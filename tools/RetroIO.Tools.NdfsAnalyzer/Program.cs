@@ -15,6 +15,8 @@ using RetroIO.Storage.Ndfs.FileSystems;
 
 namespace RetroIO.Tools.NdfsAnalyzer
 {
+using NdfsAnalyzer = RetroIO.Storage.Ndfs.Diagnostics.NdfsAnalyzer;
+
     class Program
     {
         static int Main(string[] args)
@@ -122,23 +124,23 @@ namespace RetroIO.Tools.NdfsAnalyzer
         static void ShowUsage()
         {
             Console.WriteLine("Usage:");
-            Console.WriteLine("  NdfsAnalyzerTool analyze <image-path>                        Analyze NDFS filesystem");
-            Console.WriteLine("  NdfsAnalyzerTool repair <image-path> [--auto]                Repair NDFS filesystem");
-            Console.WriteLine("  NdfsAnalyzerTool list-initial-commands <image-path>          Show SINTRAN initial commands");
-            Console.WriteLine("  NdfsAnalyzerTool set-initial-commands <image-path> \"CMD\" ...  Replace SINTRAN initial commands");
-            Console.WriteLine("  NdfsAnalyzerTool repair-initial-commands <image> \"CMD\" ...    Restore a header-corrupted buffer");
-            Console.WriteLine("  NdfsAnalyzerTool diagnose-initial-commands <image-path>      Dump every INIBU candidate (debug)");
-            Console.WriteLine("  NdfsAnalyzerTool list-files <image-path>                     List object files");
-            Console.WriteLine("  NdfsAnalyzerTool read-file <image-path> <USER/NAME:TYPE>     Print a file as 7-bit text");
+            Console.WriteLine("  ndfs-analyzer analyze <image-path>                        Analyze NDFS filesystem");
+            Console.WriteLine("  ndfs-analyzer repair <image-path> [--auto]                Repair NDFS filesystem");
+            Console.WriteLine("  ndfs-analyzer list-initial-commands <image-path>          Show SINTRAN initial commands");
+            Console.WriteLine("  ndfs-analyzer set-initial-commands <image-path> \"CMD\" ...  Replace SINTRAN initial commands");
+            Console.WriteLine("  ndfs-analyzer repair-initial-commands <image> \"CMD\" ...    Restore a header-corrupted buffer");
+            Console.WriteLine("  ndfs-analyzer diagnose-initial-commands <image-path>      Dump every INIBU candidate (debug)");
+            Console.WriteLine("  ndfs-analyzer list-files <image-path>                     List object files");
+            Console.WriteLine("  ndfs-analyzer read-file <image-path> <USER/NAME:TYPE>     Print a file as 7-bit text");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --auto    Auto-approve all repairs (use with caution!)");
             Console.WriteLine();
             Console.WriteLine("Examples:");
-            Console.WriteLine("  NdfsAnalyzerTool analyze test.ndfs");
-            Console.WriteLine("  NdfsAnalyzerTool repair test.ndfs --auto");
-            Console.WriteLine("  NdfsAnalyzerTool list-initial-commands SMD0-L.IMG");
-            Console.WriteLine("  NdfsAnalyzerTool set-initial-commands SMD0-L.IMG \"ENTER-DIR,,DI-75-1,0\" \"SET-AVAIL\" \"CC READY\"");
+            Console.WriteLine("  ndfs-analyzer analyze test.ndfs");
+            Console.WriteLine("  ndfs-analyzer repair test.ndfs --auto");
+            Console.WriteLine("  ndfs-analyzer list-initial-commands SMD0-L.IMG");
+            Console.WriteLine("  ndfs-analyzer set-initial-commands SMD0-L.IMG \"ENTER-DIR,,DI-75-1,0\" \"SET-AVAIL\" \"CC READY\"");
         }
 
         static int ShowInitialCommands(string imagePath)
@@ -488,7 +490,7 @@ namespace RetroIO.Tools.NdfsAnalyzer
                 fs.Initialize(device);
 
                 Console.WriteLine("Running deep analysis...");
-                var analyzer = new RetroIO.Storage.Ndfs.Diagnostics.NdfsAnalyzer(fs, device);
+                var analyzer = new NdfsAnalyzer(fs, device);
                 var report = analyzer.Analyze();
 
                 Console.WriteLine();
@@ -539,7 +541,7 @@ namespace RetroIO.Tools.NdfsAnalyzer
 
                 // Step 1: Analyze
                 Console.WriteLine("Step 1: Analyzing filesystem...");
-                var analyzer = new RetroIO.Storage.Ndfs.Diagnostics.NdfsAnalyzer(fs, device);
+                var analyzer = new NdfsAnalyzer(fs, device);
                 var report = analyzer.Analyze();
 
                 if (report.TotalIssues == 0)
@@ -614,7 +616,7 @@ namespace RetroIO.Tools.NdfsAnalyzer
                 // Step 5: Re-analyze
                 Console.WriteLine();
                 Console.WriteLine("Step 5: Verifying repairs...");
-                var analyzer2 = new RetroIO.Storage.Ndfs.Diagnostics.NdfsAnalyzer(fs, device);
+                var analyzer2 = new NdfsAnalyzer(fs, device);
                 var report2 = analyzer2.Analyze();
 
                 Console.WriteLine($"Remaining issues: {report2.TotalIssues}");
