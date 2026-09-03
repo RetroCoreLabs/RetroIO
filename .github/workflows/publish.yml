@@ -13,5 +13,5 @@ jobs:
       - name: version from tag
         shell: pwsh
         run: echo "VERSION=$($env:GITHUB_REF_NAME.TrimStart('v'))" >> $env:GITHUB_ENV
-      - run: dotnet pack RetroIO.sln -c Release -nodeReuse:false -o packages -p:VersionPrefix=${{ env.VERSION }}
+      - run: dotnet pack -c Release -nodeReuse:false -o packages -p:VersionPrefix=${{ env.VERSION }}
       - run: dotnet nuget push packages\*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate

@@ -5,7 +5,13 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
 New-Item -ItemType Directory -Force $Feed | Out-Null
-dotnet pack (Join-Path $root 'RetroIO.sln') -c Release -nodeReuse:false -o $Feed -p:VersionSuffix="local.$stamp"
+
+# `dotnet new sln` writes RetroIO.slnx (the XML solution format) on SDK 10 and RetroIO.sln on
+# older ones, so take whichever is actually on disk rather than assuming the extension.
+$sln = @('RetroIO.slnx', 'RetroIO.sln') | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $sln) { throw "no RetroIO.slnx or RetroIO.sln in $root" }
+
+dotnet pack $sln -c Release -nodeReuse:false -o $Feed -p:VersionSuffix="local.$stamp"
 if ($LASTEXITCODE -ne 0) { throw "pack failed" }
 if ($Clean) {
   Get-ChildItem $Feed -Filter '*.nupkg' | Group-Object { $_.Name -replace '\.\d+\.\d+\.\d+-local\.\d+\.s?nupkg$','' } |
