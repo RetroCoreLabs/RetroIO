@@ -3,6 +3,10 @@
   <Folder Name="/RetroIO.Identity/src/">
     <Project Path="RetroIO.Identity/src/RetroIO.Identity.csproj" />
   </Folder>
+  <Folder Name="/RetroIO.Link/" />
+  <Folder Name="/RetroIO.Link/src/">
+    <Project Path="RetroIO.Link/src/RetroIO.Link.csproj" />
+  </Folder>
   <Folder Name="/RetroIO.Management.Api/" />
   <Folder Name="/RetroIO.Management.Api/src/">
     <Project Path="RetroIO.Management.Api/src/RetroIO.Management.Api.csproj" />
@@ -25,6 +29,46 @@
   <Folder Name="/RetroIO.Protocols.Tnfs/" />
   <Folder Name="/RetroIO.Protocols.Tnfs/src/">
     <Project Path="RetroIO.Protocols.Tnfs/src/RetroIO.Protocols.Tnfs.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Client/" />
+  <Folder Name="/RetroIO.Protocols.X25.Client/src/">
+    <Project Path="RetroIO.Protocols.X25.Client/src/RetroIO.Protocols.X25.Client.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Common/" />
+  <Folder Name="/RetroIO.Protocols.X25.Common/src/">
+    <Project Path="RetroIO.Protocols.X25.Common/src/RetroIO.Protocols.X25.Common.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Monitor/" />
+  <Folder Name="/RetroIO.Protocols.X25.Monitor/src/">
+    <Project Path="RetroIO.Protocols.X25.Monitor/src/RetroIO.Protocols.X25.Monitor.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Nmc/" />
+  <Folder Name="/RetroIO.Protocols.X25.Nmc/src/">
+    <Project Path="RetroIO.Protocols.X25.Nmc/src/RetroIO.Protocols.X25.Nmc.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Routing/" />
+  <Folder Name="/RetroIO.Protocols.X25.Routing/src/">
+    <Project Path="RetroIO.Protocols.X25.Routing/src/RetroIO.Protocols.X25.Routing.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Runtime/" />
+  <Folder Name="/RetroIO.Protocols.X25.Runtime/src/">
+    <Project Path="RetroIO.Protocols.X25.Runtime/src/RetroIO.Protocols.X25.Runtime.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Sintran/" />
+  <Folder Name="/RetroIO.Protocols.X25.Sintran/src/">
+    <Project Path="RetroIO.Protocols.X25.Sintran/src/RetroIO.Protocols.X25.Sintran.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Switch.Management/" />
+  <Folder Name="/RetroIO.Protocols.X25.Switch.Management/src/">
+    <Project Path="RetroIO.Protocols.X25.Switch.Management/src/RetroIO.Protocols.X25.Switch.Management.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25.Switch/" />
+  <Folder Name="/RetroIO.Protocols.X25.Switch/src/">
+    <Project Path="RetroIO.Protocols.X25.Switch/src/RetroIO.Protocols.X25.Switch.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.X25/" />
+  <Folder Name="/RetroIO.Protocols.X25/src/">
+    <Project Path="RetroIO.Protocols.X25/src/RetroIO.Protocols.X25.csproj" />
   </Folder>
   <Folder Name="/RetroIO.Security.Firewall/" />
   <Folder Name="/RetroIO.Security.Firewall/src/">
@@ -78,6 +122,7 @@
     <Project Path="RetroIO.Storage.Utilities/src/RetroIO.Storage.Utilities.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/RetroIO.Protocols.X25.Tests/RetroIO.Protocols.X25.Tests.csproj" />
     <Project Path="tests/RetroIO.Tests/RetroIO.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

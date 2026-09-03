@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <!--
+    Per-test default timeout so a hanging test fails fast instead of blocking the whole run.
+    Legacy Stack A processing was removed; any test that waited on a retired path now times out
+    rather than hanging the test host indefinitely.
+  -->
+  <NUnit>
+    <DefaultTimeout>120000</DefaultTimeout>
+  </NUnit>
+</RunSettings>

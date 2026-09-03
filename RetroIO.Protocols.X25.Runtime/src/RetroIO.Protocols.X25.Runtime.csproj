@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Runtime</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Runtime</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Runtime</RootNamespace>
+    <Description>The X.25 protocol runtime that hosts links, routing, PVC bindings and protocol services for the X.25 front ends.</Description>
+    <PackageTags>retroio;x25;x25emulator.core</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Common\src\RetroIO.Protocols.X25.Common.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Link\src\RetroIO.Link.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25\src\RetroIO.Protocols.X25.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Sintran\src\RetroIO.Protocols.X25.Sintran.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

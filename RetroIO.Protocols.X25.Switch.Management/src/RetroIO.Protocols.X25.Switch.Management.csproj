@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Switch management surfaces: the telnet CLI, its command renderers (byte-exact management output),
+    and the authenticated PAD / Q-bit management protocol. Kept separate from Switch.Core so a headless
+    or test switch can run the engine without any management surface. See docs/SWITCH_ARCHITECTURE.md.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Switch.Management</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Switch.Management</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Switch.Management</RootNamespace>
+    <Description>Telnet CLI and in-band NMC management of the X.25 switch, byte-compatible with the C x25switch/x25nmc.</Description>
+    <PackageTags>retroio;x25;x25emulator.switch.management</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Common\src\RetroIO.Protocols.X25.Common.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Routing\src\RetroIO.Protocols.X25.Routing.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Switch\src\RetroIO.Protocols.X25.Switch.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,154 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using NUnit.Framework;
+using Microsoft.Extensions.Logging;
+using X25Emulator.Core;
+using X25Emulator.Core.Models;
+
+namespace X25Emulator.Tests
+{
+    /// <summary>
+    /// Test to verify X.25 events are firing and being captured in history
+    /// </summary>
+    [TestFixture]
+    public class X25EventFlowTest : TestBase
+    {
+        private ProtocolRuntime _runtime;
+        private List<HistoryItem> _capturedHistory;
+        private ManualResetEventSlim _x25EventFired;
+        private ManualResetEventSlim _lapbEventFired;
+
+        [SetUp]
+        public override void Setup()
+        {
+            base.Setup();
+            
+            _capturedHistory = new List<HistoryItem>();
+            _x25EventFired = new ManualResetEventSlim(false);
+            _lapbEventFired = new ManualResetEventSlim(false);
+            
+            _runtime = new ProtocolRuntime(Logger, new RuntimeConfig());
+            _runtime.HistoryItemAdded += OnHistoryItemAdded;
+        }
+
+        [TearDown] 
+        public override void TearDown()
+        {
+            _runtime?.Dispose();
+            _x25EventFired?.Dispose();
+            _lapbEventFired?.Dispose();
+            base.TearDown();
+        }
+
+        private void OnHistoryItemAdded(object sender, HistoryItem item)
+        {
+            Logger.LogInformation($"[X25EVENTTEST] HistoryItem: {item.Layer} {item.Direction} - ID: {item.Id}");
+            _capturedHistory.Add(item);
+            
+            if (item.Layer == LayerType.X25)
+                _x25EventFired.Set();
+            if (item.Layer == LayerType.LAPB)
+                _lapbEventFired.Set();
+        }
+
+        [Test]
+        public void LAPB_TX_Should_Generate_X25_History_Items()
+        {
+            Logger.LogInformation("=== Testing X.25 Event Flow ===");
+            
+            // Create realistic X.25 Call Request data (like PAD CONNECT generates)
+            var x25CallRequest = new byte[] { 
+                0x10, 0x00, 0x01, 0x0B,           // X.25 header: GFI + LCI + PTI + Address length
+                0x04, 0x31, 0x32, 0x33, 0x34      // Called address "1234"
+            };
+            
+            Logger.LogInformation($"[X25EVENTTEST] Sending X.25 Call Request: {BitConverter.ToString(x25CallRequest)}");
+            
+            _capturedHistory.Clear();
+            _x25EventFired.Reset();
+            _lapbEventFired.Reset();
+            
+            // Directly send X.25 packet to X.25 layer (simulates outgoing call)
+            _runtime.X25Layer.ProcessOutgoingCall("1234", new byte[0], new byte[0]);
+            
+            // Wait for events
+            Logger.LogInformation("[X25EVENTTEST] Waiting for X.25 and LAPB events...");
+            bool x25Fired = _x25EventFired.Wait(TimeSpan.FromSeconds(2));
+            bool lapbFired = _lapbEventFired.Wait(TimeSpan.FromSeconds(2));
+            
+            Logger.LogInformation($"[X25EVENTTEST] Events received: X25={x25Fired}, LAPB={lapbFired}");
+            Logger.LogInformation($"[X25EVENTTEST] Total history items: {_capturedHistory.Count}");
+            
+            foreach (var item in _capturedHistory)
+            {
+                Logger.LogInformation($"[X25EVENTTEST]   {item.Layer} {item.Direction} ID:{item.Id} Related:{item.RelatedItem?.Id}");
+            }
+            
+            // Verify X.25 packet was generated
+            Assert.That(x25Fired, Is.True, "X.25 event should fire for outgoing call");
+            
+            var x25Items = _capturedHistory.FindAll(i => i.Layer == LayerType.X25);
+            var lapbItems = _capturedHistory.FindAll(i => i.Layer == LayerType.LAPB);
+            
+            Assert.That(x25Items.Count, Is.GreaterThan(0), "Should generate X.25 history items");
+            
+            if (lapbItems.Count > 0)
+            {
+                Logger.LogInformation("[X25EVENTTEST] ✅ LAPB items were also generated - checking relationships");
+                
+                // Check for relationships
+                var relatedX25 = x25Items.Find(x => x.RelatedItem != null);
+                var relatedLapb = lapbItems.Find(l => l.RelatedItem != null);
+                
+                if (relatedX25 != null && relatedLapb != null)
+                {
+                    Logger.LogInformation("[X25EVENTTEST] ✅ Relationships found!");
+                    Assert.That(relatedX25.RelatedItem, Is.EqualTo(relatedLapb), "X.25 should relate to LAPB");
+                    Assert.That(relatedLapb.RelatedItem, Is.EqualTo(relatedX25), "LAPB should relate to X.25");
+                }
+                else
+                {
+                    Logger.LogError("[X25EVENTTEST] ❌ NO RELATIONSHIPS - This is the bug!");
+                }
+            }
+        }
+
+        [Test]
+        public void Debug_Complete_Protocol_Stack_Flow()
+        {
+            Logger.LogInformation("=== DEBUGGING COMPLETE PROTOCOL STACK ===");
+            
+            // This test helps identify where in the protocol stack things break
+            Logger.LogInformation("[X25EVENTTEST] Available layers:");
+            Logger.LogInformation($"[X25EVENTTEST]   Physical: {_runtime.Physical != null}");
+            Logger.LogInformation($"[X25EVENTTEST]   HDLC: {_runtime.HDLCLayer != null}");
+            Logger.LogInformation($"[X25EVENTTEST]   LAPB: {_runtime.LAPBLayer != null}");  
+            Logger.LogInformation($"[X25EVENTTEST]   X25: {_runtime.X25Layer != null}");
+            
+            // Test each layer individually
+            Logger.LogInformation("[X25EVENTTEST] Testing X.25 layer directly...");
+            
+            try
+            {
+                // Try to generate an outgoing call - this should create X.25 and LAPB events
+                _runtime.X25Layer.ProcessOutgoingCall("100", new byte[4] { 0x01, 0x00, 0x00, 0x00 }, new byte[0]);
+                
+                // Wait and see what happens
+                Thread.Sleep(500);
+                
+                Logger.LogInformation($"[X25EVENTTEST] After ProcessOutgoingCall: {_capturedHistory.Count} items");
+                foreach (var item in _capturedHistory)
+                {
+                    Logger.LogInformation($"[X25EVENTTEST]   {item.Layer} {item.Direction}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"[X25EVENTTEST] Exception in ProcessOutgoingCall: {ex.Message}");
+            }
+            
+            Assert.That(true, Is.True, "Debug test completed");
+        }
+    }
+}

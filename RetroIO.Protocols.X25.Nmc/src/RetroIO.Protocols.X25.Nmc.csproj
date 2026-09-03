@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Nmc</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Nmc</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Nmc</RootNamespace>
+    <Description>NMC discovery client library used by the X.25 monitor GUI.</Description>
+    <PackageTags>retroio;x25;x25emulator.nmc.core</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The discovery engine rides real X.25 through the client facade. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Client\src\RetroIO.Protocols.X25.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

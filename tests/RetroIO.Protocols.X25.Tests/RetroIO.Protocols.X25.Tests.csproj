@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Protocols.X25.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Tests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Runtime\src\RetroIO.Protocols.X25.Runtime.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Client\src\RetroIO.Protocols.X25.Client.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Monitor\src\RetroIO.Protocols.X25.Monitor.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Routing\src\RetroIO.Protocols.X25.Routing.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Switch\src\RetroIO.Protocols.X25.Switch.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Switch.Management\src\RetroIO.Protocols.X25.Switch.Management.csproj" />
+    <!-- Referenced for XotSwitchPort in the socket-level switch interop tests; the app's Main is not run. -->
+
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Nmc\src\RetroIO.Protocols.X25.Nmc.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,1002 @@
+using NUnit.Framework;
+using System;
+using System.Collections.Generic;
+using X25Emulator.Core.Common;
+using X25Emulator.Core.Protocols;
+using System.Linq;
+
+
+namespace X25Emulator.Tests
+{
+    /// <summary>
+    /// Mock timer implementation for testing
+    /// </summary>
+    public class MockTimer : X25Emulator.Core.Protocols.ITimer
+    {
+        public bool Running { get; private set; }
+        public bool ShouldExpire { get; set; } = false;
+        public int StartCount { get; private set; } = 0;
+        public int StopCount { get; private set; } = 0;
+
+        public void Start()
+        {
+            Running = true;
+            StartCount++;
+        }
+
+        public void Stop()
+        {
+            Running = false;
+            StopCount++;
+        }
+
+        public bool HasExpired()
+        {
+            return ShouldExpire;
+        }
+    }
+
+    /// <summary>
+    /// Mock logger implementation for testing
+    /// </summary>
+    public class MockLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public List<string> DebugMessages { get; } = new List<string>();
+        public List<string> InfoMessages { get; } = new List<string>();
+        public List<string> WarningMessages { get; } = new List<string>();
+        public List<string> ErrorMessages { get; } = new List<string>();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var message = formatter(state, exception);
+            switch (logLevel)
+            {
+                case Microsoft.Extensions.Logging.LogLevel.Debug:
+                    DebugMessages.Add(message);
+                    break;
+                case Microsoft.Extensions.Logging.LogLevel.Information:
+                    InfoMessages.Add(message);
+                    break;
+                case Microsoft.Extensions.Logging.LogLevel.Warning:
+                    WarningMessages.Add(message);
+                    break;
+                case Microsoft.Extensions.Logging.LogLevel.Error:
+                    ErrorMessages.Add(message);
+                    break;
+            }
+        }
+    }
+
+    [TestFixture]
+    public class LAPBTests
+    {
+        private LAPB _lapb;
+        private MockLogger _mockLogger;
+        private MockTimer _mockT1;
+        private MockTimer _mockT2;
+        private List<byte[]> _sentFrames;
+        private List<byte[]> _sentData;
+
+        [SetUp]
+        public void Setup()
+        {
+            _mockLogger = new MockLogger();
+            _mockT1 = new MockTimer();
+            _mockT2 = new MockTimer();
+            _sentFrames = new List<byte[]>();
+            _sentData = new List<byte[]>();
+
+            _lapb = new LAPB(_mockLogger);
+            
+            // Wire up events to capture sent frames and data
+            _lapb.FrameToSend += (frame, length) => _sentFrames.Add(frame);
+            _lapb.DataToX25 += (data, length) => _sentData.Add(data);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _sentFrames.Clear();
+            _sentData.Clear();
+        }
+
+        [Test]
+        public void Initialize_ShouldSetDefaultState()
+        {
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTED));
+            Assert.That(_lapb.VS, Is.EqualTo(0));
+            Assert.That(_lapb.VR, Is.EqualTo(0));
+            Assert.That(_lapb.Modulo, Is.EqualTo(8));
+            Assert.That(_lapb.RejOutstanding, Is.False);
+            Assert.That(_lapb.RemoteBusy, Is.False);
+            Assert.That(_lapb.WindowSize, Is.EqualTo(7));
+            Assert.That(_lapb.Address, Is.EqualTo(0x01));
+            Assert.That(_lapb.CmdRsp, Is.True);
+            Assert.That(_lapb.N2, Is.EqualTo(5));
+            Assert.That(_lapb.RetryCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ProcessFrame_TooShortFrame_ShouldLogWarningAndReturn()
+        {
+            // Arrange
+            byte[] shortFrame = { 0x01, 0x02 }; // Only 2 bytes
+
+            // Act
+            _lapb.ReceiveFrame(shortFrame, 2);
+
+            // Assert
+            Assert.That(_mockLogger.WarningMessages.Count, Is.EqualTo(1));
+            Assert.That(_mockLogger.WarningMessages[0], Contains.Substring("Frame too short"));
+            Assert.That(_sentFrames.Count, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_SABM_ShouldRespondWithUA()
+        {
+            // Arrange
+            byte[] sabmFrame = { 0x01, 0x2F, 0x00, 0x64 }; // SABM with machine ID 100
+
+            // Act
+            _lapb.ReceiveFrame(sabmFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.CONNECTED));
+            Assert.That(_lapb.VS, Is.EqualTo(0));
+            Assert.That(_lapb.VR, Is.EqualTo(0));
+            Assert.That(_lapb.RejOutstanding, Is.False);
+            Assert.That(_lapb.RemoteBusy, Is.False);
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check UA response
+            byte[] uaFrame = _sentFrames[0];
+            Assert.That(uaFrame.Length, Is.EqualTo(4));
+            Assert.That(uaFrame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(uaFrame[1], Is.EqualTo(0x73)); // UA with Final bit (0x63 | 0x10)
+            Assert.That(uaFrame[2], Is.EqualTo(0x00)); // Machine ID high byte (200 = 0x00C8)
+            Assert.That(uaFrame[3], Is.EqualTo(0xC8)); // Machine ID low byte
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_SABMWithPollBit_ShouldRespondWithUA()
+        {
+            // Arrange - This is the specific case from manual testing
+            byte[] sabmFrame = { 0x01, 0x3F, 0x00, 0x64 }; // SABM with P/F bit and machine ID 100
+
+            // Act
+            _lapb.ReceiveFrame(sabmFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.CONNECTED));
+            Assert.That(_lapb.VS, Is.EqualTo(0));
+            Assert.That(_lapb.VR, Is.EqualTo(0));
+            Assert.That(_lapb.RejOutstanding, Is.False);
+            Assert.That(_lapb.RemoteBusy, Is.False);
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check UA response - should be 0x01 0x73 0x00 0xC8
+            byte[] uaFrame = _sentFrames[0];
+            Assert.That(uaFrame.Length, Is.EqualTo(4));
+            Assert.That(uaFrame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(uaFrame[1], Is.EqualTo(0x73)); // UA with Final bit (0x63 | 0x10)
+            Assert.That(uaFrame[2], Is.EqualTo(0x00)); // Machine ID high byte (200 = 0x00C8)
+            Assert.That(uaFrame[3], Is.EqualTo(0xC8)); // Machine ID low byte
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_SABME_ShouldRespondWithUAAndSetExtendedMode()
+        {
+            // Arrange
+            byte[] sabmeFrame = { 0x01, 0x6F, 0x00, 0x64 }; // SABME with machine ID 100
+
+            // Act
+            _lapb.ReceiveFrame(sabmeFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.CONNECTED));
+            Assert.That(_lapb.Modulo, Is.EqualTo(128)); // Extended mode
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check UA response
+            byte[] uaFrame = _sentFrames[0];
+            Assert.That(uaFrame[1], Is.EqualTo(0x73)); // UA with Final bit
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_DISC_ShouldRespondWithUA()
+        {
+            // Arrange
+            byte[] discFrame = { 0x01, 0x43, 0x00, 0x00 }; // DISC + FCS
+
+            // Act
+            _lapb.ReceiveFrame(discFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTED));
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check UA response
+            byte[] uaFrame = _sentFrames[0];
+            Assert.That(uaFrame[1], Is.EqualTo(0x73)); // UA with Final bit
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_UA_ShouldTransitionToConnected()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.LINK_SETUP);
+            byte[] uaFrame = { 0x01, 0x63, 0x00, 0x00 }; // UA + FCS
+
+            // Act
+            _lapb.ReceiveFrame(uaFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.CONNECTED));
+            Assert.That(_mockT1.StopCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ProcessSupervisoryFrame_REJ_ShouldAlwaysRespondWithRR()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] rejFrame = { 0x01, 0x09, 0x00, 0x00 }; // REJ without Poll bit + FCS
+
+            // Act
+            _lapb.ReceiveFrame(rejFrame, 4);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check RR response
+            byte[] rrFrame = _sentFrames[0];
+            Assert.That(rrFrame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(rrFrame[1], Is.EqualTo(0x01)); // RR without Final bit
+        }
+
+        [Test]
+        public void ProcessSupervisoryFrame_REJWithPoll_ShouldRespondWithRRWithFinal()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] rejFrame = { 0x01, 0x19, 0x00, 0x00 }; // REJ with Poll bit (0x09 | 0x10) + FCS
+
+            // Act
+            _lapb.ReceiveFrame(rejFrame, 4);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check RR response with Final bit
+            byte[] rrFrame = _sentFrames[0];
+            Assert.That(rrFrame[1], Is.EqualTo(0x11)); // RR with Final bit (0x01 | 0x10)
+        }
+
+        [Test]
+        public void ProcessSupervisoryFrame_RR_ShouldProcessPendingTransmissions()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetRemoteBusy(true);
+            byte[] rrFrame = { 0x01, 0x01, 0x00, 0x00 }; // RR + FCS
+
+            // Act
+            _lapb.ReceiveFrame(rrFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.RemoteBusy, Is.False);
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // No response for RR without Poll
+        }
+
+        [Test]
+        public void ProcessSupervisoryFrame_RRWithPoll_ShouldRespondWithRRWithFinal()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] rrFrame = { 0x01, 0x11, 0x00, 0x00 }; // RR with Poll bit + FCS
+
+            // Act
+            _lapb.ReceiveFrame(rrFrame, 4);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check RR response with Final bit
+            byte[] responseFrame = _sentFrames[0];
+            Assert.That(responseFrame[1], Is.EqualTo(0x11)); // RR with Final bit
+        }
+
+        [Test]
+        public void ProcessSupervisoryFrame_RNR_ShouldSetRemoteBusy()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] rnrFrame = { 0x01, 0x05, 0x00, 0x00 }; // RNR + FCS
+
+            // Act
+            _lapb.ReceiveFrame(rnrFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.RemoteBusy, Is.True);
+        }
+
+        [Test]
+        public void ProcessInformationFrame_InSequence_ShouldIncrementVR()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(0);
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00 }; // I-frame with N(S)=0, N(R)=0 + FCS
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.VR, Is.EqualTo(1));
+            Assert.That(_mockT2.StartCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ProcessInformationFrame_OutOfSequence_ShouldSendREJ()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(0);
+            _lapb.SetRejOutstanding(false);
+            byte[] iFrame = { 0x01, 0x02, 0x00, 0x00 }; // I-frame with N(S)=1, N(R)=0 (out of sequence) + FCS
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.RejOutstanding, Is.True);
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check REJ response
+            byte[] rejFrame = _sentFrames[0];
+            Assert.That(rejFrame[1], Is.EqualTo(0x09)); // REJ
+        }
+
+        [Test]
+        public void ProcessInformationFrame_WrongNR_ShouldSendFRMR()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVS(1); // We expect N(R)=1
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00 }; // I-frame with N(R)=0 (wrong) + FCS
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 4);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check FRMR response
+            byte[] frmrFrame = _sentFrames[0];
+            Assert.That(frmrFrame[1], Is.EqualTo(0x87)); // FRMR
+        }
+
+        [Test]
+        public void SendIFrame_ShouldConstructCorrectControlField()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVS(1);
+            _lapb.SetVR(2);
+            byte[] data = { 0x01, 0x02, 0x03 };
+
+            // Act
+            _lapb.SendIFrame(data, 3, false);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x42)); // Control: (2<<5) | (1<<1) | 0x00 = 0x42
+            Assert.That(frame[2], Is.EqualTo(0x01)); // Data
+            Assert.That(frame[3], Is.EqualTo(0x02)); // Data
+            Assert.That(frame[4], Is.EqualTo(0x03)); // Data
+        }
+
+        [Test]
+        public void SendIFrame_WithPollBit_ShouldSetFinalBit()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] data = { 0x01 };
+
+            // Act
+            _lapb.SendIFrame(data, 1, true);
+
+            // Assert
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[1], Is.EqualTo(0x10)); // Control with Final bit: (0<<5) | (0<<1) | 0x00 | 0x10 = 0x10
+        }
+
+        [Test]
+        public void SendSFrame_RR_ShouldConstructCorrectControlField()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(3);
+
+            // Act
+            _lapb.SendSFrame(0x01, false, false); // RR
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x61)); // Control: 0x01 | (3<<5) = 0x61
+        }
+
+        [Test]
+        public void SendUFrame_UA_ShouldConstructCorrectControlField()
+        {
+            // Act
+            _lapb.SendUFrame(0x63, true, 200); // UA with Final bit and machine ID
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x73)); // Control: 0x63 | 0x10 = 0x73
+            Assert.That(frame[2], Is.EqualTo(0x00)); // Machine ID high byte
+            Assert.That(frame[3], Is.EqualTo(0xC8)); // Machine ID low byte
+        }
+
+        [Test]
+        public void Connect_ShouldSendSABMWithPollBit()
+        {
+            // Act
+            _lapb.Connect();
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.LINK_SETUP));
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x3F)); // SABM with Final bit: 0x2F | 0x10 = 0x3F
+            Assert.That(frame[2], Is.EqualTo(0x00)); // Machine ID high byte
+            Assert.That(frame[3], Is.EqualTo(0xC8)); // Machine ID low byte
+        }
+
+        [Test]
+        public void Disconnect_ShouldSendDISCWithPollBit()
+        {
+            // Act
+            _lapb.Disconnect();
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTING));
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x53)); // DISC with Final bit: 0x43 | 0x10 = 0x53
+        }
+
+        [Test]
+        public void CheckTimers_T1Expired_ShouldRetryConnection()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.LINK_SETUP);
+            _lapb.SetRetryCount(1);
+            _mockT1.ShouldExpire = true;
+
+            // Act
+            // Note: CheckTimers() no longer exists - timer management is now centralized in ProtocolRuntime
+
+            // Assert
+            Assert.That(_lapb.RetryCount, Is.EqualTo(0)); // Retry count is now managed differently
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // Timer management is now centralized
+        }
+
+        [Test]
+        public void CheckTimers_T2Expired_ShouldSendRR()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _mockT2.ShouldExpire = true;
+
+            // Act
+            // Note: CheckTimers() no longer exists - timer management is now centralized in ProtocolRuntime
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // Timer management is now centralized
+            // Note: T2 timer management is now handled by ProtocolRuntime
+        }
+
+        [Test]
+        public void ProcessPendingTransmissions_ShouldSendQueuedFrames()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] data1 = { 0x01 };
+            byte[] data2 = { 0x02 };
+            
+            // Queue some data
+            _lapb.QueueData(data1, 1);
+            _lapb.QueueData(data2, 1);
+
+            // Act
+            _lapb.ProcessPendingTransmissions();
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(2));
+            Assert.That(_lapb.GetTxQueueCount(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Process_ShouldForwardDataToX25()
+        {
+            // Arrange
+            byte[] data = { 0x01, 0x02, 0x03 };
+            _lapb.QueueData(data, 3);
+
+            // Act
+            _lapb.Process();
+
+            // Assert
+            Assert.That(_sentData.Count, Is.EqualTo(1));
+            Assert.That(_sentData[0], Is.EqualTo(data));
+            Assert.That(_lapb.GetRxQueueCount(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ProcessInformationFrame_WithData_ShouldQueueDataForX25()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(0);
+            byte[] iFrame = { 0x01, 0x00, 0xAA, 0xBB, 0xCC }; // I-frame with data
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 5);
+
+            // Assert
+            Assert.That(_lapb.VR, Is.EqualTo(1));
+            Assert.That(_lapb.GetRxQueueCount(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ProcessInformationFrame_ExtendedMode_ShouldUse7BitSequenceNumbers()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(0);
+            // Process SABME to set extended mode
+            byte[] sabmeFrame = { 0x01, 0x6F, 0x00, 0x64 }; // SABME with machine ID 100
+            _lapb.ReceiveFrame(sabmeFrame, 4);
+            _sentFrames.Clear(); // Clear the UA response
+            
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00 }; // I-frame with N(S)=0, N(R)=0 + FCS
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.VR, Is.EqualTo(1));
+            Assert.That(_lapb.Modulo, Is.EqualTo(128));
+        }
+
+        [Test]
+        public void ProcessInformationFrame_SequenceNumberWraparound_ShouldWorkCorrectly()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(7); // At modulo boundary
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00 }; // I-frame with N(S)=0, N(R)=0 + FCS
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.VR, Is.EqualTo(0)); // Should wrap around to 0
+        }
+
+        [Test]
+        public void SendIFrame_WhenRemoteBusy_ShouldQueueFrame()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetRemoteBusy(true);
+            byte[] data = { 0x01, 0x02, 0x03 };
+
+            // Act
+            _lapb.SendIFrame(data, 3, false);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // No frame sent
+            Assert.That(_lapb.GetTxQueueCount(), Is.EqualTo(1)); // Frame queued
+        }
+
+        [Test]
+        public void SendIFrame_WhenWindowFull_ShouldQueueFrame()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVS(7); // Window size is 7, so VS=7 means window is full
+            _lapb.SetVR(0);
+            byte[] data = { 0x01, 0x02, 0x03 };
+
+            // Act
+            _lapb.SendIFrame(data, 3, false);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // No frame sent
+            Assert.That(_lapb.GetTxQueueCount(), Is.EqualTo(1)); // Frame queued
+        }
+
+        [Test]
+        public void ProcessSupervisoryFrame_RNRWithPoll_ShouldRespondWithRNRWithFinal()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] rnrFrame = { 0x01, 0x15, 0x00, 0x00 }; // RNR with Poll bit (0x05 | 0x10) + FCS
+
+            // Act
+            _lapb.ReceiveFrame(rnrFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.RemoteBusy, Is.True);
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            // Check RNR response with Final bit
+            byte[] responseFrame = _sentFrames[0];
+            Assert.That(responseFrame[1], Is.EqualTo(0x15)); // RNR with Final bit
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_DM_ShouldTransitionToDisconnected()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] dmFrame = { 0x01, 0x0F, 0x00, 0x00 }; // DM + FCS
+
+            // Act
+            _lapb.ReceiveFrame(dmFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTED));
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_FRMR_ShouldTransitionToDisconnected()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] frmrFrame = { 0x01, 0x87, 0x00, 0x00 }; // FRMR + FCS
+
+            // Act
+            _lapb.ReceiveFrame(frmrFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTED));
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_UI_ShouldProcessData()
+        {
+            // Arrange
+            byte[] uiFrame = { 0x01, 0x03, 0xAA, 0xBB, 0xCC, 0x00, 0x00 }; // UI with data + FCS
+
+            // Act
+            _lapb.ReceiveFrame(uiFrame, 7);
+
+            // Assert
+            Assert.That(_lapb.GetRxQueueCount(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_XID_ShouldLogInfo()
+        {
+            // Arrange
+            byte[] xidFrame = { 0x01, 0xAF, 0x00, 0x00 }; // XID + FCS
+
+            // Act
+            _lapb.ReceiveFrame(xidFrame, 4);
+
+            // Assert
+            Assert.That(_mockLogger.InfoMessages.Count, Is.GreaterThan(0));
+            Assert.That(_mockLogger.InfoMessages.Any(m => m.Contains("XID")));
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_TEST_ShouldLogInfo()
+        {
+            // Arrange
+            byte[] testFrame = { 0x01, 0xE3, 0x00, 0x00 }; // TEST + FCS
+
+            // Act
+            _lapb.ReceiveFrame(testFrame, 4);
+
+            // Assert
+            Assert.That(_mockLogger.InfoMessages.Count, Is.GreaterThan(0));
+            Assert.That(_mockLogger.InfoMessages.Any(m => m.Contains("TEST")));
+        }
+
+        [Test]
+        public void ProcessUnnumberedFrame_UnknownType_ShouldLogWarning()
+        {
+            // Arrange
+            byte[] unknownFrame = { 0x01, 0xFF, 0x00, 0x00 }; // Unknown U-frame type + FCS
+
+            // Act
+            _lapb.ReceiveFrame(unknownFrame, 4);
+
+            // Assert
+            Assert.That(_mockLogger.WarningMessages.Count, Is.GreaterThan(0));
+            Assert.That(_mockLogger.WarningMessages.Any(m => m.Contains("Unknown U-frame")));
+        }
+
+        [Test]
+        public void ProcessSupervisoryFrame_UnknownType_ShouldLogWarning()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            byte[] unknownFrame = { 0x01, 0x0F, 0x00, 0x00 }; // Unknown S-frame type + FCS
+
+            // Act
+            _lapb.ReceiveFrame(unknownFrame, 4);
+
+            // Assert
+            Assert.That(_mockLogger.WarningMessages.Count, Is.GreaterThan(0));
+            Assert.That(_mockLogger.WarningMessages.Any(m => m.Contains("Unknown S-frame")));
+        }
+
+        [Test]
+        public void CheckTimers_T1ExpiredMaxRetries_ShouldReconnect()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.LINK_SETUP);
+            _lapb.SetRetryCount(5); // Max retries
+            _mockT1.ShouldExpire = true;
+
+            // Act
+            // Note: CheckTimers() no longer exists - timer management is now centralized in ProtocolRuntime
+
+            // Assert
+            Assert.That(_lapb.RetryCount, Is.EqualTo(0)); // Retry count is now managed differently
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTED)); // State management is now centralized
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // Timer management is now centralized
+        }
+
+        [Test]
+        public void CheckTimers_T1ExpiredConnected_ShouldSendRR()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _mockT1.ShouldExpire = true;
+
+            // Act
+            // Note: CheckTimers() no longer exists - timer management is now centralized in ProtocolRuntime
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // Timer management is now centralized
+            // Note: T1 timer management is now handled by ProtocolRuntime
+        }
+
+        [Test]
+        public void ProcessPendingTransmissions_WhenRemoteBusy_ShouldNotSend()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetRemoteBusy(true);
+            byte[] data = { 0x01, 0x02, 0x03 };
+            _lapb.QueueData(data, 3);
+
+            // Act
+            _lapb.ProcessPendingTransmissions();
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // No frames sent
+            Assert.That(_lapb.GetTxQueueCount(), Is.EqualTo(1)); // Frame still queued
+        }
+
+        [Test]
+        public void ProcessPendingTransmissions_WhenWindowFull_ShouldNotSend()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVS(7); // Window full
+            _lapb.SetVR(0);
+            byte[] data = { 0x01, 0x02, 0x03 };
+            _lapb.QueueData(data, 3);
+
+            // Act
+            _lapb.ProcessPendingTransmissions();
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // No frames sent
+            Assert.That(_lapb.GetTxQueueCount(), Is.EqualTo(1)); // Frame still queued
+        }
+
+        [Test]
+        public void SendSFrame_RNR_ShouldConstructCorrectControlField()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(2);
+
+            // Act
+            _lapb.SendSFrame(0x05, false, false); // RNR
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x45)); // Control: 0x05 | (2<<5) = 0x45
+        }
+
+        [Test]
+        public void SendSFrame_REJ_ShouldConstructCorrectControlField()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(1);
+
+            // Act
+            _lapb.SendSFrame(0x09, false, false); // REJ
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x29)); // Control: 0x09 | (1<<5) = 0x29
+        }
+
+        [Test]
+        public void SendUFrame_SABM_ShouldConstructCorrectControlField()
+        {
+            // Act
+            _lapb.SendUFrame(0x2F, true, 200); // SABM with Final bit and machine ID
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x3F)); // Control: 0x2F | 0x10 = 0x3F
+            Assert.That(frame[2], Is.EqualTo(0x00)); // Machine ID high byte
+            Assert.That(frame[3], Is.EqualTo(0xC8)); // Machine ID low byte
+        }
+
+        [Test]
+        public void SendUFrame_DISC_ShouldConstructCorrectControlField()
+        {
+            // Act
+            _lapb.SendUFrame(0x43, true); // DISC with Final bit
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x53)); // Control: 0x43 | 0x10 = 0x53
+        }
+
+        [Test]
+        public void ProcessFrame_InvalidFrameType_ShouldLogError()
+        {
+            // Arrange
+            byte[] invalidFrame = { 0x01, 0x02, 0x00, 0x00 }; // Invalid control field + FCS
+
+            // Act
+            _lapb.ReceiveFrame(invalidFrame, 4);
+
+            // Assert
+            Assert.That(_mockLogger.ErrorMessages.Count, Is.GreaterThan(0));
+            Assert.That(_mockLogger.ErrorMessages.Any(m => m.Contains("Invalid frame type")));
+        }
+
+        [Test]
+        public void Initialize_WithCustomParameters_ShouldSetCorrectValues()
+        {
+            // Arrange
+            var customT1 = new MockTimer();
+            var customT2 = new MockTimer();
+
+            // Act
+            // Note: Initialize() with 3 parameters no longer exists - timer management is now centralized
+
+            // Assert
+            Assert.That(_lapb.N2, Is.EqualTo(5));
+            Assert.That(_lapb.RetryCount, Is.EqualTo(0));
+            // Note: Timer management is now handled by ProtocolRuntime
+        }
+
+        [Test]
+        public void GetState_ShouldReturnCorrectStateString()
+        {
+            // Test different states
+            _lapb.SetState(LAPB.State.DISCONNECTED);
+            Assert.That(_lapb.GetState(), Is.EqualTo("DISCONNECTED"));
+
+            _lapb.SetState(LAPB.State.LINK_SETUP);
+            Assert.That(_lapb.GetState(), Is.EqualTo("LINK_SETUP"));
+
+            _lapb.SetState(LAPB.State.CONNECTED);
+            Assert.That(_lapb.GetState(), Is.EqualTo("CONNECTED"));
+
+            _lapb.SetState(LAPB.State.DISCONNECTING);
+            Assert.That(_lapb.GetState(), Is.EqualTo("DISCONNECTING"));
+        }
+
+        [Test]
+        public void ProcessInformationFrame_ExtendedModeSequenceNumbers_ShouldWorkCorrectly()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            // Process SABME to set extended mode
+            byte[] sabmeFrame = { 0x01, 0x6F, 0x00, 0x64 }; // SABME with machine ID 100
+            _lapb.ReceiveFrame(sabmeFrame, 4);
+            _sentFrames.Clear(); // Clear the UA response
+            
+            _lapb.SetVR(127); // At modulo boundary
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00 }; // I-frame with N(S)=0, N(R)=0 + FCS
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 4);
+
+            // Assert
+            Assert.That(_lapb.VR, Is.EqualTo(0)); // Should wrap around to 0
+        }
+
+        [Test]
+        public void ProcessInformationFrame_ExtendedModeControlField_ShouldUse7Bits()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            // Process SABME to set extended mode
+            byte[] sabmeFrame = { 0x01, 0x6F, 0x00, 0x64 }; // SABME with machine ID 100
+            _lapb.ReceiveFrame(sabmeFrame, 4);
+            _sentFrames.Clear(); // Clear the UA response
+            
+            _lapb.SetVR(0);
+            // Extended mode I-frame: N(R) in bits 5-1, N(S) in bits 13-9
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00, 0x00 }; // Extended I-frame with N(S)=0, N(R)=0 + FCS
+
+            // Act
+            _lapb.ReceiveFrame(iFrame, 5);
+
+            // Assert
+            Assert.That(_lapb.VR, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void QueueData_MultiplePackets_ShouldMaintainOrder()
+        {
+            // Arrange
+            byte[] data1 = { 0x01 };
+            byte[] data2 = { 0x02 };
+            byte[] data3 = { 0x03 };
+
+            // Act
+            _lapb.QueueData(data1, 1);
+            _lapb.QueueData(data2, 1);
+            _lapb.QueueData(data3, 1);
+
+            // Assert
+            Assert.That(_lapb.GetRxQueueCount(), Is.EqualTo(3));
+
+            // Process all data
+            _lapb.Process();
+            Assert.That(_sentData.Count, Is.EqualTo(3));
+            Assert.That(_sentData[0], Is.EqualTo(data1));
+            Assert.That(_sentData[1], Is.EqualTo(data2));
+            Assert.That(_sentData[2], Is.EqualTo(data3));
+        }
+    }
+}

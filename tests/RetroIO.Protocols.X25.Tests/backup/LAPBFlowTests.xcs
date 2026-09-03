@@ -1,0 +1,258 @@
+using NUnit.Framework;
+using System;
+using System.Collections.Generic;
+using X25Emulator.Core.Common;
+using X25Emulator.Core.Protocols;
+
+namespace X25Emulator.Tests
+{
+    [TestFixture]
+    public class LAPBFlowTests
+    {
+        private LAPB _lapb;
+        private MockLogger _mockLogger;
+        private MockTimer _mockT1;
+        private MockTimer _mockT2;
+        private List<byte[]> _sentFrames;
+
+        [SetUp]
+        public void Setup()
+        {
+            _mockLogger = new MockLogger();
+            _mockT1 = new MockTimer();
+            _mockT2 = new MockTimer();
+            _sentFrames = new List<byte[]>();
+
+            _lapb = new LAPB(_mockLogger);
+            // Note: Initialize() with 3 parameters no longer exists - timer management is now centralized
+            
+            // Wire up events to capture sent frames
+            _lapb.FrameToSend += (frame, length) => _sentFrames.Add(frame);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _sentFrames.Clear();
+        }
+
+        [Test]
+        public void REJFrame_0x09_0x01_0x00_0x64_ShouldAlwaysRespondWithRR()
+        {
+            // Arrange - This is the specific frame that wasn't responding before the fix
+            byte[] rejFrame = { 0x09, 0x01, 0x00, 0x64, 0x00, 0x00 }; // REJ without Poll bit + FCS
+            _lapb.SetState(LAPB.State.CONNECTED);
+
+            // Act
+            _lapb.ReceiveFrame(rejFrame, 6);
+
+            // Assert - Should always respond with RR, regardless of Poll bit
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] responseFrame = _sentFrames[0];
+            Assert.That(responseFrame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(responseFrame[1], Is.EqualTo(0x01)); // RR without Final bit (since original had no Poll)
+        }
+
+        [Test]
+        public void REJFrameWithPoll_ShouldRespondWithRRWithFinal()
+        {
+            // Arrange
+            byte[] rejFrameWithPoll = { 0x19, 0x01, 0x00, 0x64, 0x00, 0x00 }; // REJ with Poll bit (0x09 | 0x10) + FCS
+            _lapb.SetState(LAPB.State.CONNECTED);
+
+            // Act
+            _lapb.ReceiveFrame(rejFrameWithPoll, 6);
+
+            // Assert
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] responseFrame = _sentFrames[0];
+            Assert.That(responseFrame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(responseFrame[1], Is.EqualTo(0x11)); // RR with Final bit (0x01 | 0x10)
+        }
+
+        [Test]
+        public void CompleteLAPBConnectionFlow_ShouldWorkCorrectly()
+        {
+            // Step 1: Send SABM
+            byte[] sabmFrame = { 0x01, 0x2F, 0x00, 0x64 }; // SABM with machine ID 100
+            _sentFrames.Clear();
+            
+            _lapb.ReceiveFrame(sabmFrame, 4);
+            
+            // Should respond with UA
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.CONNECTED));
+            
+            byte[] uaResponse = _sentFrames[0];
+            Assert.That(uaResponse[1], Is.EqualTo(0x73)); // UA with Final bit
+            
+            // Step 2: Send I-frame
+            _sentFrames.Clear();
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00 }; // I-frame with N(S)=0, N(R)=0 + FCS
+            
+            _lapb.ReceiveFrame(iFrame, 4);
+            
+            // Should process I-frame and increment VR
+            Assert.That(_lapb.VR, Is.EqualTo(1));
+            
+            // Step 3: Send REJ (the problematic frame)
+            _sentFrames.Clear();
+            byte[] rejFrame = { 0x01, 0x09, 0x00, 0x00 }; // REJ without Poll bit + FCS
+            
+            _lapb.ReceiveFrame(rejFrame, 4);
+            
+            // Should always respond with RR
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            Assert.That(_sentFrames[0][1], Is.EqualTo(0x01)); // RR
+        }
+
+        [Test]
+        public void IFrameControlFieldConstruction_ShouldFollowLAPBSpec()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVS(2); // N(S) = 2
+            _lapb.SetVR(3); // N(R) = 3
+            byte[] data = { 0x01, 0x02, 0x03 };
+
+            // Act
+            _lapb.SendIFrame(data, 3, false);
+
+            // Assert - Control field should be: (nr << 5) | (pf << 4) | (ns << 1) | 0x00
+            // (3 << 5) | (0 << 4) | (2 << 1) | 0x00 = 0x60 | 0x00 | 0x04 | 0x00 = 0x64
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x64)); // Control field: (3<<5) | (2<<1) | 0x00 = 0x64
+        }
+
+        [Test]
+        public void IFrameControlFieldWithPollBit_ShouldSetFinalBit()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVS(1); // N(S) = 1
+            _lapb.SetVR(0); // N(R) = 0
+            byte[] data = { 0x01 };
+
+            // Act
+            _lapb.SendIFrame(data, 1, true); // With Poll bit
+
+            // Assert - Control field should be: (nr << 5) | (pf << 4) | (ns << 1) | 0x00
+            // (0 << 5) | (1 << 4) | (1 << 1) | 0x00 = 0x00 | 0x10 | 0x02 | 0x00 = 0x12
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x12)); // Control field with Final bit
+        }
+
+        [Test]
+        public void SFrameControlFieldConstruction_ShouldFollowLAPBSpec()
+        {
+            // Arrange
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _lapb.SetVR(2); // N(R) = 2
+
+            // Act
+            _lapb.SendSFrame(0x01, false, false); // RR
+
+            // Assert - Control field should be: (nr << 5) | (pf << 4) | (ss << 2) | 0x01
+            // (2 << 5) | (0 << 4) | (0 << 2) | 0x01 = 0x40 | 0x00 | 0x00 | 0x01 = 0x41
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x41)); // Control field: (2<<5) | 0x01 = 0x41
+        }
+
+        [Test]
+        public void UFrameControlFieldConstruction_ShouldFollowLAPBSpec()
+        {
+            // Act
+            _lapb.SendUFrame(0x63, true, 200); // UA with Final bit and machine ID
+
+            // Assert - Control field should be: (m2 << 5) | (pf << 4) | (m1 << 2) | 0x03
+            // For UA (0x63): M1=0, M2=3, so: (3 << 5) | (1 << 4) | (0 << 2) | 0x03 = 0x60 | 0x10 | 0x00 | 0x03 = 0x73
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            
+            byte[] frame = _sentFrames[0];
+            Assert.That(frame[0], Is.EqualTo(0x01)); // Address
+            Assert.That(frame[1], Is.EqualTo(0x73)); // Control field with Final bit
+            Assert.That(frame[2], Is.EqualTo(0x00)); // Machine ID high byte
+            Assert.That(frame[3], Is.EqualTo(0xC8)); // Machine ID low byte
+        }
+
+        [Test]
+        public void FrameTypeDetection_ShouldWorkCorrectly()
+        {
+            // Test I-frame detection (bit 0 = 0)
+            byte[] iFrame = { 0x01, 0x00, 0x00, 0x00 }; // I-frame + FCS
+            _lapb.SetState(LAPB.State.CONNECTED);
+            _sentFrames.Clear();
+            
+            _lapb.ReceiveFrame(iFrame, 4);
+            // Should process as I-frame (no response sent for valid I-frame)
+            Assert.That(_sentFrames.Count, Is.EqualTo(0));
+
+            // Test S-frame detection (bits 1-0 = 01)
+            byte[] sFrame = { 0x01, 0x01, 0x00, 0x00 }; // RR + FCS
+            _sentFrames.Clear();
+            
+            _lapb.ReceiveFrame(sFrame, 4);
+            // Should process as S-frame
+            Assert.That(_sentFrames.Count, Is.EqualTo(0)); // No response for RR without Poll
+
+            // Test U-frame detection (bits 1-0 = 11)
+            byte[] uFrame = { 0x01, 0x63, 0x00, 0x00 }; // UA + FCS
+            _sentFrames.Clear();
+            
+            _lapb.ReceiveFrame(uFrame, 4);
+            // Should process as U-frame
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.CONNECTED));
+        }
+
+        [Test]
+        public void MachineIdHandling_ShouldWorkCorrectly()
+        {
+            // Test SABM with machine ID
+            byte[] sabmFrame = { 0x01, 0x2F, 0x00, 0x64 }; // SABM with machine ID 100
+            _sentFrames.Clear();
+            
+            _lapb.ReceiveFrame(sabmFrame, 4);
+            
+            // Should respond with our machine ID (200)
+            Assert.That(_sentFrames.Count, Is.EqualTo(1));
+            byte[] response = _sentFrames[0];
+            Assert.That(response[2], Is.EqualTo(0x00)); // Machine ID high byte (200 = 0x00C8)
+            Assert.That(response[3], Is.EqualTo(0xC8)); // Machine ID low byte
+        }
+
+        [Test]
+        public void StateTransitions_ShouldWorkCorrectly()
+        {
+            // Start in DISCONNECTED
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTED));
+
+            // Connect should go to LINK_SETUP
+            _lapb.Connect();
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.LINK_SETUP));
+
+            // Receive UA should go to CONNECTED
+            byte[] uaFrame = { 0x01, 0x63, 0x00, 0x00 };
+            _lapb.ReceiveFrame(uaFrame, 4);
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.CONNECTED));
+
+            // Disconnect should go to DISCONNECTING
+            _lapb.Disconnect();
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTING));
+
+            // Receive UA should go to DISCONNECTED
+            _lapb.ReceiveFrame(uaFrame, 4);
+            Assert.That(_lapb.CurrentState, Is.EqualTo(LAPB.State.DISCONNECTED));
+        }
+    }
+}

@@ -1,0 +1,26 @@
+03:26:45 info: x25switch[0] TcpLinkTransport[port0]: listening on 0.0.0.0:2200
+03:26:45 info: x25switch[0] Port 0 (Dce Access): listening on 0.0.0.0:2200
+03:26:45 info: x25switch[0] Port 1 (Dte Trunk): dial 127.0.0.1:2201 connected
+03:26:45 info: x25switch[0] TcpLinkTransport[port1]: dial attempt 1 to 127.0.0.1:2201
+03:26:45 info: x25switch[0] TcpLinkTransport[port2]: listening on 0.0.0.0:2210
+03:26:45 info: x25switch[0] Port 2 (Dce Trunk): listening on 0.0.0.0:2210
+03:26:45 info: x25switch[0] Monitoring stream listening on port 4001
+03:26:45 info: x25switch[0] TcpLinkTransport[port1]: connected to 127.0.0.1:2201 (attempt 1)
+03:26:45 info: x25switch[0] Management console listening on port 9101
+03:26:45 info: x25switch[0] x25switch 'Switch-A' (DNIC 2350) started with 3 ports
+03:26:45 info: x25switch[0] TcpLinkTransport[port1]: connection up [::ffff:127.0.0.1]:54509 <-> [::ffff:127.0.0.1]:2201
+03:26:45 info: x25switch[0] Port 1 (Dte Trunk): peer connected
+03:27:01 info: x25switch[0] TcpLinkTransport[port0]: accepted connection from 127.0.0.1:28043
+03:27:01 info: x25switch[0] TcpLinkTransport[port0]: connection up 127.0.0.1:2200 <-> 127.0.0.1:28043
+03:27:01 info: x25switch[0] Port 0 (Dce Access): peer connected
+03:27:01 info: x25switch[0] Port 0: incoming call 99990002 -> 23500000 LCI=1
+03:27:01 info: x25switch[0] Port 0: incoming call 99990002 -> 23510000 LCI=2
+03:27:01 info: x25switch[0] Port 1: placing call to 23510000 (calling 99990002) LCI=1
+03:27:01 info: x25switch[0] Port 1: call accepted LCI=1
+03:27:01 info: x25switch[0] Port 0: incoming call 99990002 -> 23400000 LCI=3
+03:27:01 info: x25switch[0] Port 2: placing call to 23400000 (calling 99990002) LCI=1
+03:27:01 info: x25switch[0] Port 0: incoming call 99990002 -> 23520000 LCI=4
+03:27:01 info: x25switch[0] Port 1: placing call to 23520000 (calling 99990002) LCI=2
+03:27:01 info: x25switch[0] Port 1: call accepted LCI=2
+03:27:01 info: x25switch[0] TcpLinkTransport[port0]: connection down (remote closed the connection (read 0))
+03:27:01 info: x25switch[0] Port 0 (Dce Access): peer disconnected (remote closed the connection (read 0))

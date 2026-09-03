@@ -1,0 +1,72 @@
+using System;
+
+namespace RetroIO.Protocols.X25.Modules
+{
+    /// <summary>
+    /// An <see cref="IPadTransport"/> that drives a <see cref="PadClient"/> over the concrete
+    /// <see cref="IProtocolRuntime"/>: outgoing calls, data and clears delegate to the runtime, while
+    /// received packets reach the PAD through its <see cref="IProtocolModule"/> registration.
+    /// </summary>
+    /// <remarks>
+    /// This preserves the historical runtime behaviour exactly: ordinary terminal data goes through the
+    /// XOT-mapped path when the channel is XOT-mapped and falls back to the packet layer otherwise, while
+    /// qualified/X.29 data goes through the runtime's data-send entry point.
+    /// </remarks>
+    public sealed class RuntimePadTransport : IPadTransport
+    {
+        private readonly IProtocolRuntime _runtime;
+
+        /// <summary>
+        /// The PAD module the runtime binds outgoing calls to. Set by the owning <see cref="PadClient"/>
+        /// once it is constructed.
+        /// </summary>
+        public IProtocolModule? Module { get; set; }
+
+        /// <summary>
+        /// Creates the adapter over a protocol runtime.
+        /// </summary>
+        /// <param name="runtime">
+        /// The runtime that carries the calls.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="runtime"/> is null.
+        /// </exception>
+        public RuntimePadTransport(IProtocolRuntime runtime)
+        {
+            _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        }
+
+        /// <inheritdoc/>
+        public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
+        {
+            if (Module == null)
+            {
+                return false;
+            }
+
+            return _runtime.PlaceX25CallWithModule(calledAddress, callingAddress, callUserData, Module);
+        }
+
+        /// <inheritdoc/>
+        public bool SendData(ushort lcn, byte[] data, bool mBit, bool qBit, bool dBit)
+        {
+            return _runtime.SendX25Data(lcn, data, mBit, qBit, dBit);
+        }
+
+        /// <inheritdoc/>
+        public void ForwardData(ushort lcn, byte[] data, int length)
+        {
+            // Prefer the XOT-mapped path; fall back to the packet layer when the channel is not XOT-mapped.
+            if (!_runtime.SendDataViaXotIfMapped(lcn, data, length))
+            {
+                _runtime.X25Layer.SendData(lcn, data, length);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void ClearCall(ushort lcn, byte cause, byte diagnostic)
+        {
+            _runtime.X25Layer.ClearCall(lcn, cause, diagnostic);
+        }
+    }
+}

@@ -1,0 +1,14 @@
+03:26:41 info: x25switch[0] TcpLinkTransport[port0]: listening on 0.0.0.0:2202
+03:26:41 info: x25switch[0] Port 0 (Dce Trunk): listening on 0.0.0.0:2202
+03:26:41 info: x25switch[0] TcpLinkTransport[port1]: listening on 0.0.0.0:2203
+03:26:41 info: x25switch[0] Port 1 (Dce Access): listening on 0.0.0.0:2203
+03:26:41 info: x25switch[0] Monitoring stream listening on port 4003
+03:26:41 info: x25switch[0] Management console listening on port 9103
+03:26:41 info: x25switch[0] x25switch 'Switch-C' (DNIC 2352) started with 2 ports
+03:26:43 info: x25switch[0] TcpLinkTransport[port0]: accepted connection from 127.0.0.1:65197
+03:26:43 info: x25switch[0] TcpLinkTransport[port0]: connection up 127.0.0.1:2202 <-> 127.0.0.1:65197
+03:26:43 info: x25switch[0] Port 0 (Dce Trunk): peer connected
+03:26:47 info: x25switch[0] TcpLinkTransport[port1]: accepted connection from 127.0.0.1:54514
+03:26:47 info: x25switch[0] TcpLinkTransport[port1]: connection up 127.0.0.1:2203 <-> 127.0.0.1:54514
+03:26:47 info: x25switch[0] Port 1 (Dce Access): peer connected
+03:27:01 info: x25switch[0] Port 0: incoming call 99990002 -> 23520000 LCI=1

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Monitor</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Monitor</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Monitor</RootNamespace>
+    <Description>X25MON/1 monitor stream server, client and codec for X.25 switch viewers.</Description>
+    <PackageTags>retroio;x25;x25emulator.monitor</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reuses the clean X.25 codec (X25PacketParser) to decode captured packets server-side. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25\src\RetroIO.Protocols.X25.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Link</PackageId>
+    <AssemblyName>RetroIO.Link</AssemblyName>
+    <RootNamespace>RetroIO.Link</RootNamespace>
+    <Description>Link layer: HDLC/RFC 1662 and SLIP framing, LAPB, XOT framing, serial/TCP/XOT transports and the ILink/ILinkTransport seam.</Description>
+    <PackageTags>retroio;x25;x25emulator.link</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Common\src\RetroIO.Protocols.X25.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

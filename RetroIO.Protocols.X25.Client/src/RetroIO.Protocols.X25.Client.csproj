@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Client</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Client</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Client</RootNamespace>
+    <Description>X25Client: an X.25 DTE over XOT for tools such as x25pad, x25echo, x25nmc and x25traffic.</Description>
+    <PackageTags>retroio;x25;x25emulator.client</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The facade composes the clean stack directly and no longer depends on the runtime:
+         Common <- Link <- X25 <- Client. -->
+    <ProjectReference Include="..\..\RetroIO.Link\src\RetroIO.Link.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25\src\RetroIO.Protocols.X25.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

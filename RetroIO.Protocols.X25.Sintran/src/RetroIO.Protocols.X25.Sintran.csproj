@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Sintran</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Sintran</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Sintran</RootNamespace>
+    <Description>SINTRAN-over-X.25 handlers for RetroIO: TAD, routing and the PVC server.</Description>
+    <PackageTags>retroio;x25;x25emulator.sintran</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Common\src\RetroIO.Protocols.X25.Common.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Link\src\RetroIO.Link.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25\src\RetroIO.Protocols.X25.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,177 @@
+using System;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using RetroIO.Protocols.X25.Protocols;
+using RetroIO.Link.Models;
+using RetroIO.Protocols.X25.Models;
+
+namespace RetroIO.Protocols.X25.Services
+{
+    /// <summary>
+    /// TAD (Terminal Access Device) Protocol Service
+    /// Handles X.25 connections for interactive terminal access using X.29 PAD protocol
+    /// </summary>
+    public class TadProtocolService : IProtocolService
+    {
+        private readonly ILogger _logger;
+        private readonly LocalTadProtocol _tadProtocol;
+        private readonly string[] _localAddresses;
+        private readonly IProtocolRuntime _runtime;
+        
+        public TadProtocolService(ILogger logger, LocalTadProtocol tadProtocol, IProtocolRuntime runtime, params string[] localAddresses)
+        {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _tadProtocol = tadProtocol ?? throw new ArgumentNullException(nameof(tadProtocol));
+            _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+            _localAddresses = localAddresses ?? throw new ArgumentNullException(nameof(localAddresses));
+            
+            if (_localAddresses.Length == 0)
+                throw new ArgumentException("At least one local address must be specified", nameof(localAddresses));
+                
+            // Subscribe to LocalTadProtocol events
+            _tadProtocol.PacketGenerated += OnTadPacketGenerated;
+                
+            _logger.LogInformation("TAD Protocol Service initialized for addresses: [{Addresses}]", 
+                string.Join(", ", _localAddresses));
+        }
+        
+        public string ServiceName => "TAD";
+        public string[] LocalAddresses => _localAddresses;
+        public int Priority => 100; // High priority for TAD service
+        
+        /// <summary>
+        /// Check if this service can handle the given CUD
+        /// TAD service handles:
+        /// 1. X.29 PAD protocol (CUD = 0x01 0x00 0x00 0x00)
+        /// 2. Empty CUD (default to TAD)
+        /// 3. Any unrecognized CUD patterns (fallback to TAD)
+        /// </summary>
+        public bool CanHandleCUD(byte[] cud)
+        {
+            if (cud == null || cud.Length == 0)
+            {
+                _logger.LogTrace("TAD service accepting empty CUD (default terminal service)");
+                return true;
+            }
+            
+            // X.29 PAD protocol
+            if (cud.Length >= 4 && cud[0] == 0x01 && cud[1] == 0x00 && cud[2] == 0x00 && cud[3] == 0x00)
+            {
+                _logger.LogTrace("TAD service accepting X.29 PAD protocol CUD");
+                return true;
+            }
+            
+            // Check for protocols that should NOT go to TAD
+            if (IsXMSGProtocol(cud) || IsIPProtocol(cud) || IsCLNPProtocol(cud))
+            {
+                _logger.LogTrace("TAD service rejecting non-terminal protocol CUD");
+                return false;
+            }
+            
+            // Default: TAD service accepts any unrecognized protocol as terminal access
+            _logger.LogTrace("TAD service accepting unrecognized CUD as fallback terminal service");
+            return true;
+        }
+        
+        /// <summary>
+        /// Handle incoming X.25 call request
+        /// </summary>
+        public bool HandleIncomingCall(ushort lcn, string calledAddress, string callingAddress, 
+            byte[] cud, byte[] facilities)
+        {
+            try
+            {
+                _logger.LogInformation("TAD service handling incoming call from {CallingAddress} to {CalledAddress} on LCN {LCN}",
+                    callingAddress, calledAddress, lcn);
+                
+                // Use the existing LocalTadProtocol to handle the call - events are handled via subscription
+                return _tadProtocol.HandleOutgoingCall(lcn, calledAddress, callingAddress, cud);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling TAD incoming call on LCN {LCN}", lcn);
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Handle data received on established connection
+        /// </summary>
+        public void HandleData(ushort lcn, byte[] data)
+        {
+            _tadProtocol.HandleIncomingData(lcn, data);
+        }
+        
+        /// <summary>
+        /// Handle call clearing
+        /// </summary>
+        public void HandleClear(ushort lcn, byte cause, byte diagnostic)
+        {
+            _tadProtocol.HandleCallClear(lcn);
+        }
+        
+        /// <summary>
+        /// Handle interrupt packets
+        /// </summary>
+        public void HandleInterrupt(ushort lcn, byte[] data)
+        {
+            // TAD protocol doesn't typically handle interrupts, but log them
+            _logger.LogDebug("TAD service received interrupt on LCN {LCN}: {DataLength} bytes", lcn, data?.Length ?? 0);
+        }
+        
+        /// <summary>
+        /// Handle LocalTadProtocol events and route to bound modules
+        /// </summary>
+        private void OnTadPacketGenerated(object? sender, X25PacketEventArgs e)
+        {
+            _logger.LogDebug("TAD protocol event: {PacketType}", e.Packet.PacketTypeId);
+            
+            // Fire X25Layer event to create history items
+            if (e.Direction == PacketDirection.Receive)
+            {
+                _runtime.X25Layer.FirePacketReceived(e);
+            }
+            else
+            {
+                _runtime.X25Layer.FirePacketTransmitted(e);
+            }
+            
+            // Also route event to bound module (PAD client) - needed for actual functionality
+            _runtime.RouteX25EventToBoundModule(e.Packet.LCN, e);
+        }
+        
+        /// <summary>
+        /// Check if CUD indicates XMSG protocol
+        /// </summary>
+        private bool IsXMSGProtocol(byte[] cud)
+        {
+            if (cud.Length >= 6 && cud[0] == 0x4C && cud[1] == 0x03)
+                return true;
+                
+            if (cud.Length >= 6)
+            {
+                ushort port = (ushort)((cud[4] << 8) | cud[5]);
+                if (port >= 0x1000 && port <= 0x1FFF)
+                    return true;
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Check if CUD indicates IP protocol
+        /// </summary>
+        private bool IsIPProtocol(byte[] cud)
+        {
+            return cud.Length >= 1 && cud[0] == 0xCC;
+        }
+        
+        /// <summary>
+        /// Check if CUD indicates CLNP protocol
+        /// </summary>
+        private bool IsCLNPProtocol(byte[] cud)
+        {
+            return cud.Length >= 1 && cud[0] == 0x81;
+        }
+    }
+}

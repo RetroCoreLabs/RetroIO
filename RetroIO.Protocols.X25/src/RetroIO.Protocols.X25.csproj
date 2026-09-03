@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25</RootNamespace>
+    <Description>X.25 packet layer: packet builder/parser, the clean X25Layer state machine, X.3/X.28/X.29 PAD protocols, XOT transports.</Description>
+    <PackageTags>retroio;x25;x25emulator.x25</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Common\src\RetroIO.Protocols.X25.Common.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Link\src\RetroIO.Link.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

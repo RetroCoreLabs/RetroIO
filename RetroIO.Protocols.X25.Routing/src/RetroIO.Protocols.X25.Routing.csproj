@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Generic, protocol-agnostic X.121 routing library. Pure logic (address strings + port numbers),
+    no transport/X.25/logging dependencies, so it is reusable by the switch, the PAD, and tests.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Routing</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Routing</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Routing</RootNamespace>
+    <Description>X.121 routing table, routes and hunt groups for the X.25 switch.</Description>
+    <PackageTags>retroio;x25;x25emulator.routing</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

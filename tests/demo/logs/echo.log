@@ -1,0 +1,6 @@
+03:26:47 info: x25echo[0] Echo: Connecting to 127.0.0.1:2203...
+03:26:47 info: x25echo[0] TcpLinkTransport[Echo]: connecting to 127.0.0.1:2203
+03:26:47 info: x25echo[0] TcpLinkTransport[Echo]: connected to 127.0.0.1:2203
+03:26:47 info: x25echo[0] TcpLinkTransport[Echo]: connection up [::ffff:127.0.0.1]:54514 <-> [::ffff:127.0.0.1]:2203
+03:26:47 info: x25echo[0] Echo: Connected
+03:26:47 info: x25echo[0] Echo: Service ready, waiting for calls...
