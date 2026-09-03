@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Xmsg.Servers: the HIGH-LEVEL, swappable server layer - the named XROUT programs (*TADADM now,
+    *XM-FIDO later) plus their subsystems (the TAD tty subsystem, accounts, commands). It depends
+    only on the boundary contracts in RetroIO.Protocols.Xmsg.Node.Services (IXmsgServer / IXmsgTransport) and never
+    touches the XMSG envelope/sequencing. This is the layer expected to be refactored hard later,
+    so it is deliberately isolated from the transport code.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Servers</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Servers</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Servers</RootNamespace>
+    <Description>The *FA-SERVER file server and *TADADM terminal server that answer real SINTRAN machines.</Description>
+    <PackageTags>retroio;xmsg;xmsg.servers</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Drives the default TAD MOTD banner ("Emulated TAD server version vN.N.N"). -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Node\src\RetroIO.Protocols.Xmsg.Node.csproj" />
+    <!--
+      The FA (remote file access) server serves a Windows folder, and the 64-byte directory record
+      it has to put on the wire is the SINTRAN object entry. RetroIO.Protocols.Xmsg.Ndfs is the ONE place that knows
+      that structure (it holds the RetroFS dependency so nothing else has to), so the file server
+      goes through it rather than growing its own copy of the layout.
+    -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ndfs\src\RetroIO.Protocols.Xmsg.Ndfs.csproj" />
+    <!-- ChatRoom: the room rules, shared with the port-to-port chat server. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Chat\src\RetroIO.Protocols.Xmsg.Chat.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

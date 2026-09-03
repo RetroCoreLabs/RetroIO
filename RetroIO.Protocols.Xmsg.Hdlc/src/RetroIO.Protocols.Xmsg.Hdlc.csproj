@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Hdlc</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Hdlc</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Hdlc</RootNamespace>
+    <Description>Decode-only HDLC/LAPB frame parser with FCS-16 and a pcapng reader for XMSG captures.</Description>
+    <PackageTags>retroio;xmsg;xmsg.hdlc</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

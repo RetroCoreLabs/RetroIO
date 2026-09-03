@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Xmsg.Chat: a worked example of an XMSG APPLICATION - a named service several users join and
+    talk through. Nothing like it exists on any SINTRAN image we have, so the vocabulary in
+    ChatMessageKind is ours; everything it stands on (claiming a name, admission against a
+    free-connection count, learning a sender from an arrived message, port-to-port delivery) is
+    captured from a running machine.
+
+    HARD RULE: this project owns no wire bytes and no kernel behaviour. It talks to RetroIO.Protocols.Xmsg.Api and
+    nothing else, so it doubles as the answer to "what does writing an XMSG program actually look
+    like?" - if something here has to reach past RetroIO.Protocols.Xmsg.Api, that is a gap in RetroIO.Protocols.Xmsg.Api, not a reason
+    to add a reference.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Chat</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Chat</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Chat</RootNamespace>
+    <Description>Chat application over the XMSG kernel API: rooms, members, trunks between machines.</Description>
+    <PackageTags>retroio;xmsg;xmsg.chat</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Api\src\RetroIO.Protocols.Xmsg.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

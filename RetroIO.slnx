@@ -70,6 +70,81 @@
   <Folder Name="/RetroIO.Protocols.X25/src/">
     <Project Path="RetroIO.Protocols.X25/src/RetroIO.Protocols.X25.csproj" />
   </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Api.Node/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Api.Node/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Api.Node/src/RetroIO.Protocols.Xmsg.Api.Node.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Api.Node/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Api.Node/tests/RetroIO.Protocols.Xmsg.Api.Node.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Api/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Api/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Api/src/RetroIO.Protocols.Xmsg.Api.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Api/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Api/tests/RetroIO.Protocols.Xmsg.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Chat/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Chat/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Chat/src/RetroIO.Protocols.Xmsg.Chat.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Chat/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Chat/tests/RetroIO.Protocols.Xmsg.Chat.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Diagnostics/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Diagnostics/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Diagnostics/src/RetroIO.Protocols.Xmsg.Diagnostics.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Ethernet/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Ethernet/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Ethernet/src/RetroIO.Protocols.Xmsg.Ethernet.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Ethernet/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Ethernet/tests/RetroIO.Protocols.Xmsg.Ethernet.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Hdlc/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Hdlc/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Hdlc/src/RetroIO.Protocols.Xmsg.Hdlc.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Live/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Live/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Live/src/RetroIO.Protocols.Xmsg.Live.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Live/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Live/tests/RetroIO.Protocols.Xmsg.Live.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Ndfs/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Ndfs/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Ndfs/src/RetroIO.Protocols.Xmsg.Ndfs.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Ndfs/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Ndfs/tests/RetroIO.Protocols.Xmsg.Ndfs.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Node/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Node/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Node/src/RetroIO.Protocols.Xmsg.Node.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Node/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Node/tests/RetroIO.Protocols.Xmsg.Node.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Servers/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Servers/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Servers/src/RetroIO.Protocols.Xmsg.Servers.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Sync/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg.Sync/src/">
+    <Project Path="RetroIO.Protocols.Xmsg.Sync/src/RetroIO.Protocols.Xmsg.Sync.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg.Sync/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg.Sync/tests/RetroIO.Protocols.Xmsg.Sync.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg/" />
+  <Folder Name="/RetroIO.Protocols.Xmsg/src/">
+    <Project Path="RetroIO.Protocols.Xmsg/src/RetroIO.Protocols.Xmsg.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Xmsg/tests/">
+    <Project Path="RetroIO.Protocols.Xmsg/tests/RetroIO.Protocols.Xmsg.Tests.csproj" />
+  </Folder>
   <Folder Name="/RetroIO.Security.Firewall/" />
   <Folder Name="/RetroIO.Security.Firewall/src/">
     <Project Path="RetroIO.Security.Firewall/src/RetroIO.Security.Firewall.csproj" />
@@ -123,6 +198,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/RetroIO.Protocols.X25.Tests/RetroIO.Protocols.X25.Tests.csproj" />
+    <Project Path="tests/RetroIO.Protocols.Xmsg.TestSupport/RetroIO.Protocols.Xmsg.TestSupport.csproj" />
     <Project Path="tests/RetroIO.Tests/RetroIO.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

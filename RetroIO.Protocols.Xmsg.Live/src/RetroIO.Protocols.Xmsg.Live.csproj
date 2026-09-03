@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Live</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Live</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Live</RootNamespace>
+    <Description>Live XMSG links: LAPB state machine with injected clock, HDLC encoder, TCP bridge transport, link adapters.</Description>
+    <PackageTags>retroio;xmsg;xmsg.live</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- RetroIO.Protocols.Xmsg.Node is the portable upper half; RetroIO.Protocols.Xmsg.Live (the replaceable link half) references it,
+         never the other way round. This is the porting seam direction. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Node\src\RetroIO.Protocols.Xmsg.Node.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hdlc\src\RetroIO.Protocols.Xmsg.Hdlc.csproj" />
+    <!-- RetroIO.Protocols.Xmsg.Ethernet is the second transport under the SAME ILink seam as RetroIO.Protocols.Xmsg.Hdlc: EthernetLink
+         is the Ethernet sibling of LapbLayerAdapter. RetroIO.Protocols.Xmsg.Ethernet itself stays free of any
+         reference to RetroIO.Protocols.Xmsg.Node - the adapter lives here, on the replaceable live side. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ethernet\src\RetroIO.Protocols.Xmsg.Ethernet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

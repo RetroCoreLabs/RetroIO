@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Diagnostics</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Diagnostics</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Diagnostics</RootNamespace>
+    <Description>Diagnostics helpers for XMSG traffic.</Description>
+    <PackageTags>retroio;xmsg;xmsg.diagnostics</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

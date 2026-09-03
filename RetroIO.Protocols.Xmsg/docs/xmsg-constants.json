@@ -1,0 +1,1245 @@
+{
+  "meta": {
+    "title": "SINTRAN III XMSG / XROUT protocol constants",
+    "xmsg_version": "M",
+    "source_file": "SINTRAN/XMSG/XMSG-PL-VALUES-M.INCL",
+    "source_date": "1988-08-18",
+    "note": "Machine-generated from the official ND include file. Values decimal. option_bits values are BIT NUMBERS (0-15) in the MON 200B T-register high byte, not masks.",
+    "supplementary_source_file": "F:/ND/SINTRAN-K05-XMSG-2026/XMSG-Symb/XMSG-VALUES-L.SYMB",
+    "supplementary_source_version": "L",
+    "supplementary_note": "Entries carrying \"source\": \"L\" were added on 2026-07-29 from the XMSG L symbol files and are NOT present in the M include this file is otherwise generated from. They are real symbols, not inventions: the XEF* XMFIDO status family and XSSRT. Any regenerator MUST preserve entries marked \"source\": \"L\" or they will be silently lost - that is exactly what happened before this note existed. Whether they are absent from M because the M .INCL omits them (as the L .INCL also does - XSSRT appears only in the L .SYMB) or because they were removed in M is UNKNOWN; check an M .SYMB before deleting any of them."
+  },
+  "functions": {
+    "XFDUM": {
+      "value": 0,
+      "desc": "Dummy function"
+    },
+    "XFDCT": {
+      "value": 1,
+      "desc": "Disconnect from message system"
+    },
+    "XFGET": {
+      "value": 2,
+      "desc": "Get message space"
+    },
+    "XFREL": {
+      "value": 3,
+      "desc": "Release message space"
+    },
+    "XFRHD": {
+      "value": 4,
+      "desc": "Read header from a message (6 bytes)"
+    },
+    "XFWHD": {
+      "value": 5,
+      "desc": "Write header to a message (6 bytes)"
+    },
+    "XFREA": {
+      "value": 6,
+      "desc": "Read from message to user buffer"
+    },
+    "XFWRI": {
+      "value": 7,
+      "desc": "Write from user to message"
+    },
+    "XFSCM": {
+      "value": 8,
+      "desc": "Set current message"
+    },
+    "XFMST": {
+      "value": 9,
+      "desc": "Get message status"
+    },
+    "XFOPN": {
+      "value": 10,
+      "desc": "Open port"
+    },
+    "XFCLS": {
+      "value": 11,
+      "desc": "Close port"
+    },
+    "XFSND": {
+      "value": 12,
+      "desc": "Send message to a remote port"
+    },
+    "XFRCV": {
+      "value": 13,
+      "desc": "Receive a message on a given port"
+    },
+    "XFPST": {
+      "value": 14,
+      "desc": "Get local port status"
+    },
+    "XFGST": {
+      "value": 15,
+      "desc": "General status or wait"
+    },
+    "XFSIN": {
+      "value": 16,
+      "desc": "Service initialisation function (privileged)"
+    },
+    "XFSRL": {
+      "value": 17,
+      "desc": "Service release function (obsolete)"
+    },
+    "XFABR": {
+      "value": 18,
+      "desc": "Absolute read block from XMSG area (privileged)"
+    },
+    "XFABW": {
+      "value": 19,
+      "desc": "Absolute write block to XMSG area (obsolete)"
+    },
+    "XFMLK": {
+      "value": 20,
+      "desc": "Lock message system (obsolete)"
+    },
+    "XFMUL": {
+      "value": 21,
+      "desc": "Unlock message system (obsolete)"
+    },
+    "XFM2P": {
+      "value": 22,
+      "desc": "Magic number to system number and port id."
+    },
+    "XFP2M": {
+      "value": 23,
+      "desc": "Port to magic number"
+    },
+    "XFRIN": {
+      "value": 24,
+      "desc": "Routing initialise (obsolete)"
+    },
+    "XFCRD": {
+      "value": 25,
+      "desc": "Create driver with context (privileged)"
+    },
+    "XFSTD": {
+      "value": 26,
+      "desc": "Start driver (privileged)"
+    },
+    "XFDIB": {
+      "value": 27,
+      "desc": "Define indirect buffer (obsolete)"
+    },
+    "XFRIB": {
+      "value": 28,
+      "desc": "Read from indirect buffer (obsolete)"
+    },
+    "XFWIB": {
+      "value": 29,
+      "desc": "Write to indirect buffer (obsolete)"
+    },
+    "XFPRV": {
+      "value": 30,
+      "desc": "Request privilege"
+    },
+    "XFRTN": {
+      "value": 31,
+      "desc": "Write word 0 and return message"
+    },
+    "XFRRH": {
+      "value": 32,
+      "desc": "Receive message and read word 0"
+    },
+    "XFDUB": {
+      "value": 33,
+      "desc": "Define user buffer area for current message (privileged)"
+    },
+    "XFWDF": {
+      "value": 34,
+      "desc": "Define wake-up context (drivers only!)"
+    },
+    "XFDBK": {
+      "value": 35,
+      "desc": "Define bank no (drivers only)"
+    },
+    "XFSMC": {
+      "value": 36,
+      "desc": "Start multi-function call"
+    },
+    "XFDMM": {
+      "value": 37,
+      "desc": "Define max memory for a task (privileged)"
+    },
+    "XFALM": {
+      "value": 38,
+      "desc": "Allocate messages to a task"
+    },
+    "XFFRM": {
+      "value": 39,
+      "desc": "Free allocated messages"
+    },
+    "XFLMP": {
+      "value": 40,
+      "desc": "List messages and ports"
+    },
+    "XFRRE": {
+      "value": 41,
+      "desc": "Receive and read message"
+    },
+    "XFCPV": {
+      "value": 42,
+      "desc": "Check system and/or user privileges"
+    },
+    "XFWRT": {
+      "value": 43,
+      "desc": "Write and return message"
+    },
+    "XFMRT": {
+      "value": 44,
+      "desc": "Modify routing tables (privileged - COSROUT only!)"
+    },
+    "XFSFM": {
+      "value": 45,
+      "desc": "Send message via specified link/netserver (priv - COSROUT only!)"
+    },
+    "XFCRR": {
+      "value": 46,
+      "desc": "Cosrout receive and read message (priv - COSROUT only!)"
+    },
+    "XFGSM": {
+      "value": 47,
+      "desc": "General status multiple or wait"
+    }
+  },
+  "option_bits": {
+    "XFSYS": {
+      "value": 7,
+      "desc": "Bit set to indicate system mode call (system domain)."
+    },
+    "XFTCM": {
+      "value": 8,
+      "desc": "In XFSND/SFM: Send task current message"
+    },
+    "XFSEC": {
+      "value": 9,
+      "desc": "In XFSND/RTN/WRT: Secure message (Return if not deliv'd)."
+    },
+    "XFRDI": {
+      "value": 10,
+      "desc": "In XFWRT: Reset the current message displacement to 0."
+    },
+    "XFROU": {
+      "value": 10,
+      "desc": "In XFSND: Message to be sent to XROUT (see XFRRO)."
+    },
+    "XFFWD": {
+      "value": 11,
+      "desc": "In XFSND/RTN/WRT/SFM: Forward message."
+    },
+    "XFBNC": {
+      "value": 12,
+      "desc": "In XFSND/RTN/WRT: Bounce message."
+    },
+    "XFRES": {
+      "value": 12,
+      "desc": "In XFWRI: Reset message length to 0 before data is written."
+    },
+    "XFRMR": {
+      "value": 12,
+      "desc": "In XFRRE: Release the message if the last byte is read."
+    },
+    "XFEXC": {
+      "value": 13,
+      "desc": "In XFALM/GET: Allocate/reserve exclusive message buffer(s)."
+    },
+    "XFHIP": {
+      "value": 13,
+      "desc": "In XFSND/RTN/WRT/SFM: If not XFROU then high-priority message"
+    },
+    "XFPON": {
+      "value": 13,
+      "desc": "In XFSTD: Driver to run with paging on."
+    },
+    "XFRRO": {
+      "value": 13,
+      "desc": "In XFSND: If XFROU then non-local XROUT (sysno in A-reg)."
+    },
+    "XFWAK": {
+      "value": 14,
+      "desc": "In XFRCV/PST/GST/RRH/RRE: Wake up task on status change."
+    },
+    "XFWTF": {
+      "value": 15,
+      "desc": "If set then wait if operation not terminated."
+    }
+  },
+  "driver_functions": {
+    "XDINF": {
+      "value": 1,
+      "desc": "Get message info"
+    },
+    "XDSBP": {
+      "value": 2,
+      "desc": "Set byte pointer"
+    },
+    "XDPUS": {
+      "value": 3,
+      "desc": "Put byte sequential"
+    },
+    "XDPUR": {
+      "value": 4,
+      "desc": "Put byte random"
+    },
+    "XDGES": {
+      "value": 5,
+      "desc": "Get byte sequential"
+    },
+    "XDGER": {
+      "value": 6,
+      "desc": "Get byte random"
+    }
+  },
+  "message_types": {
+    "XMTNO": {
+      "value": 1,
+      "desc": "Normal message"
+    },
+    "XMROU": {
+      "value": 2,
+      "desc": "Routed message (Via XROUT)"
+    },
+    "XMTHI": {
+      "value": 3,
+      "desc": "High priority message"
+    },
+    "XMTRE": {
+      "value": 4,
+      "desc": "Return message (Abnormal condition)"
+    },
+    "XMKIK": {
+      "value": 5,
+      "desc": "XROUT has been kicked (no message)"
+    },
+    "XMTPS": {
+      "value": 6,
+      "desc": "Pseudo message (not used)"
+    }
+  },
+  "user_errors": {
+    "XECRA": {
+      "value": -63,
+      "desc": "XMSG crash (Info in Basefield)"
+    },
+    "XEICM": {
+      "value": -44,
+      "desc": "Function not available to tasks other than COSROUT"
+    },
+    "XENCE": {
+      "value": -43,
+      "desc": "Network checksum error (purely internal significance)"
+    },
+    "XETMU": {
+      "value": -42,
+      "desc": "Too many multi-call functions"
+    },
+    "XEIXT": {
+      "value": -41,
+      "desc": "Driver called XMSG with illegal XT-block"
+    },
+    "XEREJ": {
+      "value": -40,
+      "desc": "Network remote reject (request retransmit)"
+    },
+    "XENUS": {
+      "value": -39,
+      "desc": "No user segment info defined (XFUSG option)"
+    },
+    "XENTO": {
+      "value": -38,
+      "desc": "Timeout detected by network layer"
+    },
+    "XENRU": {
+      "value": -37,
+      "desc": "XMSG not running === do not move - used in SINTRAN ==="
+    },
+    "XEPCL": {
+      "value": -36,
+      "desc": "Remote port closed while message queued"
+    },
+    "XERND": {
+      "value": -35,
+      "desc": "Remote system not defined"
+    },
+    "XENSE": {
+      "value": -34,
+      "desc": "Network sequencing error (purely internal significance)"
+    },
+    "XENOS": {
+      "value": -33,
+      "desc": "Indirect Buffer not on valid segment"
+    },
+    "XEILR": {
+      "value": -32,
+      "desc": "Illegal use of reentrant segment in XFDIB"
+    },
+    "XEIDP": {
+      "value": -31,
+      "desc": "Illegal displacement in read/write"
+    },
+    "XEITL": {
+      "value": -30,
+      "desc": "Illegal transfer length for read/write"
+    },
+    "XENDP": {
+      "value": -29,
+      "desc": "No port open (so 'default port' param invalid)"
+    },
+    "XEDRI": {
+      "value": -28,
+      "desc": "Driver called XMSG before return from previous"
+    },
+    "XEXBF": {
+      "value": -27,
+      "desc": "Message already has XMSG buffer (XFDUB)"
+    },
+    "XEROV": {
+      "value": -26,
+      "desc": "Remote task space overflow"
+    },
+    "XERNA": {
+      "value": -25,
+      "desc": "Remote system not available"
+    },
+    "XEPVR": {
+      "value": -24,
+      "desc": "Privilege request refused"
+    },
+    "XEPRV": {
+      "value": -23,
+      "desc": "Privileged function called without privilege."
+    },
+    "XEIPN": {
+      "value": -22,
+      "desc": "Illegal port number"
+    },
+    "XEILM": {
+      "value": -21,
+      "desc": "Illegal message size or not enough space left"
+    },
+    "XEMFL": {
+      "value": -20,
+      "desc": "Message space full or buffer not available"
+    },
+    "XEIMA": {
+      "value": -19,
+      "desc": "Invalid magic number"
+    },
+    "XEILF": {
+      "value": -18,
+      "desc": "Illegal function code"
+    },
+    "XENVI": {
+      "value": -17,
+      "desc": "No Valid Indirect buffer defined"
+    },
+    "XEWNA": {
+      "value": -16,
+      "desc": "Write Not Allowed (Indirect buffer)"
+    },
+    "XEBNC": {
+      "value": -15,
+      "desc": "Return of a bounce message"
+    },
+    "XEAIN": {
+      "value": -14,
+      "desc": "XMSG Kernel already initialised"
+    },
+    "XEBFC": {
+      "value": -13,
+      "desc": "Message is in a queue."
+    },
+    "XEMCH": {
+      "value": -12,
+      "desc": "Message is already chained"
+    },
+    "XENDM": {
+      "value": -11,
+      "desc": "No default message"
+    },
+    "XEIDR": {
+      "value": -10,
+      "desc": "Function not available to drivers"
+    },
+    "XENOP": {
+      "value": -9,
+      "desc": "No more ports available"
+    },
+    "XEIRT": {
+      "value": -8,
+      "desc": "Illegal function for RT-programs (only drivers)"
+    },
+    "XEBNY": {
+      "value": -7,
+      "desc": "Message buffer not yours"
+    },
+    "XEIBP": {
+      "value": -6,
+      "desc": "Illegal message buffer pointer"
+    },
+    "XENIM": {
+      "value": -5,
+      "desc": "Facility not yet implemented"
+    },
+    "XETMM": {
+      "value": -4,
+      "desc": "Task is not allowed any more memory"
+    },
+    "XENIR": {
+      "value": -3,
+      "desc": "Network layer initialization reject (purely internal)"
+    },
+    "XEIRM": {
+      "value": -2,
+      "desc": "Non-local remote port illegal here"
+    },
+    "XENOT": {
+      "value": -1,
+      "desc": "No more XT-blocks free"
+    },
+    "XKXXX": {
+      "value": 16896,
+      "desc": "Base for standard error system (41000B)"
+    }
+  },
+  "xrout_services": {
+    "XSNUL": {
+      "value": 64,
+      "desc": "Null command returns 0 status to sender"
+    },
+    "XSLET": {
+      "value": 65,
+      "desc": "Send a letter"
+    },
+    "XSNAM": {
+      "value": 66,
+      "desc": "Give name to this port"
+    },
+    "XSCNM": {
+      "value": 67,
+      "desc": "Clear name of this port"
+    },
+    "XSGNM": {
+      "value": 68,
+      "desc": "Get name of port (param: MAGNO)"
+    },
+    "XSGNI": {
+      "value": 69,
+      "desc": "Get name (param: MC/PORTNO)"
+    },
+    "XSGMG": {
+      "value": 71,
+      "desc": "Get magic number from name (privileged)"
+    },
+    "XSDRN": {
+      "value": 73,
+      "desc": "Define remote name (privileged)"
+    },
+    "XSDMC": {
+      "value": 74,
+      "desc": "Define routing for system N - old symbol (alias of XSDSY)"
+    },
+    "XSDSY": {
+      "value": 74,
+      "desc": "Define routing for system N (privileged)"
+    },
+    "XSGMC": {
+      "value": 75,
+      "desc": "Get routing info for system N - old symbol (alias of XSGSY)"
+    },
+    "XSGSY": {
+      "value": 75,
+      "desc": "Get routing info for system N"
+    },
+    "XSLKI": {
+      "value": 76,
+      "desc": "Start up specified link (privileged)"
+    },
+    "XSTIN": {
+      "value": 77,
+      "desc": "Initialise tracing (open file, ..) (privileged)"
+    },
+    "XSTCL": {
+      "value": 78,
+      "desc": "Close tracing (privileged)"
+    },
+    "XSTDC": {
+      "value": 79,
+      "desc": "Define tracing conditions (privileged)"
+    },
+    "XSCRS": {
+      "value": 80,
+      "desc": "Create service (name, init no of SP's)"
+    },
+    "XSNSP": {
+      "value": 81,
+      "desc": "New service point(s) (increment/decrement in SP's)"
+    },
+    "XSGIN": {
+      "value": 82,
+      "desc": "Get information about name"
+    },
+    "XSDLO": {
+      "value": 83,
+      "desc": "Define local system (privileged)"
+    },
+    "XSLEK": {
+      "value": 84,
+      "desc": "Send letter and kick if unavailable (privileged)"
+    },
+    "XSNET": {
+      "value": 85,
+      "desc": "Start/stop gateway (network server) (privileged)"
+    },
+    "XSSCI": {
+      "value": 86,
+      "desc": "Set crash information (privileged)"
+    },
+    "XSGAT": {
+      "value": 87,
+      "desc": "Get/check attribute"
+    },
+    "XSDAT": {
+      "value": 88,
+      "desc": "Define/remove attribute (privileged)"
+    },
+    "XSNSI": {
+      "value": 89,
+      "desc": "Get network server information (privileged)"
+    },
+    "XSLIN": {
+      "value": 90,
+      "desc": "Get information about a link (privileged)"
+    },
+    "XSPIN": {
+      "value": 91,
+      "desc": "Get information about named ports"
+    },
+    "XSLSY": {
+      "value": 92,
+      "desc": "Get information about a system (privileged)"
+    },
+    "XSGSU": {
+      "value": 93,
+      "desc": "Get info about system utilization (privileged)"
+    },
+    "XSCRM": {
+      "value": 94,
+      "desc": "Start/stop Cosmos routing manager (priv - COSROUT only!)"
+    },
+    "XSGLI": {
+      "value": 95,
+      "desc": "Get information from link tables (priv - COSROUT only!)"
+    },
+    "XSGSG": {
+      "value": 96,
+      "desc": "Get info about system generation variables (privileged)"
+    },
+    "XSMAX": {
+      "value": 96,
+      "desc": "Maximum legal service value (alias of XSGSG)"
+    }
+  },
+  "xrout_subservices": {
+    "XSDAR": {
+      "value": 1,
+      "desc": "Enable/disable auto-restart of XMSG"
+    },
+    "XSDFR": {
+      "value": 1,
+      "desc": "Define friend system"
+    },
+    "XSGXV": {
+      "value": 1,
+      "desc": "Get XMSG version and revision"
+    },
+    "XSCMG": {
+      "value": 2,
+      "desc": "Check magic number"
+    },
+    "XSDRF": {
+      "value": 2,
+      "desc": "Define/remove restart-files"
+    },
+    "XSRFR": {
+      "value": 2,
+      "desc": "Remove friend system"
+    },
+    "XSDDF": {
+      "value": 3,
+      "desc": "Define/remove dump-files"
+    },
+    "XSECS": {
+      "value": 3,
+      "desc": "Enable checksum"
+    },
+    "XSGCN": {
+      "value": 3,
+      "desc": "Get complete system or port name (deabbreviate name)"
+    },
+    "XSDCS": {
+      "value": 4,
+      "desc": "Disable checksum"
+    },
+    "XSGDF": {
+      "value": 4,
+      "desc": "Get defined dump-files"
+    },
+    "XSGFR": {
+      "value": 4,
+      "desc": "Get friend information (privileged!)"
+    },
+    "XSDAL": {
+      "value": 5,
+      "desc": "Define alternative link (COSROUT only)"
+    },
+    "XSSRT": {
+      "value": 6,
+      "desc": "Set route through flag (XSDAT sub-service)",
+      "source": "L"
+    },
+    "XSDUX": {
+      "value": 5,
+      "desc": "Dump XMSG onto files"
+    },
+    "XSGLO": {
+      "value": 5,
+      "desc": "Get local system number and name"
+    },
+    "XSGRF": {
+      "value": 6,
+      "desc": "Get defined restart-files"
+    },
+    "XSGAR": {
+      "value": 7,
+      "desc": "Get auto-restart definition"
+    }
+  },
+  "xrout_errors": {
+    "XRSOK": {
+      "value": 0,
+      "desc": "OK - not an error!"
+    },
+    "XRISN": {
+      "value": 1,
+      "desc": "Illegal service number"
+    },
+    "XRUNN": {
+      "value": 2,
+      "desc": "Unknown name (of server or system)"
+    },
+    "XRDDF": {
+      "value": 3,
+      "desc": "Another port already has this name"
+    },
+    "XRNSP": {
+      "value": 4,
+      "desc": "No space left for names"
+    },
+    "XRIPT": {
+      "value": 5,
+      "desc": "Illegal parameter type"
+    },
+    "XRMMP": {
+      "value": 6,
+      "desc": "Missing mandatory parameter"
+    },
+    "XRUNM": {
+      "value": 7,
+      "desc": "Unknown magic number"
+    },
+    "XRMTL": {
+      "value": 8,
+      "desc": "Too short message or resulting message too long"
+    },
+    "XRSMF": {
+      "value": 9,
+      "desc": "Standard message format not handled"
+    },
+    "XRPRV": {
+      "value": 10,
+      "desc": "Caller was not privileged"
+    },
+    "XRISY": {
+      "value": 11,
+      "desc": "Illegal system number parameter"
+    },
+    "XRNRO": {
+      "value": 12,
+      "desc": "No access to remote system"
+    },
+    "XRIIV": {
+      "value": 13,
+      "desc": "Illegal integer value"
+    },
+    "XRNEI": {
+      "value": 14,
+      "desc": "Cannot define route to a neighbour"
+    },
+    "XRNXM": {
+      "value": 15,
+      "desc": "Invalid service request - not available to current caller"
+    },
+    "XRILN": {
+      "value": 16,
+      "desc": "Illegal/Reserved Logical Unit Number (LUN) for link"
+    },
+    "XRNXL": {
+      "value": 17,
+      "desc": "No more Link Descriptors (XL-blocks) for start-link/netserver"
+    },
+    "XRNXD": {
+      "value": 18,
+      "desc": "Not enough resources (XD/XF/XM-Blocks) for start-link/netserver"
+    },
+    "XRNTR": {
+      "value": 19,
+      "desc": "No trace generated (no trace buffer available)'"
+    },
+    "XRTRA": {
+      "value": 20,
+      "desc": "Trace already active"
+    },
+    "XRTRP": {
+      "value": 21,
+      "desc": "Trace passive"
+    },
+    "XRTFE": {
+      "value": 22,
+      "desc": "Trace/dump file open error (see parameter 1)"
+    },
+    "XRTRT": {
+      "value": 23,
+      "desc": "Trace RT-prog (XTRACE) not found"
+    },
+    "XRTIS": {
+      "value": 24,
+      "desc": "Illegal trace system number"
+    },
+    "XRBLK": {
+      "value": 25,
+      "desc": "Bad link - open unsuccessful"
+    },
+    "XRSYD": {
+      "value": 26,
+      "desc": "Attempt to redefine local system no"
+    },
+    "XRNLS": {
+      "value": 27,
+      "desc": "No local system number defined"
+    },
+    "XRTRE": {
+      "value": 28,
+      "desc": "Too many remote names to this system"
+    },
+    "XRRNA": {
+      "value": 29,
+      "desc": "Old service calls (<64) cannot go remote"
+    },
+    "XRBUS": {
+      "value": 30,
+      "desc": "Service points busy"
+    },
+    "XRNSE": {
+      "value": 31,
+      "desc": "This is not a service port"
+    },
+    "XRRPN": {
+      "value": 32,
+      "desc": "Remote port statically declared"
+    },
+    "XRUKS": {
+      "value": 33,
+      "desc": "Unknown remote system name or number"
+    },
+    "XRMFL": {
+      "value": 34,
+      "desc": "Remote system message table space full"
+    },
+    "XRROV": {
+      "value": 35,
+      "desc": "Remote task message space used up"
+    },
+    "XRRFU": {
+      "value": 36,
+      "desc": "Routing table full (too many systems)"
+    },
+    "XRNRB": {
+      "value": 37,
+      "desc": "No remote batch service available"
+    },
+    "XRURT": {
+      "value": 38,
+      "desc": "Unknown RT name"
+    },
+    "XRSNR": {
+      "value": 39,
+      "desc": "This server is not running"
+    },
+    "XRRND": {
+      "value": 40,
+      "desc": "Netserver: remote system is not defined"
+    },
+    "XRNNA": {
+      "value": 41,
+      "desc": "Netserver: network not available"
+    },
+    "XRISE": {
+      "value": 42,
+      "desc": "Netserver: internal server error"
+    },
+    "XRIRQ": {
+      "value": 43,
+      "desc": "Netserver: invalid request"
+    },
+    "XRNGA": {
+      "value": 44,
+      "desc": "XMSG not congfigurated with gateway code"
+    },
+    "XRRNL": {
+      "value": 45,
+      "desc": "Remote system not on same LAN"
+    },
+    "XRNCO": {
+      "value": 46,
+      "desc": "No connection to this system (unknown status)"
+    },
+    "XRAMB": {
+      "value": 47,
+      "desc": "Ambiguous name"
+    },
+    "XRFFU": {
+      "value": 48,
+      "desc": "Friend system table full (too many friends)"
+    },
+    "XRNTA": {
+      "value": 49,
+      "desc": "Netserver: network temporarily not available"
+    },
+    "XRMTO": {
+      "value": 50,
+      "desc": "Netserver: message too old"
+    },
+    "XRCNR": {
+      "value": 51,
+      "desc": "COSMOS routing manager is not running"
+    },
+    "XRICR": {
+      "value": 52,
+      "desc": "COSMOS routing manager is already running"
+    },
+    "XRRID": {
+      "value": 53,
+      "desc": "Routing information defined (start/stop inhibited)"
+    },
+    "XRIRR": {
+      "value": 54,
+      "desc": "COSMOS routing manager: invalid request"
+    },
+    "XRILX": {
+      "value": 55,
+      "desc": "Illegal link number parameter"
+    },
+    "XRXXX": {
+      "value": 16960,
+      "desc": "Base for XROUT errors: 41100B"
+    }
+  },
+  "xmfido_status": {
+    "XEFOK": {
+      "value": 0,
+      "desc": "Ok."
+    },
+    "X412B": {
+      "value": 17024,
+      "desc": "Base for this error range 41200B"
+    },
+    "XEFCL": {
+      "value": 17024,
+      "desc": "Watched port closed.",
+      "source": "L"
+    },
+    "XEFSU": {
+      "value": 17025,
+      "desc": "System up.",
+      "source": "L"
+    },
+    "XEFSD": {
+      "value": 17026,
+      "desc": "System down.",
+      "source": "L"
+    },
+    "XEFTO": {
+      "value": 17027,
+      "desc": "Timeout.",
+      "source": "L"
+    },
+    "XEFAR": {
+      "value": 17028,
+      "desc": "Already registered.",
+      "source": "L"
+    },
+    "XEFIP": {
+      "value": 17029,
+      "desc": "Illegal port.",
+      "source": "L"
+    },
+    "XEFOV": {
+      "value": 17030,
+      "desc": "Overflow.",
+      "source": "L"
+    },
+    "XEFNP": {
+      "value": 17031,
+      "desc": "No such port.",
+      "source": "L"
+    },
+    "XEFIE": {
+      "value": 17032,
+      "desc": "Illegal entry.",
+      "source": "L"
+    },
+    "XEFLT": {
+      "value": 17033,
+      "desc": "Local table full.",
+      "source": "L"
+    },
+    "XEFRT": {
+      "value": 17034,
+      "desc": "Remote table full.",
+      "source": "L"
+    },
+    "XEFRU": {
+      "value": 17035,
+      "desc": "Table resources used up in XMFIDO. (L .SYMB omits 'up')",
+      "source": "L"
+    }
+  },
+  "crash_codes": {
+    "XXEIE": {
+      "value": 1,
+      "desc": "Illegal port address in the creation of magic number"
+    },
+    "XXIOW": {
+      "value": 2,
+      "desc": "Illegal owner of buffer"
+    },
+    "XXBIN": {
+      "value": 3,
+      "desc": "Memory allocation inconsistency"
+    },
+    "XXMCE": {
+      "value": 4,
+      "desc": "Message queue length inconsistency"
+    },
+    "XXIEN": {
+      "value": 5,
+      "desc": "ZRALL gave port not in XQTAB (Not used)"
+    },
+    "XXIFL": {
+      "value": 6,
+      "desc": "XROUT: ZFUNC function >X5FUN"
+    },
+    "XXIRT": {
+      "value": 7,
+      "desc": "Illegal RT-Description add used (Not used)"
+    },
+    "XXNBF": {
+      "value": 8,
+      "desc": "INIT: No Buffer space available (Not used)"
+    },
+    "XXRIN": {
+      "value": 9,
+      "desc": "Inconsistency in resource allocation"
+    },
+    "XXNMM": {
+      "value": 10,
+      "desc": "More memory released than owned"
+    },
+    "XXNIM": {
+      "value": 11,
+      "desc": "Not implemented (Cannot recover) (Not used)"
+    },
+    "XXCLS": {
+      "value": 12,
+      "desc": "Inconsistency in port chain when closing"
+    },
+    "XXCHE": {
+      "value": 13,
+      "desc": "Double chaining attempted"
+    },
+    "XXNOR": {
+      "value": 14,
+      "desc": "No XMSG-RESIDENT found by initialization (Not used)"
+    },
+    "XXICM": {
+      "value": 15,
+      "desc": "Inconsistency in XMPRT/XPCMS Pair"
+    },
+    "XX100": {
+      "value": 16,
+      "desc": "This can only be done on N100'S (Not used)"
+    },
+    "XXMON": {
+      "value": 17,
+      "desc": "Inconsistency in level 5 monitor queues"
+    },
+    "XXMMC": {
+      "value": 18,
+      "desc": "Multisystem XMSG not implemented/generated (Not used)"
+    },
+    "XXFBI": {
+      "value": 19,
+      "desc": "Frame buffer handling inconsistency"
+    },
+    "XXPER": {
+      "value": 20,
+      "desc": "Protocol error in communications system"
+    },
+    "XXILN": {
+      "value": 21,
+      "desc": "Illegal LOG NO for HDLC (bad LOGPH) (Not used)"
+    },
+    "XXROU": {
+      "value": 22,
+      "desc": "No legal routing (XROUT) port defined"
+    },
+    "XXHER": {
+      "value": 23,
+      "desc": "Error in HDLC Driver or interface to it"
+    },
+    "XXRO2": {
+      "value": 24,
+      "desc": "XROUT fatal error - see XROUT Basefield"
+    },
+    "XXTAS": {
+      "value": 25,
+      "desc": "Task handling (wait,resume) error"
+    },
+    "XXMER": {
+      "value": 26,
+      "desc": "Message handling error (kernel-net interface)"
+    },
+    "XXNER": {
+      "value": 27,
+      "desc": "Network gateway error"
+    },
+    "XXCRM": {
+      "value": 28,
+      "desc": "No legal COSMOS routing manager port defined"
+    },
+    "XXRIC": {
+      "value": 29,
+      "desc": "Inconsistency in COSMOS routing manager"
+    },
+    "XXNGA": {
+      "value": 30,
+      "desc": "Gateway code not generated (Not used)"
+    },
+    "XXRI2": {
+      "value": 31,
+      "desc": "XROUT: Resource inconsistency"
+    },
+    "XXINP": {
+      "value": 32,
+      "desc": "XROUT: Releasing invalid name unit"
+    },
+    "XXBER": {
+      "value": 33,
+      "desc": "XROUT: Buffer handling error (xb... routines)"
+    },
+    "XXRUT": {
+      "value": 34,
+      "desc": "XROUT: Response with no request outstanding (Not used)"
+    },
+    "XXNXM": {
+      "value": 35,
+      "desc": "XROUT: No multi-system xmsg - inconsistent! (Not used)"
+    },
+    "XXNLD": {
+      "value": 36,
+      "desc": "XROUT: Not loaded correctly with RT loader"
+    },
+    "XXUSR": {
+      "value": 37,
+      "desc": "XROUT: Stopped by 'STOP-XMSG' in SINTRAN-SERVICE (Not used)"
+    },
+    "XXN10": {
+      "value": 38,
+      "desc": "XROUT: 8X100 library mark set, but this is ND-10 (Not used)"
+    },
+    "XXNSG": {
+      "value": 39,
+      "desc": "XROUT: No space available for fixing tables and/or message area"
+    },
+    "XXNI2": {
+      "value": 40,
+      "desc": "XROUT: Not yet implemented (Not used)"
+    },
+    "XXMIN": {
+      "value": 41,
+      "desc": "XROUT: System / routing table inconsistency"
+    },
+    "XXTAI": {
+      "value": 42,
+      "desc": "XROUT: Table allocation inconsistency"
+    },
+    "XXWS3": {
+      "value": 43,
+      "desc": "XROUT: Wrong SINTRAN III SYMBOL--LISTs"
+    },
+    "XXN33": {
+      "value": 44,
+      "desc": "XROUT: Not enough space for seg 33 (or too big)"
+    },
+    "XXVSX": {
+      "value": 45,
+      "desc": "XROUT: PIT3 version must run on S3 version I or later"
+    },
+    "XXNCX": {
+      "value": 46,
+      "desc": "XROUT: CX version must run on a ND-100/CX or a ND-110"
+    },
+    "XXWSY": {
+      "value": 47,
+      "desc": "XROUT: Not generated for this system"
+    },
+    "XXMNL": {
+      "value": 48,
+      "desc": "XROUT: Length of system/port names too long, reduce length of name"
+    },
+    "XXILL": {
+      "value": 50,
+      "desc": "XROUT: Not allowed on this system (error from MON CPUST/ENTSG)"
+    },
+    "XXKTB": {
+      "value": 51,
+      "desc": "XROUT: Kernel tables are too big, reduce system parameters"
+    },
+    "XXNIN": {
+      "value": 52,
+      "desc": "XROUT: XMSG is not initialized to SINTRAN."
+    },
+    "XXNSA": {
+      "value": 53,
+      "desc": "XROUT: Too many systems, reduce max number of systems accessible"
+    },
+    "XXNNP": {
+      "value": 54,
+      "desc": "XROUT: Too many named ports, reduce max number of named ports"
+    },
+    "XXILG": {
+      "value": 55,
+      "desc": "XROUT: XMSG is not generated correctly"
+    },
+    "XXTBT": {
+      "value": 56,
+      "desc": "XROUT: Physical tables are too big (>64K)"
+    },
+    "XXTBM": {
+      "value": 57,
+      "desc": "XROUT: Message buffer pool is too big (>256K)"
+    }
+  }
+}

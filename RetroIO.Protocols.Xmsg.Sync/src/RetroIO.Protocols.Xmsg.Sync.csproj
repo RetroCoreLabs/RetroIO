@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The folder-watch sync engine: local edits out to a SINTRAN machine, compiler output back.
+
+    Deliberately references NOTHING of the XMSG stack. The engine talks to an IFileTransport and
+    never names FA, XFTRA or remote batch, because which of those actually carries a file is not
+    settled - see DOC/PLAN-SYNC-DAEMON-2026-08-09.md. Keeping the seam here means the decision
+    can be made late without rewriting the watching, settling and change-detection logic.
+  -->
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Sync</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Sync</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Sync</RootNamespace>
+    <Description>Folder-watch synchronisation engine: scanner, settle tracker, planner, ledger and the transfer agent seam.</Description>
+    <PackageTags>retroio;xmsg;xmsg.sync</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

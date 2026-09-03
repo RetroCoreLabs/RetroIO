@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Ethernet</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Ethernet</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Ethernet</RootNamespace>
+    <Description>ND/COSMOS Ethernet link layer over IEEE 802.3 with TCP-hub, UDP-multicast and in-process backends.</Description>
+    <PackageTags>retroio;xmsg;xmsg.ethernet</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

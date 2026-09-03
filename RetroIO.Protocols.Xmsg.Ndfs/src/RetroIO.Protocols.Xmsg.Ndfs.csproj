@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Ndfs</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Ndfs</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Ndfs</RootNamespace>
+    <Description>COSMOS file-access (FA) file store over a folder, synthesising SINTRAN object entries through RetroIO.Storage.Ndfs.</Description>
+    <PackageTags>retroio;xmsg;xmsg.ndfs</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    This project exists to hold the RetroFS dependency in ONE place.
+
+    The 64-byte directory record the COSMOS file server puts on the wire is the SINTRAN on-disk
+    object entry, unchanged. RetroIO.Storage.Ndfs already models that structure and already decodes the
+    packed ND date word, so re-implementing either here would be duplication.
+
+    RetroIO.Protocols.Xmsg therefore stays free of RetroFS and treats the record as opaque bytes; only this
+    adapter knows what is inside it. That keeps the wire library from acquiring RetroIO.Storage.Core and
+    RetroIO.Storage.Local transitively, and it is the seam that disappears when the XMSG work migrates into
+    the RetroFS tree - see DOC/XMSG-RETROFS-MIGRATION-PLAN-2026-07-29.md.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Ndfs\src\RetroIO.Storage.Ndfs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

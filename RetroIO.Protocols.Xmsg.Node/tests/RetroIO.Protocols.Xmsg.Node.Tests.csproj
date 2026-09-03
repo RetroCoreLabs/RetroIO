@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Xmsg.Node.Tests: tests of the PORTABLE half only. It references RetroIO.Protocols.Xmsg + RetroIO.Protocols.Xmsg.Node and
+    DELIBERATELY NOT RetroIO.Protocols.Xmsg.Live or RetroIO.Protocols.Xmsg.Hdlc. That missing reference is the point: it makes "these
+    tests exercise the port surface with no link/framing dependency" a compiler-enforced fact, not a
+    convention. The fake-ILink acceptance test lives here so it cannot silently grow a Live dependency.
+  -->
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Node.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Node.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
+    <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.Node.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Servers\src\RetroIO.Protocols.Xmsg.Servers.csproj" />
+    <!-- Referenced so RegistryEnumCompletenessTests can SEE every enum the registry binds.
+         The completeness check is only meaningful where all four assemblies are visible;
+         split across projects it would report a live type as missing. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ethernet\src\RetroIO.Protocols.Xmsg.Ethernet.csproj" />
+    <ProjectReference Include="..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>

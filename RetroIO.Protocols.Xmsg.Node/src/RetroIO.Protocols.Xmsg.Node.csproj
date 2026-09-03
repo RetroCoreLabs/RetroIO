@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Xmsg.Node: the PORTABLE half of the node stack. Everything here compiles against ONLY
+    RetroIO.Protocols.Xmsg plus the seam contract (ILink). It is the code the X25Emulator port takes
+    verbatim; the consumer writes one ILink adapter on its side and nothing here changes.
+
+    HARD RULE: the only ProjectReference allowed is RetroIO.Protocols.Xmsg. Anything here that needs
+    RetroIO.Protocols.Xmsg.Hdlc or a RetroIO.Protocols.Xmsg.Live type is a seam leak to be fixed, NOT a reference to be added.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Node</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Node</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Node</RootNamespace>
+    <Description>An XMSG node: link seam, XMSG layer, named server hosting, TAD terminal service, sequence and seed stores.</Description>
+    <PackageTags>retroio;xmsg;xmsg.node</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

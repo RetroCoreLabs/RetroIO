@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Xmsg.Api.Node: the BRIDGE between the manual-shaped API (RetroIO.Protocols.Xmsg.Api) and the node's
+    frame-shaped server model (RetroIO.Protocols.Xmsg.Node). It exists as its own project because neither
+    side may reference the other: RetroIO.Protocols.Xmsg.Node's hard rule is that it depends on nothing but
+    RetroIO.Protocols.Xmsg, and RetroIO.Protocols.Xmsg.Api keeps the same rule so it stays transport-agnostic.
+    Everything that has to know about BOTH worlds lives here and nowhere else.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Api.Node</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Api.Node</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Api.Node</RootNamespace>
+    <Description>Bridges the in-process XMSG kernel API to a live node as a named server.</Description>
+    <PackageTags>retroio;xmsg;xmsg.api.node</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Api\src\RetroIO.Protocols.Xmsg.Api.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Node\src\RetroIO.Protocols.Xmsg.Node.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared helpers for the test projects ONLY. Nothing here ships in a production assembly.
+
+    It exists because the same FromHex was hand-written 11 times across five test projects, in
+    THREE different behaviours - strip nothing, strip spaces, strip spaces and newlines. A capture
+    pasted with a line break parsed in one project and threw in another, purely by which copy the
+    file happened to sit next to.
+
+    IsTestProject is deliberately NOT set: this carries no tests of its own, and marking it as a
+    test project makes the runner scan it for good.
+  -->
+
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Protocols.Xmsg.TestSupport</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.TestSupport</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>
