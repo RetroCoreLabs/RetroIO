@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\nuget-icon.png" Pack="true" PackagePath="nuget-icon.png" Visible="false" />
+  </ItemGroup>
+</Project>

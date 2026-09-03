@@ -1,0 +1,7 @@
+<Project>
+  <!-- Test defaults. No test-framework references here: RetroIO has NUnit projects, xunit projects and one with both. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+</Project>
