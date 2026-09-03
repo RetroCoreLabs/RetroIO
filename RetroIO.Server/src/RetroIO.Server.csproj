@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ONE library that is the whole RetroFS server: the protocol servers (TNFS, Econet), identity,
+    security, the filesystem backend AND the management API, composed by a single call.
+
+    Every host is then a thin shell over this: RetroServer.exe runs it as a console app or a
+    Windows service, a web app could run it in IIS, a test can run it in memory. Hosting the
+    management API in the same process is what makes the TNFS, Econet and Server endpoints report
+    real numbers instead of zeros.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Server</PackageId>
+    <AssemblyName>RetroIO.Server</AssemblyName>
+    <RootNamespace>RetroIO.Server</RootNamespace>
+    <Description>ASP.NET Core composition of the RetroServer daemon: AddRetroServer wires identity, security, storage, TNFS, Econet and the management API.</Description>
+    <PackageTags>retroio;retrofs;retrofs.server</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Management.Api\src\RetroIO.Management.Api.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Server.Hosting\src\RetroIO.Server.Hosting.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Tnfs\src\RetroIO.Protocols.Tnfs.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Econet\src\RetroIO.Protocols.Econet.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

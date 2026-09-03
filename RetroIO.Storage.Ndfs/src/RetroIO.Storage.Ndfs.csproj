@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Storage.Ndfs</PackageId>
+    <AssemblyName>RetroIO.Storage.Ndfs</AssemblyName>
+    <RootNamespace>RetroIO.Storage.Ndfs</RootNamespace>
+    <Description>Nord Disk File System (NDFS) support for RetroIO: reads and writes the filesystem of the Norsk Data ND-100 and ND-500.</Description>
+    <PackageTags>retroio;retrofs;retrofs.ndfs</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Assembly metadata -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Local\src\RetroIO.Storage.Local.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RetroIO.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

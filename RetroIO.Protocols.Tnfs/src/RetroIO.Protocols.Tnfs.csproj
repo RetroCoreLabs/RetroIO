@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Tnfs</PackageId>
+    <AssemblyName>RetroIO.Protocols.Tnfs</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Tnfs</RootNamespace>
+    <Description>TNFS (Trivial Network File System) server and client over UDP and TCP, as used by FujiNet and other 8-bit network adapters.</Description>
+    <PackageTags>retroio;retrofs;retrofs.protocols.tnfs</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Security.Firewall\src\RetroIO.Security.Firewall.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Security.Implementation\src\RetroIO.Security.Implementation.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Identity\src\RetroIO.Identity.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

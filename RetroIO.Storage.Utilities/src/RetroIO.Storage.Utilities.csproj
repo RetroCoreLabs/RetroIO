@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Storage.Utilities</PackageId>
+    <AssemblyName>RetroIO.Storage.Utilities</AssemblyName>
+    <RootNamespace>RetroIO.Storage.Utilities</RootNamespace>
+    <Description>Shared helpers for RetroIO: path handling, configuration stores and logging.</Description>
+    <PackageTags>retroio;retrofs;retrofs.utilities</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Security</PackageId>
+    <AssemblyName>RetroIO.Security</AssemblyName>
+    <RootNamespace>RetroIO.Security</RootNamespace>
+    <Description>Security abstractions for RetroIO servers: authentication, authorization, validation, rate limiting and audit contracts.</Description>
+    <PackageTags>retroio;retrofs;retrofs.security</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

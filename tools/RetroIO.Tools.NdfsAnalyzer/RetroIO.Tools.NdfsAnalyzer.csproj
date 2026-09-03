@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ndfs-analyzer</AssemblyName>
+    <RootNamespace>RetroIO.Tools.NdfsAnalyzer</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Local\src\RetroIO.Storage.Local.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Ndfs\src\RetroIO.Storage.Ndfs.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,68 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A LIBRARY, not an executable. It carries the management API (controllers, SignalR hub,
+    background push service) so that any host can serve it: the RetroServer console/service
+    process, a web app, or a test harness. It used to be a Microsoft.NET.Sdk.Web exe with its
+    own Program.cs, which is why the 8 live endpoints (TNFS, Econet, Server) always reported
+    zeros: they need SessionManager and the statistics objects, and those only exist in the
+    process that actually runs the protocol servers.
+
+    FrameworkReference rather than the Web SDK: it needs the ASP.NET Core types to compile,
+    but it must not produce an exe, a launch profile or a web publish layout.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Management.Api</PackageId>
+    <AssemblyName>RetroIO.Management.Api</AssemblyName>
+    <RootNamespace>RetroIO.Management.Api</RootNamespace>
+    <Description>Management HTTP API for RetroIO: the server-side endpoints and SignalR hub behind the admin client.</Description>
+    <PackageTags>retroio;retrofs;retrofs.management.api</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!--
+    The Web SDK used to supply these as implicit usings. The plain SDK does not, so they are
+    declared here rather than adding a dozen using lines to every controller. This list is the
+    Web SDK's own implicit using set.
+  -->
+  <ItemGroup>
+    <Using Include="System.Net.Http.Json" />
+    <Using Include="Microsoft.AspNetCore.Builder" />
+    <Using Include="Microsoft.AspNetCore.Hosting" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <Using Include="Microsoft.AspNetCore.Routing" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Hosting" />
+    <Using Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Management.Contracts\src\RetroIO.Management.Contracts.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Tnfs\src\RetroIO.Protocols.Tnfs.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Econet\src\RetroIO.Protocols.Econet.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Server.Hosting\src\RetroIO.Server.Hosting.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Identity\src\RetroIO.Identity.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Security.Firewall\src\RetroIO.Security.Firewall.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Security.Implementation\src\RetroIO.Security.Implementation.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Azure\src\RetroIO.Storage.Azure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

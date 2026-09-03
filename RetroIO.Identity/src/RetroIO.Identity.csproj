@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Identity</PackageId>
+    <AssemblyName>RetroIO.Identity</AssemblyName>
+    <RootNamespace>RetroIO.Identity</RootNamespace>
+    <Description>JSON-backed user and group store for RetroIO, with Argon2id passwords and per-protocol access flags.</Description>
+    <PackageTags>retroio;retrofs;retrofs.retroidp</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The wire contract of the RetroFS management API: the request/response DTOs and the SignalR
+    push types. Deliberately has NO project or package references at all. Anything that talks to
+    the management API (the ASP.NET host that implements it, the RetroServe UI, a CLI, a test
+    harness) depends on this and nothing else, so no client ever has to reference the server.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Management.Contracts</PackageId>
+    <AssemblyName>RetroIO.Management.Contracts</AssemblyName>
+    <RootNamespace>RetroIO.Management.Contracts</RootNamespace>
+    <Description>DTOs and the SignalR hub contract shared by the RetroServer management API and its clients.</Description>
+    <PackageTags>retroio;retrofs;retrofs.management.contracts</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

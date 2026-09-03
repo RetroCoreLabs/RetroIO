@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Storage.Local.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Storage.Local.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Authors>RetroFS Project</Authors>
+    <Company>RetroFS</Company>
+    <Product>RetroIO.Storage.Local.Tests</Product>
+    <Description>Unit tests for RetroIO.Storage.Local - Testing filesystem drivers and local adapter</Description>
+    <Copyright>Copyright © 2025 RetroFS Project</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\src\RetroIO.Storage.Local.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Client side of the RetroFS management API: a typed HTTP client and a typed SignalR client.
+    Depends only on the contract assembly, never on the ASP.NET host, so any consumer (the
+    RetroServe UI, RetroCommander, a CLI, an integration test) can drive the API without
+    dragging a web server into its build or its publish output.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Management.Client</PackageId>
+    <AssemblyName>RetroIO.Management.Client</AssemblyName>
+    <RootNamespace>RetroIO.Management.Client</RootNamespace>
+    <Description>REST and SignalR client for the RetroServer management API.</Description>
+    <PackageTags>retroio;retrofs;retrofs.management.client</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Management.Contracts\src\RetroIO.Management.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

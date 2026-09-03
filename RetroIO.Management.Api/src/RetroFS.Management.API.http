@@ -1,0 +1,6 @@
+@RetroFS.Management.API_HostAddress = http://localhost:5006
+
+GET {{RetroFS.Management.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Storage.Core</PackageId>
+    <AssemblyName>RetroIO.Storage.Core</AssemblyName>
+    <RootNamespace>RetroIO.Storage.Core</RootNamespace>
+    <Description>Core interfaces and types of RetroIO: URN-addressed volumes, streams and the driver contracts every storage backend implements.</Description>
+    <PackageTags>retroio;retrofs;retrofs.core</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

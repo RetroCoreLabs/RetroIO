@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Server.Hosting</PackageId>
+    <AssemblyName>RetroIO.Server.Hosting</AssemblyName>
+    <RootNamespace>RetroIO.Server.Hosting</RootNamespace>
+    <Description>Hosting glue for RetroServer: data directory, identity and security registration, protocol configuration files, VFS discs.</Description>
+    <PackageTags>retroio;retrofs;retrofs.server.hosting</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Azure\src\RetroIO.Storage.Azure.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Providers\src\RetroIO.Storage.Providers.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Identity\src\RetroIO.Identity.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Security.Firewall\src\RetroIO.Security.Firewall.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Security.Implementation\src\RetroIO.Security.Implementation.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

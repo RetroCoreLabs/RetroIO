@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Security.Firewall</PackageId>
+    <AssemblyName>RetroIO.Security.Firewall</AssemblyName>
+    <RootNamespace>RetroIO.Security.Firewall</RootNamespace>
+    <Description>IP firewall for RetroIO protocol servers: rule engine, persistence and rule management.</Description>
+    <PackageTags>retroio;retrofs;retrofs.security.firewall</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

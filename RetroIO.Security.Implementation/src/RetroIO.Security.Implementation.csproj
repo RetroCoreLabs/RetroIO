@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Identity\src\RetroIO.Identity.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Security.Implementation</PackageId>
+    <AssemblyName>RetroIO.Security.Implementation</AssemblyName>
+    <RootNamespace>RetroIO.Security.Implementation</RootNamespace>
+    <Description>Rate limiting and audit logging implementations for RetroIO servers.</Description>
+    <PackageTags>retroio;retrofs;retrofs.security.implementation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

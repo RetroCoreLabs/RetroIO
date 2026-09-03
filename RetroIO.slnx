@@ -1,0 +1,89 @@
+<Solution>
+  <Folder Name="/RetroIO.Identity/" />
+  <Folder Name="/RetroIO.Identity/src/">
+    <Project Path="RetroIO.Identity/src/RetroIO.Identity.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Management.Api/" />
+  <Folder Name="/RetroIO.Management.Api/src/">
+    <Project Path="RetroIO.Management.Api/src/RetroIO.Management.Api.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Management.Api/tests/">
+    <Project Path="RetroIO.Management.Api/tests/RetroIO.Management.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Management.Client/" />
+  <Folder Name="/RetroIO.Management.Client/src/">
+    <Project Path="RetroIO.Management.Client/src/RetroIO.Management.Client.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Management.Contracts/" />
+  <Folder Name="/RetroIO.Management.Contracts/src/">
+    <Project Path="RetroIO.Management.Contracts/src/RetroIO.Management.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Econet/" />
+  <Folder Name="/RetroIO.Protocols.Econet/src/">
+    <Project Path="RetroIO.Protocols.Econet/src/RetroIO.Protocols.Econet.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Tnfs/" />
+  <Folder Name="/RetroIO.Protocols.Tnfs/src/">
+    <Project Path="RetroIO.Protocols.Tnfs/src/RetroIO.Protocols.Tnfs.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Security.Firewall/" />
+  <Folder Name="/RetroIO.Security.Firewall/src/">
+    <Project Path="RetroIO.Security.Firewall/src/RetroIO.Security.Firewall.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Security.Implementation/" />
+  <Folder Name="/RetroIO.Security.Implementation/src/">
+    <Project Path="RetroIO.Security.Implementation/src/RetroIO.Security.Implementation.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Security/" />
+  <Folder Name="/RetroIO.Security/src/">
+    <Project Path="RetroIO.Security/src/RetroIO.Security.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Server.Core/" />
+  <Folder Name="/RetroIO.Server.Core/src/">
+    <Project Path="RetroIO.Server.Core/src/RetroIO.Server.Core.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Server.Hosting/" />
+  <Folder Name="/RetroIO.Server.Hosting/src/">
+    <Project Path="RetroIO.Server.Hosting/src/RetroIO.Server.Hosting.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Server/" />
+  <Folder Name="/RetroIO.Server/src/">
+    <Project Path="RetroIO.Server/src/RetroIO.Server.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Storage.Azure/" />
+  <Folder Name="/RetroIO.Storage.Azure/src/">
+    <Project Path="RetroIO.Storage.Azure/src/RetroIO.Storage.Azure.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Storage.Core/" />
+  <Folder Name="/RetroIO.Storage.Core/src/">
+    <Project Path="RetroIO.Storage.Core/src/RetroIO.Storage.Core.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Storage.Local/" />
+  <Folder Name="/RetroIO.Storage.Local/src/">
+    <Project Path="RetroIO.Storage.Local/src/RetroIO.Storage.Local.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Storage.Local/tests/">
+    <Project Path="RetroIO.Storage.Local/tests/RetroIO.Storage.Local.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Storage.Ndfs/" />
+  <Folder Name="/RetroIO.Storage.Ndfs/src/">
+    <Project Path="RetroIO.Storage.Ndfs/src/RetroIO.Storage.Ndfs.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Storage.Providers/" />
+  <Folder Name="/RetroIO.Storage.Providers/src/">
+    <Project Path="RetroIO.Storage.Providers/src/RetroIO.Storage.Providers.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Storage.Utilities/" />
+  <Folder Name="/RetroIO.Storage.Utilities/src/">
+    <Project Path="RetroIO.Storage.Utilities/src/RetroIO.Storage.Utilities.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RetroIO.Tests/RetroIO.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/RetroIO.Demo/RetroIO.Demo.csproj" />
+    <Project Path="tools/RetroIO.Tools.NdfsAnalyzer/RetroIO.Tools.NdfsAnalyzer.csproj" />
+    <Project Path="tools/RetroIO.Tools.NdfsPassword/RetroIO.Tools.NdfsPassword.csproj" />
+    <Project Path="tools/RetroIO.Tools.TnfsStress/RetroIO.Tools.TnfsStress.csproj" />
+  </Folder>
+</Solution>

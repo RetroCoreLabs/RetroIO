@@ -1,0 +1,813 @@
+//
+// SPDX-License-Identifier: MIT
+// Copyright (c) 1985-2026 Ronny Hansen 
+// HackerCorp Labs — https://github.com/HackerCorpLabs
+// RetroFS -- Accessing yesterday's data with today's standards"
+//
+
+using System;
+using System.Collections.Generic;
+using System.Text;
+using RetroIO.Storage.Core;
+using RetroIO.Storage.Ndfs.BlockDevices;
+using RetroIO.Storage.Ndfs.Elements;
+using RetroIO.Storage.Ndfs.FileSystems;
+using RetroIO.Storage.Ndfs.Structures;
+
+namespace RetroIO.Storage.Ndfs.Diagnostics
+{
+    /// <summary>
+    /// Deep analysis and validation tool for NDFS filesystems.
+    /// Analyzes block usage, pointer chains, quota tracking, and detects inconsistencies.
+    /// </summary>
+    public class NdfsAnalyzer
+    {
+        private readonly NdfsFileSystem _fileSystem;
+        private readonly IBlockDevice _device;
+        private readonly uint _totalBlocks;
+        private readonly Dictionary<uint, BlockInfo> _blockMap;
+        private readonly List<AnalysisIssue> _issues;
+
+        public NdfsAnalyzer(NdfsFileSystem fileSystem, IBlockDevice device)
+        {
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _device = device ?? throw new ArgumentNullException(nameof(device));
+            _totalBlocks = device.TotalBlocks;
+            _blockMap = new Dictionary<uint, BlockInfo>();
+            _issues = new List<AnalysisIssue>();
+        }
+
+        /// <summary>
+        /// Performs comprehensive filesystem analysis.
+        /// </summary>
+        public AnalysisReport Analyze()
+        {
+            var report = new AnalysisReport
+            {
+                AnalysisStartTime = DateTime.Now,
+                TotalBlocks = _totalBlocks
+            };
+
+            // Phase 1: Initialize block map
+            InitializeBlockMap();
+
+            // Phase 2: Parse filesystem structures
+            var masterBlock = ParseMasterBlock();
+            var bitFile = ParseBitFile(masterBlock);
+            var userFile = ParseUserFile(masterBlock);
+            var objectFile = ParseObjectFile(masterBlock);
+
+            // Phase 3: Map bitmap usage
+            MapBitmapUsage(bitFile);
+
+            // Phase 4: Traverse all pointers from master block
+            TraverseFromMasterBlock(masterBlock);
+            TraverseUserFile(userFile, masterBlock);
+            TraverseObjectFile(objectFile, masterBlock);
+
+            // Phase 5: Traverse all file pointers
+            TraverseAllFiles(objectFile);
+
+            // Phase 6: Detect issues
+            DetectOrphanedBlocks();
+            DetectMultiplyReferencedBlocks();
+            DetectBitmapMismatches();
+            DetectInvalidPointers();
+
+            // Phase 7: Validate user quotas
+            ValidateUserQuotas(userFile, objectFile);
+
+            // Phase 8: Validate unreserved pages count
+            ValidateUnreservedPages(masterBlock, bitFile);
+
+            // Phase 9: Generate report
+            report.AnalysisEndTime = DateTime.Now;
+            report.BlockMap = _blockMap;
+            report.Issues = _issues;
+            report.MasterBlock = masterBlock;
+            report.TotalIssues = _issues.Count;
+
+            return report;
+        }
+
+        private void InitializeBlockMap()
+        {
+            for (uint i = 0; i < _totalBlocks; i++)
+            {
+                _blockMap[i] = new BlockInfo
+                {
+                    BlockId = i,
+                    IsMarkedUsedInBitmap = false,
+                    PointedToBy = new List<PointerInfo>(),
+                    BlockType = DetermineSystemBlockType(i)
+                };
+            }
+        }
+
+        private BlockType DetermineSystemBlockType(uint blockId)
+        {
+            // System blocks 0-6 are reserved
+            if (blockId == 0 || blockId == 1)
+                return BlockType.MasterBlock;
+            if (blockId >= 2 && blockId <= 6)
+                return BlockType.SystemReserved;
+            return BlockType.Unknown;
+        }
+
+        private MasterBlock ParseMasterBlock()
+        {
+            // Read master block from page 0
+            byte[] buffer = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+            _device.ReadBlock(BlockAddress.FromLBA(0), buffer);
+
+            int offset = NdfsBlockDeviceDescriptor.MASTER_BLOCK_OFFSET;
+
+            // Parse directory name
+            int nameEnd = offset;
+            while (nameEnd < offset + 16 && buffer[nameEnd] != 0x27 && buffer[nameEnd] != 0)
+                nameEnd++;
+
+            string dirName = Encoding.ASCII.GetString(buffer, offset, nameEnd - offset);
+
+            // Parse total pages (big-endian)
+            uint totalPages = (uint)((buffer[offset + 0x0C] << 24) |
+                                    (buffer[offset + 0x0D] << 16) |
+                                    (buffer[offset + 0x0E] << 8) |
+                                    buffer[offset + 0x0F]);
+
+            // Parse pointers
+            var objectFilePtr = BlockPointer.FromBytes(buffer, offset + 0x10);
+            var userFilePtr = BlockPointer.FromBytes(buffer, offset + 0x14);
+            var bitFilePtr = BlockPointer.FromBytes(buffer, offset + 0x18);
+
+            // Parse unreserved pages
+            uint unreservedPages = (uint)((buffer[offset + 0x1C] << 24) |
+                                         (buffer[offset + 0x1D] << 16) |
+                                         (buffer[offset + 0x1E] << 8) |
+                                         buffer[offset + 0x1F]);
+
+            return new MasterBlock
+            {
+                DirectoryName = dirName,
+                TotalPages = totalPages,
+                ObjectFilePointer = objectFilePtr,
+                UserFilePointer = userFilePtr,
+                BitFilePointer = bitFilePtr,
+                UnreservedPages = unreservedPages
+            };
+        }
+
+        private BitFile ParseBitFile(MasterBlock master)
+        {
+            byte[] buffer = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+            _device.ReadBlock(BlockAddress.FromLBA(master.BitFilePointer.BlockID), buffer);
+
+            var bitFile = new BitFile();
+            // BitFile is typically just the raw bitmap
+            return bitFile;
+        }
+
+        private UserFile ParseUserFile(MasterBlock master)
+        {
+            var userFile = new UserFile();
+            // UserFile parsing would go here
+            // For now, use filesystem's existing UserFile
+            return userFile;
+        }
+
+        private ObjectFile ParseObjectFile(MasterBlock master)
+        {
+            var objectFile = new ObjectFile();
+            // ObjectFile parsing would go here
+            // For now, use filesystem's existing ObjectFile
+            return objectFile;
+        }
+
+        private void MapBitmapUsage(BitFile bitFile)
+        {
+            // Read bitmap and mark blocks as used/free
+            byte[] buffer = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+            _device.ReadBlock(BlockAddress.FromLBA(4), buffer); // BitFile is at block 4
+
+            for (uint blockId = 0; blockId < _totalBlocks; blockId++)
+            {
+                uint byteIndex = blockId / 8;
+                int bitIndex = (int)(blockId % 8);
+
+                if (byteIndex < buffer.Length)
+                {
+                    bool isUsed = (buffer[byteIndex] & (1 << bitIndex)) != 0;
+                    _blockMap[blockId].IsMarkedUsedInBitmap = isUsed;
+                }
+            }
+        }
+
+        private void TraverseFromMasterBlock(MasterBlock master)
+        {
+            // Mark system blocks (0-6) as used
+            for (uint i = 0; i <= 6; i++)
+            {
+                _blockMap[i].BlockType = BlockType.SystemReserved;
+                RecordPointer(i, new BlockPointer { BlockID = 0, Type = BlockPointer.PointerType.Contiguous }, "MasterBlock");
+            }
+
+            // Mark ObjectFile index block
+            if (master.ObjectFilePointer.BlockID > 0 && master.ObjectFilePointer.BlockID < _totalBlocks)
+            {
+                _blockMap[master.ObjectFilePointer.BlockID].BlockType = BlockType.ObjectFileIndex;
+                RecordPointer(master.ObjectFilePointer.BlockID, master.ObjectFilePointer, "MasterBlock->ObjectFile");
+            }
+
+            // Mark UserFile index block
+            if (master.UserFilePointer.BlockID > 0 && master.UserFilePointer.BlockID < _totalBlocks)
+            {
+                _blockMap[master.UserFilePointer.BlockID].BlockType = BlockType.UserFileIndex;
+                RecordPointer(master.UserFilePointer.BlockID, master.UserFilePointer, "MasterBlock->UserFile");
+            }
+
+            // Mark BitFile block
+            if (master.BitFilePointer.BlockID > 0 && master.BitFilePointer.BlockID < _totalBlocks)
+            {
+                _blockMap[master.BitFilePointer.BlockID].BlockType = BlockType.BitFile;
+                RecordPointer(master.BitFilePointer.BlockID, master.BitFilePointer, "MasterBlock->BitFile");
+            }
+        }
+
+        private void TraverseUserFile(UserFile userFile, MasterBlock master)
+        {
+            // Read UserFile index block
+            byte[] indexBuffer = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+            _device.ReadBlock(BlockAddress.FromLBA(master.UserFilePointer.BlockID), indexBuffer);
+
+            // Traverse data blocks
+            for (int i = 0; i < 512; i++)
+            {
+                var dataPtr = BlockPointer.FromBytes(indexBuffer, i * 4);
+                if (dataPtr.BlockID > 0 && dataPtr.BlockID < _totalBlocks)
+                {
+                    _blockMap[dataPtr.BlockID].BlockType = BlockType.UserFileData;
+                    RecordPointer(dataPtr.BlockID, dataPtr, $"UserFile[Index]->DataBlock[{i}]");
+                }
+            }
+        }
+
+        private void TraverseObjectFile(ObjectFile objectFile, MasterBlock master)
+        {
+            // Read ObjectFile index block
+            byte[] indexBuffer = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+            _device.ReadBlock(BlockAddress.FromLBA(master.ObjectFilePointer.BlockID), indexBuffer);
+
+            // Traverse data blocks
+            for (int i = 0; i < 512; i++)
+            {
+                var dataPtr = BlockPointer.FromBytes(indexBuffer, i * 4);
+                if (dataPtr.BlockID > 0 && dataPtr.BlockID < _totalBlocks)
+                {
+                    _blockMap[dataPtr.BlockID].BlockType = BlockType.ObjectFileData;
+                    RecordPointer(dataPtr.BlockID, dataPtr, $"ObjectFile[Index]->DataBlock[{i}]");
+                }
+            }
+        }
+
+        private void TraverseAllFiles(ObjectFile objectFile)
+        {
+            // Get all files from filesystem
+            var users = _fileSystem.GetUsers();
+
+            foreach (var user in users)
+            {
+                var files = _fileSystem.ListDirectory(user.UserName);
+
+                if (files != null && files.Length > 0)
+                {
+                    foreach (var file in files)
+                    {
+                        string fullPath = $"{user.UserName}/{file.Name}";
+                        TraverseFile(fullPath, user.UserName);
+                    }
+                }
+            }
+
+            // Also try direct ObjectFile traversal using reflection
+            TraverseObjectFileDirectly(objectFile);
+        }
+
+        private void TraverseObjectFileDirectly(ObjectFile objectFile)
+        {
+            try
+            {
+                // Use reflection to access internal ObjectFile entries
+                var objFileField = typeof(NdfsFileSystem).GetField("_objectFile",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (objFileField == null) return;
+
+                var objectFileInstance = objFileField.GetValue(_fileSystem);
+                if (objectFileInstance == null) return;
+
+                // Try to get all entries
+                var getAllMethod = objectFileInstance.GetType().GetMethod("GetAllEntries");
+                if (getAllMethod != null)
+                {
+                    object? entriesResult = getAllMethod.Invoke(objectFileInstance, null);
+                    if (entriesResult != null)
+                    {
+                        dynamic entries = entriesResult;
+                        foreach (var entry in entries)
+                        {
+                            string fileName = entry.FileName;
+                            string userName = entry.UserName;
+                            BlockPointer filePointer = entry.FilePointer;
+                            uint fileSize = entry.BytesInFile;
+
+                            string fullPath = $"{userName}/{fileName}";
+
+                            if (filePointer.BlockID > 0 && filePointer.BlockID < _totalBlocks)
+                            {
+                                _blockMap[filePointer.BlockID].BlockType = BlockType.FileIndex;
+                                RecordPointer(filePointer.BlockID, filePointer, $"File[{fullPath}]->IndexBlock");
+                                TraverseFileDataBlocks(filePointer, fileSize, fullPath);
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Reflection failed, skip direct traversal
+            }
+        }
+
+        private void TraverseFile(string fullPath, string userName)
+        {
+            try
+            {
+                var metadata = _fileSystem.GetMetadata(fullPath);
+                if (metadata == null) return;
+
+                // Use reflection to get ObjectEntry (internal)
+                var objFileField = typeof(NdfsFileSystem).GetField("_objectFile",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (objFileField == null) return;
+
+                var objectFile = objFileField.GetValue(_fileSystem);
+                if (objectFile == null) return;
+
+                var findMethod = objectFile.GetType().GetMethod("FindObject");
+                if (findMethod == null) return;
+
+                string fileName = System.IO.Path.GetFileName(fullPath);
+                object? entryResult = findMethod.Invoke(objectFile, new object[] { fileName, userName });
+                if (entryResult == null) return;
+                dynamic entry = entryResult;
+
+                BlockPointer filePointer = entry.FilePointer;
+                uint fileSize = entry.BytesInFile;
+
+                // Mark file index block
+                if (filePointer.BlockID > 0 && filePointer.BlockID < _totalBlocks)
+                {
+                    _blockMap[filePointer.BlockID].BlockType = BlockType.FileIndex;
+                    RecordPointer(filePointer.BlockID, filePointer, $"File[{fullPath}]->IndexBlock");
+
+                    // Traverse data blocks
+                    TraverseFileDataBlocks(filePointer, fileSize, fullPath);
+                }
+            }
+            catch
+            {
+                // Skip files that can't be analyzed
+            }
+        }
+
+        private void TraverseFileDataBlocks(BlockPointer indexPointer, uint fileSize, string filePath)
+        {
+            if (indexPointer.Type == BlockPointer.PointerType.Indexed)
+            {
+                // Read index block
+                byte[] indexBuffer = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+                _device.ReadBlock(BlockAddress.FromLBA(indexPointer.BlockID), indexBuffer);
+
+                // Calculate number of data blocks needed
+                uint dataBlocks = (fileSize + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - 1) / NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+
+                for (int i = 0; i < dataBlocks && i < 512; i++)
+                {
+                    var dataPtr = BlockPointer.FromBytes(indexBuffer, i * 4);
+                    if (dataPtr.BlockID > 0 && dataPtr.BlockID < _totalBlocks)
+                    {
+                        _blockMap[dataPtr.BlockID].BlockType = BlockType.FileData;
+                        RecordPointer(dataPtr.BlockID, dataPtr, $"File[{filePath}]->DataBlock[{i}]");
+                    }
+                }
+            }
+            else if (indexPointer.Type == BlockPointer.PointerType.Contiguous)
+            {
+                // Contiguous allocation
+                uint dataBlocks = (fileSize + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - 1) / NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+
+                for (uint i = 0; i < dataBlocks; i++)
+                {
+                    uint blockId = indexPointer.BlockID + i;
+                    if (blockId < _totalBlocks)
+                    {
+                        _blockMap[blockId].BlockType = BlockType.FileData;
+                        RecordPointer(blockId, indexPointer, $"File[{filePath}]->DataBlock[{i}](Contiguous)");
+                    }
+                }
+            }
+        }
+
+        private void RecordPointer(uint blockId, BlockPointer pointer, string source)
+        {
+            if (!_blockMap.ContainsKey(blockId))
+                return;
+
+            var info = new PointerInfo
+            {
+                Pointer = pointer,
+                Source = source
+            };
+
+            _blockMap[blockId].PointedToBy.Add(info);
+        }
+
+        private void DetectOrphanedBlocks()
+        {
+            foreach (var block in _blockMap.Values)
+            {
+                // Orphaned: marked as used in bitmap but nothing points to it
+                if (block.IsMarkedUsedInBitmap && block.PointedToBy.Count == 0 && block.BlockId >= 7)
+                {
+                    _issues.Add(new AnalysisIssue
+                    {
+                        Severity = IssueSeverity.Warning,
+                        Category = IssueCategory.OrphanedBlock,
+                        BlockId = block.BlockId,
+                        Description = $"Block {block.BlockId} is marked as used in bitmap but has no pointers to it (orphaned block)",
+                        Recommendation = "Free this block in the bitmap"
+                    });
+                }
+            }
+        }
+
+        private void DetectMultiplyReferencedBlocks()
+        {
+            foreach (var block in _blockMap.Values)
+            {
+                if (block.PointedToBy.Count > 1)
+                {
+                    // Build sources string manually
+                    var sb = new StringBuilder();
+                    for (int i = 0; i < block.PointedToBy.Count; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        sb.Append(block.PointedToBy[i].Source);
+                    }
+                    string sources = sb.ToString();
+
+                    _issues.Add(new AnalysisIssue
+                    {
+                        Severity = IssueSeverity.Critical,
+                        Category = IssueCategory.MultiplePointers,
+                        BlockId = block.BlockId,
+                        Description = $"Block {block.BlockId} is pointed to by {block.PointedToBy.Count} different sources: {sources}",
+                        Recommendation = "This indicates filesystem corruption - same block referenced multiple times"
+                    });
+                }
+            }
+        }
+
+        private void DetectBitmapMismatches()
+        {
+            foreach (var block in _blockMap.Values)
+            {
+                bool shouldBeUsed = block.PointedToBy.Count > 0;
+
+                if (shouldBeUsed && !block.IsMarkedUsedInBitmap)
+                {
+                    // Build list of who points to this block
+                    var sb = new StringBuilder();
+                    for (int i = 0; i < block.PointedToBy.Count; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        sb.Append(block.PointedToBy[i].Source);
+                    }
+                    string pointers = sb.ToString();
+
+                    _issues.Add(new AnalysisIssue
+                    {
+                        Severity = IssueSeverity.Error,
+                        Category = IssueCategory.BitmapMismatch,
+                        BlockId = block.BlockId,
+                        Description = $"Block {block.BlockId} has {block.PointedToBy.Count} pointer(s) but is marked FREE in bitmap. Pointed to by: {pointers}",
+                        Recommendation = "Mark block as USED in bitmap"
+                    });
+                }
+            }
+        }
+
+        private void DetectInvalidPointers()
+        {
+            foreach (var block in _blockMap.Values)
+            {
+                foreach (var ptr in block.PointedToBy)
+                {
+                    // Check if pointer points to valid block
+                    if (ptr.Pointer.BlockID >= _totalBlocks)
+                    {
+                        _issues.Add(new AnalysisIssue
+                        {
+                            Severity = IssueSeverity.Critical,
+                            Category = IssueCategory.InvalidPointer,
+                            BlockId = block.BlockId,
+                            Description = $"Invalid pointer from {ptr.Source}: points to block {ptr.Pointer.BlockID} which is beyond disk size ({_totalBlocks})",
+                            Recommendation = "Remove this invalid pointer"
+                        });
+                    }
+                }
+            }
+        }
+
+        private void ValidateUserQuotas(UserFile userFile, ObjectFile objectFile)
+        {
+            var users = _fileSystem.GetUsers();
+
+            // Access ObjectFile via reflection to get actual entries
+            var objFileField = typeof(NdfsFileSystem).GetField("_objectFile",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (objFileField == null) return;
+
+            var objectFileInstance = objFileField.GetValue(_fileSystem);
+            if (objectFileInstance == null) return;
+
+            foreach (var user in users)
+            {
+                uint actualPagesUsed = 0;
+
+                // Get user's files from ObjectFile using GetUserObjects method
+                var getUserObjectsMethod = objectFileInstance.GetType().GetMethod("GetUserObjects", new[] { typeof(string) });
+                if (getUserObjectsMethod != null)
+                {
+                    object? userObjectsResult = getUserObjectsMethod.Invoke(objectFileInstance, new object[] { user.UserName });
+
+                    if (userObjectsResult != null)
+                    {
+                        dynamic userObjects = userObjectsResult;
+                        // Calculate pages from ObjectEntry.PagesInFile
+                        for (int i = 0; i < userObjects.Count; i++)
+                        {
+                            dynamic obj = userObjects[i];
+                            uint pagesInFile = obj.PagesInFile;
+                            actualPagesUsed += pagesInFile;
+                        }
+                    }
+                }
+
+                // Report mismatch if values don't match
+                if (actualPagesUsed != user.PagesUsed)
+                {
+                    _issues.Add(new AnalysisIssue
+                    {
+                        Severity = IssueSeverity.Warning,
+                        Category = IssueCategory.QuotaMismatch,
+                        Description = $"User '{user.UserName}' has PagesUsed={user.PagesUsed} but actual blocks used={actualPagesUsed}",
+                        Recommendation = $"Update user PagesUsed to {actualPagesUsed}"
+                    });
+                }
+            }
+        }
+
+        private void ValidateUnreservedPages(MasterBlock master, BitFile bitFile)
+        {
+            // Count actual free blocks
+            uint actualFree = 0;
+            foreach (var block in _blockMap.Values)
+            {
+                if (!block.IsMarkedUsedInBitmap && block.BlockId >= 7)
+                    actualFree++;
+            }
+
+            if (actualFree != master.UnreservedPages)
+            {
+                _issues.Add(new AnalysisIssue
+                {
+                    Severity = IssueSeverity.Warning,
+                    Category = IssueCategory.UnreservedPagesMismatch,
+                    Description = $"MasterBlock.UnreservedPages={master.UnreservedPages} but actual free blocks={actualFree}",
+                    Recommendation = $"Update MasterBlock.UnreservedPages to {actualFree}"
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Information about a single block on disk.
+    /// </summary>
+    public class BlockInfo
+    {
+        public uint BlockId { get; set; }
+        public bool IsMarkedUsedInBitmap { get; set; }
+        public List<PointerInfo> PointedToBy { get; set; } = new List<PointerInfo>();
+        public BlockType BlockType { get; set; }
+    }
+
+    public class PointerInfo
+    {
+        public BlockPointer Pointer { get; set; } = new BlockPointer();
+        public string Source { get; set; } = string.Empty;
+    }
+
+    public enum BlockType
+    {
+        Unknown,
+        MasterBlock,
+        SystemReserved,
+        ObjectFileIndex,
+        ObjectFileData,
+        UserFileIndex,
+        UserFileData,
+        BitFile,
+        FileIndex,
+        FileData
+    }
+
+    public class MasterBlock
+    {
+        public string DirectoryName { get; set; } = string.Empty;
+        public uint TotalPages { get; set; }
+        public BlockPointer ObjectFilePointer { get; set; } = new BlockPointer();
+        public BlockPointer UserFilePointer { get; set; } = new BlockPointer();
+        public BlockPointer BitFilePointer { get; set; } = new BlockPointer();
+        public uint UnreservedPages { get; set; }
+    }
+
+    public class AnalysisReport
+    {
+        public DateTime AnalysisStartTime { get; set; }
+        public DateTime AnalysisEndTime { get; set; }
+        public uint TotalBlocks { get; set; }
+        public Dictionary<uint, BlockInfo> BlockMap { get; set; } = new Dictionary<uint, BlockInfo>();
+        public List<AnalysisIssue> Issues { get; set; } = new List<AnalysisIssue>();
+        public MasterBlock MasterBlock { get; set; } = new MasterBlock();
+        public int TotalIssues { get; set; }
+
+        public TimeSpan AnalysisDuration => AnalysisEndTime - AnalysisStartTime;
+
+        public int GetIssueCount(IssueSeverity severity)
+        {
+            int count = 0;
+            for (int i = 0; i < Issues.Count; i++)
+            {
+                if (Issues[i].Severity == severity)
+                    count++;
+            }
+            return count;
+        }
+
+        public int GetIssueCount(IssueCategory category)
+        {
+            int count = 0;
+            for (int i = 0; i < Issues.Count; i++)
+            {
+                if (Issues[i].Category == category)
+                    count++;
+            }
+            return count;
+        }
+
+        public string GenerateTextReport()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=".PadRight(80, '='));
+            sb.AppendLine("NDFS FILESYSTEM ANALYSIS REPORT");
+            sb.AppendLine("=".PadRight(80, '='));
+            sb.AppendLine();
+
+            sb.AppendLine($"Analysis Time: {AnalysisStartTime:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"Duration: {AnalysisDuration.TotalSeconds:F2} seconds");
+            sb.AppendLine($"Total Blocks: {TotalBlocks:N0}");
+            sb.AppendLine();
+
+            sb.AppendLine("MASTER BLOCK INFORMATION:");
+            sb.AppendLine($"  Directory Name: {MasterBlock.DirectoryName}");
+            sb.AppendLine($"  Total Pages: {MasterBlock.TotalPages:N0}");
+            sb.AppendLine($"  Unreserved Pages: {MasterBlock.UnreservedPages:N0}");
+            sb.AppendLine($"  ObjectFile Pointer: Block {MasterBlock.ObjectFilePointer.BlockID}");
+            sb.AppendLine($"  UserFile Pointer: Block {MasterBlock.UserFilePointer.BlockID}");
+            sb.AppendLine($"  BitFile Pointer: Block {MasterBlock.BitFilePointer.BlockID}");
+            sb.AppendLine();
+
+            sb.AppendLine("BLOCK USAGE SUMMARY:");
+            int usedInBitmap = 0;
+            int hasPointers = 0;
+            foreach (var block in BlockMap.Values)
+            {
+                if (block.IsMarkedUsedInBitmap) usedInBitmap++;
+                if (block.PointedToBy.Count > 0) hasPointers++;
+            }
+
+            int orphaned = 0;
+            int multiRef = 0;
+            for (int i = 0; i < Issues.Count; i++)
+            {
+                if (Issues[i].Category == IssueCategory.OrphanedBlock) orphaned++;
+                if (Issues[i].Category == IssueCategory.MultiplePointers) multiRef++;
+            }
+
+            sb.AppendLine($"  Marked USED in bitmap: {usedInBitmap:N0}");
+            sb.AppendLine($"  Marked FREE in bitmap: {TotalBlocks - usedInBitmap:N0}");
+            sb.AppendLine($"  Blocks with pointers: {hasPointers:N0}");
+            sb.AppendLine($"  Orphaned blocks: {orphaned:N0}");
+            sb.AppendLine($"  Multiply-referenced blocks: {multiRef:N0}");
+            sb.AppendLine();
+
+            sb.AppendLine("ISSUES FOUND:");
+            sb.AppendLine($"  Total: {TotalIssues}");
+            sb.AppendLine($"  Critical: {GetIssueCount(IssueSeverity.Critical)}");
+            sb.AppendLine($"  Error: {GetIssueCount(IssueSeverity.Error)}");
+            sb.AppendLine($"  Warning: {GetIssueCount(IssueSeverity.Warning)}");
+            sb.AppendLine($"  Info: {GetIssueCount(IssueSeverity.Info)}");
+            sb.AppendLine();
+
+            if (TotalIssues > 0)
+            {
+                sb.AppendLine("ISSUE DETAILS:");
+                sb.AppendLine();
+
+                // Group issues by category manually
+                var categoryGroups = new Dictionary<IssueCategory, List<AnalysisIssue>>();
+                for (int i = 0; i < Issues.Count; i++)
+                {
+                    var issue = Issues[i];
+                    if (!categoryGroups.ContainsKey(issue.Category))
+                        categoryGroups[issue.Category] = new List<AnalysisIssue>();
+                    categoryGroups[issue.Category].Add(issue);
+                }
+
+                // Sort categories
+                var categories = new List<IssueCategory>(categoryGroups.Keys);
+                categories.Sort();
+
+                for (int i = 0; i < categories.Count; i++)
+                {
+                    var category = categories[i];
+                    var groupIssues = categoryGroups[category];
+
+                    sb.AppendLine($"  [{category}] ({groupIssues.Count} issues)");
+                    sb.AppendLine("  " + "-".PadRight(76, '-'));
+
+                    // Sort issues by severity
+                    groupIssues.Sort((a, b) => a.Severity.CompareTo(b.Severity));
+
+                    for (int j = 0; j < groupIssues.Count; j++)
+                    {
+                        var issue = groupIssues[j];
+                        sb.AppendLine($"    [{issue.Severity}] {issue.Description}");
+                        if (!string.IsNullOrEmpty(issue.Recommendation))
+                            sb.AppendLine($"      → {issue.Recommendation}");
+                    }
+
+                    sb.AppendLine();
+                }
+            }
+            else
+            {
+                sb.AppendLine("✓ NO ISSUES FOUND - Filesystem is healthy!");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("=".PadRight(80, '='));
+            sb.AppendLine("END OF REPORT");
+            sb.AppendLine("=".PadRight(80, '='));
+
+            return sb.ToString();
+        }
+    }
+
+    public class AnalysisIssue
+    {
+        public IssueSeverity Severity { get; set; }
+        public IssueCategory Category { get; set; }
+        public uint? BlockId { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string Recommendation { get; set; } = string.Empty;
+    }
+
+    public enum IssueSeverity
+    {
+        Info,
+        Warning,
+        Error,
+        Critical
+    }
+
+    public enum IssueCategory
+    {
+        OrphanedBlock,
+        MultiplePointers,
+        BitmapMismatch,
+        InvalidPointer,
+        QuotaMismatch,
+        UnreservedPagesMismatch
+    }
+}
