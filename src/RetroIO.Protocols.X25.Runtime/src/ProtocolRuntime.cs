@@ -173,6 +173,24 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                 PeerAcked = peerPR;
                 _windowOpen.Set(); // Always signal — let WaitForWindow re-evaluate
             }
+
+            /// <summary>
+            /// Puts the circuit back to the state it had at call setup, after a reset.
+            /// </summary>
+            /// <remarks>
+            /// X.25 says a reset sets BOTH directions' sequence numbers to zero, so all three
+            /// counters go back together - resetting only one would leave us numbering packets the
+            /// peer discards. The waiting sender is released as well: with the counters level the
+            /// window is empty again, and a sender blocked on the pre-reset window would otherwise
+            /// sit there until its timeout even though it is now free to send.
+            /// </remarks>
+            public void ResetFlow()
+            {
+                SendSeq = 0;
+                RecvSeq = 0;
+                PeerAcked = 0;
+                _windowOpen.Set();
+            }
         }
 
         // XOT connection tracking: maps local LCN to (connection, remote LCN) for bidirectional data
@@ -1488,9 +1506,41 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                             fc.AckReceived(peerPR);
                     }
                 }
+                else if (pti == 0x1B) // Reset Request / Reset Indication
+                {
+                    // MEASURED 2026-09-04, and this is what the bulk-transfer stall was. The peer
+                    // resets the circuit mid-stream; X.25 requires the DTE to answer with a Reset
+                    // Confirmation and to set BOTH sequence counters back to zero. This branch did
+                    // not exist, so the packet fell into the "unhandled" LogDebug below: the peer
+                    // waited for a confirmation that never came and stopped acknowledging, our send
+                    // window stayed at 7 outstanding, and every later send timed out - 59 of them
+                    // before the test's 120-second limit. The one frame that explained the whole
+                    // failure was logged BELOW the level the tests run at, which is why the earlier
+                    // investigation blamed the acknowledgement counter instead.
+                    byte cause = packetData.Length > 3 ? packetData[3] : (byte)0;
+                    byte diag = packetData.Length > 4 ? packetData[4] : (byte)0;
+
+                    // Warning, not Debug. A reset is the peer telling us the circuit was torn down
+                    // underneath us; it must never again be invisible at the default level.
+                    _logger.LogWarning(
+                        "XOT Reset Request on remote LCN {RemoteLcn} -> local LCN {LocalLcn}: cause=0x{Cause:X2} diagnostic=0x{Diag:X2} - confirming and restarting sequence numbers",
+                        remoteLcn, localLcn, cause, diag);
+
+                    SendResetConfirmationToXotConnection(localLcn, remoteLcn);
+
+                    lock (_routingLock)
+                    {
+                        if (_xotFlowControl.TryGetValue(localLcn, out var fc))
+                        {
+                            fc.ResetFlow();
+                        }
+                    }
+                }
                 else
                 {
-                    _logger.LogDebug("XOT packet type 0x{PTI:X2} on remote LCN {RemoteLcn} (unhandled)", pti, remoteLcn);
+                    // Warning rather than Debug: an unhandled packet type on a live circuit is how
+                    // the reset above hid for so long. If this fires, the type belongs above.
+                    _logger.LogWarning("XOT packet type 0x{PTI:X2} on remote LCN {RemoteLcn} (UNHANDLED)", pti, remoteLcn);
                 }
             }
             catch (Exception ex)
@@ -4967,6 +5017,50 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                     xotClient.SendX25Packet(remoteIP, rrPacket);
             }
             _logger.LogDebug("Sent RR P(R)={PR} to XOT remote LCN {RemoteLcn}", pr, remoteLcn);
+        }
+
+        /// <summary>
+        /// Answers a Reset Indication on an XOT circuit with a Reset Confirmation.
+        /// </summary>
+        /// <param name="localLcn">The local logical channel number.</param>
+        /// <param name="remoteLcn">The peer's logical channel number, which is what goes on the wire.</param>
+        /// <remarks>
+        /// Built by hand rather than through <c>X25PacketBuilder.CreateResetConfirmation</c> for the
+        /// same reason <see cref="SendRRToXotConnection"/> does: XOT carries the PEER's LCN in the
+        /// header, and the builder would write our local one. Three bytes - GFI with the modulo-8
+        /// marker and the channel group, the low LCN byte, then the Reset Confirmation type
+        /// <c>0x1F</c>, which carries no cause or diagnostic of its own.
+        /// </remarks>
+        private void SendResetConfirmationToXotConnection(ushort localLcn, ushort remoteLcn)
+        {
+            object? connection = null;
+            lock (_routingLock)
+            {
+                if (_xotConnections.TryGetValue(localLcn, out var xotInfo))
+                    connection = xotInfo.Connection;
+            }
+
+            var resetConfirm = new byte[]
+            {
+                (byte)(0x10 | ((remoteLcn >> 8) & 0x0F)),
+                (byte)(remoteLcn & 0xFF),
+                0x1F
+            };
+
+            if (connection is RetroIO.Protocols.X25.Transport.XotServerConnection xotConn)
+            {
+                xotConn.SendPacket(resetConfirm);
+            }
+            else if (connection is RetroIO.Protocols.X25.Transport.XotClientTransport xotClient)
+            {
+                var remoteIP = xotClient.GetRemoteIPAddress();
+                if (!string.IsNullOrEmpty(remoteIP))
+                    xotClient.SendX25Packet(remoteIP, resetConfirm);
+            }
+            else
+            {
+                _logger.LogWarning("No XOT connection for LCN {LocalLcn}; Reset Confirmation not sent", localLcn);
+            }
         }
 
         /// <summary>

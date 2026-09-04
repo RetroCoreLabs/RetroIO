@@ -442,6 +442,16 @@ namespace RetroIO.Protocols.X25.Transport
         private NetworkStream? _stream;
         private CancellationTokenSource? _cancellationTokenSource;
 
+        /// <summary>
+        /// Serialises whole XOT frames onto the stream.
+        /// </summary>
+        /// <remarks>
+        /// Its own object rather than locking <c>_stream</c>, because <c>_stream</c> is replaced on
+        /// reconnect and a lock taken on the old instance would guard nothing. See
+        /// <see cref="SendPacket"/> for what interleaved writes did to the wire.
+        /// </remarks>
+        private readonly object _sendLock = new object();
+
         public event EventHandler<TransportDataEventArgs>? DataReceived;
         public event EventHandler<string>? ConnectionClosed;
 
@@ -499,17 +509,34 @@ namespace RetroIO.Protocols.X25.Transport
 
             try
             {
-                // XOT encapsulation: 4-byte header + X.25 packet
-                // Header format: Version(2) + Length(2) + X.25 packet
-                var xotHeader = new byte[4];
-                xotHeader[0] = 0x00; // Version high byte
-                xotHeader[1] = 0x00; // Version low byte (RFC 1613 version 0)
-                xotHeader[2] = (byte)(x25Packet.Length >> 8); // Length high byte
-                xotHeader[3] = (byte)(x25Packet.Length & 0xFF); // Length low byte
+                // XOT encapsulation (RFC 1613): 2-byte version 0x0000, 2-byte big-endian length,
+                // then the X.25 packet.
+                //
+                // ONE buffer and ONE lock, and both matter. MEASURED 2026-09-04: this used to be two
+                // separate _stream.Write calls with no lock, and TWO threads reach here - the caller
+                // sending DATA, and the receive thread sending RR from
+                // ProtocolRuntime.SendRRToXotConnection, which runs outside the routing lock.
+                // NetworkStream.Write is not atomic across calls, so the two frames interleaved: the
+                // peer read one frame's length header followed by another frame's bytes, the frame
+                // boundary was destroyed, and it decoded the remains as an X.25 packet with a
+                // sequence number that made no sense. The C reference answered exactly as ITU-T
+                // X.25 4.5.2.2 says it must - RESET, cause 0x05 local procedure error, diagnostic
+                // 0x01 invalid P(S) - which is what a bulk transfer kept dying of.
+                //
+                // XotServerTransport.SendPacket already took this lock; only the client half was
+                // missed, and the tests dial OUT, so they took the unprotected path every time.
+                var frame = new byte[4 + x25Packet.Length];
+                frame[0] = 0x00;
+                frame[1] = 0x00;
+                frame[2] = (byte)((x25Packet.Length >> 8) & 0xFF);
+                frame[3] = (byte)(x25Packet.Length & 0xFF);
+                Buffer.BlockCopy(x25Packet, 0, frame, 4, x25Packet.Length);
 
-                _stream.Write(xotHeader, 0, 4);
-                _stream.Write(x25Packet, 0, x25Packet.Length);
-                _stream.Flush();
+                lock (_sendLock)
+                {
+                    _stream.Write(frame, 0, frame.Length);
+                    _stream.Flush();
+                }
 
                 _logger.LogDebug("Sent XOT packet ({Length} bytes) to {Address}:{Port}", x25Packet.Length, _remoteAddress, _remotePort);
                 return true;
