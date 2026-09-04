@@ -56,7 +56,10 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             Assert.True(SintranDatagramRelay.MakeRelayed(relayed));
 
-            Assert.Equal(SintranDatagramRelay.Marker2Relay, relayed[1]);
+            // Byte 1 is a decrementing HOP COUNT, not a marker: relaying once takes it from
+            // InitialHopCount to InitialHopCount-1, which is one hop taken.
+            Assert.Equal(SintranDatagramRelay.InitialHopCount - 1, relayed[1]);
+            Assert.Equal(1, SintranDatagramRelay.HopsTaken(relayed));
             Assert.True(SintranDatagramRelay.IsRelayed(relayed));
             Assert.True(SintranDatagramRelay.HasValidChecksum(relayed));
 

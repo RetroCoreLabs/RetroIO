@@ -91,7 +91,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// wrong Base and crashes the peer's XMSG (XXPER); this computes it.
         /// </summary>
         /// <param name="fields">
-        /// The envelope fields. <see cref="XmsgDataFields.ProtocolId"/> is ignored and overwritten
+        /// The envelope fields. <see cref="XmsgDataFields.ChecksumHigh"/> is ignored and overwritten
         /// with <see cref="XmsgEnvelope.DeriveChannel(ushort, byte, uint)"/> of the Flags1 / Counter / XMCSM.
         /// </param>
         /// <returns>

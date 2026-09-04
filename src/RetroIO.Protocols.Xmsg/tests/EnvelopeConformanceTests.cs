@@ -161,9 +161,9 @@ namespace RetroIO.Protocols.Xmsg.Tests
 
                     ushort flags1 = decoded.Header.Flags1;
                     ushort flags2 = decoded.Header.Flags2;
-                    byte counter = decoded.Header.Counter;
-                    uint xmcsm = decoded.ControlService;
-                    SintranProtocolId actualChannel = decoded.Header.ProtocolId;
+                    byte counter = decoded.Header.ChecksumLow;
+                    uint xmcsm = decoded.XmcsmWithBodyWord;
+                    SintranProtocolId actualChannel = (SintranProtocolId)decoded.Header.ChecksumHigh;
 
                     // Learn the seed from THIS frame, then predict the channel back from it. If the
                     // closed form holds, the prediction equals the channel actually on the wire.

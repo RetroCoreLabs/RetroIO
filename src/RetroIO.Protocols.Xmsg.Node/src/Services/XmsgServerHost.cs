@@ -173,7 +173,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
             if (destPort == XroutRequestPort)
             {
                 // Port 0: fork on the XMCSM low "service" byte.
-                byte serviceByte = (byte)(incoming.ControlService & 0xFF);
+                byte serviceByte = (byte)(incoming.XmcsmWithBodyWord & 0xFF);
                 if (serviceByte == XsletServiceByte)
                 {
                     // XSLET letter - route by the target name inside the letter.
@@ -1428,7 +1428,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
             }
 
             byte seed = XmsgEnvelope.LearnSeed(
-                incoming.Header.Flags1, incoming.Header.Counter, incoming.Header.Flags2);
+                incoming.Header.Flags1, (byte)(incoming.Header.Checksum & 0x00FF), incoming.Header.Flags2);
             ushort node = incoming.Header.SourceNode;
 
             if (_links.TryGetValue(node, out XmsgLink? link))
@@ -1438,7 +1438,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
                 if (link.Seed != seed)
                 {
                     Log?.Invoke(
-                        $"[host] WARNING: node {node} frame F1=0x{incoming.Header.Flags1:X4} ctr=0x{incoming.Header.Counter:X2} F2=0x{incoming.Header.Flags2:X4} implies seed 0x{seed:X2} but link seed is 0x{link.Seed:X2} - keeping 0x{link.Seed:X2} (out-of-model frame)");
+                        $"[host] WARNING: node {node} frame F1=0x{incoming.Header.Flags1:X4} ctr=0x{(byte)(incoming.Header.Checksum & 0x00FF):X2} F2=0x{incoming.Header.Flags2:X4} implies seed 0x{seed:X2} but link seed is 0x{link.Seed:X2} - keeping 0x{link.Seed:X2} (out-of-model frame)");
                 }
 
                 return;

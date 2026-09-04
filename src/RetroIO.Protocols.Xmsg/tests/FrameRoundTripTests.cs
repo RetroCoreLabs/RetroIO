@@ -69,7 +69,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(0x02C1, decoded.SubHeader.DestinationPort);
             Assert.Equal(100, decoded.SubHeader.SourceSystem);
             Assert.Equal(0x02AD, decoded.SubHeader.SourcePort);
-            Assert.Equal(0x0100014Bu, decoded.ControlService);
+            Assert.Equal(0x0100014Bu, decoded.XmcsmWithBodyWord);
 
             // Body equality. The 4-byte XROUT header IS carried, at absolute 28-31, so the serial
             // and service survive the round trip. They are the same two bytes the historical

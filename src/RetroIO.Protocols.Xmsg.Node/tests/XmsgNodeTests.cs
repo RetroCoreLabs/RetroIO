@@ -52,7 +52,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             data.Header.SourceNode = 0x0066;                      // 102
             data.Header.Flags1 = 0x0004;                          // datagram sequence
             data.Header.Flags2 = 0x0400;                          // a data frame-class word
-            data.Header.ProtocolId = SintranProtocolId.Routing;   // 0xDE
+            data.Header.ChecksumHigh = (byte)SintranProtocolId.Routing;   // 0xDE
             data.ClearRawBytes();                                 // serialise the ACK from the model
 
             XmsgNode node = new XmsgNode(nodeNumber: 103, ackCounter: 0x17);

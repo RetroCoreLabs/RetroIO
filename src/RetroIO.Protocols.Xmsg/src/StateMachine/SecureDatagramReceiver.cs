@@ -190,7 +190,7 @@ namespace RetroIO.Protocols.Xmsg
             // LEGACY (reachability / list-route): echo the data channel, carry the decrementing
             // counter. Both are halves of header word 6 - see above; still emitted as chosen
             // values here because this path exists to reproduce traffic we have not derived.
-            ack.Header.Checksum = (ushort)(((ushort)(ackChannel ?? dataHeader.ProtocolId) << 8) | _counter);
+            ack.Header.Checksum = (ushort)(((ushort)(ackChannel ?? (SintranProtocolId)(byte)(dataHeader.Checksum >> 8)) << 8) | _counter);
             _counter = (byte)(_counter - 1);
             return ack;
         }

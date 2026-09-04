@@ -127,7 +127,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(0x0001, ack.Header.Flags2);
             Assert.Equal(100, ack.Header.DestinationNode);      // opposite direction
             Assert.Equal(102, ack.Header.SourceNode);
-            Assert.Equal(SintranProtocolId.Routing, ack.Header.ProtocolId);
+            Assert.Equal((byte)SintranProtocolId.Routing, ack.Header.ChecksumHigh);
 
             // Trailing byte is the receiver's per-direction counter, which decrements.
             // CORRECTED 2026-08-04: an ACK is fourteen bytes with no trailing byte. What the old
@@ -175,7 +175,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 XmsgFrame ack = receiver.ReceiveDataFrame(DataWithFlags1(f1[i]), SintranProtocolId.Routing);
 
                 Assert.Equal(f1[i], ack.Header.Flags1);            // echoes Flags1
-                Assert.Equal(channel[i], ack.Header.ProtocolId);   // derived channel (DE / DD)
+                Assert.Equal((byte)channel[i], ack.Header.ChecksumHigh);   // derived channel (DE / DD)
                 Assert.Equal(counter[i], (byte)(ack.Header.Checksum & 0xFF));  // checksum low half
                 Assert.Equal(0x0001, ack.Header.Flags2);           // always class 0x0001
             }
@@ -193,9 +193,9 @@ namespace RetroIO.Protocols.Xmsg.Tests
             XmsgFrame a = receiver.ReceiveDataFrame(DataWithFlags1(0x002A), SintranProtocolId.Routing);
             XmsgFrame b = receiver.ReceiveDataFrame(DataWithFlags1(0x002A), SintranProtocolId.Routing);
 
-            Assert.Equal(SintranProtocolId.Tad, a.Header.ProtocolId);   // DD
+            Assert.Equal((byte)SintranProtocolId.Tad, a.Header.ChecksumHigh);   // DD
             Assert.Equal(0xF4, (byte)(a.Header.Checksum & 0xFF));
-            Assert.Equal(a.Header.ProtocolId, b.Header.ProtocolId);
+            Assert.Equal(a.Header.ChecksumHigh, b.Header.ChecksumHigh);
             Assert.Equal(a.Header.Checksum, b.Header.Checksum);
         }
 
@@ -213,7 +213,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             SecureDatagramReceiver receiver = new SecureDatagramReceiver(initialCounter: 0x2D);
 
             XmsgFrame ack1 = receiver.ReceiveDataFrame(DataWithFlags1(0x0007), SintranProtocolId.Dc);
-            Assert.Equal(SintranProtocolId.Dc, ack1.Header.ProtocolId);   // echoes the data channel
+            Assert.Equal((byte)SintranProtocolId.Dc, ack1.Header.ChecksumHigh);   // echoes the data channel
             Assert.Equal(0x2D, (byte)(ack1.Header.Checksum & 0xFF));
 
             XmsgFrame ack2 = receiver.ReceiveDataFrame(DataWithFlags1(0x0008), SintranProtocolId.Dc);

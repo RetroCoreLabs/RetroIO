@@ -4,12 +4,5 @@
   <PropertyGroup>
     <!-- X.25 was built with style enforcement on; keep it for this family only. -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <!-- NUnit1033 ("the Write methods are wrappers on TestContext.Out") ships in
-         NUnit.Analyzers 4.5.0. The X.25 tree pinned 4.0.1, which did not have the rule, and
-         one repo-wide version moves it up - so about ten existing TestContext.Write calls
-         become errors under TreatWarningsAsErrors. The calls are correct, just written the
-         older way. Named here with its id rather than silenced wholesale; delete this line
-         once those tests are rewritten to TestContext.Out.Write. -->
-    <NoWarn>$(NoWarn);NUnit1033</NoWarn>
   </PropertyGroup>
 </Project>

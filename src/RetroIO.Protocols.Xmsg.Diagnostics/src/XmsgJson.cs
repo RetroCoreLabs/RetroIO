@@ -100,7 +100,8 @@ namespace RetroIO.Protocols.Xmsg.Diagnostics
             dto.Header.SourceNode = header.SourceNode;
             dto.Header.Flags1 = header.Flags1;
             dto.Header.Flags2 = header.Flags2;
-            dto.Header.ProtocolId = header.ProtocolId;
+            // Historical DTO field name, honest source: offset 12 is the checksum's high byte.
+            dto.Header.ProtocolId = (SintranProtocolId)(byte)(header.Checksum >> 8);
 
             if (frame.SubHeader != null)
             {
@@ -118,7 +119,7 @@ namespace RetroIO.Protocols.Xmsg.Diagnostics
                     DestinationPort = sub.DestinationPort,
                     SourceSystem = sub.SourceSystem,
                     SourcePort = sub.SourcePort,
-                    ControlService = frame.ControlService,
+                    ControlService = frame.XmcsmWithBodyWord,
                     Pad = bodyBytes.Length > 2 ? bodyBytes[2] : (byte)0,
                     UserDataLength = bodyBytes.Length > 3 ? bodyBytes[3] : (byte)0,
                 };
@@ -227,7 +228,14 @@ namespace RetroIO.Protocols.Xmsg.Diagnostics
                 SourceNode = h.SourceNode,
                 Flags1 = h.Flags1,
                 Flags2 = h.Flags2,
-                ProtocolId = h.ProtocolId,
+
+                // The DTO keeps the historical ProtocolId/Counter field names so existing JSON
+                // still loads, but the header stores one thing: the 16-bit checksum at offsets
+                // 12-13. ProtocolId is its high byte and Counter its low byte, so both are folded
+                // back into Checksum here rather than written through compatibility properties
+                // that set one half and leave the other stale.
+                Checksum = (ushort)(((ushort)(byte)h.ProtocolId << 8)
+                                    | (dto.SubHeader != null ? dto.SubHeader.Counter : (byte)0)),
             };
 
             if (dto.SubHeader != null)
@@ -244,8 +252,8 @@ namespace RetroIO.Protocols.Xmsg.Diagnostics
                     Xmcsm = (ushort)(s.ControlService >> 16),
                 };
 
-                // Counter is the header checksum's LOW byte, so it is restored into the header.
-                frame.Header.Counter = s.Counter;
+                // Counter went into Header.Checksum above, with ProtocolId as its high byte -
+                // the two halves have to be written together or the second write clears the first.
             }
 
             if (dto.Body != null)

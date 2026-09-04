@@ -97,15 +97,15 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 SourceNode = 0x0066,
                 Flags1 = 0x0131,
                 Flags2 = 0x0108,
-                Counter = 0xDB,
+                ChecksumLow = 0xDB,
                 FrameFlags = 0x92,
                 Role = 0x00,
                 DestinationSystem = 0x0064,
                 DestinationPort = 0x02AB,
                 SourceSystem = 0x0066,
                 SourcePort = 0x04C2,
-                ControlService = 0x01080000u,
-                Payload = Convert.FromHexString("1800"),   // TAD DUMM (0x18) count=0
+                XmcsmWithBodyWord = 0x01080000u,
+                XroutPayload = Convert.FromHexString("1800"),   // TAD DUMM (0x18) count=0
             };
             Assert.Equal(
                 Convert.FromHexString("2113000E0064006601310108DBDB21009200006402AB006604C20108000000021800"),
@@ -118,15 +118,15 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 SourceNode = 0x0066,
                 Flags1 = 0x0135,
                 Flags2 = 0x0108,
-                Counter = 0xD7,
+                ChecksumLow = 0xD7,
                 FrameFlags = 0x96,
                 Role = 0x00,
                 DestinationSystem = 0x0064,
                 DestinationPort = 0x02AB,
                 SourceSystem = 0x0066,
                 SourcePort = 0x04C2,
-                ControlService = 0x01080000u,
-                Payload = Convert.FromHexString(
+                XmcsmWithBodyWord = 0x01080000u,
+                XroutPayload = Convert.FromHexString(
                     "0004030100000003010101600D0A2032322E32372E32322020202020203820415052494C202020"
                     + "313939380D0A2053494E5452414E20494949202D205653582F353030204C0D0A2D2D2D2052455452"
                     + "4F434F524520454D554C41544544204C2049443A313032202D2D2D0D0A1302000201080D0A454E54"

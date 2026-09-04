@@ -36,7 +36,13 @@ namespace RetroIO.Protocols.Xmsg
             _header.Marker2 = SintranHeader.Marker2Normal;
             _header.Subtype = SintranPacketSubtype.Data;
             _header.Flags2 = 0x0400; // data-frame class word observed in the corpus
-            _header.ProtocolId = SintranProtocolId.Routing;
+
+            // Seeds the HIGH byte of the header checksum (offset 12) with the value historically
+            // called "Routing". Offsets 12-13 are one 16-bit ones-complement checksum over words
+            // 0-5, so anything putting this frame on the wire must recompute it with
+            // XmsgEnvelope.ComputeHeaderChecksum. The header is fresh here, so its low byte is 0
+            // and this produces exactly the bytes this builder has always produced.
+            _header.Checksum = (ushort)((byte)SintranProtocolId.Routing << 8);
 
             _subHeader = new XmsgSubHeader();
         }
@@ -86,7 +92,11 @@ namespace RetroIO.Protocols.Xmsg
         /// </returns>
         public XmsgFrameBuilder WithProtocol(SintranProtocolId protocolId)
         {
-            _header.ProtocolId = protocolId;
+            // Writes the checksum's HIGH byte and leaves the low byte alone. The SintranProtocolId
+            // names are misnomers - they record which traffic produced that byte in the captures,
+            // not a sub-protocol selector - so call this BEFORE the real checksum is computed,
+            // never after, or the header is corrupt.
+            _header.Checksum = (ushort)(((ushort)(byte)protocolId << 8) | (_header.Checksum & 0x00FF));
             return this;
         }
 
@@ -124,8 +134,8 @@ namespace RetroIO.Protocols.Xmsg
         {
             // The "counter" is the SINTRAN header checksum's LOW byte (offset 13), not a
             // sub-header field - see SintranHeader.Checksum. Kept on this signature so callers
-            // compile; the header facade routes it to the right place.
-            _header.Counter = counter;
+            // compile; written straight into the checksum's low half here, leaving the high half.
+            _header.Checksum = (ushort)((_header.Checksum & 0xFF00) | counter);
             _subHeader.FrameFlags = frameFlags;
             _subHeader.Role = role;
             return this;

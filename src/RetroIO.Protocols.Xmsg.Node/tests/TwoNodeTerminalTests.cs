@@ -66,7 +66,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             bool sawFd = false;
             TadConnectClient badClient = BuildPairedNodes(badScreen, out XmsgCodec badCodec, frame =>
             {
-                if (frame.SubHeader != null && frame.ControlService == 0x00060000u)
+                if (frame.SubHeader != null && frame.XmcsmWithBodyWord == 0x00060000u)
                 {
                     sawFd = true;
                 }
@@ -206,7 +206,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
                 }
 
                 // Frame 5: the 0xFD session-state notification rides the 0x00060000 class.
-                if (frame.ControlService == 0x00060000u)
+                if (frame.XmcsmWithBodyWord == 0x00060000u)
                 {
                     sawFd = true;
                 }
@@ -226,7 +226,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
                 // Frame 3: a terminal-data frame (0x01080000) carrying SYCN 000B (LoggedOut) - the logout
                 // signal that actually makes 100 send DCON. The decoded chain is on frame.Tad.
-                if (frame.ControlService == 0x01080000u && frame.Tad != null)
+                if (frame.XmcsmWithBodyWord == 0x01080000u && frame.Tad != null)
                 {
                     IReadOnlyList<TadMessage> messages = frame.Tad.Messages;
                     for (int i = 0; i < messages.Count; i++)
@@ -990,7 +990,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             // seed 0x16 instead of 0x14 (the measured live poisoning signature). The server must
             // answer it - and everything after it - with envelopes still derived from the TRUE seed.
             XmsgFrame poisoned = client.BuildInput("help");
-            poisoned.Header!.Counter = (byte)(poisoned.Header.Counter + 2);
+            poisoned.Header!.ChecksumLow = (byte)(poisoned.Header.ChecksumLow + 2);
             poisoned.ClearRawBytes();
             fromServer.Clear();
             clientCodec.SendPacket(new XmsgPacket(poisoned));
@@ -1006,7 +1006,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
                 }
 
                 byte implied = XmsgEnvelope.LearnSeed(
-                    frame.Header!.Flags1, frame.Header.Counter, frame.Header.Flags2);
+                    frame.Header!.Flags1, frame.Header.ChecksumLow, frame.Header.Flags2);
                 Assert.Equal(0x14, implied);
                 checkedFrames++;
             }
@@ -1200,7 +1200,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             XmsgFrame? found = null;
             for (int i = 0; i < frames.Count; i++)
             {
-                if (frames[i].SubHeader != null && frames[i].ControlService == 0x01080000u)
+                if (frames[i].SubHeader != null && frames[i].XmcsmWithBodyWord == 0x01080000u)
                 {
                     found = frames[i];
                 }
@@ -1310,9 +1310,9 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             clientCodec.SendPacket(new XmsgPacket(client.BuildEsca()));
             List<XmsgFrame> escaReplies = DataFrames(fromServer);
             Assert.Equal(2, escaReplies.Count);
-            Assert.Equal(0x00080000u, escaReplies[0].ControlService);
+            Assert.Equal(0x00080000u, escaReplies[0].XmcsmWithBodyWord);
             Assert.Equal(0x86, escaReplies[0].SubHeader!.FrameFlags);
-            Assert.Equal(0x01080000u, escaReplies[1].ControlService);
+            Assert.Equal(0x01080000u, escaReplies[1].XmcsmWithBodyWord);
             Assert.Equal(0x96, escaReplies[1].SubHeader!.FrameFlags);
 
             // First RECO -> RESE#2, ff 0x92.
@@ -1514,7 +1514,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             XmsgFrame? accept = null;
             for (int i = 0; i < fromServer.Count; i++)
             {
-                if (fromServer[i].SubHeader != null && fromServer[i].ControlService == 0x04000041u)
+                if (fromServer[i].SubHeader != null && fromServer[i].XmcsmWithBodyWord == 0x04000041u)
                 {
                     accept = fromServer[i];
                 }
@@ -1531,7 +1531,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             xense.Header.SourceNode = 100;
             xense.Header.Flags1 = acceptF1;
             xense.Header.Flags2 = unchecked((ushort)XmsgError.XENSE);
-            xense.Header.ProtocolId = SintranProtocolId.Routing;
+            xense.Header.ChecksumHigh = (byte)SintranProtocolId.Routing;
             xense.ClearRawBytes();
 
             fromServer.Clear();
@@ -1541,7 +1541,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             List<XmsgFrame> replies = DataFrames(fromServer);
             Assert.Single(replies);
             XmsgFrame resent = replies[0];
-            Assert.Equal(0x04000041u, resent.ControlService);
+            Assert.Equal(0x04000041u, resent.XmcsmWithBodyWord);
             Assert.Equal((ushort)(acceptF1 - 1), resent.Header.Flags1);
 
             // UPDATED 2026-08-05. This used to assert LearnSeed(...) == 0x14 - that the resent

@@ -50,7 +50,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal("hdlc:test", gotLinkId);           // sender/link-id first, stamped by the base
             Assert.NotNull(gotPacket);
             Assert.Equal(XmsgPacketType.Data, gotPacket!.Type);
-            Assert.Equal(0x04000041u, gotPacket.ControlService);
+            Assert.Equal(0x04000041u, gotPacket.XmcsmWithBodyWord);
             Assert.Empty(transport.Sent);                    // parsing up must not send anything down
         }
 

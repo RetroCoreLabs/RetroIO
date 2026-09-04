@@ -103,35 +103,36 @@ namespace RetroIO.Protocols.Xmsg
         public ushort Checksum { get; set; }
 
         /// <summary>
-        /// Gets or sets the checksum HIGH byte (offset 12) under its historical name.
+        /// Gets or sets the HIGH byte of <see cref="Checksum"/> - wire offset 12.
         /// </summary>
         /// <remarks>
+        /// Half of one value, addressable on its own because some legacy paths still choose the
+        /// halves separately. Setting it leaves the low half untouched, so setting either half
+        /// AFTER the real checksum has been computed CORRUPTS the header. Anything going on the
+        /// wire should set <see cref="Checksum"/> from
+        /// <c>XmsgEnvelope.ComputeHeaderChecksum</c> instead.
         /// <para>
-        /// COMPATIBILITY VIEW over <see cref="Checksum"/> - it stores nothing of its own. The
-        /// <see cref="SintranProtocolId"/> member names (<c>Tad</c>, <c>Routing</c>, <c>Pad</c>,
-        /// ...) are MISNOMERS: they record which traffic happened to produce that checksum byte in
-        /// the captures, not a sub-protocol selector. Setting this rewrites the checksum's high
-        /// half and leaves the low half alone, so a caller that sets it after the real checksum
-        /// CORRUPTS the header. Dispatch on the subtype and on XMCSM instead.
+        /// This replaced a property called <c>ProtocolId</c>. There is no protocol-selector byte
+        /// on the wire: offsets 12-13 are a ones-complement checksum over header words 0-5, and
+        /// the <see cref="SintranProtocolId"/> member names record which traffic happened to
+        /// produce a given high byte in the captures. Dispatch on the subtype and on XMCSM.
         /// </para>
         /// </remarks>
-        [Obsolete("Offset 12 is the header checksum high byte, not a protocol selector. Use SintranHeader.Checksum (XmsgEnvelope.ComputeHeaderChecksum).")]
-        public SintranProtocolId ProtocolId
+        public byte ChecksumHigh
         {
-            get { return (SintranProtocolId)(byte)(Checksum >> 8); }
-            set { Checksum = (ushort)(((ushort)value << 8) | (Checksum & 0x00FF)); }
+            get { return (byte)(Checksum >> 8); }
+            set { Checksum = (ushort)((value << 8) | (Checksum & 0x00FF)); }
         }
 
         /// <summary>
-        /// Gets or sets the checksum LOW byte (offset 13) under its historical name.
+        /// Gets or sets the LOW byte of <see cref="Checksum"/> - wire offset 13.
         /// </summary>
         /// <remarks>
-        /// COMPATIBILITY VIEW over <see cref="Checksum"/>. This byte was long modelled as the XMSG
-        /// sub-header's per-direction "Counter"; it is not a counter and it does not belong to the
-        /// sub-header at all. See the class remarks for the worked checksum example.
+        /// This replaced a property called <c>Counter</c>. The byte was long modelled as the XMSG
+        /// sub-header's per-direction counter; it is not a counter, and it belongs to the SINTRAN
+        /// header rather than the sub-header. See the class remarks for the worked example.
         /// </remarks>
-        [Obsolete("Offset 13 is the header checksum low byte, not a sub-header counter. Use SintranHeader.Checksum.")]
-        public byte Counter
+        public byte ChecksumLow
         {
             get { return (byte)(Checksum & 0x00FF); }
             set { Checksum = (ushort)((Checksum & 0xFF00) | value); }

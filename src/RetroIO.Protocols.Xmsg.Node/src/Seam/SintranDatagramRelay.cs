@@ -93,28 +93,11 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         /// </summary>
         public const byte InitialHopCount = 0x13;
 
-        /// <summary>
-        /// Marker 1, which opens every SINTRAN header.
-        /// </summary>
-        [Obsolete("This is the version/protocol byte of XDROU. Use VersionProtocolValue.")]
-        public const byte Marker1Value = VersionProtocolValue;
-
-        /// <summary>
-        /// Marker 2 on a datagram that has not been relayed.
-        /// </summary>
-        [Obsolete("This is the INITIAL HOP COUNT, not a marker. Use InitialHopCount.")]
-        public const byte Marker2Normal = InitialHopCount;
-
-        /// <summary>
-        /// Marker 2 on a datagram that a node has forwarded.
-        /// </summary>
-        /// <remarks>
-        /// Kept only because it is the value ONE hop produces. A relay now DECREMENTS the hop
-        /// count, so a twice-forwarded datagram reads <c>0x11</c> and this constant does not
-        /// describe it. Test with <see cref="IsRelayed"/> instead of comparing to this.
-        /// </remarks>
-        [Obsolete("Byte 1 is a decrementing HOP COUNT. Use IsRelayed, or InitialHopCount - hops.")]
-        public const byte Marker2Relay = InitialHopCount - 1;
+        // Marker1Value, Marker2Normal and Marker2Relay were deleted 2026-09-04 with the rest of the
+        // [Obsolete] set. Byte 0 is the XDROU version/protocol byte (VersionProtocolValue) and
+        // byte 1 is a decrementing hop count (InitialHopCount, HopsTaken, IsRelayed) - neither is
+        // a "marker", and "Marker2Relay" only ever described the value ONE hop produces, so a
+        // twice-forwarded datagram at 0x11 did not match it.
 
         /// <summary>
         /// Rewrites a datagram in place into its relayed form: marks it relayed and recomputes the

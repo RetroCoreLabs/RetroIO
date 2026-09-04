@@ -137,7 +137,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(0x0012, frame.Body.Length);     // 18 bytes of parameter blocks
 
             // The historical 32-bit view is XMCSM plus that serial/service pair, and nothing else.
-            Assert.Equal(0x00221B41u, frame.ControlService);
+            Assert.Equal(0x00221B41u, frame.XmcsmWithBodyWord);
 
             // Both string parameters survive - *FA-SERVER and D102.
             Assert.Equal(2, frame.Body.Parameters.Count);
@@ -182,16 +182,16 @@ namespace RetroIO.Protocols.Xmsg.Tests
             forward.SourceNode = 102;
             forward.Flags1 = 0x0131;
             forward.Flags2 = 0x0108;
-            forward.ControlService = 0x01080000u;
-            forward.Payload = payload;
+            forward.XmcsmWithBodyWord = 0x01080000u;
+            forward.XroutPayload = payload;
 
             XmsgDataFields reversed = default(XmsgDataFields);
             reversed.DestinationNode = 100;
             reversed.SourceNode = 102;
             reversed.Flags1 = 0x0131;
             reversed.Flags2 = 0x0108;
-            reversed.Payload = payload;
-            reversed.ControlService = 0x01080000u;
+            reversed.XroutPayload = payload;
+            reversed.XmcsmWithBodyWord = 0x01080000u;
 
             byte[] forwardBytes = XmsgPacketBuilder.CreateSessionData(forward).ToBytes();
             byte[] reversedBytes = XmsgPacketBuilder.CreateSessionData(reversed).ToBytes();

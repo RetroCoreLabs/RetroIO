@@ -58,10 +58,10 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(0x0064, info.SourceNode);                    // 100 (the connecting machine)
             Assert.Equal(0x0067, info.DestinationNode);               // 103 (us)
             Assert.Equal(0x0000, info.Flags1);
-            Assert.Equal(SintranProtocolId.Pad, info.ProtocolId);      // 0xDA
+            Assert.Equal((byte)SintranProtocolId.Pad, info.ChecksumHigh);      // 0xDA
             Assert.True(info.HasSubHeader);
-            Assert.Equal(0x13, info.Counter);
-            Assert.Equal(0x04000041u, info.ControlService);
+            Assert.Equal(0x13, info.ChecksumLow);
+            Assert.Equal(0x04000041u, info.XmcsmWithBodyWord);
             Assert.Equal(0x02F7, info.SourcePort);                    // 100's asking port (XMSPT)
             // Base = Flags1 (0x0000) + Counter (0x13) = 0x0013.
             Assert.Equal(0x0013, info.Base);
@@ -98,16 +98,16 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 SourceNode = 0x0067,        // from us (103)
                 Flags1 = 0x0000,            // echo connect datagram sequence
                 Flags2 = 0x0400,            // setup-frame class word
-                ProtocolId = SintranProtocolId.Pad,   // 0xDA - echo the connect channel
-                Counter = 0x13,             // echo connect counter
+                ChecksumHigh = (byte)SintranProtocolId.Pad,   // 0xDA - echo the connect channel
+                ChecksumLow = 0x13,             // echo connect counter
                 FrameFlags = 0x86,
                 Role = 0x40,                // responder role
                 DestinationSystem = 0x0064, // 100
                 DestinationPort = 0x02F7,   // 100's port
                 SourceSystem = 0x0067,      // 103
                 SourcePort = 0x0156,        // our TADADM port
-                ControlService = 0x04000041u,
-                Payload = Convert.FromHexString("01020000" + "0202000A"),
+                XmcsmWithBodyWord = 0x04000041u,
+                XroutPayload = Convert.FromHexString("01020000" + "0202000A"),
             };
 
             byte[] accept = XmsgPacketBuilder.CreateData(fields).ToBytes();
@@ -133,17 +133,17 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 SourceNode = 0x0067,
                 Flags1 = 0x0001,            // echo session-setup datagram sequence
                 Flags2 = 0x0400,
-                ProtocolId = SintranProtocolId.Pad,   // 0xDA
-                Counter = 0x12,             // echo session-setup counter
+                ChecksumHigh = (byte)SintranProtocolId.Pad,   // 0xDA
+                ChecksumLow = 0x12,             // echo session-setup counter
                 FrameFlags = 0x86,
                 Role = 0x40,
                 DestinationSystem = 0x0064,
                 DestinationPort = 0x02F7,
                 SourceSystem = 0x0067,
                 SourcePort = 0x0156,
-                ControlService = 0x04000000u,
+                XmcsmWithBodyWord = 0x04000000u,
                 // 24-byte trailer: 0x07 endpoint (system 0x67, session port 0x0211) then options.
-                Payload = Convert.FromHexString(
+                XroutPayload = Convert.FromHexString(
                     "00" + "0705" + "00006702" + "11" + "1F03" + "4C0000"
                     + "00" + "0B02" + "0300" + "1502" + "0108" + "FF00"),
             };
@@ -204,7 +204,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(XmsgPacketType.NetworkError, info.Type);
             Assert.Equal(0xFFED, info.Flags2);          // XEIMA -19
             Assert.Equal(0x0002, info.Flags1);
-            Assert.Equal(SintranProtocolId.Routing, info.ProtocolId);
+            Assert.Equal((byte)SintranProtocolId.Routing, info.ChecksumHigh);
         }
     }
 }

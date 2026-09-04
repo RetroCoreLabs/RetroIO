@@ -44,7 +44,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
 
             Assert.NotNull(frame.SubHeader);
             Assert.Equal(0u, (uint)frame.SubHeader!.DestinationPort);
-            Assert.Equal(0x04000041u, frame.ControlService);
+            Assert.Equal(0x04000041u, frame.XmcsmWithBodyWord);
 
             Assert.NotNull(frame.Body);
             Assert.Equal(2, frame.Body!.Parameters.Count);

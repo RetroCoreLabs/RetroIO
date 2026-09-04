@@ -337,7 +337,7 @@ namespace RetroIO.Protocols.Xmsg.Node
             if (ServerHost != null
                 && incoming.Header.Subtype == SintranPacketSubtype.Data
                 && incoming.SubHeader != null
-                && incoming.ControlService != ListRoutingServer.XmcsmXsgsyRequest)
+                && incoming.XmcsmWithBodyWord != ListRoutingServer.XmcsmXsgsyRequest)
             {
                 List<XmsgFrame> served = new List<XmsgFrame>();
                 // Gate the secure-ACK on AcknowledgeTadFrames (the session-data ACK flag), NOT
@@ -446,7 +446,7 @@ namespace RetroIO.Protocols.Xmsg.Node
                 //     handshake proceeds, and if it carries terminal input (BDAT) send the menu
                 //     response too.
                 if (TadResponder.IsConnected
-                    && incoming.ControlService != ListRoutingServer.XmcsmXsgsyRequest)
+                    && incoming.XmcsmWithBodyWord != ListRoutingServer.XmcsmXsgsyRequest)
                 {
                     // Session data frames arrive on various channels (DC/DD/DE) but every ACK
                     // rides the one session-constant channel (connect+4), so pass it explicitly.
@@ -631,7 +631,7 @@ namespace RetroIO.Protocols.Xmsg.Node
                     // response, unlike a bare 0x03 ACK).
                     if (RoutingTable != null
                         && incoming.SubHeader != null
-                        && incoming.ControlService == ListRoutingServer.XmcsmXsgsyRequest)
+                        && incoming.XmcsmWithBodyWord == ListRoutingServer.XmcsmXsgsyRequest)
                     {
                         // Match the real 103 XSGSY response (device-online capture): the reply carries
                         // the SAME Flags1 as the request, so the asker can correlate it.
@@ -734,7 +734,7 @@ namespace RetroIO.Protocols.Xmsg.Node
         private byte LearnLinkSeedOnce(XmsgFrame incoming)
         {
             byte implied = XmsgEnvelope.LearnSeed(
-                incoming.Header!.Flags1, incoming.Header!.Counter, incoming.Header.Flags2);
+                incoming.Header!.Flags1, (byte)(incoming.Header!.Checksum & 0x00FF), incoming.Header.Flags2);
 
             if (!_linkSeedLearned)
             {
@@ -746,7 +746,7 @@ namespace RetroIO.Protocols.Xmsg.Node
             if (implied != _linkSeed)
             {
                 Log?.Invoke(
-                    $"[node] WARNING: frame from node {incoming.Header.SourceNode} F1=0x{incoming.Header.Flags1:X4} ctr=0x{incoming.Header.Counter:X2} F2=0x{incoming.Header.Flags2:X4} implies seed 0x{implied:X2} but link seed is 0x{_linkSeed:X2} - keeping 0x{_linkSeed:X2} (out-of-model frame)");
+                    $"[node] WARNING: frame from node {incoming.Header.SourceNode} F1=0x{incoming.Header.Flags1:X4} ctr=0x{(byte)(incoming.Header.Checksum & 0x00FF):X2} F2=0x{incoming.Header.Flags2:X4} implies seed 0x{implied:X2} but link seed is 0x{_linkSeed:X2} - keeping 0x{_linkSeed:X2} (out-of-model frame)");
             }
 
             return _linkSeed;

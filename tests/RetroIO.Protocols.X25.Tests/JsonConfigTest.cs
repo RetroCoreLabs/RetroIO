@@ -116,8 +116,8 @@ namespace RetroIO.Protocols.X25.Tests
 
             var json = JsonSerializer.Serialize(config, options);
             
-            TestContext.WriteLine("JSON Configuration:");
-            TestContext.WriteLine(json);
+            TestContext.Out.WriteLine("JSON Configuration:");
+            TestContext.Out.WriteLine(json);
             
             // Verify JSON contains all expected sections
             Assert.That(json, Contains.Substring("\"x25\":"));
@@ -178,11 +178,11 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(host1.Via, Is.EqualTo("300"));
             Assert.That(host1.Enabled, Is.True);
 
-            TestContext.WriteLine("[TEST] ✅ JSON configuration serialization/deserialization works correctly");
-            TestContext.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.SerialInterfaces.Count} serial interfaces");
-            TestContext.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.XotInterfaces.Count} XOT interfaces");
-            TestContext.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.RoutingTable.Count} routing entries");
-            TestContext.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.KnownHosts.Count} known hosts");
+            TestContext.Out.WriteLine("[TEST] ✅ JSON configuration serialization/deserialization works correctly");
+            TestContext.Out.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.SerialInterfaces.Count} serial interfaces");
+            TestContext.Out.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.XotInterfaces.Count} XOT interfaces");
+            TestContext.Out.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.RoutingTable.Count} routing entries");
+            TestContext.Out.WriteLine($"[TEST] Configuration contains {loadedConfig.Routing.KnownHosts.Count} known hosts");
         }
     }
 }

@@ -117,16 +117,15 @@ namespace RetroIO.Protocols.Xmsg.Packet
         }
 
         /// <summary>
-        /// Gets the checksum HIGH byte (offset 12) under its historical name.
+        /// Gets the HIGH byte of <see cref="Checksum"/> - wire offset 12.
         /// </summary>
         /// <remarks>
-        /// COMPATIBILITY VIEW over <see cref="Checksum"/> - the names are misnomers, see
-        /// <see cref="SintranProtocolId"/>.
+        /// Was called <c>ProtocolId</c>; the <see cref="SintranProtocolId"/> names are misnomers
+        /// for a checksum byte. See <see cref="SintranHeader.ChecksumHigh"/>.
         /// </remarks>
-        [Obsolete("Offset 12 is the header checksum high byte. Use XmsgPacketInfo.Checksum.")]
-        public SintranProtocolId ProtocolId
+        public byte ChecksumHigh
         {
-            get { return _frame.Header.ProtocolId; }
+            get { return _frame.Header.ChecksumHigh; }
         }
 
         /// <summary>
@@ -140,7 +139,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
 
         /// <summary>
         /// Gets the XMSG sub-header, or <c>null</c> for a short frame. Prefer the typed accessors
-        /// (<see cref="Counter"/>, <see cref="ControlService"/>, ...) which are null-safe.
+        /// (<see cref="ChecksumLow"/>, <see cref="XmcsmWithBodyWord"/>, ...) which are null-safe.
         /// </summary>
         public XmsgSubHeader? SubHeader
         {
@@ -156,16 +155,15 @@ namespace RetroIO.Protocols.Xmsg.Packet
         }
 
         /// <summary>
-        /// Gets the checksum LOW byte (offset 13) under its historical name.
+        /// Gets the LOW byte of <see cref="Checksum"/> - wire offset 13.
         /// </summary>
         /// <remarks>
-        /// COMPATIBILITY VIEW. This byte is part of the SINTRAN header, not the XMSG sub-header,
-        /// and it is not a counter - see <see cref="SintranHeader.Checksum"/>.
+        /// Was called <c>Counter</c>. It is part of the SINTRAN header, not the XMSG sub-header,
+        /// and it is not a counter - see <see cref="SintranHeader.ChecksumLow"/>.
         /// </remarks>
-        [Obsolete("Offset 13 is the header checksum low byte, not a sub-header counter. Use XmsgPacketInfo.Checksum.")]
-        public byte Counter
+        public byte ChecksumLow
         {
-            get { return (byte)(_frame.Header.Checksum & 0x00FF); }
+            get { return _frame.Header.ChecksumLow; }
         }
 
         /// <summary>
@@ -233,17 +231,17 @@ namespace RetroIO.Protocols.Xmsg.Packet
         }
 
         /// <summary>
-        /// Gets the historical 32-bit control/service word:
+        /// Gets the XMCSM word and the first body word composed into one 32-bit value:
         /// <c>(XMCSM shifted left 16) | firstBodyWord</c>, or 0 for a short frame.
         /// </summary>
         /// <remarks>
-        /// COMPATIBILITY VIEW - it reads ACROSS the sub-header/body boundary. See
-        /// <see cref="XmsgFrame.ControlService"/>.
+        /// Two fields from opposite sides of the sub-header/body boundary, joined because the
+        /// <see cref="XmcsmService"/> constants are written that way. See
+        /// <see cref="XmsgFrame.XmcsmWithBodyWord"/> for the full account.
         /// </remarks>
-        [Obsolete("Reads across the sub-header/body boundary. Use Xmcsm plus the first word of Body.")]
-        public uint ControlService
+        public uint XmcsmWithBodyWord
         {
-            get { return _frame.ControlService; }
+            get { return _frame.XmcsmWithBodyWord; }
         }
 
         /// <summary>
@@ -287,7 +285,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// </summary>
         public ushort Base
         {
-            get { return (ushort)(_frame.Header.Flags1 + Counter); }
+            get { return (ushort)(_frame.Header.Flags1 + (byte)(_frame.Header.Checksum & 0x00FF)); }
         }
 
         /// <summary>

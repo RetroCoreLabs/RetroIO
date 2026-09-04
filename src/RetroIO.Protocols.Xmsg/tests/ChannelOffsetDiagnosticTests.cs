@@ -99,15 +99,15 @@ namespace RetroIO.Protocols.Xmsg.Tests
 
                     ushort flags1 = decoded.Header.Flags1;
                     ushort flags2 = decoded.Header.Flags2;
-                    byte counter = decoded.Header.Counter;
-                    uint xmcsm = decoded.ControlService;
+                    byte counter = decoded.Header.ChecksumLow;
+                    uint xmcsm = decoded.XmcsmWithBodyWord;
 
                     byte seed = XmsgEnvelope.LearnSeed(flags1, counter, flags2);
 
                     // What the wire says the offset from the anchor is, and what the model derives.
                     int wireOffset = XmsgEnvelope.ChannelAnchor
                         - (byte)(xmcsm >> 24)
-                        - (byte)decoded.Header.ProtocolId;
+                        - decoded.Header.ChecksumHigh;
                     int derivedOffset = XmsgEnvelope.ComputeEpoch(seed, flags1, flags2);
 
                     Add(offsetCensus, wireOffset);

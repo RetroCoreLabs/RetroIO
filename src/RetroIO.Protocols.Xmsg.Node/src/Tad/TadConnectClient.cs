@@ -335,7 +335,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             }
 
             // The server's terminal-data frames (XMCSM 0x01080000) carry its session port as the source.
-            if (frame.ControlService == TerminalDataControlService && frame.SubHeader.SourcePort != 0)
+            if (frame.XmcsmWithBodyWord == TerminalDataControlService && frame.SubHeader.SourcePort != 0)
             {
                 _serverSessionPort = frame.SubHeader.SourcePort;
             }

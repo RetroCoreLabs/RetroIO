@@ -13,3 +13,5 @@ __blobstorage__/
 azurite.log
 pcap-decode-report.txt
 pcap-decode-sample.json
+## build.ps1 output - single-file executables, rebuildable
+publish/

@@ -72,11 +72,18 @@ namespace RetroIO.Protocols.Xmsg.Packet
         }
 
         /// <summary>
-        /// Gets the sub-protocol selector / channel (Protocol ID).
+        /// Gets the HIGH byte of the header checksum (offset 12), under the historical
+        /// <see cref="SintranProtocolId"/> names.
         /// </summary>
+        /// <remarks>
+        /// It is NOT a sub-protocol selector or a channel, whatever the enum members are called:
+        /// offsets 12-13 are one ones-complement checksum over header words 0-5. The names record
+        /// which traffic happened to produce that byte in the captures. Dispatch on the subtype and
+        /// on XMCSM instead.
+        /// </remarks>
         public SintranProtocolId ProtocolId
         {
-            get { return _frame.Header.ProtocolId; }
+            get { return (SintranProtocolId)(byte)(_frame.Header.Checksum >> 8); }
         }
 
         /// <summary>

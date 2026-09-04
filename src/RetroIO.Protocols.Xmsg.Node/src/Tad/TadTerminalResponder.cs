@@ -267,7 +267,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         {
             return frame != null
                 && frame.SubHeader != null
-                && frame.ControlService == SystemTadControlService
+                && frame.XmcsmWithBodyWord == SystemTadControlService
                 // The connect letter is a routed XROUT letter (XFROU set). The old "(role & 0x0F) == 4 =
                 // asker" reading was wrong (bit 0x04 is XFROU "routed", not "asker" - the host's own 0xFD
                 // notify rides role 0x54 which also sets it); the XsletLetter XMCSM above is what actually
@@ -334,7 +334,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             // frame across accept, port-assign and all terminal-data - one sequence, epoch 0, so
             // terminal data rides 0xDD (NOT DB: DB was an epoch-2 artifact of a high running sequence).
             _seed = XmsgEnvelope.LearnSeed(
-                request.Header.Flags1, request.Header.Counter, request.Header.Flags2);
+                request.Header.Flags1, (byte)(request.Header.Checksum & 0x00FF), request.Header.Flags2);
             // CONTINUE our per-remote-node outgoing Flags1 from the persisted store (the store advances on
             // 100's 0x03 ACKs = 100's expected-from-us / XSRSQ). GOD-LLM S6a MEASUREMENT: continuation is
             // right and its values are capture-legal at any epoch/channel - "echo (accept F1 == connect
@@ -388,7 +388,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             return _connected
                 && frame != null
                 && frame.SubHeader != null
-                && frame.ControlService == SessionSetupControlService;
+                && frame.XmcsmWithBodyWord == SessionSetupControlService;
         }
 
         /// <summary>

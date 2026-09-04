@@ -22,7 +22,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(100, header.SourceNode);
             Assert.Equal(0xFFFF, header.Flags1);
             Assert.Equal(0x0001, header.Flags2);
-            Assert.Equal(SintranProtocolId.Routing, header.ProtocolId);
+            Assert.Equal((byte)SintranProtocolId.Routing, header.ChecksumHigh);
         }
 
         [Fact]
@@ -36,7 +36,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(102, header.SourceNode);
             Assert.Equal(0xFFFF, header.Flags1);
             Assert.Equal(0x0001, header.Flags2);
-            Assert.Equal(SintranProtocolId.Routing, header.ProtocolId);
+            Assert.Equal((byte)SintranProtocolId.Routing, header.ChecksumHigh);
         }
 
         [Fact]
@@ -51,7 +51,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             Assert.Equal(103, decoded.Header.SourceNode);
             Assert.Equal(0x0004, decoded.Header.Flags1);
             Assert.Equal(0x0001, decoded.Header.Flags2);
-            Assert.Equal(SintranProtocolId.Routing, decoded.Header.ProtocolId);
+            Assert.Equal((byte)SintranProtocolId.Routing, decoded.Header.ChecksumHigh);
 
             // CORRECTED 2026-08-04: there is NO trailing byte. This frame is exactly fourteen
             // bytes and 0xDE17 is header word 6, the checksum. Check the arithmetic: the

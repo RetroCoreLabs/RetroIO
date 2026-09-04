@@ -39,7 +39,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// <para>
         /// CARVED FACT, 2026-07-31 - this is not an independent "frame-class word". It equals the
         /// true 16-bit XMCSM at wire 26-27 on <b>1449 of 1449</b> data frames in the corpus. See
-        /// <see cref="ControlService"/> for the full word layout carved from the kernel symbols.
+        /// <see cref="XmcsmWithBodyWord"/> for the full word layout carved from the kernel symbols.
         /// </para>
         /// <para>
         /// The kernel comments XMCSM as <c>"datagram checksum; if not checksum, then message
@@ -92,28 +92,28 @@ namespace RetroIO.Protocols.Xmsg.Packet
         public ushort Checksum;
 
         /// <summary>
-        /// The checksum HIGH byte (offset 12) under its historical name.
+        /// The HIGH byte of <see cref="Checksum"/> - wire offset 12.
         /// </summary>
         /// <remarks>
-        /// COMPATIBILITY VIEW over <see cref="Checksum"/>; stores nothing of its own. The
-        /// <see cref="SintranProtocolId"/> names are misnomers - see that type.
+        /// Was called <c>ProtocolId</c>. There is no protocol-selector byte: offsets 12-13 are one
+        /// ones-complement checksum over header words 0-5, and the <see cref="SintranProtocolId"/>
+        /// names only record which traffic produced a given high byte. Setting this leaves the low
+        /// half alone, so never set it after the real checksum has been computed.
         /// </remarks>
-        [Obsolete("Offset 12 is the header checksum high byte. Use XmsgDataFields.Checksum.")]
-        public SintranProtocolId ProtocolId
+        public byte ChecksumHigh
         {
-            get { return (SintranProtocolId)(byte)(Checksum >> 8); }
-            set { Checksum = (ushort)(((ushort)value << 8) | (Checksum & 0x00FF)); }
+            get { return (byte)(Checksum >> 8); }
+            set { Checksum = (ushort)((value << 8) | (Checksum & 0x00FF)); }
         }
 
         /// <summary>
-        /// The checksum LOW byte (offset 13) under its historical name.
+        /// The LOW byte of <see cref="Checksum"/> - wire offset 13.
         /// </summary>
         /// <remarks>
-        /// COMPATIBILITY VIEW over <see cref="Checksum"/>; stores nothing of its own. This byte
-        /// belongs to the SINTRAN header, not to the XMSG sub-header, and it is not a counter.
+        /// Was called <c>Counter</c>. It is not a counter and it belongs to the SINTRAN header,
+        /// not to the XMSG sub-header.
         /// </remarks>
-        [Obsolete("Offset 13 is the header checksum low byte, not a sub-header counter. Use XmsgDataFields.Checksum.")]
-        public byte Counter
+        public byte ChecksumLow
         {
             get { return (byte)(Checksum & 0x00FF); }
             set { Checksum = (ushort)((Checksum & 0xFF00) | value); }
@@ -206,12 +206,22 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// </para>
         /// <para>
         /// LANDED 2026-08-04. The stored model is now correct: <see cref="Xmcsm"/> holds the real
-        /// one-word XMCSM and <see cref="Body"/> holds the message body from absolute 28. This
-        /// property is the COMPATIBILITY VIEW that keeps the ~85 old call sites compiling.
+        /// one-word XMCSM and <see cref="Body"/> holds the message body from absolute 28.
+        /// </para>
+        /// <para>
+        /// This property is the two of them COMPOSED, and its name says so. It exists because the
+        /// <see cref="XmcsmService"/> constants are written in that 32-bit form, so dispatch needs
+        /// both halves. It stores nothing itself: the getter reads <see cref="Xmcsm"/> and the
+        /// first body word, and the setter writes exactly those - which is what the old name's
+        /// deprecation note asked callers to do by hand.
+        /// </para>
+        /// <para>
+        /// It was called <c>ControlService</c>, a name that claimed the wire carries one 32-bit
+        /// "control/service" field. It does not, and believing it did hid the 13+19 boundary error.
+        /// Use <see cref="Xmcsm"/> alone when only the XMCSM matters.
         /// </para>
         /// </remarks>
-        [Obsolete("Reads across the sub-header/body boundary. Set Xmcsm and Body instead.")]
-        public uint ControlService
+        public uint XmcsmWithBodyWord
         {
             get
             {
@@ -252,9 +262,9 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// <c>FaMessageType</c>.
         /// </para>
         /// <para>
-        /// The legacy views <see cref="ControlService"/> (low half), <see cref="Pad"/> and
+        /// The legacy views <see cref="XmcsmWithBodyWord"/> (low half), <see cref="Pad"/> and
         /// <see cref="UserDataLength"/> write into bytes 0-3 of this array and
-        /// <see cref="Payload"/> into byte 4 onward, each leaving the others alone, so a caller may
+        /// <see cref="XroutPayload"/> into byte 4 onward, each leaving the others alone, so a caller may
         /// set them in ANY order and get the same bytes.
         /// </para>
         /// </remarks>
@@ -296,8 +306,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// COMPATIBILITY VIEW over <see cref="Body"/>: this is <c>Body</c> minus its first four
         /// bytes, which the 13+19 model mislabelled as XMCSM's second half, a pad and a length.
         /// </remarks>
-        [Obsolete("The body starts at wire 28, not 32. Use Body.")]
-        public byte[] Payload
+        public byte[] XroutPayload
         {
             get
             {
@@ -391,18 +400,18 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// The message body for wire offset 28 onward.
         /// </returns>
         /// <remarks>
-        /// This routes through the compatibility properties above rather than repeating their
-        /// arithmetic, so there is still exactly ONE place that knows the old view's shape.
+        /// The single place that knows how the composite word and the payload become a body:
+        /// XMCSM out of the high half, the body word out of the low half, then the XROUT header and
+        /// the payload. Everything that builds a data body goes through here.
         /// </remarks>
-        [Obsolete("Compatibility shim for the 32-bit control/service view. Build the body directly.")]
         public static byte[] ComposeBody(uint controlService, byte[] payload, out ushort xmcsm)
         {
             XmsgDataFields fields = default(XmsgDataFields);
-            fields.ControlService = controlService;
+            fields.XmcsmWithBodyWord = controlService;
             byte[] tail = payload != null ? payload : EmptyBytes;
             // Payload's setter writes the big-endian length into body bytes 2-3 itself, which is
             // exactly what the old Pad + XMLEN pair held.
-            fields.Payload = tail;
+            fields.XroutPayload = tail;
 
             xmcsm = fields.Xmcsm;
             // Payload's setter runs EnsureBody, so Body is never null by this point.

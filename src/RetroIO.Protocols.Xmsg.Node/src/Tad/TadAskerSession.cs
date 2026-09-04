@@ -119,7 +119,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             outgoing.Add(_ackReceiver.ReceiveDataFrame(frame, _ackChannel));
             RenderBdat(frame);
 
-            uint controlService = frame.ControlService;
+            uint controlService = frame.XmcsmWithBodyWord;
             if (controlService == (uint)XmcsmService.XsletLetter)
             {
                 // ACCEPT (from host system port) -> send the session-setup to port 342.

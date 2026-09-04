@@ -133,18 +133,30 @@ namespace RetroIO.Protocols.Xmsg
         }
 
         /// <summary>
-        /// Gets the historical 32-bit "XMCSM control/service word":
-        /// <c>(XMCSM shifted left 16) | firstBodyWord</c>.
+        /// Gets the XMCSM word and the first body word composed into one 32-bit value:
+        /// <c>(XMCSM shifted left 16) | firstBodyWord</c>. Zero when there is no sub-header.
         /// </summary>
         /// <remarks>
-        /// COMPATIBILITY VIEW, computed - nothing stores it. The high half is the real XMCSM at
-        /// absolute 26-27; the low half is the FIRST WORD OF THE MESSAGE BODY at absolute 28-29,
-        /// which on a letter is the XROUT serial byte and service byte. Reading them as one 32-bit
-        /// field is what hid the header/sub-header boundary error for months. Zero when the frame
-        /// carries no sub-header.
+        /// <para>
+        /// TWO FIELDS, DELIBERATELY JOINED, and the name says so. The high half is the real XMCSM
+        /// at absolute 26-27; the low half is the FIRST WORD OF THE MESSAGE BODY at absolute 28-29,
+        /// which on a letter is the XROUT serial byte and service byte. They sit on opposite sides
+        /// of the sub-header/body boundary.
+        /// </para>
+        /// <para>
+        /// It exists because the <see cref="XmcsmService"/> CONSTANTS are written in this composite
+        /// form - <c>XsgsyRequest = 0x0100014B</c> is XMCSM <c>0x0100</c> plus body word
+        /// <c>0x014B</c> (serial <c>0x01</c>, service <c>0x4B</c> = 75 = XSGSY) - so dispatch needs
+        /// both halves. <see cref="DecodeDataTrailer"/> composes exactly this inline.
+        /// </para>
+        /// <para>
+        /// It replaced a property called <c>ControlService</c>, whose name claimed the wire carries
+        /// a single 32-bit "control/service" field. It does not, and believing it did hid the
+        /// 13+19 header/sub-header boundary error for months. When only the XMCSM matters, use
+        /// <c>SubHeader.Xmcsm</c> and do not compose at all.
+        /// </para>
         /// </remarks>
-        [Obsolete("Reads across the sub-header/body boundary. Use SubHeader.Xmcsm plus the body word from GetBodyBytes().")]
-        public uint ControlService
+        public uint XmcsmWithBodyWord
         {
             get
             {

@@ -419,7 +419,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
 
             // A connect letter is addressed to port 0 with XMCSM XSLET (0x04000041).
             if (incoming.SubHeader.DestinationPort == 0x0000
-                && incoming.ControlService == XsletLetterControlService)
+                && incoming.XmcsmWithBodyWord == XsletLetterControlService)
             {
                 return OnConnect(incoming, transport);
             }
@@ -431,7 +431,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
                 return Array.Empty<XmsgFrame>();
             }
 
-            if (incoming.ControlService == SessionSetupControlService)
+            if (incoming.XmcsmWithBodyWord == SessionSetupControlService)
             {
                 return OnSessionSetup(session, incoming, transport);
             }

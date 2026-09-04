@@ -42,8 +42,10 @@ namespace RetroIO.Protocols.Xmsg.Diagnostics
             sb.Append("SINTRAN header: ")
               .Append(h.SourceNode).Append(" -> ").Append(h.DestinationNode)
               .Append("  subtype=").Append(h.Subtype)
-              .Append("  proto=").Append(h.ProtocolId)
-              .Append(" (0x").Append(((byte)h.ProtocolId).ToString("X2")).Append(')')
+              // Offsets 12-13 are the header checksum, not a protocol selector. The dump used to
+              // print "proto=Tad (0x0E)" from the high byte alone, which invited the reader to
+              // believe in a sub-protocol field that is not on the wire.
+              .Append("  checksum=0x").Append(h.Checksum.ToString("X4"))
               .Append('\n');
             sb.Append("  markers=0x").Append(h.Marker1.ToString("X2"))
               .Append(" 0x").Append(h.Marker2.ToString("X2"))
@@ -65,7 +67,7 @@ namespace RetroIO.Protocols.Xmsg.Diagnostics
                 // every historical note and constant is written that way; it is XMCSM in the high
                 // half and the first MESSAGE BODY word (wire 28-29) in the low half.
                 sb.Append("  XMCSM=0x").Append(s.Xmcsm.ToString("X4"))
-                  .Append("  (legacy 32-bit view 0x").Append(frame.ControlService.ToString("X8")).Append(')')
+                  .Append("  (legacy 32-bit view 0x").Append(frame.XmcsmWithBodyWord.ToString("X8")).Append(')')
                   .Append('\n');
             }
 

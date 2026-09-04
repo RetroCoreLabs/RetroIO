@@ -535,7 +535,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             }
 
             if (incoming.SubHeader.DestinationPort == 0x0000
-                && (incoming.ControlService & 0xFF) == XsletServiceByte)
+                && (incoming.XmcsmWithBodyWord & 0xFF) == XsletServiceByte)
             {
                 return OnConnect(incoming, transport);
             }
