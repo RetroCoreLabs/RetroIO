@@ -19,6 +19,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <!--
+      Says out loud what the comment above only intended. This project sits under tests/, and
+      eng/build/tests.Directory.Build.props sets IsTestProject=true for everything there - so
+      without this line the runner scans a library that carries no tests, its testhost exits
+      with an error, and `dotnet test` returns non-zero even when every test passed. A property
+      set in the csproj wins, because Directory.Build.props is imported before it.
+    -->
+    <IsTestProject>false</IsTestProject>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
