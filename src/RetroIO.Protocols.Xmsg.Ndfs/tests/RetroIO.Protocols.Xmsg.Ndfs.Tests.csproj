@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>RetroIO.Protocols.Xmsg.Ethernet.Tests</AssemblyName>
-    <RootNamespace>RetroIO.Protocols.Xmsg.Ethernet.Tests</RootNamespace>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Ndfs.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Ndfs.Tests</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -17,8 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.Ethernet.csproj" />
-    <ProjectReference Include="..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
+    <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.Ndfs.csproj" />
+    <ProjectReference Include="..\..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

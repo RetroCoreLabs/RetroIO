@@ -6,9 +6,12 @@ param(
   [string]$X25Pcap       = 'E:\Dev\Ronny\X25Emulator\pcap',
   [string]$RclRoot       = 'E:\Dev\RCL'
 )
+# Every junction sits BESIDE the repos, never inside RetroIO. The test code walks UP from its own
+# binary to the drive root looking for these folder names, so one level above the repo is found
+# just as well - and the RetroIO working tree stays free of links. (Ronny's rule, 2026-09-04.)
 $links = @(
-  @{ Link = Join-Path $RclRoot 'RetroIO\demo\test-images';        Target = $RetroFsImages },
-  @{ Link = Join-Path $RclRoot 'RetroIO\DOC';                      Target = $XmsgDoc },
+  @{ Link = Join-Path $RclRoot 'demo\test-images';                 Target = $RetroFsImages },
+  @{ Link = Join-Path $RclRoot 'DOC';                               Target = $XmsgDoc },
   @{ Link = Join-Path $RclRoot 'X25Emulator\pcap';                 Target = $X25Pcap },
   @{ Link = Join-Path $RclRoot 'RetroCommander\demo\test-images'; Target = $RetroFsImages }
 )

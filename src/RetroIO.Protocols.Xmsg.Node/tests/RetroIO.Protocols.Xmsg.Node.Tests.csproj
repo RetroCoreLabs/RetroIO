@@ -30,7 +30,7 @@
          The completeness check is only meaningful where all four assemblies are visible;
          split across projects it would report a live type as missing. -->
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ethernet\src\RetroIO.Protocols.Xmsg.Ethernet.csproj" />
-    <ProjectReference Include="..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
+    <ProjectReference Include="..\..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

@@ -20,7 +20,7 @@
     <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hdlc\src\RetroIO.Protocols.Xmsg.Hdlc.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Diagnostics\src\RetroIO.Protocols.Xmsg.Diagnostics.csproj" />
-    <ProjectReference Include="..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
+    <ProjectReference Include="..\..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

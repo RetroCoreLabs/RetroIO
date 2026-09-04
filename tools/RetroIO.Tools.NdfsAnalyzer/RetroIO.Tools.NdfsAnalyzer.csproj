@@ -9,9 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
-    <ProjectReference Include="..\..\RetroIO.Storage.Local\src\RetroIO.Storage.Local.csproj" />
-    <ProjectReference Include="..\..\RetroIO.Storage.Ndfs\src\RetroIO.Storage.Ndfs.csproj" />
+    <ProjectReference Include="..\..\src\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\..\src\RetroIO.Storage.Local\src\RetroIO.Storage.Local.csproj" />
+    <ProjectReference Include="..\..\src\RetroIO.Storage.Ndfs\src\RetroIO.Storage.Ndfs.csproj" />
   </ItemGroup>
 
 </Project>

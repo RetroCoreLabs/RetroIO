@@ -10,8 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\RetroIO.Protocols.Tnfs\src\RetroIO.Protocols.Tnfs.csproj" />
-    <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
+    <ProjectReference Include="..\..\src\RetroIO.Protocols.Tnfs\src\RetroIO.Protocols.Tnfs.csproj" />
+    <ProjectReference Include="..\..\src\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
   </ItemGroup>
 
 </Project>

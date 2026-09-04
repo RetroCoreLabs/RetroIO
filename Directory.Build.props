@@ -1,13 +1,13 @@
 <Project>
   <!-- Root Directory.Build.props for the RetroIO repo. MSBuild finds this walking up from each project. -->
-  <Import Project="$(MSBuildThisFileDirectory)_shared\build\Directory.Build.props" />
+  <Import Project="$(MSBuildThisFileDirectory)eng\build\Directory.Build.props" />
   <PropertyGroup>
     <_RioDir>$(MSBuildProjectDirectory)</_RioDir>
     <_RioIsSrc Condition="$(_RioDir.EndsWith('\src'))">true</_RioIsSrc>
     <_RioIsTests Condition="$(_RioDir.EndsWith('\tests')) or $(MSBuildProjectName.EndsWith('.Tests')) or $(_RioDir.Contains('\tests\'))">true</_RioIsTests>
     <_RioIsTools Condition="$(_RioDir.Contains('\tools\'))">true</_RioIsTools>
   </PropertyGroup>
-  <Import Project="$(MSBuildThisFileDirectory)_shared\build\src.Directory.Build.props" Condition="'$(_RioIsSrc)' == 'true' and '$(_RioIsTests)' != 'true' and '$(_RioIsTools)' != 'true'" />
-  <Import Project="$(MSBuildThisFileDirectory)_shared\build\tests.Directory.Build.props" Condition="'$(_RioIsTests)' == 'true'" />
-  <Import Project="$(MSBuildThisFileDirectory)_shared\build\tools.Directory.Build.props" Condition="'$(_RioIsTools)' == 'true' and '$(_RioIsTests)' != 'true'" />
+  <Import Project="$(MSBuildThisFileDirectory)eng\build\src.Directory.Build.props" Condition="'$(_RioIsSrc)' == 'true' and '$(_RioIsTests)' != 'true' and '$(_RioIsTools)' != 'true'" />
+  <Import Project="$(MSBuildThisFileDirectory)eng\build\tests.Directory.Build.props" Condition="'$(_RioIsTests)' == 'true'" />
+  <Import Project="$(MSBuildThisFileDirectory)eng\build\tools.Directory.Build.props" Condition="'$(_RioIsTools)' == 'true' and '$(_RioIsTests)' != 'true'" />
 </Project>

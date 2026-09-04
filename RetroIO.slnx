@@ -1,200 +1,201 @@
 <Solution>
-  <Folder Name="/RetroIO.Identity/" />
-  <Folder Name="/RetroIO.Identity/src/">
-    <Project Path="RetroIO.Identity/src/RetroIO.Identity.csproj" />
+  <Folder Name="/src/" />
+  <Folder Name="/src/RetroIO.Identity/" />
+  <Folder Name="/src/RetroIO.Identity/src/">
+    <Project Path="src/RetroIO.Identity/src/RetroIO.Identity.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Link/" />
-  <Folder Name="/RetroIO.Link/src/">
-    <Project Path="RetroIO.Link/src/RetroIO.Link.csproj" />
+  <Folder Name="/src/RetroIO.Link/" />
+  <Folder Name="/src/RetroIO.Link/src/">
+    <Project Path="src/RetroIO.Link/src/RetroIO.Link.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Management.Api/" />
-  <Folder Name="/RetroIO.Management.Api/src/">
-    <Project Path="RetroIO.Management.Api/src/RetroIO.Management.Api.csproj" />
+  <Folder Name="/src/RetroIO.Management.Api/" />
+  <Folder Name="/src/RetroIO.Management.Api/src/">
+    <Project Path="src/RetroIO.Management.Api/src/RetroIO.Management.Api.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Management.Api/tests/">
-    <Project Path="RetroIO.Management.Api/tests/RetroIO.Management.Api.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Management.Api/tests/">
+    <Project Path="src/RetroIO.Management.Api/tests/RetroIO.Management.Api.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Management.Client/" />
-  <Folder Name="/RetroIO.Management.Client/src/">
-    <Project Path="RetroIO.Management.Client/src/RetroIO.Management.Client.csproj" />
+  <Folder Name="/src/RetroIO.Management.Client/" />
+  <Folder Name="/src/RetroIO.Management.Client/src/">
+    <Project Path="src/RetroIO.Management.Client/src/RetroIO.Management.Client.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Management.Contracts/" />
-  <Folder Name="/RetroIO.Management.Contracts/src/">
-    <Project Path="RetroIO.Management.Contracts/src/RetroIO.Management.Contracts.csproj" />
+  <Folder Name="/src/RetroIO.Management.Contracts/" />
+  <Folder Name="/src/RetroIO.Management.Contracts/src/">
+    <Project Path="src/RetroIO.Management.Contracts/src/RetroIO.Management.Contracts.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Econet/" />
-  <Folder Name="/RetroIO.Protocols.Econet/src/">
-    <Project Path="RetroIO.Protocols.Econet/src/RetroIO.Protocols.Econet.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Econet/" />
+  <Folder Name="/src/RetroIO.Protocols.Econet/src/">
+    <Project Path="src/RetroIO.Protocols.Econet/src/RetroIO.Protocols.Econet.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Tnfs/" />
-  <Folder Name="/RetroIO.Protocols.Tnfs/src/">
-    <Project Path="RetroIO.Protocols.Tnfs/src/RetroIO.Protocols.Tnfs.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Tnfs/" />
+  <Folder Name="/src/RetroIO.Protocols.Tnfs/src/">
+    <Project Path="src/RetroIO.Protocols.Tnfs/src/RetroIO.Protocols.Tnfs.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Client/" />
-  <Folder Name="/RetroIO.Protocols.X25.Client/src/">
-    <Project Path="RetroIO.Protocols.X25.Client/src/RetroIO.Protocols.X25.Client.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Client/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Client/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Client/src/RetroIO.Protocols.X25.Client.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Common/" />
-  <Folder Name="/RetroIO.Protocols.X25.Common/src/">
-    <Project Path="RetroIO.Protocols.X25.Common/src/RetroIO.Protocols.X25.Common.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Common/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Common/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Common/src/RetroIO.Protocols.X25.Common.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Monitor/" />
-  <Folder Name="/RetroIO.Protocols.X25.Monitor/src/">
-    <Project Path="RetroIO.Protocols.X25.Monitor/src/RetroIO.Protocols.X25.Monitor.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Monitor/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Monitor/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Monitor/src/RetroIO.Protocols.X25.Monitor.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Nmc/" />
-  <Folder Name="/RetroIO.Protocols.X25.Nmc/src/">
-    <Project Path="RetroIO.Protocols.X25.Nmc/src/RetroIO.Protocols.X25.Nmc.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Nmc/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Nmc/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Nmc/src/RetroIO.Protocols.X25.Nmc.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Routing/" />
-  <Folder Name="/RetroIO.Protocols.X25.Routing/src/">
-    <Project Path="RetroIO.Protocols.X25.Routing/src/RetroIO.Protocols.X25.Routing.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Routing/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Routing/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Routing/src/RetroIO.Protocols.X25.Routing.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Runtime/" />
-  <Folder Name="/RetroIO.Protocols.X25.Runtime/src/">
-    <Project Path="RetroIO.Protocols.X25.Runtime/src/RetroIO.Protocols.X25.Runtime.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Runtime/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Runtime/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Runtime/src/RetroIO.Protocols.X25.Runtime.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Sintran/" />
-  <Folder Name="/RetroIO.Protocols.X25.Sintran/src/">
-    <Project Path="RetroIO.Protocols.X25.Sintran/src/RetroIO.Protocols.X25.Sintran.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Sintran/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Sintran/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Sintran/src/RetroIO.Protocols.X25.Sintran.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Switch.Management/" />
-  <Folder Name="/RetroIO.Protocols.X25.Switch.Management/src/">
-    <Project Path="RetroIO.Protocols.X25.Switch.Management/src/RetroIO.Protocols.X25.Switch.Management.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Switch.Management/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Switch.Management/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Switch.Management/src/RetroIO.Protocols.X25.Switch.Management.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25.Switch/" />
-  <Folder Name="/RetroIO.Protocols.X25.Switch/src/">
-    <Project Path="RetroIO.Protocols.X25.Switch/src/RetroIO.Protocols.X25.Switch.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Switch/" />
+  <Folder Name="/src/RetroIO.Protocols.X25.Switch/src/">
+    <Project Path="src/RetroIO.Protocols.X25.Switch/src/RetroIO.Protocols.X25.Switch.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.X25/" />
-  <Folder Name="/RetroIO.Protocols.X25/src/">
-    <Project Path="RetroIO.Protocols.X25/src/RetroIO.Protocols.X25.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.X25/" />
+  <Folder Name="/src/RetroIO.Protocols.X25/src/">
+    <Project Path="src/RetroIO.Protocols.X25/src/RetroIO.Protocols.X25.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Api.Node/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Api.Node/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Api.Node/src/RetroIO.Protocols.Xmsg.Api.Node.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Api.Node/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Api.Node/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Api.Node/src/RetroIO.Protocols.Xmsg.Api.Node.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Api.Node/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Api.Node/tests/RetroIO.Protocols.Xmsg.Api.Node.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Api.Node/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Api.Node/tests/RetroIO.Protocols.Xmsg.Api.Node.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Api/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Api/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Api/src/RetroIO.Protocols.Xmsg.Api.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Api/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Api/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Api/src/RetroIO.Protocols.Xmsg.Api.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Api/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Api/tests/RetroIO.Protocols.Xmsg.Api.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Api/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Api/tests/RetroIO.Protocols.Xmsg.Api.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Chat/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Chat/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Chat/src/RetroIO.Protocols.Xmsg.Chat.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Chat/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Chat/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Chat/src/RetroIO.Protocols.Xmsg.Chat.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Chat/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Chat/tests/RetroIO.Protocols.Xmsg.Chat.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Chat/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Chat/tests/RetroIO.Protocols.Xmsg.Chat.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Diagnostics/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Diagnostics/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Diagnostics/src/RetroIO.Protocols.Xmsg.Diagnostics.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Diagnostics/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Diagnostics/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Diagnostics/src/RetroIO.Protocols.Xmsg.Diagnostics.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Ethernet/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Ethernet/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Ethernet/src/RetroIO.Protocols.Xmsg.Ethernet.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Ethernet/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Ethernet/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Ethernet/src/RetroIO.Protocols.Xmsg.Ethernet.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Ethernet/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Ethernet/tests/RetroIO.Protocols.Xmsg.Ethernet.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Ethernet/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Ethernet/tests/RetroIO.Protocols.Xmsg.Ethernet.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Hdlc/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Hdlc/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Hdlc/src/RetroIO.Protocols.Xmsg.Hdlc.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Hdlc/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Hdlc/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Hdlc/src/RetroIO.Protocols.Xmsg.Hdlc.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Live/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Live/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Live/src/RetroIO.Protocols.Xmsg.Live.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Live/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Live/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Live/src/RetroIO.Protocols.Xmsg.Live.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Live/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Live/tests/RetroIO.Protocols.Xmsg.Live.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Live/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Live/tests/RetroIO.Protocols.Xmsg.Live.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Ndfs/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Ndfs/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Ndfs/src/RetroIO.Protocols.Xmsg.Ndfs.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Ndfs/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Ndfs/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Ndfs/src/RetroIO.Protocols.Xmsg.Ndfs.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Ndfs/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Ndfs/tests/RetroIO.Protocols.Xmsg.Ndfs.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Ndfs/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Ndfs/tests/RetroIO.Protocols.Xmsg.Ndfs.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Node/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Node/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Node/src/RetroIO.Protocols.Xmsg.Node.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Node/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Node/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Node/src/RetroIO.Protocols.Xmsg.Node.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Node/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Node/tests/RetroIO.Protocols.Xmsg.Node.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Node/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Node/tests/RetroIO.Protocols.Xmsg.Node.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Servers/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Servers/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Servers/src/RetroIO.Protocols.Xmsg.Servers.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Servers/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Servers/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Servers/src/RetroIO.Protocols.Xmsg.Servers.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Sync/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg.Sync/src/">
-    <Project Path="RetroIO.Protocols.Xmsg.Sync/src/RetroIO.Protocols.Xmsg.Sync.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Sync/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Sync/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Sync/src/RetroIO.Protocols.Xmsg.Sync.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg.Sync/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg.Sync/tests/RetroIO.Protocols.Xmsg.Sync.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg.Sync/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg.Sync/tests/RetroIO.Protocols.Xmsg.Sync.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg/" />
-  <Folder Name="/RetroIO.Protocols.Xmsg/src/">
-    <Project Path="RetroIO.Protocols.Xmsg/src/RetroIO.Protocols.Xmsg.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg/" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg/src/">
+    <Project Path="src/RetroIO.Protocols.Xmsg/src/RetroIO.Protocols.Xmsg.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Protocols.Xmsg/tests/">
-    <Project Path="RetroIO.Protocols.Xmsg/tests/RetroIO.Protocols.Xmsg.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Protocols.Xmsg/tests/">
+    <Project Path="src/RetroIO.Protocols.Xmsg/tests/RetroIO.Protocols.Xmsg.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Security.Firewall/" />
-  <Folder Name="/RetroIO.Security.Firewall/src/">
-    <Project Path="RetroIO.Security.Firewall/src/RetroIO.Security.Firewall.csproj" />
+  <Folder Name="/src/RetroIO.Security.Firewall/" />
+  <Folder Name="/src/RetroIO.Security.Firewall/src/">
+    <Project Path="src/RetroIO.Security.Firewall/src/RetroIO.Security.Firewall.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Security.Implementation/" />
-  <Folder Name="/RetroIO.Security.Implementation/src/">
-    <Project Path="RetroIO.Security.Implementation/src/RetroIO.Security.Implementation.csproj" />
+  <Folder Name="/src/RetroIO.Security.Implementation/" />
+  <Folder Name="/src/RetroIO.Security.Implementation/src/">
+    <Project Path="src/RetroIO.Security.Implementation/src/RetroIO.Security.Implementation.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Security/" />
-  <Folder Name="/RetroIO.Security/src/">
-    <Project Path="RetroIO.Security/src/RetroIO.Security.csproj" />
+  <Folder Name="/src/RetroIO.Security/" />
+  <Folder Name="/src/RetroIO.Security/src/">
+    <Project Path="src/RetroIO.Security/src/RetroIO.Security.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Server.Core/" />
-  <Folder Name="/RetroIO.Server.Core/src/">
-    <Project Path="RetroIO.Server.Core/src/RetroIO.Server.Core.csproj" />
+  <Folder Name="/src/RetroIO.Server.Core/" />
+  <Folder Name="/src/RetroIO.Server.Core/src/">
+    <Project Path="src/RetroIO.Server.Core/src/RetroIO.Server.Core.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Server.Hosting/" />
-  <Folder Name="/RetroIO.Server.Hosting/src/">
-    <Project Path="RetroIO.Server.Hosting/src/RetroIO.Server.Hosting.csproj" />
+  <Folder Name="/src/RetroIO.Server.Hosting/" />
+  <Folder Name="/src/RetroIO.Server.Hosting/src/">
+    <Project Path="src/RetroIO.Server.Hosting/src/RetroIO.Server.Hosting.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Server/" />
-  <Folder Name="/RetroIO.Server/src/">
-    <Project Path="RetroIO.Server/src/RetroIO.Server.csproj" />
+  <Folder Name="/src/RetroIO.Server/" />
+  <Folder Name="/src/RetroIO.Server/src/">
+    <Project Path="src/RetroIO.Server/src/RetroIO.Server.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Storage.Azure/" />
-  <Folder Name="/RetroIO.Storage.Azure/src/">
-    <Project Path="RetroIO.Storage.Azure/src/RetroIO.Storage.Azure.csproj" />
+  <Folder Name="/src/RetroIO.Storage.Azure/" />
+  <Folder Name="/src/RetroIO.Storage.Azure/src/">
+    <Project Path="src/RetroIO.Storage.Azure/src/RetroIO.Storage.Azure.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Storage.Core/" />
-  <Folder Name="/RetroIO.Storage.Core/src/">
-    <Project Path="RetroIO.Storage.Core/src/RetroIO.Storage.Core.csproj" />
+  <Folder Name="/src/RetroIO.Storage.Core/" />
+  <Folder Name="/src/RetroIO.Storage.Core/src/">
+    <Project Path="src/RetroIO.Storage.Core/src/RetroIO.Storage.Core.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Storage.Local/" />
-  <Folder Name="/RetroIO.Storage.Local/src/">
-    <Project Path="RetroIO.Storage.Local/src/RetroIO.Storage.Local.csproj" />
+  <Folder Name="/src/RetroIO.Storage.Local/" />
+  <Folder Name="/src/RetroIO.Storage.Local/src/">
+    <Project Path="src/RetroIO.Storage.Local/src/RetroIO.Storage.Local.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Storage.Local/tests/">
-    <Project Path="RetroIO.Storage.Local/tests/RetroIO.Storage.Local.Tests.csproj" />
+  <Folder Name="/src/RetroIO.Storage.Local/tests/">
+    <Project Path="src/RetroIO.Storage.Local/tests/RetroIO.Storage.Local.Tests.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Storage.Ndfs/" />
-  <Folder Name="/RetroIO.Storage.Ndfs/src/">
-    <Project Path="RetroIO.Storage.Ndfs/src/RetroIO.Storage.Ndfs.csproj" />
+  <Folder Name="/src/RetroIO.Storage.Ndfs/" />
+  <Folder Name="/src/RetroIO.Storage.Ndfs/src/">
+    <Project Path="src/RetroIO.Storage.Ndfs/src/RetroIO.Storage.Ndfs.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Storage.Providers/" />
-  <Folder Name="/RetroIO.Storage.Providers/src/">
-    <Project Path="RetroIO.Storage.Providers/src/RetroIO.Storage.Providers.csproj" />
+  <Folder Name="/src/RetroIO.Storage.Providers/" />
+  <Folder Name="/src/RetroIO.Storage.Providers/src/">
+    <Project Path="src/RetroIO.Storage.Providers/src/RetroIO.Storage.Providers.csproj" />
   </Folder>
-  <Folder Name="/RetroIO.Storage.Utilities/" />
-  <Folder Name="/RetroIO.Storage.Utilities/src/">
-    <Project Path="RetroIO.Storage.Utilities/src/RetroIO.Storage.Utilities.csproj" />
+  <Folder Name="/src/RetroIO.Storage.Utilities/" />
+  <Folder Name="/src/RetroIO.Storage.Utilities/src/">
+    <Project Path="src/RetroIO.Storage.Utilities/src/RetroIO.Storage.Utilities.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/RetroIO.Protocols.X25.Tests/RetroIO.Protocols.X25.Tests.csproj" />
