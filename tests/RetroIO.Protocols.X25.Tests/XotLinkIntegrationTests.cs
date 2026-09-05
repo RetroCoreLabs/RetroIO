@@ -310,8 +310,23 @@ namespace RetroIO.Protocols.X25.Tests
                 Thread.Sleep(50); // Give time for LAPB processing
             }
 
-            // Wait for all packets
-            bool received = allReceived.WaitOne(5000);
+            // Wait for all packets.
+            //
+            // The budget has to cover LAPB recovering by itself, not just the happy
+            // path. T1 defaults to 3000 ms (LinkConfig.T1TimeoutMs), so ONE lost
+            // frame costs a full 3 s before it is retransmitted - and the old 5 s
+            // budget left barely 2 s of slack once the five 50 ms send gaps and
+            // scheduling delay were taken out. This test asserts that all five
+            // packets arrive, not that they arrive without a retransmission, so it
+            // must allow at least a couple of T1 cycles.
+            //
+            // Measured 2026-09-05: failed once in a full-suite run, then passed 10
+            // of 10 running the fixture alone and 3 of 3 running the single test
+            // alone. That pattern - only under full-suite CPU load - is what a
+            // too-tight timeout looks like. The cause is NOT proven; if this ever
+            // fails again with a generous budget, the fault is in XotLink or LAPB
+            // and not in the clock.
+            bool received = allReceived.WaitOne(15000);
 
             // Assert
             Assert.That(received, Is.True, "All packets should be received");
