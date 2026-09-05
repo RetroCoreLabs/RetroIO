@@ -195,16 +195,45 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                 return true;
             }
 
-            /// <summary>Called when peer acknowledges with P(R)</summary>
+            /// <summary>
+            /// Called for a P(R) that acknowledges but does NOT clear a busy condition -
+            /// the piggybacked P(R) of an incoming DATA packet.
+            /// </summary>
+            /// <param name="peerPR">The P(R) carried by the packet.</param>
             /// <remarks>
-            /// An RR both acknowledges and clears any busy condition - X.25 has no separate "ready
-            /// again" packet, the RR itself is it.
+            /// X.25 4.4.1.3 makes every data, RR and RNR packet carry a P(R) that acknowledges.
+            /// But 4.4.1.6 is just as specific about what UNDOES a busy condition: it "is cleared by
+            /// the transmission in the same direction of an RR packet or by the initiation of a
+            /// reset procedure". A data packet is neither.
+            /// <para>
+            /// This distinction was missing until 2026-09-05 and it cost real packets. Both cases
+            /// called one method that cleared the flag, so on an echo circuit every packet coming
+            /// back cleared the busy condition the peer had just set - we resumed sending straight
+            /// through the RNR, far more than a window arrived at the switch after it asked us to
+            /// stop, and its forwarding queue overflowed. The RNR looked honoured in the logs and
+            /// was being undone microseconds later by the next echo.
+            /// </para>
             /// </remarks>
             public void AckReceived(byte peerPR)
             {
                 PeerAcked = peerPR;
-                PeerBusy = false;
                 _windowOpen.Set(); // Always signal — let WaitForWindow re-evaluate
+            }
+
+            /// <summary>
+            /// Called for an RR: it acknowledges AND clears any busy condition.
+            /// </summary>
+            /// <param name="peerPR">The P(R) carried by the RR.</param>
+            /// <remarks>
+            /// X.25 has no separate "ready again" packet - 4.4.1.6 makes the RR itself the signal.
+            /// Note also that an RR after an RNR "is not to be taken as a demand for retransmission
+            /// of packets which have already been transmitted", so nothing is re-sent here.
+            /// </remarks>
+            public void ReadyReceived(byte peerPR)
+            {
+                PeerAcked = peerPR;
+                PeerBusy = false;
+                _windowOpen.Set();
             }
 
             /// <summary>
@@ -1571,8 +1600,10 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                     byte peerPR = (byte)((pti >> 5) & 0x07);
                     lock (_routingLock)
                     {
+                        // ReadyReceived, not AckReceived: an RR is the only packet other than a
+                        // reset that clears a busy condition (X.25 4.4.1.6).
                         if (_xotFlowControl.TryGetValue(localLcn, out var fc))
-                            fc.AckReceived(peerPR);
+                            fc.ReadyReceived(peerPR);
                     }
                 }
                 else if ((pti & 0x1F) == 0x05) // RNR (Receiver Not Ready) - bits 4-0 = 00101

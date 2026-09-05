@@ -116,41 +116,42 @@ namespace RetroIO.Protocols.X25.Tests
         // Mirrors: x25traffic -x host:port -d 23420001 -n N -s S -r 0
         // =====================================================================
         [Test]
-        // The last argument is the minimum delivery percentage this ROUTE can actually achieve.
-        // Zero means "assert the route works, not a rate" - see below.
+        // The last argument is the minimum delivery percentage the route must achieve.
+        // It is 100 on every route, because X.25 loses nothing: the Recommendation's own summary
+        // says the service "permits the transmission of data without loss nor duplication", and
+        // 4.4.1.3 gives a receiver exactly two conformant outcomes for an in-sequence data packet -
+        // accept it, or reset the circuit. Silently dropping is not one of them, anywhere.
         //
-        // MEASURED 2026-09-05, by decoding the B-C trunk out of a packet capture frame by frame
-        // rather than by comparing totals. A direct call to switch C delivers 100%; a call through
-        // a trunk does not, and the reason is a defect in the C reference switch, at one line:
+        // Getting there took four separate silent-discard bugs, all the same shape: a send that can
+        // be refused, and a caller that ignores the refusal. MEASURED 2026-09-05, in the order they
+        // were found:
         //
-        //   x25emu/tools/x25switch.c:2750   lapb_send(&p->lapb, txbuf, txlen);   <- result ignored
+        //   1. x25emu tools/x25switch.c:2750 - lapb_send's refusal discarded, and x25.c:124 had
+        //      already spent P(S), so the neighbour saw a gap and reset the circuit.
+        //   2. x25emu tools/x25switch.c port_on_data - the packet that triggered the RNR was itself
+        //      thrown away. Proven exactly: a 100-packet run delivered 84 and logged 16 drops.
+        //   3. OURS, ProtocolRuntime - the piggybacked P(R) of an incoming DATA packet cleared the
+        //      peer's busy condition. X.25 4.4.1.6 says only an RR or a reset does that. On an echo
+        //      circuit every packet coming back undid the RNR the switch had just sent, so we
+        //      ploughed straight through it and overran the switch's forwarding queue.
+        //   4. x25emu tools/x25echo.c - the echo ignored x25c_send's refusal when its own window
+        //      filled. This is why the FAST path lost packets and the slow multi-hop ones did not:
+        //      a trunk paces arrivals enough that the echo's window never saturates.
         //
-        // lapb_send returns -1 whenever its transmit window (k=7) is full (lapb.c:360). Nobody
-        // looks, so the packet is destroyed - and P(S) was already spent, because x25.c:124 advances
-        // it before calling the output callback. Nothing requeues it either: the caller was told the
-        // send succeeded when ringbuf_write returned 0. The neighbour therefore receives a P(S) with
-        // a hole in it and answers with Reset cause 05 diagnostic 01, exactly as ITU-T X.25 4.4.1.3
-        // requires, and the reset throws away everything in flight on the circuit.
+        // A fifth thing was wrong and it was in this file: the wait was a fixed
+        // packetCount * 200 + 5000 ms, which expired while packets were still in flight and counted
+        // everything still in the pipe as lost. Every delivery figure measured before this fix mixed
+        // real loss with "had not arrived yet", which is why the numbers wandered between 3% and
+        // 100% on an unchanged network and why no threshold could be made to stick. The wait is now
+        // on quiescence.
         //
-        // What the capture showed in ONE 100-packet run over the B-C trunk: 57 DATA frames, 4 Reset
-        // Requests, and a P(S) order of 0,5,6,7 / 0..7,0,1,4,5,6 / 0,1,5,6,7 - holes of two to four.
-        // The LAPB N(S) counter had no gaps at all across 91 frames, which is how we know the holes
-        // are real bytes on the wire and not a decoding artefact. The direct XOT path, captured the
-        // same way, had 100 DATA out, zero P(S) gaps and zero resets, because framing_send writes
-        // straight to TCP and never refuses.
-        //
-        // So the delivered fraction on a trunk route is set by how often that line throws a packet
-        // away, which is timing, and it measured anywhere between 3% and 33% across five runs of the
-        // same unchanged network. Any percentage assertion there is a coin toss. These two cases
-        // therefore assert only that the route WORKS - the call sets up, data round-trips, nothing
-        // throws - and print the rate. That still catches our side failing completely, which is what
-        // the pre-fix state looked like: a 120-second timeout with the circuit never usable.
-        //
-        // Put the 80% back on ViaA and ViaB the moment the switch checks that return value.
-        [TestCase(100, 60, SWITCH_C_PORT, "DirectC", 80, TestName = "PerformanceStream_100x60B_DirectC")]
-        [TestCase(500, 60, SWITCH_C_PORT, "DirectC", 80, TestName = "PerformanceStream_500x60B_DirectC")]
-        [TestCase(100, 60, SWITCH_A_PORT, "ViaA", 0, TestName = "PerformanceStream_100x60B_ViaA")]
-        [TestCase(100, 60, SWITCH_B_PORT, "ViaB", 0, TestName = "PerformanceStream_100x60B_ViaB")]
+        // With all five fixed: 100% on all four routes, zero drops, zero resets, 500 packets in
+        // 2.95 s. If one of these ever fails, something is dropping packets again - find it, do not
+        // lower the number.
+        [TestCase(100, 60, SWITCH_C_PORT, "DirectC", 100, TestName = "PerformanceStream_100x60B_DirectC")]
+        [TestCase(500, 60, SWITCH_C_PORT, "DirectC", 100, TestName = "PerformanceStream_500x60B_DirectC")]
+        [TestCase(100, 60, SWITCH_A_PORT, "ViaA", 100, TestName = "PerformanceStream_100x60B_ViaA")]
+        [TestCase(100, 60, SWITCH_B_PORT, "ViaB", 100, TestName = "PerformanceStream_100x60B_ViaB")]
         public void PerformanceStream(int packetCount, int payloadSize, int port, string label, int minDeliveryPct)
         {
             using var runtime = CreateRuntime($"XOT_{label}", port);
@@ -160,10 +161,13 @@ namespace RetroIO.Protocols.X25.Tests
             long recvBytes = 0;
             var allReceived = new ManualResetEventSlim(false);
 
+            long lastArrivalTicks = Environment.TickCount64;
+
             pad.DataReceived += (s, a) =>
             {
                 int count = Interlocked.Increment(ref recvPackets);
                 Interlocked.Add(ref recvBytes, a.Data.Length);
+                Interlocked.Exchange(ref lastArrivalTicks, Environment.TickCount64);
                 if (count >= packetCount)
                     allReceived.Set();
             };
@@ -183,9 +187,29 @@ namespace RetroIO.Protocols.X25.Tests
                     sent++;
             }
 
-            // Wait for all echoes — signal-based, no polling
-            int maxWaitMs = Math.Min(packetCount * 200 + 5000, 60000);
-            allReceived.Wait(maxWaitMs);
+            // Wait until the echoes STOP ARRIVING, not until an arbitrary clock runs out.
+            //
+            // This used to wait packetCount * 200 + 5000 ms, which for 100 packets is 25 seconds -
+            // and when the path is slow, the send loop alone can take that long. The wait then
+            // expired while packets were still in flight and everything still in the pipe was
+            // counted as lost. Every delivery figure measured before 2026-09-05 mixed real loss
+            // with "had not arrived yet", which is why the numbers wandered between 3% and 100%
+            // on an unchanged network and why no threshold could be made to stick.
+            //
+            // Quiescence is the honest test: keep waiting while packets are still coming, and only
+            // conclude that the rest are gone after a clear idle gap. The hard deadline is a
+            // backstop for a path that has died completely, not the normal exit.
+            const int IDLE_GAP_MS = 5000;
+            long hardDeadline = Environment.TickCount64 + 120000;
+            while (Volatile.Read(ref recvPackets) < packetCount)
+            {
+                if (allReceived.Wait(250))
+                    break;
+                if (Environment.TickCount64 - Interlocked.Read(ref lastArrivalTicks) > IDLE_GAP_MS)
+                    break;
+                if (Environment.TickCount64 > hardDeadline)
+                    break;
+            }
             sw.Stop();
 
             double elapsedSec = sw.Elapsed.TotalSeconds;
@@ -206,19 +230,14 @@ namespace RetroIO.Protocols.X25.Tests
             Console.WriteLine($"Pkt rate:  {sent / elapsedSec:F1} pkt/s send, {recvPackets / elapsedSec:F1} pkt/s recv");
             Console.WriteLine();
 
-            // Every route must at least carry the call and return data. This is the whole assertion
-            // on a trunk route, where the delivered fraction is decided by the reference switch's
-            // discarded lapb_send result (see the TestCase comment).
             Assert.That(sent, Is.EqualTo(packetCount),
                 $"Route {label} refused a send: only {sent} of {packetCount} packets were accepted for sending.");
-            Assert.That(recvPackets, Is.GreaterThan(0),
-                $"Route {label} carried the call but returned no data at all. Sent {sent}, received 0.");
 
-            if (minDeliveryPct > 0)
-            {
-                Assert.That(recvPackets, Is.GreaterThanOrEqualTo(sent * minDeliveryPct / 100),
-                    $"Delivery on route {label} should be >= {minDeliveryPct}%. Sent {sent}, received {recvPackets}.");
-            }
+            Assert.That(recvPackets, Is.GreaterThanOrEqualTo(sent * minDeliveryPct / 100),
+                $"Delivery on route {label} was {recvPackets} of {sent}. X.25 does not lose packets - "
+                + "every loss found on this path so far has been a send refusal that some caller ignored. "
+                + "See the TestCase comment for the four that were fixed, and look for a fifth rather "
+                + "than lowering this number.");
         }
 
         // =====================================================================
