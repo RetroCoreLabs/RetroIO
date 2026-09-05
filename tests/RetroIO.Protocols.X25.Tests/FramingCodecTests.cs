@@ -234,6 +234,162 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(sink.Last, Is.EqualTo(expected));
         }
 
+        // ---- HDLC gaps found by the 2026-09-06 coverage audit ----
+        //
+        // These pin the behaviours that nothing covered before the framing merge. Real
+        // captures say they matter: 27% of reads are not frame-aligned, 1183 reads carry
+        // two or more frames, and 1571 carry a run of flags.
+
+        [Test]
+        public void Hdlc_MultipleFrames_InOneStream()
+        {
+            CapturingTransport sink = new CapturingTransport();
+            HdlcFrameCodec sender = new HdlcFrameCodec("A", sink);
+            HdlcFrameCodec receiver = new HdlcFrameCodec("B", new CapturingTransport());
+
+            byte[] a = new byte[] { 0x11 };
+            byte[] b = new byte[] { 0x22, 0x33 };
+            byte[] c = new byte[] { 0x44, 0x55, 0x66 };
+
+            sender.SendFrame(a);
+            byte[] wa = sink.Last;
+            sender.SendFrame(b);
+            byte[] wb = sink.Last;
+            sender.SendFrame(c);
+            byte[] wc = sink.Last;
+
+            byte[] combined = new byte[wa.Length + wb.Length + wc.Length];
+            Array.Copy(wa, 0, combined, 0, wa.Length);
+            Array.Copy(wb, 0, combined, wa.Length, wb.Length);
+            Array.Copy(wc, 0, combined, wa.Length + wb.Length, wc.Length);
+
+            List<byte[]> received = new List<byte[]>();
+            receiver.FrameReceived += (linkId, frame) => received.Add(frame.ToArray());
+            receiver.ProcessBytes(combined);
+
+            Assert.That(received.Count, Is.EqualTo(3), "all three frames should come out of one buffer");
+            Assert.That(received[0], Is.EqualTo(a));
+            Assert.That(received[1], Is.EqualTo(b));
+            Assert.That(received[2], Is.EqualTo(c));
+        }
+
+        [Test]
+        public void Hdlc_PartialFrame_ReassemblesAcrossCalls()
+        {
+            CapturingTransport sink = new CapturingTransport();
+            HdlcFrameCodec sender = new HdlcFrameCodec("A", sink);
+            HdlcFrameCodec receiver = new HdlcFrameCodec("B", new CapturingTransport());
+
+            // Contains both a flag and an escape octet, so a split can land between an
+            // escape and the octet it escapes - the case a naive rewrite gets wrong.
+            byte[] payload = new byte[] { 0xAA, 0x7E, 0xBB, 0x7D, 0xCC };
+            sender.SendFrame(payload);
+            byte[] wire = sink.Last;
+
+            List<byte[]> received = new List<byte[]>();
+            receiver.FrameReceived += (linkId, frame) => received.Add(frame.ToArray());
+
+            // Deliver one octet at a time: every possible split point at once.
+            for (int i = 0; i < wire.Length; i++)
+            {
+                receiver.ProcessBytes(new ReadOnlySpan<byte>(wire, i, 1));
+                if (i < wire.Length - 1)
+                {
+                    Assert.That(received.Count, Is.EqualTo(0),
+                        "a frame was reported before its closing flag arrived");
+                }
+            }
+
+            Assert.That(received.Count, Is.EqualTo(1));
+            Assert.That(received[0], Is.EqualTo(payload));
+        }
+
+        [Test]
+        public void Hdlc_FlagRunBetweenFrames_ProducesNoEmptyFrames()
+        {
+            CapturingTransport sink = new CapturingTransport();
+            HdlcFrameCodec sender = new HdlcFrameCodec("A", sink);
+            HdlcFrameCodec receiver = new HdlcFrameCodec("B", new CapturingTransport());
+
+            byte[] payload = new byte[] { 0x07, 0x08 };
+            sender.SendFrame(payload);
+            byte[] wire = sink.Last;
+
+            // Bracket the frame with extra flags: inter-frame time fill, ITU-T X.25
+            // clause 2.2.4. Both an odd and an even run, because HdlcFramer - the other
+            // implementation in this repository - is sensitive to the parity and this one
+            // must not be.
+            byte[] stream = new byte[3 + wire.Length + 2];
+            stream[0] = 0x7E;
+            stream[1] = 0x7E;
+            stream[2] = 0x7E;
+            Array.Copy(wire, 0, stream, 3, wire.Length);
+            stream[3 + wire.Length] = 0x7E;
+            stream[4 + wire.Length] = 0x7E;
+
+            List<byte[]> received = new List<byte[]>();
+            receiver.FrameReceived += (linkId, frame) => received.Add(frame.ToArray());
+            receiver.ProcessBytes(stream);
+
+            Assert.That(received.Count, Is.EqualTo(1), "flag fill produced spurious empty frames");
+            Assert.That(received[0], Is.EqualTo(payload));
+        }
+
+        [Test]
+        public void Hdlc_SharedFlag_OpensTheNextFrame()
+        {
+            HdlcFrameCodec receiver = new HdlcFrameCodec("B", new CapturingTransport());
+
+            // ONE flag serving as both the closing flag of the first frame and the opening
+            // flag of the second. ITU-T X.25 clause 2.2.1: "A single flag may be used as
+            // both the closing flag for one frame and the opening flag for the next frame."
+            byte[] stream = new byte[] { 0x7E, 0x11, 0x22, 0x7E, 0x33, 0x44, 0x7E };
+
+            List<byte[]> received = new List<byte[]>();
+            receiver.FrameReceived += (linkId, frame) => received.Add(frame.ToArray());
+            receiver.ProcessBytes(stream);
+
+            Assert.That(received.Count, Is.EqualTo(2), "a shared flag must open the following frame");
+            Assert.That(received[0], Is.EqualTo(new byte[] { 0x11, 0x22 }));
+            Assert.That(received[1], Is.EqualTo(new byte[] { 0x33, 0x44 }));
+        }
+
+        [Test]
+        public void Hdlc_AfterReset_TheNextBytesBecomeAFrame_NoFlagHunt()
+        {
+            CapturingTransport sink = new CapturingTransport();
+            HdlcFrameCodec sender = new HdlcFrameCodec("A", sink);
+            HdlcFrameCodec receiver = new HdlcFrameCodec("B", new CapturingTransport());
+
+            sender.SendFrame(new byte[] { 0x11, 0x22, 0x33, 0x44 });
+            byte[] wire = sink.Last;
+
+            List<byte[]> received = new List<byte[]>();
+            receiver.FrameReceived += (linkId, frame) => received.Add(frame.ToArray());
+
+            receiver.ProcessBytes(new ReadOnlySpan<byte>(wire, 0, 3));
+            receiver.Reset();
+            receiver.ProcessBytes(new ReadOnlySpan<byte>(wire, 3, wire.Length - 3));
+
+            // MEASURED 2026-09-06. Reset() clears the partial frame, but this codec has no
+            // "hunting for a flag" state - a flag always delimits, and whatever arrived
+            // since the last one becomes a frame. So the tail of the discarded frame is
+            // delivered as a frame of its own when its closing flag turns up.
+            //
+            // It is harmless today because the FCS check above the codec throws the
+            // fragment away, but it is a real difference from HdlcFramer, which ignores
+            // every byte received while it is not inside a frame. The merged framer has to
+            // pick one, and the right answer is almost certainly HdlcFramer's: after a
+            // reset, hunt for a flag and discard everything before it.
+            //
+            // Asserting 1 pins today's behaviour so the merge shows the change.
+            Assert.That(received.Count, Is.EqualTo(1),
+                "behaviour changed: HdlcFrameCodec used to deliver the post-Reset tail as a frame. "
+                + "If the merged framer now hunts for a flag instead, that is a FIX - update this test.");
+            Assert.That(received[0], Is.Not.EqualTo(new byte[] { 0x11, 0x22, 0x33, 0x44 }),
+                "the delivered fragment must not be mistaken for the original frame");
+        }
+
         // ---- XOT (RFC 1613) ----
 
         [Test]
