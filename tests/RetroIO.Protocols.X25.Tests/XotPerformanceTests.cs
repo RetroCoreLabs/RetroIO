@@ -129,7 +129,7 @@ namespace RetroIO.Protocols.X25.Tests
         // looks, so the packet is destroyed - and P(S) was already spent, because x25.c:124 advances
         // it before calling the output callback. Nothing requeues it either: the caller was told the
         // send succeeded when ringbuf_write returned 0. The neighbour therefore receives a P(S) with
-        // a hole in it and answers with Reset cause 05 diagnostic 01, exactly as ITU-T X.25 4.5.2.2
+        // a hole in it and answers with Reset cause 05 diagnostic 01, exactly as ITU-T X.25 4.4.1.3
         // requires, and the reset throws away everything in flight on the circuit.
         //
         // What the capture showed in ONE 100-packet run over the B-C trunk: 57 DATA frames, 4 Reset

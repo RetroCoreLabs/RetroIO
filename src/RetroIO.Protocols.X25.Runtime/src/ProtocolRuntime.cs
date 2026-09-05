@@ -122,7 +122,18 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
             public byte SendSeq;      // P(S) - next sequence to send (0-7)
             public byte RecvSeq;      // P(R) to include in outgoing packets (next expected from peer)
             public byte PeerAcked;    // Last P(R) received from peer (they acknowledged up to this)
-            public byte WindowSize = 7; // Max outstanding unacknowledged packets
+            /// <summary>
+            /// Maximum unacknowledged data packets we may have outstanding.
+            /// </summary>
+            /// <remarks>
+            /// Starts at the standard default and is replaced by whatever the call accepted packet
+            /// authorises (see ApplyNegotiatedWindow). It used to be a hard-coded 7, which is the
+            /// widest a modulo 8 circuit can carry but NOT what an un-negotiated peer authorises:
+            /// X.25 6.10 makes the default 2, and sending 7 into a window of 2 is a P(S) outside the
+            /// window, which X.25 4.4.1.3 makes a local procedure error - the peer resets the
+            /// circuit. It only ever worked because the C reference switches are configured for 7.
+            /// </remarks>
+            public byte WindowSize = RetroIO.Protocols.X25.Models.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
 
             /// <summary>
             /// Set while the peer has told us it cannot take more data (RNR), cleared by RR.
@@ -1515,6 +1526,21 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                 else if (pti == 0x0F) // Call Accepted
                 {
                     _logger.LogInformation("XOT Call Accepted on remote LCN {RemoteLcn} -> local LCN {LocalLcn}", remoteLcn, localLcn);
+
+                    // Take the send window from what the answering end actually authorised.
+                    //
+                    // The call accepted packet's facility field is the only statement of the window
+                    // that binds us. X.25 6.12: if the called DTE makes no facility request, it "is
+                    // assumed to have accepted the indicated values", i.e. what we proposed - but if
+                    // it lowers the window we must obey, and if it sends no facility at all we fall
+                    // back to 2, the standard default (X.25 6.10), NOT to our proposal. Sending 7
+                    // into a window of 2 puts P(S) outside the window, which X.25 4.4.1.3 makes a
+                    // local procedure error, and the peer resets the circuit.
+                    //
+                    // We are the CALLING end, so our send window is the "from the calling DTE"
+                    // value - the SECOND octet of the facility (X.25 7.3.1.2).
+                    ApplyNegotiatedWindow(localLcn, packetData);
+
                     Modules.PadClient? acceptPad = null;
                     lock (_routingLock)
                     {
@@ -3870,6 +3896,79 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                     _logger.LogInformation("Finalized outbound XOT call: localLCN={LocalLcn} transport={Transport}",
                         localLcn, (transport as RetroIO.Protocols.X25.Transport.ITransportInterface)?.Name ?? transport.GetType().Name);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Sets a circuit's send window from the flow control facility of a call accepted packet.
+        /// </summary>
+        /// <param name="localLcn">The local logical channel the call was placed on.</param>
+        /// <param name="callAccepted">The whole call accepted packet, header included.</param>
+        /// <remarks>
+        /// <para>
+        /// Layout of a call accepted packet (X.25 5.2.2): GFI+LCG, LCN, packet type, then an address
+        /// length octet, the packed BCD addresses, a facility length octet, and the facility field.
+        /// A minimal call accepted from a switch carries zero-length addresses, but the octets are
+        /// still there, so the address length must be read rather than assumed away.
+        /// </para>
+        /// <para>
+        /// When the packet carries no window size facility we take the standard default of 2
+        /// (X.25 6.10, and 7.3.1.2 "All Administrations will provide a window size of 2"), which is
+        /// the conservative choice: too small only costs throughput, while too large puts P(S)
+        /// outside the peer's window and gets the circuit reset.
+        /// </para>
+        /// </remarks>
+        private void ApplyNegotiatedWindow(ushort localLcn, byte[] callAccepted)
+        {
+            byte window = RetroIO.Protocols.X25.Models.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
+            bool negotiated = false;
+
+            // 3 header octets + the address length octet.
+            if (callAccepted.Length >= 4)
+            {
+                int callingDigits = (callAccepted[3] >> 4) & 0x0F;
+                int calledDigits = callAccepted[3] & 0x0F;
+                int addressOctets = (callingDigits + calledDigits + 1) / 2; // BCD, two digits per octet
+                int facilityLengthOffset = 4 + addressOctets;
+
+                if (facilityLengthOffset < callAccepted.Length)
+                {
+                    int facilityLength = callAccepted[facilityLengthOffset];
+                    int facilityStart = facilityLengthOffset + 1;
+
+                    if (facilityLength > 0 && facilityStart + facilityLength <= callAccepted.Length)
+                    {
+                        var parameters = RetroIO.Protocols.X25.Models.X25FlowControlFacilities.Decode(
+                            new ReadOnlySpan<byte>(callAccepted, facilityStart, facilityLength));
+
+                        if (parameters.HasWindowSize && parameters.WindowFromCalling > 0)
+                        {
+                            // We placed the call, so our send window is the calling-DTE direction.
+                            window = parameters.WindowFromCalling;
+                            negotiated = true;
+                        }
+                    }
+                }
+            }
+
+            lock (_routingLock)
+            {
+                if (_xotFlowControl.TryGetValue(localLcn, out var fc))
+                {
+                    fc.WindowSize = window;
+                }
+            }
+
+            if (negotiated)
+            {
+                _logger.LogInformation(
+                    "X.25 window negotiated on LCN {LCN}: send window {Window}", localLcn, window);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "X.25 call accepted on LCN {LCN} carried no window size facility - using the standard default of {Window} (X.25 6.10)",
+                    localLcn, window);
             }
         }
 

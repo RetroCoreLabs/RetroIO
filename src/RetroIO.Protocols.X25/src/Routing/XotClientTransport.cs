@@ -110,11 +110,29 @@ namespace RetroIO.Protocols.X25.Transport
                 // Step 3: Build and send X.25 Call Request packet
                 // Use SourceLcn from the routing layer (each VC gets its own LCN)
                 ushort callLcn = callRequest.SourceLcn > 0 ? callRequest.SourceLcn : (ushort)1;
+
+                // RFC 1613 section 6.1: an XOT call packet "MUST contain both Packet Size and
+                // Window Size facilities". We sent neither until 2026-09-05, which left the peer
+                // free to authorise the standard default of 2 (X.25 6.10) while we sent 7 - a P(S)
+                // outside the window, which X.25 4.4.1.3 makes a local procedure error and resets
+                // the circuit. It only worked because the C reference switches are configured for 7.
+                // A caller that supplied its own facilities keeps them; we do not second-guess it.
+                byte[]? facilities = callRequest.Facilities;
+                if (facilities == null || facilities.Length == 0)
+                {
+                    byte window = _interfaceConfig?.RequestedWindowSize ?? 7;
+                    int packetSize = _interfaceConfig?.RequestedPacketSize ?? 128;
+
+                    // Same value both ways: we have no reason to ask for an asymmetric circuit, and
+                    // the answering end may lower either direction independently (X.25 Table 6-1).
+                    facilities = X25FlowControlFacilities.Encode(window, window, packetSize, packetSize);
+                }
+
                 var callPacket = X25PacketBuilder.CreateCallRequest(
                     lcn: callLcn,
                     calledAddress: callRequest.CalledAddress,
                     callingAddress: callRequest.CallingAddress,
-                    facilities: callRequest.Facilities,
+                    facilities: facilities,
                     callUserData: callRequest.CallUserData
                 );
                 // Fix GFI: add modulo 8 bit for XOT
@@ -520,7 +538,7 @@ namespace RetroIO.Protocols.X25.Transport
                 // peer read one frame's length header followed by another frame's bytes, the frame
                 // boundary was destroyed, and it decoded the remains as an X.25 packet with a
                 // sequence number that made no sense. The C reference answered exactly as ITU-T
-                // X.25 4.5.2.2 says it must - RESET, cause 0x05 local procedure error, diagnostic
+                // X.25 4.4.1.3 says it must - RESET, cause 0x05 local procedure error, diagnostic
                 // 0x01 invalid P(S) - which is what a bulk transfer kept dying of.
                 //
                 // XotServerTransport.SendPacket already took this lock; only the client half was

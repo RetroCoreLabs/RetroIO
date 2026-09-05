@@ -49,6 +49,28 @@ namespace RetroIO.Protocols.X25
         public string RemoteMachineId { get; set; } = string.Empty;
 
         /// <summary>
+        /// Packet-layer window to REQUEST in the call request's flow control facility.
+        /// </summary>
+        /// <remarks>
+        /// This is a proposal, not the window we then use. What we actually use is whatever comes
+        /// back in the call accepted packet, and X.25 6.12 says a called DTE may lower it. Only when
+        /// the peer sends no window size facility at all do we fall back - and then to 2, the
+        /// standard default (X.25 6.10), never to this number.
+        /// <para>
+        /// 7 is the widest a modulo 8 circuit can carry (X.25 7.3.1.2) and is what the C reference
+        /// switches are configured for, so proposing it costs nothing against a peer that wants
+        /// less: it will say so.
+        /// </para>
+        /// </remarks>
+        public byte RequestedWindowSize { get; set; } = 7;
+
+        /// <summary>
+        /// Maximum user data field length to REQUEST, in octets. Negotiated the same way as
+        /// <see cref="RequestedWindowSize"/>.
+        /// </summary>
+        public int RequestedPacketSize { get; set; } = 128;
+
+        /// <summary>
         /// TCP keepalive settings (equivalent to Cisco tcp-keepalives)
         /// </summary>
         public bool TcpKeepalive { get; set; } = true;
