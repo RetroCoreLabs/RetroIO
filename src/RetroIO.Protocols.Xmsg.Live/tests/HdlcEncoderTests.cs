@@ -174,5 +174,116 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
 
             return false;
         }
+
+        /// <summary>
+        /// Octets below <c>0x20</c> must travel UNESCAPED on the XMSG wire.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the single most dangerous divergence in the framing merge. There are two
+        /// escape policies in this repository and they produce different wire bytes for the
+        /// same LAPB body:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item>this encoder escapes ONLY the flag and the escape octet, which is the
+        ///   minimum required by ITU-T X.25 clause 2.2.2.2;</item>
+        ///   <item>the X.25 side (HdlcFramer, HdlcFrameCodec) additionally escapes every
+        ///   octet below <c>0x20</c> - the RFC 1662 section 7.1 default ACCM.</item>
+        /// </list>
+        /// <para>
+        /// The measurement settles which one belongs here: across every capture in this
+        /// repository, the only octets ever following <c>0x7D</c> are <c>0x5D</c> and
+        /// <c>0x5E</c>. The real ND machines do not ACCM-escape. If the merged framer
+        /// adopts the wider policy by default, every XMSG frame changes on the wire.
+        /// </para>
+        /// <para>
+        /// The existing SABM anchor test covers this only by luck, because its body
+        /// happens to contain one <c>0x00</c>. This test covers it on purpose, with several
+        /// control octets in the information field.
+        /// </para>
+        /// </remarks>
+        [Fact]
+        public void ControlOctetsBelow0x20_AreNotEscaped()
+        {
+            // 0x00, 0x01, 0x11 (XON), 0x13 (XOFF) and 0x1F are all in the RFC 1662 default
+            // ACCM. None of them may be escaped here. No 0x7E or 0x7D anywhere, so the
+            // body itself needs no transparency at all.
+            byte[] body = { 0x09, 0x00, 0x01, 0x11, 0x13, 0x1F, 0x64 };
+
+            byte[] wire = HdlcEncoder.Encode(body);
+
+            // Every body octet appears verbatim, in order, between the flags.
+            Assert.Equal(0x7E, wire[0]);
+            Assert.Equal(0x7E, wire[wire.Length - 1]);
+            for (int i = 0; i < body.Length; i++)
+            {
+                Assert.Equal(body[i], wire[1 + i]);
+            }
+
+            // And the frame is exactly two flags + body + two FCS octets. Any escaping at
+            // all would make it longer. This assertion is what actually fails if somebody
+            // switches the policy.
+            Assert.Equal(body.Length + 4, wire.Length);
+
+            // Belt and braces: no escape octet was emitted.
+            Assert.DoesNotContain((byte)0x7D, wire);
+        }
+
+        /// <summary>
+        /// An FCS octet that happens to equal a flag or an escape must itself be stuffed.
+        /// </summary>
+        /// <remarks>
+        /// A classic HDLC bug: escape the body in one pass, then append the raw FCS. It
+        /// works until an FCS octet lands on <c>0x7E</c> or <c>0x7D</c>, which happens for
+        /// roughly one frame in 130 - often enough to be a maddening intermittent fault and
+        /// rare enough to survive a casual round-trip test. ITU-T X.25 clause 2.2.2.2 puts
+        /// the transparency step "following completion of the FCS calculation", so the FCS
+        /// is inside the escaped region.
+        /// </remarks>
+        [Fact]
+        public void AnFcsOctetEqualToAFlag_IsStuffed()
+        {
+            // Search for a body whose FCS contains 0x7E or 0x7D rather than hoping a
+            // hand-picked one does. Deterministic: the same body is found every run.
+            byte[] body = null!;
+            for (int i = 0; i < 4096; i++)
+            {
+                byte[] candidate = { 0x09, 0x01, (byte)(i >> 8), (byte)(i & 0xFF) };
+                ushort fcs = (ushort)(Fcs16.Compute(candidate) ^ 0xFFFF);
+                byte low = (byte)(fcs & 0xFF);
+                byte high = (byte)((fcs >> 8) & 0xFF);
+                if (low == 0x7E || low == 0x7D || high == 0x7E || high == 0x7D)
+                {
+                    body = candidate;
+                    break;
+                }
+            }
+
+            Assert.NotNull(body);
+
+            byte[] wire = HdlcEncoder.Encode(body);
+
+            // The frame must be longer than the unescaped form, proving the FCS octet was
+            // stuffed rather than written raw...
+            Assert.True(wire.Length > body.Length + 4, "the FCS octet was not stuffed");
+
+            // ...and it must still de-frame back to the original body with a valid FCS.
+            IReadOnlyList<byte[]> frames = HdlcDeframer.SplitFrames(wire);
+            Assert.Single(frames);
+            Assert.True(Fcs16.IsValid(frames[0]));
+            Assert.Equal(body, frames[0][..body.Length]);
+
+            // And exactly two flags: the stuffed FCS octet must not look like a frame end.
+            int flagCount = 0;
+            for (int i = 0; i < wire.Length; i++)
+            {
+                if (wire[i] == 0x7E)
+                {
+                    flagCount++;
+                }
+            }
+            Assert.Equal(2, flagCount);
+        }
+
     }
 }
