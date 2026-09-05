@@ -123,6 +123,21 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
             public byte RecvSeq;      // P(R) to include in outgoing packets (next expected from peer)
             public byte PeerAcked;    // Last P(R) received from peer (they acknowledged up to this)
             public byte WindowSize = 7; // Max outstanding unacknowledged packets
+
+            /// <summary>
+            /// Set while the peer has told us it cannot take more data (RNR), cleared by RR.
+            /// </summary>
+            /// <remarks>
+            /// X.25 has two independent brakes on a sender: the window, which we compute ourselves
+            /// from P(S) and the peer's P(R), and the peer's busy condition, which only the peer can
+            /// tell us about. Until 2026-09-05 we honoured the first and ignored the second - an RNR
+            /// fell through to the "unhandled packet type" branch, so we kept sending at a peer that
+            /// had just asked us to stop. That is exactly the fault that destroys packets inside the
+            /// C reference switch (tools/x25switch.c:2750 discards lapb_send's refusal), and there is
+            /// no reason for us to be the other end of the same mistake.
+            /// </remarks>
+            public bool PeerBusy;
+
             private readonly ManualResetEventSlim _windowOpen = new ManualResetEventSlim(true);
 
             public int Outstanding
@@ -136,7 +151,9 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                 }
             }
 
-            public bool CanSend => Outstanding < WindowSize;
+            // Both brakes, in the order X.25 applies them: a busy peer stops us outright, and even a
+            // ready peer only takes WindowSize unacknowledged packets.
+            public bool CanSend => !PeerBusy && Outstanding < WindowSize;
 
             /// <summary>Wait until the send window has space (peer sends RR)</summary>
             public bool WaitForWindow(int timeoutMs)
@@ -168,10 +185,32 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
             }
 
             /// <summary>Called when peer acknowledges with P(R)</summary>
+            /// <remarks>
+            /// An RR both acknowledges and clears any busy condition - X.25 has no separate "ready
+            /// again" packet, the RR itself is it.
+            /// </remarks>
             public void AckReceived(byte peerPR)
             {
                 PeerAcked = peerPR;
+                PeerBusy = false;
                 _windowOpen.Set(); // Always signal — let WaitForWindow re-evaluate
+            }
+
+            /// <summary>
+            /// Called when the peer sends RNR: it acknowledges up to P(R) and asks us to stop.
+            /// </summary>
+            /// <param name="peerPR">The P(R) carried by the RNR.</param>
+            /// <remarks>
+            /// An RNR carries a P(R) like any other supervisory packet, so it still moves the
+            /// acknowledgement point; what it adds is the busy condition. We record both. The
+            /// waiting sender is signalled even though it cannot proceed, so that it re-evaluates
+            /// and blocks on the busy flag rather than on a stale window count.
+            /// </remarks>
+            public void PeerBusyReceived(byte peerPR)
+            {
+                PeerAcked = peerPR;
+                PeerBusy = true;
+                _windowOpen.Set();
             }
 
             /// <summary>
@@ -189,6 +228,10 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                 SendSeq = 0;
                 RecvSeq = 0;
                 PeerAcked = 0;
+                // A reset clears the busy condition too: the circuit is back to its call-setup
+                // state, and leaving PeerBusy set would keep the sender blocked for ever, because
+                // the RR that would have cleared it belonged to the pre-reset sequence space.
+                PeerBusy = false;
                 _windowOpen.Set();
             }
         }
@@ -1504,6 +1547,24 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                     {
                         if (_xotFlowControl.TryGetValue(localLcn, out var fc))
                             fc.AckReceived(peerPR);
+                    }
+                }
+                else if ((pti & 0x1F) == 0x05) // RNR (Receiver Not Ready) - bits 4-0 = 00101
+                {
+                    // The peer's receive buffer is full. X.25 requires us to stop sending DATA on
+                    // this circuit until an RR arrives; the RNR's own P(R) still acknowledges.
+                    // Before 2026-09-05 this packet had no branch at all and landed in the
+                    // "unhandled" warning below, so we carried on sending into a peer that had
+                    // asked us to stop - and the peer's only remaining defence is to discard, which
+                    // costs a Reset and the whole window of data with it.
+                    byte peerPR = (byte)((pti >> 5) & 0x07);
+                    _logger.LogWarning(
+                        "XOT RNR (peer busy) on remote LCN {RemoteLcn} -> local LCN {LocalLcn}: P(R)={PeerPR} - holding off until RR",
+                        remoteLcn, localLcn, peerPR);
+                    lock (_routingLock)
+                    {
+                        if (_xotFlowControl.TryGetValue(localLcn, out var fc))
+                            fc.PeerBusyReceived(peerPR);
                     }
                 }
                 else if (pti == 0x1B) // Reset Request / Reset Indication
@@ -3591,9 +3652,15 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
         {
             try
             {
-                // Check if this LCN is XOT-mapped — send via XOT instead of serial path
-                if (SendDataViaXotIfMapped(lcn, data, data.Length))
+                // Check if this LCN is XOT-mapped - send via XOT instead of serial path.
+                // A flow-control refusal is reported to the caller as a failed send: the circuit
+                // exists and is XOT, so there is no other route the data should take, and calling
+                // it a success would hide the very back-pressure we just honoured.
+                XotSendOutcome xot = SendDataViaXotIfMapped(lcn, data, data.Length);
+                if (xot == XotSendOutcome.Sent)
                     return true;
+                if (xot == XotSendOutcome.RefusedByFlowControl)
+                    return false;
 
                 _logger.LogDebug("Sending X.25 data on LCN {LCN}, {Length} bytes", lcn, data.Length);
 
@@ -3807,11 +3874,18 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
         }
 
         /// <summary>
-        /// Send data for an LCN. If the LCN is mapped to an XOT connection, sends via XOT.
-        /// Otherwise falls through to the normal X25Layer.SendData path.
-        /// Returns true if sent via XOT, false if caller should use X25Layer.
+        /// Send data for an LCN when that LCN is mapped to an XOT connection.
         /// </summary>
-        public bool SendDataViaXotIfMapped(ushort lcn, byte[] data, int length)
+        /// <param name="lcn">Local logical channel number.</param>
+        /// <param name="data">The data to send.</param>
+        /// <param name="length">Number of valid bytes in <paramref name="data"/>.</param>
+        /// <returns>
+        /// <see cref="XotSendOutcome.NotXotMapped"/> when the caller should use the packet layer,
+        /// <see cref="XotSendOutcome.Sent"/> when the packet went out, and
+        /// <see cref="XotSendOutcome.RefusedByFlowControl"/> when the circuit is XOT but flow
+        /// control held the packet back.
+        /// </returns>
+        public XotSendOutcome SendDataViaXotIfMapped(ushort lcn, byte[] data, int length)
         {
             // First check if this LCN is XOT-mapped (quick lock)
             (object Connection, ushort RemoteLcn) xotInfo;
@@ -3820,7 +3894,7 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
             try
             {
                 if (!_xotConnections.TryGetValue(lcn, out xotInfo))
-                    return false;
+                    return XotSendOutcome.NotXotMapped;
                 _xotFlowControl.TryGetValue(lcn, out fc);
             }
             finally
@@ -3831,12 +3905,18 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
             // Wait for send window outside the lock (RR handler needs the lock)
             if (fc != null && !fc.CanSend)
             {
-                _logger.LogInformation("X.25 window wait on LCN {LCN}: PS={PS} PeerAcked={PA} outstanding={O}",
-                    lcn, fc.SendSeq, fc.PeerAcked, fc.Outstanding);
+                // PeerBusy is in both messages on purpose: a stall caused by an RNR looks exactly
+                // like a stall caused by a full window unless the log says which one it is.
+                _logger.LogInformation("X.25 window wait on LCN {LCN}: PS={PS} PeerAcked={PA} outstanding={O} peerBusy={Busy}",
+                    lcn, fc.SendSeq, fc.PeerAcked, fc.Outstanding, fc.PeerBusy);
                 if (!fc.WaitForWindow(2000))
                 {
-                    _logger.LogWarning("X.25 send window TIMEOUT on LCN {LCN} (outstanding={Outstanding})", lcn, fc.Outstanding);
-                    return false;
+                    _logger.LogWarning("X.25 send window TIMEOUT on LCN {LCN} (outstanding={Outstanding}, peerBusy={Busy})",
+                        lcn, fc.Outstanding, fc.PeerBusy);
+                    // NOT NotXotMapped. This circuit is XOT; flow control simply would not let the
+                    // packet out, and rerouting it down the packet layer would defeat the flow
+                    // control we just obeyed.
+                    return XotSendOutcome.RefusedByFlowControl;
                 }
             }
 
@@ -3871,7 +3951,7 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
                 }
 
                 _logger.LogDebug("Sent {Length} bytes via XOT for LCN {LCN}", length, lcn);
-                return true;
+                return XotSendOutcome.Sent;
             }
         }
 

@@ -56,8 +56,11 @@ namespace RetroIO.Protocols.X25.Modules
         /// <inheritdoc/>
         public void ForwardData(ushort lcn, byte[] data, int length)
         {
-            // Prefer the XOT-mapped path; fall back to the packet layer when the channel is not XOT-mapped.
-            if (!_runtime.SendDataViaXotIfMapped(lcn, data, length))
+            // Prefer the XOT-mapped path; fall back to the packet layer ONLY when the channel is
+            // not XOT-mapped at all. A flow-control refusal must not fall back: the peer sent RNR
+            // or our window is full, and pushing the same data down the packet layer would put it
+            // on the wire anyway - back-pressure obeyed in one place and ignored in the next.
+            if (_runtime.SendDataViaXotIfMapped(lcn, data, length) == XotSendOutcome.NotXotMapped)
             {
                 _runtime.X25Layer.SendData(lcn, data, length);
             }
