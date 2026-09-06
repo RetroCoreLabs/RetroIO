@@ -38,6 +38,9 @@ using RetroIO.Protocols.X25.DeleteMe;
         // been retired to _retired/; the multi-link Stack B (LinkManager) is the sole link path now.
         public Layers.PhysicalLayer PhysicalLayer { get; private set; }  // Actual physical layer for serial/XOT
         public X25Layer X25Layer { get; private set; }
+
+        /// <inheritdoc/>
+        public Services.X25PacketHistory PacketHistory { get; } = new Services.X25PacketHistory();
         public X25RoutingLayer RoutingLayer { get; private set; }
 
         // New multi-link architecture with per-link LAPB instances
@@ -1591,6 +1594,8 @@ using RetroIO.Protocols.X25.DeleteMe;
             // Subscribe to X.25 events
             X25Layer.PacketReceived += OnX25PacketReceived;
             X25Layer.PacketTransmitted += OnX25PacketTransmitted;
+            PacketHistory.PacketReceived += OnX25PacketReceived;
+            PacketHistory.PacketTransmitted += OnX25PacketTransmitted;
             X25Layer.IncomingCall += OnX25IncomingCall;
             X25Layer.CallCleared += OnX25CallCleared;
             X25Layer.DataReceived += OnX25DataReceived; // Restored - needed for LAPB → X.25 packet history creation

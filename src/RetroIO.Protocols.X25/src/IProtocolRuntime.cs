@@ -50,6 +50,12 @@ namespace RetroIO.Protocols.X25
         X25Layer X25Layer { get; }
 
         /// <summary>
+        /// The packet history bus: announce received and transmitted packets here for the history
+        /// and display code. Replaces the old layer's FirePacketReceived/FirePacketTransmitted role.
+        /// </summary>
+        Services.X25PacketHistory PacketHistory { get; }
+
+        /// <summary>
         /// Returns the modules currently registered with the runtime, keyed by name.
         /// </summary>
         /// <returns>

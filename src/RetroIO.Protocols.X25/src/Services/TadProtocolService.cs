@@ -129,11 +129,11 @@ namespace RetroIO.Protocols.X25.Services
             // Fire X25Layer event to create history items
             if (e.Direction == PacketDirection.Receive)
             {
-                _runtime.X25Layer.FirePacketReceived(e);
+                _runtime.PacketHistory.FirePacketReceived(e);
             }
             else
             {
-                _runtime.X25Layer.FirePacketTransmitted(e);
+                _runtime.PacketHistory.FirePacketTransmitted(e);
             }
             
             // Also route event to bound module (PAD client) - needed for actual functionality

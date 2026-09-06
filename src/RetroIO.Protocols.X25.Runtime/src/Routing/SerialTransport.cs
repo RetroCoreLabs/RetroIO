@@ -296,7 +296,7 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
                     Direction = PacketDirection.Transmit,
                     Timestamp = DateTime.UtcNow
                 };
-                _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+                _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 
                 // Stack A serial LAPB send retired; serial output is handled by Stack B links now.
                 _logger.LogWarning("SerialTransport: legacy LAPB call-packet send retired ({Length} bytes)", callPacket.Length);

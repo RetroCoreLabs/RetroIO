@@ -234,11 +234,11 @@ namespace RetroIO.Protocols.X25.Sintran.Services
             // Fire X25Layer event to create history items (server perspective)
             if (e.Direction == PacketDirection.Receive)
             {
-                _runtime.X25Layer.FirePacketReceived(e);
+                _runtime.PacketHistory.FirePacketReceived(e);
             }
             else
             {
-                _runtime.X25Layer.FirePacketTransmitted(e);
+                _runtime.PacketHistory.FirePacketTransmitted(e);
             }
 
             // For Data packets: Add SINTRAN routing wrapper before sending to client
