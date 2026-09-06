@@ -1,6 +1,7 @@
 using System;
-using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
+
+using RetroIO.Link.Hdlc;
 
 namespace RetroIO.Link
 {
@@ -21,26 +22,51 @@ namespace RetroIO.Link
 
     /// <summary>
     /// Handles HDLC byte-stuffing, frame detection, and FCS calculation/validation.
-    /// Used by SerialLink and TcpLapbLink for physical layer framing.
+    /// Used by SerialLink, TcpLapbLink and XotLink for physical layer framing.
     /// </summary>
-    public class HdlcFramer
+    /// <remarks>
+    /// <para>
+    /// Since 2026-09-06 this is a thin adapter over the shared engine in
+    /// <see cref="RetroIO.Link.Hdlc"/>. It was one of five separate HDLC framers in this
+    /// repository; the event-based surface is kept because three links depend on it, but the
+    /// framing itself is no longer implemented here.
+    /// </para>
+    /// <para>
+    /// <b>Two long-standing defects went away with the change</b>, both from treating a flag as a
+    /// pure toggle rather than as a delimiter:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>a single flag shared as one frame's closing flag and the next frame's opening flag
+    ///   lost the second frame, although ITU-T X.25 clause 2.2.1 permits sharing in as many
+    ///   words;</item>
+    ///   <item>a RUN of flags alternated the in-frame state, so whether the following frame was
+    ///   seen at all depended on whether the run length was odd or even - and inter-frame time
+    ///   fill IS a run of flags (clause 2.2.4).</item>
+    /// </list>
+    /// <para>
+    /// Both were pinned by <c>HdlcFramerTests</c> before the merge and those tests were updated
+    /// when the fix landed.
+    /// </para>
+    /// </remarks>
+    public class HdlcFramer : IDisposable
     {
         private readonly ILogger _logger;
         private readonly string _linkName;
 
-        // HDLC constants
-        private const byte FLAG_BYTE = 0x7E;
-        private const byte ESCAPE_BYTE = 0x7D;
-        private const byte ESCAPE_MASK = 0x20;
+        /// <summary>
+        /// The framing policy this framer drives the shared engine with.
+        /// </summary>
+        /// <remarks>
+        /// RFC 1662 transmit escaping, because that is what this framer has always emitted and its
+        /// peers expect. Corrupt frames are delivered rather than dropped, because all three
+        /// callers read <see cref="FrameEventArgs.FcsValid"/> and count the failures.
+        /// </remarks>
+        private static readonly HdlcFramerOptions Policy = HdlcFramerOptions.X25 with
+        {
+            DeliverCorruptFrames = true,
+        };
 
-        // CRC-16-CCITT constants
-        private const ushort CRC_INIT = 0xFFFF;
-        private const ushort CRC_POLY = 0x8408; // Reversed polynomial
-
-        // Frame receive state
-        private readonly List<byte> _frameBuffer;
-        private bool _inFrame = false;
-        private bool _escapeNext = false;
+        private readonly HdlcDecoder _decoder = new HdlcDecoder(Policy);
 
         /// <summary>
         /// Create a new HDLC framer
@@ -49,7 +75,6 @@ namespace RetroIO.Link
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _linkName = linkName ?? throw new ArgumentNullException(nameof(linkName));
-            _frameBuffer = new List<byte>(256);
         }
 
         /// <summary>
@@ -69,119 +94,83 @@ namespace RetroIO.Link
         /// <param name="length">Number of bytes</param>
         public void ProcessBytes(byte[] buffer, int length)
         {
-            if (buffer == null || length <= 0) return;
-
-            for (int i = 0; i < length; i++)
+            if (buffer == null || length <= 0)
             {
-                ProcessByte(buffer[i]);
+                return;
+            }
+
+            ReadOnlySpan<byte> data = new ReadOnlySpan<byte>(buffer, 0, length);
+
+            int offset = 0;
+            while (offset < data.Length)
+            {
+                HdlcDecodeStatus status = _decoder.Decode(data.Slice(offset), out int consumed);
+                offset += consumed;
+
+                if (status == HdlcDecodeStatus.NeedMoreData)
+                {
+                    break;
+                }
+
+                if (status == HdlcDecodeStatus.FrameComplete || status == HdlcDecodeStatus.BadFcs)
+                {
+                    RaiseFrame(status == HdlcDecodeStatus.FrameComplete);
+                    continue;
+                }
+
+                if (status == HdlcDecodeStatus.Runt)
+                {
+                    _logger.LogWarning("HDLC[{Link}]: Short frame discarded", _linkName);
+                }
+                else if (status == HdlcDecodeStatus.Overlong)
+                {
+                    _logger.LogWarning("HDLC[{Link}]: Oversized frame discarded", _linkName);
+                }
+                else if (status == HdlcDecodeStatus.Aborted)
+                {
+                    // An escape immediately followed by a flag (X.25 clause 2.3.5.3 f). Silently
+                    // discarded and explicitly NOT counted as an FCS error.
+                    _logger.LogDebug("HDLC[{Link}]: Frame aborted", _linkName);
+                }
             }
         }
 
         /// <summary>
-        /// Process a single received byte
+        /// Hands the decoder's current frame to subscribers with the FCS stripped.
         /// </summary>
-        private void ProcessByte(byte b)
+        /// <param name="fcsValid">Whether the frame passed its FCS check.</param>
+        /// <remarks>
+        /// The shared decoder delivers the frame WITH its FCS, because a framer should not have to
+        /// know how wide the checksum is for the layer above. This surface has always stripped it,
+        /// so the adapter does that here rather than changing what three links receive.
+        /// </remarks>
+        private void RaiseFrame(bool fcsValid)
         {
-            if (_escapeNext)
+            EventHandler<FrameEventArgs>? handler = FrameReceived;
+            if (handler is null)
             {
-                // Unescape the byte
-                byte unescaped = (byte)(b ^ ESCAPE_MASK);
-                _frameBuffer.Add(unescaped);
-                _escapeNext = false;
+                return;
             }
-            else if (b == ESCAPE_BYTE)
-            {
-                // Next byte is escaped
-                _escapeNext = true;
-            }
-            else if (b == FLAG_BYTE)
-            {
-                if (_inFrame)
-                {
-                    // End of frame
-                    if (_frameBuffer.Count >= 4) // Minimum: Address + Control + 2 FCS
-                    {
-                        ProcessCompleteFrame();
-                    }
-                    else if (_frameBuffer.Count > 0)
-                    {
-                        _logger.LogWarning("HDLC[{Link}]: Short frame discarded ({Count} bytes)",
-                            _linkName, _frameBuffer.Count);
-                    }
 
-                    _frameBuffer.Clear();
-                    _inFrame = false;
-                }
-                else
-                {
-                    // Start of frame
-                    _inFrame = true;
-                    _frameBuffer.Clear();
-                    _escapeNext = false;
-                }
-            }
-            else if (_inFrame)
+            ReadOnlySpan<byte> frame = _decoder.Frame;
+            int payloadLength = frame.Length - 2;
+            if (payloadLength < 0)
             {
-                // Add byte to frame
-                _frameBuffer.Add(b);
+                return;
             }
-            // Ignore bytes outside frames
+
+            byte[] payload = frame.Slice(0, payloadLength).ToArray();
+
+            handler(this, new FrameEventArgs
+            {
+                Data = payload,
+                Length = payloadLength,
+                FcsValid = fcsValid,
+            });
         }
 
         /// <summary>
-        /// Process a complete unstuffed frame (with FCS)
-        /// </summary>
-        private void ProcessCompleteFrame()
-        {
-            var frameWithFcs = _frameBuffer.ToArray();
-            int frameLength = frameWithFcs.Length;
-
-            // Validate FCS
-            bool fcsValid = ValidateFcs(frameWithFcs, frameLength);
-
-            if (fcsValid)
-            {
-                // Strip FCS (last 2 bytes)
-                int dataLength = frameLength - 2;
-                var frameData = new byte[dataLength];
-                Array.Copy(frameWithFcs, 0, frameData, 0, dataLength);
-
-                _logger.LogDebug("HDLC[{Link}]: Frame received ({Length} bytes, FCS valid)",
-                    _linkName, dataLength);
-
-                FrameReceived?.Invoke(this, new FrameEventArgs
-                {
-                    Data = frameData,
-                    Length = dataLength,
-                    FcsValid = true,
-                    Timestamp = DateTime.UtcNow
-                });
-            }
-            else
-            {
-                _logger.LogWarning("HDLC[{Link}]: Frame FCS error ({Length} bytes)",
-                    _linkName, frameLength);
-
-                // Still report the frame (FCS invalid)
-                int dataLength = Math.Max(0, frameLength - 2);
-                var frameData = new byte[dataLength];
-                if (dataLength > 0)
-                {
-                    Array.Copy(frameWithFcs, 0, frameData, 0, dataLength);
-                }
-
-                FrameReceived?.Invoke(this, new FrameEventArgs
-                {
-                    Data = frameData,
-                    Length = dataLength,
-                    FcsValid = false,
-                    Timestamp = DateTime.UtcNow
-                });
-            }
-        }
-
-        /// <summary>
-        /// Send a frame with byte-stuffing and FCS
+        /// Build and emit a stuffed frame with its FCS.
         /// </summary>
         /// <param name="frameData">Frame data (Address + Control + Information)</param>
         /// <param name="length">Frame length</param>
@@ -193,115 +182,28 @@ namespace RetroIO.Link
                 return;
             }
 
-            // Calculate FCS
-            ushort fcs = CalculateFcs(frameData, length);
-
-            // Build stuffed frame
-            var stuffedData = new List<byte>(length * 2 + 6); // Worst case: all bytes escaped + flags + FCS
-
-            // Start flag
-            stuffedData.Add(FLAG_BYTE);
-
-            // Stuff frame data
-            for (int i = 0; i < length; i++)
-            {
-                StuffByte(stuffedData, frameData[i]);
-            }
-
-            // Stuff FCS (LSB first)
-            StuffByte(stuffedData, (byte)(fcs & 0xFF));
-            StuffByte(stuffedData, (byte)((fcs >> 8) & 0xFF));
-
-            // End flag
-            stuffedData.Add(FLAG_BYTE);
-
-            var finalData = stuffedData.ToArray();
+            byte[] wire = HdlcEncoder.Encode(new ReadOnlySpan<byte>(frameData, 0, length), Policy);
 
             _logger.LogDebug("HDLC[{Link}]: Sending frame ({Length} bytes, stuffed to {StuffedLength})",
-                _linkName, length, finalData.Length);
+                _linkName, length, wire.Length);
 
-            BytesToSend?.Invoke(this, finalData);
+            BytesToSend?.Invoke(this, wire);
         }
 
         /// <summary>
-        /// Add a byte to the output buffer with escaping if needed
-        /// </summary>
-        private void StuffByte(List<byte> buffer, byte b)
-        {
-            if (b == FLAG_BYTE || b == ESCAPE_BYTE || b < 0x20)
-            {
-                buffer.Add(ESCAPE_BYTE);
-                buffer.Add((byte)(b ^ ESCAPE_MASK));
-            }
-            else
-            {
-                buffer.Add(b);
-            }
-        }
-
-        /// <summary>
-        /// Calculate CRC-16-CCITT FCS
-        /// </summary>
-        private ushort CalculateFcs(byte[] data, int length)
-        {
-            ushort crc = CRC_INIT;
-
-            for (int i = 0; i < length; i++)
-            {
-                crc = UpdateCrc(crc, data[i]);
-            }
-
-            // One's complement
-            return (ushort)(crc ^ 0xFFFF);
-        }
-
-        /// <summary>
-        /// Validate FCS of received frame
-        /// </summary>
-        private bool ValidateFcs(byte[] frameWithFcs, int length)
-        {
-            if (length < 4) return false; // Minimum: Address + Control + 2 FCS
-
-            ushort crc = CRC_INIT;
-
-            // Include all bytes including FCS
-            for (int i = 0; i < length; i++)
-            {
-                crc = UpdateCrc(crc, frameWithFcs[i]);
-            }
-
-            // Good FCS results in magic value
-            return crc == 0xF0B8;
-        }
-
-        /// <summary>
-        /// Update CRC with one byte (bit-by-bit method)
-        /// </summary>
-        private ushort UpdateCrc(ushort crc, byte b)
-        {
-            crc ^= b;
-            for (int i = 0; i < 8; i++)
-            {
-                if ((crc & 0x0001) != 0)
-                {
-                    crc = (ushort)((crc >> 1) ^ CRC_POLY);
-                }
-                else
-                {
-                    crc = (ushort)(crc >> 1);
-                }
-            }
-            return crc;
-        }
-
-        /// <summary>
-        /// Reset the framer state
+        /// Discard any partially received frame and hunt for the next opening flag.
         /// </summary>
         public void Reset()
         {
-            _frameBuffer.Clear();
-            _inFrame = false;
-            _escapeNext = false;
+            _decoder.Reset();
+            _logger.LogDebug("HDLC[{Link}]: Framer reset", _linkName);
+        }
+
+        /// <summary>Returns the decoder's pooled assembly buffer.</summary>
+        public void Dispose()
+        {
+            _decoder.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

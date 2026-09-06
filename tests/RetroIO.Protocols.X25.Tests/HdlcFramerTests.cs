@@ -8,14 +8,16 @@
 // one of five separate HDLC framing implementations in this repository, and it
 // is about to be merged into a single shared class.
 //
-// These tests are therefore written to PIN WHAT THE CODE DOES TODAY, not to say
-// what it ought to do. Two of them deliberately assert behaviour that is very
-// probably wrong (see SharedFlag and DanglingEscape below). That is the point:
-// when the merged framer replaces this one, a changed behaviour must show up as
-// a failing test that somebody has to look at and decide about, rather than as
-// a silent change of what goes on the wire.
+// These tests were written BEFORE the merge, to pin what the code did at the
+// time, and two of them deliberately asserted behaviour that was wrong: a shared
+// flag lost the following frame, and a run of flags decided by its parity
+// whether the next frame was seen at all.
 //
-// Where a test asserts something believed WRONG, its name and comment say so.
+// Both went red when HdlcFramer was reimplemented on the shared engine on
+// 2026-09-06, which is exactly what they were for - the change showed up as a
+// failing test somebody had to look at, rather than as a silent change of what
+// goes on the wire. They have been updated to assert the fixed behaviour, and
+// each carries a comment recording what it used to say and why.
 // =============================================================================
 
 using System;
@@ -215,7 +217,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void HdlcFramer_SecondFrameAfterSharedFlag_IsDropped_WHICH_IS_WRONG()
+        public void HdlcFramer_SecondFrameAfterSharedFlag_IsDelivered()
         {
             List<FrameEventArgs> received = new List<FrameEventArgs>();
             HdlcFramer framer = CreateFramer(new List<byte>(), received);
@@ -225,14 +227,12 @@ namespace RetroIO.Protocols.X25.Tests
             // "A single flag may be used as both the closing flag for one frame and the
             // opening flag for the next frame." Q.921 clause 2.2 says the same.
             //
-            // HdlcFramer.ProcessByte sets _inFrame = false when a flag closes a frame and
-            // does NOT re-open, so the second frame's octets arrive with _inFrame false
-            // and are discarded. Every other framing implementation in this repository
-            // handles it.
-            //
-            // This test asserts ONE frame because that is what the code does today. When
-            // the merged framer arrives it should deliver TWO and this test must be
-            // changed - deliberately, by someone who has read this comment.
+            // FIXED by the framing merge, 2026-09-06, and this test was updated deliberately.
+            // The old hand-rolled loop set _inFrame = false when a flag closed a frame and
+            // never re-opened, so the second frame's octets arrived with _inFrame false and
+            // were discarded - it asserted ONE frame and said in this comment that the merge
+            // should make it TWO. The shared engine applies the clause 2.2.1 rule directly: a
+            // flag while a frame is in progress closes it AND opens the next.
             byte[] a = WrapFrame(new byte[] { 0x11, 0x22, 0x33, 0x44 });
             byte[] b = WrapFrame(new byte[] { 0x55, 0x66, 0x77, 0x88 });
 
@@ -243,11 +243,11 @@ namespace RetroIO.Protocols.X25.Tests
 
             framer.ProcessBytes(shared, shared.Length);
 
-            Assert.That(received.Count, Is.EqualTo(1),
-                "behaviour changed: HdlcFramer used to drop the frame after a shared flag. "
-                + "If the merged framer now delivers both, that is a FIX - update this test.");
-            Assert.That(received[0].Data, Is.EqualTo(new byte[] { 0x11, 0x22, 0x33, 0x44 }),
-                "it is the FIRST frame that survives");
+            Assert.That(received.Count, Is.EqualTo(2), "a shared flag must open the following frame");
+            Assert.That(received[0].Data, Is.EqualTo(new byte[] { 0x11, 0x22, 0x33, 0x44 }));
+            Assert.That(received[1].Data, Is.EqualTo(new byte[] { 0x55, 0x66, 0x77, 0x88 }),
+                "the frame after the shared flag used to be lost entirely");
+            Assert.That(received[1].FcsValid, Is.True);
         }
 
         [Test]
@@ -298,37 +298,36 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void HdlcFramer_EvenFlagRunBeforeAFrame_DropsIt_WHICH_IS_WRONG()
+        public void HdlcFramer_FlagRunParity_NoLongerDecidesWhetherAFrameIsSeen()
         {
-            List<FrameEventArgs> received = new List<FrameEventArgs>();
-            HdlcFramer framer = CreateFramer(new List<byte>(), received);
-
-            // Three extra flags plus the frame's own opening flag: FOUR flags, even.
-            // The SAME frame that the odd case above delivers.
-            byte[] wire = WithLeadingFlags(WrapFrame(new byte[] { 0x11, 0x22, 0x33, 0x44 }), 3);
-
-            framer.ProcessBytes(wire, wire.Length);
-
-            // MEASURED 2026-09-06. HdlcFramer treats a flag as a pure toggle
-            // (HdlcFramer.cs:97-121): a flag while out of frame opens one, a flag while in
-            // frame closes one and leaves it CLOSED. So a run of flags alternates the
-            // state, and whether the frame that follows is seen at all depends on whether
-            // the run length is odd or even.
+            // FIXED by the framing merge, 2026-09-06, and this test was updated deliberately.
             //
-            // That is not a theoretical edge case. Inter-frame time fill IS a run of flags
-            // (ITU-T X.25 clause 2.2.4, "interframe time fill is accomplished by
-            // transmitting contiguous flags between frames"), and the real captures in
-            // this repository contain 7E 7E runs on 1571 separate reads.
+            // The old hand-rolled loop treated a flag as a pure toggle: a flag while out of
+            // frame opened one, a flag while in frame closed one and left it CLOSED. A run
+            // of flags therefore alternated the state, and whether the frame that followed
+            // was seen at all depended on whether the run length was odd or even. This test
+            // used to assert 0 for an even run while the odd-run test above asserted 1 - the
+            // same frame, two answers.
             //
-            // The correct behaviour is the one every other framer here implements: a flag
-            // while out of frame is time fill and is ignored; a flag while in frame closes
-            // the frame AND opens the next. Then the parity cannot matter.
+            // That was never theoretical. Inter-frame time fill IS a run of flags (ITU-T
+            // X.25 clause 2.2.4, "interframe time fill is accomplished by transmitting
+            // contiguous flags between frames"), and the captures in this repository contain
+            // 7E 7E runs on 1571 separate reads.
             //
-            // Asserting 0 pins today's behaviour. When the merged framer arrives this test
-            // must go from 0 to 1 - deliberately, by someone who has read this.
-            Assert.That(received.Count, Is.EqualTo(0),
-                "behaviour changed: HdlcFramer used to drop a frame preceded by an even flag run. "
-                + "If the merged framer now delivers it, that is a FIX - update this test.");
+            // The shared engine ignores a flag received while no frame is in progress, so
+            // the parity cannot matter. Every run length from zero upwards now delivers the
+            // frame, which is what this test checks.
+            for (int extraFlags = 0; extraFlags <= 5; extraFlags++)
+            {
+                List<FrameEventArgs> got = new List<FrameEventArgs>();
+                HdlcFramer f = CreateFramer(new List<byte>(), got);
+                byte[] w = WithLeadingFlags(WrapFrame(new byte[] { 0x11, 0x22, 0x33, 0x44 }), extraFlags);
+
+                f.ProcessBytes(w, w.Length);
+
+                Assert.That(got.Count, Is.EqualTo(1), $"failed with {extraFlags} extra leading flags");
+                Assert.That(got[0].Data, Is.EqualTo(new byte[] { 0x11, 0x22, 0x33, 0x44 }));
+            }
         }
 
         [Test]
