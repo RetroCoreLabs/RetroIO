@@ -33,6 +33,31 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </summary>
         public List<(string Called, string Calling)> PlacedCalls { get; } = new List<(string, string)>();
 
+        /// <summary>
+        /// Circuits the switch reset on this port: (logical channel, cause, diagnostic).
+        /// </summary>
+        public List<(ushort Lci, byte Cause, byte Diag)> ResetCircuits { get; } = new List<(ushort, byte, byte)>();
+
+        /// <summary>
+        /// Interrupts the switch sent out of this port: (logical channel, user data).
+        /// </summary>
+        public List<(ushort Lci, byte[] UserData)> SentInterrupts { get; } = new List<(ushort, byte[])>();
+
+        /// <summary>
+        /// Busy signals the switch raised on this port: (logical channel, busy).
+        /// </summary>
+        public List<(ushort Lci, bool Busy)> BusySignals { get; } = new List<(ushort, bool)>();
+
+        /// <summary>
+        /// Channels this port refuses to send on, as a peer with a shut window would.
+        /// </summary>
+        public HashSet<ushort> WindowShut { get; } = new HashSet<ushort>();
+
+        /// <summary>
+        /// Channels this port fails outright, as a dead circuit would.
+        /// </summary>
+        public HashSet<ushort> SendFails { get; } = new HashSet<ushort>();
+
         /// <inheritdoc/>
         public int Id { get; }
 
@@ -56,6 +81,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         /// <inheritdoc/>
         public event PortDataReceived? DataReceived;
+
+        /// <inheritdoc/>
+        public event PortReset? CircuitReset;
+
+        /// <inheritdoc/>
+        public event PortInterrupt? InterruptReceived;
+
+        /// <inheritdoc/>
+        public event PortReadyToSend? ReadyToSend;
 
         /// <inheritdoc/>
         public event PortCallCleared? CallCleared;
@@ -106,10 +140,82 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         }
 
         /// <inheritdoc/>
-        public bool SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit)
+        public PortSendResult SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit)
         {
+            if (SendFails.Contains(lci))
+            {
+                return PortSendResult.Failed;
+            }
+
+            if (WindowShut.Contains(lci))
+            {
+                return PortSendResult.WindowFull;
+            }
+
             SentData.Add((lci, data.ToArray(), qBit, mBit, dBit));
-            return true;
+            return PortSendResult.Sent;
+        }
+
+        /// <inheritdoc/>
+        public void ResetCircuit(ushort lci, byte cause, byte diagnostic)
+        {
+            ResetCircuits.Add((lci, cause, diagnostic));
+        }
+
+        /// <inheritdoc/>
+        public void SendInterrupt(ushort lci, byte[] userData)
+        {
+            SentInterrupts.Add((lci, userData));
+        }
+
+        /// <inheritdoc/>
+        public void SetLocalBusy(ushort lci, bool busy)
+        {
+            BusySignals.Add((lci, busy));
+        }
+
+        /// <summary>
+        /// Opens a channel's window again and tells the switch, the way a real port does when the
+        /// peer acknowledges or clears its busy condition.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel that can send again.
+        /// </param>
+        public void OpenWindow(ushort lci)
+        {
+            WindowShut.Remove(lci);
+            ReadyToSend?.Invoke(this, lci);
+        }
+
+        /// <summary>
+        /// Injects a reset, as if the far DTE on this port had sent one.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel that was reset.
+        /// </param>
+        /// <param name="cause">
+        /// Resetting cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        public void InjectReset(ushort lci, byte cause, byte diagnostic)
+        {
+            CircuitReset?.Invoke(this, lci, cause, diagnostic);
+        }
+
+        /// <summary>
+        /// Injects an interrupt, as if the far DTE on this port had sent one.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel it belongs to.
+        /// </param>
+        /// <param name="userData">
+        /// The interrupt user data.
+        /// </param>
+        public void InjectInterrupt(ushort lci, byte[] userData)
+        {
+            InterruptReceived?.Invoke(this, lci, userData);
         }
 
         /// <inheritdoc/>

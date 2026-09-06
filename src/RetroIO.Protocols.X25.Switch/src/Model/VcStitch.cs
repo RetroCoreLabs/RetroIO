@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using RetroIO.Protocols.X25.Switch.Ports;
 
 namespace RetroIO.Protocols.X25.Switch.Model
@@ -76,6 +77,32 @@ namespace RetroIO.Protocols.X25.Switch.Model
         /// Bytes forwarded egress to ingress.
         /// </summary>
         public ulong BytesReverse { get; set; }
+
+        /// <summary>
+        /// Packets waiting to go out of the egress leg because its window was shut.
+        /// </summary>
+        /// <remarks>
+        /// A refused packet is held here rather than dropped, and the ingress leg is put into RNR
+        /// so the sender stops rather than filling this without limit. The queue is emptied when
+        /// either leg is reset (X.25 4.4: everything in flight is discarded) and when the stitch
+        /// is torn down.
+        /// </remarks>
+        public Queue<QueuedPacket> ForwardQueue { get; } = new Queue<QueuedPacket>();
+
+        /// <summary>
+        /// Packets waiting to go out of the ingress leg because its window was shut.
+        /// </summary>
+        public Queue<QueuedPacket> ReverseQueue { get; } = new Queue<QueuedPacket>();
+
+        /// <summary>
+        /// True while the ingress leg has been told RNR because the forward queue is holding data.
+        /// </summary>
+        public bool IngressHeldBusy { get; set; }
+
+        /// <summary>
+        /// True while the egress leg has been told RNR because the reverse queue is holding data.
+        /// </summary>
+        public bool EgressHeldBusy { get; set; }
 
         /// <summary>
         /// Creates a stitch between an ingress and an egress circuit.

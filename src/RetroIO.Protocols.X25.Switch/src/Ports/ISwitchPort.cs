@@ -61,6 +61,21 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         event PortCallCleared CallCleared;
 
         /// <summary>
+        /// Raised when a circuit on this port is reset (X.25 4.4).
+        /// </summary>
+        event PortReset CircuitReset;
+
+        /// <summary>
+        /// Raised when an interrupt arrives on a circuit (X.25 4.3.2).
+        /// </summary>
+        event PortInterrupt InterruptReceived;
+
+        /// <summary>
+        /// Raised when a circuit that had refused a send can take data again.
+        /// </summary>
+        event PortReadyToSend ReadyToSend;
+
+        /// <summary>
         /// Raised when the port's up/down state changes.
         /// </summary>
         event PortStateChanged StateChanged;
@@ -122,9 +137,56 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// Delivery-confirmation bit.
         /// </param>
         /// <returns>
-        /// True if the data was accepted for transmission.
+        /// <see cref="PortSendResult.Sent"/> when the packet is on its way,
+        /// <see cref="PortSendResult.WindowFull"/> when it must wait for the window, and
+        /// <see cref="PortSendResult.Failed"/> when it cannot be sent at all. The caller has to
+        /// read this: dropping a refused packet leaves a gap in P(S) that resets the circuit.
         /// </returns>
-        bool SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit);
+        PortSendResult SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit);
+
+        /// <summary>
+        /// Resets a circuit (X.25 4.4): sequence numbers back to zero, everything in flight
+        /// discarded.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to reset.
+        /// </param>
+        /// <param name="cause">
+        /// Resetting cause code (Table 5-8).
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code (Annex E).
+        /// </param>
+        void ResetCircuit(ushort lci, byte cause, byte diagnostic);
+
+        /// <summary>
+        /// Sends an interrupt on a circuit (X.25 4.3.2), past the flow control of the data it
+        /// overtakes.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to interrupt.
+        /// </param>
+        /// <param name="userData">
+        /// One to 32 octets of interrupt user data.
+        /// </param>
+        void SendInterrupt(ushort lci, byte[] userData);
+
+        /// <summary>
+        /// Tells the far end on this circuit whether we can take data (X.25 4.4.2: RR when we can,
+        /// RNR when we cannot).
+        /// </summary>
+        /// <remarks>
+        /// This is how back pressure reaches the sender. When a switch cannot pass a packet on
+        /// because the other leg's window is shut, it says so on the leg the data came from rather
+        /// than queueing without limit or dropping.
+        /// </remarks>
+        /// <param name="lci">
+        /// Logical channel to signal on.
+        /// </param>
+        /// <param name="busy">
+        /// True to send RNR, false to send RR.
+        /// </param>
+        void SetLocalBusy(ushort lci, bool busy);
 
         /// <summary>
         /// Clears a circuit on a logical channel.

@@ -36,14 +36,20 @@ namespace RetroIO.Protocols.X25.Tests
             public event PortDataReceived? DataReceived;
             public event PortCallCleared? CallCleared;
             public event PortStateChanged? StateChanged;
+            public event PortReset? CircuitReset;
+            public event PortInterrupt? InterruptReceived;
+            public event PortReadyToSend? ReadyToSend;
 #pragma warning restore CS0067
 
             public bool Start() => true;
             public void Stop() { }
             public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData) => 1;
             public void AcceptCall(ushort lci) { }
-            public bool SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit) => true;
+            public PortSendResult SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit) => PortSendResult.Sent;
             public void ClearCall(ushort lci, byte cause, byte diagnostic) { }
+            public void ResetCircuit(ushort lci, byte cause, byte diagnostic) { }
+            public void SendInterrupt(ushort lci, byte[] userData) { }
+            public void SetLocalBusy(ushort lci, bool busy) { }
         }
 
         private static SwitchNode NewNode()
