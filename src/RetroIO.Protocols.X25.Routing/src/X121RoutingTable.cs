@@ -7,13 +7,35 @@ namespace RetroIO.Protocols.X25.Routing
     /// <see cref="X121RouteType.Regex"/> rule so the same engine can express endpoint-style pattern routing.
     /// </summary>
     /// <remarks>
-    /// Lookup precedence (using only the structured rule types):
-    ///  - the first matching Exact / Hunt / Regex entry, in table order, wins immediately.
-    ///  - otherwise the longest matching Prefix wins.
-    ///  - otherwise a DNIC match (treated as a length-4 prefix, and only if no prefix matched).
-    ///  - otherwise the Default route.
-    ///  - a resolved port equal to the ingress port is rejected (never route back the way it came).
-    /// PVC entries are held for configuration/reporting but skipped by dynamic lookup (handled at setup).
+    /// <para>
+    /// Lookup runs as four passes, in this order, and stops at the first pass that produces a port
+    /// the call may actually go to:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>Exact, Hunt and Regex entries, in table order.</description></item>
+    /// <item><description>The longest matching Prefix.</description></item>
+    /// <item><description>A DNIC match, which is the whole of this pass: it ranks below every
+    /// prefix, however short, so it cannot be reached while any prefix matched.</description></item>
+    /// <item><description>The Default route.</description></item>
+    /// </list>
+    /// <para>
+    /// A port equal to the ingress port is never the answer: routing a call back out of the
+    /// interface it arrived on sends it to the party that placed it. Such a candidate is skipped and
+    /// the search carries on, so a hunt group with one member on the ingress port still finds
+    /// another, and an exact route pointing back the way the call came falls through to the prefix
+    /// and default routes instead of forming a loop.
+    /// </para>
+    /// <para>
+    /// Written as separate passes on purpose. The single loop this replaces mixed the passes
+    /// together and got two things wrong: an Exact or Regex hit returned without the ingress check
+    /// at all, and a DNIC seen before a prefix claimed a match length of four, so a three-digit
+    /// prefix later in the table lost to it and the same table gave different answers depending on
+    /// the order it was written in.
+    /// </para>
+    /// <para>
+    /// PVC entries are held for configuration and reporting but skipped by dynamic lookup; they are
+    /// handled at setup.
+    /// </para>
     /// </remarks>
     public sealed class X121RoutingTable
     {
@@ -98,96 +120,214 @@ namespace RetroIO.Protocols.X25.Routing
         /// </returns>
         public bool TryLookup(string calledAddress, int inPort, out int outPort)
         {
-            outPort = -1;
+            if (TryNamedRoutes(calledAddress, inPort, out outPort))
+            {
+                return true;
+            }
 
-            int bestPrefix = -1;
-            int bestPrefixLen = 0;
-            int defaultPort = -1;
+            if (TryLongestPrefix(calledAddress, inPort, out outPort))
+            {
+                return true;
+            }
+
+            if (TryDnic(calledAddress, inPort, out outPort))
+            {
+                return true;
+            }
+
+            return TryDefault(inPort, out outPort);
+        }
+
+        /// <summary>
+        /// Pass one: Exact, Hunt and Regex entries, in table order.
+        /// </summary>
+        /// <param name="calledAddress">
+        /// The X.121 address to route.
+        /// </param>
+        /// <param name="inPort">
+        /// The port the call arrived on.
+        /// </param>
+        /// <param name="outPort">
+        /// The port to route to.
+        /// </param>
+        /// <returns>
+        /// True when one of them matched and named a port other than the ingress port.
+        /// </returns>
+        private bool TryNamedRoutes(string calledAddress, int inPort, out int outPort)
+        {
+            outPort = -1;
 
             for (int i = 0; i < _routes.Count; i++)
             {
                 X121Route r = _routes[i];
 
-                switch (r.Type)
+                if (r.Type == X121RouteType.Exact)
                 {
-                    case X121RouteType.Exact:
-                        if (calledAddress == r.Address)
-                        {
-                            outPort = r.DestPort;
-                            return true;
-                        }
-                        break;
+                    if (calledAddress == r.Address && r.DestPort != inPort)
+                    {
+                        outPort = r.DestPort;
+                        return true;
+                    }
 
-                    case X121RouteType.Regex:
-                        // Extension rule, evaluated like Exact: first match in table order wins immediately.
-                        if (r.RegexMatches(calledAddress))
-                        {
-                            outPort = r.DestPort;
-                            return true;
-                        }
-                        break;
+                    continue;
+                }
 
-                    case X121RouteType.Hunt:
-                        if (calledAddress == r.Address)
-                        {
-                            if (r.HuntGroupId >= 0 && r.HuntGroupId < _huntGroups.Count)
-                            {
-                                X121HuntGroup hg = _huntGroups[r.HuntGroupId];
-                                if (hg.MemberCount > 0)
-                                {
-                                    outPort = hg.Members[hg.NextIdx % hg.MemberCount];
-                                    hg.NextIdx++;
-                                    return true;
-                                }
-                            }
-                        }
-                        break;
+                if (r.Type == X121RouteType.Regex)
+                {
+                    // Extension rule, ranked with Exact: first match in table order wins.
+                    if (r.RegexMatches(calledAddress) && r.DestPort != inPort)
+                    {
+                        outPort = r.DestPort;
+                        return true;
+                    }
 
-                    case X121RouteType.Prefix:
-                        if (r.PrefixLen > 0 && StartsWithN(calledAddress, r.Address, r.PrefixLen))
-                        {
-                            // Longest prefix wins.
-                            if (r.PrefixLen > bestPrefixLen)
-                            {
-                                bestPrefixLen = r.PrefixLen;
-                                bestPrefix = r.DestPort;
-                            }
-                        }
-                        break;
+                    continue;
+                }
 
-                    case X121RouteType.Dnic:
-                        if (StartsWithN(calledAddress, r.Dnic, DnicLength))
-                        {
-                            // DNIC is lower priority than any prefix: only apply if none set yet.
-                            if (bestPrefix < 0)
-                            {
-                                bestPrefix = r.DestPort;
-                                bestPrefixLen = DnicLength;
-                            }
-                        }
-                        break;
+                if (r.Type != X121RouteType.Hunt || calledAddress != r.Address)
+                {
+                    continue;
+                }
 
-                    case X121RouteType.Default:
-                        defaultPort = r.DestPort;
-                        break;
+                if (r.HuntGroupId < 0 || r.HuntGroupId >= _huntGroups.Count)
+                {
+                    continue;
+                }
 
-                    case X121RouteType.Pvc:
-                        // Handled separately at setup; not part of dynamic lookup.
-                        break;
+                X121HuntGroup hg = _huntGroups[r.HuntGroupId];
+                if (hg.MemberCount == 0)
+                {
+                    continue;
+                }
+
+                // Round-robin over the members, skipping any that would send the call back out of
+                // the port it arrived on. The cursor advances for every member tried, so a busy
+                // group keeps rotating rather than stalling on the one that cannot be used.
+                for (int tried = 0; tried < hg.MemberCount; tried++)
+                {
+                    int member = hg.Members[hg.NextIdx % hg.MemberCount];
+                    hg.NextIdx++;
+
+                    if (member != inPort)
+                    {
+                        outPort = member;
+                        return true;
+                    }
                 }
             }
 
-            // Don't route back to the ingress port.
-            if (bestPrefix >= 0 && bestPrefix != inPort)
+            return false;
+        }
+
+        /// <summary>
+        /// Pass two: the longest matching prefix.
+        /// </summary>
+        /// <param name="calledAddress">
+        /// The X.121 address to route.
+        /// </param>
+        /// <param name="inPort">
+        /// The port the call arrived on.
+        /// </param>
+        /// <param name="outPort">
+        /// The port to route to.
+        /// </param>
+        /// <returns>
+        /// True when a prefix matched and named a port other than the ingress port.
+        /// </returns>
+        private bool TryLongestPrefix(string calledAddress, int inPort, out int outPort)
+        {
+            outPort = -1;
+            int bestLen = 0;
+
+            for (int i = 0; i < _routes.Count; i++)
             {
-                outPort = bestPrefix;
-                return true;
+                X121Route r = _routes[i];
+                if (r.Type != X121RouteType.Prefix || r.PrefixLen <= 0)
+                {
+                    continue;
+                }
+
+                if (r.DestPort == inPort || r.PrefixLen <= bestLen)
+                {
+                    continue;
+                }
+
+                if (StartsWithN(calledAddress, r.Address, r.PrefixLen))
+                {
+                    bestLen = r.PrefixLen;
+                    outPort = r.DestPort;
+                }
             }
 
-            if (defaultPort >= 0 && defaultPort != inPort)
+            return outPort >= 0;
+        }
+
+        /// <summary>
+        /// Pass three: a DNIC match, which is the first four digits of the address.
+        /// </summary>
+        /// <remarks>
+        /// A whole pass of its own rather than a prefix of length four, because it ranks below every
+        /// prefix however short. Treating it as a length-four prefix made a three-digit prefix lose
+        /// to it.
+        /// </remarks>
+        /// <param name="calledAddress">
+        /// The X.121 address to route.
+        /// </param>
+        /// <param name="inPort">
+        /// The port the call arrived on.
+        /// </param>
+        /// <param name="outPort">
+        /// The port to route to.
+        /// </param>
+        /// <returns>
+        /// True when a DNIC matched and named a port other than the ingress port.
+        /// </returns>
+        private bool TryDnic(string calledAddress, int inPort, out int outPort)
+        {
+            outPort = -1;
+
+            for (int i = 0; i < _routes.Count; i++)
             {
-                outPort = defaultPort;
-                return true;
+                X121Route r = _routes[i];
+                if (r.Type != X121RouteType.Dnic || r.DestPort == inPort)
+                {
+                    continue;
+                }
+
+                if (StartsWithN(calledAddress, r.Dnic, DnicLength))
+                {
+                    outPort = r.DestPort;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Pass four: the default route.
+        /// </summary>
+        /// <param name="inPort">
+        /// The port the call arrived on.
+        /// </param>
+        /// <param name="outPort">
+        /// The port to route to.
+        /// </param>
+        /// <returns>
+        /// True when a default route exists and is not the ingress port.
+        /// </returns>
+        private bool TryDefault(int inPort, out int outPort)
+        {
+            outPort = -1;
+
+            for (int i = 0; i < _routes.Count; i++)
+            {
+                X121Route r = _routes[i];
+                if (r.Type == X121RouteType.Default && r.DestPort != inPort)
+                {
+                    outPort = r.DestPort;
+                    return true;
+                }
             }
 
             return false;
