@@ -1470,10 +1470,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             // The piggybacked P(R) must acknowledge something we actually sent (R2); a P(R) outside
             // [last acknowledged .. next to send] is a local procedure error, diagnostic 2.
+            bool windowMoved = info.PR != vc.AckedSeq;
             if (!TryAcknowledge(vc, info.PR))
             {
                 ResetForProcedureError(vc, X25Diagnostic.InvalidPR);
                 return;
+            }
+
+            if (windowMoved)
+            {
+                DrainPending(vc);
+                RaiseWindowOpened(lci);
             }
 
             // X.25 4.4.1.3: "A received data packet containing a P(S) that is out of sequence [i.e.
@@ -1669,6 +1676,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            bool windowMoved = pr != vc.AckedSeq;
+            bool wasBusy = vc.PeerBusy;
             if (!TryAcknowledge(vc, pr))
             {
                 ResetForProcedureError(vc, X25Diagnostic.InvalidPR);
@@ -1676,7 +1685,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             vc.PeerBusy = peerBusy;
-            DrainPending(vc);
+            if (windowMoved || (wasBusy && !peerBusy))
+            {
+                // Queued segments go first, so the window they take is not offered to a waiter.
+                DrainPending(vc);
+                RaiseWindowOpened(lci);
+            }
         }
 
         /// <summary>

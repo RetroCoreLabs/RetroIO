@@ -71,6 +71,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public event X25MessageReceived? MessageReceived;
 
         /// <summary>
+        /// Raised when a circuit's send window moved or the peer's busy condition cleared.
+        /// </summary>
+        public event X25WindowOpened? WindowOpened;
+
+        /// <summary>
         /// Creates the base with the down-facing packet sink.
         /// </summary>
         /// <param name="sink">
@@ -218,6 +223,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
         protected void RaiseMessageReceived(ushort lci, byte[] data, bool qBit)
         {
             MessageReceived?.Invoke((X25Layer)this, lci, data, qBit);
+        }
+
+        /// <summary>
+        /// Raises <see cref="WindowOpened"/>.
+        /// </summary>
+        protected void RaiseWindowOpened(ushort lci)
+        {
+            WindowOpened?.Invoke((X25Layer)this, lci);
         }
     }
 }

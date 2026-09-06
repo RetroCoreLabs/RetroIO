@@ -297,6 +297,32 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.True);
         }
 
+        [Test]
+        public void R2_WindowOpened_FiresWhenAnAckMovesTheWindowOrRRClearsBusy_AndNotOtherwise()
+        {
+            ushort lci = ConnectOutgoing();
+            int opened = 0;
+            _layer.WindowOpened += (l, c) => opened++;
+
+            _layer.SendData(lci, new byte[] { 1 });
+            _layer.SendData(lci, new byte[] { 2 });
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 0));   // acknowledges nothing new
+            Assert.That(opened, Is.EqualTo(0));
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 1));   // window moved
+            Assert.That(opened, Is.EqualTo(1));
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRNR(lci, pr: 1));  // busy, nothing new acked
+            Assert.That(opened, Is.EqualTo(1));
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 1));   // busy cleared
+            Assert.That(opened, Is.EqualTo(2));
+
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 2));                 // piggybacked ack moves the window
+            Assert.That(opened, Is.EqualTo(3));
+        }
+
         // ================================================================== R3  state gating
         //
         // X.25 Annex B (state tables): RR/RNR/REJ are only meaningful in the flow-control states

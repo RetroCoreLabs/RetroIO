@@ -182,6 +182,20 @@ namespace RetroIO.Protocols.X25.PacketLayer
     public delegate void X25MessageReceived(X25Layer layer, ushort lci, byte[] data, bool qBit);
 
     /// <summary>
+    /// Raised when a circuit that could not send may be able to now: the peer acknowledged
+    /// something (the window moved) or cleared its busy condition (RR after RNR). A caller whose
+    /// <c>SendData</c> returned false can wait on this instead of polling; it says "try again", not
+    /// "your packet will fit".
+    /// </summary>
+    /// <param name="layer">
+    /// The layer.
+    /// </param>
+    /// <param name="lci">
+    /// The logical channel whose window moved.
+    /// </param>
+    public delegate void X25WindowOpened(X25Layer layer, ushort lci);
+
+    /// <summary>
     /// The down interface the X.25 layer calls to hand fully-built packet bytes to the link below for
     /// framing and transmission. This is the "interfaces down" half of the layer seam.
     /// </summary>
