@@ -442,7 +442,7 @@ namespace RetroIO.Protocols.X25.Tests
             try
             {
                 X25PacketInfo info = X25PacketParser.ParsePacket(bytes);
-                return info.PacketType == X25PacketType.Unknown
+                return info.PacketType == X25PacketType.Unknown || info.ParseError != null
                     ? Outcome.Ok()
                     : Outcome.Fail("parser accepted the packet as " + info.PacketType);
             }

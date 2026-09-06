@@ -1,3 +1,5 @@
+using RetroIO.Protocols.X25.Models;
+
 namespace RetroIO.Protocols.X25.PacketLayer
 {
     /// <summary>
@@ -65,6 +67,25 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// Negotiated inbound window size.
         /// </summary>
         public byte WindowSizeIn { get; set; }
+
+        /// <summary>
+        /// Negotiated maximum data field length for packets we send (X.25 7.3.1.1). A send longer than
+        /// this is refused until M-bit segmentation exists (plan B11).
+        /// </summary>
+        public int PacketSizeOut { get; set; } = X25Facilities.DefaultPacketSize;
+
+        /// <summary>
+        /// Negotiated maximum data field length for packets we receive. A longer one is a local
+        /// procedure error, diagnostic 39 "Packet too long" (Annex E).
+        /// </summary>
+        public int PacketSizeIn { get; set; } = X25Facilities.DefaultPacketSize;
+
+        /// <summary>
+        /// True when the peer's call set-up packet carried flow control facilities, so our answer must
+        /// state the values too (X.25 7.2.2.1: the negotiated values are indicated in the Call
+        /// Accepted / Call Connected).
+        /// </summary>
+        public bool PeerSentFacilities { get; set; }
 
         /// <summary>
         /// Absolute millisecond expiry of the active per-circuit timer, or 0 when no timer is armed.

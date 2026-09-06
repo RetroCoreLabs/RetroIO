@@ -19,24 +19,24 @@ namespace RetroIO.Protocols.X25.Models
                 throw new ArgumentException("X.25 packet must be at least 3 bytes (GFI + LCN + PTI)");
 
             var info = new X25PacketInfo();
-            
+
             // Parse GFI
             byte gfi = data[0];
             info.QBit = (gfi & X25PacketBuilder.GFI.Q_BIT_MASK) != 0;
             info.DBit = (gfi & X25PacketBuilder.GFI.D_BIT_MASK) != 0;
             info.Modulo128 = (gfi & X25PacketBuilder.GFI.MODULO_MASK) == X25PacketBuilder.GFI.MODULO_128;
-            
+
             // Parse LCN
             info.LCN = X25PacketBuilder.ExtractLCN(gfi, data[1]);
-            
+
             // Parse PTI and packet-specific fields
             byte pti = data[2];
             info.PacketType = GetPacketType(pti);
             info.RawPTI = pti;
-            
+
             // Parse packet-specific content
             ParsePacketContent(data, info);
-            
+
             return info;
         }
 
@@ -98,7 +98,7 @@ namespace RetroIO.Protocols.X25.Models
                     info.PS = data[3];
                     info.PR = data[4];
                     info.MBit = (data[0] & 0x20) != 0; // M-bit in GFI
-                    
+
                     if (data.Length > 5)
                     {
                         info.UserData = new byte[data.Length - 5];
@@ -112,7 +112,7 @@ namespace RetroIO.Protocols.X25.Models
                 info.PS = X25PacketBuilder.ExtractPS(data[2]);
                 info.PR = X25PacketBuilder.ExtractPR(data[2]);
                 info.MBit = (data[2] & 0x10) != 0; // M-bit in PTI
-                
+
                 if (data.Length > 3)
                 {
                     info.UserData = new byte[data.Length - 3];
@@ -147,9 +147,9 @@ namespace RetroIO.Protocols.X25.Models
         private static void ParseCallRequestPacket(byte[] data, X25PacketInfo info)
         {
             if (data.Length < 4) return;
-            
+
             int offset = 3; // Skip GFI, LCN, PTI
-            
+
             // Address length octet: calling length in the high nibble, called length in the low nibble
             // (ITU-T X.25). The called and calling digits then follow as ONE contiguous BCD nibble stream,
             // called first: the calling address may begin mid-octet when the called length is odd.
@@ -159,33 +159,49 @@ namespace RetroIO.Protocols.X25.Models
             int totalDigits = calledLength + callingLength;
             int addressBytes = (totalDigits + 1) / 2;
 
-            if (offset + addressBytes <= data.Length)
+            if (offset + addressBytes > data.Length)
             {
-                string digits = ExtractBcdDigits(data, offset, totalDigits);
-                info.CalledAddress = digits.Substring(0, calledLength);
-                info.CallingAddress = digits.Substring(calledLength, callingLength);
-                offset += addressBytes;
+                info.ParseError = "address lengths " + calledLength + "+" + callingLength + " digits exceed the packet";
+                return;
             }
-            
-            // Facilities length
+
+            string digits = ExtractBcdDigits(data, offset, totalDigits);
+            info.CalledAddress = digits.Substring(0, calledLength);
+            info.CallingAddress = digits.Substring(calledLength, callingLength);
+            offset += addressBytes;
+
+            ParseFacilitiesAndUserData(data, offset, info);
+        }
+
+        /// <summary>
+        /// Parses the facility length, facilities and user data that end a call set-up packet.
+        /// A facility length that runs past the body is an error, never user data.
+        /// </summary>
+        private static void ParseFacilitiesAndUserData(byte[] data, int offset, X25PacketInfo info)
+        {
+            if (offset >= data.Length)
+            {
+                return;
+            }
+
+            byte facilitiesLength = data[offset++];
+            if (offset + facilitiesLength > data.Length)
+            {
+                info.ParseError = "facility length " + facilitiesLength + " exceeds the packet";
+                return;
+            }
+
+            if (facilitiesLength > 0)
+            {
+                info.Facilities = new byte[facilitiesLength];
+                Array.Copy(data, offset, info.Facilities, 0, facilitiesLength);
+                offset += facilitiesLength;
+            }
+
             if (offset < data.Length)
             {
-                byte facilitiesLength = data[offset++];
-                
-                // Facilities
-                if (facilitiesLength > 0 && offset + facilitiesLength <= data.Length)
-                {
-                    info.Facilities = new byte[facilitiesLength];
-                    Array.Copy(data, offset, info.Facilities, 0, facilitiesLength);
-                    offset += facilitiesLength;
-                }
-                
-                // Call user data
-                if (offset < data.Length)
-                {
-                    info.CallUserData = new byte[data.Length - offset];
-                    Array.Copy(data, offset, info.CallUserData, 0, data.Length - offset);
-                }
+                info.CallUserData = new byte[data.Length - offset];
+                Array.Copy(data, offset, info.CallUserData, 0, data.Length - offset);
             }
         }
 
@@ -194,30 +210,37 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         private static void ParseCallAcceptedPacket(byte[] data, X25PacketInfo info)
         {
+            // X.25 5.2.3.1: the basic format is the three header octets alone. When anything follows,
+            // it starts with the address block (5.2.3.1.2: the address length octet "is only
+            // mandatory when the called DTE address field, the calling DTE address field or the
+            // facility length field is present" - so if a facility length is present, the address
+            // octet is too). Until 2026-09-06 this parser, and the builder, left the address octet
+            // out and read the facility length where the address lengths belong; the vector
+            // pkt-call-accepted-with-facilities pinned it.
             if (data.Length < 4) return;
-            
-            int offset = 3; // Skip GFI, LCN, PTI
-            
-            // Facilities length
-            if (offset < data.Length)
+
+            int offset = 3;
+            byte addressLengths = data[offset++];
+            int callingLength = (addressLengths >> 4) & 0x0F;
+            int calledLength = addressLengths & 0x0F;
+            int totalDigits = calledLength + callingLength;
+            int addressBytes = (totalDigits + 1) / 2;
+
+            if (offset + addressBytes > data.Length)
             {
-                byte facilitiesLength = data[offset++];
-                
-                // Facilities
-                if (facilitiesLength > 0 && offset + facilitiesLength <= data.Length)
-                {
-                    info.Facilities = new byte[facilitiesLength];
-                    Array.Copy(data, offset, info.Facilities, 0, facilitiesLength);
-                    offset += facilitiesLength;
-                }
-                
-                // Call user data
-                if (offset < data.Length)
-                {
-                    info.CallUserData = new byte[data.Length - offset];
-                    Array.Copy(data, offset, info.CallUserData, 0, data.Length - offset);
-                }
+                info.ParseError = "address lengths " + calledLength + "+" + callingLength + " digits exceed the packet";
+                return;
             }
+
+            if (totalDigits > 0)
+            {
+                string digits = ExtractBcdDigits(data, offset, totalDigits);
+                info.CalledAddress = digits.Substring(0, calledLength);
+                info.CallingAddress = digits.Substring(calledLength, callingLength);
+            }
+
+            offset += addressBytes;
+            ParseFacilitiesAndUserData(data, offset, info);
         }
 
         /// <summary>
@@ -226,19 +249,19 @@ namespace RetroIO.Protocols.X25.Models
         private static void ParseClearRequestPacket(byte[] data, X25PacketInfo info)
         {
             if (data.Length < 5) return;
-            
+
             info.ClearingCause = data[3];
             info.DiagnosticCode = data[4];
-            
+
             int offset = 5;
-            
+
             // Check for optional facilities and clear user data
             if (offset < data.Length)
             {
                 // Try to determine if next byte is facilities length or clear user data
                 // This is ambiguous in X.25 spec - implementation dependent
                 byte possibleFacLength = data[offset];
-                
+
                 if (possibleFacLength > 0 && offset + 1 + possibleFacLength <= data.Length)
                 {
                     // Assume it's facilities length
@@ -247,7 +270,7 @@ namespace RetroIO.Protocols.X25.Models
                     Array.Copy(data, offset, info.Facilities, 0, possibleFacLength);
                     offset += possibleFacLength;
                 }
-                
+
                 // Remaining data is clear user data
                 if (offset < data.Length)
                 {
@@ -293,24 +316,24 @@ namespace RetroIO.Protocols.X25.Models
         private static void ParseRegistrationRequestPacket(byte[] data, X25PacketInfo info)
         {
             if (data.Length < 4) return;
-            
+
             int offset = 3; // Skip GFI, LCN, PTI
-            
+
             // DTE address length
             byte addressLength = data[offset++];
-            
+
             // DTE address
             if (addressLength > 0 && offset + addressLength <= data.Length)
             {
                 info.DTEAddress = ParseAddressBCD(data, offset, addressLength);
                 offset += addressLength;
             }
-            
+
             // Registration parameters length
             if (offset < data.Length)
             {
                 byte paramLength = data[offset++];
-                
+
                 if (paramLength > 0 && offset + paramLength <= data.Length)
                 {
                     info.RegistrationParameters = new byte[paramLength];
@@ -336,7 +359,7 @@ namespace RetroIO.Protocols.X25.Models
             if (data.Length >= 4)
             {
                 info.DiagnosticCode = data[3];
-                
+
                 if (data.Length > 4)
                 {
                     info.DiagnosticInfo = new byte[data.Length - 4];
@@ -351,15 +374,15 @@ namespace RetroIO.Protocols.X25.Models
         private static string ParseAddressBCD(byte[] data, int offset, int length)
         {
             var address = new StringBuilder();
-            
+
             for (int i = 0; i < length; i++)
             {
                 if (offset + i >= data.Length) break;
-                
+
                 byte b = data[offset + i];
                 int high = (b >> 4) & 0x0F;
                 int low = b & 0x0F;
-                
+
                 if (high <= 9) address.Append((char)('0' + high));
                 if (low <= 9) address.Append((char)('0' + low));
             }
@@ -467,6 +490,14 @@ namespace RetroIO.Protocols.X25.Models
         public string CalledAddress { get; set; } = "";
         public string CallingAddress { get; set; } = "";
         public byte[] Facilities { get; set; } = Array.Empty<byte>();
+
+        /// <summary>
+        /// Null when the packet's fields fitted its body. Otherwise says what did not - a facility
+        /// length or an address length running past the end - so the engine can reject the packet
+        /// (X.25 Annex E 69, "Invalid facility length"; 67/68 for the addresses) instead of treating
+        /// the leftover octets as call user data, which is what this parser did until 2026-09-06.
+        /// </summary>
+        public string? ParseError { get; set; }
         public byte[] CallUserData { get; set; } = Array.Empty<byte>();
 
         // Clearing fields

@@ -97,6 +97,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 CallUserData = callUserData ?? Array.Empty<byte>(),
                 WindowSizeOut = _config.DefaultWindowSize,
                 WindowSizeIn = _config.DefaultWindowSize,
+                PacketSizeOut = _config.DefaultPacketSize,
+                PacketSizeIn = _config.DefaultPacketSize,
                 TimerExpiryMs = Now() + _config.CallRequestTimeoutMs
             };
             _vcs[lci] = vc;
@@ -138,9 +140,27 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
+            // X.25 7.2.2.1: when the caller asked for flow control values the answer states what was
+            // agreed. This engine accepts what was asked (the codec has already range-checked it), so
+            // the Call Accepted echoes the circuit's sizes in the caller's terms: "from called" is our
+            // sending direction, "from calling" is theirs.
+            byte[]? facilities = null;
+            if (vc.PeerSentFacilities)
+            {
+                facilities = new X25Facilities
+                {
+                    HasPacketSize = true,
+                    PacketSizeFromCalled = vc.PacketSizeOut,
+                    PacketSizeFromCalling = vc.PacketSizeIn,
+                    HasWindowSize = true,
+                    WindowFromCalled = vc.WindowSizeOut,
+                    WindowFromCalling = vc.WindowSizeIn,
+                }.Encode();
+            }
+
             // Send first: if the Call Accepted does not leave, the call is still merely incoming and
             // the application may try again or clear it.
-            if (!Send(X25PacketBuilder.CreateCallAccepted(lci)))
+            if (!Send(X25PacketBuilder.CreateCallAccepted(lci, facilities)))
             {
                 return false;
             }
@@ -190,6 +210,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             if (vc.PeerBusy)
+            {
+                return false;
+            }
+
+            // X.25 7.3.1.1: the negotiated packet size is the maximum data field. Longer sends are
+            // refused here until M-bit segmentation splits them (plan B11).
+            if (data.Length > vc.PacketSizeOut)
             {
                 return false;
             }
@@ -353,7 +380,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     OnCallRequest(lci, info);
                     break;
                 case X25PacketType.CallAccepted:
-                    OnCallAccepted(lci);
+                    OnCallAccepted(lci, info);
                     break;
                 case X25PacketType.Data:
                     OnData(lci, info, pkt);
@@ -577,7 +604,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.CallRequestHeld = false;
             vc.ClearReported = false;
             byte[]? cud = vc.CallUserData.Length == 0 ? null : vc.CallUserData;
-            if (!Send(X25PacketBuilder.CreateCallRequest(vc.Lci, vc.CalledAddress, vc.CallingAddress, null, cud)))
+
+            // The flow control request goes in every Call Request. RFC 1613 6.1 makes it a MUST over
+            // XOT; over plain X.25 it is how the peer learns what we want instead of silently applying
+            // its own defaults (7.2.2.1). Until 2026-09-06 the facility length octet was always zero.
+            byte[] facilities = X25Facilities.ForRequest(_config.DefaultWindowSize, _config.DefaultPacketSize).Encode();
+            if (!Send(X25PacketBuilder.CreateCallRequest(vc.Lci, vc.CalledAddress, vc.CallingAddress, facilities, cud)))
             {
                 return false;
             }
@@ -657,20 +689,138 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.CallingAddress = info.CallingAddress;
             vc.WindowSizeOut = _config.DefaultWindowSize;
             vc.WindowSizeIn = _config.DefaultWindowSize;
-            RaiseIncomingCall(lci, info.CalledAddress, info.CallingAddress, Array.Empty<byte>());
+            vc.PacketSizeOut = _config.DefaultPacketSize;
+            vc.PacketSizeIn = _config.DefaultPacketSize;
+            vc.CallUserData = info.CallUserData;
+
+            // A Call Request whose lengths do not fit its body, or whose facility field breaks clause
+            // 7, is cleared and never offered to the application (Annex E 69 / 66). Until 2026-09-06
+            // the leftover octets became call user data and the call was offered as normal.
+            if (info.ParseError != null)
+            {
+                RejectCall(vc, X25Diagnostic.InvalidFacilityLength);
+                return;
+            }
+
+            X25FacilityError facilityError = X25Facilities.TryDecode(info.Facilities, out X25Facilities requested);
+            if (facilityError != X25FacilityError.None)
+            {
+                RejectCall(vc, FacilityDiagnostic(facilityError));
+                return;
+            }
+
+            // We are the called DTE: "from called" is what we may send, "from calling" what we receive.
+            // The request is accepted as asked (the codec has range-checked it).
+            vc.PeerSentFacilities = requested.HasPacketSize || requested.HasWindowSize;
+            vc.PacketSizeOut = requested.PacketSizeFromCalled;
+            vc.PacketSizeIn = requested.PacketSizeFromCalling;
+            vc.WindowSizeOut = requested.WindowFromCalled;
+            vc.WindowSizeIn = requested.WindowFromCalling;
+
+            RaiseIncomingCall(lci, info.CalledAddress, info.CallingAddress, info.CallUserData);
         }
 
-        private void OnCallAccepted(ushort lci)
+        private void OnCallAccepted(ushort lci, X25PacketInfo info)
         {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc) || vc.State != X25VcState.CallRequest)
             {
                 return;
             }
 
+            // X.25 7.2.2.1 / 7.3.1: the Call Connected carries the values the call will run with.
+            // Until 2026-09-06 the body was never looked at and the circuit kept its own request, so
+            // a caller that asked for window 7 and was granted 2 sent seven packets into a window of
+            // two - a P(S) outside the window at the peer, which 4.4.1.3 makes a procedure error.
+            if (info.ParseError != null)
+            {
+                FailCall(vc, X25Diagnostic.InvalidFacilityLength);
+                return;
+            }
+
+            X25FacilityError facilityError = X25Facilities.TryDecode(info.Facilities, out X25Facilities agreed);
+            if (facilityError != X25FacilityError.None)
+            {
+                FailCall(vc, FacilityDiagnostic(facilityError));
+                return;
+            }
+
+            // 6.12 Table 6-2 (flow control parameter negotiation): with W(requested) >= 2 the Call
+            // Connected may indicate 2..W(requested); with W(requested) = 1 it may indicate 1 or 2;
+            // P likewise between 128 and the request. That is "between the default and the request,
+            // inclusive". Anything outside is a facility parameter not allowed. We are the calling
+            // DTE: "from calling" is our sending direction.
+            if (agreed.HasWindowSize
+                && (!Between(agreed.WindowFromCalling, X25Facilities.DefaultWindowSize, vc.WindowSizeOut)
+                    || !Between(agreed.WindowFromCalled, X25Facilities.DefaultWindowSize, vc.WindowSizeIn)))
+            {
+                FailCall(vc, X25Diagnostic.FacilityParameterNotAllowed);
+                return;
+            }
+
+            if (agreed.HasPacketSize
+                && (!Between(agreed.PacketSizeFromCalling, X25Facilities.DefaultPacketSize, vc.PacketSizeOut)
+                    || !Between(agreed.PacketSizeFromCalled, X25Facilities.DefaultPacketSize, vc.PacketSizeIn)))
+            {
+                FailCall(vc, X25Diagnostic.FacilityParameterNotAllowed);
+                return;
+            }
+
+            // A Call Connected with no facility says "the defaults apply" (7.2.2.1: a value not
+            // indicated is the default), whatever we asked for.
+            vc.WindowSizeOut = agreed.WindowFromCalling;
+            vc.WindowSizeIn = agreed.WindowFromCalled;
+            vc.PacketSizeOut = agreed.PacketSizeFromCalling;
+            vc.PacketSizeIn = agreed.PacketSizeFromCalled;
+            vc.CallUserData = info.CallUserData;
+
             vc.State = X25VcState.DataTransfer;
             vc.ResetFlow();
             vc.TimerExpiryMs = 0;
             RaiseCallConnected(lci);
+        }
+
+        private static bool Between(int value, int a, int b)
+        {
+            int lo = a < b ? a : b;
+            int hi = a < b ? b : a;
+            return value >= lo && value <= hi;
+        }
+
+        /// <summary>
+        /// Maps a facility decode error to the Annex E diagnostic that names it.
+        /// </summary>
+        private static byte FacilityDiagnostic(X25FacilityError error)
+        {
+            switch (error)
+            {
+                case X25FacilityError.Truncated: return X25Diagnostic.InvalidFacilityLength;
+                case X25FacilityError.RepeatedCode: return X25Diagnostic.DuplicateFacility;
+                default: return X25Diagnostic.FacilityParameterNotAllowed;
+            }
+        }
+
+        /// <summary>
+        /// Clears an incoming call that was never offered to the application: Clear Request with the
+        /// invalid-facility cause (from a DCE) or 0 (from a DTE), T23 running, and no Cleared event
+        /// because nobody above ever heard of the call.
+        /// </summary>
+        private void RejectCall(X25Vc vc, byte diagnostic)
+        {
+            byte cause = _config.IsDte ? X25Cause.DteOriginated : X25Cause.InvalidFacilityRequest;
+            BeginClear(vc, cause, diagnostic, Now());
+            vc.ClearReported = true;
+            ProcedureErrors++;
+        }
+
+        /// <summary>
+        /// Clears an outgoing call whose Call Connected was unacceptable and tells the caller.
+        /// </summary>
+        private void FailCall(X25Vc vc, byte diagnostic)
+        {
+            byte cause = _config.IsDte ? X25Cause.DteOriginated : X25Cause.InvalidFacilityRequest;
+            BeginClear(vc, cause, diagnostic, Now());
+            ProcedureErrors++;
+            ReportCleared(vc, cause, diagnostic);
         }
 
         private void OnData(ushort lci, X25PacketInfo info, byte[] pkt)
@@ -705,10 +855,19 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
-            vc.RecvSeq = (byte)((info.PS + 1) & 0x07);
-
             int header = info.Modulo128 ? 4 : 3;
             int payloadLen = pkt.Length > header ? pkt.Length - header : 0;
+
+            // Annex E 39 "Packet too long": a data field longer than the negotiated maximum is a
+            // local procedure error. Checked before P(S) moves, so the offending packet is not
+            // acknowledged.
+            if (payloadLen > vc.PacketSizeIn)
+            {
+                ResetForProcedureError(vc, X25Diagnostic.PacketTooLong);
+                return;
+            }
+
+            vc.RecvSeq = (byte)((info.PS + 1) & 0x07);
             byte[] payload = new byte[payloadLen];
             if (payloadLen > 0)
             {

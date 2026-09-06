@@ -739,40 +739,92 @@ namespace RetroIO.Protocols.X25.Tests
         // RFC 1613 6.1: an XOT Call Request MUST carry the packet size and window size facilities.
 
         [Test]
-        public void R9_PlaceCall_SendsNoFacilities_WHICH_IS_WRONG()
+        public void R9_PlaceCall_CarriesThePacketAndWindowRequest()
         {
             _layer.PlaceCall(RemoteAddress, LocalAddress);
             X25PacketInfo sent = _sink.LastInfo;
 
             Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.CallRequest));
-            // MEASURED 2026-09-06: the facility length octet is zero. Over XOT (RFC 1613 6.1) that
-            // is a MUST violation; over plain X.25 it silently accepts whatever the peer's defaults
-            // are without ever saying what we wanted.
-            Assert.That(sent.Facilities.Length, Is.EqualTo(0),
-                "behaviour changed: packet/window facilities in the Call Request is the FIX for R9 - rewrite this test");
+            // FIXED 2026-09-06 (Phase B7); the facility length used to be zero. RFC 1613 6.1 makes
+            // the request a MUST over XOT; X.25 7.2.2.1 is how the peer learns what we want. The
+            // configured defaults are 128 and 2: 42 07 07 43 02 02.
+            Assert.That(BitConverter.ToString(sent.Facilities).Replace('-', ' '), Is.EqualTo("42 07 07 43 02 02"));
         }
 
         [Test]
-        public void R9_CallConnectedWithASmallerWindow_IsIgnored_WHICH_IS_WRONG()
+        public void R9_CallConnectedWithASmallerWindow_IsApplied()
         {
-            ushort lci = _layer.PlaceCall(RemoteAddress);
+            RecordingSink sink = new RecordingSink();
+            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, DefaultWindowSize = 7 });
+            ushort lci = layer.PlaceCall(RemoteAddress);   // asks for window 7
 
-            // Call Connected per X.25 5.2.3.1.2 with a facility field: address block octet, facility
-            // length, window 1/1. Built by hand because the C# builder omits the address octet
-            // (pinned by the vector pkt-call-accepted-with-facilities).
-            byte[] callConnected = { 0x10, (byte)lci, 0x0F, 0x00, 0x03, 0x43, 0x01, 0x01 };
-            _layer.ProcessPacket(callConnected);
+            // Call Connected per X.25 5.2.3.1.2: address block octet, facility length, window 3/3.
+            // Table 6-2: with W(requested) >= 2 the indicated value may be anything from 2 up to the
+            // request - 3 is valid. (The first draft of this test granted 1 against a request of 2,
+            // which the table forbids, and the engine rightly cleared it.)
+            byte[] callConnected = { 0x10, (byte)lci, 0x0F, 0x00, 0x03, 0x43, 0x03, 0x03 };
+            layer.ProcessPacket(callConnected);
+            sink.Sent.Clear();
+
+            Assert.That(layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+
+            // FIXED 2026-09-06 (Phase B7); the body used to be ignored and the request stood, so a
+            // caller granted less than it asked sent into a window the peer had not authorised.
+            Assert.That(layer.Circuits[lci].WindowSizeOut, Is.EqualTo(3));
+            Assert.That(layer.Circuits[lci].WindowSizeIn, Is.EqualTo(3));
+            Assert.That(layer.SendData(lci, new byte[] { 1 }), Is.True);
+            Assert.That(layer.SendData(lci, new byte[] { 2 }), Is.True);
+            Assert.That(layer.SendData(lci, new byte[] { 3 }), Is.True);
+            Assert.That(layer.SendData(lci, new byte[] { 4 }), Is.False, "window of 3 is full");
+        }
+
+        [Test]
+        public void R9_CallConnectedWithoutFacilities_MeansTheDefaults()
+        {
+            RecordingSink sink = new RecordingSink();
+            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, DefaultWindowSize = 7, DefaultPacketSize = 1024 });
+            ushort lci = layer.PlaceCall(RemoteAddress);   // asks for 1024 / 7
+
+            layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));   // basic format, three octets
+
+            // 7.2.2.1: a value not indicated in the Call Connected is the default, whatever we asked.
+            Assert.That(layer.Circuits[lci].WindowSizeOut, Is.EqualTo(2));
+            Assert.That(layer.Circuits[lci].PacketSizeOut, Is.EqualTo(128));
+        }
+
+        [Test]
+        public void R9_CallConnectedOutsideTheNegotiationRange_IsCleared()
+        {
+            ushort lci = _layer.PlaceCall(RemoteAddress);   // asks for window 2
+            int cleared = 0;
+            byte seenDiag = 0;
+            _layer.Cleared += (l, c, cause, diag) => { cleared++; seenDiag = diag; };
             _sink.Sent.Clear();
 
-            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            // Window 5 is neither between the default (2) and the request (2) nor equal to either.
+            _layer.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x0F, 0x00, 0x03, 0x43, 0x05, 0x05 });
 
-            // MEASURED 2026-09-06: OnCallAccepted never looks at the body. The window stays at the
-            // configured default (2), so we send two packets into a window of one - a P(S) outside
-            // the window, which 4.4.1.3 makes a local procedure error at the peer.
-            Assert.That(_layer.Circuits[lci].WindowSizeOut, Is.EqualTo(2),
-                "behaviour changed: applying the negotiated window is the FIX for R9 - rewrite this test");
-            Assert.That(_layer.SendData(lci, new byte[] { 1 }), Is.True);
-            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.True, "second packet into a window of 1");
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.FacilityParameterNotAllowed));
+            Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(seenDiag, Is.EqualTo(X25Diagnostic.FacilityParameterNotAllowed));
+        }
+
+        [Test]
+        public void R9_AcceptCall_AnswersWithTheValuesTheCallerAsked()
+        {
+            // Caller asks for 256 / 3 in both directions.
+            byte[] fac = X25Facilities.ForRequest(3, 256).Encode();
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress, fac));
+            Assert.That(_layer.Circuits[5].PacketSizeOut, Is.EqualTo(256));
+            Assert.That(_layer.Circuits[5].WindowSizeOut, Is.EqualTo(3));
+
+            _layer.AcceptCall(5);
+
+            X25PacketInfo accepted = _sink.LastInfo;
+            Assert.That(accepted.PacketType, Is.EqualTo(X25PacketType.CallAccepted));
+            Assert.That(BitConverter.ToString(accepted.Facilities).Replace('-', ' '), Is.EqualTo("42 08 08 43 03 03"));
+            Assert.That(_sink.Last[3], Is.EqualTo(0x00), "5.2.3.1.2: the address octet precedes the facility length");
         }
 
         // ================================================================== R10  Call Request validation
@@ -781,7 +833,7 @@ namespace RetroIO.Protocols.X25.Tests
         // follows the facilities and is delivered to the called DTE.
 
         [Test]
-        public void R10_CallRequestWhoseFacilityLengthExceedsTheBody_IsOfferedToTheApplication_WHICH_IS_WRONG()
+        public void R10_CallRequestWhoseFacilityLengthExceedsTheBody_IsClearedAndNeverOffered()
         {
             int incoming = 0;
             _layer.IncomingCall += (l, c, called, calling, cud) => incoming++;
@@ -789,16 +841,29 @@ namespace RetroIO.Protocols.X25.Tests
             // No addresses, facility length 0x32 = 50, three octets follow.
             _layer.ProcessPacket(new byte[] { 0x10, 0x05, 0x0B, 0x00, 0x32, 0x42, 0x07, 0x07 });
 
-            // Per the C plan 3.7 (and X.25 5.2.2.3) this must be cleared with "invalid facility
-            // request" and never reach the application. MEASURED 2026-09-06: it is offered as a
-            // normal incoming call.
-            Assert.That(incoming, Is.EqualTo(1),
-                "behaviour changed: clearing a malformed Call Request is the FIX for R10 - rewrite this test");
-            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0));
+            // FIXED 2026-09-06 (Phase B7); it used to be offered as a normal call with the leftover
+            // octets as user data. Annex E 69 "Invalid facility length".
+            Assert.That(incoming, Is.EqualTo(0));
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.InvalidFacilityLength));
+            Assert.That(_layer.Circuits[5].State, Is.EqualTo(X25VcState.ClearRequest));
         }
 
         [Test]
-        public void R10_IncomingCallUserData_IsNotHandedToTheApplication_WHICH_IS_WRONG()
+        public void R10_CallRequestWithAWindowOfZero_IsClearedAndNeverOffered()
+        {
+            int incoming = 0;
+            _layer.IncomingCall += (l, c, called, calling, cud) => incoming++;
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress, new byte[] { 0x43, 0x00, 0x00 }));
+
+            Assert.That(incoming, Is.EqualTo(0));
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.FacilityParameterNotAllowed));
+        }
+
+        [Test]
+        public void R10_IncomingCallUserData_IsHandedToTheApplication()
         {
             byte[]? seenCud = null;
             _layer.IncomingCall += (l, c, called, calling, cud) => seenCud = cud;
@@ -806,12 +871,10 @@ namespace RetroIO.Protocols.X25.Tests
             byte[] cud = { 0x01, 0x00, 0x00, 0x00 };   // the X.29 PAD protocol identifier
             _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress, null, cud));
 
-            // MEASURED 2026-09-06: OnCallRequest raises IncomingCall with Array.Empty<byte>() and
-            // never stores the CUD on the circuit. A PAD or an XMSG service cannot tell what
-            // protocol the caller wants (the CUD is where SINTRAN puts it).
-            Assert.That(seenCud, Is.Not.Null);
-            Assert.That(seenCud!.Length, Is.EqualTo(0),
-                "behaviour changed: delivering the CUD is the FIX for R10 - rewrite this test");
+            // FIXED 2026-09-06 (Phase B7); the callback used to receive an empty array. The CUD is
+            // where SINTRAN says which protocol a call wants.
+            Assert.That(seenCud, Is.EqualTo(cud));
+            Assert.That(_layer.Circuits[5].CallUserData, Is.EqualTo(cud));
         }
 
         // ================================================================== R12  state hygiene
@@ -973,19 +1036,29 @@ namespace RetroIO.Protocols.X25.Tests
         // negotiated maximum is a local procedure error (reset).
 
         [Test]
-        public void R15_DataLongerThanTheDefaultPacketSize_IsDeliveredWithoutAReset_WHICH_IS_WRONG()
+        public void R15_DataLongerThanTheNegotiatedPacketSize_IsNotDeliveredAndResetsTheCircuit()
         {
-            ushort lci = ConnectOutgoing();   // DefaultPacketSize 128
-            int deliveredLength = -1;
-            _layer.DataReceived += (l, c, d, n, q, m, db) => deliveredLength = n;
+            ushort lci = ConnectOutgoing();   // 128
+            int delivered = 0;
+            _layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
 
             _layer.ProcessPacket(Data(lci, ps: 0, pr: 0, length: 300));
 
-            // MEASURED 2026-09-06: the circuit has no packet size at all (X25Vc has no such field),
-            // so nothing can be compared. 300 octets are delivered and acknowledged.
-            Assert.That(deliveredLength, Is.EqualTo(300),
-                "behaviour changed: a reset with diag 39 is the FIX for R15 - rewrite this test");
-            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0));
+            // FIXED 2026-09-06 (Phase B7); the circuit had no packet size and 300 octets were
+            // delivered and acknowledged. Annex E 39 "Packet too long".
+            Assert.That(delivered, Is.EqualTo(0));
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.PacketTooLong));
+            Assert.That(_layer.Circuits[lci].RecvSeq, Is.EqualTo(0), "not acknowledged");
+        }
+
+        [Test]
+        public void R15_ASendLongerThanTheNegotiatedPacketSize_IsRefused()
+        {
+            ushort lci = ConnectOutgoing();   // 128
+            Assert.That(_layer.SendData(lci, new byte[128]), Is.True, "exactly the maximum is fine");
+            Assert.That(_layer.SendData(lci, new byte[129]), Is.False, "one more is refused until M-bit segmentation (B11)");
+            Assert.That(_layer.Circuits[lci].SendSeq, Is.EqualTo(1), "the refused send spent no P(S)");
         }
 
         // ================================================================== R16  interrupt

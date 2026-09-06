@@ -249,7 +249,7 @@
       "build": { "type": "CallAccepted", "lcn": 1, "facilitiesHex": "42 07 07 43 07 07" },
       "hex": "10 01 0F 00 06 42 07 07 43 07 07",
       "parse": { "type": "CallAccepted", "lcn": 1, "facilitiesHex": "42 07 07 43 07 07" },
-      "status": "knownFail:R9",
+      "status": "pass", "fixed": "2026-09-06 Phase B7",
       "note": "X.25 5.2.3.1.2: 'The use of the called and calling DTE address length fields in call accepted packets is only mandatory when the called DTE address field, the calling DTE address field or the facility length field is present.' Today the C# builder omits that octet (writes 10 01 0F 06 ...) so the facility length lands where the address lengths belong. The C emulator's x25_accept (src/x25/x25.c) writes the address block before the facility length, as the spec requires."
     },
     {
@@ -389,7 +389,7 @@
       "spec": "X.25 5.2.2.2: address lengths of 15 + 15 need 15 octets that are not present",
       "hex": "10 01 0B FF 12",
       "expect": { "rejected": true },
-      "status": "knownFail:R10",
+      "status": "pass", "fixed": "2026-09-06 Phase B7",
       "note": "today the parser returns a CallRequest with whatever digits it could read; nothing rejects the packet"
     },
     {
@@ -397,7 +397,7 @@
       "spec": "X.25 5.2.2.3: facility length 50 with 3 octets following",
       "hex": "10 01 0B 00 32 42 07 07",
       "expect": { "rejected": true },
-      "status": "knownFail:R10",
+      "status": "pass", "fixed": "2026-09-06 Phase B7",
       "note": "today the parser hands back what it can and the engine treats the leftover as CUD (audit F-01-05 twin)"
     },
     {

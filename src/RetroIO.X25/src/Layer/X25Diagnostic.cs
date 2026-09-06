@@ -26,12 +26,26 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>21 - Reject not subscribed to: a REJ arrived and packet retransmission is not supported.</summary>
         public const byte RejectNotSubscribed = 21;
 
-        /// <summary>
-        /// 0 with a locally meaningful name: the cause given to the application whose outgoing call
-        /// lost a call collision at the DCE (X.25 4.1.6). No Annex E code exists for it because
-        /// nothing crosses the interface - the cancelled call was never on the wire as a Clear.
-        /// </summary>
-        public const byte CallCollision = 0;
+        /// <summary>64 - Call set-up or call clearing problem (the general code; 65-73 say which).</summary>
+        public const byte CallSetupProblem = 64;
+
+        /// <summary>65 - Facility code not allowed.</summary>
+        public const byte FacilityCodeNotAllowed = 65;
+
+        /// <summary>66 - Facility parameter not allowed: a window or packet size outside what the clause or the negotiation permits.</summary>
+        public const byte FacilityParameterNotAllowed = 66;
+
+        /// <summary>67 - Invalid called DTE address.</summary>
+        public const byte InvalidCalledAddress = 67;
+
+        /// <summary>69 - Invalid facility length.</summary>
+        public const byte InvalidFacilityLength = 69;
+
+        /// <summary>72 - Call collision: the diagnostic given to the application whose outgoing call lost a collision at the DCE (X.25 4.1.6).</summary>
+        public const byte CallCollision = 72;
+
+        /// <summary>73 - Duplicate facility requested.</summary>
+        public const byte DuplicateFacility = 73;
 
         /// <summary>33 - Packet not allowed (the general code; 34-45 say why).</summary>
         public const byte PacketNotAllowed = 33;

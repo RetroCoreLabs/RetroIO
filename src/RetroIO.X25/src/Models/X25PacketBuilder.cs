@@ -106,24 +106,24 @@ namespace RetroIO.Protocols.X25.Models
             bool dBit = false)
         {
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG (upper 4 bits of LCN)
             byte gfi = GFI.Create(qBit, dBit, false, (byte)((lcn >> 8) & 0x0F));
             ms.WriteByte(gfi);
-            
+
             // LCN (lower 8 bits)
             ms.WriteByte((byte)(lcn & 0xFF));
-            
+
             // PTI
             ms.WriteByte(PTI.CALL_REQUEST);
-            
+
             // Address length byte: calling in high nibble, called in low nibble (X.25 spec)
             byte addressLengths = (byte)(((callingAddress.Length & 0x0F) << 4) | (calledAddress.Length & 0x0F));
             ms.WriteByte(addressLengths);
 
             // Called + calling addresses packed as one contiguous BCD stream
             WriteContiguousAddressBCD(ms, calledAddress, callingAddress);
-            
+
             // Facilities
             facilities = facilities ?? Array.Empty<byte>();
             ms.WriteByte((byte)facilities.Length);
@@ -131,14 +131,14 @@ namespace RetroIO.Protocols.X25.Models
             {
                 ms.Write(facilities);
             }
-            
+
             // Call User Data
             callUserData = callUserData ?? Array.Empty<byte>();
             if (callUserData.Length > 0)
             {
                 ms.Write(callUserData);
             }
-            
+
             return ms.ToArray();
         }
 
@@ -153,32 +153,45 @@ namespace RetroIO.Protocols.X25.Models
             bool dBit = false)
         {
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG
             byte gfi = GFI.Create(qBit, dBit, false, (byte)((lcn >> 8) & 0x0F));
             ms.WriteByte(gfi);
-            
+
             // LCN
             ms.WriteByte((byte)(lcn & 0xFF));
-            
+
             // PTI
             ms.WriteByte(PTI.CALL_ACCEPTED);
-            
-            // Facilities
+
             facilities = facilities ?? Array.Empty<byte>();
+            callUserData = callUserData ?? Array.Empty<byte>();
+
+            // X.25 5.2.3.1: with nothing to say, the basic format is the three header octets alone.
+            if (facilities.Length == 0 && callUserData.Length == 0)
+            {
+                return ms.ToArray();
+            }
+
+            // X.25 5.2.3.1.2: the address length octet is mandatory whenever a facility length field
+            // is present. No addresses are carried in this stack's Call Accepted, so it is 00. Until
+            // 2026-09-06 this octet was missing and the facility length landed where the address
+            // lengths belong (pinned by the vector pkt-call-accepted-with-facilities).
+            ms.WriteByte(0x00);
+
+            // Facilities
             ms.WriteByte((byte)facilities.Length);
             if (facilities.Length > 0)
             {
                 ms.Write(facilities);
             }
-            
-            // Call User Data
-            callUserData = callUserData ?? Array.Empty<byte>();
+
+            // Called user data (5.2.3.1.5)
             if (callUserData.Length > 0)
             {
                 ms.Write(callUserData);
             }
-            
+
             return ms.ToArray();
         }
 
@@ -197,23 +210,23 @@ namespace RetroIO.Protocols.X25.Models
             byte[]? clearUserData = null)
         {
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG
             byte gfi = GFI.Create(false, false, false, (byte)((lcn >> 8) & 0x0F));
             ms.WriteByte(gfi);
-            
+
             // LCN
             ms.WriteByte((byte)(lcn & 0xFF));
-            
+
             // PTI
             ms.WriteByte(PTI.CLEAR_REQUEST);
-            
+
             // Clearing cause
             ms.WriteByte(clearingCause);
-            
+
             // Diagnostic code
             ms.WriteByte(diagnosticCode);
-            
+
             // Facilities (optional)
             facilities = facilities ?? Array.Empty<byte>();
             if (facilities.Length > 0)
@@ -221,14 +234,14 @@ namespace RetroIO.Protocols.X25.Models
                 ms.WriteByte((byte)facilities.Length);
                 ms.Write(facilities);
             }
-            
+
             // Clear user data (optional)
             clearUserData = clearUserData ?? Array.Empty<byte>();
             if (clearUserData.Length > 0)
             {
                 ms.Write(clearUserData);
             }
-            
+
             return ms.ToArray();
         }
 
@@ -263,23 +276,23 @@ namespace RetroIO.Protocols.X25.Models
         {
             if (userData == null || userData.Length == 0)
                 throw new ArgumentException("User data cannot be null or empty for data packet");
-            
+
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG
             byte gfi = GFI.Create(qBit, dBit, false, (byte)((lcn >> 8) & 0x0F));
             ms.WriteByte(gfi);
-            
+
             // LCN
             ms.WriteByte((byte)(lcn & 0xFF));
-            
+
             // PTI with sequence numbers
             byte pti = PTI.CreateDataPTI(ps, pr, mBit);
             ms.WriteByte(pti);
-            
+
             // User data
             ms.Write(userData);
-            
+
             return ms.ToArray();
         }
 
@@ -297,29 +310,29 @@ namespace RetroIO.Protocols.X25.Models
         {
             if (userData == null || userData.Length == 0)
                 throw new ArgumentException("User data cannot be null or empty for data packet");
-            
+
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG (with modulo 128 flag)
             byte gfi = GFI.Create(qBit, dBit, true, (byte)((lcn >> 8) & 0x0F));
             if (mBit) gfi |= 0x20; // M-bit in GFI for modulo 128
             ms.WriteByte(gfi);
-            
+
             // LCN
             ms.WriteByte((byte)(lcn & 0xFF));
-            
+
             // PTI (always 0x00 for modulo 128 data)
             ms.WriteByte(0x00);
-            
+
             // P(S) - separate byte
             ms.WriteByte(ps);
-            
+
             // P(R) - separate byte
             ms.WriteByte(pr);
-            
+
             // User data
             ms.Write(userData);
-            
+
             return ms.ToArray();
         }
 
@@ -415,27 +428,27 @@ namespace RetroIO.Protocols.X25.Models
         public static byte[] CreateInterrupt(ushort lcn, byte[]? interruptData = null)
         {
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG
             byte gfi = GFI.Create(false, false, false, (byte)((lcn >> 8) & 0x0F));
             ms.WriteByte(gfi);
-            
+
             // LCN
             ms.WriteByte((byte)(lcn & 0xFF));
-            
+
             // PTI
             ms.WriteByte(PTI.INTERRUPT);
-            
+
             // Interrupt user data (up to 32 bytes)
             interruptData = interruptData ?? Array.Empty<byte>();
             if (interruptData.Length > 32)
                 throw new ArgumentException("Interrupt data cannot exceed 32 bytes");
-            
+
             if (interruptData.Length > 0)
             {
                 ms.Write(interruptData);
             }
-            
+
             return ms.ToArray();
         }
 
@@ -526,19 +539,19 @@ namespace RetroIO.Protocols.X25.Models
         public static byte[] CreateRegistrationRequest(string dteAddress, byte[]? parameters = null)
         {
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG (LCN = 0 for registration)
             ms.WriteByte(GFI.Create(false, false, false, 0x00));
             ms.WriteByte(0x00);
             ms.WriteByte(PTI.REGISTRATION_REQUEST);
-            
+
             // DTE address length
             byte addressLength = (byte)dteAddress.Length;
             ms.WriteByte(addressLength);
-            
+
             // DTE address (BCD encoded)
             WriteAddressBCD(ms, dteAddress);
-            
+
             // Registration parameters (optional)
             parameters = parameters ?? Array.Empty<byte>();
             if (parameters.Length > 0)
@@ -550,7 +563,7 @@ namespace RetroIO.Protocols.X25.Models
             {
                 ms.WriteByte(0x00); // No parameters
             }
-            
+
             return ms.ToArray();
         }
 
@@ -579,20 +592,20 @@ namespace RetroIO.Protocols.X25.Models
         public static byte[] CreateDiagnostic(byte diagnosticCode, byte[]? diagnosticInfo = null)
         {
             using var ms = new MemoryStream();
-            
+
             // GFI + LCG (LCN = 0 for diagnostic)
             ms.WriteByte(GFI.Create(false, false, false, 0x00));
             ms.WriteByte(0x00);
             ms.WriteByte(PTI.DIAGNOSTIC);
             ms.WriteByte(diagnosticCode);
-            
+
             // Diagnostic information (optional)
             diagnosticInfo = diagnosticInfo ?? Array.Empty<byte>();
             if (diagnosticInfo.Length > 0)
             {
                 ms.Write(diagnosticInfo);
             }
-            
+
             return ms.ToArray();
         }
 
