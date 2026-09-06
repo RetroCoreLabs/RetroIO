@@ -133,7 +133,7 @@ namespace RetroIO.Protocols.X25.Tests
 
         // ================================================================== REJ condition
         //
-        // X.25 2.3.4.9 / 2.4.5.x: "Only one REJ exception condition for a given direction of
+        // X.25 2.3.4.4 (REJ): "Only one REJ exception condition for a given direction of
         // information transfer may be established at any time. The REJ exception condition is
         // cleared (reset) upon the receipt of an I frame with an N(S) equal to the N(R) of the REJ
         // frame."
