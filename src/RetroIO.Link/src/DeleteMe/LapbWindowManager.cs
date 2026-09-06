@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 
-namespace RetroIO.Link.Lapb
+using RetroIO.Link.Lapb;
+
+namespace RetroIO.Link.Lapb.DeleteMe
 {
     /// <summary>
     /// Represents an unacknowledged I-frame for retransmission

@@ -5,6 +5,7 @@ using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.Services;
+using RetroIO.Protocols.X25.DeleteMe;
 
 namespace RetroIO.Protocols.X25
 {

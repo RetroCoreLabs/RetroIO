@@ -3,7 +3,7 @@ using System;
 using RetroIO.Link.Models;
 namespace RetroIO.Protocols.X25.Models
 {
-using X25 = RetroIO.Protocols.X25.Protocols.X25;
+using X25 = RetroIO.Protocols.X25.DeleteMe.X25;   // TODO C3: X25.PacketType must move to a live type before DeleteMe goes
 
     /// <summary>
     /// Base class for history items in the ring buffer

@@ -8,7 +8,7 @@ using System;
 
 namespace RetroIO.Protocols.X25.Tests
 {
-using X25 = RetroIO.Protocols.X25.Protocols.X25;
+using X25 = RetroIO.Protocols.X25.DeleteMe.X25;   // the old engine; goes with DeleteMe (plan C3)
 
     [TestFixture]
     public class SintranTadClientServerTests

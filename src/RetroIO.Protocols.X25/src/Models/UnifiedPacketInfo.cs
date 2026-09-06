@@ -5,7 +5,7 @@ using System.Text;
 using RetroIO.Link.Models;
 namespace RetroIO.Protocols.X25.Models
 {
-using X25 = RetroIO.Protocols.X25.Protocols.X25;
+using X25 = RetroIO.Protocols.X25.DeleteMe.X25;   // TODO C3: X25.PacketType must move to a live type before DeleteMe goes
 
     /// <summary>
     /// Unified packet information that accumulates data as packet moves through protocol layers

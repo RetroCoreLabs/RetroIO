@@ -5,7 +5,7 @@ using RetroIO.Link.Lapb;
 using RetroIO.Protocols.X25.Common;
 using RetroIO.Link.Models;
 
-namespace RetroIO.Link.Lapb
+namespace RetroIO.Link.Lapb.DeleteMe
 {
     /// <summary>
     /// Per-link LAPB state machine with full ITU-T X.25 compliance.

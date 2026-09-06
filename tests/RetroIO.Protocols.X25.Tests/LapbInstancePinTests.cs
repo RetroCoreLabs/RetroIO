@@ -7,6 +7,7 @@ using NUnit.Framework;
 using RetroIO.Link;
 using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
+using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Protocols.X25.Tests
 {

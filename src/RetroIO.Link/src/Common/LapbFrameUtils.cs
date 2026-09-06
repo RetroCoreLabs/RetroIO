@@ -2,6 +2,7 @@ using System;
 using RetroIO.Link.Models;
 
 using RetroIO.Protocols.X25.Common;
+using RetroIO.Link.Lapb.DeleteMe;
 namespace RetroIO.Link.Lapb
 {
     /// <summary>

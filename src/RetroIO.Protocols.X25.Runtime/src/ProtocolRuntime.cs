@@ -22,7 +22,8 @@ using RetroIO.Protocols.X25.Sintran.Services;
 
 namespace RetroIO.Protocols.X25.Runtime
 {
-using X25 = RetroIO.Protocols.X25.Protocols.X25;
+using X25 = RetroIO.Protocols.X25.DeleteMe.X25;   // TODO C3: goes with the DeleteMe engine
+using RetroIO.Protocols.X25.DeleteMe;
 
     /// <summary>
     /// Central runtime for X.25 protocol stack with unified timer management, routing, and history
@@ -133,7 +134,7 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
             /// window, which X.25 4.4.1.3 makes a local procedure error - the peer resets the
             /// circuit. It only ever worked because the C reference switches are configured for 7.
             /// </remarks>
-            public byte WindowSize = RetroIO.Protocols.X25.Models.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
+            public byte WindowSize = RetroIO.Protocols.X25.DeleteMe.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
 
             /// <summary>
             /// Set while the peer has told us it cannot take more data (RNR), cleared by RR.
@@ -3951,7 +3952,7 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
         /// </remarks>
         private void ApplyNegotiatedWindow(ushort localLcn, byte[] callAccepted)
         {
-            byte window = RetroIO.Protocols.X25.Models.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
+            byte window = RetroIO.Protocols.X25.DeleteMe.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
             bool negotiated = false;
 
             // 3 header octets + the address length octet.
@@ -3969,7 +3970,7 @@ using X25 = RetroIO.Protocols.X25.Protocols.X25;
 
                     if (facilityLength > 0 && facilityStart + facilityLength <= callAccepted.Length)
                     {
-                        var parameters = RetroIO.Protocols.X25.Models.X25FlowControlFacilities.Decode(
+                        var parameters = RetroIO.Protocols.X25.DeleteMe.X25FlowControlFacilities.Decode(
                             new ReadOnlySpan<byte>(callAccepted, facilityStart, facilityLength));
 
                         if (parameters.HasWindowSize && parameters.WindowFromCalling > 0)

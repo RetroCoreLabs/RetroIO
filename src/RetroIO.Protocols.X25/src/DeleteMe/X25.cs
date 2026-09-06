@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
-namespace RetroIO.Protocols.X25.Protocols
+namespace RetroIO.Protocols.X25.DeleteMe
 {
     /// <summary>
     /// X.25 protocol implementation

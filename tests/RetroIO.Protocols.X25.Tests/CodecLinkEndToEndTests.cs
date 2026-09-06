@@ -8,6 +8,7 @@ using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Runtime.Layers;
 using RetroIO.Link;
 using RetroIO.Link.Framing;
+using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Protocols.X25.Tests
 {

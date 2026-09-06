@@ -27,6 +27,7 @@ using System;
 using NUnit.Framework;
 
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.DeleteMe;
 
 namespace RetroIO.Protocols.X25.Tests
 {

@@ -2,6 +2,7 @@ using System;
 using NUnit.Framework;
 using Microsoft.Extensions.Logging;
 using RetroIO.Link.Lapb;
+using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Protocols.X25.Tests
 {

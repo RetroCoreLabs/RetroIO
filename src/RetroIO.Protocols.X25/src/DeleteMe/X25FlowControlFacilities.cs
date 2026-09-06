@@ -1,6 +1,6 @@
 using System;
 
-namespace RetroIO.Protocols.X25.Models
+namespace RetroIO.Protocols.X25.DeleteMe
 {
     /// <summary>
     /// The negotiated flow control parameters of one virtual call.

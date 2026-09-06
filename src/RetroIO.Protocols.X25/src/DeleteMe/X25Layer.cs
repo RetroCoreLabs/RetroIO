@@ -6,9 +6,8 @@ using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Protocols;
 
 using RetroIO.Link.Lapb;
-namespace RetroIO.Protocols.X25.Layers
+namespace RetroIO.Protocols.X25.DeleteMe
 {
-using X25 = RetroIO.Protocols.X25.Protocols.X25;
 
 
     public class X25Layer
