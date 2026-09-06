@@ -115,6 +115,48 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         private readonly byte[] _info;
 
         /// <summary>
+        /// Decodes a frame that came off a live link, where there is no capture flow to name.
+        /// </summary>
+        /// <param name="frameBytes">
+        /// The frame: address, control, then any information field. No flags, no FCS.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="frameBytes"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// The frame is too short to decode.
+        /// </exception>
+        /// <remarks>
+        /// <see cref="Key"/> is left at its default. That the frame type carries a capture key at all
+        /// is a leftover from the pcap tooling it was written for; see the parking lot in
+        /// Migration/X25 one-stack plan.md.
+        /// </remarks>
+        public LapbFrame(byte[] frameBytes)
+            : this(default, frameBytes, LiveInfoLength(frameBytes))
+        {
+        }
+
+        /// <summary>
+        /// The information length of a frame that arrived on a live link: everything after the
+        /// address and control octets. A captured frame still has its two FCS octets on the end and
+        /// a live one does not, because the framer has already checked and stripped them.
+        /// </summary>
+        private static int LiveInfoLength(byte[] frameBytes)
+        {
+            if (frameBytes == null)
+            {
+                throw new ArgumentNullException(nameof(frameBytes));
+            }
+
+            if (frameBytes.Length < 2)
+            {
+                throw new ArgumentException("A LAPB frame needs at least an address and a control octet.", nameof(frameBytes));
+            }
+
+            return frameBytes.Length - 2;
+        }
+
+        /// <summary>
         /// Initialises a LAPB frame from its unstuffed, FCS-valid bytes.
         /// </summary>
         /// <param name="key">
@@ -130,6 +172,15 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// Thrown when <paramref name="frameBytes"/> is shorter than four bytes.
         /// </exception>
         public LapbFrame(StreamKey key, byte[] frameBytes)
+            : this(key, frameBytes, CapturedInfoLength(frameBytes))
+        {
+        }
+
+        /// <summary>
+        /// The information length of a captured frame: everything after the address and control
+        /// octets except the trailing two-octet FCS.
+        /// </summary>
+        private static int CapturedInfoLength(byte[] frameBytes)
         {
             if (frameBytes == null)
             {
@@ -141,12 +192,20 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
                 throw new ArgumentException("A LAPB frame needs at least address, control and a 2-byte FCS.", nameof(frameBytes));
             }
 
+            return frameBytes.Length - 4;
+        }
+
+        private LapbFrame(StreamKey key, byte[] frameBytes, int infoLength)
+        {
+            if (frameBytes == null)
+            {
+                throw new ArgumentNullException(nameof(frameBytes));
+            }
+
             Key = key;
             Address = frameBytes[0];
             Control = frameBytes[1];
 
-            // Info field excludes addr(1), ctrl(1) and the trailing 2-byte FCS.
-            int infoLength = frameBytes.Length - 4;
             _info = new byte[infoLength];
             Array.Copy(frameBytes, 2, _info, 0, infoLength);
 

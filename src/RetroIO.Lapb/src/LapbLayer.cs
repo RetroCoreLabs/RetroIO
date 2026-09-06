@@ -418,6 +418,21 @@ namespace RetroIO.Protocols.Xmsg.Live
         }
 
         /// <summary>
+        /// Drops the link to disconnected without sending anything, discarding whatever was queued.
+        /// </summary>
+        /// <remarks>
+        /// For the case where the transport under the link has gone away: the peer cannot be reached,
+        /// so a DISC would be a frame into a hole, and holding V(S)/V(R) from the dead connection
+        /// would make the next one start mid-sequence. X.25 has no name for this because the
+        /// Recommendation assumes the physical layer stays put; a TCP connection does not.
+        /// </remarks>
+        public void ForceDisconnected()
+        {
+            Reset();
+            _state = LapbLayerState.Disconnected;
+        }
+
+        /// <summary>
         /// Requests an orderly disconnect by transmitting DISC (P=1).
         /// </summary>
         /// <param name="currentTicks">
