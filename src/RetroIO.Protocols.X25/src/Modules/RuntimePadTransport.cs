@@ -62,7 +62,11 @@ namespace RetroIO.Protocols.X25.Modules
             // on the wire anyway - back-pressure obeyed in one place and ignored in the next.
             if (_runtime.SendDataViaXotIfMapped(lcn, data, length) == XotSendOutcome.NotXotMapped)
             {
-                _runtime.X25Layer.SendData(lcn, data, length);
+                // Not carried by a link: the runtime finds the bound service, or delivers it in
+                // process. Until 2026-09-06 this went straight to the old packet-layer engine and
+                // skipped the service lookup that SendX25Data does.
+                byte[] payload = data.Length == length ? data : data.AsSpan(0, length).ToArray();
+                _runtime.SendX25Data(lcn, payload, false, false, false);
             }
         }
 

@@ -569,6 +569,49 @@ namespace RetroIO.Protocols.X25.Runtime
             }
         }
 
+        /// <summary>
+        /// Delivers data on a logical channel that has no link under it: a PAD client talking to a
+        /// service in this same process.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// There is no X.25 link here and never was. Until 2026-09-06 this path ran through the old
+        /// packet-layer engine, which built a data packet, raised <c>DataToSend</c>, and was answered
+        /// by <c>IsLocalConnection</c> returning <c>true</c> unconditionally - so the packet was
+        /// immediately unwrapped and handed back into the process. The engine was doing nothing but
+        /// packing and unpacking bytes.
+        /// </para>
+        /// <para>
+        /// The packet is still BUILT, because the history and the desktop packet views want to show
+        /// what the exchange would look like on a wire, and the bound module is still given the
+        /// receive-direction event it has always had. What is gone is the pretence that a packet
+        /// layer was involved.
+        /// </para>
+        /// </remarks>
+        private void DeliverLocally(ushort lcn, byte[] data, bool mBit, bool qBit, bool dBit)
+        {
+            byte[] built = X25PacketBuilder.CreateDataPacket(lcn, 0, 0, data, mBit, qBit, dBit);
+
+            PacketHistory.FirePacketTransmitted(new X25PacketEventArgs
+            {
+                Packet = new X25Packet(built) { Direction = PacketDirection.Transmit, LCN = lcn },
+                Direction = PacketDirection.Transmit,
+                Timestamp = DateTime.UtcNow,
+                PacketId = GetNextFrameId(),
+            });
+
+            X25PacketEventArgs received = new X25PacketEventArgs
+            {
+                Packet = new X25Packet(built) { Direction = PacketDirection.Receive, LCN = lcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow,
+                PacketId = GetNextFrameId(),
+            };
+
+            RouteX25EventToBoundModule(lcn, received);
+            LocalTad.HandleIncomingData(lcn, data);
+        }
+
         // ------------------------------------------------------------------ lookups
 
         private X25Endpoint? EndpointOf(X25Layer layer)

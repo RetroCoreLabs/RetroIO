@@ -33,7 +33,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         // Configuration
         private readonly RuntimeConfig _config;
         private readonly Microsoft.Extensions.Logging.ILogger _logger;
-        
+
         // Layer instances (public concrete classes). Stack A (LinkLayer/HdlcLayer/LapbLayer/XOTLayer) has
         // been retired to _retired/; the multi-link Stack B (LinkManager) is the sole link path now.
         public Layers.PhysicalLayer PhysicalLayer { get; private set; }  // Actual physical layer for serial/XOT
@@ -92,7 +92,7 @@ using RetroIO.Protocols.X25.DeleteMe;
 
         // Central timer management (delegated to TimerManager)
         private readonly Services.TimerManager _timerManager;
-        
+
         // X.25 routing system
         private readonly X25Router _x25Router;
         private readonly Dictionary<string, ITransportInterface> _transportInterfaces = new();
@@ -102,17 +102,20 @@ using RetroIO.Protocols.X25.DeleteMe;
 
         // Local TAD protocol handler
         private readonly LocalTadProtocol _localTadProtocol;
-        
+
+        /// <summary>The in-process TAD terminal service local calls are delivered to.</summary>
+        private LocalTadProtocol LocalTad => _localTadProtocol;
+
         // Local XMSG protocol handler
         private readonly LocalXMSGProtocol _localXmsgProtocol;
-        
+
         // SINTRAN PVC server for SINTRAN-specific protocols
         private readonly SintranPvcServer _sintranPvcServer;
-        
+
         // Protocol detection service
         private readonly Services.X25ProtocolDetectionService _protocolDetection;
         private readonly Services.ProtocolServiceRegistry _protocolServices;
-        
+
         // Module routing and binding (using new centralized routing)
         private readonly Dictionary<ushort, IProtocolModule> _lcnBindings = new();
         private readonly Dictionary<string, IProtocolModule> _registeredModules = new();
@@ -131,7 +134,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         // Pending link context for associating incoming calls with their source link
         // Set before X25Layer.ReceiveX25Packet(), cleared after OnX25IncomingCall() uses it
         private string? _pendingLinkForNextCall;
-        
+
         // PAD client lifecycle management
         private readonly Dictionary<string, Modules.PadClient> _padClients = new();
         private int _padClientIdCounter = 0;
@@ -144,29 +147,29 @@ using RetroIO.Protocols.X25.DeleteMe;
         private readonly Queue<HistoryItem> _historyBuffer = new();
         private readonly object _historyLock = new();
         private int _historyCapacity = 100;
-        
+
         // Unified packet tracking system - single ID per packet with layer enrichment
         private readonly Dictionary<long, UnifiedHistoryItem> _unifiedPackets = new();
         private readonly object _unifiedPacketsLock = new();
-        
+
         // Track most recent X.25 items for linking with LAPB encapsulation
         private readonly Dictionary<long, X25HistoryItem> _recentX25Items = new();
         private readonly Dictionary<string, LapbHistoryItem> _recentLapbFrames = new();
         private readonly HashSet<string> _pendingLapbFrameKeys = new(); // Keys for LAPB frames awaiting X.25
         private readonly Dictionary<string, X25HistoryItem> _pendingX25LinksToLapb = new(); // X.25 items waiting for LAPB link
         private readonly object _x25LinkingLock = new();
-        
+
         // Simple relationship tracking (user requested simple dictionary approach)
         private LapbHistoryItem? _lastLapbIFrame = null;
-        
+
         // Shared LAPB frame counter
         private long _sharedFrameId = 0;
         private readonly object _frameIdLock = new();
-        
+
         // Statistics
         private StatisticsSnapshot _currentStats = new();
         private readonly object _statsLock = new();
-        
+
         // Runtime state
         private bool _disposed = false;
         private readonly object _stateLock = new();
@@ -188,23 +191,23 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 throw new ArgumentException("LocalMachineId must be configured in X25 configuration", nameof(config));
             }
-            
+
             // Initialize X.25 routing system
             _x25Router = new X25Router(logger);
-            
+
             // Initialize local TAD protocol handler
             _localTadProtocol = new LocalTadProtocol(logger, config.X25.LocalMachineId);
-            
+
             // Initialize local XMSG protocol handler
             _localXmsgProtocol = new LocalXMSGProtocol(logger, config.X25.LocalMachineId);
-            
+
             // Initialize SINTRAN PVC server
             _sintranPvcServer = new SintranPvcServer(logger);
             _sintranPvcServer.Initialize();  // Initialize terminal ID pool and handlers
 
             // Initialize protocol detection service
             _protocolDetection = new Services.X25ProtocolDetectionService(logger);
-            
+
             // Initialize protocol service registry
             _protocolServices = new Services.ProtocolServiceRegistry(logger);
 
@@ -218,19 +221,19 @@ using RetroIO.Protocols.X25.DeleteMe;
 
             X25Layer = new X25Layer(logger);
             RoutingLayer = new X25RoutingLayer(logger, _x25Router, this, _protocolServices);
-            
+
             // Subscribe to layer events
             SubscribeToLayerEvents();
-            
+
             // Initialize transport interfaces and routes if routing is enabled
             InitializeRouting();
-            
+
             // Register protocol services for dynamic routing
             RegisterProtocolServices();
-            
+
             // Load PVC bindings from configuration
             LoadPvcBindings();
-            
+
             // Initialize built-in PAD/TAD services
             InitializeBuiltinServices();
 
@@ -254,10 +257,10 @@ using RetroIO.Protocols.X25.DeleteMe;
 
             _startTime = DateTime.UtcNow;
             _logger.LogInformation("[ProtocolRuntime] Protocol runtime initialized and started successfully");
-            
+
             StateChanged?.Invoke(this, new RuntimeStateChangedEventArgs(
-                RuntimeState.Stopped, 
-                RuntimeState.Running, 
+                RuntimeState.Stopped,
+                RuntimeState.Running,
                 "Runtime started"
             ));
         }
@@ -282,7 +285,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         /// <summary>
         /// Get all configured transport interfaces
         /// </summary>
-        public IReadOnlyDictionary<string, ITransportInterface> TransportInterfaces => 
+        public IReadOnlyDictionary<string, ITransportInterface> TransportInterfaces =>
             _transportInterfaces.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
         /// <summary>
@@ -309,7 +312,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     }
                     else
                     {
-                        _logger.LogDebug("Transport interface {Name} already started (status: {Status})", 
+                        _logger.LogDebug("Transport interface {Name} already started (status: {Status})",
                                        transport.Name, transport.Status);
                     }
                 }
@@ -691,7 +694,7 @@ using RetroIO.Protocols.X25.DeleteMe;
 
                 _registeredModules[module.Name] = module;
                 _logger.LogInformation($"[Routing] Registered module: {module.Name}");
-                
+
                 // Update statistics to reflect new module count
                 UpdateStatistics();
             }
@@ -756,7 +759,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             lock (_historyLock)
             {
                 _historyCapacity = capacity;
-                
+
                 // Trim history if it exceeds new capacity
                 while (_historyBuffer.Count > _historyCapacity)
                 {
@@ -918,7 +921,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 // Create unified packet at entry point for simulation
                 var globalId = CreateOrUpdateUnifiedPacket(0, Direction.RX, LayerType.HDLC);
-                
+
                 // Enrich with HDLC layer info (simulated)
                 var hdlcLayerInfo = new HdlcLayerInfo
                 {
@@ -928,7 +931,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     Length = length
                 };
                 EnrichUnifiedPacket(globalId, LayerType.HDLC, hdlcLayerInfo);
-                
+
                 // Directly enrich with LAPB layer info without firing events (to avoid duplicate packets)
                 if (frameData != null && length >= 2)
                 {
@@ -941,7 +944,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                         Information = length > 2 ? frameData[2..length] : new byte[0],
                         InformationLength = length > 2 ? length - 2 : 0
                     };
-                    
+
                     // Parse sequence numbers for I-frames
                     if ((frameData[1] & 0x01) == 0) // I-frame
                     {
@@ -952,10 +955,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                     {
                         lapbLayerInfo.NR = (byte)((frameData[1] >> 5) & 0x07);
                     }
-                    
+
                     EnrichUnifiedPacket(globalId, LayerType.LAPB, lapbLayerInfo);
                 }
-                
+
                 // Get the created unified packet and add it to history to fire events
                 lock (_unifiedPacketsLock)
                 {
@@ -964,7 +967,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                         AddToHistory(unifiedItem);
                     }
                 }
-                
+
                 // Note: Don't call LAPBLayer.ReceiveHdlcFrame() to avoid creating duplicate regular HistoryItem objects
             }
             catch (Exception ex)
@@ -1037,7 +1040,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     _currentStats.XOT.TcpConnected = connected;
                     StatisticsUpdated?.Invoke(this, _currentStats.Clone());
                 }
-                
+
                 _logger.LogInformation($"[XOT] TCP connection status changed to: {(connected ? "Connected" : "Disconnected")}");
             }
             catch (Exception ex)
@@ -1118,10 +1121,10 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 // Initialize transport interfaces
                 InitializeTransportInterfaces();
-                
+
                 // Load routing configuration
                 LoadRoutingConfiguration();
-                
+
                 // Start all transport interfaces
                 StartTransportInterfaces();
 
@@ -1149,11 +1152,11 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 // Initialize Serial interfaces
                 InitializeSerialInterfaces();
-                
+
                 // Initialize XOT interfaces
                 InitializeXotInterfaces();
-                
-                _logger.LogInformation("Transport interface initialization completed - {Count} interfaces configured", 
+
+                _logger.LogInformation("Transport interface initialization completed - {Count} interfaces configured",
                                      _transportInterfaces.Count);
             }
             catch (Exception ex)
@@ -1175,13 +1178,13 @@ using RetroIO.Protocols.X25.DeleteMe;
                 if (!serialConfig.Enabled) continue;
                 try
                 {
-                    _logger.LogInformation("Creating serial transport interface: {Name} on port {Port}", 
+                    _logger.LogInformation("Creating serial transport interface: {Name} on port {Port}",
                                          serialConfig.Name, serialConfig.PortName);
 
                     var serialTransport = CreateSerialTransport(serialConfig);
                     _transportInterfaces[serialConfig.Name] = serialTransport;
                     _x25Router.RegisterInterface(serialTransport);
-                    
+
                     // Subscribe to transport events
                     serialTransport.IncomingCall += OnTransportIncomingCall;
                     serialTransport.StatusChanged += OnTransportStatusChanged;
@@ -1207,7 +1210,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 if (!xotConfig.Enabled) continue;
                 try
                 {
-                    _logger.LogInformation("Creating XOT transport interface: {Name} ({Mode})", 
+                    _logger.LogInformation("Creating XOT transport interface: {Name} ({Mode})",
                                          xotConfig.Name, xotConfig.Mode);
 
                     ITransportInterface xotTransport = xotConfig.Mode switch
@@ -1219,7 +1222,7 @@ using RetroIO.Protocols.X25.DeleteMe;
 
                     _transportInterfaces[xotConfig.Name] = xotTransport;
                     _x25Router.RegisterInterface(xotTransport);
-                    
+
                     // Subscribe to transport events
                     xotTransport.IncomingCall += OnTransportIncomingCall;
                     xotTransport.StatusChanged += OnTransportStatusChanged;
@@ -1274,7 +1277,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         /// </summary>
         private void OnTransportIncomingCall(object? sender, X25CallRequest callRequest)
         {
-            _logger.LogInformation("Incoming X.25 call from transport {Transport}: {CalledAddress} <- {CallingAddress}", 
+            _logger.LogInformation("Incoming X.25 call from transport {Transport}: {CalledAddress} <- {CallingAddress}",
                                  sender?.GetType().Name, callRequest.CalledAddress, callRequest.CallingAddress);
 
             try
@@ -1308,7 +1311,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             if (sender is ITransportInterface transport)
             {
-                _logger.LogInformation("Transport {Name} status changed: {OldStatus} -> {NewStatus} ({Reason})", 
+                _logger.LogInformation("Transport {Name} status changed: {OldStatus} -> {NewStatus} ({Reason})",
                                      transport.Name, e.OldStatus, e.NewStatus, e.Reason ?? "Unknown");
 
                 // Update statistics and fire events as needed
@@ -1322,8 +1325,8 @@ using RetroIO.Protocols.X25.DeleteMe;
         private void LoadRoutingConfiguration()
         {
             _logger.LogInformation("Loading new centralized X.25 routing system");
-            
-            if (_config.Routing?.RoutingTable == null) 
+
+            if (_config.Routing?.RoutingTable == null)
             {
                 _logger.LogWarning("No routing table configured");
                 return;
@@ -1336,7 +1339,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 try
                 {
                     ProcessRouteEntry(routeEntry);
-                    _logger.LogDebug("Processed X.25 route: {RouteName} ({Pattern} -> {Destination})", 
+                    _logger.LogDebug("Processed X.25 route: {RouteName} ({Pattern} -> {Destination})",
                                    routeEntry.Name, routeEntry.X121AddressPattern, routeEntry.Destination);
                 }
                 catch (Exception ex)
@@ -1358,9 +1361,9 @@ using RetroIO.Protocols.X25.DeleteMe;
                 if (route.Enabled)
                     enabledRouteCount++;
             }
-            _logger.LogInformation("New centralized routing system loaded with {RouteCount} enabled routes", 
+            _logger.LogInformation("New centralized routing system loaded with {RouteCount} enabled routes",
                                  enabledRouteCount);
-            
+
             /*
             // OLD CODE - will be replaced with new routing system
             if (_config.Routing?.Routes == null) return;
@@ -1381,13 +1384,13 @@ using RetroIO.Protocols.X25.DeleteMe;
                         Priority = routeConfig.Priority,
                         Enabled = routeConfig.Enabled,
                         Direction = Enum.Parse<RouteDirection>(routeConfig.Direction ?? "Bidirectional", true),
-                        BackupDestinations = routeConfig.BackupDestinations != null ? 
+                        BackupDestinations = routeConfig.BackupDestinations != null ?
                             new List<string>(routeConfig.BackupDestinations) : new List<string>(),
                         CallUserDataPattern = routeConfig.CallUserDataPattern
                     };
 
                     _x25Router.AddRoute(route);
-                    _logger.LogDebug("Added X.25 route: {RouteName} ({Pattern} -> {Destination})", 
+                    _logger.LogDebug("Added X.25 route: {RouteName} ({Pattern} -> {Destination})",
                                    route.Name, route.X121AddressPattern, route.Destination);
                 }
                 catch (Exception ex)
@@ -1482,22 +1485,22 @@ using RetroIO.Protocols.X25.DeleteMe;
             switch (routeEntry.Type)
             {
                 case RouteType.Local:
-                    _logger.LogDebug("Local route configured: {Pattern} -> {Destination}", 
+                    _logger.LogDebug("Local route configured: {Pattern} -> {Destination}",
                                    routeEntry.X121AddressPattern, routeEntry.Destination);
                     break;
 
                 case RouteType.Interface:
-                    _logger.LogDebug("Interface route configured: {Pattern} -> {Interface}", 
+                    _logger.LogDebug("Interface route configured: {Pattern} -> {Interface}",
                                    routeEntry.X121AddressPattern, routeEntry.Destination);
                     break;
 
                 case RouteType.Gateway:
-                    _logger.LogDebug("Gateway route configured: {Pattern} -> Gateway {Gateway}", 
+                    _logger.LogDebug("Gateway route configured: {Pattern} -> Gateway {Gateway}",
                                    routeEntry.X121AddressPattern, routeEntry.Destination);
                     break;
 
                 default:
-                    _logger.LogWarning("Unknown route type: {Type} for route {Name}", 
+                    _logger.LogWarning("Unknown route type: {Type} for route {Name}",
                                      routeEntry.Type, routeEntry.Name);
                     break;
             }
@@ -1542,19 +1545,19 @@ using RetroIO.Protocols.X25.DeleteMe;
         private bool MatchesAddressPattern(string address, string pattern)
         {
             if (string.IsNullOrEmpty(pattern)) return false;
-            
+
             try
             {
                 // Support exact match first
                 if (address == pattern) return true;
-                
+
                 // Support wildcard patterns like "100.*"
                 if (pattern.EndsWith(".*"))
                 {
                     string prefix = pattern.Substring(0, pattern.Length - 2);
                     return address.StartsWith(prefix);
                 }
-                
+
                 // Support regex patterns
                 var regex = new System.Text.RegularExpressions.Regex(pattern);
                 return regex.IsMatch(address);
@@ -1616,7 +1619,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             try
             {
                 _logger.LogDebug("Physical: Bytes to send, {Length} bytes", e.Length);
-                
+
                 // Route the data to the appropriate serial interface
                 // For serial routing, we need to determine which interface to use
                 // For now, use the first configured serial interface as default
@@ -1634,9 +1637,9 @@ using RetroIO.Protocols.X25.DeleteMe;
                 }
                 if (firstSerialInterface != null)
                 {
-                    _logger.LogDebug("Routing {Length} bytes to serial interface {InterfaceName}", 
+                    _logger.LogDebug("Routing {Length} bytes to serial interface {InterfaceName}",
                                    e.Length, firstSerialInterface.Name);
-                    
+
                     // Send data to the serial interface via PhysicalLayer
                     PhysicalLayer.SendToSerialInterface(firstSerialInterface.Name, e.Data);
                 }
@@ -1655,12 +1658,12 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             // Set frame ID and add to history
             e.FrameId = GetNextFrameId();
-            
+
             var direction = e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX;
-            
+
             // Create unified packet at HDLC layer (entry point)
             CreateOrUpdateUnifiedPacket(e.FrameId, direction, LayerType.HDLC);
-            
+
             // Create HDLC layer information
             var hdlcLayerInfo = new HdlcLayerInfo
             {
@@ -1669,10 +1672,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                 FrameData = e.FrameData,
                 Length = e.Length
             };
-            
+
             // Enrich unified packet with HDLC information
             EnrichUnifiedPacket(e.FrameId, LayerType.HDLC, hdlcLayerInfo);
-            
+
             var hdlcItem = new HdlcHistoryItem(
                 direction,
                 e.FrameData,
@@ -1687,11 +1690,11 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 errorReason = "FCS_Error";
                 _logger.LogWarning("⚠️ FCS ERROR: HDLC frame #{FrameId} has invalid FCS, marking as error", e.FrameId);
-                
+
                 // Mark unified packet with error
                 MarkUnifiedPacketError(e.FrameId, errorReason, LayerType.HDLC);
             }
-            
+
             // Simple dictionary approach: HDLC RX frames are always primary (from external source)
             if (e.Direction == FrameDirection.Receive)
             {
@@ -1710,9 +1713,9 @@ using RetroIO.Protocols.X25.DeleteMe;
                 // This shouldn't happen in normal flow, but handle it
                 AddPacketWithChainTracking(e.FrameId, "HDLC", Direction.TX, null, errorReason);
             }
-            
+
             AddToHistory(hdlcItem);
-            
+
             // Update HDLC statistics
             lock (_statsLock)
             {
@@ -1734,10 +1737,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                     _currentStats.HDLC.FramesTransmitted++;
                 }
             }
-            
+
             // Use enriched logging
             _logger.LogHdlcFrame(e, "HDLC frame received");
-            
+
             // Stack A LAPB routing retired (this legacy handler is no longer wired).
         }
 
@@ -1745,14 +1748,14 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             // Set frame ID and add to history
             e.FrameId = GetNextFrameId();
-            
+
             var hdlcItem = new HdlcHistoryItem(
                 e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX,
                 e.FrameData,
                 e.FcsValid,
                 e.FrameId
             );
-            
+
             // Check for FCS validation errors first
             string? errorReason = null;
             if (!e.FcsValid)
@@ -1760,23 +1763,23 @@ using RetroIO.Protocols.X25.DeleteMe;
                 errorReason = "FCS_Error";
                 _logger.LogWarning("⚠️ FCS ERROR: HDLC transmitted frame #{FrameId} has invalid FCS, marking as error", e.FrameId);
             }
-            
+
             // Simple dictionary approach: look for primary LAPB packets that need HDLC encapsulation
             var direction = e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX;
             var sourceLapbPacketId = FindPrimaryPacketNeedingDerivation("LAPB", direction);
-            
+
             if (sourceLapbPacketId.HasValue)
             {
                 // HDLC derived from LAPB packet
                 AddPacketWithChainTracking(e.FrameId, "HDLC", direction, sourceLapbPacketId.Value, errorReason);
                 if (errorReason != null)
                 {
-                    _logger.LogDebug("🔴 ERROR: HDLC frame #{HdlcId} derived from LAPB #{LapbId} with error: {ErrorReason}", 
+                    _logger.LogDebug("🔴 ERROR: HDLC frame #{HdlcId} derived from LAPB #{LapbId} with error: {ErrorReason}",
                         e.FrameId, sourceLapbPacketId.Value, errorReason);
                 }
                 else
                 {
-                    _logger.LogDebug("🔗 SIMPLE MATCH: HDLC frame #{HdlcId} derived from LAPB primary #{LapbId}", 
+                    _logger.LogDebug("🔗 SIMPLE MATCH: HDLC frame #{HdlcId} derived from LAPB primary #{LapbId}",
                         e.FrameId, sourceLapbPacketId.Value);
                 }
             }
@@ -1793,22 +1796,22 @@ using RetroIO.Protocols.X25.DeleteMe;
                     _logger.LogDebug("❌ NO PRIMARY: HDLC frame #{HdlcId} has no primary LAPB source", e.FrameId);
                 }
             }
-            
+
             AddToHistory(hdlcItem);
-            
+
             // Use enriched logging
             _logger.LogHdlcFrame(e, "HDLC frame transmitted");
-            
+
             // Update HDLC statistics
             lock (_statsLock)
             {
                 _currentStats.HDLC.BytesTransmitted += e.Length;
                 _currentStats.HDLC.FramesTransmitted++;
             }
-            
+
             // FIRE statistics updated event immediately
             StatisticsUpdated?.Invoke(this, _currentStats.Clone());
-            
+
             // Stack A physical transmit routing retired (this legacy handler is no longer wired).
         }
 
@@ -1819,10 +1822,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                 // For unified system: LAPB enriches existing HDLC packet or creates new if needed
                 // In RX flow: HDLC should have already created the unified packet
                 // In TX flow: We might need to create it here
-                
+
                 long unifiedPacketId;
                 var direction = e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX;
-                
+
                 // Try to use existing HDLC packet ID, or create new one
                 if (e.FrameId > 0)
                 {
@@ -1834,11 +1837,11 @@ using RetroIO.Protocols.X25.DeleteMe;
                     // Set frame ID for new packet
                     e.FrameId = GetNextFrameId();
                     unifiedPacketId = e.FrameId;
-                    
+
                     // Create unified packet if it doesn't exist (TX flow)
                     CreateOrUpdateUnifiedPacket(unifiedPacketId, direction, LayerType.LAPB);
                 }
-                
+
                 // Create LAPB layer information
                 var lapbLayerInfo = new LapbLayerInfo
                 {
@@ -1851,19 +1854,19 @@ using RetroIO.Protocols.X25.DeleteMe;
                     Information = e.Information,
                     InformationLength = e.Information?.Length ?? 0
                 };
-                
+
                 // Enrich unified packet with LAPB information
                 EnrichUnifiedPacket(unifiedPacketId, LayerType.LAPB, lapbLayerInfo);
-                
+
                 // Validate LAPB frame data for potential parsing errors
                 string? errorReason = ValidateLapbFrame(e);
-                
+
                 if (errorReason != null)
                 {
                     // Mark unified packet with LAPB error
                     MarkUnifiedPacketError(unifiedPacketId, errorReason, LayerType.LAPB);
                 }
-                
+
                 // For RX direction, we add LAPB first, then the X.25 packet will be linked later
                 // Create and add LAPB history item
                 var lapbItem = new LapbHistoryItem(
@@ -1877,9 +1880,9 @@ using RetroIO.Protocols.X25.DeleteMe;
                     e.PF,
                     unifiedPacketId
                 );
-                
+
                 AddToHistory(lapbItem);
-                
+
                 // Handle frame relationship tracking with error detection
                 HandleLapbFrameRelationships(e, lapbItem, errorReason);
             }
@@ -1887,7 +1890,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 // LAPB parsing exception - create error packet
                 _logger.LogError(ex, "⚠️ LAPB PARSE ERROR: Exception parsing LAPB frame #{FrameId}", e.FrameId);
-                
+
                 // Create minimal LAPB item for error tracking
                 var errorLapbItem = new LapbHistoryItem(
                     e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX,
@@ -1900,33 +1903,33 @@ using RetroIO.Protocols.X25.DeleteMe;
                     false,
                     e.FrameId
                 );
-                
+
                 AddToHistory(errorLapbItem);
-                
+
                 // Track as error packet
-                AddPacketWithChainTracking(e.FrameId, "LAPB", 
-                    e.Direction == FrameDirection.Receive ? Direction.RX : Direction.TX, 
+                AddPacketWithChainTracking(e.FrameId, "LAPB",
+                    e.Direction == FrameDirection.Receive ? Direction.RX : Direction.TX,
                     null, "LAPB_Parse_Error");
-                    
+
                 _logger.LogDebug("🔴 ERROR: LAPB frame #{FrameId} registered as error: LAPB_Parse_Error", e.FrameId);
-                
+
                 // Update statistics
                 lock (_statsLock)
                 {
                     if (e.Direction == FrameDirection.Receive)
                         _currentStats.LAPB.BadFramesReceived++;
                 }
-                
+
                 return; // Don't continue processing this frame
             }
-            
+
             // Update LAPB statistics
             lock (_statsLock)
             {
                 if (e.Direction == FrameDirection.Receive)
                 {
                     _currentStats.LAPB.FramesReceived++;
-                    
+
                     // Track specific frame types
                     switch (e.FrameType)
                     {
@@ -1940,14 +1943,14 @@ using RetroIO.Protocols.X25.DeleteMe;
                             _currentStats.LAPB.UFramesReceived++;
                             break;
                     }
-                    
+
                     // Track bad frames if we have error detection
                     // _currentStats.LAPB.BadFramesReceived++;
                 }
                 else
                 {
                     _currentStats.LAPB.FramesTransmitted++;
-                    
+
                     // Track specific frame types
                     switch (e.FrameType)
                     {
@@ -1961,18 +1964,18 @@ using RetroIO.Protocols.X25.DeleteMe;
                             _currentStats.LAPB.UFramesTransmitted++;
                             break;
                     }
-                    
+
                     // Track bad frames if we have error detection
                     // _currentStats.LAPB.BadFramesTransmitted++;
                 }
-                
+
                 // Fire statistics updated event immediately
                 StatisticsUpdated?.Invoke(this, _currentStats.Clone());
             }
-            
+
             // Use enriched logging
             _logger.LogLapbFrame(e, "LAPB frame received");
-            
+
             // NOTE: Removed automatic forwarding to X.25 layer - this bypassed LAPB state machine
             // The LAPB layer now properly handles forwarding via OnDataToX25() only when in DataTransfer state
             _logger.LogDebug("LAPB frame processed: {FrameType} {Direction}", e.FrameType, e.Direction);
@@ -1982,7 +1985,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             // Set frame ID and add to history
             e.FrameId = GetNextFrameId();
-            
+
             // Simple dictionary approach: look for primary X25 packets that need LAPB encapsulation
             long? sourceX25PacketId = null;
             if (e.FrameType == LapbFrameType.Information && e.Information.Length > 0)
@@ -1990,10 +1993,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                 // Find any primary X25 TX packet that doesn't have a derived LAPB yet
                 var direction = e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX;
                 sourceX25PacketId = FindPrimaryPacketNeedingDerivation("X25", direction);
-                
+
                 if (sourceX25PacketId.HasValue)
                 {
-                    _logger.LogDebug("🔗 SIMPLE MATCH: LAPB frame #{LapbId} derived from X.25 primary #{X25Id}", 
+                    _logger.LogDebug("🔗 SIMPLE MATCH: LAPB frame #{LapbId} derived from X.25 primary #{X25Id}",
                         e.FrameId, sourceX25PacketId.Value);
                 }
                 else
@@ -2001,7 +2004,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     _logger.LogDebug("❌ NO PRIMARY: LAPB frame #{LapbId} has no primary X.25 source", e.FrameId);
                 }
             }
-            
+
             // Create LAPB history item
             var lapbItem = new LapbHistoryItem(
                 e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX,
@@ -2014,32 +2017,32 @@ using RetroIO.Protocols.X25.DeleteMe;
                 e.PF,
                 e.FrameId
             );
-            
+
             // Simple dictionary approach: add derived relationship if source X25 found
             if (sourceX25PacketId.HasValue)
             {
                 // LAPB derived from X25 packet
-                AddPacketWithChainTracking(lapbItem.FrameId, "LAPB", 
+                AddPacketWithChainTracking(lapbItem.FrameId, "LAPB",
                     e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX, sourceX25PacketId.Value);
                 AddToHistory(lapbItem);
             }
             else
             {
                 // No source - mark as primary (external LAPB frame)
-                AddPacketWithChainTracking(lapbItem.FrameId, "LAPB", 
+                AddPacketWithChainTracking(lapbItem.FrameId, "LAPB",
                     e.Direction == FrameDirection.Transmit ? Direction.TX : Direction.RX);
                 AddToHistory(lapbItem);
             }
-            
+
             // Update LAPB statistics
             lock (_statsLock)
             {
                 _currentStats.LAPB.FramesTransmitted++;
             }
-            
+
             // Use enriched logging
             _logger.LogLapbFrame(e, "LAPB frame transmitted");
-            
+
             // Stack A HDLC transmit routing retired (this legacy handler is no longer wired).
         }
 
@@ -2231,11 +2234,11 @@ using RetroIO.Protocols.X25.DeleteMe;
             try
             {
                 _logger.LogInformation("🔥 OnX25PacketReceived called! Direction: {Direction}, Packet Length: {Length}", e.Direction, e.Packet?.Length);
-                
+
                 // For unified system: X25 enriches existing LAPB packet or creates new if needed
                 long unifiedPacketId;
                 var direction = e.Direction == PacketDirection.Receive ? Direction.RX : Direction.TX;
-                
+
                 // Try to use existing LAPB packet ID, or create new one
                 if (e.PacketId > 0)
                 {
@@ -2247,11 +2250,11 @@ using RetroIO.Protocols.X25.DeleteMe;
                     // Set packet ID for new packet
                     e.PacketId = GetNextFrameId();
                     unifiedPacketId = e.PacketId;
-                    
+
                     // Create unified packet if it doesn't exist (TX flow)
                     CreateOrUpdateUnifiedPacket(unifiedPacketId, direction, LayerType.X25);
                 }
-                
+
                 // Create X25 layer information
                 var x25LayerInfo = new X25LayerInfo
                 {
@@ -2259,23 +2262,23 @@ using RetroIO.Protocols.X25.DeleteMe;
                     LCN = e.Packet?.LCN ?? 0,
                     PacketId = unifiedPacketId,
                     CalledAddress = null, // TODO: Extract from packet data if needed
-                    CallingAddress = null, // TODO: Extract from packet data if needed  
+                    CallingAddress = null, // TODO: Extract from packet data if needed
                     Data = e.Packet?.Data ?? Array.Empty<byte>(),
                     Packet = e.Packet
                 };
-                
+
                 // Enrich unified packet with X25 information
                 EnrichUnifiedPacket(unifiedPacketId, LayerType.X25, x25LayerInfo);
-                
+
                 // Validate X25 packet for potential parsing errors
                 string? errorReason = ValidateX25Packet(e);
-                
+
                 if (errorReason != null)
                 {
                     // Mark unified packet with X25 error
                     MarkUnifiedPacketError(unifiedPacketId, errorReason, LayerType.X25);
-                } 
-            
+                }
+
             // Create X.25 history item first
             // e.Packet is non-null by contract on this path (downstream code dereferences it and the
             // X25HistoryItem ctor requires it). Assert once so the whole block sees a non-null packet.
@@ -2312,20 +2315,20 @@ using RetroIO.Protocols.X25.DeleteMe;
                     }
                 }
             }
-            
+
                 // Handle X25 packet relationship tracking with error detection
                 HandleX25PacketRelationships(e, x25Item, errorReason);
-                
+
                 // Use enriched logging
                 _logger.LogX25Packet(e, "X.25 packet received");
-                
+
                 // Module routing now handled via RouteX25EventToBoundModule in protocol services
             }
             catch (Exception ex)
             {
                 // X25 parsing exception - create error packet
                 _logger.LogError(ex, "⚠️ X25 PARSE ERROR: Exception parsing X25 packet #{PacketId}", e.PacketId);
-                
+
                 // Create minimal X25 item for error tracking
                 var errorPacket = new X25Packet();
                 var errorX25Item = new X25HistoryItem(
@@ -2333,23 +2336,23 @@ using RetroIO.Protocols.X25.DeleteMe;
                     errorPacket,
                     e.PacketId
                 );
-                
+
                 AddToHistory(errorX25Item);
-                
+
                 // Track as error packet
-                AddPacketWithChainTracking(e.PacketId, "X25", 
-                    e.Direction == PacketDirection.Receive ? Direction.RX : Direction.TX, 
+                AddPacketWithChainTracking(e.PacketId, "X25",
+                    e.Direction == PacketDirection.Receive ? Direction.RX : Direction.TX,
                     null, "X25_Parse_Error");
-                    
+
                 _logger.LogDebug("🔴 ERROR: X25 packet #{PacketId} registered as error: X25_Parse_Error", e.PacketId);
-                
+
                 // Update statistics
                 lock (_statsLock)
                 {
                     if (e.Direction == PacketDirection.Receive)
                         _currentStats.X25.BadPacketsReceived++;
                 }
-                
+
                 return; // Don't continue processing this packet
             }
         }
@@ -2357,15 +2360,15 @@ using RetroIO.Protocols.X25.DeleteMe;
         private void OnX25PacketTransmitted(object? sender, X25PacketEventArgs e)
         {
             _logger.LogInformation("🔥 OnX25PacketTransmitted called! Direction: {Direction}, Packet Length: {Length}", e.Direction, e.Packet.Length);
-            
+
             // Create and add X25 history item using centralized method
             var x25Item = CreateX25HistoryItem(e, "X.25 packet transmitted");
-            
+
             // Simple dictionary approach: mark X25 TX packets as primary (will generate LAPB)
             AddPacketWithChainTracking(x25Item.PacketId, "X25", Direction.TX);
-            
+
             AddToHistory(x25Item);
-            
+
             // Route packet based on centralized routing system
             if (e.Direction == PacketDirection.Transmit)
             {
@@ -2380,23 +2383,23 @@ using RetroIO.Protocols.X25.DeleteMe;
 
         private void OnX25DataToSend(object? sender, X25PacketEventArgs e)
         {
-            _logger.LogInformation("🔥 OnX25DataToSend called! Direction: {Direction}, LCN: {LCN}, Packet Length: {Length}", 
+            _logger.LogInformation("🔥 OnX25DataToSend called! Direction: {Direction}, LCN: {LCN}, Packet Length: {Length}",
                 e.Direction, e.Packet.LCN, e.Packet.Length);
-            
+
             // Set packet ID for tracking (but don't log to history yet - that happens in OnX25PacketTransmitted)
             e.PacketId = GetNextFrameId();
-            
+
             // First, fire PacketTransmitted event for proper history logging
             OnX25PacketTransmitted(sender, e);
-            
+
             // Then handle routing for this outgoing packet
             ushort lcn = e.Packet.LCN;
-            
+
             // For local connections (PAD to local TAD), route data directly via protocol services
             if (IsLocalConnection(lcn))
             {
                 _logger.LogInformation("🏠 LOCAL ROUTING: Data packet on LCN {LCN} is for local service, routing directly", lcn);
-                
+
                 // Create a received packet event to simulate loopback
                 var receivedPacket = new X25Packet(e.Packet.FullPacket)
                 {
@@ -2404,7 +2407,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     Timestamp = DateTime.UtcNow,
                     LCN = lcn
                 };
-                
+
                 var receivedEventArgs = new X25PacketEventArgs
                 {
                     Packet = receivedPacket,
@@ -2412,10 +2415,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                     Timestamp = DateTime.UtcNow,
                     PacketId = GetNextFrameId()
                 };
-                
+
                 // Route to appropriate protocol service
                 RouteX25EventToBoundModule(lcn, receivedEventArgs);
-                
+
                 // For local connections, try routing to TAD service on address "200" based on packet type
                 if (receivedPacket.PacketType == X25PacketType.ClearRequest)
                 {
@@ -2469,7 +2472,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 }
             }
         }
-        
+
         /// <summary>
         /// Check if the given LCN represents a local connection (PAD to local TAD/XMSG)
         /// For now, we consider all connections local since we're implementing loopback
@@ -2639,7 +2642,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         /// Enhanced packet relationship creation with chain tracking for collapse functionality
         /// Creates packet relationship with terminal detection and error tracking
         /// </summary>
-        private void AddPacketWithChainTracking(long packetId, string layer, Direction direction, 
+        private void AddPacketWithChainTracking(long packetId, string layer, Direction direction,
             long? derivedFromId = null, string? errorReason = null)
         {
             lock (_relationshipLock)
@@ -2656,7 +2659,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     Layer = layer,
                     Direction = direction,
                     Timestamp = DateTime.UtcNow,
-                    
+
                     // Collapse functionality fields
                     IsTerminal = true, // Start as terminal, will be updated if derived packets are created
                     HasProcessingError = hasError,
@@ -2672,13 +2675,13 @@ using RetroIO.Protocols.X25.DeleteMe;
                         // Parent is no longer terminal since we derived a packet from it
                         parentRelationship.IsTerminal = false;
                         parentRelationship.GeneratedIds.Add(packetId);
-                        
-                        _logger.LogDebug("🔗 CHAIN: Parent packet #{ParentId} no longer terminal, derived packet #{DerivedId}", 
+
+                        _logger.LogDebug("🔗 CHAIN: Parent packet #{ParentId} no longer terminal, derived packet #{DerivedId}",
                             derivedFromId.Value, packetId);
                     }
                 }
 
-                _logger.LogDebug("📦 CHAIN: Packet #{PacketId} ({Layer} {Direction}) - Primary: {IsPrimary}, Terminal: {IsTerminal}, Error: {HasError}", 
+                _logger.LogDebug("📦 CHAIN: Packet #{PacketId} ({Layer} {Direction}) - Primary: {IsPrimary}, Terminal: {IsTerminal}, Error: {HasError}",
                     packetId, layer, direction, isPrimary, true, hasError);
             }
         }
@@ -2693,7 +2696,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 var visited = new HashSet<long>(); // Circular reference protection
                 var currentId = packetId;
-                
+
                 while (true)
                 {
                     if (visited.Contains(currentId))
@@ -2702,21 +2705,21 @@ using RetroIO.Protocols.X25.DeleteMe;
                         _logger.LogWarning("Circular reference detected in packet chain for ID {PacketId}", packetId);
                         return currentId;
                     }
-                    
+
                     visited.Add(currentId);
-                    
+
                     if (!_packetRelationships.TryGetValue(currentId, out var relationship))
                     {
                         // No relationship found - this packet is the root
                         return currentId;
                     }
-                    
+
                     if (relationship.IsPrimary || relationship.DerivedFromId == null)
                     {
                         // Found the primary packet - this is the root
                         return currentId;
                     }
-                    
+
                     // Move up the chain
                     currentId = relationship.DerivedFromId.Value;
                 }
@@ -2728,13 +2731,13 @@ using RetroIO.Protocols.X25.DeleteMe;
             try
             {
                 _logger.LogInformation("🚨 OnX25DataReceived CALLED! LCN: {LCN}", e.Packet.LCN);
-                
+
                 // Validate X25 packet for potential parsing errors
                 string? errorReason = ValidateX25Packet(e);
-                
+
                 // Create X25 history item using centralized method (no logging here, done later)
                 var x25Item = CreateX25HistoryItem(e, "X.25 data received", logEvent: false);
-            
+
                 // Handle error cases first
                 if (!string.IsNullOrEmpty(errorReason))
                 {
@@ -2748,10 +2751,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                     if (_lastLapbIFrame != null)
                     {
                         _logger.LogDebug("🔗 SIMPLE LINK: X.25 packet derived from LAPB I-frame ID {FrameId}", _lastLapbIFrame.FrameId);
-                        
+
                         // Add derived packet metadata to dictionary
                         AddPacketWithChainTracking(x25Item.PacketId, "X25", Direction.RX, _lastLapbIFrame.FrameId);
-                        
+
                         AddToHistory(x25Item);
                         // Clear after use
                         _lastLapbIFrame = null;
@@ -2764,9 +2767,9 @@ using RetroIO.Protocols.X25.DeleteMe;
                         _logger.LogDebug("🔗 NO LINK: No recent LAPB I-frame for X.25 relationship");
                     }
                 }
-            
+
             _logger.LogDebug("X.25 data received: {PacketSummary}", e.GetPacketSummary());
-            
+
                 // Route to bound module (existing functionality)
                 if (e.Direction == PacketDirection.Receive)
                 {
@@ -2777,7 +2780,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 // X25 data parsing exception - create error packet
                 _logger.LogError(ex, "⚠️ X25 DATA PARSE ERROR: Exception parsing X25 data packet #{PacketId} LCN: {LCN}", e.PacketId, e.Packet?.LCN);
-                
+
                 // Create minimal X25 item for error tracking
                 var errorPacket = new X25Packet();
                 var errorX25Item = new X25HistoryItem(
@@ -2785,14 +2788,14 @@ using RetroIO.Protocols.X25.DeleteMe;
                     errorPacket,
                     e.PacketId
                 );
-                
+
                 AddToHistory(errorX25Item);
-                
+
                 // Track as error packet
                 AddPacketWithChainTracking(e.PacketId, "X25", Direction.RX, null, "X25_Data_Parse_Error");
-                    
+
                 _logger.LogDebug("🔴 ERROR: X25 data packet #{PacketId} registered as error: X25_Data_Parse_Error", e.PacketId);
-                
+
                 return; // Don't continue processing this packet
             }
         }
@@ -2821,9 +2824,9 @@ using RetroIO.Protocols.X25.DeleteMe;
             // Create and add X25 history item using centralized method
             var x25Item = CreateX25HistoryItem(e, "X.25 call reset");
             AddToHistory(x25Item);
-            
+
             _logger.LogInformation($"[ProtocolRuntime] X.25 call reset: {e.GetPacketSummary()}");
-            
+
             // Module routing now handled via RouteX25EventToBoundModule in protocol services
         }
 
@@ -2832,9 +2835,9 @@ using RetroIO.Protocols.X25.DeleteMe;
             // Create and add X25 history item using centralized method
             var x25Item = CreateX25HistoryItem(e, "X.25 restart requested");
             AddToHistory(x25Item);
-            
+
             _logger.LogInformation($"[ProtocolRuntime] X.25 restart requested: {e.GetPacketSummary()}");
-            
+
             // Handle restart - this would typically reset all virtual circuits
             // For now, just log the restart request
         }
@@ -2844,7 +2847,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             try
             {
                 _logger.LogDebug("XOT: Packet received, {Length} bytes", e.Length);
-                
+
                 // Add to history using centralized method
                 var eventArgs = new X25PacketEventArgs
                 {
@@ -2861,7 +2864,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 };
                 var x25Item = CreateX25HistoryItem(eventArgs, "XOT packet received");
                 AddToHistory(x25Item);
-                
+
                 // Update XOT statistics
                 lock (_statsLock)
                 {
@@ -2869,7 +2872,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     _currentStats.XOT.BytesReceived += e.Length;
                     StatisticsUpdated?.Invoke(this, _currentStats.Clone());
                 }
-                
+
                 // Route the X.25 packet to X25Layer for processing
                 X25Layer.ReceiveX25Packet(e.Data, e.Length);
             }
@@ -2884,7 +2887,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             try
             {
                 _logger.LogDebug("XOT: Bytes to send, {Length} bytes", e.Length);
-                
+
                 // Add to history using centralized method
                 var eventArgs = new X25PacketEventArgs
                 {
@@ -2901,7 +2904,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 };
                 var x25Item = CreateX25HistoryItem(eventArgs, "XOT bytes to send");
                 AddToHistory(x25Item);
-                
+
                 // Update XOT statistics
                 lock (_statsLock)
                 {
@@ -2909,7 +2912,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     _currentStats.XOT.BytesTransmitted += e.Length;
                     StatisticsUpdated?.Invoke(this, _currentStats.Clone());
                 }
-                
+
                 // This event would be used to send bytes over TCP connection
                 // For now, we'll just log it as the TCP handling is in the GUI layer
                 _logger.LogInformation("XOT: Encapsulated X.25 packet ready for TCP transmission");
@@ -3064,16 +3067,16 @@ using RetroIO.Protocols.X25.DeleteMe;
                 // Register TAD server for loopback testing on address "200"
                 var tadServer = new Modules.TadServer(_logger, this);
                 RegisterModule(tadServer);
-                
+
                 // Register SINTRAN PVC server for SINTRAN system protocols
                 RegisterModule(_sintranPvcServer);
 
                 // NOTE: Packet routing for SINTRAN PVC server is now handled by SintranTadProtocolService
                 // which subscribes to PacketGenerated and properly handles direction flipping + history creation
-                
+
                 // Note: TAD server routing is now handled by centralized routing system
                 // The RoutingConfigExample shows how to configure LocalTAD route
-                
+
                 _logger.LogInformation("[Services] Initialized built-in TAD server for address 200");
                 _logger.LogInformation("[Services] Initialized SINTRAN PVC server for SINTRAN protocols");
             }
@@ -3091,7 +3094,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             var tadServer = new Modules.TadServer(_logger, this);
             tadServer.Name = name;
             RegisterModule(tadServer);
-            
+
             _logger.LogInformation("Created TAD server: {Name}", name);
             return tadServer;
         }
@@ -3127,7 +3130,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             return _protocolDetection;
         }
-        
+
         /// <summary>
         /// Get protocol service registry
         /// </summary>
@@ -3135,7 +3138,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             return _protocolServices;
         }
-        
+
         /// <summary>
         /// Register protocol services for dynamic routing
         /// </summary>
@@ -3177,7 +3180,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             RegisterModule(padClient);
             return padClient;
         }
-        
+
         /// <summary>
         /// Create a managed PAD client with unique ID
         /// </summary>
@@ -3195,7 +3198,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 return padId;
             }
         }
-        
+
         /// <summary>
         /// Get a managed PAD client by ID
         /// </summary>
@@ -3206,7 +3209,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 return _padClients.TryGetValue(padId, out var padClient) ? padClient : null;
             }
         }
-        
+
         /// <summary>
         /// Dispose a managed PAD client
         /// </summary>
@@ -3224,7 +3227,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 return false;
             }
         }
-        
+
         /// <summary>
         /// Get all managed PAD client IDs
         /// </summary>
@@ -3372,15 +3375,13 @@ using RetroIO.Protocols.X25.DeleteMe;
                     }
                     else
                     {
-                        _logger.LogWarning("No service found for established session on LCN {LCN}", lcn);
-                        // Fall back to external routing
-                        X25Layer.SendData(lcn, data, data.Length);
+                        _logger.LogDebug("No service for LCN {LCN}; delivering in-process", lcn);
+                        DeliverLocally(lcn, data, mBit, qBit, dBit);
                     }
                 }
                 else
                 {
-                    // No established session, route externally
-                    X25Layer.SendData(lcn, data, data.Length);
+                    DeliverLocally(lcn, data, mBit, qBit, dBit);
                 }
 
                 return true;
@@ -3569,7 +3570,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 // Simple implementation - in a real system, this would parse the actual X.25 call request format
                 // For now, we'll create a basic call request with placeholder data
-                
+
                 if (packet.PacketType != X25PacketType.CallRequest)
                 {
                     return null;
@@ -3579,7 +3580,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 // This is a simplified implementation - real X.25 parsing would be more complex
                 string calledAddress = "UNKNOWN";
                 string callingAddress = "UNKNOWN";
-                
+
                 if (packet.Data != null && packet.Data.Length > 0)
                 {
                     try
@@ -3613,7 +3614,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             // Simple implementation - in a real system, this would be more complex
             // with proper LAPB frame construction including address and control fields
-            
+
             // For now, just return the packet data as-is
             // The LAPB layer will handle proper frame construction
             return packet.FullPacket ?? Array.Empty<byte>();
@@ -3627,7 +3628,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             try
             {
                 _logger.LogInformation("🚀 ROUTING: RouteOutgoingX25Packet called with packet length {Length}", packet.Length);
-                
+
                 // Extract called address from the packet
                 var calledAddress = ExtractCalledAddressFromX25Packet(packet);
                 if (string.IsNullOrEmpty(calledAddress))
@@ -3635,23 +3636,23 @@ using RetroIO.Protocols.X25.DeleteMe;
                     _logger.LogWarning("🚀 ROUTING: Cannot route X.25 packet - no called address found");
                     return;
                 }
-                
+
                 _logger.LogInformation("🚀 ROUTING: Extracted called address '{CalledAddress}' from X.25 packet", calledAddress);
-                
+
                 // Use centralized routing system
                 if (_config.Routing?.Enabled == true)
                 {
                     _logger.LogInformation("🚀 ROUTING: Centralized routing is enabled, checking {Count} routes", _config.Routing.RoutingTable.Count);
-                    
+
                     foreach (var route in _config.Routing.RoutingTable)
                     {
                         _logger.LogDebug("🚀 ROUTING: Checking route '{RouteName}' pattern '{Pattern}' (enabled: {Enabled})", route.Name, route.X121AddressPattern, route.Enabled);
-                        
+
                         if (route.Enabled && IsRouteMatch(route, calledAddress))
                         {
                             _logger.LogInformation("🚀 ROUTING: ✅ MATCH! Route '{RouteName}' matches address {CalledAddress} -> {RouteType}/{Destination}",
                                 route.Name, calledAddress, route.Type, route.Destination);
-                                
+
                             RoutePacketToDestination(packet, route);
                             return;
                         }
@@ -3665,25 +3666,25 @@ using RetroIO.Protocols.X25.DeleteMe;
                 {
                     _logger.LogWarning("🚀 ROUTING: Centralized routing is DISABLED");
                 }
-                
+
                 // No route found - check protocol services before LAPB fallback
                 _logger.LogWarning("🚀 ROUTING: No route found for address {CalledAddress} - checking protocol services", calledAddress);
-                
+
                 // Try to extract CUD and create a temporary call request to check protocol services
                 byte[] cud = ExtractCallUserDataFromX25Packet(packet);
                 var service = _protocolServices.FindServiceForCall(calledAddress, cud);
-                
+
                 if (service != null)
                 {
                     _logger.LogInformation("🚀 ROUTING: Found protocol service '{ServiceName}' for address {CalledAddress}", service.ServiceName, calledAddress);
-                    
+
                     // Create a proper call request for the service
                     var tempCallRequest = new X25CallRequest(calledAddress, _config.X25.LocalMachineId, null, cud);
-                    
+
                     // Handle via protocol service
                     ushort lcn = (ushort)(packet.LCN > 0 ? packet.LCN : 1);
                     bool handled = service.HandleIncomingCall(lcn, tempCallRequest.CalledAddress, tempCallRequest.CallingAddress, tempCallRequest.CallUserData ?? new byte[0], new byte[0]);
-                    
+
                     if (handled)
                     {
                         _logger.LogInformation("🚀 ROUTING: Protocol service successfully handled call to {CalledAddress}", calledAddress);
@@ -3698,7 +3699,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 {
                     _logger.LogWarning("🚀 ROUTING: No protocol service found for address {CalledAddress}", calledAddress);
                 }
-                
+
                 // Final fallback to local LAPB (for backward compatibility)
                 _logger.LogWarning("🚀 ROUTING: Using local LAPB fallback for address {CalledAddress}", calledAddress);
                 _logger.LogWarning("Routing: legacy local-LAPB send retired; configure a link (LinkManager) to reach this address");
@@ -3706,7 +3707,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error routing outgoing X.25 packet");
-                
+
                 // Fallback to local LAPB on error
                 _logger.LogWarning("Routing: legacy local-LAPB send retired; configure a link (LinkManager) to reach this address");
             }
@@ -3722,7 +3723,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 var data = packet.FullPacket;
                 if (data == null || data.Length < 4)
                     return "";
-                    
+
                 // Check if this is a Call Request packet (packet type 0x0B)
                 byte packetType = data[2];
                 if ((packetType & 0x1F) != 0x0B) // Call Request
@@ -3730,36 +3731,36 @@ using RetroIO.Protocols.X25.DeleteMe;
                     // Not a Call Request - no routing needed
                     return "";
                 }
-                
+
                 // Parse Call Request format: GFI+LCN(2) + Type(1) + Addresses...
                 int index = 3;
                 if (index >= data.Length) return "";
-                
+
                 // Address lengths field
                 byte addressLengths = data[index++];
                 byte calledAddressLength = (byte)((addressLengths >> 4) & 0x0F);
                 byte callingAddressLength = (byte)(addressLengths & 0x0F);
-                
+
                 if (calledAddressLength == 0) return "";
                 if (index + (calledAddressLength + 1) / 2 > data.Length) return "";
-                
+
                 // Extract called address (BCD encoded)
                 var calledAddress = "";
                 for (int i = 0; i < (calledAddressLength + 1) / 2; i++)
                 {
                     if (index + i >= data.Length) break;
-                    
+
                     byte bcdByte = data[index + i];
-                    
+
                     // First digit (upper nibble) - BCD digits are stored high nibble first
                     if (calledAddress.Length < calledAddressLength)
                         calledAddress += ((bcdByte >> 4) & 0x0F).ToString();
-                        
-                    // Second digit (lower nibble)  
+
+                    // Second digit (lower nibble)
                     if (calledAddress.Length < calledAddressLength)
                         calledAddress += (bcdByte & 0x0F).ToString();
                 }
-                
+
                 return calledAddress;
             }
             catch (Exception ex)
@@ -3779,7 +3780,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 var data = packet.FullPacket;
                 if (data == null || data.Length < 4)
                     return new byte[0];
-                    
+
                 // Check if this is a Call Request packet (packet type 0x0B)
                 byte packetType = data[2];
                 if ((packetType & 0x1F) != 0x0B) // Call Request
@@ -3787,33 +3788,33 @@ using RetroIO.Protocols.X25.DeleteMe;
                     // Not a Call Request - no CUD
                     return new byte[0];
                 }
-                
+
                 // Parse Call Request format: GFI+LCN(2) + Type(1) + AddressLengths(1) + Addresses + Facilities + CUD
                 int index = 3;
                 if (index >= data.Length) return new byte[0];
-                
+
                 // Address lengths field
                 byte addressLengths = data[index++];
                 byte calledAddressLength = (byte)((addressLengths >> 4) & 0x0F);
                 byte callingAddressLength = (byte)(addressLengths & 0x0F);
-                
+
                 // Skip addresses (BCD packed, 2 digits per byte)
                 int addressBytesToSkip = (calledAddressLength + callingAddressLength + 1) / 2;
                 index += addressBytesToSkip;
-                
+
                 if (index >= data.Length) return new byte[0];
-                
+
                 // Skip facilities (first byte is facilities length)
                 byte facilitiesLength = data[index++];
                 index += facilitiesLength;
-                
+
                 if (index >= data.Length) return new byte[0];
-                
+
                 // Remaining bytes are Call User Data
                 int cudLength = data.Length - index;
                 byte[] cud = new byte[cudLength];
                 Array.Copy(data, index, cud, 0, cudLength);
-                
+
                 _logger.LogDebug("Extracted CUD: {CUD} bytes from X.25 packet", cudLength);
                 return cud;
             }
@@ -3850,7 +3851,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 case RouteType.Local:
                     _logger.LogDebug("Routing to local destination: {Destination}", route.Destination);
-                    
+
                     // Use dynamic protocol service registry instead of hardcoded handlers
                     if (packet.PacketType == X25PacketType.CallRequest)
                     {
@@ -3858,36 +3859,36 @@ using RetroIO.Protocols.X25.DeleteMe;
                         {
                             // Parse the call request packet using constructor
                             var callRequest = new X25CallRequest(packet.FullPacket);
-                            
-                            _logger.LogInformation("Processing local Call Request for address {CalledAddress} on LCN {LCN}", 
+
+                            _logger.LogInformation("Processing local Call Request for address {CalledAddress} on LCN {LCN}",
                                 callRequest.CalledAddress, packet.LCN);
-                            
+
                             // Find appropriate protocol service based on address and CUD
                             var service = _protocolServices.FindServiceForCall(callRequest.CalledAddress, callRequest.CallUserData);
-                            
+
                             if (service != null)
                             {
-                                _logger.LogInformation("Found protocol service '{ServiceName}' for address {CalledAddress}", 
+                                _logger.LogInformation("Found protocol service '{ServiceName}' for address {CalledAddress}",
                                     service.ServiceName, callRequest.CalledAddress);
-                                
+
                                 // Handle the call using the protocol service
-                                var success = service.HandleIncomingCall(packet.LCN, callRequest.CalledAddress, 
+                                var success = service.HandleIncomingCall(packet.LCN, callRequest.CalledAddress,
                                     callRequest.CallingAddress, callRequest.CallUserData, callRequest.Facilities);
-                                
+
                                 if (success)
                                 {
-                                    _logger.LogInformation("✅ Local call setup successful for address {CalledAddress} on LCN {LCN} via {ServiceName}", 
+                                    _logger.LogInformation("✅ Local call setup successful for address {CalledAddress} on LCN {LCN} via {ServiceName}",
                                         callRequest.CalledAddress, packet.LCN, service.ServiceName);
                                 }
                                 else
                                 {
-                                    _logger.LogWarning("❌ Local call setup failed for address {CalledAddress} on LCN {LCN} via {ServiceName}", 
+                                    _logger.LogWarning("❌ Local call setup failed for address {CalledAddress} on LCN {LCN} via {ServiceName}",
                                         callRequest.CalledAddress, packet.LCN, service.ServiceName);
                                 }
                             }
                             else
                             {
-                                _logger.LogWarning("No protocol service found for address {CalledAddress} with CUD pattern", 
+                                _logger.LogWarning("No protocol service found for address {CalledAddress} with CUD pattern",
                                     callRequest.CalledAddress);
                             }
                         }
@@ -3900,17 +3901,17 @@ using RetroIO.Protocols.X25.DeleteMe;
                     {
                         // For non-Call Request packets (Data, etc.), let them be handled normally
                         // The protocol services will receive them via the existing event system
-                        _logger.LogDebug("Local route: {PacketType} packet on LCN {LCN} will be handled via existing protocol system", 
+                        _logger.LogDebug("Local route: {PacketType} packet on LCN {LCN} will be handled via existing protocol system",
                             packet.PacketType, packet.LCN);
-                        
+
                         // Don't route these packets - let them be processed normally by the protocol stack
                         // This allows Data packets to reach bound modules via the existing LCN binding system
                     }
                     break;
-                    
+
                 case RouteType.Interface:
                     _logger.LogDebug("Routing to interface: {Destination}", route.Destination);
-                    
+
                     // Check if it's a serial interface
                     SerialInterfaceConfig? serialInterface = null;
                     if (_config.Routing?.SerialInterfaces != null)
@@ -3928,9 +3929,9 @@ using RetroIO.Protocols.X25.DeleteMe;
                     {
                         if (serialInterface.Enabled)
                         {
-                            _logger.LogInformation("Routing packet to Serial interface {InterfaceName} ({Port})", 
+                            _logger.LogInformation("Routing packet to Serial interface {InterfaceName} ({Port})",
                                 serialInterface.Name, serialInterface.PortName);
-                            
+
                             // Serial routing is handled by the serial link (LinkManager); legacy LAPB retired.
                             _logger.LogWarning("Routing: legacy serial-LAPB send retired; use the serial link for {InterfaceName}", serialInterface.Name);
                         }
@@ -3940,7 +3941,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                         }
                         return;
                     }
-                    
+
                     // Check if it's an XOT interface
                     XotInterfaceConfig? xotInterface = null;
                     if (_config.Routing?.XotInterfaces != null)
@@ -3958,9 +3959,9 @@ using RetroIO.Protocols.X25.DeleteMe;
                     {
                         if (xotInterface.Enabled)
                         {
-                            _logger.LogInformation("Routing packet to XOT interface {InterfaceName} ({RemoteIP}:{Port})", 
+                            _logger.LogInformation("Routing packet to XOT interface {InterfaceName} ({RemoteIP}:{Port})",
                                 xotInterface.Name, xotInterface.RemoteIPAddress, xotInterface.RemotePort);
-                            
+
                             // Route to XOT interface
                             // TODO: Implement XOT routing when XOT layer is ready
                             _logger.LogWarning("XOT routing not yet implemented");
@@ -3971,16 +3972,16 @@ using RetroIO.Protocols.X25.DeleteMe;
                         }
                         return;
                     }
-                    
+
                     _logger.LogError("Interface {InterfaceName} not found in configuration", route.Destination);
                     break;
-                    
+
                 case RouteType.Gateway:
                     _logger.LogDebug("Routing via gateway: {Destination}", route.Destination);
                     // TODO: Implement gateway routing
                     _logger.LogWarning("Gateway routing not yet implemented");
                     break;
-                    
+
                 default:
                     _logger.LogError("Unknown route type: {RouteType}", route.Type);
                     break;
@@ -3995,7 +3996,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             AddToHistory(item, null, RelationshipType.None);
         }
-        
+
         private void AddToHistory(HistoryItem item, HistoryItem? relatedItem, RelationshipType relationshipType)
         {
             if (item == null)
@@ -4013,13 +4014,13 @@ using RetroIO.Protocols.X25.DeleteMe;
                 {
                     item.Id = GetNextFrameId();
                 }
-                
+
                 // Set relationship if provided
                 if (relatedItem != null)
                 {
                     item.RelatedItem = relatedItem;
                     item.RelationshipType = relationshipType;
-                    
+
                     // Set reverse relationship
                     if (relationshipType == RelationshipType.Encapsulates)
                     {
@@ -4031,11 +4032,11 @@ using RetroIO.Protocols.X25.DeleteMe;
                         relatedItem.RelatedItem = item;
                         relatedItem.RelationshipType = RelationshipType.Encapsulates;
                     }
-                    
+
                     // Apply two-line display business logic
                     ApplyTwoLineDisplayLogic(item, relatedItem);
                 }
-                
+
                 // Add to ring buffer
                 _historyBuffer.Enqueue(item);
 
@@ -4052,7 +4053,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     {
                         // Store this X.25 item for potential LAPB linking
                         _recentX25Items[item.Id] = x25Item;
-                        
+
                         // Clean up old entries (keep last 10)
                         while (_recentX25Items.Count > 10)
                         {
@@ -4064,12 +4065,12 @@ using RetroIO.Protocols.X25.DeleteMe;
 
                 // Fire event
                 HistoryItemAdded?.Invoke(this, item);
-                
+
                 // Trigger GUI display update for real-time updates
                 var relationship = GetPacketRelationship(item.Id);
                 bool isNewDerivedPacket = relationship?.IsPrimary == false;
                 TriggerDisplayUpdate(item.Id, isNewDerivedPacket);
-                
+
                 // Log history item added
                 _logger.LogHistoryItemAdded(item);
             }
@@ -4087,7 +4088,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         }
 
         // ===== UNIFIED PACKET SYSTEM METHODS =====
-        
+
         /// <summary>
         /// Create or update a unified packet - single ID with layer enrichment
         /// </summary>
@@ -4104,7 +4105,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 {
                     packetId = GetNextFrameId();
                 }
-                
+
                 // Check if packet already exists
                 if (_unifiedPackets.TryGetValue(packetId, out var existingPacket))
                 {
@@ -4112,7 +4113,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     existingPacket.UpdateLayer(originLayer);
                     return packetId;
                 }
-                
+
                 // Create new unified packet
                 var packetInfo = new UnifiedPacketInfo
                 {
@@ -4121,16 +4122,16 @@ using RetroIO.Protocols.X25.DeleteMe;
                     OriginLayer = originLayer,
                     HighestLayer = originLayer
                 };
-                
+
                 packetInfo.LayersVisited.Add(originLayer);
-                
+
                 var unifiedItem = new UnifiedHistoryItem(packetInfo);
                 _unifiedPackets[packetId] = unifiedItem;
-                
+
                 return packetId;
             }
         }
-        
+
         /// <summary>
         /// Enrich a unified packet with layer-specific information
         /// </summary>
@@ -4146,10 +4147,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                     // Packet doesn't exist yet - this shouldn't happen in normal flow
                     return;
                 }
-                
+
                 // Update layer
                 unifiedItem.UpdateLayer(layerType);
-                
+
                 // Add layer-specific information
                 switch (layerType)
                 {
@@ -4159,14 +4160,14 @@ using RetroIO.Protocols.X25.DeleteMe;
                             unifiedItem.PacketInfo.HDLC = hdlcInfo;
                         }
                         break;
-                        
+
                     case LayerType.LAPB:
                         if (layerInfo is LapbLayerInfo lapbInfo)
                         {
                             unifiedItem.PacketInfo.LAPB = lapbInfo;
                         }
                         break;
-                        
+
                     case LayerType.X25:
                         if (layerInfo is X25LayerInfo x25Info)
                         {
@@ -4176,7 +4177,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 }
             }
         }
-        
+
         /// <summary>
         /// Mark a unified packet as having an error
         /// </summary>
@@ -4193,7 +4194,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 }
             }
         }
-        
+
         /// <summary>
         /// Get unified packets for display (replacement for GetPacketsForDisplay)
         /// </summary>
@@ -4203,13 +4204,13 @@ using RetroIO.Protocols.X25.DeleteMe;
             lock (_unifiedPacketsLock)
             {
                 var displayItems = new List<PacketDisplayItem>();
-                
+
                 foreach (var unifiedItem in _unifiedPackets.Values)
                 {
                     var displayItem = new PacketDisplayItem(unifiedItem, this);
                     displayItems.Add(displayItem);
                 }
-                
+
                 // Sort manually by Packet.Id
                 var sortedItems = new List<PacketDisplayItem>(displayItems);
                 for (int i = 0; i < sortedItems.Count - 1; i++)
@@ -4227,7 +4228,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 return sortedItems;
             }
         }
-        
+
         /// <summary>
         /// Apply two-line display business logic to related history items
         /// Determines which item is main line vs secondary line based on direction and layer type
@@ -4237,16 +4238,16 @@ using RetroIO.Protocols.X25.DeleteMe;
             // Business logic for two-line display:
             // TX direction: X.25 is primary (business logic), LAPB is secondary (transport)
             // RX direction: LAPB is primary (received first), X.25 is secondary (extracted content)
-            
+
             bool currentIsX25 = currentItem.Layer == LayerType.X25;
             bool relatedIsX25 = relatedItem.Layer == LayerType.X25;
             bool currentIsTX = currentItem.Direction == Direction.TX;
             bool relatedIsTX = relatedItem.Direction == Direction.TX;
-            
+
             // Determine primary item based on direction and protocol layer
             HistoryItem primaryItem;
             HistoryItem secondaryItem;
-            
+
             if (currentIsTX)
             {
                 // TX: X.25 is primary (business logic layer)
@@ -4275,19 +4276,19 @@ using RetroIO.Protocols.X25.DeleteMe;
                     secondaryItem = currentItem;
                 }
             }
-            
+
             // Set display flags
             primaryItem.IsMainLine = true;
             primaryItem.IsSecondaryLine = false;
-            
+
             secondaryItem.IsMainLine = false;
             secondaryItem.IsSecondaryLine = true;
-            
+
             _logger.LogDebug("Two-line display: {PrimaryLayer}[{PrimaryDir}] #{PrimaryId} is PRIMARY, {SecondaryLayer}[{SecondaryDir}] #{SecondaryId} is SECONDARY",
                             primaryItem.Layer, primaryItem.Direction, primaryItem.Id,
                             secondaryItem.Layer, secondaryItem.Direction, secondaryItem.Id);
         }
-        
+
         /// <summary>
         /// Compare two byte arrays for equality
         /// </summary>
@@ -4296,7 +4297,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             if (a == null && b == null) return true;
             if (a == null || b == null) return false;
             if (a.Length != b.Length) return false;
-            
+
             for (int i = 0; i < a.Length; i++)
             {
                 if (a[i] != b[i]) return false;
@@ -4311,7 +4312,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             if (_config.Timers?.CentralTimerManagement != true)
                 return;
-                
+
             try
             {
                 StartTimer("LAPB_T1", _config.Lapb.T1Timeout, () =>
@@ -4335,7 +4336,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             if (_config.Timers?.CentralTimerManagement != true)
                 return;
-                
+
             try
             {
                 StartTimer("LAPB_T2", _config.Lapb.T2Timeout, () =>
@@ -4359,14 +4360,14 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             if (_config.Timers?.CentralTimerManagement != true)
                 return;
-                
-            // ITU-T X.25: T3 timer disabled when timeout = 0 
+
+            // ITU-T X.25: T3 timer disabled when timeout = 0
             if (_config.Lapb.T3Timeout.TotalMilliseconds <= 0)
             {
                 _logger.LogDebug("[Timers] LAPB: T3 timer disabled (timeout=0) - no idle supervision");
                 return;
             }
-                
+
             try
             {
                 StartTimer("LAPB_T3", _config.Lapb.T3Timeout, () =>
@@ -4427,7 +4428,7 @@ using RetroIO.Protocols.X25.DeleteMe;
 
                 // Update X.25 active virtual circuits count
                 _currentStats.X25.ActiveVirtualCircuits = _lcnBindings.Count;
-                
+
                 // Update X.25 state (simplified - in real implementation this would come from X.25 layer)
                 _currentStats.X25.CurrentState = _lcnBindings.Count > 0 ? "ACTIVE" : "IDLE";
 
@@ -4445,7 +4446,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 // First, detect protocol from Call User Data according to X.25 spec
                 var protocolInfo = _protocolDetection.GetProtocolInfo(callRequest.CallUserData, callRequest.CalledAddress);
-                _logger.LogInformation("Protocol detected for {CalledAddress}: {Protocol} ({Description})", 
+                _logger.LogInformation("Protocol detected for {CalledAddress}: {Protocol} ({Description})",
                     callRequest.CalledAddress, protocolInfo.Protocol, protocolInfo.Description);
 
                 // Check if this is a local call to our machine ID
@@ -4454,47 +4455,47 @@ using RetroIO.Protocols.X25.DeleteMe;
                 if (isLocalCall)
                 {
                     // Use dynamic protocol service registry for local calls
-                    _logger.LogInformation("Processing local call to machine ID {CalledAddress}, protocol: {Protocol}", 
+                    _logger.LogInformation("Processing local call to machine ID {CalledAddress}, protocol: {Protocol}",
                         callRequest.CalledAddress, protocolInfo.Protocol);
-                    
+
                     // Find appropriate protocol service based on address and CUD
                     var service = _protocolServices.FindServiceForCall(callRequest.CalledAddress, callRequest.CallUserData);
-                    
+
                     if (service != null)
                     {
-                        _logger.LogInformation("Found protocol service '{ServiceName}' for local call to {CalledAddress}", 
+                        _logger.LogInformation("Found protocol service '{ServiceName}' for local call to {CalledAddress}",
                             service.ServiceName, callRequest.CalledAddress);
-                        
+
                         try
                         {
                             // Handle the call using the protocol service
-                            var success = service.HandleIncomingCall(lcn, callRequest.CalledAddress, 
+                            var success = service.HandleIncomingCall(lcn, callRequest.CalledAddress,
                                 callRequest.CallingAddress, callRequest.CallUserData, callRequest.Facilities);
-                            
+
                             if (success)
                             {
-                                _logger.LogInformation("✅ Local call setup successful via {ServiceName} for address {CalledAddress} on LCN {LCN}", 
+                                _logger.LogInformation("✅ Local call setup successful via {ServiceName} for address {CalledAddress} on LCN {LCN}",
                                     service.ServiceName, callRequest.CalledAddress, lcn);
-                                    
+
                                 // Return the associated module if available
-                                return _registeredModules.ContainsKey(service.ServiceName + "Server") ? 
+                                return _registeredModules.ContainsKey(service.ServiceName + "Server") ?
                                     _registeredModules[service.ServiceName + "Server"] : null;
                             }
                             else
                             {
-                                _logger.LogWarning("❌ Local call setup failed via {ServiceName} for address {CalledAddress} on LCN {LCN}", 
+                                _logger.LogWarning("❌ Local call setup failed via {ServiceName} for address {CalledAddress} on LCN {LCN}",
                                     service.ServiceName, callRequest.CalledAddress, lcn);
                             }
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Error handling local call via {ServiceName} for address {CalledAddress} on LCN {LCN}", 
+                            _logger.LogError(ex, "Error handling local call via {ServiceName} for address {CalledAddress} on LCN {LCN}",
                                 service.ServiceName, callRequest.CalledAddress, lcn);
                         }
                     }
                     else
                     {
-                        _logger.LogWarning("No protocol service found for local call to {CalledAddress} with protocol {Protocol}", 
+                        _logger.LogWarning("No protocol service found for local call to {CalledAddress} with protocol {Protocol}",
                             callRequest.CalledAddress, protocolInfo.Protocol);
                     }
                 }
@@ -4512,7 +4513,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                                 if (regex.IsMatch(callRequest.CalledAddress))
                                 {
                                     _logger.LogInformation("Found address-based route '{RouteName}' for address {CalledAddress}", route.Name, callRequest.CalledAddress);
-                                    
+
                                     // For LocalTAD route, return the registered TAD server module
                                     if (route.Destination == "LocalTAD" && _registeredModules.ContainsKey("TadServer"))
                                     {
@@ -4528,7 +4529,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     }
                 }
 
-                _logger.LogWarning("No route found for call request to {CalledAddress} with protocol {Protocol}", 
+                _logger.LogWarning("No route found for call request to {CalledAddress} with protocol {Protocol}",
                     callRequest.CalledAddress, protocolInfo.Protocol);
                 return null;
             }
@@ -4565,7 +4566,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             // NOTE: Events are already fired by X25Layer - no need to duplicate here
             // to prevent dual event firing creating multiple history entries
-            
+
             lock (_routingLock)
             {
                 if (_lcnBindings.TryGetValue(lcn, out var module))
@@ -4593,7 +4594,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 }
             }
         }
-        
+
 
 
 
@@ -4685,17 +4686,17 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 eventArgs.PacketId = GetNextFrameId();
             }
-            
+
             var direction = eventArgs.Direction == PacketDirection.Transmit ? Direction.TX : Direction.RX;
-            
+
             var x25Item = new X25HistoryItem(direction, eventArgs.Packet, eventArgs.PacketId);
-            
+
             // Use enriched logging for all X25 events (optional)
             if (logEvent)
             {
                 _logger.LogX25Packet(eventArgs, eventType);
             }
-            
+
             return x25Item;
         }
 
@@ -4764,14 +4765,14 @@ using RetroIO.Protocols.X25.DeleteMe;
 
                 _disposed = true;
                 _logger.LogInformation("[ProtocolRuntime] Protocol runtime stopped successfully");
-                
+
                 StateChanged?.Invoke(this, new RuntimeStateChangedEventArgs(
-                    RuntimeState.Running, 
-                    RuntimeState.Stopped, 
+                    RuntimeState.Running,
+                    RuntimeState.Stopped,
                     "Runtime stopped"
                 ));
             }
-            
+
             // Dispose timer manager
             _timerManager.Dispose();
 
@@ -4850,7 +4851,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         public List<PacketDisplayItem> GetPacketsForDisplay()
         {
             var displayItems = new List<PacketDisplayItem>();
-            
+
             lock (_historyLock)
             {
                 foreach (var packet in _historyBuffer)
@@ -4860,7 +4861,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     displayItems.Add(new PacketDisplayItem(packet, this));
                 }
             }
-            
+
             // Sort to keep derived packets immediately after their primary packets
             return SortPacketsForConsecutiveDisplay(displayItems);
         }
@@ -4873,7 +4874,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         {
             var result = new List<PacketDisplayItem>();
             var processed = new HashSet<long>();
-            
+
             // Sort items manually by Packet.Id
             var sortedItems = new List<PacketDisplayItem>(items);
             for (int i = 0; i < sortedItems.Count - 1; i++)
@@ -4888,17 +4889,17 @@ using RetroIO.Protocols.X25.DeleteMe;
                     }
                 }
             }
-            
+
             foreach (var item in sortedItems)
             {
                 if (processed.Contains(item.Packet.Id))
                     continue;
-                    
+
                 if (item.IsPrimary()) // Use original dictionary
                 {
                     result.Add(item);
                     processed.Add(item.Packet.Id);
-                    
+
                     // Find all derived packets manually
                     var derived = new List<PacketDisplayItem>();
                     foreach (var d in items)
@@ -4908,7 +4909,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                             derived.Add(d);
                         }
                     }
-                    
+
                     // Sort derived items by Packet.Id
                     for (int i = 0; i < derived.Count - 1; i++)
                     {
@@ -4922,7 +4923,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                             }
                         }
                     }
-                        
+
                     foreach (var derivedItem in derived)
                     {
                         if (!processed.Contains(derivedItem.Packet.Id))
@@ -4933,7 +4934,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     }
                 }
             }
-            
+
             // Add any remaining items that weren't processed (orphaned derived packets)
             foreach (var item in items)
             {
@@ -4942,7 +4943,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                     result.Add(item);
                 }
             }
-            
+
             return result;
         }
 
@@ -4963,7 +4964,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             bool isTerminal = relationship?.IsTerminal ?? false;
             bool hasError = relationship?.HasProcessingError ?? false;
             string? errorReason = relationship?.ErrorReason;
-            
+
             DisplayUpdateNeeded?.Invoke(this, new PacketDisplayUpdateEventArgs
             {
                 NewPacketId = newPacketId,
@@ -4976,7 +4977,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         }
 
         #endregion
-        
+
         #region LAPB Error Detection Helper Methods
 
         /// <summary>
@@ -4995,7 +4996,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 return "LAPB_Validation_Exception";
             }
         }
-        
+
         /// <summary>
         /// Handles LAPB frame relationship tracking (extracted from original OnLapbFrameReceived)
         /// </summary>
@@ -5004,15 +5005,15 @@ using RetroIO.Protocols.X25.DeleteMe;
             // Don't create relationships for error packets
             if (!string.IsNullOrEmpty(errorReason))
             {
-                AddPacketWithChainTracking(e.FrameId, "LAPB", 
-                    e.Direction == FrameDirection.Receive ? Direction.RX : Direction.TX, 
+                AddPacketWithChainTracking(e.FrameId, "LAPB",
+                    e.Direction == FrameDirection.Receive ? Direction.RX : Direction.TX,
                     null, errorReason);
                 _logger.LogDebug("🔴 ERROR: LAPB frame #{FrameId} registered with error: {ErrorReason}", e.FrameId, errorReason);
                 return;
             }
-            
+
             // Use the provided lapbItem for _lastLapbIFrame tracking
-            
+
             // Simple dictionary approach: check if LAPB frame is derived from HDLC or primary for X.25
             if (e.FrameType == LapbFrameType.Information && e.Direction == FrameDirection.Receive && e.Information.Length > 0)
             {
@@ -5062,15 +5063,15 @@ using RetroIO.Protocols.X25.DeleteMe;
                             _recentLapbFrames.Remove(oldestKey);
                     }
                 }
-                
+
                 // Check if derived from HDLC primary packet
                 var sourceHdlcPacketId = FindPrimaryPacketNeedingDerivation("HDLC", Direction.RX);
-                
+
                 if (sourceHdlcPacketId.HasValue)
                 {
                     // LAPB derived from HDLC frame
                     AddPacketWithChainTracking(e.FrameId, "LAPB", Direction.RX, sourceHdlcPacketId.Value);
-                    _logger.LogDebug("🔗 HDLC→LAPB: LAPB I-frame #{LapbId} derived from HDLC primary #{HdlcId}", 
+                    _logger.LogDebug("🔗 HDLC→LAPB: LAPB I-frame #{LapbId} derived from HDLC primary #{HdlcId}",
                         e.FrameId, sourceHdlcPacketId.Value);
                 }
                 else
@@ -5083,26 +5084,26 @@ using RetroIO.Protocols.X25.DeleteMe;
             else if (e.FrameType != LapbFrameType.Information)
             {
                 // Non-I frames (S-frames, U-frames) can also be derived from HDLC
-                var sourceHdlcPacketId = FindPrimaryPacketNeedingDerivation("HDLC", 
+                var sourceHdlcPacketId = FindPrimaryPacketNeedingDerivation("HDLC",
                     e.Direction == FrameDirection.Receive ? Direction.RX : Direction.TX);
-                
+
                 if (sourceHdlcPacketId.HasValue)
                 {
-                    AddPacketWithChainTracking(e.FrameId, "LAPB", 
+                    AddPacketWithChainTracking(e.FrameId, "LAPB",
                         e.Direction == FrameDirection.Receive ? Direction.RX : Direction.TX, sourceHdlcPacketId.Value);
-                    _logger.LogDebug("🔗 HDLC→LAPB: LAPB {FrameType} #{LapbId} derived from HDLC #{HdlcId}", 
+                    _logger.LogDebug("🔗 HDLC→LAPB: LAPB {FrameType} #{LapbId} derived from HDLC #{HdlcId}",
                         e.FrameType, e.FrameId, sourceHdlcPacketId.Value);
                 }
                 else
                 {
-                    AddPacketWithChainTracking(e.FrameId, "LAPB", 
+                    AddPacketWithChainTracking(e.FrameId, "LAPB",
                         e.Direction == FrameDirection.Receive ? Direction.RX : Direction.TX);
                 }
             }
         }
-        
+
         #endregion
-        
+
         #region X25 Error Detection Helper Methods
 
         /// <summary>
@@ -5121,7 +5122,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 return "X25_Validation_Exception";
             }
         }
-        
+
         /// <summary>
         /// Handles X25 packet relationship tracking (extracted from original OnX25PacketReceived)
         /// </summary>
@@ -5130,13 +5131,13 @@ using RetroIO.Protocols.X25.DeleteMe;
             // Don't create relationships for error packets
             if (!string.IsNullOrEmpty(errorReason))
             {
-                AddPacketWithChainTracking(e.PacketId, "X25", 
-                    e.Direction == PacketDirection.Receive ? Direction.RX : Direction.TX, 
+                AddPacketWithChainTracking(e.PacketId, "X25",
+                    e.Direction == PacketDirection.Receive ? Direction.RX : Direction.TX,
                     null, errorReason);
                 _logger.LogDebug("🔴 ERROR: X25 packet #{PacketId} registered with error: {ErrorReason}", e.PacketId, errorReason);
                 return;
             }
-            
+
             // Original relationship logic (extracted from the method)
             // Look for matching LAPB frame for RX direction
             LapbHistoryItem? relatedLapbItem = null;
@@ -5144,13 +5145,13 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 lock (_x25LinkingLock)
                 {
-                    _logger.LogDebug("🔍 X.25 Packet RX: Looking for LAPB match. Data len: {DataLen}, Available LAPB frames: {LapbCount}", 
+                    _logger.LogDebug("🔍 X.25 Packet RX: Looking for LAPB match. Data len: {DataLen}, Available LAPB frames: {LapbCount}",
                         e.Packet.FullPacket.Length, _recentLapbFrames.Count);
-                        
+
                     var frameKey = Convert.ToBase64String(e.Packet.FullPacket);
                     if (_recentLapbFrames.TryGetValue(frameKey, out relatedLapbItem))
                     {
-                        _logger.LogInformation("🔗 FOUND MATCH: X.25 packet #{X25Id} matches LAPB #{LapbId}", 
+                        _logger.LogInformation("🔗 FOUND MATCH: X.25 packet #{X25Id} matches LAPB #{LapbId}",
                             e.PacketId, relatedLapbItem.Id);
                         // Remove from tracking since we found the match
                         _recentLapbFrames.Remove(frameKey);
@@ -5164,7 +5165,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                         {
                             keyList.Add(key.Substring(0, Math.Min(16, key.Length)) + "...");
                         }
-                        _logger.LogDebug("  Available LAPB frame keys: [{Keys}]", 
+                        _logger.LogDebug("  Available LAPB frame keys: [{Keys}]",
                             string.Join(", ", keyList));
                     }
                 }
@@ -5189,7 +5190,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 if (e.Direction == PacketDirection.Receive)
                 {
                     _currentStats.X25.PacketsReceived++;
-                    
+
                     // Track specific packet types
                     switch (e.Packet.PacketType)
                     {
@@ -5204,7 +5205,7 @@ using RetroIO.Protocols.X25.DeleteMe;
                 else
                 {
                     _currentStats.X25.PacketsTransmitted++;
-                    
+
                     // Track specific packet types
                     switch (e.Packet.PacketType)
                     {
@@ -5216,12 +5217,12 @@ using RetroIO.Protocols.X25.DeleteMe;
                             break;
                     }
                 }
-                
+
                 // Fire statistics updated event immediately
                 StatisticsUpdated?.Invoke(this, _currentStats.Clone());
             }
         }
-        
+
         #endregion
     }
 }
