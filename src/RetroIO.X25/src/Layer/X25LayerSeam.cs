@@ -162,6 +162,26 @@ namespace RetroIO.Protocols.X25.PacketLayer
     public delegate void X25InterruptConfirmed(X25Layer layer, ushort lci);
 
     /// <summary>
+    /// Raised once per complete packet sequence (X.25 4.3.5): the user data of every category A
+    /// packet (full, M=1, D=0) and the category B packet that ends the sequence, joined in order.
+    /// A single packet with M=0 is a sequence of one. <see cref="X25DataReceived"/> still fires for
+    /// every packet; an application that wants messages listens here instead.
+    /// </summary>
+    /// <param name="layer">
+    /// The layer.
+    /// </param>
+    /// <param name="lci">
+    /// The logical channel.
+    /// </param>
+    /// <param name="data">
+    /// The reassembled user data.
+    /// </param>
+    /// <param name="qBit">
+    /// The qualifier bit, the same in every packet of the sequence (4.3.3).
+    /// </param>
+    public delegate void X25MessageReceived(X25Layer layer, ushort lci, byte[] data, bool qBit);
+
+    /// <summary>
     /// The down interface the X.25 layer calls to hand fully-built packet bytes to the link below for
     /// framing and transmission. This is the "interfaces down" half of the layer seam.
     /// </summary>

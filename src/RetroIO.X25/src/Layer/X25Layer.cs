@@ -230,16 +230,19 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 }.Encode();
             }
 
-            // Send first: if the Call Accepted does not leave, the call is still merely incoming and
-            // the application may try again or clear it.
-            if (!Send(X25PacketBuilder.CreateCallAccepted(lci, facilities)))
-            {
-                return false;
-            }
-
+            // The state moves before the packet goes out, and back if it does not: the peer's first
+            // data packet can arrive synchronously inside Send (loopback sink) and must find the
+            // circuit in data transfer, not still incoming. If the Call Accepted is refused the call
+            // is merely incoming again and the application may try again or clear it.
             vc.State = X25VcState.DataTransfer;
             vc.ResetFlow();
             vc.TimerExpiryMs = 0;
+            if (!Send(X25PacketBuilder.CreateCallAccepted(lci, facilities)))
+            {
+                vc.State = X25VcState.CallIncoming;
+                return false;
+            }
+
             return true;
         }
 
@@ -281,14 +284,136 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
-            if (vc.PeerBusy)
+            // X.25 7.3.1.1: the negotiated packet size is the maximum data field. A longer block is a
+            // message, not a packet: SendMessage segments it (4.3.4).
+            if (data.Length > vc.PacketSizeOut)
             {
                 return false;
             }
 
-            // X.25 7.3.1.1: the negotiated packet size is the maximum data field. Longer sends are
-            // refused here until M-bit segmentation splits them (plan B11).
-            if (data.Length > vc.PacketSizeOut)
+            // A message accepted earlier is still going out; a packet sent now would overtake its
+            // tail and break the complete packet sequence (4.3.5). Queue behind it instead.
+            if (vc.PendingSegments.Count > 0)
+            {
+                return false;
+            }
+
+            return SendOnePacket(vc, data, mBit, qBit, dBit);
+        }
+
+        /// <summary>
+        /// Sends user data of any length as one complete packet sequence (X.25 4.3.5): full packets
+        /// with the M bit set, then the remainder with M clear. What the window does not let out now
+        /// is queued on the circuit and sent as acknowledgements arrive.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel, in data transfer.
+        /// </param>
+        /// <param name="data">
+        /// The message. Empty is refused.
+        /// </param>
+        /// <param name="qBit">
+        /// Qualifier bit, applied to every packet of the sequence (4.3.3).
+        /// </param>
+        /// <param name="dBit">
+        /// Delivery confirmation bit. Carried in every packet, not honoured: this engine's P(R) is a
+        /// local window update only (decided 2026-09-06; X.25 4.4.1.4 makes the D-bit procedure
+        /// optional for a network to support).
+        /// </param>
+        /// <returns>
+        /// True when the whole message has been accepted - sent or queued. False when the channel is
+        /// not in data transfer, the message is empty, or the first packet could not be sent and
+        /// nothing was queued (a refused link).
+        /// </returns>
+        /// <remarks>
+        /// The last packet of a message shorter than a multiple of the packet size is a partial
+        /// packet with M=0 - a category B packet - so the receiver knows the sequence ended. A
+        /// message that is an exact multiple ends with a full packet with M=0, also category B.
+        /// </remarks>
+        public bool SendMessage(ushort lci, byte[] data, bool qBit = false, bool dBit = false)
+        {
+            if (data == null || data.Length == 0)
+            {
+                return false;
+            }
+
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                return false;
+            }
+
+            if (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady)
+            {
+                return false;
+            }
+
+            int size = vc.PacketSizeOut;
+            int offset = 0;
+            while (offset < data.Length)
+            {
+                int take = data.Length - offset < size ? data.Length - offset : size;
+                bool more = offset + take < data.Length;
+                byte[] segment = new byte[take];
+                Array.Copy(data, offset, segment, 0, take);
+                vc.PendingSegments.Enqueue(new X25PendingSegment(segment, more, qBit, dBit));
+                offset += take;
+            }
+
+            DrainPending(vc);
+            return true;
+        }
+
+        /// <summary>
+        /// Sends as many queued segments as the window and the peer's busy condition allow, in order.
+        /// Called after every acknowledgement and RR.
+        /// </summary>
+        private void DrainPending(X25Vc vc)
+        {
+            // With a loopback sink the peer's RR for a segment arrives synchronously, inside
+            // SendOnePacket, and lands here again through OnFlowControl. A nested drain would send
+            // the next segment and dequeue it, and the outer loop would then dequeue a segment it
+            // never sent. So only the outermost call drains; the inner one returns and the outer
+            // loop picks up the newly opened window on its next turn.
+            if (vc.Draining)
+            {
+                return;
+            }
+
+            vc.Draining = true;
+            try
+            {
+                while (vc.PendingSegments.Count > 0)
+                {
+                    if (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady)
+                    {
+                        return;
+                    }
+
+                    X25PendingSegment next = vc.PendingSegments.Peek();
+                    if (!SendOnePacket(vc, next.Data, next.MBit, next.QBit, next.DBit))
+                    {
+                        return;
+                    }
+
+                    // A reset that arrived inside the send has already emptied the queue.
+                    if (vc.PendingSegments.Count > 0)
+                    {
+                        vc.PendingSegments.Dequeue();
+                    }
+                }
+            }
+            finally
+            {
+                vc.Draining = false;
+            }
+        }
+
+        /// <summary>
+        /// The single-packet send: window, busy condition, and P(S) spent only when the packet left.
+        /// </summary>
+        private bool SendOnePacket(X25Vc vc, byte[] data, bool mBit, bool qBit, bool dBit)
+        {
+            if (vc.PeerBusy)
             {
                 return false;
             }
@@ -300,15 +425,20 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
-            // P(S) is spent only when the packet actually leaves. A refused send that still advanced
-            // P(S) would leave a hole the peer must treat as a local procedure error (X.25 4.4.1.3).
+            // P(S) is spent only when the packet actually leaves - a refused send that still advanced
+            // P(S) would leave a hole the peer must treat as a local procedure error (X.25 4.4.1.3) -
+            // but it must be spent BEFORE the sink is called, not after: with a loopback sink the
+            // peer's RR for this very packet arrives synchronously inside Send, and an RR with
+            // P(R) = ps + 1 against a SendSeq still equal to ps is an invalid P(R). So advance, send,
+            // and roll back on refusal.
             byte ps = vc.SendSeq;
-            if (!Send(X25PacketBuilder.CreateDataPacket(lci, ps, vc.RecvSeq, data, mBit, qBit, dBit)))
+            vc.SendSeq = (byte)((ps + 1) & 0x07);
+            if (!Send(X25PacketBuilder.CreateDataPacket(vc.Lci, ps, vc.RecvSeq, data, mBit, qBit, dBit)))
             {
+                vc.SendSeq = ps;
                 return false;
             }
 
-            vc.SendSeq = (byte)((ps + 1) & 0x07);
             return true;
         }
 
@@ -404,15 +534,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             // The flag follows the packet: a busy condition the peer was never told about is not a
-            // busy condition, it is a stall the peer cannot explain.
+            // busy condition, it is a stall the peer cannot explain. Set before the send so a
+            // synchronous reply sees it, rolled back if the packet did not leave.
+            bool before = vc.LocalBusy;
+            vc.LocalBusy = busy;
             if (!Send(busy
                 ? X25PacketBuilder.CreateRNR(lci, vc.RecvSeq)
                 : X25PacketBuilder.CreateRR(lci, vc.RecvSeq)))
             {
+                vc.LocalBusy = before;
                 return false;
             }
 
-            vc.LocalBusy = busy;
             return true;
         }
 
@@ -462,12 +595,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
+            // Marked outstanding before the send: the confirmation can arrive synchronously.
+            vc.InterruptOutstanding = true;
             if (!Send(X25PacketBuilder.CreateInterrupt(lci, data)))
             {
+                vc.InterruptOutstanding = false;
                 return false;
             }
 
-            vc.InterruptOutstanding = true;
             return true;
         }
 
@@ -561,6 +696,48 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     OnInterruptConfirmation(lci);
                     break;
             }
+        }
+
+        // ------------------------------------------------------------------ complete packet sequences (X.25 4.3.5)
+
+        /// <summary>
+        /// Collects category A packets (full, M=1, D=0) and delivers the whole sequence once the
+        /// category B packet that ends it arrives. The Q-bit consistency rule (4.3.3) has already
+        /// been applied by the caller, before the packet was acknowledged.
+        /// </summary>
+        private void Reassemble(X25Vc vc, byte[] payload, bool qBit, bool mBit, bool dBit)
+        {
+            bool categoryA = mBit && !dBit && payload.Length == vc.PacketSizeIn;
+
+            if (categoryA)
+            {
+                if (vc.Reassembly == null)
+                {
+                    vc.Reassembly = new System.IO.MemoryStream();
+                    vc.ReassemblyQBit = qBit;
+                }
+
+                if (vc.Reassembly.Length + payload.Length > X25Vc.MaxReassembly)
+                {
+                    vc.ClearSequences();
+                    ResetForProcedureError(vc, X25Diagnostic.PacketTooLong);
+                    return;
+                }
+
+                vc.Reassembly.Write(payload, 0, payload.Length);
+                return;
+            }
+
+            if (vc.Reassembly == null)
+            {
+                RaiseMessageReceived(vc.Lci, payload, qBit);
+                return;
+            }
+
+            vc.Reassembly.Write(payload, 0, payload.Length);
+            byte[] message = vc.Reassembly.ToArray();
+            vc.ClearSequences();
+            RaiseMessageReceived(vc.Lci, message, qBit);
         }
 
         // ------------------------------------------------------------------ interrupts (X.25 4.4.2)
@@ -1063,12 +1240,16 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // XOT; over plain X.25 it is how the peer learns what we want instead of silently applying
             // its own defaults (7.2.2.1). Until 2026-09-06 the facility length octet was always zero.
             byte[] facilities = X25Facilities.ForRequest(_config.DefaultWindowSize, _config.DefaultPacketSize).Encode();
+
+            // T21 is armed before the send: a Call Connected arriving synchronously inside Send
+            // cancels it, and arming it afterwards would leave a timer running on a connected call.
+            vc.TimerExpiryMs = Now() + _config.CallRequestTimeoutMs;
             if (!Send(X25PacketBuilder.CreateCallRequest(vc.Lci, vc.CalledAddress, vc.CallingAddress, facilities, cud)))
             {
+                vc.TimerExpiryMs = 0;
                 return false;
             }
 
-            vc.TimerExpiryMs = Now() + _config.CallRequestTimeoutMs;
             return true;
         }
 
@@ -1319,7 +1500,19 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            // 4.3.3: the Q bit must not change inside a complete packet sequence. Annex C lets a
+            // network reset on that, and this engine does (diagnostic 83), before the packet is
+            // acknowledged or delivered: a sequence whose interpretation changes half-way is not
+            // data anyone can use.
+            if (vc.Reassembly != null && vc.ReassemblyQBit != info.QBit)
+            {
+                vc.ClearSequences();
+                ResetForProcedureError(vc, X25Diagnostic.InconsistentQBit);
+                return;
+            }
+
             vc.RecvSeq = (byte)((info.PS + 1) & 0x07);
+
             byte[] payload = new byte[payloadLen];
             if (payloadLen > 0)
             {
@@ -1327,6 +1520,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             RaiseDataReceived(lci, payload, payloadLen, info.QBit, info.MBit, info.DBit);
+            Reassemble(vc, payload, info.QBit, info.MBit, info.DBit);
 
             // Acknowledge the received data (receive-ready, unless we are locally busy).
             // A refused acknowledgement is counted, not rolled back: the data has been delivered and
@@ -1482,6 +1676,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             vc.PeerBusy = peerBusy;
+            DrainPending(vc);
         }
 
         /// <summary>

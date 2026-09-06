@@ -1114,6 +1114,219 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_layer.Circuits[lci].SendSeq, Is.EqualTo(1), "the refused send spent no P(S)");
         }
 
+        // ================================================================== R20 / R21  D-bit and M-bit
+        //
+        // X.25 4.3.4: the M bit may be set in any data packet; only a FULL packet with M=1 and D=0
+        // (category A, 4.3.5) continues a complete packet sequence, and every other packet ends
+        // one. 4.3.3: the Q bit is the same in every packet of a sequence. D-bit end-to-end
+        // acknowledgement is NOT honoured by this engine (decided 2026-09-06, audit D3 option B):
+        // the bit is carried and P(R) stays a local window update (4.4.1.4 makes the procedure
+        // optional for a network).
+
+        private static byte[] Filled(int length, byte seed)
+        {
+            byte[] b = new byte[length];
+            for (int i = 0; i < length; i++)
+            {
+                b[i] = (byte)(seed + i);
+            }
+
+            return b;
+        }
+
+        [Test]
+        public void R21_SendMessage_SegmentsIntoFullPacketsWithMThenARemainderWithoutM()
+        {
+            ushort fresh = ConnectOutgoing();   // 128 / window 2
+
+            byte[] message = Filled(300, 1);
+            Assert.That(_layer.SendMessage(fresh, message), Is.True);
+
+            // Window 2: the first two segments go out at once, the third waits.
+            Assert.That(_sink.CountOfType(X25PacketType.Data), Is.EqualTo(2));
+            X25PacketInfo p0 = X25PacketParser.ParsePacket(_sink.Sent[0]);
+            X25PacketInfo p1 = X25PacketParser.ParsePacket(_sink.Sent[1]);
+            Assert.That(p0.UserData.Length, Is.EqualTo(128));
+            Assert.That(p0.MBit, Is.True);
+            Assert.That(p1.UserData.Length, Is.EqualTo(128));
+            Assert.That(p1.MBit, Is.True);
+            Assert.That(_layer.Circuits[fresh].PendingSegments.Count, Is.EqualTo(1));
+
+            // The peer acknowledges; the tail (44 octets, M=0) follows.
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(fresh, pr: 2));
+            Assert.That(_sink.CountOfType(X25PacketType.Data), Is.EqualTo(3));
+            X25PacketInfo p2 = X25PacketParser.ParsePacket(_sink.Sent[2]);
+            Assert.That(p2.UserData.Length, Is.EqualTo(44));
+            Assert.That(p2.MBit, Is.False);
+            Assert.That(p2.PS, Is.EqualTo(2));
+            Assert.That(_layer.Circuits[fresh].PendingSegments.Count, Is.EqualTo(0));
+
+            // Payload integrity across the three packets.
+            byte[] joined = new byte[300];
+            Array.Copy(p0.UserData, 0, joined, 0, 128);
+            Array.Copy(p1.UserData, 0, joined, 128, 128);
+            Array.Copy(p2.UserData, 0, joined, 256, 44);
+            Assert.That(joined, Is.EqualTo(message));
+        }
+
+        [Test]
+        public void R21_AMessageThatIsAnExactMultiple_EndsWithAFullPacketWithoutM()
+        {
+            ushort lci = ConnectOutgoing();
+            Assert.That(_layer.SendMessage(lci, Filled(256, 9)), Is.True);
+            Assert.That(X25PacketParser.ParsePacket(_sink.Sent[0]).MBit, Is.True);
+            Assert.That(X25PacketParser.ParsePacket(_sink.Sent[1]).MBit, Is.False);
+            Assert.That(X25PacketParser.ParsePacket(_sink.Sent[1]).UserData.Length, Is.EqualTo(128));
+        }
+
+        [Test]
+        public void R21_SendData_WaitsBehindAQueuedMessage()
+        {
+            ushort lci = ConnectOutgoing();   // window 2
+            Assert.That(_layer.SendMessage(lci, Filled(300, 1)), Is.True);   // one segment queued
+            Assert.That(_layer.SendData(lci, new byte[] { 0xFF }), Is.False, "4.3.5: a packet must not overtake the tail of a sequence");
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 2));
+            Assert.That(_layer.SendData(lci, new byte[] { 0xFF }), Is.True, "queue drained, ordinary sends resume");
+        }
+
+        [Test]
+        public void R21_QueuedSegmentsAreDroppedByAReset()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.SendMessage(lci, Filled(1000, 1));
+            Assert.That(_layer.Circuits[lci].PendingSegments.Count, Is.GreaterThan(0));
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateResetRequest(lci, 0, 0));
+
+            Assert.That(_layer.Circuits[lci].PendingSegments.Count, Is.EqualTo(0), "4.4.3.1: a reset discards data in flight");
+        }
+
+        [Test]
+        public void R21_ReceivedSequence_IsDeliveredOnceAsAMessage_AndPerPacketToo()
+        {
+            ushort lci = ConnectOutgoing();   // 128 in
+            List<byte[]> messages = new List<byte[]>();
+            int packets = 0;
+            _layer.MessageReceived += (l, c, d, q) => messages.Add(d);
+            _layer.DataReceived += (l, c, d, n, q, m, db) => packets++;
+
+            byte[] a = Filled(128, 1);
+            byte[] b = Filled(128, 50);
+            byte[] c = Filled(10, 99);
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 0, 0, a, mBit: true));
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 1, 0, b, mBit: true));
+            Assert.That(messages.Count, Is.EqualTo(0), "not until the category B packet");
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 2, 0, c, mBit: false));
+
+            Assert.That(messages.Count, Is.EqualTo(1));
+            Assert.That(messages[0].Length, Is.EqualTo(266));
+            Assert.That(messages[0][0], Is.EqualTo(1));
+            Assert.That(messages[0][128], Is.EqualTo(50));
+            Assert.That(messages[0][256], Is.EqualTo(99));
+            Assert.That(packets, Is.EqualTo(3), "DataReceived still fires per packet");
+            Assert.That(_sink.CountOfType(X25PacketType.RR), Is.EqualTo(3), "every packet is acknowledged as it arrives");
+        }
+
+        [Test]
+        public void R21_APartialPacketWithMSet_EndsTheSequence()
+        {
+            // 4.3.4: only a FULL packet with M=1 (and D=0) continues; a partial one with M=1 is
+            // category B and the network delivers it with M=0 - the sequence is over.
+            ushort lci = ConnectOutgoing();
+            List<byte[]> messages = new List<byte[]>();
+            _layer.MessageReceived += (l, c, d, q) => messages.Add(d);
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 0, 0, Filled(128, 1), mBit: true));
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 1, 0, Filled(5, 1), mBit: true));
+
+            Assert.That(messages.Count, Is.EqualTo(1));
+            Assert.That(messages[0].Length, Is.EqualTo(133));
+        }
+
+        [Test]
+        public void R21_ASinglePacket_IsAMessageOfOne()
+        {
+            ushort lci = ConnectOutgoing();
+            List<byte[]> messages = new List<byte[]>();
+            _layer.MessageReceived += (l, c, d, q) => messages.Add(d);
+
+            _layer.ProcessPacket(Data(lci, 0, 0, length: 4));
+
+            Assert.That(messages.Count, Is.EqualTo(1));
+            Assert.That(messages[0].Length, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void R21_QBitChangingInsideASequence_ResetsWithDiagnostic83()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 0, 0, Filled(128, 1), mBit: true, qBit: false));
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 1, 0, Filled(128, 1), mBit: true, qBit: true));
+
+            // 4.3.3 / Annex C: the Q bit is the same in every packet of a complete packet sequence.
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(83));
+        }
+
+        [Test]
+        public void R21_ARoundTripThroughTwoLayers_DeliversTheMessageWhole()
+        {
+            // Two engines back to back with a 64-octet packet size on both sides.
+            X25Config cfgA = new X25Config { LocalAddress = "1", LciBase = 1, LciCount = 4, DefaultPacketSize = 64, DefaultWindowSize = 2, IsDte = true };
+            X25Config cfgB = new X25Config { LocalAddress = "2", LciBase = 1, LciCount = 4, DefaultPacketSize = 64, DefaultWindowSize = 2, IsDte = false };
+            LoopSinkPair pair = new LoopSinkPair();
+            X25Layer a = new X25Layer(pair.A, cfgA);
+            X25Layer b = new X25Layer(pair.B, cfgB);
+            pair.A.Target = b;
+            pair.B.Target = a;
+            b.IncomingCall += (l, c, called, calling, cud) => l.AcceptCall(c);
+            byte[]? got = null;
+            b.MessageReceived += (l, c, d, q) => got = d;
+
+            ushort lci = a.PlaceCall("2");
+            Assert.That(a.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+
+            byte[] message = Filled(1000, 3);
+            Assert.That(a.SendMessage(lci, message), Is.True);
+
+            // Every RR the far side sends drains the near side's queue in the same call chain.
+            Assert.That(got, Is.Not.Null);
+            Assert.That(got, Is.EqualTo(message));
+        }
+
+        /// <summary>Two sinks that feed each other's layers, for the round-trip test.</summary>
+        private sealed class LoopSinkPair
+        {
+            public readonly LoopSink A = new LoopSink();
+            public readonly LoopSink B = new LoopSink();
+        }
+
+        private sealed class LoopSink : IX25PacketSink
+        {
+            public X25Layer? Target;
+
+            public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
+            {
+                byte[] bytes = packet.ToArray();
+                Target?.ProcessPacket(bytes);
+                return X25SendResult.Sent;
+            }
+        }
+
+        [Test]
+        public void R20_DBit_IsCarriedButNotHonoured()
+        {
+            ushort lci = ConnectOutgoing();
+            Assert.That(_layer.SendData(lci, new byte[] { 1 }, dBit: true), Is.True);
+            Assert.That(_sink.LastInfo.DBit, Is.True, "the bit goes on the wire as asked");
+
+            // Receiving D=1 data: acknowledged at once like any other packet - P(R) is local.
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 0, 0, new byte[] { 2 }, dBit: true));
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.RR));
+            Assert.That(_sink.LastInfo.PR, Is.EqualTo(1));
+        }
+
         // ================================================================== R16  interrupt
         //
         // X.25 4.4.2: an interrupt packet is confirmed with an interrupt confirmation and

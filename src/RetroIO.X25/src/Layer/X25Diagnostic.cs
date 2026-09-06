@@ -87,6 +87,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>45 - Unauthorized reject.</summary>
         public const byte UnauthorizedReject = 45;
 
+        /// <summary>83 - Inconsistent Q-bit setting: the Q bit changed inside a complete packet sequence (4.3.3).</summary>
+        public const byte InconsistentQBit = 83;
+
         /// <summary>48 - Time expired (the general code; 49-53 say which timer).</summary>
         public const byte TimeExpired = 48;
 

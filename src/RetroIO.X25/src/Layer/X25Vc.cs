@@ -94,6 +94,46 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public bool InterruptOutstanding { get; set; }
 
         /// <summary>
+        /// Segments of messages accepted by <c>SendMessage</c> that the window or the peer's busy
+        /// condition has not yet let out, in order. Drained as acknowledgements arrive.
+        /// </summary>
+        public System.Collections.Generic.Queue<X25PendingSegment> PendingSegments { get; } = new System.Collections.Generic.Queue<X25PendingSegment>();
+
+        /// <summary>
+        /// Category A packets (full, M=1, D=0) received so far in the current complete packet
+        /// sequence (X.25 4.3.5), awaiting the category B packet that ends it.
+        /// </summary>
+        public System.IO.MemoryStream? Reassembly { get; set; }
+
+        /// <summary>
+        /// True while the engine is inside the loop that sends queued segments; a re-entrant call
+        /// (the peer's RR arriving synchronously through a loopback sink) must not start a second.
+        /// </summary>
+        public bool Draining { get; set; }
+
+        /// <summary>
+        /// The Q bit of the sequence being reassembled; every packet in it must carry the same
+        /// value (4.3.3).
+        /// </summary>
+        public bool ReassemblyQBit { get; set; }
+
+        /// <summary>
+        /// Largest complete packet sequence this engine will reassemble before treating the sender
+        /// as broken. An engine limit, not a clause: X.25 puts no bound on a sequence.
+        /// </summary>
+        public const int MaxReassembly = 65536;
+
+        /// <summary>
+        /// Forgets any partly sent message and any partly received sequence.
+        /// </summary>
+        public void ClearSequences()
+        {
+            PendingSegments.Clear();
+            Reassembly?.Dispose();
+            Reassembly = null;
+        }
+
+        /// <summary>
         /// Absolute millisecond expiry of the active per-circuit timer, or 0 when no timer is armed.
         /// The applicable timer depends on the state: call-request (T21), reset-request (T22),
         /// clear-request (T23).
@@ -173,6 +213,36 @@ namespace RetroIO.Protocols.X25.PacketLayer
             PeerBusy = false;
             LocalBusy = false;
             InterruptOutstanding = false;   // X.25 4.4.3.1: a reset also discards an unconfirmed interrupt
+            ClearSequences();               // and everything in flight in both directions
         }
+    }
+
+    /// <summary>
+    /// One data packet's worth of a message waiting for the window to open.
+    /// </summary>
+    public readonly struct X25PendingSegment
+    {
+        /// <summary>
+        /// Creates a segment.
+        /// </summary>
+        public X25PendingSegment(byte[] data, bool mBit, bool qBit, bool dBit)
+        {
+            Data = data;
+            MBit = mBit;
+            QBit = qBit;
+            DBit = dBit;
+        }
+
+        /// <summary>The user data, at most the circuit's PacketSizeOut.</summary>
+        public byte[] Data { get; }
+
+        /// <summary>True on every segment but the last of a message.</summary>
+        public bool MBit { get; }
+
+        /// <summary>The message's qualifier bit.</summary>
+        public bool QBit { get; }
+
+        /// <summary>The message's delivery confirmation bit (carried, not honoured).</summary>
+        public bool DBit { get; }
     }
 }

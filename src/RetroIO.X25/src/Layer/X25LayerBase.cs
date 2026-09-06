@@ -66,6 +66,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public event X25InterruptConfirmed? InterruptConfirmed;
 
         /// <summary>
+        /// Raised once per complete packet sequence with the reassembled user data.
+        /// </summary>
+        public event X25MessageReceived? MessageReceived;
+
+        /// <summary>
         /// Creates the base with the down-facing packet sink.
         /// </summary>
         /// <param name="sink">
@@ -205,6 +210,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
         protected void RaiseInterruptConfirmed(ushort lci)
         {
             InterruptConfirmed?.Invoke((X25Layer)this, lci);
+        }
+
+        /// <summary>
+        /// Raises <see cref="MessageReceived"/>.
+        /// </summary>
+        protected void RaiseMessageReceived(ushort lci, byte[] data, bool qBit)
+        {
+            MessageReceived?.Invoke((X25Layer)this, lci, data, qBit);
         }
     }
 }
