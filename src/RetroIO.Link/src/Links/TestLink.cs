@@ -2,7 +2,6 @@ using System;
 using Microsoft.Extensions.Logging;
 using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
-using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Link
 {
@@ -15,7 +14,7 @@ namespace RetroIO.Link
     {
         private readonly ILogger _logger;
         private readonly string _name;
-        private readonly LapbInstance _lapbInstance;
+        private readonly LapbStation _lapbInstance;
 
         private LinkStatus _status = LinkStatus.Stopped;
         private readonly LinkStatistics _statistics;
@@ -30,7 +29,7 @@ namespace RetroIO.Link
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _name = name ?? throw new ArgumentNullException(nameof(name));
 
-            _lapbInstance = new LapbInstance(
+            _lapbInstance = new LapbStation(
                 logger,
                 name,
                 windowSize,

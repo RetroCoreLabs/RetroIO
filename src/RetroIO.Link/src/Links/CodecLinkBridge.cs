@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using RetroIO.Link.Framing;
 using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
-using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Link
 {
@@ -14,9 +13,9 @@ namespace RetroIO.Link
     /// This is where the FCS ownership lives, relocated out of the framing layer. The framing codecs
     /// (SLIP, HDLC/PPP, XOT) carry an opaque, delimited payload with no checksum; this bridge appends the
     /// CRC-16 FCS on transmit and validates then strips it on receive, so the FCS-agnostic
-    /// <see cref="LapbInstance"/> exchanges plain address+control+information frames.
+    /// <see cref="LapbStation"/> exchanges plain address+control+information frames.
     ///
-    /// A codec plus this bridge plus a <see cref="LapbInstance"/> forms a complete link over any
+    /// A codec plus this bridge plus a <see cref="LapbStation"/> forms a complete link over any
     /// <see cref="IFrameTransport"/>. Swapping the codec (SLIP / HDLC / XOT) changes only the wire framing;
     /// the LAPB engine and FCS handling are unchanged: framing is delimiting-only and the FCS (CRC-16)
     /// belongs to the LAPB module.
@@ -26,7 +25,7 @@ namespace RetroIO.Link
         private readonly ILogger _logger;
         private readonly string _linkId;
         private readonly FrameCodecBase _codec;
-        private readonly LapbInstance _lapb;
+        private readonly LapbStation _lapb;
         private bool _disposed;
 
         /// <summary>
@@ -47,7 +46,7 @@ namespace RetroIO.Link
         /// <exception cref="ArgumentNullException">
         /// Thrown when any argument is null.
         /// </exception>
-        public CodecLinkBridge(string linkId, FrameCodecBase codec, LapbInstance lapb, ILogger logger)
+        public CodecLinkBridge(string linkId, FrameCodecBase codec, LapbStation lapb, ILogger logger)
         {
             _linkId = linkId ?? throw new ArgumentNullException(nameof(linkId));
             _codec = codec ?? throw new ArgumentNullException(nameof(codec));

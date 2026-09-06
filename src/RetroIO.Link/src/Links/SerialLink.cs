@@ -3,7 +3,6 @@ using System.IO.Ports;
 using Microsoft.Extensions.Logging;
 using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
-using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Link
 {
@@ -17,7 +16,7 @@ namespace RetroIO.Link
         private readonly ILogger _logger;
         private readonly SerialLinkConfig _config;
         private readonly HdlcFramer _hdlcFramer;
-        private readonly LapbInstance _lapbInstance;
+        private readonly LapbStation _lapbInstance;
 
         private SerialPort? _serialPort;
         private LinkStatus _status = LinkStatus.Stopped;
@@ -38,7 +37,7 @@ namespace RetroIO.Link
 
             // Create components
             _hdlcFramer = new HdlcFramer(logger, config.Name);
-            _lapbInstance = new LapbInstance(
+            _lapbInstance = new LapbStation(
                 logger,
                 config.Name,
                 config.WindowSize,

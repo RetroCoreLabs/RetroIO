@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using RetroIO.Link.Lapb;
 using RetroIO.Link.Framing;
 using RetroIO.Link.Models;
-using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Link
 {
@@ -12,7 +11,7 @@ namespace RetroIO.Link
     /// </summary>
     /// <remarks>
     /// Composes an <see cref="ILinkTransport"/> (TCP or serial) with a byte-stuffed framing codec, a
-    /// <see cref="CodecLinkBridge"/> (which owns the FCS), a <see cref="LapbInstance"/>, and a
+    /// <see cref="CodecLinkBridge"/> (which owns the FCS), a <see cref="LapbStation"/>, and a
     /// <see cref="ProtocolDetector"/> to present the standard <see cref="ILink"/> surface. This single link
     /// covers every combination of {SLIP, HDLC} framing over {TCP, serial} transport — SLIP over a serial
     /// line, HDLC/PPP over TCP, and so on — because framing and transport are independent seams. XOT is not
@@ -27,7 +26,7 @@ namespace RetroIO.Link
         private readonly CodecLinkConfig _config;
         private readonly ILinkTransport _transport;
         private readonly FrameCodecBase _codec;
-        private readonly LapbInstance _lapb;
+        private readonly LapbStation _lapb;
         private readonly CodecLinkBridge _bridge;
         private readonly LinkStatistics _statistics;
         private readonly object _lock = new object();
@@ -68,7 +67,7 @@ namespace RetroIO.Link
                 _ => throw new ArgumentOutOfRangeException(nameof(config), config.Framing, "Unsupported framing type.")
             };
 
-            _lapb = new LapbInstance(
+            _lapb = new LapbStation(
                 logger,
                 config.Name,
                 config.WindowSize,

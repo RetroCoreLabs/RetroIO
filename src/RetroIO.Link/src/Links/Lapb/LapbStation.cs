@@ -35,6 +35,19 @@ namespace RetroIO.Link.Lapb
     {
         private const int TickIntervalMs = 100;
 
+        /// <summary>
+        /// N1 for a link that carries X.25: the largest information field this station accepts.
+        /// </summary>
+        /// <remarks>
+        /// N1 is a link parameter, not a constant of the protocol (X.25 2.3.2), and the engine's own
+        /// default is the ND network's 622 - far too small here. X.25 Table 6-2 allows a data field
+        /// of up to 4096 octets, and a data packet's header is at most 4 octets (a general format
+        /// identifier and channel number, then a one- or two-octet packet type identifier when
+        /// extended sequence numbering is in use), so 4100 is the largest X.25 packet that can arrive.
+        /// Anything longer is answered with FRMR, reason Y (2.3.4.10).
+        /// </remarks>
+        public const int X25InformationLength = 4100;
+
         private readonly ILogger _logger;
         private readonly string _linkName;
         private readonly LapbLayer _lapb;
@@ -93,7 +106,8 @@ namespace RetroIO.Link.Lapb
                 windowSize: windowSize,
                 reestablishOnLinkFailure: true,
                 variant: LapbVariant.Itu,
-                isDte: isPrimary);
+                isDte: isPrimary,
+                maxInformationLength: X25InformationLength);
 
             _lapb = new LapbLayer(0, options);
             _lapb.OnTransmit += OnEngineTransmit;
@@ -244,16 +258,7 @@ namespace RetroIO.Link.Lapb
             lock (_sync)
             {
                 CountFrame(frame.Control, received: true);
-                FrameReceived?.Invoke(this, new LapbFrameEventArgs
-                {
-                    FrameData = bytes,
-                    Length = (ushort)length,
-                    Direction = FrameDirection.Receive,
-                    Timestamp = DateTime.UtcNow,
-                    FrameType = LapbFrameUtils.DetectFrameType(frame.Control),
-                    Address = frame.Address,
-                    Control = frame.Control,
-                });
+                FrameReceived?.Invoke(this, Describe(bytes, length, FrameDirection.Receive));
 
                 _lapb.OnFrameReceived(frame, Now);
                 SyncState();
@@ -344,16 +349,50 @@ namespace RetroIO.Link.Lapb
 
         private void RaiseTransmit(byte[] body)
         {
-            FrameToTransmit?.Invoke(this, new LapbFrameEventArgs
+            FrameToTransmit?.Invoke(this, Describe(body, body.Length, FrameDirection.Transmit));
+        }
+
+        /// <summary>
+        /// Describes a frame for the listeners that build the packet history and the desktop views.
+        /// </summary>
+        /// <remarks>
+        /// The sequence numbers, the P/F bit and the information field all have to be here: the
+        /// history relates an I-frame to the X.25 packet it carried by matching N(S), and a view
+        /// that is handed only the address and control shows a link with no traffic on it.
+        /// </remarks>
+        private static LapbFrameEventArgs Describe(byte[] frame, int length, FrameDirection direction)
+        {
+            byte control = length > 1 ? frame[1] : (byte)0;
+            LapbFrameType type = LapbFrameUtils.DetectFrameType(control);
+
+            LapbFrameEventArgs args = new LapbFrameEventArgs
             {
-                FrameData = body,
-                Length = (ushort)body.Length,
-                Direction = FrameDirection.Transmit,
+                FrameData = frame,
+                Length = (ushort)length,
+                Direction = direction,
                 Timestamp = DateTime.UtcNow,
-                FrameType = LapbFrameUtils.DetectFrameType(body.Length > 1 ? body[1] : (byte)0),
-                Address = body.Length > 0 ? body[0] : (byte)0,
-                Control = body.Length > 1 ? body[1] : (byte)0,
-            });
+                FrameType = type,
+                Address = length > 0 ? frame[0] : (byte)0,
+                Control = control,
+                PF = (control & 0x10) != 0,
+            };
+
+            if (type == LapbFrameType.Information)
+            {
+                args.NS = LapbFrameUtils.ExtractNS(control);
+                args.NR = LapbFrameUtils.ExtractNR(control);
+            }
+            else if (type == LapbFrameType.Supervisory)
+            {
+                args.NR = LapbFrameUtils.ExtractNR(control);
+            }
+
+            if (length > 2)
+            {
+                args.Information = LapbFrameUtils.ExtractInformation(frame, length);
+            }
+
+            return args;
         }
 
         private void OnEngineInformation(ReadOnlyMemory<byte> info)

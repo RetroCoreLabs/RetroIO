@@ -7,7 +7,7 @@ from (`RetroIO.Protocols.X25.Models` for the stateless codec, `RetroIO.Protocols
 for the engine), so consumers did not move.
 
 Everything it replaces sits in `DeleteMe/` folders under namespaces ending `.DeleteMe`
-(`src/RetroIO.Protocols.X25/src/DeleteMe`, `src/RetroIO.Link/src/DeleteMe`). Nothing new may
+(`src/RetroIO.Protocols.X25/src/DeleteMe`). Nothing new may
 reference those.
 
 ## Contents

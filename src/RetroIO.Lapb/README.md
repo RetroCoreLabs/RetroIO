@@ -36,5 +36,6 @@ capture corpus for the ND dialect). Tests live in
 `src/RetroIO.Protocols.Xmsg.Live/tests` (`LapbLayerTests`, `LapbTimerTests`, `LapbFrmrTests`,
 `LapbConformanceVectorsTests`, `LapbItuVariantSeamTests`, ...) until they follow the code here.
 
-Created 2026-09-06 as Phase D2 of `E:\Dev\RCL\Migration\X25 one-stack plan.md`. `LapbInstance`
-in `src/RetroIO.Link/src/DeleteMe` is what this replaces (Phase D3).
+Created 2026-09-06 as Phase D2 of `E:\Dev\RCL\Migration\X25 one-stack plan.md`. The second LAPB
+implementation it replaced, `LapbInstance`, was deleted in Phase D3; `LapbStation` in
+`src/RetroIO.Link/src/Links/Lapb` is the event surface the links use over this engine.

@@ -607,7 +607,6 @@ namespace RetroIO.Protocols.Xmsg.Live
                     // received mid-session is a legitimate reset, NOT an error (the highest-risk ND
                     // deviation): stay connected.
                     CaptureNode(frame.Info);
-                    SendUnnumbered(UaBase, includeNode: true, pollFinal: true);
 
                     // "notify up" PER THE STATE TABLE, which differs by the state we came FROM:
                     //
@@ -630,6 +629,15 @@ namespace RetroIO.Protocols.Xmsg.Live
                     _state = LapbLayerState.Connected;
                     StartT3(currentTicks);
                     StopT1();
+
+                    // The UA goes out only now, with the state already settled. It used to be sent
+                    // first, before Reset() and before CONNECTED: on a real link the peer's next
+                    // frame arrives milliseconds later and nobody noticed, but on an in-process link
+                    // it arrives INSIDE this send, finds the station still disconnected, and is
+                    // answered with a DM - both ends then tear the link down they had just built.
+                    // Found 2026-09-06 wiring two stations back to back through a codec bridge.
+                    SendUnnumbered(UaBase, includeNode: true, pollFinal: true);
+
                     // Push the peer to the RUN phase: it advances only once it receives an RR from us
                     // (spec 3.4 idle keepalive; live-necessary against the ND kernel).
                     EmitSupervisory(RrNibble, pollFinal: false);
@@ -746,10 +754,18 @@ namespace RetroIO.Protocols.Xmsg.Live
                     return;
             }
 
-            if (frame.PollFinal)
+            if (frame.PollFinal && !ReceivedIsResponse(frame.Address))
             {
-                // P=1 MUST be answered with F=1 carrying the current N(R) (spec 4.8).
-                EmitSupervisory(RrNibble, pollFinal: true);
+                // A COMMAND with P=1 must be answered with a response carrying F=1 and the current
+                // N(R) (X.25 2.4.5.9, ND spec 4.8). A RESPONSE with F=1 is the answer to a poll of
+                // ours and must not be answered again.
+                //
+                // The ND dialect cannot tell the two apart - it has no command/response bit in the
+                // address - so there this answers anything with P/F set, as it always has. In ITU
+                // mode the address says which it is (2.4.2), and without that test two stations
+                // answer each other's F=1 for ever: found 2026-09-06 as a stack overflow the moment
+                // two ITU stations were wired back to back over a synchronous loopback.
+                EmitSupervisory(RrNibble, pollFinal: true, isCommand: false);
             }
 
             if (!_peerBusy)
@@ -905,9 +921,17 @@ namespace RetroIO.Protocols.Xmsg.Live
                 && _pending.Count > 0)
             {
                 byte[] payload = _pending.Dequeue();
-                _txInfo[_sendVariable] = payload;
-                EmitInformation(_sendVariable, payload);
-                _sendVariable = (_sendVariable + 1) & 0x07;
+                int sequence = _sendVariable;
+                _txInfo[sequence] = payload;
+
+                // V(S) advances BEFORE the frame goes out, not after. On a real link the peer's
+                // acknowledgement arrives later, so either order looks the same; on an in-process
+                // link - a codec bridge, a loopback - the answer comes back INSIDE the transmit
+                // call, and an N(R) that acknowledges a frame V(S) has not counted yet reads as
+                // invalid. Both stations then FRMR each other for ever. Found 2026-09-06 wiring two
+                // stations back to back; the X.25 engine had the same fault in its own send path.
+                _sendVariable = (sequence + 1) & 0x07;
+                EmitInformation(sequence, payload);
 
                 // An I-frame is now outstanding: stop the idle keepalive and start T1 if it was idle
                 // (spec 5.1: "start T1 when an I-frame is sent and the queue was previously empty").

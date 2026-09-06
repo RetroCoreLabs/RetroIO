@@ -8,12 +8,11 @@ using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Runtime.Layers;
 using RetroIO.Link;
 using RetroIO.Link.Framing;
-using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
-    /// End-to-end tests for a framing codec plus CodecLinkBridge plus LapbInstance over an in-memory loopback.
+    /// End-to-end tests for a framing codec plus CodecLinkBridge plus LapbStation over an in-memory loopback.
     /// </summary>
     /// <remarks>
     /// Proves the relocated FCS model works through the real LAPB engine: a SLIP-framed link performs the
@@ -73,8 +72,8 @@ namespace RetroIO.Protocols.X25.Tests
             wireA.Peer = codecB; // A's framed bytes arrive at B's de-framer
             wireB.Peer = codecA;
 
-            using LapbInstance lapbA = new LapbInstance(_logger, "A", isPrimary: true);
-            using LapbInstance lapbB = new LapbInstance(_logger, "B", isPrimary: false);
+            using LapbStation lapbA = new LapbStation(_logger, "A", isPrimary: true);
+            using LapbStation lapbB = new LapbStation(_logger, "B", isPrimary: false);
             using CodecLinkBridge bridgeA = new CodecLinkBridge("A", codecA, lapbA, _logger);
             using CodecLinkBridge bridgeB = new CodecLinkBridge("B", codecB, lapbB, _logger);
 
@@ -113,7 +112,7 @@ namespace RetroIO.Protocols.X25.Tests
             framed[1] ^= 0x01; // corrupt the address byte (index 1, just after the leading END)
 
             // Receiver: codec + bridge + LAPB. The bridge must reject the bad FCS before LAPB sees it.
-            using LapbInstance lapb = new LapbInstance(_logger, "R", isPrimary: false);
+            using LapbStation lapb = new LapbStation(_logger, "R", isPrimary: false);
             SlipFrameCodec receiverCodec = new SlipFrameCodec("R", new LoopbackTransport());
             using CodecLinkBridge bridge = new CodecLinkBridge("R", receiverCodec, lapb, _logger);
 

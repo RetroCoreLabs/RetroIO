@@ -5,7 +5,6 @@ using System.Threading;
 using Microsoft.Extensions.Logging;
 using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
-using RetroIO.Link.Lapb.DeleteMe;
 
 namespace RetroIO.Link
 {
@@ -21,7 +20,7 @@ namespace RetroIO.Link
 
         // LAPB components - only used when UseLapbFraming = true
         private readonly HdlcFramer? _hdlcFramer;
-        private readonly LapbInstance? _lapbInstance;
+        private readonly LapbStation? _lapbInstance;
 
         private TcpListener? _listener;
         private TcpClient? _tcpClient;
@@ -63,7 +62,7 @@ namespace RetroIO.Link
             if (_config.UseLapbFraming)
             {
                 _hdlcFramer = new HdlcFramer(logger, config.Name);
-                _lapbInstance = new LapbInstance(
+                _lapbInstance = new LapbStation(
                     logger,
                     config.Name,
                     config.WindowSize,

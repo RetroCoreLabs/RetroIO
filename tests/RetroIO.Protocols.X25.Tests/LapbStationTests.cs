@@ -11,7 +11,7 @@ namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
     /// <see cref="LapbStation"/>: the link layer's event surface running on the shared engine. These
-    /// are the behaviours <see cref="LapbInstancePinTests"/> pinned as wrong on the implementation
+    /// are the behaviours <c>LapbInstancePinTests</c> pinned as wrong on the implementation
     /// this replaces, plus the surface the four links depend on.
     /// </summary>
     [TestFixture]

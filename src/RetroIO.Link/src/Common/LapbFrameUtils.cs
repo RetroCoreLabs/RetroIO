@@ -2,18 +2,17 @@ using System;
 using RetroIO.Link.Models;
 
 using RetroIO.Protocols.X25.Common;
-using RetroIO.Link.Lapb.DeleteMe;
 namespace RetroIO.Link.Lapb
 {
     /// <summary>
     /// Utility methods for LAPB frame handling.
-    /// Consolidates duplicate frame manipulation code from LapbLayer and LapbInstance.
+    /// Frame manipulation shared by the LAPB engine and the links.
     /// </summary>
     public static class LapbFrameUtils
     {
         /// <summary>
         /// Detect frame type from control byte.
-        /// Replaces duplicate logic in LapbLayer.cs and LapbInstance.cs
+        /// One copy of the control-byte decode, rather than one per LAPB implementation
         /// </summary>
         public static LapbFrameType DetectFrameType(byte control)
         {
