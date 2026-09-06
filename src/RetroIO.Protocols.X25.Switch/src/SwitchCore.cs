@@ -105,6 +105,7 @@ namespace RetroIO.Protocols.X25.Switch
             port.CircuitReset += OnCircuitReset;
             port.InterruptReceived += OnInterruptReceived;
             port.ReadyToSend += OnReadyToSend;
+            port.StateChanged += OnPortStateChanged;
         }
 
         private static long NowMs()
@@ -156,17 +157,27 @@ namespace RetroIO.Protocols.X25.Switch
             stitch.StartTimeMs = NowMs();
             stitch.HopCount = 0;
 
-            // Accept the incoming call now that the onward leg is placed.
-            inPort.AcceptCall(inLci);
-
+            // The incoming call is NOT accepted here. X.25 4.1: a Call Accepted says the circuit is
+            // established end to end, and at this point only the onward Call Request has gone out.
+            // Confirming now tells the caller the call is up while the far end may still refuse it,
+            // and anything it sends in between has nowhere to go. The accept happens in
+            // OnCallConnected, when the far end has answered.
             AccountForCallSetup(callingAddress, calledAddress);
             CallSetup?.Invoke(callingAddress, calledAddress, inPort.Id, outPort.Id);
         }
 
         private void OnCallConnected(ISwitchPort port, ushort lci)
         {
-            // The onward leg was accepted by the far end. The stitch already exists (created when the call
-            // was routed), so there is nothing further to establish; this is a notification hook.
+            // The onward leg was accepted by the far end, so now the incoming call can be
+            // confirmed. The stitch was created when the call was routed.
+            VcStitch? stitch = _node.FindEgress(port, lci);
+            if (stitch == null)
+            {
+                return;
+            }
+
+            stitch.Active = true;
+            stitch.InPort.AcceptCall(stitch.InLci);
         }
 
         private void OnDataReceived(ISwitchPort port, ushort lci, byte[] data, int length, bool qBit, bool mBit, bool dBit)
@@ -414,6 +425,47 @@ namespace RetroIO.Protocols.X25.Switch
             }
 
             HoldSender(stitch, toEgress, busy: false);
+        }
+
+        private void OnPortStateChanged(ISwitchPort port, bool active)
+        {
+            if (active)
+            {
+                return;
+            }
+
+            // The port is down, so every circuit through it is gone. X.25 4.1.2: a restart clears
+            // every virtual call on the interface it happens on - and the far leg of each of those
+            // calls is on another interface, which knows nothing about it unless the switch says
+            // so. Left alone, the far DTE holds a circuit open against a switch that has forgotten
+            // it, until something times out.
+            List<VcStitch> stitches = _node.SnapshotStitches();
+            for (int i = 0; i < stitches.Count; i++)
+            {
+                VcStitch stitch = stitches[i];
+                bool isIngress = ReferenceEquals(stitch.InPort, port);
+                bool isEgress = ReferenceEquals(stitch.OutPort, port);
+                if (!isIngress && !isEgress)
+                {
+                    continue;
+                }
+
+                // Only the leg that is still up is told; sending to the port that just went down
+                // would go nowhere.
+                stitch.ForwardQueue.Clear();
+                stitch.ReverseQueue.Clear();
+
+                ISwitchPort farPort = isIngress ? stitch.OutPort : stitch.InPort;
+                ushort farLci = isIngress ? stitch.OutLci : stitch.InLci;
+                farPort.ClearCall(farLci, CauseOutOfOrder, 0);
+                farPort.Counters.IncrementCallsCleared();
+
+                WriteCdr(stitch, CauseOutOfOrder, 0);
+                AccountForCallClear(stitch);
+                _node.DestroyStitch(stitch);
+
+                CallClear?.Invoke(port.Id, isIngress ? stitch.InLci : stitch.OutLci, CauseOutOfOrder, 0);
+            }
         }
 
         private void OnCircuitReset(ISwitchPort port, ushort lci, byte cause, byte diagnostic)

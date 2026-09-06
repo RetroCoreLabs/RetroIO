@@ -274,6 +274,64 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
+        public void TheCallerIsNotToldTheCallIsUpUntilTheFarEndAnswers()
+        {
+            // X.25 4.1: a Call Accepted means the circuit is established end to end. Sending one as
+            // soon as the onward Call Request goes out tells the caller the call is up while the
+            // far end may still refuse it, and anything the caller sends in between has nowhere to
+            // go.
+            ushort inLci = _ingress.InjectIncomingCall("23410001", "23400001");
+
+            Assert.That(_egress.PlacedCalls.Count, Is.EqualTo(1), "the onward call went out");
+            Assert.That(_ingress.AcceptedCalls, Is.Empty, "and nothing was confirmed to the caller yet");
+
+            VcStitch stitch = _node.SnapshotStitches()[0];
+            _egress.InjectConnected(stitch.OutLci);
+
+            Assert.That(_ingress.AcceptedCalls, Does.Contain(inLci));
+            Assert.That(stitch.Active, Is.True);
+        }
+
+        [Test]
+        public void APortGoingDown_ClearsTheFarLegOfEveryCircuitThroughIt()
+        {
+            // X.25 4.1.2: a restart clears every virtual call on the interface it happens on. The
+            // far leg of each of those calls is on another interface and knows nothing about it,
+            // so the switch has to say so; otherwise the far DTE holds a circuit open against a
+            // switch that has forgotten it.
+            (ushort inLci, VcStitch stitch) = Call();
+            _egress.WindowShut.Add(stitch.OutLci);
+            _ingress.InjectData(inLci, new byte[] { 1 });
+            Assert.That(stitch.ForwardQueue.Count, Is.EqualTo(1));
+
+            _ingress.Start();
+            _ingress.Stop();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(_egress.ClearedCalls.Count, Is.EqualTo(1), "the far leg is told");
+                Assert.That(_egress.ClearedCalls[0].Lci, Is.EqualTo(stitch.OutLci));
+                Assert.That(_egress.ClearedCalls[0].Cause, Is.EqualTo(SwitchCore.CauseOutOfOrder));
+                Assert.That(_ingress.ClearedCalls, Is.Empty, "nothing is sent to the port that just went down");
+                Assert.That(_node.ActiveStitchCount, Is.EqualTo(0));
+                Assert.That(stitch.ForwardQueue.Count, Is.EqualTo(0), "what was held is discarded");
+            });
+        }
+
+        [Test]
+        public void AnEgressPortGoingDown_ClearsTheIngressLeg()
+        {
+            (ushort inLci, VcStitch stitch) = Call();
+
+            _egress.Start();
+            _egress.Stop();
+
+            Assert.That(_ingress.ClearedCalls.Count, Is.EqualTo(1));
+            Assert.That(_ingress.ClearedCalls[0].Lci, Is.EqualTo(inLci));
+            Assert.That(_node.ActiveStitchCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public void TheTwoDirectionsAreHeldSeparately()
         {
             // A shut window one way must not stop the other way: they are separate flows with

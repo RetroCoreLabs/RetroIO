@@ -54,15 +54,21 @@ namespace RetroIO.Protocols.X25.Tests
             // A DTE on port 0 calls an address that routes to port 1.
             ushort inLci = _p0.InjectIncomingCall("23410001", "23400001");
 
-            // The onward call was placed on port 1 and the inbound call accepted on port 0.
+            // The onward call was placed on port 1. The inbound call is NOT accepted yet: at this
+            // point only the onward Call Request has gone out, and X.25 4.1 makes a Call Accepted
+            // mean the circuit is established end to end.
             Assert.That(_p1.PlacedCalls.Count, Is.EqualTo(1));
             Assert.That(_p1.PlacedCalls[0].Called, Is.EqualTo("23410001"));
-            Assert.That(_p0.AcceptedCalls, Does.Contain(inLci));
+            Assert.That(_p0.AcceptedCalls, Is.Empty, "the caller must not be told the call is up before the far end answers");
             Assert.That(_node.ActiveStitchCount, Is.EqualTo(1));
             Assert.That(setupFired, Is.True);
 
             VcStitch stitch = _node.SnapshotStitches()[0];
             ushort outLci = stitch.OutLci;
+
+            // The far end answers, and only now is the incoming call confirmed.
+            _p1.InjectConnected(outLci);
+            Assert.That(_p0.AcceptedCalls, Does.Contain(inLci));
 
             // Forward: data from the ingress DTE reaches the egress port.
             byte[] hello = Encoding.ASCII.GetBytes("hello");
