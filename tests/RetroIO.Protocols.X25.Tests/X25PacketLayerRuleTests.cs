@@ -413,7 +413,7 @@ namespace RetroIO.Protocols.X25.Tests
         // about each one. Table 11: T20 (180 s) retransmits an unanswered Restart Request.
 
         [Test]
-        public void R6_IncomingRestart_ConfirmsAndFreesEveryCall_ButRaisesNoClearedPerCall_WHICH_IS_WRONG()
+        public void R6_IncomingRestart_ConfirmsFreesEveryCallAndTellsTheApplicationPerCall()
         {
             ushort a = ConnectOutgoing();
             ushort b = ConnectOutgoing();
@@ -427,14 +427,24 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.RestartConfirmation));
             Assert.That(_layer.Circuits[a].State, Is.EqualTo(X25VcState.Ready));
             Assert.That(_layer.Circuits[b].State, Is.EqualTo(X25VcState.Ready));
-            Assert.That(restarts, Is.EqualTo(1));
 
-            // MEASURED 2026-09-06: FreeSwitchedCircuits sets every SVC to Ready with no per-call
-            // notification. An application holding two calls learns nothing about either unless it
-            // also listens for RestartOccurred and walks the table itself. The C emulator has the
-            // same gap (F-02-07) and the C switch misdelivers data because of it (F-08-02).
-            Assert.That(cleared, Is.EqualTo(0),
-                "behaviour changed: a Cleared per call on restart is the FIX for R6 - rewrite this test");
+            // FIXED 2026-09-06 (Phase B5); used to assert zero Cleared events. X.25 4.1: a restart
+            // clears every virtual call - each holder is told, then the restart itself is reported.
+            Assert.That(cleared, Is.EqualTo(2));
+            Assert.That(restarts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R6_OurRestart_TellsTheApplicationPerCallToo()
+        {
+            ushort a = ConnectOutgoing();
+            int cleared = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+
+            _layer.Restart();
+
+            Assert.That(_layer.Circuits[a].State, Is.EqualTo(X25VcState.Ready));
+            Assert.That(cleared, Is.EqualTo(1));
         }
 
         [Test]
@@ -471,17 +481,70 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void R6_UnansweredRestartRequest_IsNeverRetransmitted_WHICH_IS_WRONG()
+        public void R6_UnansweredRestartRequest_IsRetransmittedOnT20ThenGivenUp()
         {
+            int timedOut = 0;
+            _layer.RestartTimedOut += l => timedOut++;
             _layer.Restart();
             Assert.That(_sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(1));
 
-            _layer.Tick(FarFuture);
+            // FIXED 2026-09-06 (Phase B5); there used to be no T20 at all. X.25 Table D.2: T20 =
+            // 180 s, "to retransmit the restart request"; note 1: after the retries, higher layers
+            // decide. Five retransmissions, then RestartTimedOut.
+            long now = Environment.TickCount64;
+            for (int i = 1; i <= 5; i++)
+            {
+                _layer.Tick(now + i * 180_001L);
+                Assert.That(_sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(1 + i), "retransmission " + i);
+                Assert.That(_layer.RestartOutstanding, Is.True);
+            }
 
-            // X.25 Table 11: T20 = 180 s, then the Restart Request is retransmitted. MEASURED
-            // 2026-09-06: there is no T20; Restart() sends once and forgets.
-            Assert.That(_sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(1),
-                "behaviour changed: a T20 retransmission is the FIX for R6 - rewrite this test");
+            _layer.Tick(now + 6 * 180_001L);
+            Assert.That(_sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(6), "no seventh attempt");
+            Assert.That(_layer.RestartOutstanding, Is.False);
+            Assert.That(timedOut, Is.EqualTo(1));
+            Assert.That(_layer.RestartTimeouts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R6_ACallPlacedWhileOurRestartIsOutstanding_IsHeldUntilTheConfirmation()
+        {
+            // X.25 4.1.1: no call set-up packet may be sent in state r2. X25Client restarts in its
+            // constructor and applications call straight away, so the call is held, not refused.
+            _layer.Restart();
+            _sink.Sent.Clear();
+
+            ushort lci = _layer.PlaceCall(RemoteAddress);
+            Assert.That(lci, Is.Not.EqualTo((ushort)0));
+            Assert.That(_layer.Circuits[lci].CallRequestHeld, Is.True);
+            Assert.That(_sink.CountOfType(X25PacketType.CallRequest), Is.EqualTo(0), "nothing on the wire in r2");
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRestartConfirmation());
+
+            Assert.That(_sink.CountOfType(X25PacketType.CallRequest), Is.EqualTo(1), "released by the confirmation");
+            Assert.That(_layer.Circuits[lci].CallRequestHeld, Is.False);
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.CallRequest));
+            Assert.That(_layer.Circuits[lci].TimerExpiryMs, Is.Not.EqualTo(0), "T21 runs from the send");
+        }
+
+        [Test]
+        public void R6_AHeldCall_IsReportedClearedWhenTheRestartGivesUp()
+        {
+            _layer.Restart();
+            ushort lci = _layer.PlaceCall(RemoteAddress);
+            int cleared = 0;
+            byte seenDiag = 0;
+            _layer.Cleared += (l, c, cause, diag) => { cleared++; seenDiag = diag; };
+
+            long now = Environment.TickCount64;
+            for (int i = 1; i <= 6; i++)
+            {
+                _layer.Tick(now + i * 180_001L);
+            }
+
+            Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(seenDiag, Is.EqualTo(X25Diagnostic.TimeExpiredRestart));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
         }
 
         // ================================================================== R7  timers
@@ -491,54 +554,109 @@ namespace RetroIO.Protocols.X25.Tests
         // clear; T23 = 180 s on Clear Request -> retransmit the Clear Request.
 
         [Test]
-        public void R7_T21Expiry_ReturnsToReadyAndRaisesCleared_ButSendsNoClearRequest_WHICH_IS_WRONG()
+        public void R7_T21Expiry_SendsAClearRequestAndTellsTheApplicationOnce()
         {
             ushort lci = _layer.PlaceCall(RemoteAddress);
             int cleared = 0;
-            _layer.Cleared += (l, c, cause, diag) => cleared++;
+            byte seenDiag = 0;
+            _layer.Cleared += (l, c, cause, diag) => { cleared++; seenDiag = diag; };
             _sink.Sent.Clear();
 
             _layer.Tick(FarFuture);
 
-            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
+            // FIXED 2026-09-06 (Phase B5); used to assert Ready with nothing on the wire, leaving
+            // the peer holding the channel in p3. X.25 Table D.2, T21: "To transmit a clear request".
+            // The application hears now (diagnostic 49, time expired for the call); the channel is
+            // busy clearing until the peer confirms.
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.ClearingCause, Is.EqualTo(X25Cause.DteOriginated));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.TimeExpiredCall));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ClearRequest));
             Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(seenDiag, Is.EqualTo(X25Diagnostic.TimeExpiredCall));
+            Assert.That(_layer.CallTimeouts, Is.EqualTo(1));
 
-            // MEASURED 2026-09-06: nothing is sent. The peer still holds the LCI in p3 and the
-            // next call on this LCI collides with a ghost (C emulator F-02-03).
-            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0),
-                "behaviour changed: a Clear Request on T21 expiry is the FIX for R7 - rewrite this test");
+            // The confirmation frees the channel without a second Cleared.
+            _layer.ProcessPacket(X25PacketBuilder.CreateClearConfirmation(lci));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
+            Assert.That(cleared, Is.EqualTo(1), "told exactly once, however many steps the ending took");
         }
 
         [Test]
-        public void R7_T23Expiry_GivesUpWithoutRetransmittingTheClearRequest_WHICH_IS_WRONG()
+        public void R7_T23Expiry_RetransmitsTheClearRequestThenGivesUp()
         {
             ushort lci = ConnectOutgoing();
-            _layer.ClearCall(lci);
+            int cleared = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+            _layer.ClearCall(lci, cause: 0, diagnostic: 0x0A);
             Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
 
-            _layer.Tick(FarFuture);
+            // FIXED 2026-09-06 (Phase B5); used to give up after one attempt. Table D.2, T23: "To
+            // retransmit the clear request"; note 2: after the retries the channel is out of order.
+            long now = Environment.TickCount64;
+            for (int i = 1; i <= 5; i++)
+            {
+                _layer.Tick(now + i * 180_001L);
+                Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1 + i), "retransmission " + i);
+                Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(0x0A), "the same clear is repeated");
+                Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ClearRequest));
+            }
 
+            _layer.Tick(now + 6 * 180_001L);
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(6));
             Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
-            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1),
-                "behaviour changed: a retransmitted Clear Request on T23 is the FIX for R7 - rewrite this test");
+            Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(_layer.ClearTimeouts, Is.EqualTo(1));
         }
 
         [Test]
-        public void R7_T22Expiry_SilentlyReturnsToDataTransfer_WHICH_IS_WRONG()
+        public void R7_T22Expiry_RetransmitsTheResetRequestThenClearsTheCall()
         {
             ushort lci = ConnectOutgoing();
+            int cleared = 0;
+            byte seenDiag = 0;
+            _layer.Cleared += (l, c, cause, diag) => { cleared++; seenDiag = diag; };
             _layer.ResetCall(lci);
             Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
 
-            _layer.Tick(FarFuture);
+            // FIXED 2026-09-06 (Phase B5); used to flip back to DataTransfer as if the peer had
+            // confirmed. Table D.2, T22: "For virtual calls, to retransmit the reset request or to
+            // transmit a clear request" - retransmit five times, then clear (diagnostic 51).
+            long now = Environment.TickCount64;
+            for (int i = 1; i <= 5; i++)
+            {
+                _layer.Tick(now + i * 180_001L);
+                Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1 + i), "retransmission " + i);
+                Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest));
+            }
 
-            // MEASURED 2026-09-06: the state flips back to DataTransfer as if the peer had
-            // confirmed. Nothing is retransmitted and nothing is cleared. The peer may still be
-            // in d2 with different sequence numbers.
-            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer),
-                "behaviour changed: retransmit-then-clear on T22 is the FIX for R7 - rewrite this test");
-            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
-            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0));
+            _layer.Tick(now + 6 * 180_001L);
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(6));
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.TimeExpiredReset));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ClearRequest));
+            Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(seenDiag, Is.EqualTo(X25Diagnostic.TimeExpiredReset));
+            Assert.That(_layer.ResetTimeouts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R7_AResetConfirmationDuringRetransmission_CompletesTheReset()
+        {
+            ushort lci = ConnectOutgoing();
+            int resets = 0;
+            _layer.Reset += (l, c, cause, diag) => resets++;
+            _layer.ResetCall(lci);
+
+            long now = Environment.TickCount64;
+            _layer.Tick(now + 180_001L);   // one retransmission
+            _layer.ProcessPacket(X25PacketBuilder.CreateResetConfirmation(lci));
+
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            Assert.That(resets, Is.EqualTo(1));
+
+            _layer.Tick(now + 2 * 180_001L);   // the timer was cancelled
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(2));
         }
 
         // ================================================================== R8  call collision / LCI choice

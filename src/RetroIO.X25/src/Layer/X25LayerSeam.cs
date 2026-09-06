@@ -109,6 +109,16 @@ namespace RetroIO.Protocols.X25.PacketLayer
     public delegate void X25RestartOccurred(X25Layer layer, byte cause, byte diagnostic);
 
     /// <summary>
+    /// Raised when our own Restart Request went unanswered through every retransmission (T20 x
+    /// MaxRetransmissions). X.25 Table D.2 note 1: "recovery decisions should be taken at higher
+    /// layers" - the link is most likely dead, and the owner should tear it down and re-open it.
+    /// </summary>
+    /// <param name="layer">
+    /// The layer whose restart failed.
+    /// </param>
+    public delegate void X25RestartTimedOut(X25Layer layer);
+
+    /// <summary>
     /// The down interface the X.25 layer calls to hand fully-built packet bytes to the link below for
     /// framing and transmission. This is the "interfaces down" half of the layer seam.
     /// </summary>

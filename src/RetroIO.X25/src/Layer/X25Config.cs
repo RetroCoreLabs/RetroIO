@@ -50,5 +50,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// Clear-request timer (T23) duration in milliseconds.
         /// </summary>
         public int ClearRequestTimeoutMs { get; set; } = 180000;
+
+        /// <summary>
+        /// Restart-request timer (T20) duration in milliseconds. X.25 Table D.2: 180 s.
+        /// </summary>
+        public int RestartTimeoutMs { get; set; } = 180000;
+
+        /// <summary>
+        /// How many times an unanswered Restart, Reset or Clear Request is retransmitted before the
+        /// engine gives up (X.25 Table D.2 notes 1 and 2 speak of "unsuccessful retries" without a
+        /// number; the C emulator plan uses 5 for all three, and so does this).
+        /// </summary>
+        public int MaxRetransmissions { get; set; } = 5;
     }
 }

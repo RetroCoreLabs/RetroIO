@@ -84,6 +84,32 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public byte Diagnostic { get; set; }
 
         /// <summary>
+        /// How many times the packet the current timer guards (Reset or Clear Request) has been
+        /// retransmitted. Reset whenever the circuit enters a new requesting state.
+        /// </summary>
+        public int Retries { get; set; }
+
+        /// <summary>
+        /// True once the application has been told this call is over. A call can end in several
+        /// steps (a T21 expiry that starts a clear, then the confirmation of that clear) and the
+        /// application must hear about it exactly once.
+        /// </summary>
+        public bool ClearReported { get; set; }
+
+        /// <summary>
+        /// True while the Call Request is being held back because our Restart Request has not yet
+        /// been confirmed (X.25 4.1.1: no call set-up in state r2). Sent when the restart completes.
+        /// </summary>
+        public bool CallRequestHeld { get; set; }
+
+        /// <summary>
+        /// True on a permanent virtual circuit whose Reset Request has gone unanswered through every
+        /// retransmission (X.25 Table D.2 note 2: "the logical channel should be considered out of
+        /// order"). Cleared when a reset finally completes or a restart runs.
+        /// </summary>
+        public bool OutOfOrder { get; set; }
+
+        /// <summary>
         /// Call user data associated with the circuit.
         /// </summary>
         public byte[] CallUserData { get; set; } = System.Array.Empty<byte>();

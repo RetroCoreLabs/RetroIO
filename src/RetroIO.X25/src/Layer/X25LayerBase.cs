@@ -46,6 +46,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public event X25RestartOccurred? RestartOccurred;
 
         /// <summary>
+        /// Raised when our own Restart Request went unanswered through every retransmission.
+        /// </summary>
+        public event X25RestartTimedOut? RestartTimedOut;
+
+        /// <summary>
         /// Creates the base with the down-facing packet sink.
         /// </summary>
         /// <param name="sink">
@@ -153,6 +158,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
         protected void RaiseRestartOccurred(byte cause, byte diagnostic)
         {
             RestartOccurred?.Invoke((X25Layer)this, cause, diagnostic);
+        }
+
+        /// <summary>
+        /// Raises <see cref="RestartTimedOut"/>.
+        /// </summary>
+        protected void RaiseRestartTimedOut()
+        {
+            RestartTimedOut?.Invoke((X25Layer)this);
         }
     }
 }

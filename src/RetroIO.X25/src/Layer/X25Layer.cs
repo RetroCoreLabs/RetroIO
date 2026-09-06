@@ -14,8 +14,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
     {
         private readonly X25Config _config;
         private readonly Dictionary<ushort, X25Vc> _vcs = new Dictionary<ushort, X25Vc>();
-        // True from our Restart Request until the peer confirms it or sends its own (X.25 4.1.2).
+        // Our Restart Request, from sending it until the peer confirms it or sends its own (X.25
+        // 4.1.2): the T20 deadline, how often it has been retransmitted, and what it said.
         private bool _restartOutstanding;
+        private long _restartExpiryMs;
+        private int _restartRetries;
+        private byte _restartCause;
+        private byte _restartDiagnostic;
 
         /// <summary>
         /// Creates an X.25 layer over a packet sink with the given configuration.
@@ -47,6 +52,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// How many packets arrived in a state where they mean nothing and were dropped.
         /// </summary>
         public long UnexpectedPackets { get; private set; }
+
+        /// <summary>Calls that were never answered (T21 expired).</summary>
+        public long CallTimeouts { get; private set; }
+
+        /// <summary>Reset Requests that were never confirmed through every retransmission (T22).</summary>
+        public long ResetTimeouts { get; private set; }
+
+        /// <summary>Clear Requests that were never confirmed through every retransmission (T23).</summary>
+        public long ClearTimeouts { get; private set; }
+
+        /// <summary>Restart Requests that were never confirmed through every retransmission (T20).</summary>
+        public long RestartTimeouts { get; private set; }
 
         /// <summary>
         /// Places an outgoing call and returns its logical channel, or 0 if no channel is free.
@@ -84,7 +101,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
             };
             _vcs[lci] = vc;
 
-            if (!Send(X25PacketBuilder.CreateCallRequest(lci, calledAddress, calling, null, callUserData)))
+            // X.25 4.1.1: in state r2 (our Restart Request unanswered) no call set-up packet may be
+            // sent. The call is accepted from the application and held; it goes out the moment the
+            // restart completes, or is reported cleared if the restart never does.
+            if (_restartOutstanding)
+            {
+                vc.CallRequestHeld = true;
+                vc.TimerExpiryMs = 0;
+                return lci;
+            }
+
+            if (!SendCallRequest(vc))
             {
                 // The link did not take it: no call exists, and the channel is free again.
                 _vcs.Remove(lci);
@@ -211,6 +238,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.State = X25VcState.ClearRequest;
             vc.Cause = cause;
             vc.Diagnostic = diagnostic;
+            vc.Retries = 0;
+            vc.CallRequestHeld = false;
             vc.TimerExpiryMs = Now() + _config.ClearRequestTimeoutMs;
             return Send(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic));
         }
@@ -243,6 +272,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.State = X25VcState.ResetRequest;
             vc.Cause = cause;
             vc.Diagnostic = diagnostic;
+            vc.Retries = 0;
             vc.TimerExpiryMs = Now() + _config.ResetRequestTimeoutMs;
             return Send(X25PacketBuilder.CreateResetRequest(lci, cause, diagnostic));
         }
@@ -291,8 +321,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // application saying "forget everything", and that must hold locally. Telling the peer
             // is what the T20 retransmission will guarantee (plan B5); until then a refused Restart
             // Request is counted and reported.
-            FreeSwitchedCircuits();
+            FreeSwitchedCircuits(cause, diagnostic);
             _restartOutstanding = true;
+            _restartRetries = 0;
+            _restartCause = cause;
+            _restartDiagnostic = diagnostic;
+            _restartExpiryMs = Now() + _config.RestartTimeoutMs;
             return Send(X25PacketBuilder.CreateRestartRequest(cause, diagnostic));
         }
 
@@ -365,6 +399,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </param>
         public void Tick(long nowMs)
         {
+            TickRestart(nowMs);
+
             ushort[] keys = SnapshotKeys();
             for (int i = 0; i < keys.Length; i++)
             {
@@ -379,19 +415,209 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 }
 
                 vc.TimerExpiryMs = 0;
-                if (vc.State == X25VcState.CallRequest)
+                switch (vc.State)
                 {
-                    // Call not answered in time: clear it locally and notify the application.
-                    vc.State = X25VcState.Ready;
-                    RaiseCleared(vc.Lci, vc.Cause, vc.Diagnostic);
+                    case X25VcState.CallRequest:
+                        OnT21Expired(vc, nowMs);
+                        break;
+                    case X25VcState.ResetRequest:
+                        OnT22Expired(vc, nowMs);
+                        break;
+                    case X25VcState.ClearRequest:
+                        OnT23Expired(vc, nowMs);
+                        break;
                 }
-                else if (vc.State == X25VcState.ClearRequest)
+            }
+        }
+
+        // ------------------------------------------------------------------ time-limits (X.25 Table D.2)
+        //
+        // Until 2026-09-06 every expiry silently flipped the state to what the peer would have
+        // produced had it answered: T21 went to Ready with no Clear Request (the peer kept the
+        // channel in p3), T22 went back to data transfer as if confirmed, T23 gave up after one
+        // attempt, and there was no T20 at all. Table D.2 says what each expiry is for.
+
+        /// <summary>
+        /// T20 (r2): "To retransmit the restart request". After the retries: note 1, "recovery
+        /// decisions should be taken at higher layers" - the owner is told through RestartTimedOut
+        /// and every call held for the restart is reported cleared.
+        /// </summary>
+        private void TickRestart(long nowMs)
+        {
+            if (!_restartOutstanding || nowMs < _restartExpiryMs)
+            {
+                return;
+            }
+
+            if (_restartRetries < _config.MaxRetransmissions)
+            {
+                _restartRetries++;
+                _restartExpiryMs = nowMs + _config.RestartTimeoutMs;
+                Send(X25PacketBuilder.CreateRestartRequest(_restartCause, _restartDiagnostic));
+                return;
+            }
+
+            _restartOutstanding = false;
+            RestartTimeouts++;
+            FailHeldCalls(X25Diagnostic.TimeExpiredRestart);
+            RaiseRestartTimedOut();
+        }
+
+        /// <summary>
+        /// T21 (p2): "To transmit a clear request". The application hears now that its call failed
+        /// (diagnostic 49, time expired); the channel itself is busy clearing until the peer confirms
+        /// or T23 gives up, and is not offered to a new call before that.
+        /// </summary>
+        private void OnT21Expired(X25Vc vc, long nowMs)
+        {
+            CallTimeouts++;
+            BeginClear(vc, ProcedureErrorCause(), X25Diagnostic.TimeExpiredCall, nowMs);
+            ReportCleared(vc, vc.Cause, vc.Diagnostic);
+        }
+
+        /// <summary>
+        /// T22 (d2): "For virtual calls, to retransmit the reset request or to transmit a clear
+        /// request. For permanent virtual circuits, to retransmit the reset request." After the
+        /// retries a virtual call is cleared (diagnostic 51); a permanent virtual circuit is marked
+        /// out of order (note 2) and keeps asking, because a reset or a restart is its only way back.
+        /// </summary>
+        private void OnT22Expired(X25Vc vc, long nowMs)
+        {
+            if (vc.Retries < _config.MaxRetransmissions)
+            {
+                vc.Retries++;
+                vc.TimerExpiryMs = nowMs + _config.ResetRequestTimeoutMs;
+                Send(X25PacketBuilder.CreateResetRequest(vc.Lci, vc.Cause, vc.Diagnostic));
+                return;
+            }
+
+            ResetTimeouts++;
+            if (vc.Kind == X25VcKind.Svc)
+            {
+                BeginClear(vc, ProcedureErrorCause(), X25Diagnostic.TimeExpiredReset, nowMs);
+                ReportCleared(vc, vc.Cause, vc.Diagnostic);
+                return;
+            }
+
+            if (!vc.OutOfOrder)
+            {
+                vc.OutOfOrder = true;
+                RaiseReset(vc.Lci, vc.Cause, X25Diagnostic.TimeExpiredReset);
+            }
+
+            vc.Retries = 0;
+            vc.TimerExpiryMs = nowMs + _config.ResetRequestTimeoutMs;
+            Send(X25PacketBuilder.CreateResetRequest(vc.Lci, vc.Cause, vc.Diagnostic));
+        }
+
+        /// <summary>
+        /// T23 (p6): "To retransmit the clear request". After the retries the channel is taken back
+        /// locally (note 2: considered out of order) and the application, if it has not heard yet,
+        /// is told with diagnostic 50.
+        /// </summary>
+        private void OnT23Expired(X25Vc vc, long nowMs)
+        {
+            if (vc.Retries < _config.MaxRetransmissions)
+            {
+                vc.Retries++;
+                vc.TimerExpiryMs = nowMs + _config.ClearRequestTimeoutMs;
+                Send(X25PacketBuilder.CreateClearRequest(vc.Lci, vc.Cause, vc.Diagnostic));
+                return;
+            }
+
+            ClearTimeouts++;
+            vc.State = X25VcState.Ready;
+            ReportCleared(vc, vc.Cause, X25Diagnostic.TimeExpiredClear);
+        }
+
+        /// <summary>
+        /// Puts a circuit into p6 with a Clear Request on the wire and T23 running.
+        /// </summary>
+        private void BeginClear(X25Vc vc, byte cause, byte diagnostic, long nowMs)
+        {
+            vc.State = X25VcState.ClearRequest;
+            vc.Cause = cause;
+            vc.Diagnostic = diagnostic;
+            vc.Retries = 0;
+            vc.CallRequestHeld = false;
+            vc.TimerExpiryMs = nowMs + _config.ClearRequestTimeoutMs;
+            Send(X25PacketBuilder.CreateClearRequest(vc.Lci, cause, diagnostic));
+        }
+
+        /// <summary>
+        /// Tells the application that a call is over - once per call, however many steps the ending
+        /// took.
+        /// </summary>
+        private void ReportCleared(X25Vc vc, byte cause, byte diagnostic)
+        {
+            if (vc.ClearReported)
+            {
+                return;
+            }
+
+            vc.ClearReported = true;
+            RaiseCleared(vc.Lci, cause, diagnostic);
+        }
+
+        /// <summary>
+        /// The cause this engine puts in a Clear or Reset it originates for a procedure error or a
+        /// time-out: "Local procedure error" from a DCE; from a DTE only 0 is allowed (X.25 Table
+        /// 5-7 / 5-8 note a) and the diagnostic carries the reason.
+        /// </summary>
+        private byte ProcedureErrorCause()
+        {
+            return _config.IsDte ? X25Cause.DteOriginated : X25Cause.LocalProcedureError;
+        }
+
+        /// <summary>
+        /// Sends the Call Request for a circuit in p2 and arms T21.
+        /// </summary>
+        private bool SendCallRequest(X25Vc vc)
+        {
+            vc.CallRequestHeld = false;
+            vc.ClearReported = false;
+            byte[]? cud = vc.CallUserData.Length == 0 ? null : vc.CallUserData;
+            if (!Send(X25PacketBuilder.CreateCallRequest(vc.Lci, vc.CalledAddress, vc.CallingAddress, null, cud)))
+            {
+                return false;
+            }
+
+            vc.TimerExpiryMs = Now() + _config.CallRequestTimeoutMs;
+            return true;
+        }
+
+        /// <summary>
+        /// Sends every Call Request that was held for an outstanding restart (X.25 4.1.1).
+        /// </summary>
+        private void SendHeldCalls()
+        {
+            ushort[] keys = SnapshotKeys();
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (_vcs.TryGetValue(keys[i], out X25Vc? vc) && vc.CallRequestHeld && vc.State == X25VcState.CallRequest)
                 {
-                    vc.State = X25VcState.Ready;
+                    if (!SendCallRequest(vc))
+                    {
+                        vc.State = X25VcState.Ready;
+                        ReportCleared(vc, ProcedureErrorCause(), X25Diagnostic.None);
+                    }
                 }
-                else if (vc.State == X25VcState.ResetRequest)
+            }
+        }
+
+        /// <summary>
+        /// Reports every held Call Request cleared because the restart it waited for failed.
+        /// </summary>
+        private void FailHeldCalls(byte diagnostic)
+        {
+            ushort[] keys = SnapshotKeys();
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (_vcs.TryGetValue(keys[i], out X25Vc? vc) && vc.CallRequestHeld)
                 {
-                    vc.State = X25VcState.DataTransfer;
+                    vc.CallRequestHeld = false;
+                    vc.State = X25VcState.Ready;
+                    ReportCleared(vc, ProcedureErrorCause(), diagnostic);
                 }
             }
         }
@@ -421,10 +647,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
                 vc.State = X25VcState.Ready;
                 vc.TimerExpiryMs = 0;
-                RaiseCleared(lci, X25Cause.LocalProcedureError, X25Diagnostic.CallCollision);
+                ReportCleared(vc, X25Cause.LocalProcedureError, X25Diagnostic.CallCollision);
             }
 
             vc.State = X25VcState.CallIncoming;
+            vc.ClearReported = false;
+            vc.Retries = 0;
             vc.CalledAddress = info.CalledAddress;
             vc.CallingAddress = info.CallingAddress;
             vc.WindowSizeOut = _config.DefaultWindowSize;
@@ -514,14 +742,15 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 vc.State = X25VcState.Ready;
                 vc.TimerExpiryMs = 0;
-                RaiseCleared(lci, vc.Cause, vc.Diagnostic);
+                ReportCleared(vc, vc.Cause, vc.Diagnostic);
                 return;
             }
 
             Send(X25PacketBuilder.CreateClearConfirmation(lci));
             vc.State = X25VcState.Ready;
             vc.TimerExpiryMs = 0;
-            RaiseCleared(lci, info.ClearingCause, info.DiagnosticCode);
+            vc.CallRequestHeld = false;
+            ReportCleared(vc, info.ClearingCause, info.DiagnosticCode);
         }
 
         private void OnClearConfirmation(ushort lci)
@@ -533,7 +762,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
                 // Cleared means "this channel is now free" whichever side started the clearing; an
                 // application that asked to clear learns here that the peer has confirmed it.
-                RaiseCleared(lci, vc.Cause, vc.Diagnostic);
+                ReportCleared(vc, vc.Cause, vc.Diagnostic);
             }
         }
 
@@ -574,6 +803,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 vc.State = vc.Kind == X25VcKind.Pvc ? X25VcState.PvcReady : X25VcState.DataTransfer;
                 vc.TimerExpiryMs = 0;
+                vc.OutOfOrder = false;
                 vc.ResetFlow();
 
                 // The application learns that the circuit was reset when the reset is complete - it
@@ -591,13 +821,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
             if (_restartOutstanding)
             {
                 _restartOutstanding = false;
-                FreeSwitchedCircuits();
+                FreeSwitchedCircuits(info.RestartCause, info.DiagnosticCode);
                 RaiseRestartOccurred(info.RestartCause, info.DiagnosticCode);
+                SendHeldCalls();
                 return;
             }
 
             Send(X25PacketBuilder.CreateRestartConfirmation());
-            FreeSwitchedCircuits();
+            FreeSwitchedCircuits(info.RestartCause, info.DiagnosticCode);
             RaiseRestartOccurred(info.RestartCause, info.DiagnosticCode);
         }
 
@@ -610,6 +841,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             _restartOutstanding = false;
+            SendHeldCalls();
         }
 
         /// <summary>
@@ -713,21 +945,53 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.State = X25VcState.ResetRequest;
             vc.Cause = cause;
             vc.Diagnostic = diagnostic;
+            vc.Retries = 0;
             vc.TimerExpiryMs = Now() + _config.ResetRequestTimeoutMs;
             ProcedureErrors++;
             Send(X25PacketBuilder.CreateResetRequest(vc.Lci, cause, diagnostic));
         }
 
-        private void FreeSwitchedCircuits()
+        /// <summary>
+        /// Applies a restart to every circuit: X.25 4.1 - a restart clears every virtual call and
+        /// resets every permanent virtual circuit. The application is told per circuit (a Cleared for
+        /// each call that was up or being set up, a Reset for each PVC) and then once for the restart
+        /// itself, so a holder of several calls does not have to walk the table to find out what
+        /// happened. A Call Request held for our own outstanding restart is not a call yet and is
+        /// left alone.
+        /// </summary>
+        private void FreeSwitchedCircuits(byte cause, byte diagnostic)
         {
             ushort[] keys = SnapshotKeys();
             for (int i = 0; i < keys.Length; i++)
             {
-                if (_vcs.TryGetValue(keys[i], out X25Vc? vc) && vc.Kind == X25VcKind.Svc)
+                if (!_vcs.TryGetValue(keys[i], out X25Vc? vc))
                 {
+                    continue;
+                }
+
+                if (vc.Kind == X25VcKind.Svc)
+                {
+                    if (vc.CallRequestHeld)
+                    {
+                        continue;
+                    }
+
+                    bool wasLive = vc.State != X25VcState.Ready;
                     vc.State = X25VcState.Ready;
                     vc.TimerExpiryMs = 0;
                     vc.ResetFlow();
+                    if (wasLive)
+                    {
+                        ReportCleared(vc, cause, diagnostic);
+                    }
+                }
+                else
+                {
+                    vc.State = X25VcState.PvcReady;
+                    vc.TimerExpiryMs = 0;
+                    vc.OutOfOrder = false;
+                    vc.ResetFlow();
+                    RaiseReset(vc.Lci, cause, diagnostic);
                 }
             }
         }

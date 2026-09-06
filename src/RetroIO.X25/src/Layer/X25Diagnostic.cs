@@ -44,6 +44,21 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
         /// <summary>39 - Packet too long.</summary>
         public const byte PacketTooLong = 39;
+
+        /// <summary>48 - Time expired (the general code; 49-53 say which timer).</summary>
+        public const byte TimeExpired = 48;
+
+        /// <summary>49 - Time expired for incoming call: the call was not answered (T21 at a DTE, T11 at a DCE).</summary>
+        public const byte TimeExpiredCall = 49;
+
+        /// <summary>50 - Time expired for clear indication: the Clear Request was never confirmed (T23).</summary>
+        public const byte TimeExpiredClear = 50;
+
+        /// <summary>51 - Time expired for reset indication: the Reset Request was never confirmed (T22).</summary>
+        public const byte TimeExpiredReset = 51;
+
+        /// <summary>52 - Time expired for restart indication: the Restart Request was never confirmed (T20).</summary>
+        public const byte TimeExpiredRestart = 52;
     }
 
     /// <summary>
