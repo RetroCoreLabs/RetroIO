@@ -28,7 +28,7 @@ using RetroIO.Protocols.X25.DeleteMe;
     /// <summary>
     /// Central runtime for X.25 protocol stack with unified timer management, routing, and history
     /// </summary>
-    public class ProtocolRuntime : IDisposable, IProtocolRuntime, ILapbTimerManager, ILapbFramePreHandler
+    public partial class ProtocolRuntime : IDisposable, IProtocolRuntime, ILapbTimerManager, ILapbFramePreHandler
     {
         // Configuration
         private readonly RuntimeConfig _config;
@@ -115,176 +115,12 @@ using RetroIO.Protocols.X25.DeleteMe;
         private readonly Dictionary<string, IProtocolModule> _registeredModules = new();
         private readonly object _routingLock = new();
 
-        /// <summary>
-        /// X.25 modulo 8 flow control state for one virtual circuit
-        /// </summary>
-        private class XotFlowControl
-        {
-            public byte SendSeq;      // P(S) - next sequence to send (0-7)
-            public byte RecvSeq;      // P(R) to include in outgoing packets (next expected from peer)
-            public byte PeerAcked;    // Last P(R) received from peer (they acknowledged up to this)
-            /// <summary>
-            /// Maximum unacknowledged data packets we may have outstanding.
-            /// </summary>
-            /// <remarks>
-            /// Starts at the standard default and is replaced by whatever the call accepted packet
-            /// authorises (see ApplyNegotiatedWindow). It used to be a hard-coded 7, which is the
-            /// widest a modulo 8 circuit can carry but NOT what an un-negotiated peer authorises:
-            /// X.25 6.10 makes the default 2, and sending 7 into a window of 2 is a P(S) outside the
-            /// window, which X.25 4.4.1.3 makes a local procedure error - the peer resets the
-            /// circuit. It only ever worked because the C reference switches are configured for 7.
-            /// </remarks>
-            public byte WindowSize = RetroIO.Protocols.X25.DeleteMe.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
-
-            /// <summary>
-            /// Set while the peer has told us it cannot take more data (RNR), cleared by RR.
-            /// </summary>
-            /// <remarks>
-            /// X.25 has two independent brakes on a sender: the window, which we compute ourselves
-            /// from P(S) and the peer's P(R), and the peer's busy condition, which only the peer can
-            /// tell us about. Until 2026-09-05 we honoured the first and ignored the second - an RNR
-            /// fell through to the "unhandled packet type" branch, so we kept sending at a peer that
-            /// had just asked us to stop. That is exactly the fault that destroys packets inside the
-            /// C reference switch (tools/x25switch.c:2750 discards lapb_send's refusal), and there is
-            /// no reason for us to be the other end of the same mistake.
-            /// </remarks>
-            public bool PeerBusy;
-
-            private readonly ManualResetEventSlim _windowOpen = new ManualResetEventSlim(true);
-
-            public int Outstanding
-            {
-                get
-                {
-                    int diff = (SendSeq - PeerAcked) & 0x07;
-                    // Handle the ambiguous case: if diff == 0, no packets outstanding
-                    // (we can't have exactly 8 outstanding in mod 8)
-                    return diff;
-                }
-            }
-
-            // Both brakes, in the order X.25 applies them: a busy peer stops us outright, and even a
-            // ready peer only takes WindowSize unacknowledged packets.
-            public bool CanSend => !PeerBusy && Outstanding < WindowSize;
-
-            /// <summary>Wait until the send window has space (peer sends RR)</summary>
-            public bool WaitForWindow(int timeoutMs)
-            {
-                // Fast path: window already open
-                if (CanSend) return true;
-
-                var deadline = Environment.TickCount64 + timeoutMs;
-
-                // Brief spin before blocking — covers the common case where
-                // RR arrives within microseconds of the previous send
-                var spin = new SpinWait();
-                for (int i = 0; i < 20; i++)
-                {
-                    spin.SpinOnce();
-                    if (CanSend) return true;
-                }
-
-                // Fall back to event-based wait with 1ms granularity
-                while (!CanSend)
-                {
-                    int remaining = (int)(deadline - Environment.TickCount64);
-                    if (remaining <= 0) return false;
-                    _windowOpen.Reset();
-                    if (CanSend) return true;
-                    _windowOpen.Wait(Math.Min(remaining, 1));
-                }
-                return true;
-            }
-
-            /// <summary>
-            /// Called for a P(R) that acknowledges but does NOT clear a busy condition -
-            /// the piggybacked P(R) of an incoming DATA packet.
-            /// </summary>
-            /// <param name="peerPR">The P(R) carried by the packet.</param>
-            /// <remarks>
-            /// X.25 4.4.1.3 makes every data, RR and RNR packet carry a P(R) that acknowledges.
-            /// But 4.4.1.6 is just as specific about what UNDOES a busy condition: it "is cleared by
-            /// the transmission in the same direction of an RR packet or by the initiation of a
-            /// reset procedure". A data packet is neither.
-            /// <para>
-            /// This distinction was missing until 2026-09-05 and it cost real packets. Both cases
-            /// called one method that cleared the flag, so on an echo circuit every packet coming
-            /// back cleared the busy condition the peer had just set - we resumed sending straight
-            /// through the RNR, far more than a window arrived at the switch after it asked us to
-            /// stop, and its forwarding queue overflowed. The RNR looked honoured in the logs and
-            /// was being undone microseconds later by the next echo.
-            /// </para>
-            /// </remarks>
-            public void AckReceived(byte peerPR)
-            {
-                PeerAcked = peerPR;
-                _windowOpen.Set(); // Always signal — let WaitForWindow re-evaluate
-            }
-
-            /// <summary>
-            /// Called for an RR: it acknowledges AND clears any busy condition.
-            /// </summary>
-            /// <param name="peerPR">The P(R) carried by the RR.</param>
-            /// <remarks>
-            /// X.25 has no separate "ready again" packet - 4.4.1.6 makes the RR itself the signal.
-            /// Note also that an RR after an RNR "is not to be taken as a demand for retransmission
-            /// of packets which have already been transmitted", so nothing is re-sent here.
-            /// </remarks>
-            public void ReadyReceived(byte peerPR)
-            {
-                PeerAcked = peerPR;
-                PeerBusy = false;
-                _windowOpen.Set();
-            }
-
-            /// <summary>
-            /// Called when the peer sends RNR: it acknowledges up to P(R) and asks us to stop.
-            /// </summary>
-            /// <param name="peerPR">The P(R) carried by the RNR.</param>
-            /// <remarks>
-            /// An RNR carries a P(R) like any other supervisory packet, so it still moves the
-            /// acknowledgement point; what it adds is the busy condition. We record both. The
-            /// waiting sender is signalled even though it cannot proceed, so that it re-evaluates
-            /// and blocks on the busy flag rather than on a stale window count.
-            /// </remarks>
-            public void PeerBusyReceived(byte peerPR)
-            {
-                PeerAcked = peerPR;
-                PeerBusy = true;
-                _windowOpen.Set();
-            }
-
-            /// <summary>
-            /// Puts the circuit back to the state it had at call setup, after a reset.
-            /// </summary>
-            /// <remarks>
-            /// X.25 says a reset sets BOTH directions' sequence numbers to zero, so all three
-            /// counters go back together - resetting only one would leave us numbering packets the
-            /// peer discards. The waiting sender is released as well: with the counters level the
-            /// window is empty again, and a sender blocked on the pre-reset window would otherwise
-            /// sit there until its timeout even though it is now free to send.
-            /// </remarks>
-            public void ResetFlow()
-            {
-                SendSeq = 0;
-                RecvSeq = 0;
-                PeerAcked = 0;
-                // A reset clears the busy condition too: the circuit is back to its call-setup
-                // state, and leaving PeerBusy set would keep the sender blocked for ever, because
-                // the RR that would have cleared it belonged to the pre-reset sequence space.
-                PeerBusy = false;
-                _windowOpen.Set();
-            }
-        }
 
         // XOT connection tracking: maps local LCN to (connection, remote LCN) for bidirectional data
-        private readonly Dictionary<ushort, (object Connection, ushort RemoteLcn)> _xotConnections = new();
         // Reverse lookup: remote LCN -> local LCN (avoids linear scan in receive path)
-        private readonly Dictionary<ushort, ushort> _xotRemoteToLocalLcn = new();
         // LCN to service mapping for XOT calls
         private readonly Dictionary<ushort, Services.IProtocolService> _lcnServiceBindings = new();
         // Per-LCN X.25 flow control state for XOT calls
-        private readonly Dictionary<ushort, XotFlowControl> _xotFlowControl = new();
 
         // LCN to Link mapping for multi-link TX routing
         private readonly Dictionary<ushort, string> _lcnToLink = new();
@@ -1410,6 +1246,7 @@ using RetroIO.Protocols.X25.DeleteMe;
 
             var transport = new XotClientTransport(_logger, clientConfig);
             transport.SetInterfaceConfig(xotConfig);
+            transport.PacketLayerPlaceCall = PlaceCallViaEndpoint;
             return transport;
         }
 
@@ -1460,213 +1297,6 @@ using RetroIO.Protocols.X25.DeleteMe;
             }
         }
 
-        /// <summary>
-        /// Handle data packets received from XOT transport connections.
-        /// Routes data to the appropriate local service (TAD) based on LCN mapping.
-        /// </summary>
-        private void OnXotDataReceived(object? sender, TransportDataEventArgs e)
-        {
-            try
-            {
-                var packetData = e.Data;
-                if (packetData == null || packetData.Length < 3) return;
-
-                // Extract LCN from packet
-                byte gfi = packetData[0];
-                byte lcnLow = packetData[1];
-                ushort remoteLcn = (ushort)(((gfi & 0x0F) << 8) | lcnLow);
-                byte pti = packetData[2];
-
-                _logger.LogInformation("OnXotDataReceived: {Length} bytes, GFI=0x{GFI:X2} LCN={RemoteLcn} byte2=0x{PTI:X2}",
-                    packetData.Length, gfi, remoteLcn, pti);
-
-                // Find local LCN mapped to this remote LCN (O(1) reverse lookup)
-                ushort localLcn = 0;
-                lock (_routingLock)
-                {
-                    _xotRemoteToLocalLcn.TryGetValue(remoteLcn, out localLcn);
-                }
-
-                if (localLcn == 0)
-                {
-                    _logger.LogDebug("No local LCN mapping for remote LCN {RemoteLcn}, packet type 0x{PTI:X2}", remoteLcn, pti);
-                    return;
-                }
-
-                // Check if this is a DATA packet (bit 0 = 0 means I-frame / data)
-                if ((pti & 0x01) == 0)
-                {
-                    // X.25 modulo 8 data packet: byte[0]=GFI|LCG, byte[1]=LCN, byte[2]=P(R)|M|P(S)|0
-                    // User data starts at byte[3]
-                    if (packetData.Length > 3)
-                    {
-                        int dataOffset = 3;
-                        var userData = new byte[packetData.Length - dataOffset];
-                        Array.Copy(packetData, dataOffset, userData, 0, userData.Length);
-
-                        _logger.LogInformation("XOT DATA: {Length} user bytes on remote LCN {RemoteLcn} -> local LCN {LocalLcn}",
-                                       userData.Length, remoteLcn, localLcn);
-
-                        // Extract sequence info and update flow control
-                        byte receivedPs = (byte)((pti >> 1) & 0x07);
-                        byte receivedPr = (byte)((pti >> 5) & 0x07);
-                        byte ackPr = (byte)((receivedPs + 1) & 0x07);
-                        lock (_routingLock)
-                        {
-                            if (_xotFlowControl.TryGetValue(localLcn, out var fc))
-                            {
-                                fc.RecvSeq = ackPr;
-                                fc.AckReceived(receivedPr); // Piggybacked P(R) opens send window
-                            }
-                        }
-                        SendRRToXotConnection(localLcn, remoteLcn, ackPr);
-
-                        // Route to TAD service (inbound calls) or PadClient module (outbound calls)
-                        var tadService = FindServiceForLcn(localLcn);
-                        if (tadService != null)
-                        {
-                            tadService.HandleData(localLcn, userData);
-                        }
-                        else
-                        {
-                            // Look up bound module under lock, call outside lock to avoid contention
-                            Modules.PadClient? boundPad = null;
-                            lock (_routingLock)
-                            {
-                                if (_lcnBindings.TryGetValue(localLcn, out var module) && module is Modules.PadClient pc)
-                                    boundPad = pc;
-                                else
-                                    _logger.LogWarning("No service or module bound to LCN {LCN} for incoming data", localLcn);
-                            }
-                            if (boundPad != null)
-                            {
-                                var packet = new RetroIO.Protocols.X25.Models.X25Packet(packetData);
-                                packet.LCN = localLcn;
-                                var args = new RetroIO.Protocols.X25.Models.X25PacketEventArgs
-                                {
-                                    Packet = packet,
-                                    Direction = RetroIO.Protocols.X25.Models.PacketDirection.Receive,
-                                    Timestamp = DateTime.UtcNow
-                                };
-                                boundPad.OnX25Event(args);
-                            }
-                        }
-                    }
-                }
-                else if (pti == 0x0F) // Call Accepted
-                {
-                    _logger.LogInformation("XOT Call Accepted on remote LCN {RemoteLcn} -> local LCN {LocalLcn}", remoteLcn, localLcn);
-
-                    // Take the send window from what the answering end actually authorised.
-                    //
-                    // The call accepted packet's facility field is the only statement of the window
-                    // that binds us. X.25 6.12: if the called DTE makes no facility request, it "is
-                    // assumed to have accepted the indicated values", i.e. what we proposed - but if
-                    // it lowers the window we must obey, and if it sends no facility at all we fall
-                    // back to 2, the standard default (X.25 6.10), NOT to our proposal. Sending 7
-                    // into a window of 2 puts P(S) outside the window, which X.25 4.4.1.3 makes a
-                    // local procedure error, and the peer resets the circuit.
-                    //
-                    // We are the CALLING end, so our send window is the "from the calling DTE"
-                    // value - the SECOND octet of the facility (X.25 7.3.1.2).
-                    ApplyNegotiatedWindow(localLcn, packetData);
-
-                    Modules.PadClient? acceptPad = null;
-                    lock (_routingLock)
-                    {
-                        if (_lcnBindings.TryGetValue(localLcn, out var module) && module is Modules.PadClient pc)
-                            acceptPad = pc;
-                    }
-                    acceptPad?.NotifyCallAccepted(localLcn);
-                }
-                else if (pti == 0xFF) // Restart Confirm
-                {
-                    _logger.LogInformation("XOT Restart Confirm received on remote LCN {RemoteLcn}", remoteLcn);
-                    // Restart handshake complete - no action needed, call request follows
-                }
-                else if (pti == 0x13) // Clear Request
-                {
-                    _logger.LogInformation("XOT Clear Request on remote LCN {RemoteLcn} -> local LCN {LocalLcn}", remoteLcn, localLcn);
-                    var tadService = FindServiceForLcn(localLcn);
-                    if (tadService != null)
-                    {
-                        byte cause = packetData.Length > 3 ? packetData[3] : (byte)0;
-                        byte diag = packetData.Length > 4 ? packetData[4] : (byte)0;
-                        tadService.HandleClear(localLcn, cause, diag);
-                    }
-                    UnregisterXotConnection(localLcn);
-                }
-                else if ((pti & 0x1F) == 0x01) // RR (Receiver Ready) - bits 4-0 = 00001
-                {
-                    byte peerPR = (byte)((pti >> 5) & 0x07);
-                    lock (_routingLock)
-                    {
-                        // ReadyReceived, not AckReceived: an RR is the only packet other than a
-                        // reset that clears a busy condition (X.25 4.4.1.6).
-                        if (_xotFlowControl.TryGetValue(localLcn, out var fc))
-                            fc.ReadyReceived(peerPR);
-                    }
-                }
-                else if ((pti & 0x1F) == 0x05) // RNR (Receiver Not Ready) - bits 4-0 = 00101
-                {
-                    // The peer's receive buffer is full. X.25 requires us to stop sending DATA on
-                    // this circuit until an RR arrives; the RNR's own P(R) still acknowledges.
-                    // Before 2026-09-05 this packet had no branch at all and landed in the
-                    // "unhandled" warning below, so we carried on sending into a peer that had
-                    // asked us to stop - and the peer's only remaining defence is to discard, which
-                    // costs a Reset and the whole window of data with it.
-                    byte peerPR = (byte)((pti >> 5) & 0x07);
-                    _logger.LogWarning(
-                        "XOT RNR (peer busy) on remote LCN {RemoteLcn} -> local LCN {LocalLcn}: P(R)={PeerPR} - holding off until RR",
-                        remoteLcn, localLcn, peerPR);
-                    lock (_routingLock)
-                    {
-                        if (_xotFlowControl.TryGetValue(localLcn, out var fc))
-                            fc.PeerBusyReceived(peerPR);
-                    }
-                }
-                else if (pti == 0x1B) // Reset Request / Reset Indication
-                {
-                    // MEASURED 2026-09-04, and this is what the bulk-transfer stall was. The peer
-                    // resets the circuit mid-stream; X.25 requires the DTE to answer with a Reset
-                    // Confirmation and to set BOTH sequence counters back to zero. This branch did
-                    // not exist, so the packet fell into the "unhandled" LogDebug below: the peer
-                    // waited for a confirmation that never came and stopped acknowledging, our send
-                    // window stayed at 7 outstanding, and every later send timed out - 59 of them
-                    // before the test's 120-second limit. The one frame that explained the whole
-                    // failure was logged BELOW the level the tests run at, which is why the earlier
-                    // investigation blamed the acknowledgement counter instead.
-                    byte cause = packetData.Length > 3 ? packetData[3] : (byte)0;
-                    byte diag = packetData.Length > 4 ? packetData[4] : (byte)0;
-
-                    // Warning, not Debug. A reset is the peer telling us the circuit was torn down
-                    // underneath us; it must never again be invisible at the default level.
-                    _logger.LogWarning(
-                        "XOT Reset Request on remote LCN {RemoteLcn} -> local LCN {LocalLcn}: cause=0x{Cause:X2} diagnostic=0x{Diag:X2} - confirming and restarting sequence numbers",
-                        remoteLcn, localLcn, cause, diag);
-
-                    SendResetConfirmationToXotConnection(localLcn, remoteLcn);
-
-                    lock (_routingLock)
-                    {
-                        if (_xotFlowControl.TryGetValue(localLcn, out var fc))
-                        {
-                            fc.ResetFlow();
-                        }
-                    }
-                }
-                else
-                {
-                    // Warning rather than Debug: an unhandled packet type on a live circuit is how
-                    // the reset above hid for so long. If this fires, the type belongs above.
-                    _logger.LogWarning("XOT packet type 0x{PTI:X2} on remote LCN {RemoteLcn} (UNHANDLED)", pti, remoteLcn);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling XOT data packet");
-            }
-        }
 
         /// <summary>
         /// Handle transport status changes
@@ -3803,6 +3433,54 @@ using RetroIO.Protocols.X25.DeleteMe;
         /// <summary>
         /// Find an available LCN for outgoing calls
         /// </summary>
+        /// <summary>
+        /// Maps a local LCN onto the circuit an incoming XOT call arrived on. Called by the routing
+        /// layer with the connection and the engine's channel it got from the Call Request.
+        /// </summary>
+        public void RegisterXotConnection(ushort lcn, object? connection, ushort remoteLcn)
+        {
+            if (connection == null)
+            {
+                return;
+            }
+
+            X25Endpoint? endpoint = FindEndpoint(connection);
+            if (endpoint == null)
+            {
+                _logger.LogWarning("RegisterXotConnection: no endpoint for the connection of LCN {LCN}", lcn);
+                return;
+            }
+
+            MapCircuit(lcn, endpoint, remoteLcn);
+        }
+
+        /// <summary>
+        /// Forgets a local LCN's circuit and service binding.
+        /// </summary>
+        public void UnregisterXotConnection(ushort lcn)
+        {
+            UnmapCircuit(lcn);
+            lock (_routingLock)
+            {
+                _lcnServiceBindings.Remove(lcn);
+            }
+        }
+
+        /// <summary>Kept for the routing layer's call sequence; the mapping is made when the call is placed.</summary>
+        public void RegisterOutboundXotCall(ushort localLcn, ushort remoteLcn)
+        {
+        }
+
+        /// <summary>Kept for the routing layer's call sequence; the mapping is made when the call is placed.</summary>
+        public void RegisterOutboundXotCallDeferred(ushort localLcn, ushort remoteLcn)
+        {
+        }
+
+        /// <summary>Kept for the routing layer's call sequence; the mapping is made when the call is placed.</summary>
+        public void FinalizeOutboundXotCall(ushort localLcn, object transport)
+        {
+        }
+
         public ushort FindAvailableLCN()
         {
             lock (_routingLock)
@@ -3819,35 +3497,7 @@ using RetroIO.Protocols.X25.DeleteMe;
             }
         }
 
-        /// <summary>
-        /// Register an XOT connection for an LCN so TAD responses can be sent back
-        /// </summary>
-        public void RegisterXotConnection(ushort lcn, object? connection, ushort remoteLcn)
-        {
-            if (connection == null) return;
-            lock (_routingLock)
-            {
-                _xotConnections[lcn] = (connection, remoteLcn);
-                _xotRemoteToLocalLcn[remoteLcn] = lcn;
-                _logger.LogDebug("Registered XOT connection for LCN {LCN} (remote LCN {RemoteLcn})", lcn, remoteLcn);
-            }
-        }
 
-        /// <summary>
-        /// Unregister an XOT connection for an LCN
-        /// </summary>
-        public void UnregisterXotConnection(ushort lcn)
-        {
-            lock (_routingLock)
-            {
-                if (_xotConnections.TryGetValue(lcn, out var removed))
-                    _xotRemoteToLocalLcn.Remove(removed.RemoteLcn);
-                _xotConnections.Remove(lcn);
-                _lcnServiceBindings.Remove(lcn);
-                _xotFlowControl.Remove(lcn);
-                _logger.LogDebug("Unregistered XOT connection and service for LCN {LCN}", lcn);
-            }
-        }
 
         /// <summary>
         /// Unbind a module from an LCN (cleanup on failed outbound call)
@@ -3860,231 +3510,10 @@ using RetroIO.Protocols.X25.DeleteMe;
             }
         }
 
-        /// <summary>
-        /// Register an outbound XOT call for response routing.
-        /// Uses the last active XOT client connection for sending responses back.
-        /// </summary>
-        public void RegisterOutboundXotCall(ushort localLcn, ushort remoteLcn)
-        {
-            lock (_routingLock)
-            {
-                // Find the active XOT client transport to get its connection
-                object? xotConnection = null;
-                foreach (var transport in _transportInterfaces.Values)
-                {
-                    if (transport is RetroIO.Protocols.X25.Transport.XotClientTransport xotClient &&
-                        xotClient.Status == RetroIO.Protocols.X25.Transport.TransportStatus.Active)
-                    {
-                        xotConnection = xotClient;
-                        break;
-                    }
-                }
 
-                if (xotConnection != null)
-                {
-                    _xotConnections[localLcn] = (xotConnection, remoteLcn);
-                    _xotRemoteToLocalLcn[remoteLcn] = localLcn;
-                    _xotFlowControl[localLcn] = new XotFlowControl();
-                    _logger.LogInformation("Registered outbound XOT call: localLCN={LocalLcn} remoteLCN={RemoteLcn}",
-                        localLcn, remoteLcn);
-                }
-                else
-                {
-                    _logger.LogWarning("RegisterOutboundXotCall: No active XOT client transport found! Interfaces: {Count}",
-                        _transportInterfaces.Count);
-                    foreach (var t in _transportInterfaces)
-                        _logger.LogWarning("  Transport: {Name} Type={Type} Status={Status}", t.Key, t.Value.Type, t.Value.Status);
-                }
-            }
-        }
 
-        /// <summary>
-        /// Pre-register an outbound XOT call with a placeholder connection.
-        /// This ensures the LCN mapping exists before PlaceCall sends the Call Request,
-        /// so Call Accepted (arriving on background thread) can find it.
-        /// </summary>
-        public void RegisterOutboundXotCallDeferred(ushort localLcn, ushort remoteLcn)
-        {
-            lock (_routingLock)
-            {
-                // Use a placeholder — will be replaced by FinalizeOutboundXotCall
-                _xotConnections[localLcn] = (new object(), remoteLcn);
-                _xotRemoteToLocalLcn[remoteLcn] = localLcn;
-                _xotFlowControl[localLcn] = new XotFlowControl();
-                _logger.LogDebug("Pre-registered outbound XOT call: localLCN={LocalLcn} remoteLCN={RemoteLcn}", localLcn, remoteLcn);
-            }
-        }
 
-        /// <summary>
-        /// Finalize an outbound XOT call by setting the actual transport used.
-        /// </summary>
-        public void FinalizeOutboundXotCall(ushort localLcn, object transport)
-        {
-            lock (_routingLock)
-            {
-                if (_xotConnections.TryGetValue(localLcn, out var existing))
-                {
-                    _xotConnections[localLcn] = (transport, existing.RemoteLcn);
-                    _logger.LogInformation("Finalized outbound XOT call: localLCN={LocalLcn} transport={Transport}",
-                        localLcn, (transport as RetroIO.Protocols.X25.Transport.ITransportInterface)?.Name ?? transport.GetType().Name);
-                }
-            }
-        }
 
-        /// <summary>
-        /// Sets a circuit's send window from the flow control facility of a call accepted packet.
-        /// </summary>
-        /// <param name="localLcn">The local logical channel the call was placed on.</param>
-        /// <param name="callAccepted">The whole call accepted packet, header included.</param>
-        /// <remarks>
-        /// <para>
-        /// Layout of a call accepted packet (X.25 5.2.2): GFI+LCG, LCN, packet type, then an address
-        /// length octet, the packed BCD addresses, a facility length octet, and the facility field.
-        /// A minimal call accepted from a switch carries zero-length addresses, but the octets are
-        /// still there, so the address length must be read rather than assumed away.
-        /// </para>
-        /// <para>
-        /// When the packet carries no window size facility we take the standard default of 2
-        /// (X.25 6.10, and 7.3.1.2 "All Administrations will provide a window size of 2"), which is
-        /// the conservative choice: too small only costs throughput, while too large puts P(S)
-        /// outside the peer's window and gets the circuit reset.
-        /// </para>
-        /// </remarks>
-        private void ApplyNegotiatedWindow(ushort localLcn, byte[] callAccepted)
-        {
-            byte window = RetroIO.Protocols.X25.DeleteMe.X25FlowControlFacilities.DEFAULT_WINDOW_SIZE;
-            bool negotiated = false;
-
-            // 3 header octets + the address length octet.
-            if (callAccepted.Length >= 4)
-            {
-                int callingDigits = (callAccepted[3] >> 4) & 0x0F;
-                int calledDigits = callAccepted[3] & 0x0F;
-                int addressOctets = (callingDigits + calledDigits + 1) / 2; // BCD, two digits per octet
-                int facilityLengthOffset = 4 + addressOctets;
-
-                if (facilityLengthOffset < callAccepted.Length)
-                {
-                    int facilityLength = callAccepted[facilityLengthOffset];
-                    int facilityStart = facilityLengthOffset + 1;
-
-                    if (facilityLength > 0 && facilityStart + facilityLength <= callAccepted.Length)
-                    {
-                        var parameters = RetroIO.Protocols.X25.DeleteMe.X25FlowControlFacilities.Decode(
-                            new ReadOnlySpan<byte>(callAccepted, facilityStart, facilityLength));
-
-                        if (parameters.HasWindowSize && parameters.WindowFromCalling > 0)
-                        {
-                            // We placed the call, so our send window is the calling-DTE direction.
-                            window = parameters.WindowFromCalling;
-                            negotiated = true;
-                        }
-                    }
-                }
-            }
-
-            lock (_routingLock)
-            {
-                if (_xotFlowControl.TryGetValue(localLcn, out var fc))
-                {
-                    fc.WindowSize = window;
-                }
-            }
-
-            if (negotiated)
-            {
-                _logger.LogInformation(
-                    "X.25 window negotiated on LCN {LCN}: send window {Window}", localLcn, window);
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "X.25 call accepted on LCN {LCN} carried no window size facility - using the standard default of {Window} (X.25 6.10)",
-                    localLcn, window);
-            }
-        }
-
-        /// <summary>
-        /// Send data for an LCN when that LCN is mapped to an XOT connection.
-        /// </summary>
-        /// <param name="lcn">Local logical channel number.</param>
-        /// <param name="data">The data to send.</param>
-        /// <param name="length">Number of valid bytes in <paramref name="data"/>.</param>
-        /// <returns>
-        /// <see cref="XotSendOutcome.NotXotMapped"/> when the caller should use the packet layer,
-        /// <see cref="XotSendOutcome.Sent"/> when the packet went out, and
-        /// <see cref="XotSendOutcome.RefusedByFlowControl"/> when the circuit is XOT but flow
-        /// control held the packet back.
-        /// </returns>
-        public XotSendOutcome SendDataViaXotIfMapped(ushort lcn, byte[] data, int length)
-        {
-            // First check if this LCN is XOT-mapped (quick lock)
-            (object Connection, ushort RemoteLcn) xotInfo;
-            XotFlowControl? fc;
-            Monitor.Enter(_routingLock);
-            try
-            {
-                if (!_xotConnections.TryGetValue(lcn, out xotInfo))
-                    return XotSendOutcome.NotXotMapped;
-                _xotFlowControl.TryGetValue(lcn, out fc);
-            }
-            finally
-            {
-                Monitor.Exit(_routingLock);
-            }
-
-            // Wait for send window outside the lock (RR handler needs the lock)
-            if (fc != null && !fc.CanSend)
-            {
-                // PeerBusy is in both messages on purpose: a stall caused by an RNR looks exactly
-                // like a stall caused by a full window unless the log says which one it is.
-                _logger.LogInformation("X.25 window wait on LCN {LCN}: PS={PS} PeerAcked={PA} outstanding={O} peerBusy={Busy}",
-                    lcn, fc.SendSeq, fc.PeerAcked, fc.Outstanding, fc.PeerBusy);
-                if (!fc.WaitForWindow(2000))
-                {
-                    _logger.LogWarning("X.25 send window TIMEOUT on LCN {LCN} (outstanding={Outstanding}, peerBusy={Busy})",
-                        lcn, fc.Outstanding, fc.PeerBusy);
-                    // NOT NotXotMapped. This circuit is XOT; flow control simply would not let the
-                    // packet out, and rerouting it down the packet layer would defeat the flow
-                    // control we just obeyed.
-                    return XotSendOutcome.RefusedByFlowControl;
-                }
-            }
-
-            lock (_routingLock)
-            {
-                // Get and increment sequence numbers under lock to prevent race
-                byte ps = fc?.SendSeq ?? 0;
-                byte pr = fc?.RecvSeq ?? 0;
-                if (fc != null)
-                    fc.SendSeq = (byte)((ps + 1) & 0x07);
-
-                var x25Packet = RetroIO.Protocols.X25.Models.X25PacketBuilder.CreateDataPacket(lcn, ps, pr, data);
-
-                // Fix GFI for XOT
-                if (x25Packet.Length > 0)
-                {
-                    byte origGfi = x25Packet[0];
-                    byte qd = (byte)(origGfi & 0xC0);
-                    x25Packet[0] = (byte)(qd | 0x10 | ((xotInfo.RemoteLcn >> 8) & 0x0F));
-                    x25Packet[1] = (byte)(xotInfo.RemoteLcn & 0xFF);
-                }
-
-                if (xotInfo.Connection is RetroIO.Protocols.X25.Transport.XotServerConnection xotServerConn)
-                {
-                    xotServerConn.SendPacket(x25Packet);
-                }
-                else if (xotInfo.Connection is RetroIO.Protocols.X25.Transport.XotClientTransport xotClient)
-                {
-                    var remoteIP = xotClient.GetRemoteIPAddress();
-                    if (!string.IsNullOrEmpty(remoteIP))
-                        xotClient.SendX25Packet(remoteIP, x25Packet);
-                }
-
-                _logger.LogDebug("Sent {Length} bytes via XOT for LCN {LCN}", length, lcn);
-                return XotSendOutcome.Sent;
-            }
-        }
 
         /// <summary>
         /// Bind a protocol service to an LCN for XOT data routing
@@ -5144,10 +4573,14 @@ using RetroIO.Protocols.X25.DeleteMe;
                     // the console-app clients built on this runtime). No concrete type-checking required.
                     module.OnX25Event(eventArgs);
                 }
-                else if (_xotConnections.TryGetValue(lcn, out var xotInfo))
+                else if (TryCircuit(lcn, out _, out _))
                 {
-                    // Route to XOT connection (for calls originating from remote XOT PAD)
-                    RoutePacketToXotConnection(lcn, xotInfo.Connection, xotInfo.RemoteLcn, eventArgs);
+                    // A packet the OLD engine built for a channel that an XOT endpoint carries. Until
+                    // 2026-09-06 it was rewritten with the remote LCN and pushed onto the connection
+                    // beside the endpoint's own traffic - two engines on one circuit. Now it is
+                    // translated into an operation on the endpoint's engine (data, clear), or dropped
+                    // when the endpoint already did it (Call Accepted).
+                    ForwardOldLayerPacketToEndpoint(lcn, eventArgs);
                 }
                 else
                 {
@@ -5156,123 +4589,8 @@ using RetroIO.Protocols.X25.DeleteMe;
             }
         }
         
-        /// <summary>
-        /// Route a TAD-generated packet back to the remote XOT PAD client.
-        /// Rewrites the LCN in the packet to match the remote side's LCN.
-        /// </summary>
-        private void RoutePacketToXotConnection(ushort localLcn, object connection, ushort remoteLcn, X25PacketEventArgs eventArgs)
-        {
-            var packetData = eventArgs.Packet.FullPacket;
-            if (packetData == null || packetData.Length < 3)
-            {
-                _logger.LogWarning("Cannot route empty packet to XOT for LCN {LCN}", localLcn);
-                return;
-            }
 
-            // Rewrite LCN and ensure GFI has modulo 8 bit (0x10) for XOT interop
-            var outPacket = new byte[packetData.Length];
-            Array.Copy(packetData, outPacket, packetData.Length);
-            byte origGfi = outPacket[0];
-            byte qd = (byte)(origGfi & 0xC0);
-            outPacket[0] = (byte)(qd | 0x10 | ((remoteLcn >> 8) & 0x0F));
-            outPacket[1] = (byte)(remoteLcn & 0xFF);
 
-            _logger.LogDebug("Routing packet type 0x{PTI:X2} from LCN {LocalLcn} to XOT remote LCN {RemoteLcn}",
-                           outPacket[2], localLcn, remoteLcn);
-
-            if (connection is RetroIO.Protocols.X25.Transport.XotServerConnection xotServerConn)
-            {
-                xotServerConn.SendPacket(outPacket);
-            }
-            else if (connection is RetroIO.Protocols.X25.Transport.XotClientTransport xotClient)
-            {
-                // Outbound XOT: send via client transport using its configured remote IP
-                var remoteIP = xotClient.GetRemoteIPAddress();
-                if (!string.IsNullOrEmpty(remoteIP))
-                    xotClient.SendX25Packet(remoteIP, outPacket);
-            }
-            else
-            {
-                _logger.LogWarning("Unknown XOT connection type for LCN {LCN}: {Type}", localLcn, connection.GetType().Name);
-            }
-        }
-
-        /// <summary>
-        /// Send RR (Receiver Ready) to the remote XOT PAD to acknowledge received data
-        /// </summary>
-        private void SendRRToXotConnection(ushort localLcn, ushort remoteLcn, byte pr)
-        {
-            object? connection = null;
-            lock (_routingLock)
-            {
-                if (_xotConnections.TryGetValue(localLcn, out var xotInfo))
-                    connection = xotInfo.Connection;
-            }
-
-            // RR packet: GFI (0x10 mod8) | LCG, LCN, RR type (0x01) | P(R) << 5
-            var rrPacket = new byte[]
-            {
-                (byte)(0x10 | ((remoteLcn >> 8) & 0x0F)),
-                (byte)(remoteLcn & 0xFF),
-                (byte)(0x01 | ((pr & 0x07) << 5))
-            };
-
-            if (connection is RetroIO.Protocols.X25.Transport.XotServerConnection xotConn)
-            {
-                xotConn.SendPacket(rrPacket);
-            }
-            else if (connection is RetroIO.Protocols.X25.Transport.XotClientTransport xotClient)
-            {
-                var remoteIP = xotClient.GetRemoteIPAddress();
-                if (!string.IsNullOrEmpty(remoteIP))
-                    xotClient.SendX25Packet(remoteIP, rrPacket);
-            }
-            _logger.LogDebug("Sent RR P(R)={PR} to XOT remote LCN {RemoteLcn}", pr, remoteLcn);
-        }
-
-        /// <summary>
-        /// Answers a Reset Indication on an XOT circuit with a Reset Confirmation.
-        /// </summary>
-        /// <param name="localLcn">The local logical channel number.</param>
-        /// <param name="remoteLcn">The peer's logical channel number, which is what goes on the wire.</param>
-        /// <remarks>
-        /// Built by hand rather than through <c>X25PacketBuilder.CreateResetConfirmation</c> for the
-        /// same reason <see cref="SendRRToXotConnection"/> does: XOT carries the PEER's LCN in the
-        /// header, and the builder would write our local one. Three bytes - GFI with the modulo-8
-        /// marker and the channel group, the low LCN byte, then the Reset Confirmation type
-        /// <c>0x1F</c>, which carries no cause or diagnostic of its own.
-        /// </remarks>
-        private void SendResetConfirmationToXotConnection(ushort localLcn, ushort remoteLcn)
-        {
-            object? connection = null;
-            lock (_routingLock)
-            {
-                if (_xotConnections.TryGetValue(localLcn, out var xotInfo))
-                    connection = xotInfo.Connection;
-            }
-
-            var resetConfirm = new byte[]
-            {
-                (byte)(0x10 | ((remoteLcn >> 8) & 0x0F)),
-                (byte)(remoteLcn & 0xFF),
-                0x1F
-            };
-
-            if (connection is RetroIO.Protocols.X25.Transport.XotServerConnection xotConn)
-            {
-                xotConn.SendPacket(resetConfirm);
-            }
-            else if (connection is RetroIO.Protocols.X25.Transport.XotClientTransport xotClient)
-            {
-                var remoteIP = xotClient.GetRemoteIPAddress();
-                if (!string.IsNullOrEmpty(remoteIP))
-                    xotClient.SendX25Packet(remoteIP, resetConfirm);
-            }
-            else
-            {
-                _logger.LogWarning("No XOT connection for LCN {LocalLcn}; Reset Confirmation not sent", localLcn);
-            }
-        }
 
         /// <summary>
         /// Unbind LCN from module
@@ -5385,6 +4703,7 @@ using RetroIO.Protocols.X25.DeleteMe;
         /// </summary>
         public void Dispose()
         {
+            DisposeEndpoints();
             lock (_stateLock)
             {
                 if (_disposed)

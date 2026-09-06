@@ -69,7 +69,14 @@ namespace RetroIO.Protocols.X25.Modules
         /// <inheritdoc/>
         public void ClearCall(ushort lcn, byte cause, byte diagnostic)
         {
-            _runtime.X25Layer.ClearCall(lcn, cause, diagnostic);
+            // XOT-carried channels clear through their endpoint's engine; only a channel that is not
+            // XOT-mapped falls back to the old packet layer (LinkManager links, until plan C2).
+            // Until 2026-09-06 every clear went to the old layer, which had no XOT channels, so a PAD
+            // disconnect over XOT put nothing on the wire (pinned by ProtocolRuntimeWirePinTests).
+            if (!_runtime.ClearXotCall(lcn, cause, diagnostic))
+            {
+                _runtime.X25Layer.ClearCall(lcn, cause, diagnostic);
+            }
         }
     }
 }

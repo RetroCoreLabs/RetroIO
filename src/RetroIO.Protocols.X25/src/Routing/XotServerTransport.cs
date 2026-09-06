@@ -266,6 +266,25 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// Handle incoming call from client connection
         /// </summary>
+        /// <summary>
+        /// True when the connection belongs to this server.
+        /// </summary>
+        public bool Owns(XotServerConnection connection)
+        {
+            lock (_clientLock)
+            {
+                foreach (var kv in _clientConnections)
+                {
+                    if (ReferenceEquals(kv.Value, connection))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         private void OnClientIncomingCall(object? sender, X25CallRequest callRequest)
         {
             _statistics.InboundCallsReceived++;
@@ -478,15 +497,17 @@ namespace RetroIO.Protocols.X25.Transport
                         break;
 
                     // Fire DataReceived event for bridge pass-through mode
+                    // Every packet - Call Request, data, clear, restart - goes to the runtime, which
+                    // feeds it to this connection's X.25 engine. Since 2026-09-06 nothing is decoded
+                    // here: the old ProcessX25Packet answered restarts and raised IncomingCall itself,
+                    // which put a second protocol handler on the same connection.
                     DataReceived?.Invoke(this, new TransportDataEventArgs
                     {
                         Data = packetData,
                         Length = length,
-                        Transport = null // Will be set by XotServerTransport
+                        Transport = null, // set by XotServerTransport when it re-raises
+                        Connection = this,
                     });
-
-                    // Process X.25 packet
-                    ProcessX25Packet(packetData);
                 }
             }
             catch (Exception ex)

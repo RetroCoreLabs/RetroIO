@@ -152,7 +152,7 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         private static ushort ExtractLCN(byte gfi, byte lcn)
         {
-            byte lcg = (byte)(gfi & 0x07);
+            byte lcg = (byte)(gfi & 0x0F);   // four bits (X.25 5.1.2); was 0x07 until 2026-09-06
             return (ushort)((lcg << 8) | lcn);
         }
 

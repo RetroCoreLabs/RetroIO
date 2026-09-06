@@ -165,6 +165,13 @@ namespace RetroIO.Protocols.X25.Transport
         /// Transport interface that received the data
         /// </summary>
         public ITransportInterface? Transport { get; set; }
+
+        /// <summary>
+        /// The connection the packet arrived on, when the transport has more than one (an XOT
+        /// server's <c>XotServerConnection</c>). The runtime keeps one X.25 engine per connection
+        /// and needs this to find it.
+        /// </summary>
+        public object? Connection { get; set; }
     }
 
     /// <summary>

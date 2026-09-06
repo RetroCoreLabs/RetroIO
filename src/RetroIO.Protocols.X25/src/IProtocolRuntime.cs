@@ -112,6 +112,12 @@ namespace RetroIO.Protocols.X25
         void RegisterOutboundXotCallDeferred(ushort localLcn, ushort remoteLcn);
 
         /// <summary>
+        /// Clears a call on a local LCN carried by an XOT endpoint. False when the LCN is not
+        /// XOT-mapped, so the caller can fall back to the link path.
+        /// </summary>
+        bool ClearXotCall(ushort lcn, byte cause, byte diagnostic);
+
+        /// <summary>
         /// Finalizes a deferred outbound XOT call by attaching its transport.
         /// </summary>
         /// <param name="localLcn">Local logical channel number.</param>

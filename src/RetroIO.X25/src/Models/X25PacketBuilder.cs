@@ -22,7 +22,12 @@ namespace RetroIO.Protocols.X25.Models
             public const byte D_BIT_MASK = 0x40;      // Bit 6: Delivery confirmation bit
             public const byte A_BIT_MASK = 0x20;      // Bit 5: Address bit (always 0 for modulo 8)
             public const byte MODULO_MASK = 0x30;     // Bits 5-4: Modulo/sequence numbering
-            public const byte LCG_MASK = 0x07;        // Bits 2-0: Logical Channel Group
+            // X.25 5.1.2: the GFI is bits 8-5 of octet 1, so the logical channel GROUP is bits 4-1 -
+            // FOUR bits, 0..15, and the channel number is twelve bits, 0..4095 (5.1.3). Until
+            // 2026-09-06 this was 0x07, which corrupted every channel above 2047 in both directions
+            // (pinned by the vector pkt-clear-request-not-obtainable) and, once the engine started
+            // choosing channels from the top of the range as a DTE should, broke the first call.
+            public const byte LCG_MASK = 0x0F;        // Bits 4-1: Logical Channel Group
 
             public const byte MODULO_8 = 0x10;        // 01 in bits 5-4 = Modulo 8 (X.25 standard)
             public const byte MODULO_128 = 0x20;      // 10 in bits 5-4 = Modulo 128

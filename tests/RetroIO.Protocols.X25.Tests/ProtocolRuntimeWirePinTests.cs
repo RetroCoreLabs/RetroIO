@@ -52,6 +52,9 @@ namespace RetroIO.Protocols.X25.Tests
 
         public bool AutoAccept = true;
 
+        /// <summary>Answer a Restart Request with a Restart Confirmation, as a real DCE does (X.25 4.1.1).</summary>
+        public bool ConfirmRestart = true;
+
         public readonly ManualResetEventSlim CallSeen = new ManualResetEventSlim(false);
 
         public ushort Lcn { get; private set; }
@@ -167,7 +170,17 @@ namespace RetroIO.Protocols.X25.Tests
                     if (length < 3) continue;
 
                     byte pti = packet[2];
-                    if (pti == 0x0B)
+                    if (pti == 0xFB)
+                    {
+                        // A real DCE confirms a restart (X.25 4.1.1); the runtime holds its Call
+                        // Request until it does, so the fake must too - unless a test is proving
+                        // exactly that hold.
+                        if (ConfirmRestart)
+                        {
+                            Send(new byte[] { 0x10, 0x00, 0xFF });
+                        }
+                    }
+                    else if (pti == 0x0B)
                     {
                         Lcn = (ushort)(((packet[0] & 0x0F) << 8) | packet[1]);
                         CallSeen.Set();
@@ -213,10 +226,11 @@ namespace RetroIO.Protocols.X25.Tests
         private const string CALLING_ADDRESS = "23430001";
         private const int SETTLE_MS = 400;
 
-        private static ProtocolRuntime CreateRuntime(int port)
+        private static ProtocolRuntime CreateRuntime(int port, byte requestedWindow = 2)
         {
             RuntimeConfig config = new RuntimeConfig();
             config.X25.LocalMachineId = "23430200";
+            config.X25.DefaultPacketWindowSize = requestedWindow;
             config.TestMode = true;
 
             config.Routing.XotInterfaces.Add(new XotInterfaceConfig
@@ -253,8 +267,8 @@ namespace RetroIO.Protocols.X25.Tests
             };
 
             pad.Connect(CALLED_ADDRESS, CALLING_ADDRESS);
-            Assert.That(dce.CallSeen.Wait(5000), Is.True, "the fake DCE never saw a Call Request");
-            Assert.That(connected.Wait(5000), Is.True, "the PAD did not connect");
+            Assert.That(dce.CallSeen.Wait(10000), Is.True, "the fake DCE never saw a Call Request");
+            Assert.That(connected.Wait(10000), Is.True, "the PAD did not connect");
             return pad;
         }
 
@@ -269,21 +283,22 @@ namespace RetroIO.Protocols.X25.Tests
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
             using PadClient pad = ConnectPad(runtime, dce, "PinCall");
 
-            // MEASURED 2026-09-06: two packets on connect - a Restart Request, then the Call
-            // Request: 10 01 0B 88 23 42 00 01 23 43 00 01 06 42 07 07 43 07 07 01 00 00 00.
+            // Two packets on connect: the Restart Request, then - once it is confirmed - the Call
+            // Request. Since Phase C1c (2026-09-06) the one engine picks the channel: as a DTE it
+            // takes the highest of the interface's range (X.25 Annex A note 6), 16 by default, where
+            // the old runtime always sent its local LCN 1.
             Assert.That(dce.Count, Is.GreaterThanOrEqualTo(2));
             byte[] call = dce.At(1);
             X25PacketInfo info = X25PacketParser.ParsePacket(call);
 
             Assert.That(info.PacketType, Is.EqualTo(X25PacketType.CallRequest), Hex(call));
-            Assert.That(info.LCN, Is.EqualTo(1));
+            Assert.That(info.LCN, Is.EqualTo(16));
             Assert.That(info.CalledAddress, Is.EqualTo(CALLED_ADDRESS));
             Assert.That(info.CallingAddress, Is.EqualTo(CALLING_ADDRESS));
 
             // RFC 1613 6.1: an XOT Call Request MUST carry the packet size and window size
-            // facilities. Since 2026-09-05 it does: 128/128 and 7/7 (verified on the wire against
-            // the C switch that day).
-            Assert.That(Hex(info.Facilities), Is.EqualTo("42 07 07 43 07 07"));
+            // facilities. The engine asks for the configured defaults: 128/128 and 2/2.
+            Assert.That(Hex(info.Facilities), Is.EqualTo("42 07 07 43 02 02"));
 
             // X.29 4.1: protocol identifier 01 00 00 00 in the first four octets of the CUD.
             Assert.That(Hex(info.CallUserData), Is.EqualTo("01 00 00 00"));
@@ -292,21 +307,24 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void RestartRequest_IsSentOnLinkUp_ButTheCallDoesNotWaitForItsConfirmation_WHICH_IS_WRONG()
+        public void RestartRequest_IsSentOnLinkUp_AndTheCallWaitsForItsConfirmation()
         {
             using RecordingXotDce dce = new RecordingXotDce();
+            dce.ConfirmRestart = false;
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
-            using PadClient pad = ConnectPad(runtime, dce, "PinRestart");
+            using PadClient pad = runtime.CreatePadClient("PinRestart");
+            pad.Connect(CALLED_ADDRESS, CALLING_ADDRESS);
 
-            // MEASURED 2026-09-06: the first packet is a Restart Request, cause 0 diag 0 - good,
-            // X.25 4.1 asks for it. The fake DCE never confirms it, and the Call Request follows
-            // at once anyway. X.25 4.1.1: the DTE must not send call set-up packets until the
-            // restart is confirmed (state r1 is only left on Restart Confirmation or a Restart
-            // Indication); T20 (180 s) would retransmit. The C emulator has the same gap
-            // (audit F-02-06: "restarted set before any reply"). Plan R6.
+            // FIXED 2026-09-06 (Phase C1c); the old transport sent the Restart Request, waited up to
+            // 3 s for a confirmation and then sent the Call Request anyway. X.25 4.1.1: no call
+            // set-up packet in state r2. The engine holds the call until the Restart Confirmation.
+            Assert.That(dce.WaitFor(() => dce.Count >= 1, 3000), Is.True, "no Restart Request");
             Assert.That(Hex(dce.At(0)), Is.EqualTo("10 00 FB 00 00"));
-            Assert.That(X25PacketParser.ParsePacket(dce.At(1)).PacketType, Is.EqualTo(X25PacketType.CallRequest),
-                "behaviour changed: holding the Call Request until Restart Confirmation is the FIX - rewrite this test");
+            Thread.Sleep(1000);
+            Assert.That(dce.CountOf(X25PacketType.CallRequest), Is.EqualTo(0), "the Call Request must wait for the Restart Confirmation");
+
+            dce.Send(new byte[] { 0x10, 0x00, 0xFF });
+            Assert.That(dce.WaitFor(() => dce.CountOf(X25PacketType.CallRequest) == 1, 3000), Is.True, "released by the confirmation");
 
             pad.Disconnect();
         }
@@ -369,7 +387,9 @@ namespace RetroIO.Protocols.X25.Tests
             // Spec-form Call Connected: address block octet 00, facility length 06, packet 128/128,
             // window 7/7 (X.25 5.2.3.1.2, 7.3.1.1, 7.3.1.2).
             dce.CallConnectedBody = new byte[] { 0x00, 0x06, 0x42, 0x07, 0x07, 0x43, 0x07, 0x07 };
-            using ProtocolRuntime runtime = CreateRuntime(dce.Port);
+            // Table 6-2: the Call Connected may only indicate 2..W(requested), so 7 must be REQUESTED
+            // for 7 to be valid - the old runtime accepted any answer, the engine clears an invalid one.
+            using ProtocolRuntime runtime = CreateRuntime(dce.Port, requestedWindow: 7);
             using PadClient pad = ConnectPad(runtime, dce, "PinWin7");
             int before = dce.Count;
 
@@ -383,6 +403,22 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(dce.Count - before, Is.EqualTo(7));
 
             pad.Disconnect();
+        }
+
+        [Test]
+        public void WindowGrantedAboveTheRequest_ClearsTheCall()
+        {
+            using RecordingXotDce dce = new RecordingXotDce();
+            dce.CallConnectedBody = new byte[] { 0x00, 0x03, 0x43, 0x07, 0x07 };   // 7 granted against a request of 2
+            using ProtocolRuntime runtime = CreateRuntime(dce.Port);
+            using PadClient pad = runtime.CreatePadClient("PinBadWin");
+            pad.Connect(CALLED_ADDRESS, CALLING_ADDRESS);
+
+            // Table 6-2 (X.25 6.12): W(requested) >= 2 -> W(indicated) in 2..W(requested). 7 > 2 is a
+            // facility parameter not allowed (Annex E 66) and the caller clears.
+            Assert.That(dce.WaitFor(() => dce.CountOf(X25PacketType.ClearRequest) == 1, 3000), Is.True, "no Clear Request");
+            X25PacketInfo clear = X25PacketParser.ParsePacket(dce.At(dce.Count - 1));
+            Assert.That(clear.DiagnosticCode, Is.EqualTo(66));
         }
 
         // ------------------------------------------------------------------ receive side
@@ -406,7 +442,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void IncomingDataWithAGapInPS_IsAcknowledgedAsIfInSequence_WHICH_IS_WRONG()
+        public void IncomingDataWithAGapInPS_ResetsTheCircuit()
         {
             using RecordingXotDce dce = new RecordingXotDce();
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
@@ -419,13 +455,11 @@ namespace RetroIO.Protocols.X25.Tests
 
             X25PacketInfo reply = X25PacketParser.ParsePacket(dce.At(before));
 
-            // MEASURED 2026-09-06: the reply is 10 01 81 - an RR with P(R)=4. The gap is neither
-            // noticed nor reported. X.25 4.4.1.3 makes a P(S) gap a local procedure error (Reset,
-            // cause 05 diag 01). Plan R1. (The old Protocols/X25.cs engine would have sent a REJ,
-            // which RFC 1613 6.4 forbids over XOT; the XOT path does not go through that code.)
-            Assert.That(reply.PacketType, Is.EqualTo(X25PacketType.RR),
-                "behaviour changed: a Reset Request (cause 05, diag 01) is the FIX - rewrite this test. Got " + Hex(dce.At(before)));
-            Assert.That(reply.PR, Is.EqualTo(4));
+            // FIXED 2026-09-06 (Phase C1c); the old handler acknowledged the gap with an RR P(R)=4.
+            // X.25 4.4.1.3: a gap is a local procedure error - Reset, diagnostic 1; cause 0 from a DTE.
+            Assert.That(reply.PacketType, Is.EqualTo(X25PacketType.ResetRequest), Hex(dce.At(before)));
+            Assert.That(reply.ResetCause, Is.EqualTo(0));
+            Assert.That(reply.DiagnosticCode, Is.EqualTo(1));
 
             pad.Disconnect();
         }
@@ -460,12 +494,11 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void ClearIndication_IsNeverConfirmed_WHICH_IS_WRONG()
+        public void ClearIndication_IsConfirmedAndThePadIsTold()
         {
             using RecordingXotDce dce = new RecordingXotDce();
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
             using PadClient pad = ConnectPad(runtime, dce, "PinClear");
-            int before = dce.Count;
 
             ManualResetEventSlim disconnected = new ManualResetEventSlim(false);
             pad.ConnectionStateChanged += (s, a) =>
@@ -474,22 +507,15 @@ namespace RetroIO.Protocols.X25.Tests
             };
 
             dce.SendOnLcn(0x13, 0x00, 0x00);   // Clear Indication, DTE originated
-            bool padSawIt = disconnected.Wait(3000);
-            Thread.Sleep(SETTLE_MS);
 
-            // MEASURED 2026-09-06: nothing at all goes back. X.25 4.1.8: "the DTE ... shall
-            // respond by transferring a DTE clear confirmation packet"; without it the DCE holds
-            // the channel in p7 until T23 (180 s) expires and then clears again. Plan R5/R17.
-            Assert.That(dce.Count - before, Is.EqualTo(0),
-                "behaviour changed: a DTE Clear Confirmation is the FIX - rewrite this test. Got " + (dce.Count > before ? Hex(dce.At(before)) : ""));
-            // And the PAD is not told: it still believes it is connected to a call the network
-            // has already torn down.
-            Assert.That(padSawIt, Is.False,
-                "behaviour changed: the PAD now learns about a Clear Indication - that is a FIX - rewrite this test");
+            // FIXED 2026-09-06 (Phase C1c); nothing used to go back and the PAD was never told.
+            // X.25 4.1.8: the DTE responds with a Clear Confirmation.
+            Assert.That(dce.WaitFor(() => dce.CountOf(X25PacketType.ClearConfirmation) == 1, 3000), Is.True, "no Clear Confirmation");
+            Assert.That(disconnected.Wait(3000), Is.True, "the PAD did not learn about the clear");
         }
 
         [Test]
-        public void PadDisconnect_SendsNothingOnTheWire_WHICH_IS_WRONG()
+        public void PadDisconnect_SendsAClearRequestWithDteCause()
         {
             using RecordingXotDce dce = new RecordingXotDce();
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
@@ -497,14 +523,17 @@ namespace RetroIO.Protocols.X25.Tests
             int before = dce.Count;
 
             pad.Disconnect();
-            Thread.Sleep(3000);
 
-            // MEASURED 2026-09-06: no Clear Request, no anything. The far DCE keeps the virtual
-            // call up on LCI 1 for ever (or until its own idle timer); the next call from this
-            // side allocates LCI 1 again and collides with the ghost. X.25 4.1.7: the DTE clears
-            // by sending a Clear Request. Plan R5.
-            Assert.That(dce.Count - before, Is.EqualTo(0),
-                "behaviour changed: a Clear Request on disconnect is the FIX - rewrite this test. Got " + (dce.Count > before ? Hex(dce.At(before)) : ""));
+            // FIXED 2026-09-06 (Phase C1c); nothing used to reach the wire, so the far DCE kept the
+            // call up for ever. X.25 4.1.7: the DTE clears with a Clear Request; Table 5-7 note a:
+            // a DTE's clearing cause is 0.
+            Assert.That(dce.WaitFor(() => dce.CountOf(X25PacketType.ClearRequest) == 1, 3000), Is.True, "no Clear Request");
+            X25PacketInfo clear = X25PacketParser.ParsePacket(dce.At(before));
+            Assert.That(clear.PacketType, Is.EqualTo(X25PacketType.ClearRequest), Hex(dce.At(before)));
+            Assert.That(clear.ClearingCause, Is.EqualTo(0x00));
+
+            // The DCE confirms and the channel is free again.
+            dce.SendOnLcn(0x17);
         }
     }
 }

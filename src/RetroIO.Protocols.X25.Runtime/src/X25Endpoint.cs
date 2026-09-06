@@ -67,6 +67,12 @@ namespace RetroIO.Protocols.X25.Runtime
         public object Sync { get; } = new object();
 
         /// <summary>
+        /// True once the runtime has issued the Restart Request that brings a dialled link to a known
+        /// state (X.25 4.1). Set under <see cref="Sync"/>.
+        /// </summary>
+        public bool RestartSent { get; set; }
+
+        /// <summary>
         /// False once the connection has gone away; sends then fail with <see cref="X25SendResult.LinkDown"/>
         /// without touching the transport.
         /// </summary>

@@ -129,7 +129,11 @@ namespace RetroIO.Protocols.X25.Tests
                     _lcn = (ushort)(((packet[0] & 0x0F) << 8) | packet[1]);
                     byte pti = packet[2];
 
-                    if (pti == 0x0B) // Call Request -> answer at once
+                    if (pti == 0xFB) // Restart Request -> confirm, as a real DCE does (X.25 4.1.1)
+                    {
+                        SendXot(new byte[] { 0x10, 0x00, 0xFF });
+                    }
+                    else if (pti == 0x0B) // Call Request -> answer at once
                     {
                         SendSupervisory(0x0F); // Call Accepted
                         CallAccepted.Set();

@@ -266,7 +266,7 @@
       "build": { "type": "ClearRequest", "lcn": 4095, "cause": 13, "diag": 67 },
       "hex": "1F FF 13 0D 43",
       "parse": { "type": "ClearRequest", "lcn": 4095, "cause": 13, "diag": 67 },
-      "status": "knownFail:R18",
+      "status": "pass", "fixed": "2026-09-06 Phase C1c (LCG mask 0x0F)",
       "note": "X.25 5.1.2: the GFI is bits 8-5, so the logical channel group number is bits 4-1 (four bits, 0..15) and LCN runs 0..4095. The C# builder and parser mask the group with 0x07 (X25PacketBuilder.GFI.LCG_MASK), so LCN 4095 is built as 17 FF (LCN 2047) and 1F FF parses back as 2047. Every LCN from 2048 up is corrupted in both directions."
     },
     {

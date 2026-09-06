@@ -41,6 +41,9 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// Set the interface config (provides RemoteIPAddress and RemotePort)
         /// </summary>
+        /// <summary>The interface configuration this transport was created from, if any.</summary>
+        public XotInterfaceConfig? InterfaceConfig => _interfaceConfig;
+
         public void SetInterfaceConfig(XotInterfaceConfig interfaceConfig)
         {
             _interfaceConfig = interfaceConfig;
@@ -56,6 +59,22 @@ namespace RetroIO.Protocols.X25.Transport
         public string Name => _config.Name;
         public TransportType Type => TransportType.XOT_Client;
         public TransportStatus Status => _status;
+
+        /// <summary>
+        /// Installed by the runtime: places the call through this connection's X.25 engine once the
+        /// TCP connection is up. The transport no longer builds packets or waits for a Restart
+        /// Confirmation itself - the engine does both (X.25 4.1.1: no call set-up in r2).
+        /// </summary>
+        public Func<XotClientTransport, X25CallRequest, bool>? PacketLayerPlaceCall { get; set; }
+
+        /// <summary>
+        /// Writes one complete X.25 packet to this transport's connection.
+        /// </summary>
+        public bool SendPacket(byte[] x25Packet)
+        {
+            string? ip = _interfaceConfig?.RemoteIPAddress;
+            return ip != null && SendX25Packet(ip, x25Packet);
+        }
 
         public bool PlaceCall(X25CallRequest callRequest)
         {
@@ -90,62 +109,17 @@ namespace RetroIO.Protocols.X25.Transport
                 }
 
                 // Step 2: Send X.25 Restart Request and wait for Confirm
-                _restartConfirmReceived.Reset();
-                var restartReq = new byte[] { 0x10, 0x00, 0xFB, 0x00, 0x00 };
-                SendX25Packet(remoteIP, restartReq);
-
-                if (!_restartConfirmReceived.WaitOne(3000))
+                if (PacketLayerPlaceCall == null)
                 {
-                    _logger.LogWarning("Timeout waiting for Restart Confirm from {RemoteIP}", remoteIP);
+                    _logger.LogError("XOT client transport {Name}: no packet layer installed to place the call", Name);
+                    return false;
                 }
 
-                // Wait for the switch's own Restart handshake to settle
-                // The switch sends its own Restart Request which we respond to with Confirm.
-                // Poll briefly to let both Restart exchanges complete before sending Call Request.
-                _switchRestartSettled.Reset();
-                if (!_switchRestartSettled.WaitOne(1000))
-                {
-                    _logger.LogDebug("Switch restart settle timeout — proceeding with call");
-                }
-
-                // Step 3: Build and send X.25 Call Request packet
-                // Use SourceLcn from the routing layer (each VC gets its own LCN)
-                ushort callLcn = callRequest.SourceLcn > 0 ? callRequest.SourceLcn : (ushort)1;
-
-                // RFC 1613 section 6.1: an XOT call packet "MUST contain both Packet Size and
-                // Window Size facilities". We sent neither until 2026-09-05, which left the peer
-                // free to authorise the standard default of 2 (X.25 6.10) while we sent 7 - a P(S)
-                // outside the window, which X.25 4.4.1.3 makes a local procedure error and resets
-                // the circuit. It only worked because the C reference switches are configured for 7.
-                // A caller that supplied its own facilities keeps them; we do not second-guess it.
-                byte[]? facilities = callRequest.Facilities;
-                if (facilities == null || facilities.Length == 0)
-                {
-                    byte window = _interfaceConfig?.RequestedWindowSize ?? 7;
-                    int packetSize = _interfaceConfig?.RequestedPacketSize ?? 128;
-
-                    // Same value both ways: we have no reason to ask for an asymmetric circuit, and
-                    // the answering end may lower either direction independently (X.25 Table 6-1).
-                    facilities = X25FlowControlFacilities.Encode(window, window, packetSize, packetSize);
-                }
-
-                var callPacket = X25PacketBuilder.CreateCallRequest(
-                    lcn: callLcn,
-                    calledAddress: callRequest.CalledAddress,
-                    callingAddress: callRequest.CallingAddress,
-                    facilities: facilities,
-                    callUserData: callRequest.CallUserData
-                );
-                // Fix GFI: add modulo 8 bit for XOT
-                if (callPacket.Length > 0)
-                    callPacket[0] = (byte)((callPacket[0] & 0xC0) | 0x10 | (callPacket[0] & 0x0F));
-
-                var sent = SendX25Packet(remoteIP, callPacket);
+                var sent = PacketLayerPlaceCall(this, callRequest);
                 if (sent)
                 {
                     _statistics.OutboundCallsSucceeded++;
-                    _logger.LogInformation("XOT call placed successfully via {Name} to {CalledAddress}",
-                                         Name, callRequest.CalledAddress);
+                    _logger.LogInformation("XOT call placed via {Name} to {CalledAddress}", Name, callRequest.CalledAddress);
                 }
 
                 return sent;

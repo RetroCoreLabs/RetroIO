@@ -39,6 +39,19 @@ namespace RetroIO.Protocols.X25
         public int RemotePort { get; set; } = 1998;
 
         /// <summary>
+        /// First logical channel this side may use for calls over the connection. Default 1.
+        /// </summary>
+        public ushort LciBase { get; set; } = 1;
+
+        /// <summary>
+        /// Number of logical channels this side may use. Default 16: as a DTE the engine picks
+        /// channels from the TOP of the range (X.25 Annex A note 6), so the range must lie inside
+        /// what the far switch port offers - the C demo switches offer 1..2048 on trunks and
+        /// 1..32 on one port, and 1..16 fits every one of them.
+        /// </summary>
+        public ushort LciCount { get; set; } = 16;
+
+        /// <summary>
         /// Local listening port (for server mode, default 1998)
         /// </summary>
         public int LocalPort { get; set; } = 1998;
