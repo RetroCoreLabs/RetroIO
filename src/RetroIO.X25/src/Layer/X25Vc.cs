@@ -88,6 +88,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public bool PeerSentFacilities { get; set; }
 
         /// <summary>
+        /// True from our Interrupt until the peer's Interrupt Confirmation. X.25 4.4.2: "The DTE should
+        /// not transmit a second DTE interrupt packet until the first one is confirmed."
+        /// </summary>
+        public bool InterruptOutstanding { get; set; }
+
+        /// <summary>
         /// Absolute millisecond expiry of the active per-circuit timer, or 0 when no timer is armed.
         /// The applicable timer depends on the state: call-request (T21), reset-request (T22),
         /// clear-request (T23).
@@ -166,6 +172,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             AckedSeq = 0;
             PeerBusy = false;
             LocalBusy = false;
+            InterruptOutstanding = false;   // X.25 4.4.3.1: a reset also discards an unconfirmed interrupt
         }
     }
 }

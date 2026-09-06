@@ -333,7 +333,7 @@ namespace RetroIO.Protocols.X25.Tests
             _layer.ProcessPacket(X25PacketBuilder.CreateREJ(lci, pr: 0));
 
             Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
-            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.RejectNotSubscribed));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(37), "Annex E 37 - Phase B3 had 21, which is 'invalid for state p2'; corrected 2026-09-06");
         }
 
         // ================================================================== R4  reset collision
@@ -1120,19 +1120,75 @@ namespace RetroIO.Protocols.X25.Tests
         // delivered to the application; only one may be outstanding per direction.
 
         [Test]
-        public void R16_IncomingInterrupt_IsNeitherConfirmedNorDelivered_WHICH_IS_WRONG()
+        public void R16_IncomingInterrupt_IsDeliveredThenConfirmed()
         {
             ushort lci = ConnectOutgoing();
-            int delivered = 0;
-            _layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
+            byte[]? seen = null;
+            _layer.InterruptReceived += (l, c, d) => seen = d;
 
             _layer.ProcessPacket(X25PacketBuilder.CreateInterrupt(lci, new byte[] { 0x01 }));
 
-            // MEASURED 2026-09-06: ProcessPacket's default branch swallows it. The peer's T26 will
-            // expire and it will reset the circuit (Table 11).
-            Assert.That(_sink.CountOfType(X25PacketType.InterruptConfirmation), Is.EqualTo(0),
-                "behaviour changed: an Interrupt Confirmation is the FIX for R16 - rewrite this test");
-            Assert.That(delivered, Is.EqualTo(0));
+            // FIXED 2026-09-06 (Phase B10); the packet used to fall through the dispatch unseen.
+            Assert.That(seen, Is.EqualTo(new byte[] { 0x01 }));
+            Assert.That(_sink.CountOfType(X25PacketType.InterruptConfirmation), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R16_SendInterrupt_OneOutstandingUntilConfirmed()
+        {
+            ushort lci = ConnectOutgoing();
+            int confirmed = 0;
+            _layer.InterruptConfirmed += (l, c) => confirmed++;
+
+            Assert.That(_layer.SendInterrupt(lci, new byte[] { 0xAA }), Is.True);
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Interrupt));
+            Assert.That(_layer.SendInterrupt(lci, new byte[] { 0xBB }), Is.False, "4.4.2: not a second one before the first is confirmed");
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateInterruptConfirmation(lci));
+            Assert.That(confirmed, Is.EqualTo(1));
+            Assert.That(_layer.SendInterrupt(lci, new byte[] { 0xBB }), Is.True);
+        }
+
+        [Test]
+        public void R16_InterruptBypassesTheWindowAndPeerBusy()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.SendData(lci, new byte[] { 1 });
+            _layer.SendData(lci, new byte[] { 2 });
+            Assert.That(_layer.SendData(lci, new byte[] { 3 }), Is.False, "window of 2 is full");
+            _layer.ProcessPacket(X25PacketBuilder.CreateRNR(lci, pr: 0));
+
+            Assert.That(_layer.SendInterrupt(lci, new byte[] { 0x07 }), Is.True, "4.4.2: without following the flow control procedure");
+        }
+
+        [Test]
+        public void R16_InterruptDataLimits()
+        {
+            ushort lci = ConnectOutgoing();
+            Assert.That(_layer.SendInterrupt(lci, Array.Empty<byte>()), Is.False);
+            Assert.That(_layer.SendInterrupt(lci, new byte[33]), Is.False);
+            Assert.That(_layer.SendInterrupt(lci, new byte[32]), Is.True, "5.4.2.1: 1 to 32 octets");
+        }
+
+        [Test]
+        public void R16_UnauthorizedInterruptConfirmation_ResetsWithDiagnostic43()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ProcessPacket(X25PacketBuilder.CreateInterruptConfirmation(lci));
+
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(43));
+        }
+
+        [Test]
+        public void R16_AResetDiscardsAnUnconfirmedInterrupt()
+        {
+            ushort lci = ConnectOutgoing();
+            Assert.That(_layer.SendInterrupt(lci, new byte[] { 1 }), Is.True);
+            _layer.ProcessPacket(X25PacketBuilder.CreateResetRequest(lci, 0, 0));
+
+            Assert.That(_layer.Circuits[lci].InterruptOutstanding, Is.False, "4.4.3.1");
+            Assert.That(_layer.SendInterrupt(lci, new byte[] { 2 }), Is.True);
         }
 
         // ================================================================== R17  protocol error reactions
@@ -1207,8 +1263,11 @@ namespace RetroIO.Protocols.X25.Tests
             X25Layer dce = NewDce(dceSink);
             dce.ProcessPacket(new byte[] { 0x10, 0x00, 0xF5 });   // no such PTI
 
+            // Annex E 33 "Unidentifiable packet". (First written against a constant that was 33 by
+            // accident under the wrong name; corrected 2026-09-06 with the Annex E rows 32..46.)
             Assert.That(dceSink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Diagnostic));
-            Assert.That(dceSink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.PacketNotAllowed));
+            Assert.That(dceSink.LastInfo.DiagnosticCode, Is.EqualTo(33));
+            Assert.That(X25Diagnostic.UnidentifiablePacket, Is.EqualTo(33));
         }
 
         [Test]

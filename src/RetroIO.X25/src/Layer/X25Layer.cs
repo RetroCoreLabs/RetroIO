@@ -425,6 +425,52 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <param name="diagnostic">
         /// Diagnostic code.
         /// </param>
+        /// <summary>
+        /// Sends an Interrupt: 1 to 32 octets that reach the peer ahead of the data queue and outside
+        /// the data flow control (X.25 4.4.2).
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel, in data transfer.
+        /// </param>
+        /// <param name="data">
+        /// 1 to 32 octets.
+        /// </param>
+        /// <returns>
+        /// True when the Interrupt left. False when the channel is not in data transfer, the data
+        /// is empty or longer than 32 octets, a previous interrupt is still unconfirmed (4.4.2: only
+        /// one outstanding per direction), or the link refused the packet.
+        /// </returns>
+        public bool SendInterrupt(ushort lci, byte[] data)
+        {
+            if (data == null || data.Length == 0 || data.Length > 32)
+            {
+                return false;
+            }
+
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                return false;
+            }
+
+            if (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady)
+            {
+                return false;
+            }
+
+            if (vc.InterruptOutstanding)
+            {
+                return false;
+            }
+
+            if (!Send(X25PacketBuilder.CreateInterrupt(lci, data)))
+            {
+                return false;
+            }
+
+            vc.InterruptOutstanding = true;
+            return true;
+        }
+
         public bool Restart(byte cause = 0, byte diagnostic = 0)
         {
             cause = ApplyCauseRule(cause);
@@ -508,7 +554,65 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     DiagnosticsReceived++;
                     RaiseDiagnosticReceived(info.DiagnosticCode, info.DiagnosticInfo);
                     break;
+                case X25PacketType.Interrupt:
+                    OnInterrupt(lci, info);
+                    break;
+                case X25PacketType.InterruptConfirmation:
+                    OnInterruptConfirmation(lci);
+                    break;
             }
+        }
+
+        // ------------------------------------------------------------------ interrupts (X.25 4.4.2)
+
+        /// <summary>
+        /// An Interrupt from the peer: delivered, then confirmed. The peer may not send another
+        /// before this confirmation, so no "second interrupt outstanding" state exists on the
+        /// receive side - the confirmation is immediate. An empty or over-long data field is a
+        /// procedure error (5.4.2.1: 1 to 32 octets), diagnostic 39 / 38.
+        /// </summary>
+        private void OnInterrupt(ushort lci, X25PacketInfo info)
+        {
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                return;
+            }
+
+            if (info.InterruptData.Length == 0)
+            {
+                ResetForProcedureError(vc, X25Diagnostic.PacketTooShort);
+                return;
+            }
+
+            if (info.InterruptData.Length > 32)
+            {
+                ResetForProcedureError(vc, X25Diagnostic.PacketTooLong);
+                return;
+            }
+
+            RaiseInterruptReceived(lci, info.InterruptData);
+            Send(X25PacketBuilder.CreateInterruptConfirmation(lci));
+        }
+
+        /// <summary>
+        /// The peer confirms our Interrupt. One that arrives with none outstanding is Annex E 43,
+        /// "Unauthorized interrupt confirmation" - a procedure error (Table C.4).
+        /// </summary>
+        private void OnInterruptConfirmation(ushort lci)
+        {
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                return;
+            }
+
+            if (!vc.InterruptOutstanding)
+            {
+                ResetForProcedureError(vc, X25Diagnostic.UnauthorizedInterruptConfirmation);
+                return;
+            }
+
+            vc.InterruptOutstanding = false;
+            RaiseInterruptConfirmed(lci);
         }
 
         // ------------------------------------------------------------------ Annex C: what may arrive when
@@ -549,7 +653,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     case X25PacketType.Diagnostic:
                         return true;
                     case X25PacketType.Unknown:
-                        SendDiagnostic(X25Diagnostic.PacketNotAllowed, pkt);
+                        SendDiagnostic(X25Diagnostic.UnidentifiablePacket, pkt);
                         return false;
                     default:
                         SendDiagnostic(X25Diagnostic.UnassignedLogicalChannel, pkt);
@@ -572,7 +676,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
-            if (type == X25PacketType.Unknown || type == X25PacketType.Diagnostic
+            if (type == X25PacketType.Unknown)
+            {
+                ChannelError(lci, X25Diagnostic.UnidentifiablePacket, pkt);
+                return false;
+            }
+
+            if (type == X25PacketType.Diagnostic
                 || type == X25PacketType.RegistrationRequest || type == X25PacketType.RegistrationConfirmation)
             {
                 ChannelError(lci, X25Diagnostic.PacketNotAllowed, pkt);

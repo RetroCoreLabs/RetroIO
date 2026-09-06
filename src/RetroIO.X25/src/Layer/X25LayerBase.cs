@@ -56,6 +56,16 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public event X25DiagnosticReceived? DiagnosticReceived;
 
         /// <summary>
+        /// Raised when the peer sends an Interrupt.
+        /// </summary>
+        public event X25InterruptReceived? InterruptReceived;
+
+        /// <summary>
+        /// Raised when the peer confirms an interrupt this side sent.
+        /// </summary>
+        public event X25InterruptConfirmed? InterruptConfirmed;
+
+        /// <summary>
         /// Creates the base with the down-facing packet sink.
         /// </summary>
         /// <param name="sink">
@@ -179,6 +189,22 @@ namespace RetroIO.Protocols.X25.PacketLayer
         protected void RaiseDiagnosticReceived(byte diagnostic, byte[] explanation)
         {
             DiagnosticReceived?.Invoke((X25Layer)this, diagnostic, explanation);
+        }
+
+        /// <summary>
+        /// Raises <see cref="InterruptReceived"/>.
+        /// </summary>
+        protected void RaiseInterruptReceived(ushort lci, byte[] data)
+        {
+            InterruptReceived?.Invoke((X25Layer)this, lci, data);
+        }
+
+        /// <summary>
+        /// Raises <see cref="InterruptConfirmed"/>.
+        /// </summary>
+        protected void RaiseInterruptConfirmed(ushort lci)
+        {
+            InterruptConfirmed?.Invoke((X25Layer)this, lci);
         }
     }
 }

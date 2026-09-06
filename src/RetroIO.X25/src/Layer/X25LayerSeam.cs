@@ -136,6 +136,32 @@ namespace RetroIO.Protocols.X25.PacketLayer
     public delegate void X25DiagnosticReceived(X25Layer layer, byte diagnostic, byte[] explanation);
 
     /// <summary>
+    /// Raised when the peer sends an Interrupt (X.25 4.4.2): 1 to 32 octets that bypass the data
+    /// flow control. The engine confirms it after this handler returns.
+    /// </summary>
+    /// <param name="layer">
+    /// The layer.
+    /// </param>
+    /// <param name="lci">
+    /// The logical channel.
+    /// </param>
+    /// <param name="data">
+    /// The interrupt user data.
+    /// </param>
+    public delegate void X25InterruptReceived(X25Layer layer, ushort lci, byte[] data);
+
+    /// <summary>
+    /// Raised when the peer confirms an interrupt this side sent; another may now be sent.
+    /// </summary>
+    /// <param name="layer">
+    /// The layer.
+    /// </param>
+    /// <param name="lci">
+    /// The logical channel.
+    /// </param>
+    public delegate void X25InterruptConfirmed(X25Layer layer, ushort lci);
+
+    /// <summary>
     /// The down interface the X.25 layer calls to hand fully-built packet bytes to the link below for
     /// framing and transmission. This is the "interfaces down" half of the layer seam.
     /// </summary>

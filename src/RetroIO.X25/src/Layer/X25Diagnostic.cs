@@ -29,8 +29,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>27 - Packet type invalid for state d1 (flow control ready).</summary>
         public const byte PacketTypeInvalidForD1 = 27;
 
-        /// <summary>21 - Reject not subscribed to: a REJ arrived and packet retransmission is not supported.</summary>
-        public const byte RejectNotSubscribed = 21;
+        /// <summary>
+        /// 37 - Reject not subscribed to: a REJ arrived and packet retransmission is not supported.
+        /// (Phase B3 first used 21 for this, which is "packet type invalid for state p2"; corrected
+        /// 2026-09-06 against Annex E rows 32..46.)
+        /// </summary>
+        public const byte RejectNotSubscribed = 37;
 
         /// <summary>64 - Call set-up or call clearing problem (the general code; 65-73 say which).</summary>
         public const byte CallSetupProblem = 64;
@@ -53,8 +57,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>73 - Duplicate facility requested.</summary>
         public const byte DuplicateFacility = 73;
 
-        /// <summary>33 - Packet not allowed (the general code; 34-45 say why).</summary>
-        public const byte PacketNotAllowed = 33;
+        /// <summary>32 - Packet not allowed (the general code; 33-46 say why).</summary>
+        public const byte PacketNotAllowed = 32;
+
+        /// <summary>33 - Unidentifiable packet: a packet type identifier that is not defined.</summary>
+        public const byte UnidentifiablePacket = 33;
 
         /// <summary>36 - Packet on unassigned logical channel.</summary>
         public const byte UnassignedLogicalChannel = 36;
@@ -70,6 +77,15 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
         /// <summary>41 - Restart or registration packet with a nonzero logical channel (bits 4-1 of octet 1 or octet 2 not zero).</summary>
         public const byte RestartWithNonzeroChannel = 41;
+
+        /// <summary>43 - Unauthorized interrupt confirmation: one arrived with no interrupt outstanding.</summary>
+        public const byte UnauthorizedInterruptConfirmation = 43;
+
+        /// <summary>44 - Unauthorized interrupt: a second interrupt before the first was confirmed.</summary>
+        public const byte UnauthorizedInterrupt = 44;
+
+        /// <summary>45 - Unauthorized reject.</summary>
+        public const byte UnauthorizedReject = 45;
 
         /// <summary>48 - Time expired (the general code; 49-53 say which timer).</summary>
         public const byte TimeExpired = 48;
