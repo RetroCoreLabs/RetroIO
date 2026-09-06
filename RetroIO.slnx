@@ -8,6 +8,10 @@
   <Folder Name="/src/RetroIO.Hdlc/src/">
     <Project Path="src/RetroIO.Hdlc/src/RetroIO.Hdlc.csproj" />
   </Folder>
+  <Folder Name="/src/RetroIO.Lapb/" />
+  <Folder Name="/src/RetroIO.Lapb/src/">
+    <Project Path="src/RetroIO.Lapb/src/RetroIO.Lapb.csproj" />
+  </Folder>
   <Folder Name="/src/RetroIO.Link/" />
   <Folder Name="/src/RetroIO.Link/src/">
     <Project Path="src/RetroIO.Link/src/RetroIO.Link.csproj" />

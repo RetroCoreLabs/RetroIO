@@ -22,6 +22,7 @@
     <!-- The shared HDLC framer. This package used to carry its own, which is one of the five
          that were merged; RetroIO.Hdlc has no dependencies of its own, so this stays a leaf in
          everything but name. -->
+    <ProjectReference Include="..\..\RetroIO.Lapb\src\RetroIO.Lapb.csproj" />
     <ProjectReference Include="..\..\RetroIO.Hdlc\src\RetroIO.Hdlc.csproj" />
   </ItemGroup>
 </Project>

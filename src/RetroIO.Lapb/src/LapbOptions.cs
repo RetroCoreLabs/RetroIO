@@ -76,6 +76,13 @@ namespace RetroIO.Protocols.Xmsg.Live
         public LapbVariant Variant { get; }
 
         /// <summary>
+        /// N1: the largest information field this link will accept. A longer one is answered with an
+        /// FRMR carrying reason Y (X.25 2.3.2). Defaults to
+        /// <see cref="LapbLayer.MaxInformationLength"/>, the ND network's 622.
+        /// </summary>
+        public int MaxInformationLength { get; }
+
+        /// <summary>
         /// True when this station is the DTE, false when it is the DCE. Decides which of the two
         /// ITU addresses goes on a command and which on a response (X.25 2.4.2). Ignored by the ND
         /// dialect, which addresses by frame family instead.
@@ -112,7 +119,10 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// <param name="isDte">
         /// True when this station is the DTE (ITU addressing only).
         /// </param>
-        public LapbOptions(long t1 = 3000, long t3 = 30000, int n2 = 10, int windowSize = 7, bool reestablishOnLinkFailure = false, LapbVariant variant = LapbVariant.Nd, bool isDte = true)
+        /// <param name="maxInformationLength">
+        /// N1, the largest information field accepted; the ND default when not given.
+        /// </param>
+        public LapbOptions(long t1 = 3000, long t3 = 30000, int n2 = 10, int windowSize = 7, bool reestablishOnLinkFailure = false, LapbVariant variant = LapbVariant.Nd, bool isDte = true, int maxInformationLength = LapbLayer.MaxInformationLength)
         {
             if (t1 <= 0)
             {
@@ -142,6 +152,7 @@ namespace RetroIO.Protocols.Xmsg.Live
             ReestablishOnLinkFailure = reestablishOnLinkFailure;
             Variant = variant;
             IsDte = isDte;
+            MaxInformationLength = maxInformationLength;
         }
 
         /// <summary>

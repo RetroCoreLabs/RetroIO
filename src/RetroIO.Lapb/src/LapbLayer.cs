@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 
-using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Hdlc;
 
 namespace RetroIO.Protocols.Xmsg.Live
@@ -94,7 +93,7 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// an FRMR instead of being delivered.
         /// <para><b>Why this exact value, and why it is not a guess</b></para>
         /// It is DERIVED, not observed. A first fragment carries the full 28-byte addressing head
-        /// and a fixed <see cref="SintranMessageFragment.FirstFragmentBodyLength"/> of body, so
+        /// and a fixed <c>SintranMessageFragment.FirstFragmentBodyLength</c> of body, so
         /// 594 + 28 = 622 is the largest frame the fragmentation scheme can produce - which is
         /// exactly the largest ever recorded. A continuation is shorter (it carries no sub-header),
         /// and an unfragmented frame is shorter still by definition.
@@ -126,8 +125,21 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// with no unit. Measured by <c>LapbInformationLengthTests</c>.
         /// </para>
         /// </remarks>
-        public const int MaxInformationLength =
-            SintranMessageFragment.FirstFragmentBodyLength + SintranMessageFragment.FirstFragmentBodyOffset;
+        /// <remarks>
+        /// <para>
+        /// 622 = 594 + 14 + 14: the largest SINTRAN first-fragment body plus the SINTRAN header and
+        /// the XMSG sub-header that precede it. That is where the number comes from and why it is
+        /// this number on an ND network.
+        /// </para>
+        /// <para>
+        /// It is the DEFAULT, not a constant of the protocol. N1 is a link parameter (X.25 2.3.2:
+        /// an information field longer than the agreed maximum is FRMR reason Y), so a link that is
+        /// not carrying SINTRAN traffic sets its own through <see cref="LapbOptions.MaxInformationLength"/>.
+        /// Until 2026-09-06 this was computed from the XMSG message layout, which meant the data
+        /// link layer could not be built without it.
+        /// </para>
+        /// </remarks>
+        public const int MaxInformationLength = 622;
 
         // Unnumbered control base patterns (P/F bit 0x10 cleared), spec 2.2.3.
         // The U-frame bases, S-frame nibbles and the poll/final bit USED TO BE DECLARED HERE, and
@@ -747,7 +759,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                 return;   // invalid piggybacked N(R): FRMR(Z) sent
             }
 
-            if (frame.Info.Length > MaxInformationLength)
+            if (frame.Info.Length > _options.MaxInformationLength)
             {
                 // Over-long I-field: FRMR reason Y (spec 2.3.2 / 2.3.3).
                 SendFrmr(frame.Control, FrmrReasonY, frame.PollFinal, currentTicks, ReceivedIsResponse(frame.Address));

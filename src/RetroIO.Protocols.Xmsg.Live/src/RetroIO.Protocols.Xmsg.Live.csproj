@@ -17,6 +17,7 @@
   <ItemGroup>
     <!-- RetroIO.Protocols.Xmsg.Node is the portable upper half; RetroIO.Protocols.Xmsg.Live (the replaceable link half) references it,
          never the other way round. This is the porting seam direction. -->
+    <ProjectReference Include="..\..\RetroIO.Lapb\src\RetroIO.Lapb.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Node\src\RetroIO.Protocols.Xmsg.Node.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hdlc\src\RetroIO.Protocols.Xmsg.Hdlc.csproj" />

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Lapb</PackageId>
+    <AssemblyName>RetroIO.Lapb</AssemblyName>
+    <RootNamespace>RetroIO.Lapb</RootNamespace>
+    <Description>The one LAPB data link layer: frame decode, the ITU-T X.25 clause 2 state machine with its timers, and the ND dialect, selected by a variant flag.</Description>
+    <PackageTags>retroio;lapb;x25;hdlc</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
