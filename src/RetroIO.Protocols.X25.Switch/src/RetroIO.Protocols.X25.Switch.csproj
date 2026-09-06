@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\RetroIO.Protocols.X25.Common\src\RetroIO.Protocols.X25.Common.csproj" />
+    <ProjectReference Include="..\..\RetroIO.X25\src\RetroIO.X25.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Link\src\RetroIO.Link.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.X25.Routing\src\RetroIO.Protocols.X25.Routing.csproj" />
   </ItemGroup>
 
