@@ -26,6 +26,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>21 - Reject not subscribed to: a REJ arrived and packet retransmission is not supported.</summary>
         public const byte RejectNotSubscribed = 21;
 
+        /// <summary>
+        /// 0 with a locally meaningful name: the cause given to the application whose outgoing call
+        /// lost a call collision at the DCE (X.25 4.1.6). No Annex E code exists for it because
+        /// nothing crosses the interface - the cancelled call was never on the wire as a Clear.
+        /// </summary>
+        public const byte CallCollision = 0;
+
         /// <summary>33 - Packet not allowed (the general code; 34-45 say why).</summary>
         public const byte PacketNotAllowed = 33;
 

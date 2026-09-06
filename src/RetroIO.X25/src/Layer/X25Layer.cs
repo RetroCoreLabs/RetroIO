@@ -14,7 +14,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
     {
         private readonly X25Config _config;
         private readonly Dictionary<ushort, X25Vc> _vcs = new Dictionary<ushort, X25Vc>();
-        private ushort _nextLci;
+        // True from our Restart Request until the peer confirms it or sends its own (X.25 4.1.2).
+        private bool _restartOutstanding;
 
         /// <summary>
         /// Creates an X.25 layer over a packet sink with the given configuration.
@@ -29,7 +30,6 @@ namespace RetroIO.Protocols.X25.PacketLayer
             : base(sink)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
-            _nextLci = config.LciBase == 0 ? (ushort)1 : config.LciBase;
         }
 
         /// <summary>
@@ -292,6 +292,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // is what the T20 retransmission will guarantee (plan B5); until then a refused Restart
             // Request is counted and reported.
             FreeSwitchedCircuits();
+            _restartOutstanding = true;
             return Send(X25PacketBuilder.CreateRestartRequest(cause, diagnostic));
         }
 
@@ -337,6 +338,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     break;
                 case X25PacketType.RestartRequest:
                     OnRestartRequest(info);
+                    break;
+                case X25PacketType.RestartConfirmation:
+                    OnRestartConfirmation();
                     break;
                 case X25PacketType.RR:
                     OnFlowControl(lci, info.PR, peerBusy: false);
@@ -398,6 +402,26 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 vc = new X25Vc(lci, X25VcKind.Svc);
                 _vcs[lci] = vc;
+            }
+
+            // Call collision, X.25 4.1.6: "The DCE will proceed with the call request and cancel the
+            // incoming call." So when this engine is the DTE and its own Call Request is out on this
+            // channel, the incoming call is the one that dies: drop it and wait for Call Connected.
+            // When this engine is the DCE, the peer's Call Request wins: our outgoing call (which was
+            // an Incoming Call toward the peer) is cancelled and its application told, and the
+            // peer's call is offered as usual. Until 2026-09-06 the incoming call simply overwrote
+            // whatever was on the channel, and the application's own call vanished without a word.
+            if (vc.State == X25VcState.CallRequest)
+            {
+                if (_config.IsDte)
+                {
+                    UnexpectedPackets++;
+                    return;
+                }
+
+                vc.State = X25VcState.Ready;
+                vc.TimerExpiryMs = 0;
+                RaiseCleared(lci, X25Cause.LocalProcedureError, X25Diagnostic.CallCollision);
             }
 
             vc.State = X25VcState.CallIncoming;
@@ -480,6 +504,20 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            // Clear collision, X.25 4.1.9: both sides cleared at once; "the DCE will consider that
+            // the clearing is completed. The DCE will not expect a DTE clear confirmation packet and
+            // will not transfer a DCE clear confirmation packet." The channel is free; the
+            // application asked for this clear and is told it is complete, once. Until 2026-09-06 a
+            // Clear Confirmation the peer did not expect went out and the application was told its
+            // own call had been cleared as though by the peer.
+            if (vc.State == X25VcState.ClearRequest)
+            {
+                vc.State = X25VcState.Ready;
+                vc.TimerExpiryMs = 0;
+                RaiseCleared(lci, vc.Cause, vc.Diagnostic);
+                return;
+            }
+
             Send(X25PacketBuilder.CreateClearConfirmation(lci));
             vc.State = X25VcState.Ready;
             vc.TimerExpiryMs = 0;
@@ -492,6 +530,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 vc.State = X25VcState.Ready;
                 vc.TimerExpiryMs = 0;
+
+                // Cleared means "this channel is now free" whichever side started the clearing; an
+                // application that asked to clear learns here that the peer has confirmed it.
+                RaiseCleared(lci, vc.Cause, vc.Diagnostic);
             }
         }
 
@@ -499,6 +541,20 @@ namespace RetroIO.Protocols.X25.PacketLayer
         {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc))
             {
+                return;
+            }
+
+            // Reset collision, X.25 4.4.3.3: "the DCE will consider that the reset is completed.
+            // The DCE will not expect a DTE reset confirmation packet and will not transfer a DCE
+            // reset confirmation packet." Both sides go straight to d1. Until 2026-09-06 the
+            // colliding Reset was dropped and the circuit sat in d2 until T22 expired - 180 s of
+            // dead circuit, the C emulator's F-02-04 exactly.
+            if (vc.State == X25VcState.ResetRequest)
+            {
+                vc.State = vc.Kind == X25VcKind.Pvc ? X25VcState.PvcReady : X25VcState.DataTransfer;
+                vc.TimerExpiryMs = 0;
+                vc.ResetFlow();
+                RaiseReset(lci, vc.Cause, vc.Diagnostic);
                 return;
             }
 
@@ -529,10 +585,37 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
         private void OnRestartRequest(X25PacketInfo info)
         {
+            // Restart collision, X.25 4.1.2: "the DCE will consider that the restart is completed.
+            // The DCE will not expect a DTE restart confirmation packet and will not transfer a DCE
+            // restart confirmation packet." Our own restart is thereby complete too.
+            if (_restartOutstanding)
+            {
+                _restartOutstanding = false;
+                FreeSwitchedCircuits();
+                RaiseRestartOccurred(info.RestartCause, info.DiagnosticCode);
+                return;
+            }
+
             Send(X25PacketBuilder.CreateRestartConfirmation());
             FreeSwitchedCircuits();
             RaiseRestartOccurred(info.RestartCause, info.DiagnosticCode);
         }
+
+        private void OnRestartConfirmation()
+        {
+            if (!_restartOutstanding)
+            {
+                UnexpectedPackets++;
+                return;
+            }
+
+            _restartOutstanding = false;
+        }
+
+        /// <summary>
+        /// True while our Restart Request has not been answered (X.25 state r2).
+        /// </summary>
+        public bool RestartOutstanding => _restartOutstanding;
 
         private void OnFlowControl(ushort lci, byte pr, bool peerBusy)
         {
@@ -649,25 +732,54 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
         }
 
+        /// <summary>
+        /// Picks a free logical channel for an outgoing call.
+        /// </summary>
+        /// <remarks>
+        /// X.25 Annex A, note 6: "In order to minimize the risk of call collision, the DTE search
+        /// algorithm is suggested to start with the highest numbered" channel in the two-way range,
+        /// while the DCE starts with the lowest. So a DTE walks down from the top of its range and a
+        /// DCE walks up from the base, and a DTE and a DCE built from this same code only collide
+        /// when the range is nearly full. Until 2026-09-06 both walked upward with a rotating
+        /// cursor, so two stations calling each other at once collided on the first call (the C
+        /// emulator's F-02-02 twin). Channel 0 is never used for a virtual call.
+        /// </remarks>
         private ushort AllocateLci()
         {
-            ushort limit = (ushort)(_config.LciBase + _config.LciCount);
-            for (int guard = 0; guard < _config.LciCount; guard++)
+            int first = _config.LciBase == 0 ? 1 : _config.LciBase;
+            int last = _config.LciBase + _config.LciCount - 1;
+            if (last < first)
             {
-                ushort candidate = _nextLci;
-                _nextLci++;
-                if (_nextLci >= limit || _nextLci == 0)
-                {
-                    _nextLci = _config.LciBase == 0 ? (ushort)1 : _config.LciBase;
-                }
+                return 0;
+            }
 
-                if (!_vcs.TryGetValue(candidate, out X25Vc? vc) || vc.State == X25VcState.Ready)
+            if (_config.IsDte)
+            {
+                for (int candidate = last; candidate >= first; candidate--)
                 {
-                    return candidate;
+                    if (IsFree((ushort)candidate))
+                    {
+                        return (ushort)candidate;
+                    }
+                }
+            }
+            else
+            {
+                for (int candidate = first; candidate <= last; candidate++)
+                {
+                    if (IsFree((ushort)candidate))
+                    {
+                        return (ushort)candidate;
+                    }
                 }
             }
 
             return 0;
+        }
+
+        private bool IsFree(ushort lci)
+        {
+            return !_vcs.TryGetValue(lci, out X25Vc? vc) || vc.State == X25VcState.Ready;
         }
 
         private ushort[] SnapshotKeys()

@@ -340,7 +340,7 @@ namespace RetroIO.Protocols.X25.Tests
         // state (d1)."
 
         [Test]
-        public void R4_ResetCollision_IncomingResetWhileOursIsOutstanding_IsIgnored_WHICH_IS_WRONG()
+        public void R4_ResetCollision_CompletesTheResetAtOnceWithNothingSent()
         {
             ushort lci = ConnectOutgoing();
             int resets = 0;
@@ -352,14 +352,14 @@ namespace RetroIO.Protocols.X25.Tests
 
             _layer.ProcessPacket(X25PacketBuilder.CreateResetRequest(lci, resetCause: 0x05, diagnosticCode: 0x01));
 
-            // MEASURED 2026-09-06: OnResetRequest only acts in DataTransfer/PvcReady, so the
-            // colliding Reset is dropped on the floor. The circuit stays in ResetRequest until T22
-            // expires (180 s), exactly the C emulator's defect F-02-04. Per 4.4.3.3 it should go
-            // to data transfer at once, raise Reset once, and send nothing.
-            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest),
-                "behaviour changed: if the circuit is now back in DataTransfer that is the FIX for R4 - rewrite this test");
-            Assert.That(resets, Is.EqualTo(0));
-            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+            // FIXED 2026-09-06 (Phase B4); used to assert the colliding Reset was dropped and the
+            // circuit stayed in ResetRequest until T22 (180 s). X.25 4.4.3.3: both sides consider
+            // the reset complete, no confirmation crosses, the channel is in d1.
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            Assert.That(resets, Is.EqualTo(1), "told once that the reset completed");
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0), "no Reset Confirmation on a collision");
+            Assert.That(_layer.SendData(lci, new byte[] { 1 }), Is.True, "and the circuit carries data again");
+            Assert.That(_sink.LastInfo.PS, Is.EqualTo(0));
         }
 
         // ================================================================== R5  clear collision
@@ -369,7 +369,7 @@ namespace RetroIO.Protocols.X25.Tests
         // clear confirmation packet."
 
         [Test]
-        public void R5_ClearCollision_IncomingClearWhileOursIsOutstanding_SendsAClearConfirmation_WHICH_IS_WRONG()
+        public void R5_ClearCollision_FreesTheChannelWithNoConfirmationAndOneClearedEvent()
         {
             ushort lci = ConnectOutgoing();
             int cleared = 0;
@@ -381,11 +381,27 @@ namespace RetroIO.Protocols.X25.Tests
 
             _layer.ProcessPacket(X25PacketBuilder.CreateClearRequest(lci, clearingCause: 0, diagnosticCode: 0));
 
-            // MEASURED 2026-09-06: OnClearRequest has no collision branch; it answers with a
-            // Clear Confirmation the peer does not expect (4.1.9) and raises Cleared for a call the
-            // application itself asked to clear (the C emulator's F-02-16).
-            Assert.That(_sink.CountOfType(X25PacketType.ClearConfirmation), Is.EqualTo(1),
-                "behaviour changed: no Clear Confirmation on collision is the FIX for R5 - rewrite this test");
+            // FIXED 2026-09-06 (Phase B4); used to assert a Clear Confirmation the peer did not
+            // expect (X.25 4.1.9) and a Cleared event that looked like the peer's doing.
+            Assert.That(_sink.CountOfType(X25PacketType.ClearConfirmation), Is.EqualTo(0));
+            Assert.That(cleared, Is.EqualTo(1), "told once that the channel is free");
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
+        }
+
+        [Test]
+        public void R5_ClearConfirmation_CompletesOurClearAndTellsTheApplication()
+        {
+            ushort lci = ConnectOutgoing();
+            int cleared = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+
+            _layer.ClearCall(lci, cause: 0, diagnostic: 0x0A);
+            Assert.That(cleared, Is.EqualTo(0), "not until the peer confirms");
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateClearConfirmation(lci));
+
+            // Cleared means "the channel is now free" whichever side started the clearing. Before
+            // Phase B4 an application that cleared a call was never told when that completed.
             Assert.That(cleared, Is.EqualTo(1));
             Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
         }
@@ -422,17 +438,36 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void R6_RestartCollision_OurRestartOutstanding_IncomingRestartIsConfirmed_WHICH_IS_WRONG()
+        public void R6_RestartCollision_CompletesBothRestartsWithNoConfirmation()
         {
+            int restarts = 0;
+            _layer.RestartOccurred += (l, cause, diag) => restarts++;
             _layer.Restart();
+            Assert.That(_layer.RestartOutstanding, Is.True);
             _sink.Sent.Clear();
 
             _layer.ProcessPacket(X25PacketBuilder.CreateRestartRequest(restartCause: 0, diagnosticCode: 0));
 
-            // X.25 4.1.2: on collision no restart confirmation is transferred. MEASURED
-            // 2026-09-06: the engine keeps no "restart outstanding" state at all, so it confirms.
-            Assert.That(_sink.CountOfType(X25PacketType.RestartConfirmation), Is.EqualTo(1),
-                "behaviour changed: no confirmation on restart collision is the FIX for R6 - rewrite this test");
+            // FIXED 2026-09-06 (Phase B4); used to assert a Restart Confirmation was sent. X.25
+            // 4.1.2: on collision no confirmation crosses and both restarts are complete.
+            Assert.That(_sink.CountOfType(X25PacketType.RestartConfirmation), Is.EqualTo(0));
+            Assert.That(_layer.RestartOutstanding, Is.False);
+            Assert.That(restarts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R6_RestartConfirmation_ClearsTheOutstandingRestart()
+        {
+            _layer.Restart();
+            Assert.That(_layer.RestartOutstanding, Is.True);
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRestartConfirmation());
+
+            Assert.That(_layer.RestartOutstanding, Is.False);
+
+            // An unsolicited one is dropped and counted.
+            _layer.ProcessPacket(X25PacketBuilder.CreateRestartConfirmation());
+            Assert.That(_layer.UnexpectedPackets, Is.EqualTo(1));
         }
 
         [Test]
@@ -514,7 +549,7 @@ namespace RetroIO.Protocols.X25.Tests
         // numbered" logical channel, the DCE with the lowest, precisely to keep collisions rare.
 
         [Test]
-        public void R8_CallCollision_IncomingCallOnOurCallRequestLci_ReplacesOurCall_WHICH_IS_WRONG()
+        public void R8_CallCollisionAtTheDte_OurCallStandsAndTheIncomingCallIsDropped()
         {
             ushort lci = _layer.PlaceCall(RemoteAddress);
             int incoming = 0;
@@ -524,26 +559,60 @@ namespace RetroIO.Protocols.X25.Tests
 
             _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(lci, LocalAddress, "9999"));
 
-            // MEASURED 2026-09-06: OnCallRequest overwrites the circuit in CallRequest state with
-            // CallIncoming and raises IncomingCall. Our own call vanishes with no Cleared, and the
-            // application now has two ideas of what LCI 1 is.
-            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.CallIncoming),
-                "behaviour changed: keeping our call and dropping the incoming one is the FIX for R8 - rewrite this test");
-            Assert.That(incoming, Is.EqualTo(1));
+            // FIXED 2026-09-06 (Phase B4); used to assert the incoming call overwrote ours. X.25
+            // 4.1.6: "The DCE will proceed with the call request and cancel the incoming call" - at
+            // the DTE, its own call is the one that proceeds.
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.CallRequest));
+            Assert.That(incoming, Is.EqualTo(0));
             Assert.That(cleared, Is.EqualTo(0));
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
         }
 
         [Test]
-        public void R8_DteAllocatesLcisUpwardFromTheBase_WHICH_IS_WRONG()
+        public void R8_CallCollisionAtTheDce_ThePeersCallWinsAndOurApplicationIsTold()
         {
-            // Annex A note 6: a DTE should start from the HIGHEST numbered channel. Both the C
-            // emulator (F-02-02) and this engine walk upward from the base, so a DTE and a DCE
-            // built from this code collide on the first call whenever both call at once.
+            RecordingSink sink = new RecordingSink();
+            X25Layer dce = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, IsDte = false });
+            ushort lci = dce.PlaceCall(RemoteAddress);
+            int incoming = 0;
+            int cleared = 0;
+            dce.IncomingCall += (l, c, called, calling, cud) => incoming++;
+            dce.Cleared += (l, c, cause, diag) => cleared++;
+
+            dce.ProcessPacket(X25PacketBuilder.CreateCallRequest(lci, LocalAddress, "9999"));
+
+            // X.25 4.1.6 from the DCE's side: the DTE's call request proceeds, the DCE's incoming
+            // call (our outgoing one) is cancelled - and the application that placed it is told.
+            Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(incoming, Is.EqualTo(1));
+            Assert.That(dce.Circuits[lci].State, Is.EqualTo(X25VcState.CallIncoming));
+        }
+
+        [Test]
+        public void R8_DteAllocatesFromTheTopOfTheRange_DceFromTheBottom()
+        {
+            // X.25 Annex A note 6: the DTE search starts with the highest numbered channel, the DCE
+            // with the lowest, so that a DTE and a DCE calling at once do not collide. FIXED
+            // 2026-09-06 (Phase B4); used to assert 1 then 2 for a DTE.
             ushort first = _layer.PlaceCall(RemoteAddress);
             ushort second = _layer.PlaceCall(RemoteAddress);
+            Assert.That(first, Is.EqualTo((ushort)16));
+            Assert.That(second, Is.EqualTo((ushort)15));
 
-            Assert.That(first, Is.EqualTo((ushort)1), "behaviour changed: highest-first allocation is the FIX for R8");
-            Assert.That(second, Is.EqualTo((ushort)2));
+            RecordingSink sink = new RecordingSink();
+            X25Layer dce = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, IsDte = false });
+            Assert.That(dce.PlaceCall(RemoteAddress), Is.EqualTo((ushort)1));
+            Assert.That(dce.PlaceCall(RemoteAddress), Is.EqualTo((ushort)2));
+        }
+
+        [Test]
+        public void R8_AClearedChannelIsReused()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ProcessPacket(X25PacketBuilder.CreateClearRequest(lci, 0, 0));
+            Assert.That(_layer.PlaceCall(RemoteAddress), Is.EqualTo(lci), "the highest channel is free again and is picked again");
         }
 
         // ================================================================== R9  negotiated sizes
