@@ -478,6 +478,81 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <summary>
         /// Tells whoever holds a local LCN that its call is over, and unbinds it.
         /// </summary>
+        /// <summary>
+        /// Clears a call by its local channel number, wherever the circuit lives.
+        /// </summary>
+        /// <remarks>
+        /// A circuit carried by a connection - an XOT connection or a LinkManager link - is cleared
+        /// by that connection's engine, which puts the Clear Request on the wire and runs T23. A
+        /// circuit that is in process, a PAD calling a local service, has no wire and no engine, so
+        /// the owner is simply told the call is gone. Before this, both went to the retired
+        /// process-wide engine, which knew about neither.
+        /// </remarks>
+        /// <param name="lcn">
+        /// The runtime's local channel number.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause (X.25 Table 5-7).
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code (Annex E).
+        /// </param>
+        public void ClearCallByLocalLcn(ushort lcn, byte cause, byte diagnostic)
+        {
+            if (ClearMappedCall(lcn, cause, diagnostic))
+            {
+                return;
+            }
+
+            ClearLocally(lcn, cause, diagnostic);
+        }
+
+        /// <summary>
+        /// Clears a circuit that runs in process: a PAD talking to a local service, with no link
+        /// and no engine under it.
+        /// </summary>
+        /// <remarks>
+        /// The same shape as <see cref="DeliverLocally"/>. A Clear Request is built so the history
+        /// and the packet views show the circuit ending the way they would for a real one, the bound
+        /// module is told, and the local terminal service closes its session. Before 2026-09-06 the
+        /// clear went to the retired process-wide engine, whose reply was bounced back into the
+        /// process and reached the service that way.
+        /// </remarks>
+        /// <param name="lcn">
+        /// The runtime's local channel number.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause (X.25 Table 5-7).
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code (Annex E).
+        /// </param>
+        private void ClearLocally(ushort lcn, byte cause, byte diagnostic)
+        {
+            byte[] built = X25PacketBuilder.CreateClearRequest(lcn, cause, diagnostic);
+
+            PacketHistory.FirePacketTransmitted(new X25PacketEventArgs
+            {
+                Packet = new X25Packet(built) { Direction = PacketDirection.Transmit, LCN = lcn },
+                Direction = PacketDirection.Transmit,
+                Timestamp = DateTime.UtcNow,
+                PacketId = GetNextFrameId(),
+            });
+
+            X25PacketEventArgs received = new X25PacketEventArgs
+            {
+                Packet = new X25Packet(built) { Direction = PacketDirection.Receive, LCN = lcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow,
+                PacketId = GetNextFrameId(),
+            };
+
+            RouteX25EventToBoundModule(lcn, received);
+            LocalTad.HandleCallClear(lcn);
+
+            DeliverCleared(lcn, cause, diagnostic);
+        }
+
         private void DeliverCleared(ushort localLcn, byte cause, byte diagnostic)
         {
             Services.IProtocolService? service = FindServiceForLcn(localLcn);

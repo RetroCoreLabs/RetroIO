@@ -349,145 +349,15 @@ namespace RetroIO.Protocols.X25.Layers
             }
         }
 
-        /// <summary>
-        /// Handle incoming Call Request from transport interface (XOT, Serial, etc.)
-        /// Looks up local services for the called address, allocates LCN, and binds.
-        /// </summary>
-        public bool HandleIncomingCall(X25CallRequest callRequest, ITransportInterface sourceTransport)
-        {
-            _logger.LogInformation("Handling incoming Call Request from {CallingAddress} to {CalledAddress} via {Transport}",
-                                 callRequest.CallingAddress, callRequest.CalledAddress, sourceTransport.Name);
-
-            try
-            {
-                // Step 1: Look up local service for the called address
-                var localService = _protocolServices.FindServiceForCall(
-                    callRequest.CalledAddress, callRequest.CallUserData ?? Array.Empty<byte>());
-
-                if (localService == null)
-                {
-                    _logger.LogWarning("No local service found for address {CalledAddress} - clearing call",
-                                     callRequest.CalledAddress);
-                    SendClearRequest(callRequest, sourceTransport, 0x01); // Number busy / not obtainable
-                    return false;
-                }
-
-                // Step 2: Allocate LCN
-                ushort lcn = _runtime.FindAvailableLCN();
-                if (lcn == 0)
-                {
-                    _logger.LogError("No available LCN for incoming call to {CalledAddress}", callRequest.CalledAddress);
-                    SendClearRequest(callRequest, sourceTransport, 0x05); // Network congestion
-                    return false;
-                }
-
-                _logger.LogInformation("Allocated LCN {LCN} for incoming call to {CalledAddress} via service '{ServiceName}'",
-                                     lcn, callRequest.CalledAddress, localService.ServiceName);
-
-                // Step 3: Store the XOT connection mapping so we can send data back
-                _runtime.RegisterXotConnection(lcn, callRequest.SourceConnection, callRequest.SourceLcn);
-
-                // Step 3b: Bind the service to the LCN for data routing
-                _runtime.BindServiceToLcn(lcn, localService);
-
-                // Step 4: Handle the call via the local service
-                var success = localService.HandleIncomingCall(lcn, callRequest.CalledAddress,
-                    callRequest.CallingAddress, callRequest.CallUserData ?? Array.Empty<byte>(),
-                    callRequest.Facilities ?? Array.Empty<byte>());
-
-                if (success)
-                {
-                    _logger.LogInformation("Service '{ServiceName}' accepted call on LCN {LCN}, sending Call Accepted",
-                                         localService.ServiceName, lcn);
-
-                    // Send Call Accepted back to caller
-                    SendCallAccepted(callRequest, sourceTransport);
-                    return true;
-                }
-                else
-                {
-                    _logger.LogWarning("Service '{ServiceName}' rejected call on LCN {LCN}", localService.ServiceName, lcn);
-                    _runtime.UnregisterXotConnection(lcn);
-                    SendClearRequest(callRequest, sourceTransport, 0x01);
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling incoming Call Request from {CallingAddress}",
-                               callRequest.CallingAddress);
-                SendClearRequest(callRequest, sourceTransport, 0x0B);
-                return false;
-            }
-        }
-
-        #endregion
-
-        #region X.25 Packet Type Handlers (RFC 1613)
-
-        /// <summary>
-        /// Send Call Accepted back to the source connection.
-        /// Uses SourceConnection from callRequest to find the XOT connection.
-        /// </summary>
-        private bool SendCallAccepted(X25CallRequest originalCall, ITransportInterface transport)
-        {
-            _logger.LogDebug("Sending Call Accepted for call to {CalledAddress}", originalCall.CalledAddress);
-
-            // Build Call Accepted with the source LCN and set GFI modulo 8 bit for XOT
-            ushort responseLcn = originalCall.SourceLcn;
-            var callAcceptedPacket = X25PacketBuilder.CreateCallAccepted(responseLcn);
-            // Fix GFI: add modulo 8 bit (0x10) for XOT interop
-            if (callAcceptedPacket.Length > 0)
-                callAcceptedPacket[0] = (byte)((callAcceptedPacket[0] & 0xC0) | 0x10 | (callAcceptedPacket[0] & 0x0F));
-
-            return SendXotPacket(originalCall, transport, callAcceptedPacket, "Call Accepted");
-        }
-
-        /// <summary>
-        /// Send Clear Request back to the source connection
-        /// </summary>
-        private bool SendClearRequest(X25CallRequest originalCall, ITransportInterface transport, byte cause)
-        {
-            _logger.LogDebug("Sending Clear Request for call to {CalledAddress} with cause 0x{Cause:X2}",
-                           originalCall.CalledAddress, cause);
-
-            ushort responseLcn = originalCall.SourceLcn;
-            var clearPacket = X25PacketBuilder.CreateClearRequest(responseLcn, cause);
-            if (clearPacket.Length > 0)
-                clearPacket[0] = (byte)((clearPacket[0] & 0xC0) | 0x10 | (clearPacket[0] & 0x0F));
-
-            return SendXotPacket(originalCall, transport, clearPacket, "Clear Request");
-        }
-
-        /// <summary>
-        /// Send an X.25 packet back to the originating connection
-        /// </summary>
-        private bool SendXotPacket(X25CallRequest originalCall, ITransportInterface transport, byte[] packet, string packetType)
-        {
-            // Try the SourceConnection first (XOT server connections)
-            if (originalCall.SourceConnection is XotServerConnection xotConn)
-            {
-                return xotConn.SendPacket(packet);
-            }
-
-            if (transport is XotClientTransport xotClient)
-            {
-                return xotClient.SendX25Packet("", packet);
-            }
-
-            // Check the transport abstraction (Type), NOT the concrete SerialTransport class:
-            // SerialTransport lives in the top-level Runtime assembly, so a concrete type-check here
-            // would create an illegal X25 -> Runtime dependency. ITransportInterface.Type is the
-            // architecture-safe discriminator and preserves identical behaviour.
-            if (transport.Type == TransportType.Serial)
-            {
-                _runtime.X25Layer.SendPacket(packet, packet.Length);
-                return true;
-            }
-
-            _logger.LogWarning("Cannot send {PacketType}: unknown transport type {Type}", packetType, transport.GetType().Name);
-            return false;
-        }
+        // The overload that took an ITransportInterface was removed on 2026-09-06 with C2 stage 3.
+        // It looked up the service, allocated the channel and then built and sent its own Call
+        // Accepted or Clear Request straight to the connection - a second packet layer beside the
+        // engine, which answered the same call again. Its last live user was the XOT server, and
+        // that has gone through the engine since the endpoints were built; the serial transport
+        // never reached it, because nothing raises the event it hangs off. Its three private
+        // senders went with it, and with them the last call into the retired engine from here.
+        // A transport that needs to answer a call gets an X25Endpoint, the way XOT and the links
+        // have one. RouteIncomingCall above is the shared half.
 
         #endregion
 

@@ -124,6 +124,21 @@ namespace RetroIO.Protocols.X25
         bool ClearMappedCall(ushort lcn, byte cause, byte diagnostic);
 
         /// <summary>
+        /// Clears a call by its local channel number, whether it is carried by a connection or runs
+        /// in process.
+        /// </summary>
+        /// <param name="lcn">
+        /// The runtime's local channel number.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause (X.25 Table 5-7).
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code (Annex E).
+        /// </param>
+        void ClearCallByLocalLcn(ushort lcn, byte cause, byte diagnostic);
+
+        /// <summary>
         /// Finalizes a deferred outbound XOT call by attaching its transport.
         /// </summary>
         /// <param name="localLcn">Local logical channel number.</param>

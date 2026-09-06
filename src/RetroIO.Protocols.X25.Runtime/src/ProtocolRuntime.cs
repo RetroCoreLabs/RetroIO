@@ -1282,20 +1282,17 @@ using RetroIO.Protocols.X25.DeleteMe;
 
             try
             {
-                // Route incoming call through the routing layer
-                var sourceTransport = sender as ITransportInterface;
-                if (sourceTransport != null)
-                {
-                    var routed = RoutingLayer.HandleIncomingCall(callRequest, sourceTransport);
-                    if (!routed)
-                    {
-                        _logger.LogWarning("Failed to route incoming call to {CalledAddress}", callRequest.CalledAddress);
-                    }
-                }
-                else
-                {
-                    _logger.LogError("Incoming call sender is not a valid transport interface");
-                }
+                // A transport that owns an X25Endpoint never gets here: its call is decoded by its
+                // own engine and routed by OnEndpointIncomingCall, which answers through the engine.
+                // What is left is a transport with no engine, and there is no way to answer a call
+                // on one - the routing layer used to build a Call Accepted by hand and write it to
+                // the connection, which is the second packet layer this migration is removing.
+                // The serial transport is the only such transport, and nothing raises its event
+                // today; it gets an endpoint in Phase E.
+                ITransportInterface? sourceTransport = sender as ITransportInterface;
+                _logger.LogWarning(
+                    "Incoming call to {CalledAddress} on transport {Transport} cannot be answered: that transport has no X.25 engine yet",
+                    callRequest.CalledAddress, sourceTransport?.Name ?? sender?.GetType().Name ?? "unknown");
             }
             catch (Exception ex)
             {
@@ -2996,6 +2993,15 @@ using RetroIO.Protocols.X25.DeleteMe;
             {
                 _logger.LogInformation("LinkManager: Link {LinkName} status: {OldStatus} -> {NewStatus} ({Reason})",
                     link.Name, oldStatus, newStatus, reason);
+
+                // A link that is no longer carrying traffic takes its X.25 engine with it: every
+                // circuit on it is reported cleared to whoever owned it, rather than left open on a
+                // connection that cannot answer. A later payload on the same link builds a fresh
+                // engine, which is what X.25 4.1 expects after the link is restored - a restart.
+                if (newStatus != LinkStatus.Active && oldStatus == LinkStatus.Active)
+                {
+                    DropEndpoint(link);
+                }
 
                 // Update statistics when link status changes
                 UpdateStatistics();

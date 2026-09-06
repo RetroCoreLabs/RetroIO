@@ -279,7 +279,7 @@ namespace RetroIO.Protocols.X25.Sintran
 
             // Send X.25 Clear Request
             _logger.LogDebug("SintranTadClient: Sending X.25 Clear Request on LCN {LCN}", _currentLCN);
-            _runtime.X25Layer.ClearCall(_currentLCN, 0, 0);
+            _runtime.ClearCallByLocalLcn(_currentLCN, 0, 0);
 
             _session.State = TadSessionState.Closed;
             _currentLCN = 0;
