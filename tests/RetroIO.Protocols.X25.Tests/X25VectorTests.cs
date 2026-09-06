@@ -189,24 +189,20 @@ namespace RetroIO.Protocols.X25.Tests
             byte[] bytes = Hex(v.GetProperty("hex").GetString());
             JsonElement expect = v.GetProperty("expect");
 
-            X25FlowControlParameters result;
-            try
-            {
-                result = X25FlowControlFacilities.Decode(bytes);
-            }
-            catch (Exception ex)
-            {
-                // An exception is the only way the current API can say "invalid".
-                return ExpectsInvalid(expect)
-                    ? Outcome.Ok()
-                    : Outcome.Fail("decoder threw " + ex.GetType().Name + ": " + ex.Message);
-            }
+            X25FacilityError error = X25Facilities.TryDecode(bytes, out X25Facilities result);
 
             if (ExpectsInvalid(expect))
             {
-                return Outcome.Fail("expected the field to be rejected as invalid; the decoder returned window "
-                    + result.WindowFromCalled + "/" + result.WindowFromCalling + " packet "
-                    + result.PacketSizeFromCalled + "/" + result.PacketSizeFromCalling);
+                return error != X25FacilityError.None
+                    ? Outcome.Ok()
+                    : Outcome.Fail("expected the field to be rejected as invalid; the decoder returned window "
+                        + result.WindowFromCalled + "/" + result.WindowFromCalling + " packet "
+                        + result.PacketSizeFromCalled + "/" + result.PacketSizeFromCalling);
+            }
+
+            if (error != X25FacilityError.None)
+            {
+                return Outcome.Fail("decoder rejected a valid field: " + error);
             }
 
             StringBuilder why = new StringBuilder();
@@ -214,15 +210,7 @@ namespace RetroIO.Protocols.X25.Tests
             CheckInt(why, "packetCalling", result.PacketSizeFromCalling, expect);
             CheckInt(why, "windowCalled", result.WindowFromCalled, expect);
             CheckInt(why, "windowCalling", result.WindowFromCalling, expect);
-
-            // The current result type has no pass-through field. A vector that expects one cannot be
-            // satisfied until X25Facilities (plan section 3) exists; an empty expectation is fine.
-            string wantPass = expect.TryGetProperty("passThroughHex", out JsonElement pt) ? pt.GetString() ?? "" : "";
-            if (wantPass.Length > 0)
-            {
-                why.Append("passThroughHex expected '").Append(wantPass)
-                   .Append("' but X25FlowControlParameters has no pass-through field; ");
-            }
+            CheckHex(why, "passThroughHex", result.PassThrough, expect);
 
             return why.Length == 0 ? Outcome.Ok() : Outcome.Fail(why.ToString());
         }
@@ -232,27 +220,30 @@ namespace RetroIO.Protocols.X25.Tests
         private static Outcome RunFacilityEncode(JsonElement v)
         {
             JsonElement p = v.GetProperty("params");
-            byte windowCalled = (byte)p.GetProperty("windowCalled").GetInt32();
-            byte windowCalling = (byte)p.GetProperty("windowCalling").GetInt32();
-            int packetCalled = p.GetProperty("packetCalled").GetInt32();
-            int packetCalling = p.GetProperty("packetCalling").GetInt32();
+            X25Facilities f = new X25Facilities
+            {
+                HasWindowSize = true,
+                HasPacketSize = true,
+                WindowFromCalled = (byte)p.GetProperty("windowCalled").GetInt32(),
+                WindowFromCalling = (byte)p.GetProperty("windowCalling").GetInt32(),
+                PacketSizeFromCalled = p.GetProperty("packetCalled").GetInt32(),
+                PacketSizeFromCalling = p.GetProperty("packetCalling").GetInt32(),
+            };
             bool wantInvalid = v.TryGetProperty("expect", out JsonElement expect) && ExpectsInvalid(expect);
 
             byte[] encoded;
             try
             {
-                encoded = X25FlowControlFacilities.Encode(windowCalled, windowCalling, packetCalled, packetCalling);
+                encoded = f.Encode();
             }
-            catch (Exception ex)
+            catch (ArgumentOutOfRangeException ex)
             {
-                return wantInvalid ? Outcome.Ok() : Outcome.Fail("encoder threw " + ex.GetType().Name + ": " + ex.Message);
+                return wantInvalid ? Outcome.Ok() : Outcome.Fail("encoder refused: " + ex.Message);
             }
 
             if (wantInvalid)
             {
-                return (encoded == null || encoded.Length == 0)
-                    ? Outcome.Ok()
-                    : Outcome.Fail("expected refusal; encoder produced " + ToHex(encoded));
+                return Outcome.Fail("expected refusal; encoder produced " + ToHex(encoded));
             }
 
             return CompareHex("encoded", encoded, v.GetProperty("hex").GetString());

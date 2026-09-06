@@ -39,7 +39,7 @@
       "spec": "X.25 7.1 Table 7-1: class D (bits 8,7 = 11) has a length octet; 7.3.7 NUI 0xC6 is class D. Unknown facility is stepped over by its declared length and kept for pass-through",
       "hex": "C6 03 41 42 43 43 03 03",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 3, "windowCalling": 3, "passThroughHex": "C6 03 41 42 43" },
-      "status": "knownFail:R11",
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities",
       "note": "window decodes right today; the pass-through field does not exist yet, so the vector fails on passThroughHex"
     },
     {
@@ -47,7 +47,7 @@
       "spec": "X.25 7.1: marker = code 0x00 + parameter 0x00 separates X.25 facilities from non-X.25 network facilities; everything after it is NOT an X.25 facility",
       "hex": "42 07 07 00 00 42 0A 0A",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "00 00 42 0A 0A" },
-      "status": "knownFail:R11",
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities",
       "note": "today the second 42 0A 0A is read as packet size 1024 (audit F-01-01 twin)"
     },
     {
@@ -55,21 +55,21 @@
       "spec": "X.25 7.1: marker parameter all ones precedes facilities for the called DTE's network",
       "hex": "43 02 02 00 FF 42 0A 0A",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "00 FF 42 0A 0A" },
-      "status": "knownFail:R11"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-marker-00-0F-dte-facilities",
       "spec": "X.25 7.1: marker parameter 00001111 precedes ITU-T-specified DTE facilities (Annex G), passed unchanged",
       "hex": "00 0F 0B 04 0A 20 20 20",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "00 0F 0B 04 0A 20 20 20" },
-      "status": "knownFail:R11"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-shift-FF-extended-code",
       "spec": "X.25 7.1: code 0xFF is the extension; the NEXT octet is an extended code with class from its own bits 8,7. Extended 0x42 is class B (2 octets) and is NOT packet size",
       "hex": "FF 42 07 07 43 02 02",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "FF 42 07 07" },
-      "status": "knownFail:R11",
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities",
       "note": "today 0xFF is treated as class D with 0x42 as its length (audit F-01-02 twin)"
     },
     {
@@ -77,14 +77,14 @@
       "spec": "X.25 7.1: 'Repetition of facility code 11111111 is permitted'",
       "hex": "FF FF 01 01 43 04 04",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 4, "windowCalling": 4, "passThroughHex": "FF FF 01 01" },
-      "status": "knownFail:R11"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-window-zero-invalid",
       "spec": "X.25 7.3.1.2: 'A value of zero is not allowed'",
       "hex": "43 00 00",
       "expect": { "invalid": true },
-      "status": "knownFail:R9",
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities",
       "note": "today window 0 is accepted and blocks sending for ever (audit F-01-04 twin)"
     },
     {
@@ -92,14 +92,14 @@
       "spec": "X.25 7.3.1.2: 'Window sizes of 8 to 127 are only valid if extended sequence numbering is used'",
       "hex": "43 08 08",
       "expect": { "invalid": true },
-      "status": "knownFail:R9"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-packet-log2-3-invalid",
       "spec": "X.25 7.3.1.1: values 4 to 12 only",
       "hex": "42 03 03",
       "expect": { "invalid": true },
-      "status": "knownFail:R9",
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities",
       "note": "today silently becomes 128"
     },
     {
@@ -107,14 +107,14 @@
       "spec": "X.25 7.3.1.1: values 4 to 12 only",
       "hex": "42 0D 0D",
       "expect": { "invalid": true },
-      "status": "knownFail:R9"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-truncated-packet-size",
       "spec": "X.25 7.1: class B carries two parameter octets; a field ending after one is malformed",
       "hex": "42 07",
       "expect": { "invalid": true },
-      "status": "knownFail:R10",
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities",
       "note": "today the truncated element is skipped and defaults returned"
     },
     {
@@ -122,28 +122,28 @@
       "spec": "X.25 7.3.6: code 0x01, bit 1 = reverse charging requested; not a flow control facility",
       "hex": "01 01 42 07 07",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "01 01" },
-      "status": "knownFail:R11"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-fast-select-passes-through",
       "spec": "X.25 7.3.6: bit 8 = 1, bit 7 = 0 fast select with no restriction on response",
       "hex": "01 80",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "01 80" },
-      "status": "knownFail:R11"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-cug-basic-bcd",
       "spec": "X.25 7.3.3.1: code 0x03, index as two BCD digits",
       "hex": "03 12 43 02 02",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "03 12" },
-      "status": "knownFail:R11"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-cug-extended-bcd",
       "spec": "X.25 7.3.3.2: code 0x47, index as four BCD digits",
       "hex": "47 12 34",
       "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "47 12 34" },
-      "status": "knownFail:R11"
+      "status": "pass", "fixed": "2026-09-06 Phase B6, X25Facilities"
     },
     {
       "id": "fac-empty",
