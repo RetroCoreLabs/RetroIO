@@ -69,7 +69,20 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// </remarks>
         public bool ReestablishOnLinkFailure { get; }
 
+         /// <summary>
+        /// Which dialect this link speaks. Defaults to <see cref="LapbVariant.Nd"/>, which is what
+        /// every caller wanted when this engine had no choice.
+        /// </summary>
+        public LapbVariant Variant { get; }
+
         /// <summary>
+        /// True when this station is the DTE, false when it is the DCE. Decides which of the two
+        /// ITU addresses goes on a command and which on a response (X.25 2.4.2). Ignored by the ND
+        /// dialect, which addresses by frame family instead.
+        /// </summary>
+        public bool IsDte { get; }
+
+       /// <summary>
         /// Initialises LAPB options, validating each value and falling back to the spec default.
         /// </summary>
         /// <param name="t1">
@@ -93,7 +106,13 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// Thrown when <paramref name="t1"/> or <paramref name="t3"/> is not positive, when
         /// <paramref name="n2"/> is less than 1, or when <paramref name="windowSize"/> is outside 1..7.
         /// </exception>
-        public LapbOptions(long t1 = 3000, long t3 = 30000, int n2 = 10, int windowSize = 7, bool reestablishOnLinkFailure = false)
+        /// <param name="variant">
+        /// Which LAPB dialect the link speaks; ND by default.
+        /// </param>
+        /// <param name="isDte">
+        /// True when this station is the DTE (ITU addressing only).
+        /// </param>
+        public LapbOptions(long t1 = 3000, long t3 = 30000, int n2 = 10, int windowSize = 7, bool reestablishOnLinkFailure = false, LapbVariant variant = LapbVariant.Nd, bool isDte = true)
         {
             if (t1 <= 0)
             {
@@ -121,6 +140,8 @@ namespace RetroIO.Protocols.Xmsg.Live
             N2 = n2;
             WindowSize = windowSize;
             ReestablishOnLinkFailure = reestablishOnLinkFailure;
+            Variant = variant;
+            IsDte = isDte;
         }
 
         /// <summary>

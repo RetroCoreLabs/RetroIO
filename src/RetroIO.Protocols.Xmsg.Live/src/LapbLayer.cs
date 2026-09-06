@@ -60,6 +60,18 @@ namespace RetroIO.Protocols.Xmsg.Live
         public const byte AddressOddLengthBit = 0x80;
 
         /// <summary>
+        /// ITU-T X.25 2.4.2 address A, single link operation: on commands from the DCE and responses
+        /// from the DTE. Coded 11000000 in transmission order, which is 0x03 in a byte.
+        /// </summary>
+        public const byte AddressItuA = 0x03;
+
+        /// <summary>
+        /// ITU-T X.25 2.4.2 address B, single link operation: on commands from the DTE and responses
+        /// from the DCE. Coded 10000000 in transmission order, which is 0x01 in a byte.
+        /// </summary>
+        public const byte AddressItuB = 0x01;
+
+        /// <summary>
         /// Maximum information-field length; a longer received I-field is FRMR reason Y (spec 2.3.2).
         /// </summary>
         /// <remarks>
@@ -703,7 +715,7 @@ namespace RetroIO.Protocols.Xmsg.Live
 
                 default:
                     // An unknown S-subtype is an unimplemented control field: FRMR reason W (spec 2.3.3).
-                    SendFrmr(frame.Control, FrmrReasonW, frame.PollFinal, currentTicks);
+                    SendFrmr(frame.Control, FrmrReasonW, frame.PollFinal, currentTicks, ReceivedIsResponse(frame.Address));
                     return;
             }
 
@@ -738,7 +750,7 @@ namespace RetroIO.Protocols.Xmsg.Live
             if (frame.Info.Length > MaxInformationLength)
             {
                 // Over-long I-field: FRMR reason Y (spec 2.3.2 / 2.3.3).
-                SendFrmr(frame.Control, FrmrReasonY, frame.PollFinal, currentTicks);
+                SendFrmr(frame.Control, FrmrReasonY, frame.PollFinal, currentTicks, ReceivedIsResponse(frame.Address));
                 return;
             }
 
@@ -749,19 +761,19 @@ namespace RetroIO.Protocols.Xmsg.Live
                 _receiveVariable = (_receiveVariable + 1) & 0x07;
                 _rejectCondition = false;
                 OnInformation?.Invoke(frame.Info);
-                EmitSupervisory(RrNibble, pollFinal: frame.PollFinal);
+                EmitSupervisory(RrNibble, pollFinal: frame.PollFinal, isCommand: false);
             }
             else if (IsDuplicate(ns))
             {
                 // Already-accepted frame retransmitted: discard, re-acknowledge current V(R) (4.5).
-                EmitSupervisory(RrNibble, pollFinal: frame.PollFinal);
+                EmitSupervisory(RrNibble, pollFinal: frame.PollFinal, isCommand: false);
             }
             else
             {
                 // Gap: send exactly one REJ and latch the reject condition (4.5), avoiding a REJ storm.
                 if (!_rejectCondition)
                 {
-                    EmitSupervisory(RejNibble, pollFinal: frame.PollFinal);
+                    EmitSupervisory(RejNibble, pollFinal: frame.PollFinal, isCommand: false);
                     _rejectCondition = true;
                 }
             }
@@ -888,6 +900,13 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// </param>
         private void CaptureNode(ReadOnlyMemory<byte> info)
         {
+            // ITU frames carry no node number (X.25 2.3.4): there is nothing to capture, and reading
+            // two bytes of whatever followed would invent a neighbour id.
+            if (IsItu)
+            {
+                return;
+            }
+
             // Spec 2.3.1 / 3.3: SABM/UA/RR carry the sender's node number big-endian. Store it read-only
             // as the neighbour id; it is NEVER a routing key.
             ReadOnlySpan<byte> span = info.Span;
@@ -1029,16 +1048,28 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// <param name="currentTicks">
         /// The current injected clock value, used to arm the T1 timer.
         /// </param>
-        private void SendFrmr(byte rejectedControl, byte reasonBits, bool pollFinal, long currentTicks)
+        /// <param name="rejectedWasResponse">
+        /// True when the frame being rejected arrived as a response; sets the C/R bit of the FRMR
+        /// diagnostic in ITU mode (X.25 2.3.4.10).
+        /// </param>
+        private void SendFrmr(byte rejectedControl, byte reasonBits, bool pollFinal, long currentTicks, bool rejectedWasResponse = false)
         {
             // Diagnostic (spec 2.3.3): rejected control; V(S)/V(R) with bit4 = 0; reason nibble.
+            // X.25 2.3.4.10: V(S) in bits 2-4, the C/R bit in bit 5 (1 when the rejected frame was a
+            // response), V(R) in bits 6-8. The ND dialect leaves the C/R bit clear;
+            // in ITU mode it says which it was.
             byte sequences = (byte)(((_sendVariable << 1) & 0x0E) | ((_receiveVariable << 5) & 0xE0));
+            if (IsItu && rejectedWasResponse)
+            {
+                sequences |= 0x10;
+            }
+
             byte[] info = new byte[] { rejectedControl, sequences, reasonBits };
             _lastFrmrInfo = info;
 
             byte control = (byte)(FrmrBase | (pollFinal ? PollFinalBit : 0));
             byte[] body = new byte[2 + info.Length];
-            body[0] = AddressLinkSetup;
+            body[0] = AddressFor(linkManagement: true, isCommand: false, infoLength: info.Length);
             body[1] = control;
             body[2] = info[0];
             body[3] = info[1];
@@ -1063,13 +1094,72 @@ namespace RetroIO.Protocols.Xmsg.Live
             }
 
             byte[] body = new byte[2 + _lastFrmrInfo.Length];
-            body[0] = AddressLinkSetup;
+            body[0] = AddressFor(linkManagement: true, isCommand: false, infoLength: _lastFrmrInfo.Length);
             body[1] = (byte)(FrmrBase | PollFinalBit);
             body[2] = _lastFrmrInfo[0];
             body[3] = _lastFrmrInfo[1];
             body[4] = _lastFrmrInfo[2];
             OnTransmit?.Invoke(body);
             RestartT1(currentTicks);
+        }
+
+        /// <summary>
+        /// True when this link speaks ITU-T LAPB rather than the ND dialect.
+        /// </summary>
+        private bool IsItu => _options.Variant == LapbVariant.Itu;
+
+        /// <summary>
+        /// True when a frame we received was a response rather than a command, judged by its address
+        /// (X.25 2.4.2). Meaningless in the ND dialect, which does not distinguish, so it answers
+        /// false there and the FRMR C/R bit stays clear as it always has.
+        /// </summary>
+        /// <param name="address">
+        /// The received frame's address byte.
+        /// </param>
+        private bool ReceivedIsResponse(byte address)
+        {
+            if (!IsItu)
+            {
+                return false;
+            }
+
+            return _options.IsDte ? address == AddressItuB : address == AddressItuA;
+        }
+
+        /// <summary>
+        /// The address byte for a frame we are about to send.
+        /// </summary>
+        /// <param name="linkManagement">
+        /// True for SABM, UA, DISC, DM and FRMR; false for I and the supervisory frames.
+        /// </param>
+        /// <param name="isCommand">
+        /// True for a command frame, false for a response.
+        /// </param>
+        /// <param name="infoLength">
+        /// Length of the information field, for the ND odd-length marker.
+        /// </param>
+        /// <remarks>
+        /// The two dialects address on different grounds. ITU (2.4.2) addresses by DIRECTION: a
+        /// command carries the address of the station it is sent to, a response the address of the
+        /// station sending it, so a DTE commands with B and answers with A. ND addresses by FRAME
+        /// FAMILY: link management is 0x01, data transfer 0x09, with 0x80 added when the information
+        /// field has an odd byte count because the ND-100's word DMA needs to know (see
+        /// <see cref="AddressData"/>). The two agree on nothing except the value 0x01.
+        /// </remarks>
+        private byte AddressFor(bool linkManagement, bool isCommand, int infoLength)
+        {
+            if (IsItu)
+            {
+                bool useA = _options.IsDte ? !isCommand : isCommand;
+                return useA ? AddressItuA : AddressItuB;
+            }
+
+            if (linkManagement)
+            {
+                return AddressLinkSetup;
+            }
+
+            return (byte)(AddressData | (((infoLength & 1) != 0) ? AddressOddLengthBit : 0));
         }
 
         /// <summary>
@@ -1089,7 +1179,7 @@ namespace RetroIO.Protocols.Xmsg.Live
             // ND odd-info-length address marker (capture-VERIFIED): 0x89 for an odd-length info field,
             // 0x09 for even. 100 silently discards an I-frame whose address parity disagrees with its
             // length (word-DMA off-by-one), so this MUST be set per frame - see AddressData.
-            body[0] = (byte)(AddressData | (((payload.Length & 1) != 0) ? AddressOddLengthBit : 0));
+            body[0] = AddressFor(linkManagement: false, isCommand: true, infoLength: payload.Length);
             body[1] = control;
             Array.Copy(payload, 0, body, 2, payload.Length);
             OnTransmit?.Invoke(body);
@@ -1104,15 +1194,26 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// <param name="pollFinal">
         /// Whether to set the poll/final bit.
         /// </param>
-        private void EmitSupervisory(byte subtypeNibble, bool pollFinal)
+        /// <param name="isCommand">
+        /// True when this frame is a command (our own poll or a plain acknowledgement), false when
+        /// it answers a poll. Decides the ITU address; ignored by the ND dialect.
+        /// </param>
+        private void EmitSupervisory(byte subtypeNibble, bool pollFinal, bool isCommand = true)
         {
             // S-frame control (spec 2.2.2): N(R) in bits 5..7, P/F, then the subtype low nibble.
             byte control = (byte)((_receiveVariable << 5) | (pollFinal ? PollFinalBit : 0) | subtypeNibble);
-            byte[] body = new byte[4];
-            body[0] = AddressData;
+
+            // ITU 2.3.4: a supervisory frame has no information field. The ND dialect puts the
+            // sender's node number there, which is how a neighbour is identified on that network.
+            byte[] body = IsItu ? new byte[2] : new byte[4];
+            body[0] = AddressFor(linkManagement: false, isCommand: isCommand, infoLength: 0);
             body[1] = control;
-            body[2] = (byte)((_ownNode >> 8) & 0xFF);
-            body[3] = (byte)(_ownNode & 0xFF);
+            if (!IsItu)
+            {
+                body[2] = (byte)((_ownNode >> 8) & 0xFF);
+                body[3] = (byte)(_ownNode & 0xFF);
+            }
+
             OnTransmit?.Invoke(body);
         }
 
@@ -1131,22 +1232,24 @@ namespace RetroIO.Protocols.Xmsg.Live
         private void SendUnnumbered(byte controlBase, bool includeNode, bool pollFinal)
         {
             byte control = (byte)(controlBase | (pollFinal ? PollFinalBit : 0));
-            if (includeNode)
+
+            // SABM and DISC are commands, UA and DM are responses (X.25 2.3.4). The ND dialect does
+            // not distinguish, so this only decides the address in ITU mode.
+            bool isCommand = controlBase == SabmBase || controlBase == DiscBase;
+
+            // ITU 2.3.4: no information field on SABM, UA, DISC or DM. The node number is the ND
+            // dialect's way of naming the neighbour (spec 2.3.1) and must not go on an X.25 link.
+            bool withNode = includeNode && !IsItu;
+            byte[] body = withNode ? new byte[4] : new byte[2];
+            body[0] = AddressFor(linkManagement: true, isCommand: isCommand, infoLength: 0);
+            body[1] = control;
+            if (withNode)
             {
-                byte[] body = new byte[4];
-                body[0] = AddressLinkSetup;
-                body[1] = control;
                 body[2] = (byte)((_ownNode >> 8) & 0xFF);
                 body[3] = (byte)(_ownNode & 0xFF);
-                OnTransmit?.Invoke(body);
             }
-            else
-            {
-                byte[] body = new byte[2];
-                body[0] = AddressLinkSetup;
-                body[1] = control;
-                OnTransmit?.Invoke(body);
-            }
+
+            OnTransmit?.Invoke(body);
         }
 
         /// <summary>
