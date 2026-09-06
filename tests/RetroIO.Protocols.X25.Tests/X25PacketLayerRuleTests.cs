@@ -1,0 +1,726 @@
+using System;
+using System.Collections.Generic;
+using NUnit.Framework;
+using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.PacketLayer;
+
+namespace RetroIO.Protocols.X25.Tests
+{
+    /// <summary>
+    /// Characterisation tests for <see cref="X25Layer"/> (the PacketLayer engine that becomes the ONE
+    /// C# X.25 stack), one group per rule R1-R19 of <c>Migration/X25 one-stack plan.md</c> section 3.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Written BEFORE the engine is changed (Phase A2), so most of these tests PIN WHAT THE CODE DOES
+    /// TODAY rather than what X.25 says it should do. Where today's behaviour is wrong, the test name
+    /// ends in <c>_WHICH_IS_WRONG</c>, the comment quotes the clause, and the assertion is the wrong
+    /// behaviour. When Phase B fixes a rule, its test goes red and has to be rewritten on purpose -
+    /// the same fence the HDLC merge used, so no behaviour change on the wire can pass unnoticed.
+    /// </para>
+    /// <para>
+    /// The engine is driven single-threaded through a recording <see cref="IX25PacketSink"/>; time is
+    /// injected through <see cref="X25Layer.Tick"/>. Spec text: <c>E:\Dev\RCL\Specs\X25</c>,
+    /// T-REC-X.25-199610-I (10/96) unless another document is named.
+    /// </para>
+    /// </remarks>
+    [TestFixture]
+    public class X25PacketLayerRuleTests
+    {
+        /// <summary>
+        /// Records every packet the layer sends. Nothing is looped back; the test feeds replies by hand.
+        /// </summary>
+        private sealed class RecordingSink : IX25PacketSink
+        {
+            public readonly List<byte[]> Sent = new List<byte[]>();
+
+            public void SendPacket(ReadOnlySpan<byte> packet)
+            {
+                Sent.Add(packet.ToArray());
+            }
+
+            public byte[] Last => Sent[Sent.Count - 1];
+
+            public int CountOfType(X25PacketType type)
+            {
+                int n = 0;
+                for (int i = 0; i < Sent.Count; i++)
+                {
+                    if (X25PacketParser.ParsePacket(Sent[i]).PacketType == type)
+                    {
+                        n++;
+                    }
+                }
+
+                return n;
+            }
+
+            public X25PacketInfo LastInfo => X25PacketParser.ParsePacket(Last);
+        }
+
+        private const string LocalAddress = "2340";
+        private const string RemoteAddress = "2341";
+
+        private RecordingSink _sink = null!;
+        private X25Layer _layer = null!;
+        private X25Config _config = null!;
+
+        // Far-future tick that expires every timer the config can arm.
+        private static long FarFuture => Environment.TickCount64 + 1_000_000;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _sink = new RecordingSink();
+            _config = new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, IsDte = true };
+            _layer = new X25Layer(_sink, _config);
+        }
+
+        // ------------------------------------------------------------------ helpers
+
+        /// <summary>Places a call and feeds a Call Connected, leaving the circuit in data transfer.</summary>
+        private ushort ConnectOutgoing()
+        {
+            ushort lci = _layer.PlaceCall(RemoteAddress);
+            Assert.That(lci, Is.Not.EqualTo((ushort)0), "no LCI allocated");
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            _sink.Sent.Clear();
+            return lci;
+        }
+
+        /// <summary>Feeds an Incoming Call on the given LCI and accepts it.</summary>
+        private void ConnectIncoming(ushort lci)
+        {
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(lci, LocalAddress, RemoteAddress));
+            _layer.AcceptCall(lci);
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            _sink.Sent.Clear();
+        }
+
+        private static byte[] Data(ushort lci, byte ps, byte pr, int length = 4, bool m = false)
+        {
+            byte[] payload = new byte[length];
+            for (int i = 0; i < length; i++)
+            {
+                payload[i] = (byte)i;
+            }
+
+            return X25PacketBuilder.CreateDataPacket(lci, ps, pr, payload, m);
+        }
+
+        // ================================================================== R1  P(S) sequencing
+        //
+        // X.25 4.4.1.3 "Flow control principles": "... a duplicate or a gap in the P(S) numbering
+        // ... is considered by the DCE as a local procedure error" - the circuit is reset, cause
+        // 00000101 (Table 5-8), diagnostic 1 "Invalid P(S)" (Annex E Table E.1).
+
+        [Test]
+        public void R1_InSequenceData_IsDeliveredAndAcknowledgedWithTheNextPR()
+        {
+            ushort lci = ConnectOutgoing();
+            int delivered = 0;
+            _layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
+
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.RR));
+            Assert.That(_sink.LastInfo.PR, Is.EqualTo(1));
+
+            _layer.ProcessPacket(Data(lci, ps: 1, pr: 0));
+            Assert.That(_sink.LastInfo.PR, Is.EqualTo(2));
+            Assert.That(delivered, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void R1_DataWithAGapInPS_IsDeliveredAndNoResetIsSent_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            int delivered = 0;
+            _layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
+
+            // Expected P(S) is 0; the peer sends 3. X.25 4.4.1.3: a gap is a local procedure
+            // error and the circuit must be reset with diagnostic 1.
+            _layer.ProcessPacket(Data(lci, ps: 3, pr: 0));
+
+            // MEASURED 2026-09-06: OnData assigns RecvSeq = P(S) + 1 without comparing P(S) to
+            // anything, delivers the packet, and acknowledges it. No reset. This is WORSE than the
+            // C emulator, which does check P(S).
+            Assert.That(delivered, Is.EqualTo(1), "behaviour changed: a gap in P(S) used to be delivered");
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0),
+                "behaviour changed: if a Reset Request is now sent that is the FIX for R1 - rewrite this test");
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.RR));
+            Assert.That(_sink.LastInfo.PR, Is.EqualTo(4), "it even acknowledges up to the gap");
+        }
+
+        [Test]
+        public void R1_DuplicatePS_IsDeliveredTwice_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            int delivered = 0;
+            _layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
+
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));   // duplicate
+
+            // X.25 4.4.1.3: a duplicate is a local procedure error (reset, diag 1).
+            Assert.That(delivered, Is.EqualTo(2), "behaviour changed: a duplicate P(S) used to be delivered again");
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0));
+        }
+
+        // ================================================================== R2  P(R) validation
+        //
+        // X.25 4.4.1.3: "the receipt of a P(R) ... that is not in the range [last P(R) received ..
+        // P(S) of the next packet to send] ... is considered a local procedure error" - reset,
+        // diagnostic 2 "Invalid P(R)".
+
+        [Test]
+        public void R2_ValidPR_OpensTheSendWindow()
+        {
+            ushort lci = ConnectOutgoing();   // default window 2
+
+            Assert.That(_layer.SendData(lci, new byte[] { 1 }), Is.True);
+            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.True);
+            Assert.That(_layer.SendData(lci, new byte[] { 3 }), Is.False, "window of 2 is full");
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 2));
+            Assert.That(_layer.SendData(lci, new byte[] { 3 }), Is.True, "RR P(R)=2 acknowledged both");
+        }
+
+        [Test]
+        public void R2_RRWithPROutsideTheWindow_IsTakenAsAnAckAndBlocksTheCircuit_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            Assert.That(_layer.SendData(lci, new byte[] { 1 }), Is.True);   // P(S) is now 1
+
+            // Only P(R) 0 or 1 is valid here. The peer sends 5.
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 5));
+
+            // MEASURED 2026-09-06: OnFlowControl stores AckedSeq = 5 unchecked. The window
+            // arithmetic (SendSeq - AckedSeq) & 7 = (1 - 5) & 7 = 4 is now >= the window of 2,
+            // so a perfectly healthy circuit can never send again. X.25 says: reset, diag 2.
+            Assert.That(_layer.Circuits[lci].AckedSeq, Is.EqualTo(5), "behaviour changed: invalid P(R) used to be accepted");
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0),
+                "behaviour changed: a Reset Request here is the FIX for R2 - rewrite this test");
+            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.False, "the circuit is now stuck");
+        }
+
+        [Test]
+        public void R2_PiggybackedPROnData_AcknowledgesButDoesNotClearPeerBusy()
+        {
+            // X.25 4.4.1.6: the busy condition set by RNR is cleared by an RR (or a reset) - NOT by
+            // the P(R) carried in a data packet. This is the rule that was broken in
+            // ProtocolRuntime until 2026-09-05 and destroyed packets under load; the PacketLayer
+            // engine has it right, and this pins it.
+            ushort lci = ConnectOutgoing();
+            _layer.SendData(lci, new byte[] { 1 });
+            _layer.ProcessPacket(X25PacketBuilder.CreateRNR(lci, pr: 1));
+            Assert.That(_layer.Circuits[lci].PeerBusy, Is.True);
+
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 1));
+
+            Assert.That(_layer.Circuits[lci].PeerBusy, Is.True, "a data packet's P(R) must not clear busy");
+            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.False);
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 1));
+            Assert.That(_layer.Circuits[lci].PeerBusy, Is.False, "only an RR clears it");
+            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.True);
+        }
+
+        // ================================================================== R3  state gating
+        //
+        // X.25 Annex B (state tables): RR/RNR/REJ are only meaningful in the flow-control states
+        // d1/d2/d3 of data transfer (p4). In p2 (DTE waiting) they are a procedure error.
+
+        [Test]
+        public void R3_RNRInCallRequestState_IsRecordedOnTheCircuit_WHICH_IS_WRONG()
+        {
+            ushort lci = _layer.PlaceCall(RemoteAddress);   // state p2, waiting for Call Connected
+            _sink.Sent.Clear();
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRNR(lci, pr: 0));
+
+            // MEASURED 2026-09-06: OnFlowControl has no state check; PeerBusy is set on a circuit
+            // that is not even connected, and nothing is sent back.
+            Assert.That(_layer.Circuits[lci].PeerBusy, Is.True, "behaviour changed: RNR outside data transfer used to be applied");
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+        }
+
+        // ================================================================== R4  reset collision
+        //
+        // X.25 4.4.3.3 "Reset collision": "... the DCE will consider that the reset is completed.
+        // The DCE will not expect a DTE reset confirmation packet and will not transfer a DCE
+        // reset confirmation packet. This places the logical channel in the flow control ready
+        // state (d1)."
+
+        [Test]
+        public void R4_ResetCollision_IncomingResetWhileOursIsOutstanding_IsIgnored_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            int resets = 0;
+            _layer.Reset += (l, c, cause, diag) => resets++;
+
+            _layer.ResetCall(lci, cause: 0, diagnostic: 0);
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest));
+            _sink.Sent.Clear();
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateResetRequest(lci, resetCause: 0x05, diagnosticCode: 0x01));
+
+            // MEASURED 2026-09-06: OnResetRequest only acts in DataTransfer/PvcReady, so the
+            // colliding Reset is dropped on the floor. The circuit stays in ResetRequest until T22
+            // expires (180 s), exactly the C emulator's defect F-02-04. Per 4.4.3.3 it should go
+            // to data transfer at once, raise Reset once, and send nothing.
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest),
+                "behaviour changed: if the circuit is now back in DataTransfer that is the FIX for R4 - rewrite this test");
+            Assert.That(resets, Is.EqualTo(0));
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+        }
+
+        // ================================================================== R5  clear collision
+        //
+        // X.25 4.1.9 "Clear collision": "... the DCE will consider that the clearing is completed.
+        // The DCE will not expect a DTE clear confirmation packet and will not transfer a DCE
+        // clear confirmation packet."
+
+        [Test]
+        public void R5_ClearCollision_IncomingClearWhileOursIsOutstanding_SendsAClearConfirmation_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            int cleared = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+
+            _layer.ClearCall(lci);
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ClearRequest));
+            _sink.Sent.Clear();
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateClearRequest(lci, clearingCause: 0, diagnosticCode: 0));
+
+            // MEASURED 2026-09-06: OnClearRequest has no collision branch; it answers with a
+            // Clear Confirmation the peer does not expect (4.1.9) and raises Cleared for a call the
+            // application itself asked to clear (the C emulator's F-02-16).
+            Assert.That(_sink.CountOfType(X25PacketType.ClearConfirmation), Is.EqualTo(1),
+                "behaviour changed: no Clear Confirmation on collision is the FIX for R5 - rewrite this test");
+            Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
+        }
+
+        // ================================================================== R6  restart
+        //
+        // X.25 4.1.2 "Restart collision": no confirmation crosses. 4.1.1: a restart clears every
+        // virtual call and resets every permanent virtual circuit - the application must learn
+        // about each one. Table 11: T20 (180 s) retransmits an unanswered Restart Request.
+
+        [Test]
+        public void R6_IncomingRestart_ConfirmsAndFreesEveryCall_ButRaisesNoClearedPerCall_WHICH_IS_WRONG()
+        {
+            ushort a = ConnectOutgoing();
+            ushort b = ConnectOutgoing();
+            int cleared = 0;
+            int restarts = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+            _layer.RestartOccurred += (l, cause, diag) => restarts++;
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRestartRequest(restartCause: 0x07, diagnosticCode: 0));
+
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.RestartConfirmation));
+            Assert.That(_layer.Circuits[a].State, Is.EqualTo(X25VcState.Ready));
+            Assert.That(_layer.Circuits[b].State, Is.EqualTo(X25VcState.Ready));
+            Assert.That(restarts, Is.EqualTo(1));
+
+            // MEASURED 2026-09-06: FreeSwitchedCircuits sets every SVC to Ready with no per-call
+            // notification. An application holding two calls learns nothing about either unless it
+            // also listens for RestartOccurred and walks the table itself. The C emulator has the
+            // same gap (F-02-07) and the C switch misdelivers data because of it (F-08-02).
+            Assert.That(cleared, Is.EqualTo(0),
+                "behaviour changed: a Cleared per call on restart is the FIX for R6 - rewrite this test");
+        }
+
+        [Test]
+        public void R6_RestartCollision_OurRestartOutstanding_IncomingRestartIsConfirmed_WHICH_IS_WRONG()
+        {
+            _layer.Restart();
+            _sink.Sent.Clear();
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRestartRequest(restartCause: 0, diagnosticCode: 0));
+
+            // X.25 4.1.2: on collision no restart confirmation is transferred. MEASURED
+            // 2026-09-06: the engine keeps no "restart outstanding" state at all, so it confirms.
+            Assert.That(_sink.CountOfType(X25PacketType.RestartConfirmation), Is.EqualTo(1),
+                "behaviour changed: no confirmation on restart collision is the FIX for R6 - rewrite this test");
+        }
+
+        [Test]
+        public void R6_UnansweredRestartRequest_IsNeverRetransmitted_WHICH_IS_WRONG()
+        {
+            _layer.Restart();
+            Assert.That(_sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(1));
+
+            _layer.Tick(FarFuture);
+
+            // X.25 Table 11: T20 = 180 s, then the Restart Request is retransmitted. MEASURED
+            // 2026-09-06: there is no T20; Restart() sends once and forgets.
+            Assert.That(_sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(1),
+                "behaviour changed: a T20 retransmission is the FIX for R6 - rewrite this test");
+        }
+
+        // ================================================================== R7  timers
+        //
+        // X.25 Table 11/X.25 (DTE time-limits): T21 = 200 s on Call Request -> the DTE clears the
+        // call (Clear Request, diagnostic 49); T22 = 180 s on Reset Request -> retransmit, then
+        // clear; T23 = 180 s on Clear Request -> retransmit the Clear Request.
+
+        [Test]
+        public void R7_T21Expiry_ReturnsToReadyAndRaisesCleared_ButSendsNoClearRequest_WHICH_IS_WRONG()
+        {
+            ushort lci = _layer.PlaceCall(RemoteAddress);
+            int cleared = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+            _sink.Sent.Clear();
+
+            _layer.Tick(FarFuture);
+
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
+            Assert.That(cleared, Is.EqualTo(1));
+
+            // MEASURED 2026-09-06: nothing is sent. The peer still holds the LCI in p3 and the
+            // next call on this LCI collides with a ghost (C emulator F-02-03).
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0),
+                "behaviour changed: a Clear Request on T21 expiry is the FIX for R7 - rewrite this test");
+        }
+
+        [Test]
+        public void R7_T23Expiry_GivesUpWithoutRetransmittingTheClearRequest_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ClearCall(lci);
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
+
+            _layer.Tick(FarFuture);
+
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.Ready));
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1),
+                "behaviour changed: a retransmitted Clear Request on T23 is the FIX for R7 - rewrite this test");
+        }
+
+        [Test]
+        public void R7_T22Expiry_SilentlyReturnsToDataTransfer_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ResetCall(lci);
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+
+            _layer.Tick(FarFuture);
+
+            // MEASURED 2026-09-06: the state flips back to DataTransfer as if the peer had
+            // confirmed. Nothing is retransmitted and nothing is cleared. The peer may still be
+            // in d2 with different sequence numbers.
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer),
+                "behaviour changed: retransmit-then-clear on T22 is the FIX for R7 - rewrite this test");
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0));
+        }
+
+        // ================================================================== R8  call collision / LCI choice
+        //
+        // X.25 4.1.6 "Call collision": "The DCE will proceed with the call request and cancel the
+        // incoming call." So at the DTE its own call stands and the incoming call is dropped.
+        // Annex A note 6: "the DTE search algorithm is suggested to start with the highest
+        // numbered" logical channel, the DCE with the lowest, precisely to keep collisions rare.
+
+        [Test]
+        public void R8_CallCollision_IncomingCallOnOurCallRequestLci_ReplacesOurCall_WHICH_IS_WRONG()
+        {
+            ushort lci = _layer.PlaceCall(RemoteAddress);
+            int incoming = 0;
+            int cleared = 0;
+            _layer.IncomingCall += (l, c, called, calling, cud) => incoming++;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(lci, LocalAddress, "9999"));
+
+            // MEASURED 2026-09-06: OnCallRequest overwrites the circuit in CallRequest state with
+            // CallIncoming and raises IncomingCall. Our own call vanishes with no Cleared, and the
+            // application now has two ideas of what LCI 1 is.
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.CallIncoming),
+                "behaviour changed: keeping our call and dropping the incoming one is the FIX for R8 - rewrite this test");
+            Assert.That(incoming, Is.EqualTo(1));
+            Assert.That(cleared, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void R8_DteAllocatesLcisUpwardFromTheBase_WHICH_IS_WRONG()
+        {
+            // Annex A note 6: a DTE should start from the HIGHEST numbered channel. Both the C
+            // emulator (F-02-02) and this engine walk upward from the base, so a DTE and a DCE
+            // built from this code collide on the first call whenever both call at once.
+            ushort first = _layer.PlaceCall(RemoteAddress);
+            ushort second = _layer.PlaceCall(RemoteAddress);
+
+            Assert.That(first, Is.EqualTo((ushort)1), "behaviour changed: highest-first allocation is the FIX for R8");
+            Assert.That(second, Is.EqualTo((ushort)2));
+        }
+
+        // ================================================================== R9  negotiated sizes
+        //
+        // X.25 7.3.1.2: the window size facility in Call Connected is the value the call runs with.
+        // RFC 1613 6.1: an XOT Call Request MUST carry the packet size and window size facilities.
+
+        [Test]
+        public void R9_PlaceCall_SendsNoFacilities_WHICH_IS_WRONG()
+        {
+            _layer.PlaceCall(RemoteAddress, LocalAddress);
+            X25PacketInfo sent = _sink.LastInfo;
+
+            Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.CallRequest));
+            // MEASURED 2026-09-06: the facility length octet is zero. Over XOT (RFC 1613 6.1) that
+            // is a MUST violation; over plain X.25 it silently accepts whatever the peer's defaults
+            // are without ever saying what we wanted.
+            Assert.That(sent.Facilities.Length, Is.EqualTo(0),
+                "behaviour changed: packet/window facilities in the Call Request is the FIX for R9 - rewrite this test");
+        }
+
+        [Test]
+        public void R9_CallConnectedWithASmallerWindow_IsIgnored_WHICH_IS_WRONG()
+        {
+            ushort lci = _layer.PlaceCall(RemoteAddress);
+
+            // Call Connected per X.25 5.2.3.1.2 with a facility field: address block octet, facility
+            // length, window 1/1. Built by hand because the C# builder omits the address octet
+            // (pinned by the vector pkt-call-accepted-with-facilities).
+            byte[] callConnected = { 0x10, (byte)lci, 0x0F, 0x00, 0x03, 0x43, 0x01, 0x01 };
+            _layer.ProcessPacket(callConnected);
+            _sink.Sent.Clear();
+
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+
+            // MEASURED 2026-09-06: OnCallAccepted never looks at the body. The window stays at the
+            // configured default (2), so we send two packets into a window of one - a P(S) outside
+            // the window, which 4.4.1.3 makes a local procedure error at the peer.
+            Assert.That(_layer.Circuits[lci].WindowSizeOut, Is.EqualTo(2),
+                "behaviour changed: applying the negotiated window is the FIX for R9 - rewrite this test");
+            Assert.That(_layer.SendData(lci, new byte[] { 1 }), Is.True);
+            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.True, "second packet into a window of 1");
+        }
+
+        // ================================================================== R10  Call Request validation
+        //
+        // X.25 5.2.2.3-5.2.2.5: the facility length must fit the body; call user data is what
+        // follows the facilities and is delivered to the called DTE.
+
+        [Test]
+        public void R10_CallRequestWhoseFacilityLengthExceedsTheBody_IsOfferedToTheApplication_WHICH_IS_WRONG()
+        {
+            int incoming = 0;
+            _layer.IncomingCall += (l, c, called, calling, cud) => incoming++;
+
+            // No addresses, facility length 0x32 = 50, three octets follow.
+            _layer.ProcessPacket(new byte[] { 0x10, 0x05, 0x0B, 0x00, 0x32, 0x42, 0x07, 0x07 });
+
+            // Per the C plan 3.7 (and X.25 5.2.2.3) this must be cleared with "invalid facility
+            // request" and never reach the application. MEASURED 2026-09-06: it is offered as a
+            // normal incoming call.
+            Assert.That(incoming, Is.EqualTo(1),
+                "behaviour changed: clearing a malformed Call Request is the FIX for R10 - rewrite this test");
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void R10_IncomingCallUserData_IsNotHandedToTheApplication_WHICH_IS_WRONG()
+        {
+            byte[]? seenCud = null;
+            _layer.IncomingCall += (l, c, called, calling, cud) => seenCud = cud;
+
+            byte[] cud = { 0x01, 0x00, 0x00, 0x00 };   // the X.29 PAD protocol identifier
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress, null, cud));
+
+            // MEASURED 2026-09-06: OnCallRequest raises IncomingCall with Array.Empty<byte>() and
+            // never stores the CUD on the circuit. A PAD or an XMSG service cannot tell what
+            // protocol the caller wants (the CUD is where SINTRAN puts it).
+            Assert.That(seenCud, Is.Not.Null);
+            Assert.That(seenCud!.Length, Is.EqualTo(0),
+                "behaviour changed: delivering the CUD is the FIX for R10 - rewrite this test");
+        }
+
+        // ================================================================== R12  state hygiene
+
+        [Test]
+        public void R12_AcceptingANewCallOnAReusedLci_StartsWithCleanFlowState()
+        {
+            // First call: peer goes busy, then the call is cleared by the peer.
+            ConnectIncoming(5);
+            _layer.ProcessPacket(X25PacketBuilder.CreateRNR(5, pr: 0));
+            _layer.ProcessPacket(Data(5, ps: 0, pr: 0));
+            Assert.That(_layer.Circuits[5].PeerBusy, Is.True);
+            _layer.ProcessPacket(X25PacketBuilder.CreateClearRequest(5, 0, 0));
+            Assert.That(_layer.Circuits[5].State, Is.EqualTo(X25VcState.Ready));
+
+            // Second call on the same LCI must not inherit busy flags or sequence numbers.
+            ConnectIncoming(5);
+            X25Vc vc = _layer.Circuits[5];
+            Assert.That(vc.PeerBusy, Is.False);
+            Assert.That(vc.LocalBusy, Is.False);
+            Assert.That(vc.SendSeq, Is.EqualTo(0));
+            Assert.That(vc.RecvSeq, Is.EqualTo(0));
+            Assert.That(vc.AckedSeq, Is.EqualTo(0));
+            Assert.That(_layer.SendData(5, new byte[] { 1 }), Is.True);
+        }
+
+        // ================================================================== R13  clearing a PVC
+        //
+        // X.25 4.3: permanent virtual circuits are never cleared, only reset. The engine has an
+        // X25VcKind.Pvc but no way to create one, so the only thing that can be pinned today is
+        // that ClearCall on a channel the engine does not know is silent.
+
+        [Test]
+        public void R13_ClearCallOnAnUnknownLci_SendsNothing()
+        {
+            _layer.ClearCall(9);
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+        }
+
+        // ================================================================== R14  send results
+        //
+        // The engine cannot know whether the layer below took its packet: IX25PacketSink.SendPacket
+        // returns void. The C audit's first root cause ("return values are produced but not
+        // consumed") is designed in here rather than merely ignored.
+
+        /// <summary>A sink that drops everything, like a link whose transmit queue is full.</summary>
+        private sealed class DroppingSink : IX25PacketSink
+        {
+            public int Dropped;
+
+            public void SendPacket(ReadOnlySpan<byte> packet)
+            {
+                Dropped++;
+            }
+        }
+
+        [Test]
+        public void R14_WhenTheSinkDropsThePacket_SendDataStillReportsSuccessAndSpendsPS_WHICH_IS_WRONG()
+        {
+            DroppingSink sink = new DroppingSink();
+            X25Layer layer = new X25Layer(sink, _config);
+            ushort lci = layer.PlaceCall(RemoteAddress);
+            layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));
+
+            bool ok = layer.SendData(lci, new byte[] { 1 });
+
+            // MEASURED 2026-09-06: true, and P(S) is 1 although nothing left. The peer will see a
+            // gap when the next packet arrives with P(S)=1 and reset the circuit (4.4.1.3) - the
+            // same mechanism that lost packets in the C switch (x25switch.c:2750).
+            Assert.That(ok, Is.True, "behaviour changed: a refused send reporting false is the FIX for R14 - rewrite this test");
+            Assert.That(layer.Circuits[lci].SendSeq, Is.EqualTo(1));
+            Assert.That(sink.Dropped, Is.GreaterThan(0));
+        }
+
+        // ================================================================== R15  received length
+        //
+        // X.25 4.3.3 / Annex E diag 39 "Packet too long": a data packet longer than the
+        // negotiated maximum is a local procedure error (reset).
+
+        [Test]
+        public void R15_DataLongerThanTheDefaultPacketSize_IsDeliveredWithoutAReset_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();   // DefaultPacketSize 128
+            int deliveredLength = -1;
+            _layer.DataReceived += (l, c, d, n, q, m, db) => deliveredLength = n;
+
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 0, length: 300));
+
+            // MEASURED 2026-09-06: the circuit has no packet size at all (X25Vc has no such field),
+            // so nothing can be compared. 300 octets are delivered and acknowledged.
+            Assert.That(deliveredLength, Is.EqualTo(300),
+                "behaviour changed: a reset with diag 39 is the FIX for R15 - rewrite this test");
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0));
+        }
+
+        // ================================================================== R16  interrupt
+        //
+        // X.25 4.4.2: an interrupt packet is confirmed with an interrupt confirmation and
+        // delivered to the application; only one may be outstanding per direction.
+
+        [Test]
+        public void R16_IncomingInterrupt_IsNeitherConfirmedNorDelivered_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+            int delivered = 0;
+            _layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateInterrupt(lci, new byte[] { 0x01 }));
+
+            // MEASURED 2026-09-06: ProcessPacket's default branch swallows it. The peer's T26 will
+            // expire and it will reset the circuit (Table 11).
+            Assert.That(_sink.CountOfType(X25PacketType.InterruptConfirmation), Is.EqualTo(0),
+                "behaviour changed: an Interrupt Confirmation is the FIX for R16 - rewrite this test");
+            Assert.That(delivered, Is.EqualTo(0));
+        }
+
+        // ================================================================== R17  protocol error reactions
+        //
+        // X.25 Annex D Table D-1: a packet on an unassigned logical channel is answered with a
+        // Clear (DCE) or Diagnostic (DTE) carrying diagnostic 36 "Packet on unassigned logical
+        // channel"; a non-restart packet on channel 0 gets diagnostic 41 (Table E.1).
+
+        [Test]
+        public void R17_DataOnAnUnassignedLci_IsDroppedWithoutAnyReaction_WHICH_IS_WRONG()
+        {
+            _layer.ProcessPacket(Data(9, ps: 0, pr: 0));
+
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0),
+                "behaviour changed: a Diagnostic/Clear with diag 36 is the FIX for R17 - rewrite this test");
+        }
+
+        [Test]
+        public void R17_DataOnLogicalChannelZero_IsDroppedWithoutAnyReaction_WHICH_IS_WRONG()
+        {
+            _layer.ProcessPacket(Data(0, ps: 0, pr: 0));
+
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0),
+                "behaviour changed: a Diagnostic with diag 41 is the FIX for R17 - rewrite this test");
+        }
+
+        // ================================================================== R18  ranges
+        //
+        // X.25 5.1.2 / 5.1.3: the logical channel number is twelve bits, 0..4095.
+
+        [Test]
+        public void R18_ConfiguredRangeRunningPast4095_HandsOutImpossibleLcis_WHICH_IS_WRONG()
+        {
+            RecordingSink sink = new RecordingSink();
+            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 4090, LciCount = 16 });
+
+            ushort highest = 0;
+            for (int i = 0; i < 16; i++)
+            {
+                ushort lci = layer.PlaceCall(RemoteAddress);
+                if (lci > highest)
+                {
+                    highest = lci;
+                }
+            }
+
+            // MEASURED 2026-09-06: X25Config is not validated and AllocateLci walks to base+count.
+            // (And the builder's 3-bit group mask then turns every one of these into a different
+            // LCN on the wire - vector pkt-clear-request-not-obtainable.)
+            Assert.That(highest, Is.GreaterThan((ushort)4095),
+                "behaviour changed: rejecting a range past 4095 at init is the FIX for R18 - rewrite this test");
+        }
+
+        // ================================================================== R19  DTE cause byte
+        //
+        // X.25 Table 5-7 note a: in a clear request from a DTE the clearing cause is 00000000, or
+        // a value with bit 8 set (1xxxxxxx) when the network supports it. A DCE-style cause such as
+        // 00001001 "Out of order" must never be sent by a DTE.
+
+        [Test]
+        public void R19_DteClearCallWithADceStyleCause_SendsItUnchanged_WHICH_IS_WRONG()
+        {
+            ushort lci = ConnectOutgoing();
+
+            _layer.ClearCall(lci, cause: 0x09, diagnostic: 0);
+
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(_sink.LastInfo.ClearingCause, Is.EqualTo(0x09),
+                "behaviour changed: forcing a DTE cause to 0x00 is the FIX for R19 - rewrite this test");
+        }
+    }
+}
