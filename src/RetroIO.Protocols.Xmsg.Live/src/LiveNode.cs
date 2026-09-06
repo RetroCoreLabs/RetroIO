@@ -35,7 +35,21 @@ namespace RetroIO.Protocols.Xmsg.Live
         private readonly LapbLayer _link;
         private readonly XmsgNode _node;
 
-        private readonly List<byte> _frameAccumulator;
+        /// <summary>
+        /// The shared streaming HDLC decoder for this link's receive direction.
+        /// </summary>
+        /// <remarks>
+        /// Delimiting and transparency only - <c>UseFcs</c> is false and the minimum length is one
+        /// - because the FCS decision belongs to the caller here, as it did in the de-framer this
+        /// replaces. One instance per direction; the type is not thread-safe by design.
+        /// </remarks>
+        private readonly RetroIO.Link.Hdlc.HdlcDecoder _hdlcDecoder =
+            new RetroIO.Link.Hdlc.HdlcDecoder(
+                RetroIO.Link.Hdlc.HdlcFramerOptions.Xmsg with
+                {
+                    UseFcs = false,
+                    MinFrameLength = 1,
+                });
         private readonly Queue<byte[]> _pendingWrites;
 
         private long _ticks;
@@ -81,7 +95,6 @@ namespace RetroIO.Protocols.Xmsg.Live
             _transport = transport;
             _link = link;
             _node = node;
-            _frameAccumulator = new List<byte>(512);
             _pendingWrites = new Queue<byte[]>();
 
             _link.OnTransmit += EnqueueTransmit;
@@ -178,10 +191,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                         break;
                     }
 
-                    for (int i = 0; i < n; i++)
-                    {
-                        FeedByte(buffer[i]);
-                    }
+                    FeedBytes(buffer, n);
 
                     await FlushPendingAsync(cancellationToken);
                 }
@@ -209,10 +219,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                         break;
                     }
 
-                    for (int i = 0; i < n; i++)
-                    {
-                        FeedByte(buffer[i]);
-                    }
+                    FeedBytes(buffer, n);
 
                     _ticks++;
                     _link.Tick(_ticks);
@@ -231,48 +238,47 @@ namespace RetroIO.Protocols.Xmsg.Live
         }
 
         /// <summary>
-        /// Feeds one received byte into the incremental HDLC frame splitter.
+        /// Feeds received bytes into the shared streaming HDLC decoder and dispatches every
+        /// complete, FCS-valid frame to the LAPB link.
         /// </summary>
-        /// <param name="value">
-        /// The received byte.
-        /// </param>
-        private void FeedByte(byte value)
+        /// <param name="buffer">The receive buffer.</param>
+        /// <param name="count">How many bytes of it are valid.</param>
+        /// <remarks>
+        /// <para>
+        /// Until 2026-09-06 this was a hand-rolled byte-at-a-time flag splitter that accumulated
+        /// into a <c>List&lt;byte&gt;</c>, and then, to reuse the verified de-framer, wrapped the
+        /// accumulated content back up in flags and handed it to a whole-buffer API - an extra
+        /// copy of every frame, and a near-identical copy of the code in two files.
+        /// </para>
+        /// <para>
+        /// It existed only because the de-framer could not hold a partial frame across reads. The
+        /// shared decoder can, so all of it goes away.
+        /// </para>
+        /// </remarks>
+        private void FeedBytes(byte[] buffer, int count)
         {
-            if (value == Flag)
+            ReadOnlySpan<byte> data = new ReadOnlySpan<byte>(buffer, 0, count);
+
+            int offset = 0;
+            while (offset < data.Length)
             {
-                if (_frameAccumulator.Count > 0)
+                RetroIO.Link.Hdlc.HdlcDecodeStatus status =
+                    _hdlcDecoder.Decode(data.Slice(offset), out int consumed);
+                offset += consumed;
+
+                if (status == RetroIO.Link.Hdlc.HdlcDecodeStatus.NeedMoreData)
                 {
-                    ProcessAccumulatedFrame();
-                    _frameAccumulator.Clear();
+                    break;
                 }
 
-                // A run of flags (interframe fill) collapses; nothing to do on empty accum.
-                return;
-            }
+                if (status != RetroIO.Link.Hdlc.HdlcDecodeStatus.FrameComplete)
+                {
+                    continue;
+                }
 
-            _frameAccumulator.Add(value);
-        }
-
-        /// <summary>
-        /// Unstuffs and FCS-checks the bytes accumulated between two flags, then dispatches
-        /// a valid frame to the LAPB link.
-        /// </summary>
-        private void ProcessAccumulatedFrame()
-        {
-            // Reuse the verified de-framer by wrapping the stuffed content back in flags.
-            byte[] wrapped = new byte[_frameAccumulator.Count + 2];
-            wrapped[0] = Flag;
-            for (int i = 0; i < _frameAccumulator.Count; i++)
-            {
-                wrapped[i + 1] = _frameAccumulator[i];
-            }
-
-            wrapped[wrapped.Length - 1] = Flag;
-
-            IReadOnlyList<byte[]> frames = HdlcDeframer.SplitFrames(wrapped);
-            for (int i = 0; i < frames.Count; i++)
-            {
-                byte[] frameBytes = frames[i];
+                // The decoder is configured without an FCS, exactly as the de-framer it replaces
+                // was, so the checksum decision stays here where it has always been.
+                byte[] frameBytes = _hdlcDecoder.Frame.ToArray();
                 if (!Fcs16.IsValid(frameBytes))
                 {
                     continue;
