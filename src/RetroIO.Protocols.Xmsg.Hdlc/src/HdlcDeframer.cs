@@ -49,114 +49,71 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         }
 
         /// <summary>
-        /// Splits a stream on <c>0x7E</c> flags and unstuffs each frame's bytes, optionally
-        /// reporting where in the stream each frame ended.
+        /// Splits a byte stream into unstuffed LAPB frames, recording where each one ended.
         /// </summary>
-        /// <param name="stream">
-        /// The reassembled byte stream (the concatenated TCP payloads of one flow).
-        /// </param>
+        /// <param name="stream">The captured or received octets.</param>
         /// <param name="frameEndOffsets">
-        /// When not null, receives one entry per returned frame: the offset of that frame's closing
-        /// flag within <paramref name="stream"/>. Callers use it to map a frame back to the TCP
-        /// segment that completed it, and so to recover capture order across flows - which plain
-        /// per-flow reassembly throws away.
+        /// When not null, receives the offset just past each frame's closing flag, in the same
+        /// order as the returned frames. Used by the pcap tooling to keep frames in capture order.
         /// </param>
-        /// <returns>
-        /// The list of unstuffed frame byte arrays, in stream order. Empty runs between
-        /// consecutive flags are skipped.
-        /// </returns>
+        /// <returns>The frames, each with its FCS still attached.</returns>
+        /// <remarks>
+        /// <para>
+        /// Since 2026-09-06 this drives the shared streaming framer in <c>RetroIO.Link.Hdlc</c>
+        /// rather than its own loop - one of five HDLC implementations that were merged. The
+        /// whole-buffer shape is kept because the pcap tooling wants it, but there is only one
+        /// engine underneath now.
+        /// </para>
+        /// <para>
+        /// <b>One behaviour deliberately changed.</b> The old loop treated the end of the buffer as
+        /// a frame terminator and returned a truncated tail as though it were a frame. A streaming
+        /// decoder holds it instead, so a partial frame at the end of a read is simply not
+        /// reported. That is the correct answer - ITU-T X.25 clause 2.3.5.3 a makes a frame invalid
+        /// unless it is "properly bounded by two flags" - and it is what lets the byte-at-a-time
+        /// accumulators that used to wrap this function go away.
+        /// </para>
+        /// <para>
+        /// Frames are returned with the FCS attached and are NOT checked here; the caller decides,
+        /// as it always has, with <see cref="Fcs16.IsValid"/>. That is why the framer is configured
+        /// with <c>UseFcs</c> false.
+        /// </para>
+        /// </remarks>
         public static IReadOnlyList<byte[]> SplitFrames(ReadOnlySpan<byte> stream, IList<int>? frameEndOffsets)
         {
             List<byte[]> frames = new List<byte[]>();
 
-            int length = stream.Length;
-            int pos = 0;
-            while (pos < length)
+            // Minimum length one: without an FCS check there is no four-octet floor, and this
+            // function has always returned whatever lay between two flags and left the judgement
+            // to the caller.
+            RetroIO.Link.Hdlc.HdlcFramerOptions options =
+                RetroIO.Link.Hdlc.HdlcFramerOptions.Xmsg with
+                {
+                    UseFcs = false,
+                    MinFrameLength = 1,
+                };
+
+            using RetroIO.Link.Hdlc.HdlcDecoder decoder = new RetroIO.Link.Hdlc.HdlcDecoder(options);
+
+            int offset = 0;
+            while (offset < stream.Length)
             {
-                // Seek an opening flag.
-                while (pos < length && stream[pos] != Flag)
-                {
-                    pos++;
-                }
+                RetroIO.Link.Hdlc.HdlcDecodeStatus status =
+                    decoder.Decode(stream.Slice(offset), out int consumed);
+                offset += consumed;
 
-                // Skip the run of consecutive flags (interframe fill).
-                while (pos < length && stream[pos] == Flag)
-                {
-                    pos++;
-                }
-
-                if (pos >= length)
+                if (status == RetroIO.Link.Hdlc.HdlcDecodeStatus.NeedMoreData)
                 {
                     break;
                 }
 
-                int contentStart = pos;
-
-                // Seek the closing flag.
-                while (pos < length && stream[pos] != Flag)
+                if (status == RetroIO.Link.Hdlc.HdlcDecodeStatus.FrameComplete)
                 {
-                    pos++;
+                    frames.Add(decoder.Frame.ToArray());
+                    frameEndOffsets?.Add(offset);
                 }
-
-                if (pos > contentStart)
-                {
-                    byte[] unstuffed = Unstuff(stream.Slice(contentStart, pos - contentStart));
-                    if (unstuffed.Length > 0)
-                    {
-                        frames.Add(unstuffed);
-                        if (frameEndOffsets != null) { frameEndOffsets.Add(pos); }
-                    }
-                }
-
-                // Leave pos on the closing flag; the outer loop treats it as the next
-                // opening flag, which also correctly handles shared-flag framing.
             }
 
             return frames;
-        }
-
-        /// <summary>
-        /// Reverses HDLC byte stuffing on a single frame's content bytes.
-        /// </summary>
-        /// <param name="content">
-        /// The stuffed frame content between two flags (excluding the flags themselves).
-        /// </param>
-        /// <returns>
-        /// A new array holding the unstuffed bytes.
-        /// </returns>
-        private static byte[] Unstuff(ReadOnlySpan<byte> content)
-        {
-            // The unstuffed output can never be longer than the input.
-            byte[] output = new byte[content.Length];
-            int n = 0;
-            int i = 0;
-            while (i < content.Length)
-            {
-                byte b = content[i];
-                if (b == Escape)
-                {
-                    i++;
-                    if (i < content.Length)
-                    {
-                        output[n++] = (byte)(content[i] ^ EscapeMask);
-                    }
-                }
-                else
-                {
-                    output[n++] = b;
-                }
-
-                i++;
-            }
-
-            if (n == output.Length)
-            {
-                return output;
-            }
-
-            byte[] trimmed = new byte[n];
-            Array.Copy(output, trimmed, n);
-            return trimmed;
         }
     }
 }

@@ -4,6 +4,10 @@
   <Folder Name="/src/RetroIO.Identity/src/">
     <Project Path="src/RetroIO.Identity/src/RetroIO.Identity.csproj" />
   </Folder>
+  <Folder Name="/src/RetroIO.Hdlc/" />
+  <Folder Name="/src/RetroIO.Hdlc/src/">
+    <Project Path="src/RetroIO.Hdlc/src/RetroIO.Hdlc.csproj" />
+  </Folder>
   <Folder Name="/src/RetroIO.Link/" />
   <Folder Name="/src/RetroIO.Link/src/">
     <Project Path="src/RetroIO.Link/src/RetroIO.Link.csproj" />

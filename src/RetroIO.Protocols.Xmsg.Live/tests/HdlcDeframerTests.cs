@@ -210,23 +210,22 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
         }
 
         [Fact]
-        public void TruncatedTail_IsDeliveredAsAFrame_WHICH_IS_WRONG_FOR_A_STREAM()
+        public void TruncatedTail_IsHeldNotDelivered()
         {
             // A read that ends in the middle of a frame. 27% of the reads in the capture
             // corpus are not frame-aligned, and 468 of them contain no flag at all, so
             // this is the normal case on a real link, not a rarity.
             //
-            // MEASURED 2026-09-06: SplitFrames treats END OF BUFFER as a frame terminator
-            // and hands back the truncated tail as if it were a frame. It is whole-buffer
-            // by design and has no way to say "hold this until more arrives" - which is
-            // precisely why LiveNode.FeedByte and LapbLayerAdapter.FeedByte each hand-roll
-            // a streaming accumulator around it and then re-wrap the result in flags just
-            // to call back in here.
+            // FIXED by the framing merge, 2026-09-06, and this test was updated deliberately.
+            // The old whole-buffer loop treated END OF BUFFER as a frame terminator and handed
+            // back the truncated tail as though it were a frame - this test used to assert two
+            // frames and say in its comment that a streaming decoder must hold the tail instead.
+            // It does now. ITU-T X.25 clause 2.3.5.3 a makes a frame invalid unless it is
+            // "properly bounded by two flags", and a tail with no closing flag is not.
             //
-            // Nothing breaks today because the fragment fails the FCS check above. But a
-            // merged framer must STREAM natively: hold the tail, deliver nothing, and
-            // resume on the next read. When it does, this test should report one frame and
-            // must be updated - deliberately, by someone who has read this.
+            // Nothing broke when it changed, because the fragment used to fail the FCS check
+            // above anyway. What it unlocks is the removal of the byte-at-a-time accumulators in
+            // LiveNode and LapbLayerAdapter, which existed only to hold exactly this tail.
             byte[] complete = WithFcs(0x09, 0x01, 0x00, 0x64);
 
             List<byte> wire = new List<byte> { Flag };
@@ -238,10 +237,8 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
 
             IReadOnlyList<byte[]> frames = HdlcDeframer.SplitFrames(wire.ToArray());
 
-            Assert.Equal(2, frames.Count);
+            Assert.Single(frames);
             Assert.Equal(complete, frames[0]);
-            Assert.Equal(new byte[] { 0x09, 0x02, 0x00 }, frames[1]);
-            Assert.False(Fcs16.IsValid(frames[1]), "the truncated tail must not pass the FCS check");
         }
 
         [Fact]

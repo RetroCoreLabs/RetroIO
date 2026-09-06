@@ -51,51 +51,17 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// </returns>
         public static byte[] Encode(ReadOnlySpan<byte> body)
         {
-            // Frame check sequence: the one's-complement of the reflected CRC over the body,
-            // stored low byte first. VERIFIED against the SABM anchor (XMSG-PROTOCOL.md
-            // section 2): body 01 3F 00 64 yields FCS 0x092E -> wire bytes 2E 09.
-            ushort fcs = (ushort)(Fcs16.Compute(body) ^ 0xFFFF);
-            byte fcsLow = (byte)(fcs & 0xFF);
-            byte fcsHigh = (byte)((fcs >> 8) & 0xFF);
-
-            // Worst case: every body byte and both FCS bytes need escaping (x2), plus two
-            // flags. Building into a right-sized list keeps the code simple and correct;
-            // the frame sizes here are small (<= ~312 body bytes, XMSG-PROTOCOL.md sec 7).
-            List<byte> output = new List<byte>((body.Length + 2) * 2 + 2);
-            output.Add(Flag);
-
-            for (int i = 0; i < body.Length; i++)
-            {
-                Stuff(output, body[i]);
-            }
-
-            Stuff(output, fcsLow);
-            Stuff(output, fcsHigh);
-
-            output.Add(Flag);
-            return output.ToArray();
-        }
-
-        /// <summary>
-        /// Appends one byte to the output, byte-stuffing it if it is a flag or escape.
-        /// </summary>
-        /// <param name="output">
-        /// The growing output byte list.
-        /// </param>
-        /// <param name="value">
-        /// The raw byte to emit.
-        /// </param>
-        private static void Stuff(List<byte> output, byte value)
-        {
-            if (value == Flag || value == Escape)
-            {
-                output.Add(Escape);
-                output.Add((byte)(value ^ EscapeMask));
-            }
-            else
-            {
-                output.Add(value);
-            }
+            // Since 2026-09-06 this delegates to the shared framer in RetroIO.Link.Hdlc - one of
+            // five separate HDLC implementations that were merged into it. The wire format is
+            // unchanged, and HdlcEncoderTests still asserts the captured SABM anchor byte for byte:
+            // body 01 3F 00 64 -> 7E 01 3F 00 64 2E 09 7E.
+            //
+            // HdlcFramerOptions.Xmsg is what keeps that true. It escapes ONLY the flag and the
+            // control escape, per ITU-T X.25 clause 2.2.2.2, and NOT every octet below 0x20 the way
+            // the RFC 1662 default ACCM would. The captures settle it: across the whole corpus the
+            // only octets ever following 0x7D are 0x5D and 0x5E, so the real ND machines do not
+            // ACCM-escape and neither may we.
+            return RetroIO.Link.Hdlc.HdlcEncoder.Encode(body, RetroIO.Link.Hdlc.HdlcFramerOptions.Xmsg);
         }
     }
 }

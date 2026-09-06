@@ -21,7 +21,7 @@ namespace RetroIO.Link.Hdlc
     /// returned the raw running register with every caller applying <c>^ 0xFFFF</c> itself.
     /// Merging those two by name would have compiled cleanly and silently produced wrong CRCs at
     /// every call site on one of the two sides. So neither name survives here:
-    /// <see cref="ComputeTransmitFcs"/> and <see cref="Update"/> cannot be confused with each
+    /// <see cref="ComputeTransmitFcs"/> and <see cref="Update(ushort, byte)"/> cannot be confused with each
     /// other or bound to by accident.
     /// </para>
     /// <para>

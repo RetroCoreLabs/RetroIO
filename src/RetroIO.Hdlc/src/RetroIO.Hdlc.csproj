@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Hdlc</PackageId>
+    <AssemblyName>RetroIO.Hdlc</AssemblyName>
+    <RootNamespace>RetroIO.Link.Hdlc</RootNamespace>
+    <Description>Shared HDLC framing: byte-stuffed encode and streaming decode with FCS-16, per ITU-T X.25 clause 2 and RFC 1662.</Description>
+    <PackageTags>retroio;hdlc;lapb;framing</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

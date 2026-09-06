@@ -14,7 +14,8 @@ namespace RetroIO.Link.Hdlc
     public static class HdlcEncoder
     {
         /// <summary>
-        /// Upper bound on the octets <see cref="Encode"/> will write for a body of this length.
+        /// Upper bound on the octets <see cref="Encode(System.ReadOnlySpan{byte}, System.Span{byte}, HdlcFramerOptions)"/>
+        /// will write for a body of this length.
         /// </summary>
         /// <param name="bodyLength">Octets of address, control and information, FCS excluded.</param>
         /// <returns>A size that is always sufficient.</returns>
