@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
 
+using RetroIO.Link.Hdlc;
+
 namespace RetroIO.Link.Framing
 {
     /// <summary>
@@ -21,26 +23,32 @@ namespace RetroIO.Link.Framing
     ///
     /// Receive mirrors <see cref="SlipFrameCodec"/>: a FLAG always delimits; an empty frame between flags
     /// is skipped; buffer overflow discards and resynchronizes. Behavior follows RFC 1662.
+    /// <para>
+    /// Since 2026-09-06 this is a thin adapter over the shared engine in
+    /// <see cref="RetroIO.Link.Hdlc"/> rather than its own hand-rolled loop - one of five separate
+    /// HDLC framers that were merged. The wire format is unchanged and
+    /// <c>FramingCodecTests</c> asserts the exact on-the-wire bytes either way. What the shared
+    /// engine adds here is per-condition counters and an overlong frame that is discarded up to its
+    /// closing flag rather than silently restarting mid-stream.
+    /// </para>
     /// </remarks>
-    public sealed class HdlcFrameCodec : FrameCodecBase
+    public sealed class HdlcFrameCodec : FrameCodecBase, IDisposable
     {
-        // RFC 1662 control octets.
-        private const byte Flag = 0x7E;
-        private const byte Esc = 0x7D;
-        private const byte Xor = 0x20;
-
-        // Control octets at or above this value are not subject to ACCM transmit escaping.
-        private const byte ControlCharLimit = 0x20;
-
         /// <summary>
         /// Maximum de-framed payload size in bytes (X.25 max packet plus LAPB overhead).
         /// </summary>
         public const int FrameMaxPayload = 4096;
 
-        // Receive accumulation buffer and its current fill; _inEscape tracks a pending ESC.
-        private readonly byte[] _rxBuffer = new byte[FrameMaxPayload];
-        private int _rxLen;
-        private bool _inEscape;
+        /// <summary>
+        /// The framing policy this codec drives the shared engine with: RFC 1662 transmit escaping,
+        /// and no FCS, because <c>CodecLinkBridge</c> owns the checksum at the layer above.
+        /// </summary>
+        private static readonly HdlcFramerOptions Policy = HdlcFramerOptions.FramingOnly with
+        {
+            MaxFrameLength = FrameMaxPayload,
+        };
+
+        private readonly HdlcDecoder _decoder = new HdlcDecoder(Policy);
 
         /// <summary>
         /// Initializes an HDLC/PPP codec.
@@ -59,76 +67,37 @@ namespace RetroIO.Link.Framing
         /// <inheritdoc/>
         public override void ProcessBytes(ReadOnlySpan<byte> data)
         {
-            for (int i = 0; i < data.Length; i++)
+            int offset = 0;
+            while (offset < data.Length)
             {
-                byte b = data[i];
-                switch (b)
+                HdlcDecodeStatus status = _decoder.Decode(data.Slice(offset), out int consumed);
+                offset += consumed;
+
+                if (status == HdlcDecodeStatus.NeedMoreData)
                 {
-                    case Flag:
-                        // A FLAG always delimits, regardless of a dangling escape.
-                        if (_rxLen == 0)
-                        {
-                            // Empty frame (inter-frame fill or leading FLAG) -- skip.
-                            _inEscape = false;
-                            break;
-                        }
-                        RaiseFrameReceived(_rxBuffer.AsSpan(0, _rxLen));
-                        _rxLen = 0;
-                        _inEscape = false;
-                        break;
-
-                    case Esc:
-                        _inEscape = true;
-                        break;
-
-                    default:
-                        byte value = b;
-                        if (_inEscape)
-                        {
-                            _inEscape = false;
-                            value = (byte)(b ^ Xor); // undo the transmit XOR encoding
-                        }
-
-                        if (_rxLen >= FrameMaxPayload)
-                        {
-                            // Frame too large -- discard and resync.
-                            _rxLen = 0;
-                            _inEscape = false;
-                            break;
-                        }
-
-                        _rxBuffer[_rxLen++] = value;
-                        break;
+                    break;
                 }
+
+                if (status == HdlcDecodeStatus.FrameComplete)
+                {
+                    RaiseFrameReceived(_decoder.Frame);
+                }
+
+                // Runt, Overlong and Aborted are discarded here, as they were before. The decoder
+                // has already counted each of them separately, which the hand-rolled loop this
+                // replaces could not do - it lumped an oversized frame in with everything else.
             }
         }
 
         /// <inheritdoc/>
         public override void SendFrame(ReadOnlySpan<byte> frame)
         {
-            // Worst case: every byte escaped (2x) plus leading and trailing FLAG.
-            int maxLen = (frame.Length * 2) + 2;
-            byte[] rented = ArrayPool<byte>.Shared.Rent(maxLen);
+            int max = HdlcEncoder.GetMaxEncodedLength(frame.Length);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(max);
             try
             {
-                int pos = 0;
-                rented[pos++] = Flag; // leading FLAG flushes accumulated line noise
-                for (int i = 0; i < frame.Length; i++)
-                {
-                    byte b = frame[i];
-                    if (b == Flag || b == Esc || b < ControlCharLimit)
-                    {
-                        rented[pos++] = Esc;
-                        rented[pos++] = (byte)(b ^ Xor);
-                    }
-                    else
-                    {
-                        rented[pos++] = b;
-                    }
-                }
-
-                rented[pos++] = Flag; // trailing FLAG marks the frame boundary
-                Transport.Send(rented.AsSpan(0, pos));
+                int written = HdlcEncoder.Encode(frame, rented, Policy);
+                Transport.Send(rented.AsSpan(0, written));
             }
             finally
             {
@@ -139,8 +108,13 @@ namespace RetroIO.Link.Framing
         /// <inheritdoc/>
         public override void Reset()
         {
-            _rxLen = 0;
-            _inEscape = false;
+            _decoder.Reset();
+        }
+
+        /// <summary>Returns the decoder's pooled assembly buffer.</summary>
+        public void Dispose()
+        {
+            _decoder.Dispose();
         }
     }
 }

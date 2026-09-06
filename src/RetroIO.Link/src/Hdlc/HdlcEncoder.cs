@@ -80,7 +80,7 @@ namespace RetroIO.Link.Hdlc
             // escaped along with it - X.25 clause 2.2.2.2 puts the escaping "following completion
             // of the FCS calculation". Appending a raw, unescaped FCS is the classic bug here: it
             // works until an FCS octet lands on 0x7E or 0x7D, about one frame in 130.
-            ushort fcs = HdlcFcs.ComputeTransmitFcs(body);
+            ushort fcs = options.UseFcs ? HdlcFcs.ComputeTransmitFcs(body) : (ushort)0;
             byte fcsLow = (byte)(fcs & 0xFF);
             byte fcsHigh = (byte)((fcs >> 8) & 0xFF);
 
@@ -98,9 +98,14 @@ namespace RetroIO.Link.Hdlc
                 }
             }
 
-            if (!WriteStuffed(destination, ref pos, fcsLow, options) ||
-                !WriteStuffed(destination, ref pos, fcsHigh, options) ||
-                !Write(destination, ref pos, HdlcFramerOptions.Flag))
+            if (options.UseFcs &&
+                (!WriteStuffed(destination, ref pos, fcsLow, options) ||
+                 !WriteStuffed(destination, ref pos, fcsHigh, options)))
+            {
+                return false;
+            }
+
+            if (!Write(destination, ref pos, HdlcFramerOptions.Flag))
             {
                 return false;
             }

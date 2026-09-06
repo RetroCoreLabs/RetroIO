@@ -79,6 +79,24 @@ namespace RetroIO.Link.Hdlc
         public const uint AccmNone = 0x00000000;
 
         /// <summary>
+        /// Whether this framer owns the frame check sequence.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <see langword="true"/> - the encoder computes and appends the FCS, and the decoder
+        /// verifies the residue and reports <see cref="HdlcDecodeStatus.BadFcs"/>. This is what a
+        /// link that terminates HDLC itself wants.
+        /// </para>
+        /// <para>
+        /// <see langword="false"/> - pure delimiting and transparency, no checksum. One of the
+        /// engines this class replaces was framing-only by design, with the FCS owned by the layer
+        /// above it (<c>CodecLinkBridge</c>), and that separation is worth keeping: it is the
+        /// cleaner layering, and a codec that does not know about the FCS can carry anything.
+        /// </para>
+        /// </remarks>
+        public bool UseFcs { get; init; } = true;
+
+        /// <summary>
         /// Smallest acceptable frame in octets between the flags, FCS included, transparency
         /// excluded. Anything shorter is a runt.
         /// </summary>
@@ -127,6 +145,22 @@ namespace RetroIO.Link.Hdlc
         public static HdlcFramerOptions Xmsg { get; } = new HdlcFramerOptions
         {
             SendAccm = AccmNone,
+            MaxFrameLength = 4096,
+        };
+
+        /// <summary>
+        /// Delimiting and transparency only, with the FCS left to the layer above.
+        /// </summary>
+        /// <remarks>
+        /// The policy the framing-codec sublayer uses. <see cref="MinFrameLength"/> drops to one
+        /// because without an FCS there is no four-octet floor - any non-empty run between two
+        /// flags is a frame as far as this layer is concerned.
+        /// </remarks>
+        public static HdlcFramerOptions FramingOnly { get; } = new HdlcFramerOptions
+        {
+            SendAccm = AccmAllControlOctets,
+            UseFcs = false,
+            MinFrameLength = 1,
             MaxFrameLength = 4096,
         };
 

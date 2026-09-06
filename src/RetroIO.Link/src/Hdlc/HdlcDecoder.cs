@@ -110,6 +110,14 @@ namespace RetroIO.Link.Hdlc
         private int _frameLength;
         private ushort _fcs;
         private bool _escaped;
+
+        // False until the first flag has been seen, and again after a Reset. While false every
+        // octet is discarded: X.25 clause 2.3.5.3 a makes a frame invalid unless it is "properly
+        // bounded by two flags", so content that never had an opening flag is not a frame and must
+        // not be handed up. Two of the engines this replaces got this right by ignoring anything
+        // received while out of frame; one did not, and would turn the tail of a discarded frame
+        // into a frame of its own.
+        private bool _seenFlag;
         private bool _overflowed;
         private bool _disposed;
 
@@ -187,6 +195,14 @@ namespace RetroIO.Link.Hdlc
 
                 if (b == HdlcFramerOptions.Flag)
                 {
+                    if (!_seenFlag)
+                    {
+                        // The opening flag we were hunting for. Nothing before it was a frame.
+                        _seenFlag = true;
+                        _statistics.IdleFlags++;
+                        continue;
+                    }
+
                     // An escape immediately followed by a flag is an abort (X.25 clause 2.3.5.3 f,
                     // RFC 1662 section 4.2). Discard silently and go back to hunting - and note it
                     // is NOT an FCS error.
@@ -209,6 +225,12 @@ namespace RetroIO.Link.Hdlc
                     HdlcDecodeStatus status = CompleteFrame();
                     consumed = i + 1;
                     return status;
+                }
+
+                if (!_seenFlag)
+                {
+                    // Still hunting: discard inter-frame junk rather than accumulating it.
+                    continue;
                 }
 
                 if (_escaped)
@@ -239,6 +261,7 @@ namespace RetroIO.Link.Hdlc
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             StartNewFrame();
+            _seenFlag = false;
             _frameLength = 0;
         }
 
@@ -275,7 +298,11 @@ namespace RetroIO.Link.Hdlc
             }
 
             int length = _length;
-            bool goodFcs = HdlcFcs.IsGoodResidue(_fcs);
+
+            // With UseFcs false this framer is delimiting and transparency only - the layer above
+            // owns the checksum - so there is no residue to test and every run that clears the
+            // minimum length is a frame.
+            bool goodFcs = !_options.UseFcs || HdlcFcs.IsGoodResidue(_fcs);
 
             if (length < _options.MinFrameLength)
             {

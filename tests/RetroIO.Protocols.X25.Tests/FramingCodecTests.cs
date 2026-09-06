@@ -355,7 +355,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void Hdlc_AfterReset_TheNextBytesBecomeAFrame_NoFlagHunt()
+        public void Hdlc_AfterReset_HuntsForAFlagAndDiscardsThePartialTail()
         {
             CapturingTransport sink = new CapturingTransport();
             HdlcFrameCodec sender = new HdlcFrameCodec("A", sink);
@@ -371,23 +371,20 @@ namespace RetroIO.Protocols.X25.Tests
             receiver.Reset();
             receiver.ProcessBytes(new ReadOnlySpan<byte>(wire, 3, wire.Length - 3));
 
-            // MEASURED 2026-09-06. Reset() clears the partial frame, but this codec has no
-            // "hunting for a flag" state - a flag always delimits, and whatever arrived
-            // since the last one becomes a frame. So the tail of the discarded frame is
-            // delivered as a frame of its own when its closing flag turns up.
+            // FIXED by the framing merge, 2026-09-06, and this test was updated deliberately.
             //
-            // It is harmless today because the FCS check above the codec throws the
-            // fragment away, but it is a real difference from HdlcFramer, which ignores
-            // every byte received while it is not inside a frame. The merged framer has to
-            // pick one, and the right answer is almost certainly HdlcFramer's: after a
-            // reset, hunt for a flag and discard everything before it.
+            // Before the merge this codec had no flag-hunt state: a flag always delimited, so
+            // whatever had arrived since the last one became a frame, and the tail of a frame
+            // discarded by Reset was delivered as a frame of its own. It was harmless in practice
+            // because the FCS check above threw the fragment away, but it was wrong, and it
+            // differed from the other framer in this repository, which ignored everything received
+            // while it was not inside a frame.
             //
-            // Asserting 1 pins today's behaviour so the merge shows the change.
-            Assert.That(received.Count, Is.EqualTo(1),
-                "behaviour changed: HdlcFrameCodec used to deliver the post-Reset tail as a frame. "
-                + "If the merged framer now hunts for a flag instead, that is a FIX - update this test.");
-            Assert.That(received[0], Is.Not.EqualTo(new byte[] { 0x11, 0x22, 0x33, 0x44 }),
-                "the delivered fragment must not be mistaken for the original frame");
+            // The shared engine hunts. ITU-T X.25 clause 2.3.5.3 a makes a frame invalid unless it
+            // is "properly bounded by two flags", so content with no opening flag is not a frame
+            // and is discarded rather than handed up.
+            Assert.That(received.Count, Is.EqualTo(0),
+                "after Reset the decoder must hunt for an opening flag and discard the partial tail");
         }
 
         // ---- XOT (RFC 1613) ----
