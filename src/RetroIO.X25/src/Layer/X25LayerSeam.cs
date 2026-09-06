@@ -119,6 +119,23 @@ namespace RetroIO.Protocols.X25.PacketLayer
     public delegate void X25RestartTimedOut(X25Layer layer);
 
     /// <summary>
+    /// Raised when the peer sends a Diagnostic packet (X.25 5.6): it saw something wrong with a
+    /// packet of ours and is telling us which packet and why. Nothing changes state; the owner may
+    /// want to log it, because it is the only word a DCE gives about a discarded packet.
+    /// </summary>
+    /// <param name="layer">
+    /// The layer that received it.
+    /// </param>
+    /// <param name="diagnostic">
+    /// The Annex E diagnostic code.
+    /// </param>
+    /// <param name="explanation">
+    /// The diagnostic explanation field: the first three octets of the offending packet's header
+    /// (5.6.2), or empty.
+    /// </param>
+    public delegate void X25DiagnosticReceived(X25Layer layer, byte diagnostic, byte[] explanation);
+
+    /// <summary>
     /// The down interface the X.25 layer calls to hand fully-built packet bytes to the link below for
     /// framing and transmission. This is the "interfaces down" half of the layer seam.
     /// </summary>

@@ -303,19 +303,23 @@ namespace RetroIO.Protocols.X25.Tests
         // d1/d2/d3 of data transfer (p4). In p2 (DTE waiting) they are a procedure error.
 
         [Test]
-        public void R3_RNRInCallRequestState_IsDroppedAndCounted()
+        public void R3_RNRInCallRequestState_ClearsTheChannelWithDiagnostic21()
         {
-            ushort lci = _layer.PlaceCall(RemoteAddress);   // state p2, waiting for Call Connected
+            ushort lci = _layer.PlaceCall(RemoteAddress);   // state p2
+            int cleared = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
             _sink.Sent.Clear();
 
             _layer.ProcessPacket(X25PacketBuilder.CreateRNR(lci, pr: 0));
 
-            // FIXED 2026-09-06 (Phase B3); used to assert PeerBusy == true on a circuit that was not
-            // even connected. The Table D-1 reaction (Diagnostic / Clear, "packet type invalid for
-            // state p2") is still to come with R17; until then the packet is dropped and counted.
+            // Phase B3 dropped and counted it; Phase B8 (2026-09-06) applies Annex C Table C.3: flow
+            // control in p2 is ERROR (p7) # 21 - the channel is cleared with "packet type invalid for
+            // state p2" and the caller is told its call is gone.
             Assert.That(_layer.Circuits[lci].PeerBusy, Is.False);
-            Assert.That(_layer.UnexpectedPackets, Is.EqualTo(1));
-            Assert.That(_sink.Sent.Count, Is.EqualTo(0), "no reaction yet - that is R17");
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(21));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ClearRequest));
+            Assert.That(cleared, Is.EqualTo(1));
         }
 
         [Test]
@@ -1088,22 +1092,182 @@ namespace RetroIO.Protocols.X25.Tests
         // Clear (DCE) or Diagnostic (DTE) carrying diagnostic 36 "Packet on unassigned logical
         // channel"; a non-restart packet on channel 0 gets diagnostic 41 (Table E.1).
 
-        [Test]
-        public void R17_DataOnAnUnassignedLci_IsDroppedWithoutAnyReaction_WHICH_IS_WRONG()
+        private X25Layer NewDce(RecordingSink sink)
         {
-            _layer.ProcessPacket(Data(9, ps: 0, pr: 0));
-
-            Assert.That(_sink.Sent.Count, Is.EqualTo(0),
-                "behaviour changed: a Diagnostic/Clear with diag 36 is the FIX for R17 - rewrite this test");
+            return new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, IsDte = false });
         }
 
         [Test]
-        public void R17_DataOnLogicalChannelZero_IsDroppedWithoutAnyReaction_WHICH_IS_WRONG()
+        public void R17_DataOnAReadyChannelInRange_ClearsItWithDiagnostic20()
         {
-            _layer.ProcessPacket(Data(0, ps: 0, pr: 0));
+            // FIXED 2026-09-06 (Phase B8); it used to be dropped silently. Annex C Table C.3, state
+            // p1, row "data, interrupt, reset or flow control": ERROR (p7) # 20.
+            _layer.ProcessPacket(Data(9, ps: 0, pr: 0));
 
-            Assert.That(_sink.Sent.Count, Is.EqualTo(0),
-                "behaviour changed: a Diagnostic with diag 41 is the FIX for R17 - rewrite this test");
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.LCN, Is.EqualTo(9));
+            Assert.That(_sink.LastInfo.ClearingCause, Is.EqualTo(X25Cause.DteOriginated), "a DTE's cause is 0");
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(20));
+            Assert.That(_layer.Circuits[9].State, Is.EqualTo(X25VcState.ClearRequest));
+        }
+
+        [Test]
+        public void R17_DataOnAnUnassignedChannel_DceSendsDiagnostic36_DteOnlyCounts()
+        {
+            // Table C.1: "Any packet with unassigned logical channel: DIAG # 36". 5.6: the Diagnostic
+            // packet is transmitted by the DCE; a DTE has none to send.
+            RecordingSink dceSink = new RecordingSink();
+            X25Layer dce = NewDce(dceSink);
+            byte[] offender = Data(200, ps: 0, pr: 0);   // range is 1..16
+            dce.ProcessPacket(offender);
+
+            Assert.That(dceSink.Sent.Count, Is.EqualTo(1));
+            X25PacketInfo diag = dceSink.LastInfo;
+            Assert.That(diag.PacketType, Is.EqualTo(X25PacketType.Diagnostic));
+            Assert.That(diag.LCN, Is.EqualTo(0));
+            Assert.That(diag.DiagnosticCode, Is.EqualTo(X25Diagnostic.UnassignedLogicalChannel));
+            Assert.That(diag.DiagnosticInfo, Is.EqualTo(new byte[] { offender[0], offender[1], offender[2] }),
+                "5.6.2: the explanation is the first three octets of the offending packet");
+            Assert.That(dce.DiagnosticsSent, Is.EqualTo(1));
+
+            _layer.ProcessPacket(offender);
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0), "a DTE does not send Diagnostic packets");
+            Assert.That(_layer.UnexpectedPackets, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R17_DataOnLogicalChannelZero_IsDiagnostic36()
+        {
+            // Table C.2: a packet other than restart on channel 0 is DIAG # 36.
+            RecordingSink dceSink = new RecordingSink();
+            X25Layer dce = NewDce(dceSink);
+            dce.ProcessPacket(Data(0, ps: 0, pr: 0));
+
+            Assert.That(dceSink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Diagnostic));
+            Assert.That(dceSink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.UnassignedLogicalChannel));
+
+            _layer.ProcessPacket(Data(0, ps: 0, pr: 0));
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+            Assert.That(_layer.UnexpectedPackets, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R17_UndefinedPacketTypeOnChannelZero_IsDiagnostic33()
+        {
+            RecordingSink dceSink = new RecordingSink();
+            X25Layer dce = NewDce(dceSink);
+            dce.ProcessPacket(new byte[] { 0x10, 0x00, 0xF5 });   // no such PTI
+
+            Assert.That(dceSink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Diagnostic));
+            Assert.That(dceSink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.PacketNotAllowed));
+        }
+
+        [Test]
+        public void R17_PacketShorterThanTheHeader_IsDiagnostic38()
+        {
+            RecordingSink dceSink = new RecordingSink();
+            X25Layer dce = NewDce(dceSink);
+            dce.ProcessPacket(new byte[] { 0x10, 0x01 });
+
+            Assert.That(dceSink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Diagnostic));
+            Assert.That(dceSink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.PacketTooShort));
+        }
+
+        [Test]
+        public void R17_CallConnectedInDataTransfer_ClearsWithDiagnostic23()
+        {
+            ushort lci = ConnectOutgoing();
+            int cleared = 0;
+            _layer.Cleared += (l, c, cause, diag) => cleared++;
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));
+
+            // Table C.3, p4, call accepted row: ERROR (p7) # 23.
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(23));
+            Assert.That(cleared, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R17_UnexpectedClearConfirmationInDataTransfer_ClearsWithDiagnostic23()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ProcessPacket(X25PacketBuilder.CreateClearConfirmation(lci));
+
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(23));
+        }
+
+        [Test]
+        public void R17_UnexpectedResetConfirmationInDataTransfer_ResetsWithDiagnostic27()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ProcessPacket(X25PacketBuilder.CreateResetConfirmation(lci));
+
+            // Table C.4, d1, reset confirmation row: ERROR (d3) # 27 - a reset, not a clear.
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.PacketTypeInvalidForD1));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest));
+        }
+
+        [Test]
+        public void R17_RestartRequestOnANonzeroChannel_ClearsThatChannelWithDiagnostic41()
+        {
+            ushort lci = ConnectOutgoing();
+            byte[] restartOnChannel = { 0x10, (byte)lci, 0xFB, 0x00, 0x00 };
+            _layer.ProcessPacket(restartOnChannel);
+
+            // Table C.2, last rows: ERROR # 41 on that channel; no restart happens.
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(_sink.LastInfo.LCN, Is.EqualTo(lci));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.RestartWithNonzeroChannel));
+            Assert.That(_sink.CountOfType(X25PacketType.RestartConfirmation), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void R17_DataDuringOurClearRequest_IsDiscardedQuietly()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ClearCall(lci);
+            _sink.Sent.Clear();
+
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));
+
+            // Table C.3, p6: DISCARD - the peer may not have seen our Clear Request yet.
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+            Assert.That(_layer.UnexpectedPackets, Is.EqualTo(1));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ClearRequest));
+        }
+
+        [Test]
+        public void R17_DataDuringOurResetRequest_IsDiscardedQuietly()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ResetCall(lci);
+            _sink.Sent.Clear();
+
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));
+
+            // Table C.4, d2: DISCARD.
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest));
+        }
+
+        [Test]
+        public void R17_IncomingDiagnosticPacket_IsReportedAndChangesNothing()
+        {
+            ushort lci = ConnectOutgoing();
+            byte seen = 0;
+            byte[]? explanation = null;
+            _layer.DiagnosticReceived += (l, d, e) => { seen = d; explanation = e; };
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateDiagnostic(36, new byte[] { 0x10, 0x09, 0x00 }));
+
+            Assert.That(seen, Is.EqualTo(36));
+            Assert.That(explanation, Is.EqualTo(new byte[] { 0x10, 0x09, 0x00 }));
+            Assert.That(_layer.DiagnosticsReceived, Is.EqualTo(1));
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
         }
 
         // ================================================================== R18  ranges

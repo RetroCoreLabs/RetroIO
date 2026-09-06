@@ -51,6 +51,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public event X25RestartTimedOut? RestartTimedOut;
 
         /// <summary>
+        /// Raised when the peer sends a Diagnostic packet.
+        /// </summary>
+        public event X25DiagnosticReceived? DiagnosticReceived;
+
+        /// <summary>
         /// Creates the base with the down-facing packet sink.
         /// </summary>
         /// <param name="sink">
@@ -166,6 +171,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
         protected void RaiseRestartTimedOut()
         {
             RestartTimedOut?.Invoke((X25Layer)this);
+        }
+
+        /// <summary>
+        /// Raises <see cref="DiagnosticReceived"/>.
+        /// </summary>
+        protected void RaiseDiagnosticReceived(byte diagnostic, byte[] explanation)
+        {
+            DiagnosticReceived?.Invoke((X25Layer)this, diagnostic, explanation);
         }
     }
 }

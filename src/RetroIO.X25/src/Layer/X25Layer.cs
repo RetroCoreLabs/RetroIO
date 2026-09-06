@@ -65,6 +65,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>Restart Requests that were never confirmed through every retransmission (T20).</summary>
         public long RestartTimeouts { get; private set; }
 
+        /// <summary>Diagnostic packets this engine has sent (a DCE only; X.25 5.6).</summary>
+        public long DiagnosticsSent { get; private set; }
+
+        /// <summary>Diagnostic packets received from the peer.</summary>
+        public long DiagnosticsReceived { get; private set; }
+
         /// <summary>
         /// Places an outgoing call and returns its logical channel, or 0 if no channel is free.
         /// </summary>
@@ -365,14 +371,22 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </param>
         public void ProcessPacket(ReadOnlySpan<byte> packet)
         {
+            // Annex C Table C.1: a packet shorter than the header is DIAG # 38. (The Diagnostic
+            // packet needs three octets of the offender to quote; here there are not three.)
             if (packet.Length < 3)
             {
+                SendDiagnostic(X25Diagnostic.PacketTooShort, packet);
                 return;
             }
 
             byte[] pkt = packet.ToArray();
             X25PacketInfo info = X25PacketParser.ParsePacket(pkt);
             ushort lci = info.LCN;
+
+            if (!Admit(info, lci, pkt))
+            {
+                return;
+            }
 
             switch (info.PacketType)
             {
@@ -412,10 +426,224 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 case X25PacketType.REJ:
                     OnReject(lci, info.PR);
                     break;
-                default:
-                    // Supervisory/other packets need no state change in this layer.
+                case X25PacketType.Diagnostic:
+                    DiagnosticsReceived++;
+                    RaiseDiagnosticReceived(info.DiagnosticCode, info.DiagnosticInfo);
                     break;
             }
+        }
+
+        // ------------------------------------------------------------------ Annex C: what may arrive when
+        //
+        // Until 2026-09-06 a packet that made no sense where it arrived - data on a channel with no
+        // call, a Call Connected in data transfer, anything at all on channel 0 - was silently
+        // dropped, and the peer, which had done something wrong, never heard about it. X.25 Annex C
+        // says exactly what each case draws: DIAG # x (discard; a DCE also sends a Diagnostic packet
+        // with code x, 5.6), DISCARD, or ERROR # x (discard and clear or reset the channel with
+        // "local procedure error" and diagnostic x). The state codes are Annex E 20-29: "packet
+        // type invalid for state" p1..p7, d1..d3.
+
+        /// <summary>
+        /// Applies Annex C Tables C.1-C.4 to a received packet before it is dispatched.
+        /// </summary>
+        /// <returns>
+        /// True when the packet may be processed; false when it has been discarded, with whatever
+        /// Diagnostic, Clear or Reset the tables demand already sent.
+        /// </returns>
+        private bool Admit(X25PacketInfo info, ushort lci, byte[] pkt)
+        {
+            X25PacketType type = info.PacketType;
+
+            // Table C.1: an invalid GFI. Modulo 128 is not supported by this engine yet (plan R18).
+            if (info.Modulo128 || (pkt[0] & 0x30) == 0)
+            {
+                SendDiagnostic(X25Diagnostic.InvalidGfi, pkt);
+                return false;
+            }
+
+            // Table C.2: channel 0 carries restart and diagnostic packets and nothing else.
+            if (lci == 0)
+            {
+                switch (type)
+                {
+                    case X25PacketType.RestartRequest:
+                    case X25PacketType.RestartConfirmation:
+                    case X25PacketType.Diagnostic:
+                        return true;
+                    case X25PacketType.Unknown:
+                        SendDiagnostic(X25Diagnostic.PacketNotAllowed, pkt);
+                        return false;
+                    default:
+                        SendDiagnostic(X25Diagnostic.UnassignedLogicalChannel, pkt);
+                        return false;
+                }
+            }
+
+            // Table C.2, last rows: a restart packet on a nonzero channel is ERROR # 41 on that
+            // channel; an undefined type on an assigned channel is ERROR # 33.
+            if (type == X25PacketType.RestartRequest || type == X25PacketType.RestartConfirmation)
+            {
+                ChannelError(lci, X25Diagnostic.RestartWithNonzeroChannel, pkt);
+                return false;
+            }
+
+            // Table C.1: a channel outside every configured range is unassigned - DIAG # 36.
+            if (!IsAssigned(lci))
+            {
+                SendDiagnostic(X25Diagnostic.UnassignedLogicalChannel, pkt);
+                return false;
+            }
+
+            if (type == X25PacketType.Unknown || type == X25PacketType.Diagnostic
+                || type == X25PacketType.RegistrationRequest || type == X25PacketType.RegistrationConfirmation)
+            {
+                ChannelError(lci, X25Diagnostic.PacketNotAllowed, pkt);
+                return false;
+            }
+
+            X25VcState state = _vcs.TryGetValue(lci, out X25Vc? vc) ? vc.State : X25VcState.Ready;
+
+            // Tables C.3 and C.4, one row per packet family. NORMAL and collision rows let the packet
+            // through to its handler; DISCARD drops it; anything else is ERROR with the state's code.
+            switch (type)
+            {
+                case X25PacketType.CallRequest:
+                    // NORMAL in p1; collision in p2 (handled); p6/p7 DISCARD; else ERROR.
+                    if (state == X25VcState.Ready || state == X25VcState.CallRequest) return true;
+                    if (state == X25VcState.ClearRequest) return Discard();
+                    return Error(lci, state, pkt);
+
+                case X25PacketType.CallAccepted:
+                    if (state == X25VcState.CallRequest) return true;
+                    if (state == X25VcState.ClearRequest) return Discard();
+                    return Error(lci, state, pkt);
+
+                case X25PacketType.ClearRequest:
+                    // NORMAL in every state (Table C.3: clear request row).
+                    return true;
+
+                case X25PacketType.ClearConfirmation:
+                    if (state == X25VcState.ClearRequest) return true;
+                    return Error(lci, state, pkt);
+
+                case X25PacketType.ResetConfirmation:
+                    if (state == X25VcState.ResetRequest) return true;
+                    if (state == X25VcState.DataTransfer || state == X25VcState.PvcReady)
+                    {
+                        // Table C.4, d1: a reset confirmation is ERROR (d3) # 27 - a reset, not a clear.
+                        ResetForProcedureError(vc!, X25Diagnostic.PacketTypeInvalidForD1);
+                        return false;
+                    }
+
+                    if (state == X25VcState.ClearRequest) return Discard();
+                    return Error(lci, state, pkt);
+
+                default:
+                    // Data, interrupt, reset request, RR, RNR, REJ: the data-transfer family.
+                    // Table C.3: NORMAL in p4 (Table C.4 then decides by d-state), DISCARD in p6/p7,
+                    // ERROR elsewhere. Table C.4: in d2 (reset request) data and flow control are
+                    // DISCARD, and reset request is the collision, which the handler completes.
+                    if (state == X25VcState.DataTransfer || state == X25VcState.PvcReady) return true;
+                    if (state == X25VcState.ResetRequest) return type == X25PacketType.ResetRequest || Discard();
+                    if (state == X25VcState.ClearRequest) return Discard();
+                    return Error(lci, state, pkt);
+            }
+        }
+
+        private bool Discard()
+        {
+            UnexpectedPackets++;
+            return false;
+        }
+
+        /// <summary>
+        /// Table C.3 ERROR (p7) # x: the channel is cleared with "local procedure error" and the
+        /// diagnostic that names the state the packet was invalid for.
+        /// </summary>
+        private bool Error(ushort lci, X25VcState state, byte[] pkt)
+        {
+            ChannelError(lci, StateDiagnostic(state), pkt);
+            return false;
+        }
+
+        private void ChannelError(ushort lci, byte diagnostic, byte[] pkt)
+        {
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                if (!IsAssigned(lci))
+                {
+                    SendDiagnostic(diagnostic, pkt);
+                    return;
+                }
+
+                vc = new X25Vc(lci, X25VcKind.Svc);
+                _vcs[lci] = vc;
+            }
+
+            ProcedureErrors++;
+            bool wasLive = vc.State != X25VcState.Ready;
+            BeginClear(vc, ProcedureErrorCause(), diagnostic, Now());
+            if (wasLive)
+            {
+                ReportCleared(vc, vc.Cause, vc.Diagnostic);
+            }
+            else
+            {
+                vc.ClearReported = true;
+            }
+        }
+
+        /// <summary>
+        /// Annex E 20-29: "packet type invalid for state" p1..p7 and d1..d3, from this engine's
+        /// circuit states.
+        /// </summary>
+        private static byte StateDiagnostic(X25VcState state)
+        {
+            switch (state)
+            {
+                case X25VcState.Ready: return 20;
+                case X25VcState.CallRequest: return 21;
+                case X25VcState.CallIncoming: return 22;
+                case X25VcState.DataTransfer: return 23;
+                case X25VcState.PvcReady: return 27;
+                case X25VcState.ClearRequest: return 25;
+                case X25VcState.ResetRequest: return 28;
+                default: return X25Diagnostic.PacketTypeInvalid;
+            }
+        }
+
+        /// <summary>
+        /// DIAG # x: the packet is discarded; a DCE also sends a Diagnostic packet (X.25 5.6, "the
+        /// diagnostic packet is transmitted by the DCE") quoting the first three octets of the
+        /// offender (5.6.2). A DTE has no such packet to send and only counts.
+        /// </summary>
+        private void SendDiagnostic(byte diagnostic, ReadOnlySpan<byte> offender)
+        {
+            UnexpectedPackets++;
+            if (_config.IsDte)
+            {
+                return;
+            }
+
+            int n = offender.Length < 3 ? offender.Length : 3;
+            byte[] explanation = offender.Slice(0, n).ToArray();
+            DiagnosticsSent++;
+            Send(X25PacketBuilder.CreateDiagnostic(diagnostic, explanation));
+        }
+
+        /// <summary>
+        /// True when the channel lies in the configured virtual call range or is a known PVC.
+        /// </summary>
+        private bool IsAssigned(ushort lci)
+        {
+            int first = _config.LciBase == 0 ? 1 : _config.LciBase;
+            int last = _config.LciBase + _config.LciCount - 1;
+            if (lci >= first && lci <= last)
+            {
+                return true;
+            }
+
+            return _vcs.TryGetValue(lci, out X25Vc? vc) && vc.Kind == X25VcKind.Pvc;
         }
 
         /// <summary>

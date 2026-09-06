@@ -23,6 +23,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>16 - Packet type invalid (the general code; 17-29 name the state).</summary>
         public const byte PacketTypeInvalid = 16;
 
+        /// <summary>20 - Packet type invalid for state p1 (ready). 21 p2, 22 p3, 23 p4, 24 p5, 25 p6, 26 p7; 27 d1, 28 d2, 29 d3.</summary>
+        public const byte PacketTypeInvalidForP1 = 20;
+
+        /// <summary>27 - Packet type invalid for state d1 (flow control ready).</summary>
+        public const byte PacketTypeInvalidForD1 = 27;
+
         /// <summary>21 - Reject not subscribed to: a REJ arrived and packet retransmission is not supported.</summary>
         public const byte RejectNotSubscribed = 21;
 
@@ -58,6 +64,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
         /// <summary>39 - Packet too long.</summary>
         public const byte PacketTooLong = 39;
+
+        /// <summary>40 - Invalid general format identifier.</summary>
+        public const byte InvalidGfi = 40;
+
+        /// <summary>41 - Restart or registration packet with a nonzero logical channel (bits 4-1 of octet 1 or octet 2 not zero).</summary>
+        public const byte RestartWithNonzeroChannel = 41;
 
         /// <summary>48 - Time expired (the general code; 49-53 say which timer).</summary>
         public const byte TimeExpired = 48;
