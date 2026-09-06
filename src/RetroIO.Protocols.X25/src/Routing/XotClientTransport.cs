@@ -562,16 +562,24 @@ namespace RetroIO.Protocols.X25.Transport
                     _logger.LogDebug("Received XOT packet from {Address}:{Port}: version={Version}, length={Length}",
                                    _remoteAddress, _remotePort, version, length);
 
+                    // A wrong header ends the connection. RFC 1613 has no flag or marker to find
+                    // the next frame boundary with, so once these four octets are not a header,
+                    // nothing after them is at a known offset. Both of these used to carry on round
+                    // the loop and read the next four bytes as another header - and in the
+                    // over-length case those four bytes were the start of a payload that had never
+                    // been consumed, so every packet after it was rubbish.
                     if (version != 0)
                     {
-                        _logger.LogWarning("Unsupported XOT version {Version} from {Address}:{Port}", version, _remoteAddress, _remotePort);
-                        continue;
+                        _logger.LogError("XOT version 0x{Version:X4} from {Address}:{Port}, expected 0x0000 - closing the connection",
+                            version, _remoteAddress, _remotePort);
+                        break;
                     }
 
                     if (length > 4096)
                     {
-                        _logger.LogWarning("XOT packet too large ({Length} bytes) from {Address}:{Port}", length, _remoteAddress, _remotePort);
-                        continue;
+                        _logger.LogError("XOT length {Length} from {Address}:{Port} above the 4096-octet maximum - closing the connection",
+                            length, _remoteAddress, _remotePort);
+                        break;
                     }
 
                     // Read X.25 packet data
@@ -594,6 +602,10 @@ namespace RetroIO.Protocols.X25.Transport
             }
             finally
             {
+                // The socket is closed here, not only announced. Leaving the loop without closing
+                // left the connection open with nobody reading it, so a peer that had sent a bad
+                // header saw a live connection that would never answer again.
+                Close();
                 ConnectionClosed?.Invoke(this, _remoteAddress);
             }
         }

@@ -39,6 +39,40 @@ namespace RetroIO.Link.Framing
         public event FrameReceivedHandler? FrameReceived;
 
         /// <summary>
+        /// Raised when the byte stream cannot be framed any further and the connection has to go.
+        /// </summary>
+        /// <param name="linkId">
+        /// Identifier of the owning link.
+        /// </param>
+        /// <param name="reason">
+        /// What was wrong, for the log.
+        /// </param>
+        public delegate void FramingFailedHandler(string linkId, string reason);
+
+        /// <summary>
+        /// Raised when framing has failed beyond recovery, so the caller must close the connection.
+        /// </summary>
+        /// <remarks>
+        /// Some framings can resynchronize: HDLC has a flag byte, so a decoder that loses its place
+        /// finds the next frame boundary by looking for one. A length-prefixed framing has no such
+        /// marker. Once a header is wrong, every byte after it is at an unknown offset, and going on
+        /// means reading whatever comes next as a header and delivering rubbish as X.25 packets.
+        /// The only honest answer is to drop the connection and let it be made again.
+        /// </remarks>
+        public event FramingFailedHandler? FramingFailed;
+
+        /// <summary>
+        /// Reports that framing has failed beyond recovery.
+        /// </summary>
+        /// <param name="reason">
+        /// What was wrong, for the log.
+        /// </param>
+        protected void RaiseFramingFailed(string reason)
+        {
+            FramingFailed?.Invoke(_linkId, reason);
+        }
+
+        /// <summary>
         /// Initializes the base codec.
         /// </summary>
         /// <param name="linkId">

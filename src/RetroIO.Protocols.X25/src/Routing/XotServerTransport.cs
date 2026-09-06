@@ -479,16 +479,24 @@ namespace RetroIO.Protocols.X25.Transport
                     _logger.LogDebug("Received XOT packet from {ClientEndpoint}: version={Version}, length={Length}", 
                                    _clientEndpoint, version, length);
 
+                    // A wrong header ends the connection. RFC 1613 has no flag or marker to find
+                    // the next frame boundary with, so once these four octets are not a header,
+                    // nothing after them is at a known offset. Both of these used to carry on round
+                    // the loop and read the next four bytes as another header - and in the
+                    // over-length case those four bytes were the start of a payload that had never
+                    // been consumed, so every packet after it was rubbish.
                     if (version != 0)
                     {
-                        _logger.LogWarning("Unsupported XOT version {Version} from {ClientEndpoint}", version, _clientEndpoint);
-                        continue;
+                        _logger.LogError("XOT version 0x{Version:X4} from {ClientEndpoint}, expected 0x0000 - closing the connection",
+                            version, _clientEndpoint);
+                        break;
                     }
 
                     if (length > 4096)
                     {
-                        _logger.LogWarning("XOT packet too large ({Length} bytes) from {ClientEndpoint}", length, _clientEndpoint);
-                        continue;
+                        _logger.LogError("XOT length {Length} from {ClientEndpoint} above the 4096-octet maximum - closing the connection",
+                            length, _clientEndpoint);
+                        break;
                     }
 
                     // Read X.25 packet data

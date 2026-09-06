@@ -18,8 +18,10 @@ namespace RetroIO.Link.Framing
     /// Receive is a streaming parser: bytes are accumulated until a full header plus its declared payload
     /// are present, then the payload is delivered and the buffer is compacted. It handles partial reads
     /// (a frame split across several TCP segments) and several frames arriving in one read. A non-zero
-    /// version or an over-length declaration discards the buffer and resynchronizes, matching the C
-    /// reference (x25emu src/framing/xot.c).
+    /// version or an over-length declaration is fatal: <see cref="FrameCodecBase.FramingFailed"/> is
+    /// raised and the caller closes the connection. RFC 1613 gives no marker to resynchronize on, so
+    /// once a header is wrong every byte after it is at an unknown offset; carrying on would read
+    /// whatever came next as a header and hand rubbish up as X.25 packets.
     /// </remarks>
     public sealed class XotFrameCodec : FrameCodecBase
     {
@@ -35,6 +37,7 @@ namespace RetroIO.Link.Framing
         // Staging buffer holds at most one full frame; partial data carries across calls.
         private readonly byte[] _rx = new byte[HeaderSize + FrameMaxPayload];
         private int _rxLen;
+        private bool _failed;
 
         /// <summary>
         /// Initializes an XOT codec.
@@ -56,12 +59,18 @@ namespace RetroIO.Link.Framing
             int i = 0;
             while (i < data.Length)
             {
+                if (_failed)
+                {
+                    return;   // the connection is going; nothing more can be framed from this stream
+                }
+
                 int space = _rx.Length - _rxLen;
                 if (space == 0)
                 {
-                    // Staging full with no complete frame parsed -- malformed, discard and resync.
-                    _rxLen = 0;
-                    space = _rx.Length;
+                    // A full staging buffer with no complete frame in it means the length we read
+                    // was not a length. There is nothing to resynchronize on.
+                    Fail($"no complete frame in {_rxLen} buffered bytes");
+                    return;
                 }
 
                 int take = Math.Min(space, data.Length - i);
@@ -101,6 +110,21 @@ namespace RetroIO.Link.Framing
         public override void Reset()
         {
             _rxLen = 0;
+            _failed = false;
+        }
+
+        /// <summary>
+        /// Gives up on the stream: the buffer is dropped, nothing further is parsed, and the caller
+        /// is told to close the connection.
+        /// </summary>
+        /// <param name="reason">
+        /// What was wrong, for the log.
+        /// </param>
+        private void Fail(string reason)
+        {
+            _rxLen = 0;
+            _failed = true;
+            RaiseFramingFailed(reason);
         }
 
         // Parses and delivers every complete frame currently in the staging buffer, then compacts.
@@ -112,10 +136,15 @@ namespace RetroIO.Link.Framing
                 int version = (_rx[offset] << 8) | _rx[offset + 1];
                 int length = (_rx[offset + 2] << 8) | _rx[offset + 3];
 
-                if (version != Version || length > FrameMaxPayload)
+                if (version != Version)
                 {
-                    // Protocol violation -- discard everything and resynchronize.
-                    _rxLen = 0;
+                    Fail($"XOT version 0x{version:X4}, expected 0x0000 (RFC 1613)");
+                    return;
+                }
+
+                if (length > FrameMaxPayload)
+                {
+                    Fail($"XOT length {length} above the {FrameMaxPayload}-octet maximum");
                     return;
                 }
 

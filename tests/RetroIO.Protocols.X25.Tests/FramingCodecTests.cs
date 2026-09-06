@@ -468,6 +468,68 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
+        public void Xot_BadVersion_IsFatalAndNothingIsDeliveredAfterIt()
+        {
+            // RFC 1613: the first two octets are the version and are always zero. There is no flag
+            // or marker in XOT to find the next frame boundary with, so a wrong header means every
+            // byte after it is at an unknown offset. Carrying on would read whatever came next as a
+            // header and hand rubbish up as X.25 packets, which is what discarding and
+            // "resynchronizing" did.
+            XotFrameCodec receiver = new XotFrameCodec("B", new CapturingTransport());
+            List<byte[]> received = new List<byte[]>();
+            List<string> failures = new List<string>();
+            receiver.FrameReceived += (linkId, frame) => received.Add(frame.ToArray());
+            receiver.FramingFailed += (linkId, reason) => failures.Add(reason);
+
+            receiver.ProcessBytes(new byte[] { 0x00, 0x01, 0x00, 0x02, 0xAA, 0xBB });
+
+            Assert.That(failures.Count, Is.EqualTo(1), "a bad version must be reported as fatal");
+            Assert.That(received.Count, Is.EqualTo(0));
+
+            // A well-formed frame after the failure is still not delivered: the connection is going.
+            CapturingTransport sink = new CapturingTransport();
+            XotFrameCodec sender = new XotFrameCodec("A", sink);
+            sender.SendFrame(new byte[] { 0x41 });
+            receiver.ProcessBytes(sink.Last);
+
+            Assert.That(received.Count, Is.EqualTo(0), "nothing is framed from a stream that has failed");
+            Assert.That(failures.Count, Is.EqualTo(1), "and it is reported once, not on every byte");
+        }
+
+        [Test]
+        public void Xot_LengthAboveTheMaximum_IsFatal()
+        {
+            XotFrameCodec receiver = new XotFrameCodec("B", new CapturingTransport());
+            List<string> failures = new List<string>();
+            receiver.FramingFailed += (linkId, reason) => failures.Add(reason);
+
+            // 0x2000 = 8192, twice the 4096-octet maximum.
+            receiver.ProcessBytes(new byte[] { 0x00, 0x00, 0x20, 0x00 });
+
+            Assert.That(failures.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Xot_ResetLetsTheCodecBeUsedAgain()
+        {
+            // A codec is reset when its connection is remade, and the new stream starts clean.
+            XotFrameCodec receiver = new XotFrameCodec("B", new CapturingTransport());
+            List<byte[]> received = new List<byte[]>();
+            receiver.FrameReceived += (linkId, frame) => received.Add(frame.ToArray());
+
+            receiver.ProcessBytes(new byte[] { 0x00, 0x01, 0x00, 0x02 });
+            receiver.Reset();
+
+            CapturingTransport sink = new CapturingTransport();
+            XotFrameCodec sender = new XotFrameCodec("A", sink);
+            sender.SendFrame(new byte[] { 0x41, 0x42 });
+            receiver.ProcessBytes(sink.Last);
+
+            Assert.That(received.Count, Is.EqualTo(1));
+            Assert.That(received[0], Is.EqualTo(new byte[] { 0x41, 0x42 }));
+        }
+
+        [Test]
         public void Xot_RoundTrip_AllByteValues()
         {
             CapturingTransport sink = new CapturingTransport();

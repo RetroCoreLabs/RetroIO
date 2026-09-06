@@ -10,20 +10,25 @@ using RetroIO.Protocols.X25.Transport;
 namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
-    /// Pins what the two socket-driven XOT transports do with a bad XOT header. RFC 1613 section 3
-    /// defines the header as a 2-octet version (always 0) and a 2-octet length; there is no frame
-    /// delimiter and therefore no way to find the next frame after a bad header. The only sound
-    /// reaction is to close the connection. Both transports instead <c>continue</c> to the next
-    /// header read WITHOUT consuming the payload that follows the bad header, so the stream is read
-    /// from the wrong offset for the rest of the connection's life. The one-stack plan (Phase E3)
-    /// rewires both onto <c>XotFrameCodec</c>; these tests go red when that happens.
+    /// What the two XOT transports do with a header that is not a header.
     /// </summary>
     /// <remarks>
-    /// Real sockets on 127.0.0.1 and a free port picked by the OS; each test is bounded by a short
-    /// wait and disposes everything it opened.
+    /// <para>
+    /// RFC 1613 gives XOT a four-octet header and nothing else: no flag byte, no marker, nothing to
+    /// find the next frame boundary with. So a wrong version or an impossible length is the end of
+    /// the connection. Both transports used to log a warning and carry on round the loop, reading
+    /// the next four octets as another header. In the over-length case those four octets were the
+    /// start of a payload that had never been consumed, so the stream was read from the wrong offset
+    /// for the rest of the connection's life and every packet after it was rubbish.
+    /// </para>
+    /// <para>
+    /// These tests were written as pins that said the old behaviour was wrong in their names, and
+    /// rewritten when Phase E3 fixed it. Real sockets on 127.0.0.1 and a free port picked by the
+    /// operating system; each test is bounded by a short wait and disposes what it opened.
+    /// </para>
     /// </remarks>
     [TestFixture]
-    public class XotTransportHeaderPinTests
+    public class XotTransportHeaderTests
     {
         private static readonly ILogger Logger = NullLogger.Instance;
 
@@ -43,7 +48,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void Server_BadVersionHeader_DesyncsTheStreamAndKeepsItOpen_WHICH_IS_WRONG()
+        public void Server_BadVersionHeader_ClosesTheConnection()
         {
             int port = FreePort();
             XotServerTransport server = new XotServerTransport(Logger, new XotServerConfig
@@ -68,16 +73,11 @@ namespace RetroIO.Protocols.X25.Tests
                 stream.Flush();
                 Thread.Sleep(400);
 
-                // MEASURED 2026-09-06 (XotServerTransport.cs, HandleConnectionLoop): version != 0
-                // logs a warning and `continue`s. The next 4-octet header read therefore starts at
-                // AA BB CC 00 - version 0xAABB, rejected again - and then at 00 00 03 10, which is
-                // version 0 with length 0x0310 = 784: the loop now blocks waiting for 784 octets
-                // that never come. The good frame is never delivered and the connection is never
-                // closed. Correct: close on the first bad header (Phase E3).
-                Assert.That(received, Is.EqualTo(0),
-                    "behaviour changed: if the good frame is now delivered, or the connection is closed, look at Phase E3 and rewrite this test");
-                Assert.That(IsStillOpen(client), Is.True,
-                    "behaviour changed: closing the connection on a bad header is the FIX - rewrite this test");
+                // The good frame that followed the bad header is NOT delivered. That is the point:
+                // after a wrong header nothing in the stream is at a known offset, so anything read
+                // from it would be a guess. The connection goes instead.
+                Assert.That(received, Is.EqualTo(0), "nothing may be delivered from a stream that has lost its framing");
+                Assert.That(IsStillOpen(client), Is.False, "the connection must be closed on the first bad header");
             }
             finally
             {
@@ -125,7 +125,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void Client_BadVersionHeader_DesyncsTheStreamAndKeepsItOpen_WHICH_IS_WRONG()
+        public void Client_BadVersionHeader_ClosesTheConnection()
         {
             TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
@@ -147,12 +147,11 @@ namespace RetroIO.Protocols.X25.Tests
                 stream.Flush();
                 Thread.Sleep(400);
 
-                // MEASURED 2026-09-06 (XotClientTransport.cs, the receive loop): same `continue`
-                // as the server, same consequence.
-                Assert.That(received, Is.EqualTo(0),
-                    "behaviour changed: if the good frame is now delivered, or the connection is closed, look at Phase E3 and rewrite this test");
-                Assert.That(IsStillOpen(peer), Is.True,
-                    "behaviour changed: closing the connection on a bad header is the FIX - rewrite this test");
+                // Same rule on the client side. It also has to actually close the socket: leaving
+                // the read loop without closing left the connection up with nobody reading it, so
+                // the peer saw a live connection that would never answer again.
+                Assert.That(received, Is.EqualTo(0), "nothing may be delivered from a stream that has lost its framing");
+                Assert.That(IsStillOpen(peer), Is.False, "the connection must be closed on the first bad header");
             }
             finally
             {

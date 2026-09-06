@@ -1,3 +1,4 @@
+using RetroIO.Link.Framing;
 using System;
 using System.Net;
 using System.Net.Sockets;
@@ -20,6 +21,11 @@ namespace RetroIO.Link
 
         // LAPB components - only used when UseLapbFraming = true
         private readonly HdlcFramer? _hdlcFramer;
+
+        /// <summary>
+        /// The one XOT framing codec, shared with the X.25 client that talks to the C switch.
+        /// </summary>
+        private readonly XotFrameCodec _xotCodec;
         private readonly LapbStation? _lapbInstance;
 
         private TcpListener? _listener;
@@ -42,9 +48,6 @@ namespace RetroIO.Link
 
         // Receive buffers for XOT framing
         private readonly byte[] _receiveBuffer = new byte[MAX_XOT_PACKET_SIZE];
-        private readonly byte[] _xotPayloadBuffer = new byte[MAX_XOT_PACKET_SIZE];
-        private int _xotPayloadPos = 0;
-        private int _expectedXotLength = -1;
 
         /// <summary>
         /// Create a new XOT link
@@ -56,6 +59,10 @@ namespace RetroIO.Link
 
             if (string.IsNullOrWhiteSpace(config.Name))
                 throw new ArgumentException("Link name is required", nameof(config));
+
+            _xotCodec = new XotFrameCodec(config.Name, new XotStreamSink(this));
+            _xotCodec.FrameReceived += OnXotFrame;
+            _xotCodec.FramingFailed += OnXotFramingFailed;
 
 
             // Only create LAPB components if UseLapbFraming is enabled
@@ -113,8 +120,7 @@ namespace RetroIO.Link
                 }
 
                 _stopping = false;
-                _xotPayloadPos = 0;
-                _expectedXotLength = -1;
+                _xotCodec.Reset();
 
                 try
                 {
@@ -380,8 +386,7 @@ namespace RetroIO.Link
                     _config.Name, remoteEndPoint?.Address, remoteEndPoint?.Port);
 
                 // Reset XOT payload buffer
-                _xotPayloadPos = 0;
-                _expectedXotLength = -1;
+                _xotCodec.Reset();
 
                 // Reset LAPB for new connection if in use
                 if (_config.UseLapbFraming)
@@ -446,8 +451,7 @@ namespace RetroIO.Link
                         _config.Name, _config.RemoteAddress, _config.Port);
 
                     // Reset XOT payload buffer
-                    _xotPayloadPos = 0;
-                    _expectedXotLength = -1;
+                    _xotCodec.Reset();
 
                     SetStatus(LinkStatus.Active, "Connected");
 
@@ -552,108 +556,97 @@ namespace RetroIO.Link
         }
 
         /// <summary>
-        /// Process received TCP data, extracting XOT frames
+        /// Hands received TCP bytes to the XOT codec.
         /// </summary>
+        /// <remarks>
+        /// The framing used to be decoded here, in the third copy of the same parser. That copy
+        /// only logged a wrong version and then carried on parsing, taking the next two octets as a
+        /// length even though it had just been told the header was not a header.
+        /// </remarks>
+        /// <param name="data">
+        /// The bytes read from the socket.
+        /// </param>
+        /// <param name="length">
+        /// How many of them are valid.
+        /// </param>
         private void ProcessReceivedXotData(byte[] data, int length)
         {
-            int offset = 0;
-
-            while (offset < length)
-            {
-                // Add data to XOT payload buffer
-                int bytesToCopy = Math.Min(length - offset, _xotPayloadBuffer.Length - _xotPayloadPos);
-                Array.Copy(data, offset, _xotPayloadBuffer, _xotPayloadPos, bytesToCopy);
-                _xotPayloadPos += bytesToCopy;
-                offset += bytesToCopy;
-
-                // Try to extract complete XOT frames
-                while (TryExtractXotFrame())
-                {
-                    // TryExtractXotFrame processes the frame
-                }
-            }
+            _xotCodec.ProcessBytes(new ReadOnlySpan<byte>(data, 0, length));
         }
 
         /// <summary>
-        /// Try to extract a complete XOT frame from the buffer
+        /// One complete XOT payload from the codec.
         /// </summary>
-        private bool TryExtractXotFrame()
+        /// <param name="linkId">
+        /// The link the payload arrived on.
+        /// </param>
+        /// <param name="frame">
+        /// The payload: an LAPB frame in Cisco mode, a raw X.25 packet otherwise.
+        /// </param>
+        private void OnXotFrame(string linkId, ReadOnlySpan<byte> frame)
         {
-            // Need at least XOT header to determine length
-            if (_xotPayloadPos < XOT_HEADER_SIZE)
-            {
-                return false;
-            }
-
-            // Parse header if not yet done
-            if (_expectedXotLength < 0)
-            {
-                // Version (2 bytes, network byte order)
-                ushort version = (ushort)((_xotPayloadBuffer[0] << 8) | _xotPayloadBuffer[1]);
-
-                // Length (2 bytes, network byte order)
-                _expectedXotLength = (_xotPayloadBuffer[2] << 8) | _xotPayloadBuffer[3];
-
-                if (version != XOT_VERSION)
-                {
-                    _logger.LogWarning("XotLink[{Name}]: Unsupported XOT version {Version}",
-                        _config.Name, version);
-                }
-
-                if (_expectedXotLength > MAX_XOT_PACKET_SIZE - XOT_HEADER_SIZE)
-                {
-                    _logger.LogWarning("XotLink[{Name}]: XOT payload too large ({Length} bytes)",
-                        _config.Name, _expectedXotLength);
-                    _statistics.Errors++;
-
-                    // Reset and discard
-                    _xotPayloadPos = 0;
-                    _expectedXotLength = -1;
-                    return false;
-                }
-            }
-
-            // Check if we have complete XOT frame
-            int totalLength = XOT_HEADER_SIZE + _expectedXotLength;
-            if (_xotPayloadPos < totalLength)
-            {
-                return false;
-            }
-
-            // Handle keep-alive (length = 0)
-            if (_expectedXotLength == 0)
+            if (frame.Length == 0)
             {
                 _logger.LogDebug("XotLink[{Name}]: Keep-alive received", _config.Name);
+                return;
             }
-            else
+
+            byte[] payload = frame.ToArray();
+
+            if (_config.UseLapbFraming)
             {
-                // Extract payload
-                byte[] payload = new byte[_expectedXotLength];
-                Array.Copy(_xotPayloadBuffer, XOT_HEADER_SIZE, payload, 0, _expectedXotLength);
-
-                if (_config.UseLapbFraming)
-                {
-                    // Cisco mode: Payload is LAPB frame with flags, stuffing, FCS
-                    // Pass to HdlcFramer to process
-                    _hdlcFramer?.ProcessBytes(payload, _expectedXotLength);
-                }
-                else
-                {
-                    // RFC 1613 mode: Payload is raw X.25 packet
-                    ProcessRawX25Packet(payload, _expectedXotLength);
-                }
+                // Cisco mode: the payload is an LAPB frame with flags, byte-stuffing and an FCS.
+                _hdlcFramer?.ProcessBytes(payload, payload.Length);
+                return;
             }
 
-            // Shift remaining data
-            int remaining = _xotPayloadPos - totalLength;
-            if (remaining > 0)
+            // RFC 1613 mode: the payload is a raw X.25 packet.
+            ProcessRawX25Packet(payload, payload.Length);
+        }
+
+        /// <summary>
+        /// The byte stream cannot be framed any further, so the connection goes.
+        /// </summary>
+        /// <remarks>
+        /// RFC 1613 has no flag or marker to find the next frame boundary with. Once a header is
+        /// wrong, every byte after it is at an unknown offset and would be read as another header.
+        /// </remarks>
+        /// <param name="linkId">
+        /// The link that failed.
+        /// </param>
+        /// <param name="reason">
+        /// What was wrong.
+        /// </param>
+        private void OnXotFramingFailed(string linkId, string reason)
+        {
+            _logger.LogError("XotLink[{Name}]: XOT framing failed ({Reason}) - closing the connection", _config.Name, reason);
+            _statistics.Errors++;
+            HandleDisconnection();
+        }
+
+        /// <summary>
+        /// Writes XOT-framed bytes to the socket. The codec calls this with the header already on.
+        /// </summary>
+        private sealed class XotStreamSink : IFrameTransport
+        {
+            private readonly XotLink _owner;
+
+            /// <summary>
+            /// Creates the sink.
+            /// </summary>
+            /// <param name="owner">
+            /// The link that owns the socket.
+            /// </param>
+            public XotStreamSink(XotLink owner)
             {
-                Array.Copy(_xotPayloadBuffer, totalLength, _xotPayloadBuffer, 0, remaining);
+                _owner = owner;
             }
-            _xotPayloadPos = remaining;
-            _expectedXotLength = -1;
 
-            return remaining >= XOT_HEADER_SIZE;
+            /// <inheritdoc/>
+            public void Send(ReadOnlySpan<byte> bytes)
+            {
+                _owner.WriteToSocket(bytes);
+            }
         }
 
         /// <summary>
@@ -743,22 +736,10 @@ namespace RetroIO.Link
 
             try
             {
-                // Build XOT frame: Version (2 bytes) + Length (2 bytes) + payload
-                byte[] xotFrame = new byte[XOT_HEADER_SIZE + length];
-
-                // Version (network byte order)
-                xotFrame[0] = (byte)((XOT_VERSION >> 8) & 0xFF);
-                xotFrame[1] = (byte)(XOT_VERSION & 0xFF);
-
-                // Length (network byte order)
-                xotFrame[2] = (byte)((length >> 8) & 0xFF);
-                xotFrame[3] = (byte)(length & 0xFF);
-
-                // Payload
-                Array.Copy(data, 0, xotFrame, XOT_HEADER_SIZE, length);
-
-                _networkStream.Write(xotFrame, 0, xotFrame.Length);
-                _statistics.BytesTransmitted += xotFrame.Length;
+                // The codec puts the RFC 1613 header on and hands the whole thing to XotStreamSink,
+                // which is what actually writes to the socket. One encoder, shared with the client
+                // that talks to the C switch.
+                _xotCodec.SendFrame(new ReadOnlySpan<byte>(data, 0, length));
 
                 _logger.LogDebug("XotLink[{Name}]: Sent XOT frame ({Length} bytes payload)",
                     _config.Name, length);
@@ -792,14 +773,8 @@ namespace RetroIO.Link
 
             try
             {
-                // XOT keep-alive: empty packet (length = 0)
-                byte[] keepAlive = new byte[XOT_HEADER_SIZE];
-                keepAlive[0] = (byte)((XOT_VERSION >> 8) & 0xFF);
-                keepAlive[1] = (byte)(XOT_VERSION & 0xFF);
-                keepAlive[2] = 0;
-                keepAlive[3] = 0;
-
-                _networkStream.Write(keepAlive, 0, keepAlive.Length);
+                // An XOT keep-alive is a header with a zero length and no payload.
+                _xotCodec.SendFrame(ReadOnlySpan<byte>.Empty);
 
                 _logger.LogDebug("XotLink[{Name}]: Keep-alive sent", _config.Name);
             }
@@ -813,6 +788,24 @@ namespace RetroIO.Link
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// Writes already-framed bytes to the socket. Only <see cref="XotStreamSink"/> calls this.
+        /// </summary>
+        /// <param name="bytes">
+        /// The framed bytes.
+        /// </param>
+        private void WriteToSocket(ReadOnlySpan<byte> bytes)
+        {
+            NetworkStream? stream = _networkStream;
+            if (stream == null)
+            {
+                return;
+            }
+
+            stream.Write(bytes);
+            _statistics.BytesTransmitted += bytes.Length;
+        }
 
         private void CloseConnection()
         {
