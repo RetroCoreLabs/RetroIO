@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 
 namespace RetroIO.Protocols.X25.PacketLayer

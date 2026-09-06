@@ -1,6 +1,5 @@
 using System;
 
-using RetroIO.Link.Models;
 namespace RetroIO.Protocols.X25.Models
 {
     /// <summary>

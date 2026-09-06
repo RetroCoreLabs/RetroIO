@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.X25</PackageId>
+    <AssemblyName>RetroIO.X25</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25</RootNamespace>
+    <Description>The one X.25 packet layer: stateless packet builder/parser and facility codec, and the X25Layer virtual-circuit state machine, per ITU-T X.25 (10/96).</Description>
+    <PackageTags>retroio;x25;packet-layer</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -72,6 +72,10 @@
     <Project Path="src/RetroIO.Protocols.X25.Switch/src/RetroIO.Protocols.X25.Switch.csproj" />
   </Folder>
   <Folder Name="/src/RetroIO.Protocols.X25/" />
+  <Folder Name="/src/RetroIO.X25/" />
+  <Folder Name="/src/RetroIO.X25/src/">
+    <Project Path="src/RetroIO.X25/src/RetroIO.X25.csproj" />
+  </Folder>
   <Folder Name="/src/RetroIO.Protocols.X25/src/">
     <Project Path="src/RetroIO.Protocols.X25/src/RetroIO.Protocols.X25.csproj" />
   </Folder>

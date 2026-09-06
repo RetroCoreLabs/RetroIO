@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-using RetroIO.Link.Models;
 namespace RetroIO.Protocols.X25.Models
 {
     /// <summary>
