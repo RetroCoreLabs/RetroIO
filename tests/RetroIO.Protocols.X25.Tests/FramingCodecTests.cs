@@ -423,8 +423,11 @@ namespace RetroIO.Protocols.X25.Tests
             CapturingTransport sink = new CapturingTransport();
             XotFrameCodec sender = new XotFrameCodec("A", sink);
 
-            byte[] f1 = new byte[] { 0x11 };
-            byte[] f2 = new byte[] { 0x22, 0x33 };
+            // Legal X.25 packet lengths. These were one and two octets until 2026-09-06:
+            // RFC 1613 gives the length field only legal X.25 packet lengths and the shortest
+            // X.25 packet is three octets (5.1), so the codec refuses shorter ones now.
+            byte[] f1 = new byte[] { 0x10, 0x01, 0x11 };
+            byte[] f2 = new byte[] { 0x10, 0x02, 0x22, 0x33 };
             sender.SendFrame(f1);
             byte[] w1 = sink.Last;
             sender.SendFrame(f2);
@@ -489,7 +492,7 @@ namespace RetroIO.Protocols.X25.Tests
             // A well-formed frame after the failure is still not delivered: the connection is going.
             CapturingTransport sink = new CapturingTransport();
             XotFrameCodec sender = new XotFrameCodec("A", sink);
-            sender.SendFrame(new byte[] { 0x41 });
+            sender.SendFrame(new byte[] { 0x10, 0x01, 0x41 });
             receiver.ProcessBytes(sink.Last);
 
             Assert.That(received.Count, Is.EqualTo(0), "nothing is framed from a stream that has failed");
@@ -510,6 +513,39 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
+        public void Xot_LengthBelowThreeOctets_IsFatal()
+        {
+            // There is no XOT keep-alive. RFC 1613 gives the length field only legal X.25 packet
+            // lengths, and the shortest X.25 packet is three octets: a general format identifier
+            // with the channel group, a channel number, and a packet type identifier (X.25 5.1).
+            // A zero length is simply an illegal length, and the RFC says close the connection.
+            // This codec used to hand a zero-length frame up as an empty one and the links above
+            // skipped it as a keep-alive - while sending one themselves every minute, which a
+            // conforming peer drops the connection for.
+            for (int length = 0; length < 3; length++)
+            {
+                XotFrameCodec receiver = new XotFrameCodec("B", new CapturingTransport());
+                List<string> failures = new List<string>();
+                receiver.FramingFailed += (linkId, reason) => failures.Add(reason);
+
+                receiver.ProcessBytes(new byte[] { 0x00, 0x00, 0x00, (byte)length });
+
+                Assert.That(failures.Count, Is.EqualTo(1), $"length {length} must be refused");
+            }
+        }
+
+        [Test]
+        public void Xot_SendingAnIllegalLengthIsRefused()
+        {
+            // The same rule on the way out, so a caller's own bug does not become a peer closing
+            // the connection on us.
+            XotFrameCodec sender = new XotFrameCodec("A", new CapturingTransport());
+
+            Assert.Throws<ArgumentException>(() => sender.SendFrame(Array.Empty<byte>()));
+            Assert.Throws<ArgumentException>(() => sender.SendFrame(new byte[] { 0x10, 0x01 }));
+        }
+
+        [Test]
         public void Xot_ResetLetsTheCodecBeUsedAgain()
         {
             // A codec is reset when its connection is remade, and the new stream starts clean.
@@ -522,11 +558,11 @@ namespace RetroIO.Protocols.X25.Tests
 
             CapturingTransport sink = new CapturingTransport();
             XotFrameCodec sender = new XotFrameCodec("A", sink);
-            sender.SendFrame(new byte[] { 0x41, 0x42 });
+            sender.SendFrame(new byte[] { 0x10, 0x01, 0x41, 0x42 });
             receiver.ProcessBytes(sink.Last);
 
             Assert.That(received.Count, Is.EqualTo(1));
-            Assert.That(received[0], Is.EqualTo(new byte[] { 0x41, 0x42 }));
+            Assert.That(received[0], Is.EqualTo(new byte[] { 0x10, 0x01, 0x41, 0x42 }));
         }
 
         [Test]

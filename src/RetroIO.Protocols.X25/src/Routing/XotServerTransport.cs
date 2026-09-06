@@ -492,9 +492,9 @@ namespace RetroIO.Protocols.X25.Transport
                         break;
                     }
 
-                    if (length > 4096)
+                    if (length > 4096 || length < 3)
                     {
-                        _logger.LogError("XOT length {Length} from {ClientEndpoint} above the 4096-octet maximum - closing the connection",
+                        _logger.LogError("XOT length {Length} from {ClientEndpoint} is not a legal X.25 packet length (3..4096) - closing the connection",
                             length, _clientEndpoint);
                         break;
                     }

@@ -347,6 +347,7 @@ namespace RetroIO.Link
                     if (_listener.Pending())
                     {
                         var client = _listener.AcceptTcpClient();
+                        EnableTcpKeepAlive(client);
                         HandleNewConnection(client);
                     }
                     else
@@ -435,6 +436,7 @@ namespace RetroIO.Link
 
                     _tcpClient = new TcpClient();
                     _tcpClient.NoDelay = true;
+                    EnableTcpKeepAlive(_tcpClient);
 
                     // Connect with timeout
                     var connectTask = _tcpClient.ConnectAsync(_config.RemoteAddress, _config.Port);
@@ -585,12 +587,6 @@ namespace RetroIO.Link
         /// </param>
         private void OnXotFrame(string linkId, ReadOnlySpan<byte> frame)
         {
-            if (frame.Length == 0)
-            {
-                _logger.LogDebug("XotLink[{Name}]: Keep-alive received", _config.Name);
-                return;
-            }
-
             byte[] payload = frame.ToArray();
 
             if (_config.UseLapbFraming)
@@ -771,18 +767,12 @@ namespace RetroIO.Link
                 return;
             }
 
-            try
-            {
-                // An XOT keep-alive is a header with a zero length and no payload.
-                _xotCodec.SendFrame(ReadOnlySpan<byte>.Empty);
-
-                _logger.LogDebug("XotLink[{Name}]: Keep-alive sent", _config.Name);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("XotLink[{Name}]: Keep-alive failed: {Error}",
-                    _config.Name, ex.Message);
-            }
+            // Nothing is sent. There is no XOT keep-alive: RFC 1613 gives the length field only
+            // legal X.25 packet lengths, and says an illegal one closes the connection. A
+            // zero-length frame every minute, which is what this used to send, is an illegal length,
+            // so a conforming peer drops the link exactly when it has been quiet - which is when a
+            // keep-alive was supposed to help. TCP's own keep-alive is turned on for the socket
+            // instead; it works below XOT and needs no protocol of its own.
         }
 
         #endregion
@@ -805,6 +795,33 @@ namespace RetroIO.Link
 
             stream.Write(bytes);
             _statistics.BytesTransmitted += bytes.Length;
+        }
+
+        /// <summary>
+        /// Turns on TCP's own keep-alive for a connection.
+        /// </summary>
+        /// <remarks>
+        /// This replaces the zero-length XOT frame this link used to send every minute. There is no
+        /// XOT keep-alive: RFC 1613 gives the length field only legal X.25 packet lengths and says
+        /// an illegal one closes the connection, so that frame made a conforming peer drop the link
+        /// exactly when it had been quiet. TCP's keep-alive sits below XOT, needs no protocol of its
+        /// own, and is what the operating system is for.
+        /// </remarks>
+        /// <param name="client">
+        /// The connection to set it on.
+        /// </param>
+        private void EnableTcpKeepAlive(TcpClient client)
+        {
+            try
+            {
+                client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            }
+            catch (Exception ex)
+            {
+                // Not fatal: the link works without it, it just takes longer to notice a peer that
+                // vanished without closing.
+                _logger.LogDebug("XotLink[{Name}]: could not enable TCP keep-alive: {Error}", _config.Name, ex.Message);
+            }
         }
 
         private void CloseConnection()

@@ -527,11 +527,6 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         private void OnXotFrame(string linkId, ReadOnlySpan<byte> frame)
         {
-            if (frame.Length == 0)
-            {
-                return;   // an XOT keep-alive carries no packet
-            }
-
             // Already inside the lock: the reader thread takes it before calling the codec.
             _layer.ProcessPacket(frame);
         }

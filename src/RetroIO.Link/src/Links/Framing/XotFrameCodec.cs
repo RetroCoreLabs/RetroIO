@@ -34,6 +34,19 @@ namespace RetroIO.Link.Framing
         /// </summary>
         public const int FrameMaxPayload = 4096;
 
+        /// <summary>
+        /// The shortest legal payload: a whole X.25 packet is at least three octets.
+        /// </summary>
+        /// <remarks>
+        /// X.25 5.1 gives every packet a general format identifier with the logical channel group
+        /// number, a logical channel number, and a packet type identifier. RFC 1613 says the XOT
+        /// length field carries a legal X.25 packet length and that an illegal one closes the
+        /// connection, so a length below this is fatal. There is no XOT keep-alive: a zero length is
+        /// simply an illegal length. This decoder used to deliver one as an empty frame, and the
+        /// links above skipped it as a keep-alive.
+        /// </remarks>
+        public const int FrameMinPayload = 3;
+
         // Staging buffer holds at most one full frame; partial data carries across calls.
         private readonly byte[] _rx = new byte[HeaderSize + FrameMaxPayload];
         private int _rxLen;
@@ -84,9 +97,13 @@ namespace RetroIO.Link.Framing
         /// <inheritdoc/>
         public override void SendFrame(ReadOnlySpan<byte> frame)
         {
-            if (frame.Length > FrameMaxPayload)
+            if (frame.Length > FrameMaxPayload || frame.Length < FrameMinPayload)
             {
-                throw new ArgumentException($"XOT payload {frame.Length} exceeds maximum {FrameMaxPayload}.", nameof(frame));
+                // The same rule on the way out. A conforming peer closes the connection on an
+                // illegal length, which is a confusing way to find out about a caller's own bug.
+                throw new ArgumentException(
+                    $"XOT payload {frame.Length} is not a legal X.25 packet length ({FrameMinPayload}..{FrameMaxPayload}).",
+                    nameof(frame));
             }
 
             int total = HeaderSize + frame.Length;
@@ -142,9 +159,11 @@ namespace RetroIO.Link.Framing
                     return;
                 }
 
-                if (length > FrameMaxPayload)
+                if (length > FrameMaxPayload || length < FrameMinPayload)
                 {
-                    Fail($"XOT length {length} above the {FrameMaxPayload}-octet maximum");
+                    // RFC 1613: "Values must be legal X.25 packet lengths. If the Length field has
+                    // an illegal value, then the TCP connection MUST be closed."
+                    Fail($"XOT length {length} is not a legal X.25 packet length ({FrameMinPayload}..{FrameMaxPayload})");
                     return;
                 }
 
