@@ -14,19 +14,19 @@ namespace RetroIO.Protocols.X25
     /// </summary>
     /// <remarks>
     /// Three outcomes, because two of them used to be the same <c>false</c> and the caller then
-    /// treated a flow-control refusal as "this is not an XOT circuit" and sent the data down the
-    /// packet layer anyway. See <see cref="IProtocolRuntime.SendDataViaXotIfMapped"/>.
+    /// treated a flow-control refusal as "this channel has no link" and sent the data down the
+    /// packet layer anyway. See <see cref="IProtocolRuntime.SendMappedData"/>.
     /// </remarks>
-    public enum XotSendOutcome
+    public enum MappedSendOutcome
     {
-        /// <summary>The channel is not mapped to an XOT connection; try another path.</summary>
-        NotXotMapped = 0,
+        /// <summary>The channel has no link under it; try another path (a service, or in-process delivery).</summary>
+        NotMapped = 0,
 
-        /// <summary>The packet went out on the XOT connection.</summary>
+        /// <summary>The packet went out on the channel's link.</summary>
         Sent = 1,
 
         /// <summary>
-        /// The channel IS an XOT circuit, but X.25 flow control would not let the packet out - the
+        /// The channel IS carried by a link, but X.25 flow control would not let the packet out - the
         /// peer sent RNR, or our send window is full and no acknowledgement arrived in time. The
         /// data was not sent and no sequence number was consumed. Do NOT reroute it.
         /// </summary>
@@ -121,7 +121,7 @@ namespace RetroIO.Protocols.X25
         /// Clears a call on a local LCN carried by an XOT endpoint. False when the LCN is not
         /// XOT-mapped, so the caller can fall back to the link path.
         /// </summary>
-        bool ClearXotCall(ushort lcn, byte cause, byte diagnostic);
+        bool ClearMappedCall(ushort lcn, byte cause, byte diagnostic);
 
         /// <summary>
         /// Finalizes a deferred outbound XOT call by attaching its transport.
@@ -136,7 +136,7 @@ namespace RetroIO.Protocols.X25
         /// <param name="lcn">Logical channel number.</param>
         /// <param name="data">Data to send.</param>
         /// <param name="length">Number of valid bytes in <paramref name="data"/>.</param>
-        /// <returns>What happened - see <see cref="XotSendOutcome"/>.</returns>
+        /// <returns>What happened - see <see cref="MappedSendOutcome"/>.</returns>
         /// <remarks>
         /// This used to return a bool, and callers read false as "not an XOT circuit, use the
         /// packet layer instead". That is wrong for the other reason it can fail: flow control.
@@ -144,7 +144,7 @@ namespace RetroIO.Protocols.X25
         /// packet-layer path and be reported to the application as sent - the one thing flow
         /// control exists to prevent. The three outcomes are now distinct.
         /// </remarks>
-        XotSendOutcome SendDataViaXotIfMapped(ushort lcn, byte[] data, int length);
+        MappedSendOutcome SendMappedData(ushort lcn, byte[] data, int length);
 
         /// <summary>
         /// Binds a local protocol service to a logical channel.

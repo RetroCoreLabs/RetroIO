@@ -512,21 +512,21 @@ namespace RetroIO.Protocols.X25.Runtime
         /// Sends application data on a local LCN that is carried by an XOT endpoint, waiting up to
         /// two seconds for a closed window or a busy peer as the PAD has always expected.
         /// </summary>
-        public XotSendOutcome SendDataViaXotIfMapped(ushort lcn, byte[] data, int length)
+        public MappedSendOutcome SendMappedData(ushort lcn, byte[] data, int length)
         {
             if (!TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci))
             {
-                return XotSendOutcome.NotXotMapped;
+                return MappedSendOutcome.NotMapped;
             }
 
             byte[] payload = data.Length == length ? data : data.AsSpan(0, length).ToArray();
-            return endpoint.SendBlocking(lci, payload, XotSendTimeoutMs) ? XotSendOutcome.Sent : XotSendOutcome.RefusedByFlowControl;
+            return endpoint.SendBlocking(lci, payload, XotSendTimeoutMs) ? MappedSendOutcome.Sent : MappedSendOutcome.RefusedByFlowControl;
         }
 
         /// <summary>
         /// Clears a call on a local LCN carried by an XOT endpoint. False when the LCN is not XOT-mapped.
         /// </summary>
-        public bool ClearXotCall(ushort lcn, byte cause, byte diagnostic)
+        public bool ClearMappedCall(ushort lcn, byte cause, byte diagnostic)
         {
             if (!TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci))
             {
@@ -554,12 +554,12 @@ namespace RetroIO.Protocols.X25.Runtime
             {
                 case X25PacketType.Data:
                     // Off the routing lock: SendBlocking may wait for the window.
-                    ThreadPool.QueueUserWorkItem(_ => SendDataViaXotIfMapped(localLcn, packet.Data, packet.Data.Length));
+                    ThreadPool.QueueUserWorkItem(_ => SendMappedData(localLcn, packet.Data, packet.Data.Length));
                     break;
                 case X25PacketType.ClearRequest:
                     byte cause = packet.Data.Length > 0 ? packet.Data[0] : (byte)0;
                     byte diag = packet.Data.Length > 1 ? packet.Data[1] : (byte)0;
-                    ThreadPool.QueueUserWorkItem(_ => ClearXotCall(localLcn, cause, diag));
+                    ThreadPool.QueueUserWorkItem(_ => ClearMappedCall(localLcn, cause, diag));
                     break;
                 case X25PacketType.CallAccepted:
                     break;

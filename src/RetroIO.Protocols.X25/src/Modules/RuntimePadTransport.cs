@@ -60,7 +60,7 @@ namespace RetroIO.Protocols.X25.Modules
             // not XOT-mapped at all. A flow-control refusal must not fall back: the peer sent RNR
             // or our window is full, and pushing the same data down the packet layer would put it
             // on the wire anyway - back-pressure obeyed in one place and ignored in the next.
-            if (_runtime.SendDataViaXotIfMapped(lcn, data, length) == XotSendOutcome.NotXotMapped)
+            if (_runtime.SendMappedData(lcn, data, length) == MappedSendOutcome.NotMapped)
             {
                 // Not carried by a link: the runtime finds the bound service, or delivers it in
                 // process. Until 2026-09-06 this went straight to the old packet-layer engine and
@@ -77,7 +77,7 @@ namespace RetroIO.Protocols.X25.Modules
             // XOT-mapped falls back to the old packet layer (LinkManager links, until plan C2).
             // Until 2026-09-06 every clear went to the old layer, which had no XOT channels, so a PAD
             // disconnect over XOT put nothing on the wire (pinned by ProtocolRuntimeWirePinTests).
-            if (!_runtime.ClearXotCall(lcn, cause, diagnostic))
+            if (!_runtime.ClearMappedCall(lcn, cause, diagnostic))
             {
                 _runtime.X25Layer.ClearCall(lcn, cause, diagnostic);
             }

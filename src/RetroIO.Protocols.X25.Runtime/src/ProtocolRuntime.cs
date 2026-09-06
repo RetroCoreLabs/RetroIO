@@ -3352,10 +3352,10 @@ using RetroIO.Protocols.X25.DeleteMe;
                 // A flow-control refusal is reported to the caller as a failed send: the circuit
                 // exists and is XOT, so there is no other route the data should take, and calling
                 // it a success would hide the very back-pressure we just honoured.
-                XotSendOutcome xot = SendDataViaXotIfMapped(lcn, data, data.Length);
-                if (xot == XotSendOutcome.Sent)
+                MappedSendOutcome xot = SendMappedData(lcn, data, data.Length);
+                if (xot == MappedSendOutcome.Sent)
                     return true;
-                if (xot == XotSendOutcome.RefusedByFlowControl)
+                if (xot == MappedSendOutcome.RefusedByFlowControl)
                     return false;
 
                 _logger.LogDebug("Sending X.25 data on LCN {LCN}, {Length} bytes", lcn, data.Length);
