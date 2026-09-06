@@ -62,6 +62,33 @@ namespace RetroIO.Protocols.X25.PacketLayer
         protected IX25PacketSink Sink => _sink;
 
         /// <summary>
+        /// How many packets the sink has refused or dropped since the layer was created. Every
+        /// refusal the engine could roll back was rolled back; the ones it could not (an RR after
+        /// data was already accepted, a confirmation) are only counted here.
+        /// </summary>
+        public long SendFailures { get; private set; }
+
+        /// <summary>
+        /// Hands a packet to the sink and reports whether it went.
+        /// </summary>
+        /// <param name="packet">
+        /// The complete packet.
+        /// </param>
+        /// <returns>
+        /// True when the sink returned <see cref="X25SendResult.Sent"/>.
+        /// </returns>
+        protected bool Send(ReadOnlySpan<byte> packet)
+        {
+            if (_sink.SendPacket(packet) == X25SendResult.Sent)
+            {
+                return true;
+            }
+
+            SendFailures++;
+            return false;
+        }
+
+        /// <summary>
         /// Raises the incoming-call event.
         /// </summary>
         /// <param name="lci">Logical channel.</param>

@@ -22,11 +22,12 @@ namespace RetroIO.Protocols.X25.Tests
             public X25Layer? Target;
             public readonly List<byte[]> Sent = new List<byte[]>();
 
-            public void SendPacket(ReadOnlySpan<byte> packet)
+            public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
             {
                 byte[] bytes = packet.ToArray();
                 Sent.Add(bytes);
                 Target?.ProcessPacket(bytes);
+                return X25SendResult.Sent;
             }
         }
 

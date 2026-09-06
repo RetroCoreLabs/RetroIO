@@ -115,11 +115,45 @@ namespace RetroIO.Protocols.X25.PacketLayer
     public interface IX25PacketSink
     {
         /// <summary>
-        /// Frames and transmits a complete X.25 packet.
+        /// Frames and transmits a complete X.25 packet, and says whether the link took it.
         /// </summary>
         /// <param name="packet">
         /// The packet bytes (GFI + LCN + PTI + body).
         /// </param>
-        void SendPacket(ReadOnlySpan<byte> packet);
+        /// <returns>
+        /// <see cref="X25SendResult.Sent"/> when the link has accepted the packet for transmission;
+        /// <see cref="X25SendResult.Refused"/> when it cannot take it right now (a full transmit
+        /// queue, a LAPB window that is shut); <see cref="X25SendResult.LinkDown"/> when there is no
+        /// link to send on. Never a byte count.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Until 2026-09-06 this returned <c>void</c>, so the engine could not know whether a packet
+        /// had left, spent its P(S) regardless, and the peer saw a gap in the sequence numbers the
+        /// next time a packet did get through - which X.25 4.4.1.3 makes a local procedure error and
+        /// a reset. The same shape (a send that can be refused and a caller that does not look) was
+        /// found five times over in the C reference switch and cost it packets on every trunk.
+        /// </para>
+        /// <para>
+        /// The engine treats anything but <see cref="X25SendResult.Sent"/> as "the packet did not go"
+        /// and rolls back the state change that assumed it had.
+        /// </para>
+        /// </remarks>
+        X25SendResult SendPacket(ReadOnlySpan<byte> packet);
+    }
+
+    /// <summary>
+    /// What the link below did with a packet the X.25 layer handed it.
+    /// </summary>
+    public enum X25SendResult
+    {
+        /// <summary>The link accepted the packet for transmission.</summary>
+        Sent,
+
+        /// <summary>The link cannot take the packet right now; the caller may retry later.</summary>
+        Refused,
+
+        /// <summary>There is no link to send on.</summary>
+        LinkDown,
     }
 }

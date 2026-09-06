@@ -73,7 +73,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
             };
             _vcs[lci] = vc;
 
-            Sink.SendPacket(X25PacketBuilder.CreateCallRequest(lci, calledAddress, calling, null, callUserData));
+            if (!Send(X25PacketBuilder.CreateCallRequest(lci, calledAddress, calling, null, callUserData)))
+            {
+                // The link did not take it: no call exists, and the channel is free again.
+                _vcs.Remove(lci);
+                return 0;
+            }
+
             return lci;
         }
 
@@ -83,17 +89,28 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <param name="lci">
         /// Logical channel of the incoming call.
         /// </param>
-        public void AcceptCall(ushort lci)
+        /// <returns>
+        /// True when the Call Accepted left; false when there was no incoming call on the channel or
+        /// the link refused the packet (the call is then still incoming).
+        /// </returns>
+        public bool AcceptCall(ushort lci)
         {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc) || vc.State != X25VcState.CallIncoming)
             {
-                return;
+                return false;
+            }
+
+            // Send first: if the Call Accepted does not leave, the call is still merely incoming and
+            // the application may try again or clear it.
+            if (!Send(X25PacketBuilder.CreateCallAccepted(lci)))
+            {
+                return false;
             }
 
             vc.State = X25VcState.DataTransfer;
             vc.ResetFlow();
             vc.TimerExpiryMs = 0;
-            Sink.SendPacket(X25PacketBuilder.CreateCallAccepted(lci));
+            return true;
         }
 
         /// <summary>
@@ -146,9 +163,15 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
+            // P(S) is spent only when the packet actually leaves. A refused send that still advanced
+            // P(S) would leave a hole the peer must treat as a local procedure error (X.25 4.4.1.3).
             byte ps = vc.SendSeq;
-            vc.SendSeq = (byte)((vc.SendSeq + 1) & 0x07);
-            Sink.SendPacket(X25PacketBuilder.CreateDataPacket(lci, ps, vc.RecvSeq, data, mBit, qBit, dBit));
+            if (!Send(X25PacketBuilder.CreateDataPacket(lci, ps, vc.RecvSeq, data, mBit, qBit, dBit)))
+            {
+                return false;
+            }
+
+            vc.SendSeq = (byte)((ps + 1) & 0x07);
             return true;
         }
 
@@ -164,18 +187,21 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <param name="diagnostic">
         /// Diagnostic code.
         /// </param>
-        public void ClearCall(ushort lci, byte cause = 0, byte diagnostic = 0)
+        public bool ClearCall(ushort lci, byte cause = 0, byte diagnostic = 0)
         {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc))
             {
-                return;
+                return false;
             }
 
+            // The state change stands even when the packet is refused: the application has decided
+            // the call is over, and the clear-request timer is what carries that decision to the
+            // peer if this attempt did not (retransmission arrives with the T23 work, plan B5).
             vc.State = X25VcState.ClearRequest;
             vc.Cause = cause;
             vc.Diagnostic = diagnostic;
             vc.TimerExpiryMs = Now() + _config.ClearRequestTimeoutMs;
-            Sink.SendPacket(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic));
+            return Send(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic));
         }
 
         /// <summary>
@@ -190,21 +216,22 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <param name="diagnostic">
         /// Diagnostic code.
         /// </param>
-        public void ResetCall(ushort lci, byte cause = 0, byte diagnostic = 0)
+        public bool ResetCall(ushort lci, byte cause = 0, byte diagnostic = 0)
         {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc))
             {
-                return;
+                return false;
             }
 
             if (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady)
             {
-                return;
+                return false;
             }
 
+            // As for ClearCall: the requesting state stands and the timer carries it (plan B5).
             vc.State = X25VcState.ResetRequest;
             vc.TimerExpiryMs = Now() + _config.ResetRequestTimeoutMs;
-            Sink.SendPacket(X25PacketBuilder.CreateResetRequest(lci, cause, diagnostic));
+            return Send(X25PacketBuilder.CreateResetRequest(lci, cause, diagnostic));
         }
 
         /// <summary>
@@ -216,17 +243,24 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <param name="busy">
         /// True to signal receive-not-ready, false to signal receive-ready.
         /// </param>
-        public void SetBusy(ushort lci, bool busy)
+        public bool SetBusy(ushort lci, bool busy)
         {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc))
             {
-                return;
+                return false;
+            }
+
+            // The flag follows the packet: a busy condition the peer was never told about is not a
+            // busy condition, it is a stall the peer cannot explain.
+            if (!Send(busy
+                ? X25PacketBuilder.CreateRNR(lci, vc.RecvSeq)
+                : X25PacketBuilder.CreateRR(lci, vc.RecvSeq)))
+            {
+                return false;
             }
 
             vc.LocalBusy = busy;
-            Sink.SendPacket(busy
-                ? X25PacketBuilder.CreateRNR(lci, vc.RecvSeq)
-                : X25PacketBuilder.CreateRR(lci, vc.RecvSeq));
+            return true;
         }
 
         /// <summary>
@@ -238,10 +272,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <param name="diagnostic">
         /// Diagnostic code.
         /// </param>
-        public void Restart(byte cause = 0, byte diagnostic = 0)
+        public bool Restart(byte cause = 0, byte diagnostic = 0)
         {
+            // The local circuits are freed whether or not the packet leaves: a restart is the
+            // application saying "forget everything", and that must hold locally. Telling the peer
+            // is what the T20 retransmission will guarantee (plan B5); until then a refused Restart
+            // Request is counted and reported.
             FreeSwitchedCircuits();
-            Sink.SendPacket(X25PacketBuilder.CreateRestartRequest(cause, diagnostic));
+            return Send(X25PacketBuilder.CreateRestartRequest(cause, diagnostic));
         }
 
         /// <summary>
@@ -394,7 +432,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
             RaiseDataReceived(lci, payload, payloadLen, info.QBit, info.MBit, info.DBit);
 
             // Acknowledge the received data (receive-ready, unless we are locally busy).
-            Sink.SendPacket(vc.LocalBusy
+            // A refused acknowledgement is counted, not rolled back: the data has been delivered and
+            // P(R) has moved; the next packet in this direction carries the newer P(R).
+            Send(vc.LocalBusy
                 ? X25PacketBuilder.CreateRNR(lci, vc.RecvSeq)
                 : X25PacketBuilder.CreateRR(lci, vc.RecvSeq));
         }
@@ -406,7 +446,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
-            Sink.SendPacket(X25PacketBuilder.CreateClearConfirmation(lci));
+            Send(X25PacketBuilder.CreateClearConfirmation(lci));
             vc.State = X25VcState.Ready;
             vc.TimerExpiryMs = 0;
             RaiseCleared(lci, info.ClearingCause, info.DiagnosticCode);
@@ -433,7 +473,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
-            Sink.SendPacket(X25PacketBuilder.CreateResetConfirmation(lci));
+            Send(X25PacketBuilder.CreateResetConfirmation(lci));
             vc.ResetFlow();
             RaiseReset(lci, info.ResetCause, info.DiagnosticCode);
         }
@@ -450,7 +490,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
         private void OnRestartRequest(X25PacketInfo info)
         {
-            Sink.SendPacket(X25PacketBuilder.CreateRestartConfirmation());
+            Send(X25PacketBuilder.CreateRestartConfirmation());
             FreeSwitchedCircuits();
             RaiseRestartOccurred(info.RestartCause, info.DiagnosticCode);
         }

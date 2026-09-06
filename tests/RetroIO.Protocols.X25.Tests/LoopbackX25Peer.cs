@@ -55,9 +55,17 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <inheritdoc/>
-        public void SendPacket(ReadOnlySpan<byte> packet)
+        public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
         {
-            _codec.SendFrame(packet);
+            try
+            {
+                _codec.SendFrame(packet);
+                return X25SendResult.Sent;
+            }
+            catch (Exception)
+            {
+                return X25SendResult.LinkDown;
+            }
         }
 
         /// <inheritdoc/>

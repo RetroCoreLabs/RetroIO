@@ -34,9 +34,10 @@ namespace RetroIO.Protocols.X25.Tests
         {
             public readonly List<byte[]> Sent = new List<byte[]>();
 
-            public void SendPacket(ReadOnlySpan<byte> packet)
+            public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
             {
                 Sent.Add(packet.ToArray());
+                return X25SendResult.Sent;
             }
 
             public byte[] Last => Sent[Sent.Count - 1];
@@ -579,37 +580,118 @@ namespace RetroIO.Protocols.X25.Tests
 
         // ================================================================== R14  send results
         //
-        // The engine cannot know whether the layer below took its packet: IX25PacketSink.SendPacket
-        // returns void. The C audit's first root cause ("return values are produced but not
-        // consumed") is designed in here rather than merely ignored.
+        // FIXED 2026-09-06 (Phase B2) and these tests were rewritten deliberately. Until then
+        // IX25PacketSink.SendPacket returned void, so the engine could not know whether the layer
+        // below took its packet, reported success anyway and spent P(S) on a packet that never
+        // left - the C audit's first root cause ("return values are produced but not consumed"),
+        // designed in rather than merely ignored. The sink now answers Sent / Refused / LinkDown and
+        // every state change that assumed a send is rolled back when it did not happen.
 
-        /// <summary>A sink that drops everything, like a link whose transmit queue is full.</summary>
-        private sealed class DroppingSink : IX25PacketSink
+        /// <summary>A sink that refuses everything after a set number of packets, like a link whose transmit queue has filled.</summary>
+        private sealed class RefusingSink : IX25PacketSink
         {
-            public int Dropped;
+            public int AcceptFirst = int.MaxValue;
+            public int Accepted;
+            public int Refused;
+            public readonly List<byte[]> Sent = new List<byte[]>();
 
-            public void SendPacket(ReadOnlySpan<byte> packet)
+            public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
             {
-                Dropped++;
+                if (Accepted < AcceptFirst)
+                {
+                    Accepted++;
+                    Sent.Add(packet.ToArray());
+                    return X25SendResult.Sent;
+                }
+
+                Refused++;
+                return X25SendResult.Refused;
             }
         }
 
         [Test]
-        public void R14_WhenTheSinkDropsThePacket_SendDataStillReportsSuccessAndSpendsPS_WHICH_IS_WRONG()
+        public void R14_WhenTheSinkRefusesAData_SendDataReportsFalseAndPSIsNotSpent()
         {
-            DroppingSink sink = new DroppingSink();
+            RefusingSink sink = new RefusingSink();
             X25Layer layer = new X25Layer(sink, _config);
             ushort lci = layer.PlaceCall(RemoteAddress);
             layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));
+            sink.AcceptFirst = sink.Accepted;   // everything from here on is refused
 
             bool ok = layer.SendData(lci, new byte[] { 1 });
 
-            // MEASURED 2026-09-06: true, and P(S) is 1 although nothing left. The peer will see a
-            // gap when the next packet arrives with P(S)=1 and reset the circuit (4.4.1.3) - the
-            // same mechanism that lost packets in the C switch (x25switch.c:2750).
-            Assert.That(ok, Is.True, "behaviour changed: a refused send reporting false is the FIX for R14 - rewrite this test");
+            // Used to be: true, and P(S) = 1 although nothing left, so the peer saw a gap on the next
+            // packet and reset the circuit (4.4.1.3) - the same mechanism that lost packets in the C
+            // switch (x25switch.c:2750).
+            Assert.That(ok, Is.False);
+            Assert.That(layer.Circuits[lci].SendSeq, Is.EqualTo(0), "P(S) must not move for a packet that did not leave");
+            Assert.That(sink.Refused, Is.EqualTo(1));
+            Assert.That(layer.SendFailures, Is.EqualTo(1));
+
+            // When the link recovers, the same P(S) goes out - no hole.
+            sink.AcceptFirst = int.MaxValue;
+            Assert.That(layer.SendData(lci, new byte[] { 1 }), Is.True);
+            Assert.That(X25PacketParser.ParsePacket(sink.Sent[sink.Sent.Count - 1]).PS, Is.EqualTo(0));
             Assert.That(layer.Circuits[lci].SendSeq, Is.EqualTo(1));
-            Assert.That(sink.Dropped, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void R14_WhenTheSinkRefusesTheCallRequest_NoCircuitIsCreated()
+        {
+            RefusingSink sink = new RefusingSink { AcceptFirst = 0 };
+            X25Layer layer = new X25Layer(sink, _config);
+
+            ushort lci = layer.PlaceCall(RemoteAddress);
+
+            Assert.That(lci, Is.EqualTo((ushort)0));
+            Assert.That(layer.Circuits.Count, Is.EqualTo(0), "a call whose request never left must not occupy a channel");
+        }
+
+        [Test]
+        public void R14_WhenTheSinkRefusesTheCallAccepted_TheCallStaysIncoming()
+        {
+            RefusingSink sink = new RefusingSink();
+            X25Layer layer = new X25Layer(sink, _config);
+            layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress));
+            sink.AcceptFirst = sink.Accepted;
+
+            Assert.That(layer.AcceptCall(5), Is.False);
+            Assert.That(layer.Circuits[5].State, Is.EqualTo(X25VcState.CallIncoming));
+
+            sink.AcceptFirst = int.MaxValue;
+            Assert.That(layer.AcceptCall(5), Is.True);
+            Assert.That(layer.Circuits[5].State, Is.EqualTo(X25VcState.DataTransfer));
+        }
+
+        [Test]
+        public void R14_WhenTheSinkRefusesAnRnr_LocalBusyIsNotSet()
+        {
+            RefusingSink sink = new RefusingSink();
+            X25Layer layer = new X25Layer(sink, _config);
+            ushort lci = layer.PlaceCall(RemoteAddress);
+            layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));
+            sink.AcceptFirst = sink.Accepted;
+
+            Assert.That(layer.SetBusy(lci, true), Is.False);
+            Assert.That(layer.Circuits[lci].LocalBusy, Is.False, "a busy condition the peer was never told about must not be recorded");
+        }
+
+        [Test]
+        public void R14_ARefusedAcknowledgement_IsCountedButDataIsStillDelivered()
+        {
+            RefusingSink sink = new RefusingSink();
+            X25Layer layer = new X25Layer(sink, _config);
+            ushort lci = layer.PlaceCall(RemoteAddress);
+            layer.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci));
+            int delivered = 0;
+            layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
+            sink.AcceptFirst = sink.Accepted;
+
+            layer.ProcessPacket(Data(lci, ps: 0, pr: 0));
+
+            Assert.That(delivered, Is.EqualTo(1));
+            Assert.That(layer.Circuits[lci].RecvSeq, Is.EqualTo(1), "P(R) moves: the data was accepted");
+            Assert.That(layer.SendFailures, Is.EqualTo(1), "the RR that did not leave is counted");
         }
 
         // ================================================================== R15  received length

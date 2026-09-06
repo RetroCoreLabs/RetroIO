@@ -541,9 +541,22 @@ namespace RetroIO.Protocols.X25.Client
             }
 
             /// <inheritdoc/>
-            public void SendPacket(ReadOnlySpan<byte> packet)
+            /// <remarks>
+            /// The framing codec and the TCP transport below it report failure by throwing, so a
+            /// throw here is "the link is gone", not a bug to surface: it becomes
+            /// <see cref="X25SendResult.LinkDown"/> and the engine rolls the send back.
+            /// </remarks>
+            public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
             {
-                _codec.SendFrame(packet);
+                try
+                {
+                    _codec.SendFrame(packet);
+                    return X25SendResult.Sent;
+                }
+                catch (Exception)
+                {
+                    return X25SendResult.LinkDown;
+                }
             }
         }
 
