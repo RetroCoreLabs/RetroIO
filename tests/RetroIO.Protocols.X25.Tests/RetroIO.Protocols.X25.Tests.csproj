@@ -26,6 +26,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared X.25 conformance vectors (also read by the C emulator's test suite, see Migration/X25 one-stack plan.md). -->
+    <None Include="..\x25-vectors\x25-vectors.json" Link="x25-vectors\x25-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Runtime\src\RetroIO.Protocols.X25.Runtime.csproj" />
     <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Client\src\RetroIO.Protocols.X25.Client.csproj" />
     <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Monitor\src\RetroIO.Protocols.X25.Monitor.csproj" />

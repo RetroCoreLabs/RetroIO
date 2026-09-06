@@ -1,0 +1,411 @@
+{
+  "_about": [
+    "X.25 conformance vectors shared by the C# stack (RetroIO) and the C emulator (x25emu).",
+    "Every vector names the clause it was read from. Text sources: E:\\Dev\\RCL\\Specs\\X25 -",
+    "T-REC-X.25-199610-I (10/96) unless another document is named. Packet type identifier values",
+    "were cross-checked between the C# builder and the C header src/x25/x25.h because the",
+    "pdftotext rendering of Table 5-2 is unreadable; both agree and both have been seen on the wire.",
+    "",
+    "status: 'pass' = must pass today and always. 'knownFail:<rule>' = documents a defect the code",
+    "has TODAY (rule numbers are from Migration/X25 one-stack plan.md section 3); the reader asserts",
+    "that the vector still FAILS, so a fix shows up as a red test that somebody must read and flip.",
+    "Never change a vector's expectation to make a test green - change the code or the status."
+  ],
+
+  "facilityDecode": [
+    {
+      "id": "fac-packet-and-window-defaults",
+      "spec": "X.25 7.3.1.1, 7.3.1.2: log2 packet size in bits 4-1; window in bits 7-1; first octet = from called, second = from calling",
+      "hex": "42 07 07 43 02 02",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "" },
+      "status": "pass"
+    },
+    {
+      "id": "fac-window-only-7",
+      "spec": "X.25 7.3.1.2; packet size absent -> network default 128 (7.3.1.1 'All Administrations will provide a packet size of 128')",
+      "hex": "43 07 07",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 7, "windowCalling": 7, "passThroughHex": "" },
+      "status": "pass"
+    },
+    {
+      "id": "fac-packet-1024-asymmetric",
+      "spec": "X.25 7.3.1.1: 0x0A = 2^10 = 1024, 0x08 = 256; window absent -> default 2 (7.3.1.2)",
+      "hex": "42 0A 08",
+      "expect": { "packetCalled": 1024, "packetCalling": 256, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "" },
+      "status": "pass"
+    },
+    {
+      "id": "fac-class-D-stepped-over",
+      "spec": "X.25 7.1 Table 7-1: class D (bits 8,7 = 11) has a length octet; 7.3.7 NUI 0xC6 is class D. Unknown facility is stepped over by its declared length and kept for pass-through",
+      "hex": "C6 03 41 42 43 43 03 03",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 3, "windowCalling": 3, "passThroughHex": "C6 03 41 42 43" },
+      "status": "knownFail:R11",
+      "note": "window decodes right today; the pass-through field does not exist yet, so the vector fails on passThroughHex"
+    },
+    {
+      "id": "fac-marker-00-00-stops-x25-parsing",
+      "spec": "X.25 7.1: marker = code 0x00 + parameter 0x00 separates X.25 facilities from non-X.25 network facilities; everything after it is NOT an X.25 facility",
+      "hex": "42 07 07 00 00 42 0A 0A",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "00 00 42 0A 0A" },
+      "status": "knownFail:R11",
+      "note": "today the second 42 0A 0A is read as packet size 1024 (audit F-01-01 twin)"
+    },
+    {
+      "id": "fac-marker-00-FF-called-network",
+      "spec": "X.25 7.1: marker parameter all ones precedes facilities for the called DTE's network",
+      "hex": "43 02 02 00 FF 42 0A 0A",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "00 FF 42 0A 0A" },
+      "status": "knownFail:R11"
+    },
+    {
+      "id": "fac-marker-00-0F-dte-facilities",
+      "spec": "X.25 7.1: marker parameter 00001111 precedes ITU-T-specified DTE facilities (Annex G), passed unchanged",
+      "hex": "00 0F 0B 04 0A 20 20 20",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "00 0F 0B 04 0A 20 20 20" },
+      "status": "knownFail:R11"
+    },
+    {
+      "id": "fac-shift-FF-extended-code",
+      "spec": "X.25 7.1: code 0xFF is the extension; the NEXT octet is an extended code with class from its own bits 8,7. Extended 0x42 is class B (2 octets) and is NOT packet size",
+      "hex": "FF 42 07 07 43 02 02",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "FF 42 07 07" },
+      "status": "knownFail:R11",
+      "note": "today 0xFF is treated as class D with 0x42 as its length (audit F-01-02 twin)"
+    },
+    {
+      "id": "fac-shift-FF-repeated",
+      "spec": "X.25 7.1: 'Repetition of facility code 11111111 is permitted'",
+      "hex": "FF FF 01 01 43 04 04",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 4, "windowCalling": 4, "passThroughHex": "FF FF 01 01" },
+      "status": "knownFail:R11"
+    },
+    {
+      "id": "fac-window-zero-invalid",
+      "spec": "X.25 7.3.1.2: 'A value of zero is not allowed'",
+      "hex": "43 00 00",
+      "expect": { "invalid": true },
+      "status": "knownFail:R9",
+      "note": "today window 0 is accepted and blocks sending for ever (audit F-01-04 twin)"
+    },
+    {
+      "id": "fac-window-8-invalid-modulo-8",
+      "spec": "X.25 7.3.1.2: 'Window sizes of 8 to 127 are only valid if extended sequence numbering is used'",
+      "hex": "43 08 08",
+      "expect": { "invalid": true },
+      "status": "knownFail:R9"
+    },
+    {
+      "id": "fac-packet-log2-3-invalid",
+      "spec": "X.25 7.3.1.1: values 4 to 12 only",
+      "hex": "42 03 03",
+      "expect": { "invalid": true },
+      "status": "knownFail:R9",
+      "note": "today silently becomes 128"
+    },
+    {
+      "id": "fac-packet-log2-13-invalid",
+      "spec": "X.25 7.3.1.1: values 4 to 12 only",
+      "hex": "42 0D 0D",
+      "expect": { "invalid": true },
+      "status": "knownFail:R9"
+    },
+    {
+      "id": "fac-truncated-packet-size",
+      "spec": "X.25 7.1: class B carries two parameter octets; a field ending after one is malformed",
+      "hex": "42 07",
+      "expect": { "invalid": true },
+      "status": "knownFail:R10",
+      "note": "today the truncated element is skipped and defaults returned"
+    },
+    {
+      "id": "fac-reverse-charging-passes-through",
+      "spec": "X.25 7.3.6: code 0x01, bit 1 = reverse charging requested; not a flow control facility",
+      "hex": "01 01 42 07 07",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "01 01" },
+      "status": "knownFail:R11"
+    },
+    {
+      "id": "fac-fast-select-passes-through",
+      "spec": "X.25 7.3.6: bit 8 = 1, bit 7 = 0 fast select with no restriction on response",
+      "hex": "01 80",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "01 80" },
+      "status": "knownFail:R11"
+    },
+    {
+      "id": "fac-cug-basic-bcd",
+      "spec": "X.25 7.3.3.1: code 0x03, index as two BCD digits",
+      "hex": "03 12 43 02 02",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "03 12" },
+      "status": "knownFail:R11"
+    },
+    {
+      "id": "fac-cug-extended-bcd",
+      "spec": "X.25 7.3.3.2: code 0x47, index as four BCD digits",
+      "hex": "47 12 34",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "47 12 34" },
+      "status": "knownFail:R11"
+    },
+    {
+      "id": "fac-empty",
+      "spec": "X.25 5.2.2.4: facility field may be absent",
+      "hex": "",
+      "expect": { "packetCalled": 128, "packetCalling": 128, "windowCalled": 2, "windowCalling": 2, "passThroughHex": "" },
+      "status": "pass"
+    }
+  ],
+
+  "facilityEncode": [
+    {
+      "id": "enc-128-128-2-2",
+      "spec": "X.25 7.3.1.1, 7.3.1.2",
+      "params": { "windowCalled": 2, "windowCalling": 2, "packetCalled": 128, "packetCalling": 128 },
+      "hex": "42 07 07 43 02 02",
+      "status": "pass"
+    },
+    {
+      "id": "enc-1024-256-7-3",
+      "spec": "X.25 7.3.1.1: first octet from called, second from calling",
+      "params": { "windowCalled": 7, "windowCalling": 3, "packetCalled": 1024, "packetCalling": 256 },
+      "hex": "42 0A 08 43 07 03",
+      "status": "pass"
+    },
+    {
+      "id": "enc-window-zero-refused",
+      "spec": "X.25 7.3.1.2: zero not allowed",
+      "params": { "windowCalled": 0, "windowCalling": 2, "packetCalled": 128, "packetCalling": 128 },
+      "expect": { "invalid": true },
+      "status": "pass",
+      "note": "the encoder already refuses zero; the reader accepts either an exception or a null/empty result as 'invalid'"
+    }
+  ],
+
+  "addresses": [
+    {
+      "id": "addr-called-only-even",
+      "spec": "X.25 5.2.2.2: bits 4-1 = called length in semi-octets, bits 8-5 = calling length; digits BCD, high digit in bits 8-5",
+      "called": "1234", "calling": "",
+      "hex": "04 12 34",
+      "status": "pass"
+    },
+    {
+      "id": "addr-both-odd-total-padded",
+      "spec": "X.25 5.2.2.2: calling starts on the semi-octet after called; odd total -> a zero semi-octet is inserted after the calling address",
+      "called": "123", "calling": "45",
+      "hex": "23 12 34 50",
+      "status": "pass"
+    },
+    {
+      "id": "addr-none",
+      "spec": "X.25 5.2.2.2: both lengths zero",
+      "called": "", "calling": "",
+      "hex": "00",
+      "status": "pass"
+    },
+    {
+      "id": "addr-15-digits-max",
+      "spec": "X.25 5.2.2.2: the length field is four bits, so 15 digits is the maximum in the non-TOA/NPI format",
+      "called": "123456789012345", "calling": "",
+      "hex": "0F 12 34 56 78 90 12 34 50",
+      "status": "pass"
+    },
+    {
+      "id": "addr-16-digits-rejected",
+      "spec": "X.25 5.2.2.2: 16 semi-octets cannot be expressed in a four-bit length field",
+      "called": "1234567890123456", "calling": "",
+      "expect": { "invalid": true },
+      "status": "knownFail:R10",
+      "note": "today the length is masked with 0x0F and becomes 0 while all 16 digits are still written (audit F-01-07 twin, bounded)"
+    },
+    {
+      "id": "addr-non-digit-rejected",
+      "spec": "X.25 5.2.2.2: addresses are decimal digits coded in BCD",
+      "called": "12A4", "calling": "",
+      "expect": { "invalid": true },
+      "status": "knownFail:R10",
+      "note": "today 'A' - '0' = 17 is written as a nibble"
+    }
+  ],
+
+  "packets": [
+    {
+      "id": "pkt-call-request-basic",
+      "spec": "X.25 5.2.2 Figure 5-x: GFI 0001 + LCGN, LCN, PTI 00001011, address block, facility length, facilities, CUD",
+      "build": { "type": "CallRequest", "lcn": 1, "called": "1234", "calling": "5678" },
+      "hex": "10 01 0B 44 12 34 56 78 00",
+      "parse": { "type": "CallRequest", "lcn": 1, "called": "1234", "calling": "5678", "facilitiesHex": "", "cudHex": "" },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-call-request-facilities-and-cud",
+      "spec": "X.25 5.2.2.3-5.2.2.5",
+      "build": { "type": "CallRequest", "lcn": 258, "called": "12", "calling": "", "facilitiesHex": "42 07 07 43 07 07", "cudHex": "01 00 00 00" },
+      "hex": "11 02 0B 02 12 06 42 07 07 43 07 07 01 00 00 00",
+      "parse": { "type": "CallRequest", "lcn": 258, "called": "12", "calling": "", "facilitiesHex": "42 07 07 43 07 07", "cudHex": "01 00 00 00" },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-call-accepted-with-facilities",
+      "spec": "X.25 5.2.3: PTI 00001111; address block then facility length and facilities",
+      "build": { "type": "CallAccepted", "lcn": 1, "facilitiesHex": "42 07 07 43 07 07" },
+      "hex": "10 01 0F 00 06 42 07 07 43 07 07",
+      "parse": { "type": "CallAccepted", "lcn": 1, "facilitiesHex": "42 07 07 43 07 07" },
+      "status": "knownFail:R9",
+      "note": "X.25 5.2.3.1.2: 'The use of the called and calling DTE address length fields in call accepted packets is only mandatory when the called DTE address field, the calling DTE address field or the facility length field is present.' Today the C# builder omits that octet (writes 10 01 0F 06 ...) so the facility length lands where the address lengths belong. The C emulator's x25_accept (src/x25/x25.c) writes the address block before the facility length, as the spec requires."
+    },
+    {
+      "id": "pkt-clear-request",
+      "spec": "X.25 5.2.4: PTI 00010011, clearing cause, diagnostic",
+      "build": { "type": "ClearRequest", "lcn": 1, "cause": 0, "diag": 0 },
+      "hex": "10 01 13 00 00",
+      "parse": { "type": "ClearRequest", "lcn": 1, "cause": 0, "diag": 0 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-clear-request-not-obtainable",
+      "spec": "X.25 Table 5-7: 'Not obtainable' 00001101",
+      "build": { "type": "ClearRequest", "lcn": 4095, "cause": 13, "diag": 67 },
+      "hex": "1F FF 13 0D 43",
+      "parse": { "type": "ClearRequest", "lcn": 4095, "cause": 13, "diag": 67 },
+      "status": "knownFail:R18",
+      "note": "X.25 5.1.2: the GFI is bits 8-5, so the logical channel group number is bits 4-1 (four bits, 0..15) and LCN runs 0..4095. The C# builder and parser mask the group with 0x07 (X25PacketBuilder.GFI.LCG_MASK), so LCN 4095 is built as 17 FF (LCN 2047) and 1F FF parses back as 2047. Every LCN from 2048 up is corrupted in both directions."
+    },
+    {
+      "id": "pkt-clear-confirmation",
+      "spec": "X.25 5.2.5: PTI 00010111",
+      "build": { "type": "ClearConfirmation", "lcn": 1 },
+      "hex": "10 01 17",
+      "parse": { "type": "ClearConfirmation", "lcn": 1 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-data-ps3-pr5-m1",
+      "spec": "X.25 5.3.1: octet 3 = P(R) bits 8-6, M bit 5, P(S) bits 4-2, bit 1 = 0",
+      "build": { "type": "Data", "lcn": 1, "ps": 3, "pr": 5, "m": true, "dataHex": "AA BB" },
+      "hex": "10 01 B6 AA BB",
+      "parse": { "type": "Data", "lcn": 1, "ps": 3, "pr": 5, "m": true, "q": false, "d": false, "dataHex": "AA BB" },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-data-q-and-d",
+      "spec": "X.25 5.1.1: GFI bit 8 = Q, bit 7 = D",
+      "build": { "type": "Data", "lcn": 1, "ps": 0, "pr": 0, "q": true, "d": true, "dataHex": "00" },
+      "hex": "D0 01 00 00",
+      "parse": { "type": "Data", "lcn": 1, "ps": 0, "pr": 0, "m": false, "q": true, "d": true, "dataHex": "00" },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-rr-pr5",
+      "spec": "X.25 5.4.1.1: P(R) bits 8-6, PTI xxx00001",
+      "build": { "type": "RR", "lcn": 1, "pr": 5 },
+      "hex": "10 01 A1",
+      "parse": { "type": "RR", "lcn": 1, "pr": 5 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-rnr-pr7",
+      "spec": "X.25 5.4.1.2: PTI xxx00101",
+      "build": { "type": "RNR", "lcn": 1, "pr": 7 },
+      "hex": "10 01 E5",
+      "parse": { "type": "RNR", "lcn": 1, "pr": 7 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-rej-pr2",
+      "spec": "X.25 5.4.1.3: PTI xxx01001",
+      "build": { "type": "REJ", "lcn": 1, "pr": 2 },
+      "hex": "10 01 49",
+      "parse": { "type": "REJ", "lcn": 1, "pr": 2 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-reset-request-local-procedure-error",
+      "spec": "X.25 5.4.3, Table 5-8: 'Local procedure error' 00000101; Annex E Table E.1 diag 1 = invalid P(S)",
+      "build": { "type": "ResetRequest", "lcn": 1, "cause": 5, "diag": 1 },
+      "hex": "10 01 1B 05 01",
+      "parse": { "type": "ResetRequest", "lcn": 1, "cause": 5, "diag": 1 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-reset-confirmation",
+      "spec": "X.25 5.4.4: PTI 00011111",
+      "build": { "type": "ResetConfirmation", "lcn": 1 },
+      "hex": "10 01 1F",
+      "parse": { "type": "ResetConfirmation", "lcn": 1 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-restart-request",
+      "spec": "X.25 5.5.1: LCGN and LCN zero, PTI 11111011, restarting cause, diagnostic",
+      "build": { "type": "RestartRequest", "cause": 7, "diag": 0 },
+      "hex": "10 00 FB 07 00",
+      "parse": { "type": "RestartRequest", "lcn": 0, "cause": 7, "diag": 0 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-restart-confirmation",
+      "spec": "X.25 5.5.2: PTI 11111111",
+      "build": { "type": "RestartConfirmation" },
+      "hex": "10 00 FF",
+      "parse": { "type": "RestartConfirmation", "lcn": 0 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-interrupt-one-octet",
+      "spec": "X.25 5.4.2.1: PTI 00100011, 1 to 32 octets of user data",
+      "build": { "type": "Interrupt", "lcn": 1, "dataHex": "01" },
+      "hex": "10 01 23 01",
+      "parse": { "type": "Interrupt", "lcn": 1, "dataHex": "01" },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-interrupt-confirmation",
+      "spec": "X.25 5.4.2.2: PTI 00100111",
+      "build": { "type": "InterruptConfirmation", "lcn": 1 },
+      "hex": "10 01 27",
+      "parse": { "type": "InterruptConfirmation", "lcn": 1 },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-diagnostic",
+      "spec": "X.25 5.6: LCGN/LCN zero, PTI 11110001, diagnostic code, diagnostic explanation",
+      "build": { "type": "Diagnostic", "diag": 36, "dataHex": "10 05 00" },
+      "hex": "10 00 F1 24 10 05 00",
+      "parse": { "type": "Diagnostic", "lcn": 0, "diag": 36, "dataHex": "10 05 00" },
+      "status": "pass"
+    }
+  ],
+
+  "malformed": [
+    {
+      "id": "mal-two-octets",
+      "spec": "X.25 5.1: every packet has at least three octets",
+      "hex": "10 01",
+      "expect": { "rejected": true },
+      "status": "pass",
+      "note": "the parser must not throw; it returns an unknown/invalid result or the engine ignores the packet"
+    },
+    {
+      "id": "mal-call-request-address-lengths-exceed-body",
+      "spec": "X.25 5.2.2.2: address lengths of 15 + 15 need 15 octets that are not present",
+      "hex": "10 01 0B FF 12",
+      "expect": { "rejected": true },
+      "status": "knownFail:R10",
+      "note": "today the parser returns a CallRequest with whatever digits it could read; nothing rejects the packet"
+    },
+    {
+      "id": "mal-call-request-facility-length-exceeds-body",
+      "spec": "X.25 5.2.2.3: facility length 50 with 3 octets following",
+      "hex": "10 01 0B 00 32 42 07 07",
+      "expect": { "rejected": true },
+      "status": "knownFail:R10",
+      "note": "today the parser hands back what it can and the engine treats the leftover as CUD (audit F-01-05 twin)"
+    },
+    {
+      "id": "mal-clear-request-no-cause",
+      "spec": "X.25 5.2.4: clearing cause field is mandatory",
+      "hex": "10 01 13",
+      "expect": { "rejected": true },
+      "status": "knownFail:R17"
+    }
+  ]
+}
