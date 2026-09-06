@@ -35,6 +35,72 @@ namespace RetroIO.Protocols.X25.PacketLayer
             : base(sink)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _config.Validate();
+        }
+
+        /// <summary>
+        /// Declares a permanent virtual circuit on a logical channel outside the virtual call range.
+        /// </summary>
+        /// <param name="lci">
+        /// The channel. X.25 Annex A: permanent virtual circuits take the lowest channels, below every
+        /// virtual call range; here it must simply not be 0 and not inside the configured call range.
+        /// </param>
+        /// <param name="windowSize">
+        /// Window in both directions (1..7).
+        /// </param>
+        /// <param name="packetSize">
+        /// Maximum data field in both directions (a power of two, 16..4096).
+        /// </param>
+        /// <returns>
+        /// The circuit, in flow control ready state (d1) with zeroed sequence numbers.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// The channel is 0, lies in the virtual call range, or the sizes are outside the clauses.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// A circuit already exists on the channel.
+        /// </exception>
+        /// <remarks>
+        /// A permanent virtual circuit is never set up or cleared (X.25 4.3, 4.4.3): it exists from
+        /// configuration, it is reset to recover, and a restart resets it (4.1.1). Until 2026-09-06
+        /// the engine had the PVC kind but no way to create one.
+        /// </remarks>
+        public X25Vc AddPvc(ushort lci, byte windowSize, int packetSize)
+        {
+            int first = _config.LciBase == 0 ? 1 : _config.LciBase;
+            int last = _config.LciBase + _config.LciCount - 1;
+            if (lci == 0 || (lci >= first && lci <= last))
+            {
+                throw new ArgumentOutOfRangeException(nameof(lci), lci,
+                    "a permanent virtual circuit must not use channel 0 or a channel in the virtual call range " + first + ".." + last);
+            }
+
+            if (windowSize < 1 || windowSize > X25Facilities.MaxWindowModulo8)
+            {
+                throw new ArgumentOutOfRangeException(nameof(windowSize), windowSize, "X.25 7.3.1.2: the window is 1..7 with modulo 8");
+            }
+
+            bool powerOfTwo = packetSize >= 16 && packetSize <= 4096 && (packetSize & (packetSize - 1)) == 0;
+            if (!powerOfTwo)
+            {
+                throw new ArgumentOutOfRangeException(nameof(packetSize), packetSize, "X.25 7.3.1.1: the packet size is a power of two from 16 to 4096");
+            }
+
+            if (_vcs.ContainsKey(lci))
+            {
+                throw new InvalidOperationException("a circuit already exists on logical channel " + lci);
+            }
+
+            X25Vc vc = new X25Vc(lci, X25VcKind.Pvc)
+            {
+                State = X25VcState.PvcReady,
+                WindowSizeIn = windowSize,
+                WindowSizeOut = windowSize,
+                PacketSizeIn = packetSize,
+                PacketSizeOut = packetSize,
+            };
+            _vcs[lci] = vc;
+            return vc;
         }
 
         /// <summary>
@@ -265,6 +331,15 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
+            // X.25 4.3: a permanent virtual circuit has no clearing procedure; it is reset instead.
+            // The C emulator accepted this and left the PVC permanently dead (audit F-02-14).
+            if (vc.Kind == X25VcKind.Pvc)
+            {
+                return false;
+            }
+
+            cause = ApplyCauseRule(cause);
+
             // The state change stands even when the packet is refused: the application has decided
             // the call is over, and the clear-request timer is what carries that decision to the
             // peer if this attempt did not (retransmission arrives with the T23 work, plan B5).
@@ -295,6 +370,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 return false;
             }
+
+            cause = ApplyCauseRule(cause);
 
             if (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady)
             {
@@ -350,6 +427,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </param>
         public bool Restart(byte cause = 0, byte diagnostic = 0)
         {
+            cause = ApplyCauseRule(cause);
             // The local circuits are freed whether or not the packet leaves: a restart is the
             // application saying "forget everything", and that must hold locally. Telling the peer
             // is what the T20 retransmission will guarantee (plan B5); until then a refused Restart
@@ -781,8 +859,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             ClearTimeouts++;
-            vc.State = X25VcState.Ready;
-            ReportCleared(vc, vc.Cause, X25Diagnostic.TimeExpiredClear);
+            byte cause = vc.Cause;
+            ToReady(vc);
+            ReportCleared(vc, cause, X25Diagnostic.TimeExpiredClear);
         }
 
         /// <summary>
@@ -800,6 +879,26 @@ namespace RetroIO.Protocols.X25.PacketLayer
         }
 
         /// <summary>
+        /// Returns a virtual call's channel to p1 with nothing left over from the call: addresses,
+        /// user data, facility flags, timers, retries, sequence numbers and busy flags are all reset,
+        /// so the next call on the channel starts clean (the C emulator carried a previous call's
+        /// facilities and user data into the next one, audit F-01-06 / F-02-09).
+        /// </summary>
+        private static void ToReady(X25Vc vc)
+        {
+            vc.State = X25VcState.Ready;
+            vc.TimerExpiryMs = 0;
+            vc.Retries = 0;
+            vc.CallRequestHeld = false;
+            vc.OutOfOrder = false;
+            vc.PeerSentFacilities = false;
+            vc.CalledAddress = string.Empty;
+            vc.CallingAddress = string.Empty;
+            vc.CallUserData = Array.Empty<byte>();
+            vc.ResetFlow();
+        }
+
+        /// <summary>
         /// Tells the application that a call is over - once per call, however many steps the ending
         /// took.
         /// </summary>
@@ -812,6 +911,23 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             vc.ClearReported = true;
             RaiseCleared(vc.Lci, cause, diagnostic);
+        }
+
+        /// <summary>
+        /// X.25 Tables 5-7, 5-8 and 5-9, note a: a DTE's clearing, resetting or restarting cause is
+        /// 00000000 ("DTE originated"), or any value with bit 8 set when the network allows it. The
+        /// other codes (out of order, local procedure error, ...) are the DCE's vocabulary; a DTE that
+        /// sends them is lying about who it is. An application's DCE-style cause is therefore turned
+        /// into 0 here; the diagnostic still carries the reason. A DCE sends what it is given.
+        /// </summary>
+        private byte ApplyCauseRule(byte cause)
+        {
+            if (_config.IsDte && cause != 0 && (cause & 0x80) == 0)
+            {
+                return X25Cause.DteOriginated;
+            }
+
+            return cause;
         }
 
         /// <summary>
@@ -858,7 +974,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 {
                     if (!SendCallRequest(vc))
                     {
-                        vc.State = X25VcState.Ready;
+                        ToReady(vc);
                         ReportCleared(vc, ProcedureErrorCause(), X25Diagnostic.None);
                     }
                 }
@@ -875,8 +991,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 if (_vcs.TryGetValue(keys[i], out X25Vc? vc) && vc.CallRequestHeld)
                 {
-                    vc.CallRequestHeld = false;
-                    vc.State = X25VcState.Ready;
+                    ToReady(vc);
                     ReportCleared(vc, ProcedureErrorCause(), diagnostic);
                 }
             }
@@ -905,8 +1020,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     return;
                 }
 
-                vc.State = X25VcState.Ready;
-                vc.TimerExpiryMs = 0;
+                ToReady(vc);
                 ReportCleared(vc, X25Cause.LocalProcedureError, X25Diagnostic.CallCollision);
             }
 
@@ -1127,15 +1241,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // own call had been cleared as though by the peer.
             if (vc.State == X25VcState.ClearRequest)
             {
-                vc.State = X25VcState.Ready;
-                vc.TimerExpiryMs = 0;
+                ToReady(vc);
                 ReportCleared(vc, vc.Cause, vc.Diagnostic);
                 return;
             }
 
             Send(X25PacketBuilder.CreateClearConfirmation(lci));
-            vc.State = X25VcState.Ready;
-            vc.TimerExpiryMs = 0;
+            ToReady(vc);
             vc.CallRequestHeld = false;
             ReportCleared(vc, info.ClearingCause, info.DiagnosticCode);
         }
@@ -1144,8 +1256,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
         {
             if (_vcs.TryGetValue(lci, out X25Vc? vc) && vc.State == X25VcState.ClearRequest)
             {
-                vc.State = X25VcState.Ready;
-                vc.TimerExpiryMs = 0;
+                ToReady(vc);
 
                 // Cleared means "this channel is now free" whichever side started the clearing; an
                 // application that asked to clear learns here that the peer has confirmed it.
@@ -1364,9 +1475,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     }
 
                     bool wasLive = vc.State != X25VcState.Ready;
-                    vc.State = X25VcState.Ready;
-                    vc.TimerExpiryMs = 0;
-                    vc.ResetFlow();
+                    ToReady(vc);
                     if (wasLive)
                     {
                         ReportCleared(vc, cause, diagnostic);

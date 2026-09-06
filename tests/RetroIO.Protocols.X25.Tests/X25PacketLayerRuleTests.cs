@@ -914,8 +914,57 @@ namespace RetroIO.Protocols.X25.Tests
         [Test]
         public void R13_ClearCallOnAnUnknownLci_SendsNothing()
         {
-            _layer.ClearCall(9);
+            Assert.That(_layer.ClearCall(9), Is.False);
             Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void R13_APvcCarriesDataFromTheStartAndCannotBeCleared()
+        {
+            // Phase B9 (2026-09-06): AddPvc exists. X.25 4.3: a permanent virtual circuit is in flow
+            // control ready state from the start and has no clearing procedure.
+            RecordingSink sink = new RecordingSink();
+            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 16, LciCount = 16 });
+            X25Vc pvc = layer.AddPvc(1, windowSize: 2, packetSize: 128);
+
+            Assert.That(pvc.State, Is.EqualTo(X25VcState.PvcReady));
+            Assert.That(layer.SendData(1, new byte[] { 1 }), Is.True, "data flows without any call set-up");
+            Assert.That(sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Data));
+
+            Assert.That(layer.ClearCall(1), Is.False, "a PVC cannot be cleared (the C emulator left it dead, F-02-14)");
+            Assert.That(sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0));
+            Assert.That(pvc.State, Is.EqualTo(X25VcState.PvcReady));
+
+            Assert.That(layer.ResetCall(1), Is.True, "a PVC is reset instead");
+            layer.ProcessPacket(X25PacketBuilder.CreateResetConfirmation(1));
+            Assert.That(pvc.State, Is.EqualTo(X25VcState.PvcReady), "and comes back to d1, not to a call state");
+        }
+
+        [Test]
+        public void R13_APvcCannotSitInTheVirtualCallRangeOrOnChannelZero()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => _layer.AddPvc(0, 2, 128));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _layer.AddPvc(5, 2, 128), "5 is inside 1..16");
+            Assert.Throws<ArgumentOutOfRangeException>(() => _layer.AddPvc(100, 0, 128));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _layer.AddPvc(100, 2, 100));
+        }
+
+        [Test]
+        public void R13_ARestartResetsAPvcAndTellsTheApplication()
+        {
+            RecordingSink sink = new RecordingSink();
+            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 16, LciCount = 16 });
+            layer.AddPvc(1, 2, 128);
+            layer.SendData(1, new byte[] { 1 });
+            int resets = 0;
+            layer.Reset += (l, c, cause, diag) => resets++;
+
+            layer.ProcessPacket(X25PacketBuilder.CreateRestartRequest(0, 0));
+
+            // X.25 4.1.1: a restart resets every permanent virtual circuit.
+            Assert.That(resets, Is.EqualTo(1));
+            Assert.That(layer.Circuits[1].State, Is.EqualTo(X25VcState.PvcReady));
+            Assert.That(layer.Circuits[1].SendSeq, Is.EqualTo(0));
         }
 
         // ================================================================== R14  send results
@@ -1275,26 +1324,44 @@ namespace RetroIO.Protocols.X25.Tests
         // X.25 5.1.2 / 5.1.3: the logical channel number is twelve bits, 0..4095.
 
         [Test]
-        public void R18_ConfiguredRangeRunningPast4095_HandsOutImpossibleLcis_WHICH_IS_WRONG()
+        public void R18_AConfiguredRangeRunningPast4095_IsRefusedAtConstruction()
         {
+            // FIXED 2026-09-06 (Phase B9); it used to hand out channels 4096..4105. X.25 5.1.3: twelve
+            // bits, 0..4095.
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new X25Layer(new RecordingSink(), new X25Config { LocalAddress = LocalAddress, LciBase = 4090, LciCount = 16 }));
+        }
+
+        [Test]
+        public void R18_Modulo128_IsRefusedUntilItExists()
+        {
+            // The C emulator accepts modulo 128 in its configuration and runs at 8 (audit F-02-20).
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new X25Layer(new RecordingSink(), new X25Config { LocalAddress = LocalAddress, Modulo = 128 }));
+        }
+
+        [Test]
+        public void R18_ImpossibleDefaults_AreRefusedAtConstruction()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new X25Layer(new RecordingSink(), new X25Config { LocalAddress = LocalAddress, DefaultWindowSize = 0 }));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new X25Layer(new RecordingSink(), new X25Config { LocalAddress = LocalAddress, DefaultWindowSize = 8 }));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new X25Layer(new RecordingSink(), new X25Config { LocalAddress = LocalAddress, DefaultPacketSize = 100 }));
+        }
+
+        [Test]
+        public void R18_AModulo128DataPacket_IsDiagnostic40()
+        {
+            // Table C.1: invalid GFI. This engine runs modulo 8 (SS bits 01); a packet with SS = 10 is
+            // not something it can sequence.
             RecordingSink sink = new RecordingSink();
-            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 4090, LciCount = 16 });
+            X25Layer dce = NewDce(sink);
+            dce.ProcessPacket(new byte[] { 0x20, 0x01, 0x00, 0x00, 0xAA });
 
-            ushort highest = 0;
-            for (int i = 0; i < 16; i++)
-            {
-                ushort lci = layer.PlaceCall(RemoteAddress);
-                if (lci > highest)
-                {
-                    highest = lci;
-                }
-            }
-
-            // MEASURED 2026-09-06: X25Config is not validated and AllocateLci walks to base+count.
-            // (And the builder's 3-bit group mask then turns every one of these into a different
-            // LCN on the wire - vector pkt-clear-request-not-obtainable.)
-            Assert.That(highest, Is.GreaterThan((ushort)4095),
-                "behaviour changed: rejecting a range past 4095 at init is the FIX for R18 - rewrite this test");
+            Assert.That(sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Diagnostic));
+            Assert.That(sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.InvalidGfi));
         }
 
         // ================================================================== R19  DTE cause byte
@@ -1304,15 +1371,39 @@ namespace RetroIO.Protocols.X25.Tests
         // 00001001 "Out of order" must never be sent by a DTE.
 
         [Test]
-        public void R19_DteClearCallWithADceStyleCause_SendsItUnchanged_WHICH_IS_WRONG()
+        public void R19_DteClearCallWithADceStyleCause_SendsCauseZero()
         {
             ushort lci = ConnectOutgoing();
 
-            _layer.ClearCall(lci, cause: 0x09, diagnostic: 0);
+            _layer.ClearCall(lci, cause: 0x09, diagnostic: 0x42);
 
+            // FIXED 2026-09-06 (Phase B9); 0x09 "out of order" used to go out unchanged. Table 5-7
+            // note a: a DTE's clearing cause is 0, or a value with bit 8 set; the diagnostic still
+            // carries the reason.
             Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
-            Assert.That(_sink.LastInfo.ClearingCause, Is.EqualTo(0x09),
-                "behaviour changed: forcing a DTE cause to 0x00 is the FIX for R19 - rewrite this test");
+            Assert.That(_sink.LastInfo.ClearingCause, Is.EqualTo(0x00));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(0x42));
+        }
+
+        [Test]
+        public void R19_DteCauseWithBit8Set_IsSentAsGiven()
+        {
+            ushort lci = ConnectOutgoing();
+            _layer.ClearCall(lci, cause: 0x89, diagnostic: 0);
+            Assert.That(_sink.LastInfo.ClearingCause, Is.EqualTo(0x89));
+        }
+
+        [Test]
+        public void R19_DceSendsTheCauseItIsGiven()
+        {
+            RecordingSink sink = new RecordingSink();
+            X25Layer dce = NewDce(sink);
+            dce.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress));
+            dce.AcceptCall(5);
+
+            dce.ClearCall(5, cause: X25Cause.OutOfOrder, diagnostic: 0);
+
+            Assert.That(sink.LastInfo.ClearingCause, Is.EqualTo(X25Cause.OutOfOrder));
         }
     }
 }
