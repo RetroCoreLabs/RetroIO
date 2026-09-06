@@ -133,28 +133,30 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void R1_DataWithAGapInPS_IsDeliveredAndNoResetIsSent_WHICH_IS_WRONG()
+        public void R1_DataWithAGapInPS_IsNotDeliveredAndTheCircuitIsReset()
         {
             ushort lci = ConnectOutgoing();
             int delivered = 0;
             _layer.DataReceived += (l, c, d, n, q, m, db) => delivered++;
 
-            // Expected P(S) is 0; the peer sends 3. X.25 4.4.1.3: a gap is a local procedure
-            // error and the circuit must be reset with diagnostic 1.
+            // Expected P(S) is 0; the peer sends 3.
             _layer.ProcessPacket(Data(lci, ps: 3, pr: 0));
 
-            // MEASURED 2026-09-06: OnData assigns RecvSeq = P(S) + 1 without comparing P(S) to
-            // anything, delivers the packet, and acknowledges it. No reset. This is WORSE than the
-            // C emulator, which does check P(S).
-            Assert.That(delivered, Is.EqualTo(1), "behaviour changed: a gap in P(S) used to be delivered");
-            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0),
-                "behaviour changed: if a Reset Request is now sent that is the FIX for R1 - rewrite this test");
-            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.RR));
-            Assert.That(_sink.LastInfo.PR, Is.EqualTo(4), "it even acknowledges up to the gap");
+            // FIXED 2026-09-06 (Phase B3), test rewritten deliberately. It used to assert that the
+            // packet was delivered and acknowledged with P(R)=4 and no reset - the engine took
+            // whatever P(S) arrived. X.25 4.4.1.3: a gap is a local procedure error; the circuit is
+            // reset with diagnostic 1 (Annex E). As a DTE the cause is 0 (Table 5-8 note a).
+            Assert.That(delivered, Is.EqualTo(0), "a packet out of sequence must not reach the application");
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+            X25PacketInfo reset = _sink.LastInfo;
+            Assert.That(reset.ResetCause, Is.EqualTo(X25Cause.DteOriginated));
+            Assert.That(reset.DiagnosticCode, Is.EqualTo(X25Diagnostic.InvalidPS));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest));
+            Assert.That(_layer.ProcedureErrors, Is.EqualTo(1));
         }
 
         [Test]
-        public void R1_DuplicatePS_IsDeliveredTwice_WHICH_IS_WRONG()
+        public void R1_DuplicatePS_IsNotDeliveredAgainAndTheCircuitIsReset()
         {
             ushort lci = ConnectOutgoing();
             int delivered = 0;
@@ -163,9 +165,35 @@ namespace RetroIO.Protocols.X25.Tests
             _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));
             _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));   // duplicate
 
-            // X.25 4.4.1.3: a duplicate is a local procedure error (reset, diag 1).
-            Assert.That(delivered, Is.EqualTo(2), "behaviour changed: a duplicate P(S) used to be delivered again");
-            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0));
+            // FIXED 2026-09-06 (Phase B3); used to assert two deliveries and no reset.
+            Assert.That(delivered, Is.EqualTo(1));
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.InvalidPS));
+        }
+
+        [Test]
+        public void R1_ResetCompletes_AndTheApplicationIsToldOnce()
+        {
+            ushort lci = ConnectOutgoing();
+            int resets = 0;
+            byte seenDiag = 0xFF;
+            _layer.Reset += (l, c, cause, diag) => { resets++; seenDiag = diag; };
+
+            _layer.ProcessPacket(Data(lci, ps: 3, pr: 0));
+            Assert.That(resets, Is.EqualTo(0), "not told until the reset completes");
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateResetConfirmation(lci));
+
+            Assert.That(resets, Is.EqualTo(1));
+            Assert.That(seenDiag, Is.EqualTo(X25Diagnostic.InvalidPS));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            Assert.That(_layer.Circuits[lci].RecvSeq, Is.EqualTo(0), "the window is zeroed in both directions (4.4.3)");
+            Assert.That(_layer.Circuits[lci].SendSeq, Is.EqualTo(0));
+
+            // And the circuit carries data again, from P(S)=0.
+            _layer.ProcessPacket(Data(lci, ps: 0, pr: 0));
+            Assert.That(_sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.RR));
+            Assert.That(_sink.LastInfo.PR, Is.EqualTo(1));
         }
 
         // ================================================================== R2  P(R) validation
@@ -188,7 +216,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void R2_RRWithPROutsideTheWindow_IsTakenAsAnAckAndBlocksTheCircuit_WHICH_IS_WRONG()
+        public void R2_RRWithPROutsideTheWindow_ResetsTheCircuitWithDiagnostic2()
         {
             ushort lci = ConnectOutgoing();
             Assert.That(_layer.SendData(lci, new byte[] { 1 }), Is.True);   // P(S) is now 1
@@ -196,13 +224,55 @@ namespace RetroIO.Protocols.X25.Tests
             // Only P(R) 0 or 1 is valid here. The peer sends 5.
             _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 5));
 
-            // MEASURED 2026-09-06: OnFlowControl stores AckedSeq = 5 unchecked. The window
-            // arithmetic (SendSeq - AckedSeq) & 7 = (1 - 5) & 7 = 4 is now >= the window of 2,
-            // so a perfectly healthy circuit can never send again. X.25 says: reset, diag 2.
-            Assert.That(_layer.Circuits[lci].AckedSeq, Is.EqualTo(5), "behaviour changed: invalid P(R) used to be accepted");
-            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0),
-                "behaviour changed: a Reset Request here is the FIX for R2 - rewrite this test");
-            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.False, "the circuit is now stuck");
+            // FIXED 2026-09-06 (Phase B3); used to assert AckedSeq == 5 and a circuit that could
+            // never send again because (SendSeq - AckedSeq) & 7 looked like a full window.
+            Assert.That(_layer.Circuits[lci].AckedSeq, Is.EqualTo(0), "an invalid P(R) must not be applied");
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.InvalidPR));
+            Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.ResetRequest));
+        }
+
+        [Test]
+        public void R2_PROnTheWindowEdges_IsValid()
+        {
+            ushort lci = ConnectOutgoing();
+            Assert.That(_layer.SendData(lci, new byte[] { 1 }), Is.True);
+            Assert.That(_layer.SendData(lci, new byte[] { 2 }), Is.True);   // P(S) = 2, acked 0
+
+            // P(R) equal to the last acknowledged value acknowledges nothing new and is valid.
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 0));
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0));
+
+            // P(R) equal to the next P(S) to send acknowledges everything and is valid.
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 2));
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0));
+            Assert.That(_layer.Circuits[lci].AckedSeq, Is.EqualTo(2));
+
+            // One past that acknowledges a packet never sent.
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 3));
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void R2_PRArithmeticWrapsAtModulo8()
+        {
+            ushort lci = ConnectOutgoing();   // window 2
+            for (int round = 0; round < 6; round++)
+            {
+                Assert.That(_layer.SendData(lci, new byte[] { (byte)round }), Is.True);
+                byte acked = (byte)((round + 1) & 0x07);
+                _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: acked));
+            }
+
+            // Sent P(S) 0..5, all acknowledged; SendSeq is 6, AckedSeq is 6.
+            Assert.That(_layer.SendData(lci, new byte[] { 6 }), Is.True);
+            Assert.That(_layer.SendData(lci, new byte[] { 7 }), Is.True);   // SendSeq wraps to 0
+            Assert.That(_layer.Circuits[lci].SendSeq, Is.EqualTo(0));
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRR(lci, pr: 0));   // acknowledges 6 and 7 across the wrap
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0));
+            Assert.That(_layer.Circuits[lci].AckedSeq, Is.EqualTo(0));
+            Assert.That(_layer.SendData(lci, new byte[] { 8 }), Is.True, "window open again after the wrap");
         }
 
         [Test]
@@ -233,17 +303,33 @@ namespace RetroIO.Protocols.X25.Tests
         // d1/d2/d3 of data transfer (p4). In p2 (DTE waiting) they are a procedure error.
 
         [Test]
-        public void R3_RNRInCallRequestState_IsRecordedOnTheCircuit_WHICH_IS_WRONG()
+        public void R3_RNRInCallRequestState_IsDroppedAndCounted()
         {
             ushort lci = _layer.PlaceCall(RemoteAddress);   // state p2, waiting for Call Connected
             _sink.Sent.Clear();
 
             _layer.ProcessPacket(X25PacketBuilder.CreateRNR(lci, pr: 0));
 
-            // MEASURED 2026-09-06: OnFlowControl has no state check; PeerBusy is set on a circuit
-            // that is not even connected, and nothing is sent back.
-            Assert.That(_layer.Circuits[lci].PeerBusy, Is.True, "behaviour changed: RNR outside data transfer used to be applied");
-            Assert.That(_sink.Sent.Count, Is.EqualTo(0));
+            // FIXED 2026-09-06 (Phase B3); used to assert PeerBusy == true on a circuit that was not
+            // even connected. The Table D-1 reaction (Diagnostic / Clear, "packet type invalid for
+            // state p2") is still to come with R17; until then the packet is dropped and counted.
+            Assert.That(_layer.Circuits[lci].PeerBusy, Is.False);
+            Assert.That(_layer.UnexpectedPackets, Is.EqualTo(1));
+            Assert.That(_sink.Sent.Count, Is.EqualTo(0), "no reaction yet - that is R17");
+        }
+
+        [Test]
+        public void R3_REJInDataTransfer_ResetsWithRejectNotSubscribed()
+        {
+            // Decided 2026-09-06 (audit D9, option A): this engine has no packet retransmission
+            // facility, so a received REJ is a local procedure error, diagnostic 21 (Annex E,
+            // "Reject not subscribed to"), and the engine never sends REJ itself.
+            ushort lci = ConnectOutgoing();
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateREJ(lci, pr: 0));
+
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(1));
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.RejectNotSubscribed));
         }
 
         // ================================================================== R4  reset collision

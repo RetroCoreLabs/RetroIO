@@ -38,6 +38,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public IReadOnlyDictionary<ushort, X25Vc> Circuits => _vcs;
 
         /// <summary>
+        /// How many times the peer broke a rule badly enough to reset a circuit (invalid P(S) or
+        /// P(R), a REJ we do not support, ...).
+        /// </summary>
+        public long ProcedureErrors { get; private set; }
+
+        /// <summary>
+        /// How many packets arrived in a state where they mean nothing and were dropped.
+        /// </summary>
+        public long UnexpectedPackets { get; private set; }
+
+        /// <summary>
         /// Places an outgoing call and returns its logical channel, or 0 if no channel is free.
         /// </summary>
         /// <param name="calledAddress">
@@ -230,6 +241,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             // As for ClearCall: the requesting state stands and the timer carries it (plan B5).
             vc.State = X25VcState.ResetRequest;
+            vc.Cause = cause;
+            vc.Diagnostic = diagnostic;
             vc.TimerExpiryMs = Now() + _config.ResetRequestTimeoutMs;
             return Send(X25PacketBuilder.CreateResetRequest(lci, cause, diagnostic));
         }
@@ -331,6 +344,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 case X25PacketType.RNR:
                     OnFlowControl(lci, info.PR, peerBusy: true);
                     break;
+                case X25PacketType.REJ:
+                    OnReject(lci, info.PR);
+                    break;
                 default:
                     // Supervisory/other packets need no state change in this layer.
                     break;
@@ -417,8 +433,26 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
-            // The peer's P(R) acknowledges our sends; advance our receive sequence over the delivered data.
-            vc.AckedSeq = info.PR;
+            // The piggybacked P(R) must acknowledge something we actually sent (R2); a P(R) outside
+            // [last acknowledged .. next to send] is a local procedure error, diagnostic 2.
+            if (!TryAcknowledge(vc, info.PR))
+            {
+                ResetForProcedureError(vc, X25Diagnostic.InvalidPR);
+                return;
+            }
+
+            // X.25 4.4.1.3: "A received data packet containing a P(S) that is out of sequence [i.e.
+            // there is a duplicate or a gap in the P(S) numbering] ... is considered by the DCE as a
+            // local procedure error. The DCE will reset the virtual call ... The DTE should follow
+            // the same procedure." Diagnostic 1, "Invalid P(S)" (Annex E). Until 2026-09-06 this
+            // engine took whatever P(S) arrived and set RecvSeq past it - a lost packet went unnoticed
+            // and a duplicate was delivered twice.
+            if (info.PS != vc.RecvSeq)
+            {
+                ResetForProcedureError(vc, X25Diagnostic.InvalidPS);
+                return;
+            }
+
             vc.RecvSeq = (byte)((info.PS + 1) & 0x07);
 
             int header = info.Modulo128 ? 4 : 3;
@@ -482,9 +516,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
         {
             if (_vcs.TryGetValue(lci, out X25Vc? vc) && vc.State == X25VcState.ResetRequest)
             {
-                vc.State = X25VcState.DataTransfer;
+                vc.State = vc.Kind == X25VcKind.Pvc ? X25VcState.PvcReady : X25VcState.DataTransfer;
                 vc.TimerExpiryMs = 0;
                 vc.ResetFlow();
+
+                // The application learns that the circuit was reset when the reset is complete - it
+                // needs to know for a reset it asked for as much as for one the engine raised on a
+                // procedure error, because in both cases everything in flight is gone (X.25 4.4.3.1).
+                RaiseReset(lci, vc.Cause, vc.Diagnostic);
             }
         }
 
@@ -497,11 +536,103 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
         private void OnFlowControl(ushort lci, byte pr, bool peerBusy)
         {
-            if (_vcs.TryGetValue(lci, out X25Vc? vc))
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
             {
-                vc.AckedSeq = pr;
-                vc.PeerBusy = peerBusy;
+                return;
             }
+
+            // RR and RNR mean something only in the flow-control states of data transfer (X.25
+            // Annex B). Anywhere else they are dropped and counted here; the Table D-1 reaction
+            // (a Diagnostic or a Clear with "packet type invalid for state pN") arrives with the
+            // protocol-error work (plan B8, R17). Until 2026-09-06 an RNR in call-request state set
+            // PeerBusy on a circuit that was not even connected.
+            if (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady)
+            {
+                UnexpectedPackets++;
+                return;
+            }
+
+            if (!TryAcknowledge(vc, pr))
+            {
+                ResetForProcedureError(vc, X25Diagnostic.InvalidPR);
+                return;
+            }
+
+            vc.PeerBusy = peerBusy;
+        }
+
+        /// <summary>
+        /// Handles a received REJ. This engine has no packet retransmission facility (X.25 6.x,
+        /// "Packet retransmission" is an optional user facility), so a REJ is a local procedure
+        /// error with diagnostic 21, "Reject not subscribed to" (Annex E). Decided 2026-09-06 (audit
+        /// decision D9, option A): reset, never send REJ ourselves.
+        /// </summary>
+        private void OnReject(ushort lci, byte pr)
+        {
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                return;
+            }
+
+            if (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady)
+            {
+                UnexpectedPackets++;
+                return;
+            }
+
+            ResetForProcedureError(vc, X25Diagnostic.RejectNotSubscribed);
+        }
+
+        /// <summary>
+        /// Applies a received P(R) if it lies in the window, else reports it invalid.
+        /// </summary>
+        /// <remarks>
+        /// A valid P(R) acknowledges packets we have sent and not yet had acknowledged: it lies in
+        /// [AckedSeq .. SendSeq] inclusive (modulo 8). Anything else acknowledges a packet that was
+        /// never sent, and X.25 treats that as a local procedure error with diagnostic 2 ("Invalid
+        /// P(R)", Annex E; the range wording is in the packet retransmission facility clause, which
+        /// uses the same window arithmetic). Until 2026-09-06 any P(R) was stored unchecked, and one
+        /// outside the window made (SendSeq - AckedSeq) look like a full window for ever: a healthy
+        /// circuit that could never send again.
+        /// </remarks>
+        private static bool TryAcknowledge(X25Vc vc, byte pr)
+        {
+            int outstanding = (vc.SendSeq - vc.AckedSeq) & 0x07;
+            int advance = (pr - vc.AckedSeq) & 0x07;
+            if (advance > outstanding)
+            {
+                return false;
+            }
+
+            vc.AckedSeq = pr;
+            return true;
+        }
+
+        /// <summary>
+        /// Starts the reset procedure on a circuit because the peer broke a rule.
+        /// </summary>
+        /// <param name="vc">
+        /// The circuit.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The Annex E diagnostic that says which rule.
+        /// </param>
+        /// <remarks>
+        /// The resetting cause is "Local procedure error" (00000101, Table 5-8) when this engine is
+        /// the DCE. A DTE has no such cause available to it: Table 5-8 note a) allows a DTE only
+        /// 00000000 ("DTE originated") or a value with bit 8 set, so a DTE sends 0 and lets the
+        /// diagnostic carry the reason. The circuit enters d2 (reset request) and T22 is armed; the
+        /// application is told when the reset completes.
+        /// </remarks>
+        private void ResetForProcedureError(X25Vc vc, byte diagnostic)
+        {
+            byte cause = _config.IsDte ? (byte)0x00 : X25Cause.LocalProcedureError;
+            vc.State = X25VcState.ResetRequest;
+            vc.Cause = cause;
+            vc.Diagnostic = diagnostic;
+            vc.TimerExpiryMs = Now() + _config.ResetRequestTimeoutMs;
+            ProcedureErrors++;
+            Send(X25PacketBuilder.CreateResetRequest(vc.Lci, cause, diagnostic));
         }
 
         private void FreeSwitchedCircuits()
