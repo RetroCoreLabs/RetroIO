@@ -2964,11 +2964,20 @@ using RetroIO.Protocols.X25.DeleteMe;
                 var historyItem = CreateX25HistoryItem(eventArgs, $"RX from {link.Name}");
                 AddToHistory(historyItem);
 
-                // Store link context for incoming call association (consumed by OnX25IncomingCall).
+                // Store link context for incoming call association (consumed by OnEndpointIncomingCall).
                 _pendingLinkForNextCall = link.Name;
 
-                // Route to X.25 layer (its events fire synchronously during this call).
-                X25Layer.ReceiveX25Packet(packet.FullPacket, length);
+                // The link's own engine handles it, and its events fire synchronously inside this
+                // call - which is why the link name is set before and cleared after.
+                byte[] wire = packet.FullPacket;
+                if (wire.Length != length && length > 0 && length <= wire.Length)
+                {
+                    byte[] trimmed = new byte[length];
+                    Buffer.BlockCopy(wire, 0, trimmed, 0, length);
+                    wire = trimmed;
+                }
+
+                EndpointForLink(link).Receive(wire);
 
                 _pendingLinkForNextCall = null;
             }

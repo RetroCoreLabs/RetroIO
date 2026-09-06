@@ -271,6 +271,85 @@ namespace RetroIO.Protocols.X25.Layers
         }
 
         /// <summary>
+        /// Routes an incoming call that a packet-layer engine has already decoded, without putting
+        /// anything on the wire.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the path used by every connection that owns an <c>X25Layer</c>: an XOT connection
+        /// or a LinkManager link. The engine holds the circuit's state, so the engine sends the Call
+        /// Accepted or the Clear Request, from the return value of this method. The older overload
+        /// taking an <see cref="ITransportInterface"/> builds those two packets itself and writes
+        /// them straight to the connection, which meant a call accepted through an engine was
+        /// answered twice. It stays only for <c>SerialTransport</c>, which has no engine yet.
+        /// </para>
+        /// <para>
+        /// The steps are the ones the transport overload does: find a local service for the called
+        /// address, allocate the runtime's local channel number, map it to the connection and the
+        /// engine's own channel, bind the service, and hand the call to it.
+        /// </para>
+        /// </remarks>
+        /// <param name="callRequest">
+        /// The decoded call, with <c>SourceConnection</c> and <c>SourceLcn</c> set to the connection
+        /// it arrived on and the channel the engine gave it.
+        /// </param>
+        /// <param name="sourceName">
+        /// The connection's name, for logs.
+        /// </param>
+        /// <returns>
+        /// True when a local service took the call and the caller should accept it; false when the
+        /// caller should clear it.
+        /// </returns>
+        public bool RouteIncomingCall(X25CallRequest callRequest, string sourceName)
+        {
+            _logger.LogInformation("Incoming call from {CallingAddress} to {CalledAddress} on {Source}",
+                callRequest.CallingAddress, callRequest.CalledAddress, sourceName);
+
+            try
+            {
+                IProtocolService? localService = _protocolServices.FindServiceForCall(
+                    callRequest.CalledAddress, callRequest.CallUserData ?? Array.Empty<byte>());
+
+                if (localService == null)
+                {
+                    _logger.LogWarning("No local service for {CalledAddress} on {Source}", callRequest.CalledAddress, sourceName);
+                    return false;
+                }
+
+                ushort lcn = _runtime.FindAvailableLCN();
+                if (lcn == 0)
+                {
+                    _logger.LogError("No free local channel for the call to {CalledAddress} on {Source}", callRequest.CalledAddress, sourceName);
+                    return false;
+                }
+
+                // The mapping has to exist before the service runs: a service may answer inside
+                // HandleIncomingCall, and its data is addressed by this local channel number.
+                _runtime.RegisterXotConnection(lcn, callRequest.SourceConnection, callRequest.SourceLcn);
+                _runtime.BindServiceToLcn(lcn, localService);
+
+                bool accepted = localService.HandleIncomingCall(lcn, callRequest.CalledAddress,
+                    callRequest.CallingAddress, callRequest.CallUserData ?? Array.Empty<byte>(),
+                    callRequest.Facilities ?? Array.Empty<byte>());
+
+                if (accepted)
+                {
+                    _logger.LogInformation("Service '{ServiceName}' took the call on local channel {LCN}", localService.ServiceName, lcn);
+                    return true;
+                }
+
+                _logger.LogWarning("Service '{ServiceName}' refused the call on local channel {LCN}", localService.ServiceName, lcn);
+                _runtime.UnregisterXotConnection(lcn);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error routing the incoming call to {CalledAddress} on {Source}", callRequest.CalledAddress, sourceName);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Handle incoming Call Request from transport interface (XOT, Serial, etc.)
         /// Looks up local services for the called address, allocates LCN, and binds.
         /// </summary>

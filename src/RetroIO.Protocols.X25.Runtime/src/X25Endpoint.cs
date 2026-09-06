@@ -29,7 +29,19 @@ namespace RetroIO.Protocols.X25.Runtime
     {
         private readonly Func<byte[], bool> _send;
         private readonly ILogger _logger;
-        private readonly ManualResetEventSlim _windowOpened = new ManualResetEventSlim(false);
+        /// <summary>
+        /// What a blocked sender waits on, and what the engine pulses when a window opens, the link
+        /// goes down or the endpoint is disposed.
+        /// </summary>
+        /// <remarks>
+        /// A monitor rather than a wait handle, because there is nothing to dispose: a sender can be
+        /// inside its wait while the runtime is torn down on another thread, and a handle disposed
+        /// under it throws. Lock order is always <c>Sync</c> first, then this - never the reverse.
+        /// </remarks>
+        private readonly object _windowGate = new object();
+
+        /// <summary>Set while a window is open; cleared before each attempt to send.</summary>
+        private bool _windowIsOpen;
         private volatile bool _linkUp = true;
 
         /// <summary>
@@ -71,6 +83,11 @@ namespace RetroIO.Protocols.X25.Runtime
         /// state (X.25 4.1). Set under <see cref="Sync"/>.
         /// </summary>
         public bool RestartSent { get; set; }
+
+        /// <summary>
+        /// True once <see cref="Dispose"/> has run. Read and written under <see cref="Sync"/>.
+        /// </summary>
+        private bool _disposed;
 
         /// <summary>
         /// False once the connection has gone away; sends then fail with <see cref="X25SendResult.LinkDown"/>
@@ -127,7 +144,20 @@ namespace RetroIO.Protocols.X25.Runtime
                 bool refusedForFlowControl;
                 lock (Sync)
                 {
-                    _windowOpened.Reset();
+                    // A send can be in flight on another thread while the runtime is being torn
+                    // down: the old engine's bridge queues one on the thread pool. Checked inside
+                    // the lock that Dispose also takes, so the wait handle cannot go away between
+                    // this test and the Reset below.
+                    if (_disposed)
+                    {
+                        return false;
+                    }
+
+                    lock (_windowGate)
+                    {
+                        _windowIsOpen = false;
+                    }
+
                     if (Layer.SendData(lci, data, qBit, mBit, dBit))
                     {
                         return true;
@@ -142,7 +172,7 @@ namespace RetroIO.Protocols.X25.Runtime
                 }
 
                 long remaining = deadline - Environment.TickCount64;
-                if (remaining <= 0 || !_windowOpened.Wait((int)remaining))
+                if (remaining <= 0 || !WaitForWindow((int)remaining))
                 {
                     _logger.LogWarning("X25Endpoint[{Name}]: send window timeout on LCI {Lci}", Name, lci);
                     return false;
@@ -177,7 +207,46 @@ namespace RetroIO.Protocols.X25.Runtime
 
         private void OnWindowOpened(X25Layer layer, ushort lci)
         {
-            _windowOpened.Set();
+            OpenWindowGate();
+        }
+
+        /// <summary>
+        /// Wakes every sender waiting on the gate and leaves it open.
+        /// </summary>
+        private void OpenWindowGate()
+        {
+            lock (_windowGate)
+            {
+                _windowIsOpen = true;
+                Monitor.PulseAll(_windowGate);
+            }
+        }
+
+        /// <summary>
+        /// Waits for the gate to open.
+        /// </summary>
+        /// <param name="timeoutMs">
+        /// How long to wait.
+        /// </param>
+        /// <returns>
+        /// True when the gate opened, false on timeout.
+        /// </returns>
+        private bool WaitForWindow(int timeoutMs)
+        {
+            long deadline = Environment.TickCount64 + timeoutMs;
+            lock (_windowGate)
+            {
+                while (!_windowIsOpen)
+                {
+                    int remaining = (int)(deadline - Environment.TickCount64);
+                    if (remaining <= 0 || !Monitor.Wait(_windowGate, remaining))
+                    {
+                        return _windowIsOpen;
+                    }
+                }
+
+                return true;
+            }
         }
 
         /// <summary>
@@ -187,15 +256,27 @@ namespace RetroIO.Protocols.X25.Runtime
         public void MarkLinkDown()
         {
             _linkUp = false;
-            _windowOpened.Set();
+            OpenWindowGate();
         }
 
         /// <inheritdoc/>
         public void Dispose()
         {
+            lock (Sync)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+            }
+
             _linkUp = false;
-            _windowOpened.Set();
-            _windowOpened.Dispose();
+
+            // Wake anyone already waiting: they see _disposed on the next pass round the loop and
+            // give up rather than waiting out the timeout.
+            OpenWindowGate();
         }
 
         private sealed class Sink : IX25PacketSink

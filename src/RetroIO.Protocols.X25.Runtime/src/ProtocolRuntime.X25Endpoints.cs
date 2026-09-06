@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using RetroIO.Link;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.PacketLayer;
@@ -101,6 +102,32 @@ namespace RetroIO.Protocols.X25.Runtime
                 _logger.LogInformation("X.25 endpoint created for {Name} ({Role})", name, isDte ? "DTE" : "DCE");
                 return endpoint;
             }
+        }
+
+        /// <summary>
+        /// The X.25 engine for one LinkManager link: LAPB, HDLC or serial traffic, as opposed to the
+        /// XOT connections above.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The link itself is the key, so every circuit on it shares one engine, one restart state
+        /// and one logical channel range - which is what X.25 clause 4 describes. Before this, link
+        /// traffic went into a single process-wide engine whose replies were bounced back into the
+        /// process and never reached a link at all.
+        /// </para>
+        /// <para>
+        /// The role is DTE. Neither <c>ILink</c> nor the runtime configuration carries an X.25
+        /// role today, and every link here dials a switch or a front end, which is the DCE. It
+        /// decides the direction the engine searches for a free channel (Annex A) and which side
+        /// wins a call collision (clause 4.1.3), so it has to be stated rather than left to chance.
+        /// </para>
+        /// </remarks>
+        /// <param name="link">
+        /// The link the payload arrived on.
+        /// </param>
+        private X25Endpoint EndpointForLink(ILink link)
+        {
+            return FindEndpoint(link) ?? EndpointFor(link, link.Name, payload => _linkManager.SendViaLink(link.Name, payload), isDte: true);
         }
 
         private X25Endpoint? FindEndpoint(object connection)
@@ -346,28 +373,28 @@ namespace RetroIO.Protocols.X25.Runtime
                 return;
             }
 
-            ITransportInterface? transport = TransportOf(connection);
             X25CallRequest request = new X25CallRequest(called, calling, null, cud)
             {
                 SourceLcn = lci,
                 SourceConnection = connection,
-                UsedTransport = transport,
+                UsedTransport = TransportOf(connection),
             };
 
-            // The routing layer allocates the local LCN, binds the service and calls back into
-            // RegisterXotConnection with (localLcn, connection, lci), which maps the circuit.
-            bool accepted = transport != null && RoutingLayer.HandleIncomingCall(request, transport);
+            // The routing layer allocates the local LCN, maps the circuit and binds the service, but
+            // sends nothing: the engine below owns this circuit, so the answer goes out through it.
+            // That is also why a LinkManager link works here - it has no ITransportInterface.
+            bool accepted = RoutingLayer.RouteIncomingCall(request, endpoint.Name);
             if (accepted)
             {
                 if (!layer.AcceptCall(lci))
                 {
-                    _logger.LogWarning("XOT incoming call on {Name} channel {Lci}: Call Accepted refused by the link", endpoint.Name, lci);
+                    _logger.LogWarning("Incoming call on {Name} channel {Lci}: Call Accepted refused by the engine", endpoint.Name, lci);
                 }
 
                 return;
             }
 
-            _logger.LogWarning("XOT incoming call to {Called} on {Name} not routed - clearing", called, endpoint.Name);
+            _logger.LogWarning("Incoming call to {Called} on {Name} not routed - clearing", called, endpoint.Name);
             layer.ClearCall(lci, X25Cause.NotObtainable, X25Diagnostic.None);
         }
 
