@@ -70,7 +70,7 @@ namespace RetroIO.Protocols.X25.Tests
             };
 
             // Act - Fire X25Layer.PacketReceived event to trigger proper history creation
-            _runtime.X25Layer.FirePacketReceived(eventArgs);
+            _runtime.PacketHistory.FirePacketReceived(eventArgs);
 
             // Assert
             Assert.True(_capturedHistoryItems.Count >= 1, "Should have at least one history item");
@@ -107,7 +107,7 @@ namespace RetroIO.Protocols.X25.Tests
             };
 
             // Act - Fire X25Layer.PacketTransmitted event to trigger proper history creation
-            _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+            _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 
             // Assert
             Assert.True(_capturedHistoryItems.Count >= 1, "Should have at least one history item");
@@ -179,7 +179,7 @@ namespace RetroIO.Protocols.X25.Tests
                 };
 
                 // Fire PacketReceived event to trigger proper history creation
-                _runtime.X25Layer.FirePacketReceived(eventArgs);
+                _runtime.PacketHistory.FirePacketReceived(eventArgs);
             }
 
             // Assert
@@ -232,11 +232,11 @@ namespace RetroIO.Protocols.X25.Tests
             // Act - Fire appropriate X25Layer event based on direction
             if (packetDirection == PacketDirection.Receive)
             {
-                _runtime.X25Layer.FirePacketReceived(eventArgs);
+                _runtime.PacketHistory.FirePacketReceived(eventArgs);
             }
             else
             {
-                _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+                _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
             }
 
             // Assert

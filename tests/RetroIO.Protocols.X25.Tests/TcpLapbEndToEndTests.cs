@@ -16,7 +16,6 @@ using RetroIO.Protocols.X25.Sintran;
 
 namespace RetroIO.Protocols.X25.Tests
 {
-using X25 = RetroIO.Protocols.X25.DeleteMe.X25;   // the old engine; goes with DeleteMe (plan C3)
 
     /// <summary>
     /// End-to-end tests for TCP-LAPB links through ProtocolRuntime

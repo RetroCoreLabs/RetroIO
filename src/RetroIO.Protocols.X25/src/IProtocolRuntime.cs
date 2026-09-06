@@ -5,7 +5,6 @@ using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.Services;
-using RetroIO.Protocols.X25.DeleteMe;
 
 namespace RetroIO.Protocols.X25
 {
@@ -44,11 +43,6 @@ namespace RetroIO.Protocols.X25
     /// </remarks>
     public interface IProtocolRuntime
     {
-        /// <summary>
-        /// The X.25 packet layer.
-        /// </summary>
-        X25Layer X25Layer { get; }
-
         /// <summary>
         /// The packet history bus: announce received and transmitted packets here for the history
         /// and display code. Replaces the old layer's FirePacketReceived/FirePacketTransmitted role.

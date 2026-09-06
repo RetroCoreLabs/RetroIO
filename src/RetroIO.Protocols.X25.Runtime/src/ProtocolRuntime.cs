@@ -22,8 +22,6 @@ using RetroIO.Protocols.X25.Sintran.Services;
 
 namespace RetroIO.Protocols.X25.Runtime
 {
-using X25 = RetroIO.Protocols.X25.DeleteMe.X25;   // TODO C3: goes with the DeleteMe engine
-using RetroIO.Protocols.X25.DeleteMe;
 
     /// <summary>
     /// Central runtime for X.25 protocol stack with unified timer management, routing, and history
@@ -37,7 +35,11 @@ using RetroIO.Protocols.X25.DeleteMe;
         // Layer instances (public concrete classes). Stack A (LinkLayer/HdlcLayer/LapbLayer/XOTLayer) has
         // been retired to _retired/; the multi-link Stack B (LinkManager) is the sole link path now.
         public Layers.PhysicalLayer PhysicalLayer { get; private set; }  // Actual physical layer for serial/XOT
-        public X25Layer X25Layer { get; private set; }
+        /// <summary>
+        /// The retired process-wide engine. Removed 2026-09-06: every connection - each XOT
+        /// connection and each LinkManager link - owns an X25Layer of its own in an X25Endpoint,
+        /// and the packet history took over its other job of being the bus the views listen on.
+        /// </summary>
 
         /// <inheritdoc/>
         public Services.X25PacketHistory PacketHistory { get; } = new Services.X25PacketHistory();
@@ -219,7 +221,6 @@ using RetroIO.Protocols.X25.DeleteMe;
             var physicalConfig = CreatePhysicalLayerConfig(config);
             PhysicalLayer = new Layers.PhysicalLayer(logger, physicalConfig);
 
-            X25Layer = new X25Layer(logger);
             RoutingLayer = new X25RoutingLayer(logger, _x25Router, this, _protocolServices);
 
             // Subscribe to layer events
@@ -1591,17 +1592,10 @@ using RetroIO.Protocols.X25.DeleteMe;
             // Stack A (Physical/Link/HDLC/LAPB singleton) event wiring has been retired. Stack B links
             // (LinkManager) deliver payloads to the X.25 layer via OnLinkPayloadReceived.
 
-            // Subscribe to X.25 events
-            X25Layer.PacketReceived += OnX25PacketReceived;
-            X25Layer.PacketTransmitted += OnX25PacketTransmitted;
+            // The packet history is the bus every view and service listens on. It used to be the
+            // retired process-wide engine's second job; the engines now report through it directly.
             PacketHistory.PacketReceived += OnX25PacketReceived;
             PacketHistory.PacketTransmitted += OnX25PacketTransmitted;
-            X25Layer.IncomingCall += OnX25IncomingCall;
-            X25Layer.CallCleared += OnX25CallCleared;
-            X25Layer.DataReceived += OnX25DataReceived; // Restored - needed for LAPB → X.25 packet history creation
-            X25Layer.CallReset += OnX25CallReset;
-            X25Layer.RestartRequested += OnX25RestartRequested;
-            X25Layer.DataToSend += OnX25DataToSend;
 
             // Subscribe to new LinkManager events (multi-link architecture)
             _linkManager.PayloadReceived += OnLinkPayloadReceived;
@@ -2183,16 +2177,11 @@ using RetroIO.Protocols.X25.DeleteMe;
 
         private void OnDefaultTestLinkPayloadReceived(ILink link, byte[] payload, int length)
         {
-            // The default test link is used for X.25 frame injection: route its payload to the X25 layer.
-            try
-            {
-                _logger.LogInformation("[TestLink] payload received, routing to X25Layer");
-                X25Layer.ReceiveX25Packet(payload, length);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[ProtocolRuntime] Error routing TestLink payload");
-            }
+            // Nothing to do here any more. The default test link is registered with the LinkManager
+            // like any other link, so its payload already reached that link's own X.25 engine
+            // through OnLinkPayloadReceived. This handler used to feed the retired process-wide
+            // engine as well, which decoded the same packet a second time.
+            _logger.LogDebug("[TestLink] payload of {Length} byte(s) received on {Link}", length, link.Name);
         }
 
         private void OnDefaultTestLinkLapbStateChanged(object? sender, LapbStateChangedEventArgs e)
@@ -2375,168 +2364,6 @@ using RetroIO.Protocols.X25.DeleteMe;
             else
             {
                 _logger.LogDebug("🔥 Not routing packet - direction is {Direction}", e.Direction);
-            }
-        }
-
-        private void OnX25DataToSend(object? sender, X25PacketEventArgs e)
-        {
-            _logger.LogInformation("🔥 OnX25DataToSend called! Direction: {Direction}, LCN: {LCN}, Packet Length: {Length}",
-                e.Direction, e.Packet.LCN, e.Packet.Length);
-
-            // Set packet ID for tracking (but don't log to history yet - that happens in OnX25PacketTransmitted)
-            e.PacketId = GetNextFrameId();
-
-            // First, fire PacketTransmitted event for proper history logging
-            OnX25PacketTransmitted(sender, e);
-
-            // Then handle routing for this outgoing packet
-            ushort lcn = e.Packet.LCN;
-
-            // For local connections (PAD to local TAD), route data directly via protocol services
-            if (IsLocalConnection(lcn))
-            {
-                _logger.LogInformation("🏠 LOCAL ROUTING: Data packet on LCN {LCN} is for local service, routing directly", lcn);
-
-                // Create a received packet event to simulate loopback
-                var receivedPacket = new X25Packet(e.Packet.FullPacket)
-                {
-                    Direction = PacketDirection.Receive,
-                    Timestamp = DateTime.UtcNow,
-                    LCN = lcn
-                };
-
-                var receivedEventArgs = new X25PacketEventArgs
-                {
-                    Packet = receivedPacket,
-                    Direction = PacketDirection.Receive,
-                    Timestamp = DateTime.UtcNow,
-                    PacketId = GetNextFrameId()
-                };
-
-                // Route to appropriate protocol service
-                RouteX25EventToBoundModule(lcn, receivedEventArgs);
-
-                // For local connections, try routing to TAD service on address "200" based on packet type
-                if (receivedPacket.PacketType == X25PacketType.ClearRequest)
-                {
-                    _logger.LogInformation("🎯 LOCAL TAD: Routing ClearRequest to LocalTadProtocol on LCN {LCN}", lcn);
-                    _localTadProtocol.HandleCallClear(lcn);
-                }
-                else
-                {
-                    _logger.LogInformation("🎯 LOCAL TAD: Routing data directly to LocalTadProtocol on LCN {LCN}", lcn);
-                    _localTadProtocol.HandleIncomingData(lcn, receivedPacket.Data);
-                }
-            }
-            else
-            {
-                // External connection - send via LAPB
-                _logger.LogInformation("🌐 EXTERNAL ROUTING: Data packet on LCN {LCN} is for external connection, sending via LAPB", lcn);
-
-                try
-                {
-                    _logger.LogDebug("X.25→LAPB: X.25 layer requesting to send data, delegating to LAPB layer");
-
-                    if (e.Packet.FullPacket != null && e.Packet.FullPacket.Length > 0)
-                    {
-                        // Check if this LCN is associated with a specific link
-                        string? linkName = null;
-                        lock (_routingLock)
-                        {
-                            _lcnToLink.TryGetValue(lcn, out linkName);
-                        }
-
-                        if (!string.IsNullOrEmpty(linkName))
-                        {
-                            // Send via the specific link using LinkManager
-                            _logger.LogDebug("X.25→Link: Sending packet via link '{LinkName}' for LCN {LCN}", linkName, lcn);
-                            bool sent = _linkManager.SendViaLink(linkName, e.Packet.FullPacket);
-                            if (!sent)
-                            {
-                                _logger.LogWarning("X.25→Link: Failed to send packet via link '{LinkName}' (legacy LAPB fallback retired)", linkName);
-                            }
-                        }
-                        else
-                        {
-                            // No specific link associated; the legacy single-LAPB fallback is retired.
-                            _logger.LogWarning("X.25→Link: No link associated with this packet; cannot send (legacy LAPB fallback retired)");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "X.25→LAPB: Error delegating X.25 data to LAPB layer");
-                }
-            }
-        }
-
-        /// <summary>
-        /// Check if the given LCN represents a local connection (PAD to local TAD/XMSG)
-        /// For now, we consider all connections local since we're implementing loopback
-        /// In a full implementation, this would check routing tables
-        /// </summary>
-        private bool IsLocalConnection(ushort lcn)
-        {
-            // For now, assume all connections are local (loopback)
-            // In a real implementation, this would check if the LCN is bound to a local service
-            return true;
-        }
-
-        private void OnX25IncomingCall(object? sender, X25PacketEventArgs e)
-        {
-            // Create and add X25 history item using centralized method
-            var x25Item = CreateX25HistoryItem(e, "X.25 incoming call");
-            AddToHistory(x25Item);
-
-            // Associate LCN with source link if we have pending link context
-            // This is set by OnLinkX25PacketReceived() before calling X25Layer.ReceiveX25Packet()
-            if (_pendingLinkForNextCall != null)
-            {
-                AssociateLcnWithLink(e.Packet.LCN, _pendingLinkForNextCall);
-                _logger.LogDebug("RX Path: Associated incoming call LCN {LCN} with source link '{LinkName}'",
-                    e.Packet.LCN, _pendingLinkForNextCall);
-            }
-
-            // Evaluate SVC rules for call routing
-            if (e.Direction == PacketDirection.Receive)
-            {
-                try
-                {
-                    // Extract call request data from packet
-                    var callRequest = ExtractCallRequestFromPacket(e.Packet);
-                    if (callRequest != null)
-                    {
-                        // Route through unified routing layer
-                        var targetModule = RoutingLayer.HandleIncomingCall(e.Packet.LCN,
-                            callRequest.CalledAddress, callRequest.CallingAddress,
-                            callRequest.CallUserData, callRequest.Facilities);
-                        if (targetModule != null)
-                        {
-                            // Bind LCN to module
-                            BindLcnToModule(e.Packet.LCN, targetModule);
-
-                            // Accept the call
-                            X25Layer.AcceptCall(e.Packet.LCN);
-                            _logger.LogInformation($"[Routing] Accepted call on LCN {e.Packet.LCN} and bound to module {targetModule.Name}");
-                        }
-                        else
-                        {
-                            // No matching rule - reject the call
-                            X25Layer.ClearCall(e.Packet.LCN, 0x01, 0x01); // Cause: Unassigned number
-                            _logger.LogWarning($"[Routing] Rejected call on LCN {e.Packet.LCN} - no matching SVC rule for {callRequest.CalledAddress}");
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"[Routing] Could not extract call request data from packet on LCN {e.Packet.LCN}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError($"[Routing] Error processing incoming call on LCN {e.Packet.LCN}: {ex.Message}");
-                    // Reject the call on error
-                    X25Layer.ClearCall(e.Packet.LCN, 0x01, 0x01);
-                }
             }
         }
 
@@ -2797,87 +2624,6 @@ using RetroIO.Protocols.X25.DeleteMe;
             }
         }
 
-        private void OnX25CallCleared(object? sender, X25PacketEventArgs e)
-        {
-            // Create and add X25 history item using centralized method
-            var x25Item = CreateX25HistoryItem(e, "X.25 call cleared");
-            AddToHistory(x25Item);
-
-            _logger.LogInformation($"[ProtocolRuntime] X.25 call cleared: {e.GetPacketSummary()}");
-
-            // Unbind LCN from module
-            if (e.Direction == PacketDirection.Receive)
-            {
-                UnbindLcnFromModule(e.Packet.LCN);
-            }
-
-            // Disassociate LCN from link when call is cleared (either direction)
-            DisassociateLcnFromLink(e.Packet.LCN);
-        }
-
-
-        private void OnX25CallReset(object? sender, X25PacketEventArgs e)
-        {
-            // Create and add X25 history item using centralized method
-            var x25Item = CreateX25HistoryItem(e, "X.25 call reset");
-            AddToHistory(x25Item);
-
-            _logger.LogInformation($"[ProtocolRuntime] X.25 call reset: {e.GetPacketSummary()}");
-
-            // Module routing now handled via RouteX25EventToBoundModule in protocol services
-        }
-
-        private void OnX25RestartRequested(object? sender, X25PacketEventArgs e)
-        {
-            // Create and add X25 history item using centralized method
-            var x25Item = CreateX25HistoryItem(e, "X.25 restart requested");
-            AddToHistory(x25Item);
-
-            _logger.LogInformation($"[ProtocolRuntime] X.25 restart requested: {e.GetPacketSummary()}");
-
-            // Handle restart - this would typically reset all virtual circuits
-            // For now, just log the restart request
-        }
-
-        private void OnXOTPacketReceived(object? sender, PhysicalLayerEventArgs e)
-        {
-            try
-            {
-                _logger.LogDebug("XOT: Packet received, {Length} bytes", e.Length);
-
-                // Add to history using centralized method
-                var eventArgs = new X25PacketEventArgs
-                {
-                    Packet = new X25Packet
-                    {
-                        FullPacket = e.Data,
-                        Length = e.Length,
-                        Direction = PacketDirection.Receive,
-                        Timestamp = e.Timestamp
-                    },
-                    Direction = PacketDirection.Receive,
-                    Timestamp = e.Timestamp,
-                    PacketId = 0 // Will be assigned by centralized method
-                };
-                var x25Item = CreateX25HistoryItem(eventArgs, "XOT packet received");
-                AddToHistory(x25Item);
-
-                // Update XOT statistics
-                lock (_statsLock)
-                {
-                    _currentStats.XOT.PacketsReceived++;
-                    _currentStats.XOT.BytesReceived += e.Length;
-                    StatisticsUpdated?.Invoke(this, _currentStats.Clone());
-                }
-
-                // Route the X.25 packet to X25Layer for processing
-                X25Layer.ReceiveX25Packet(e.Data, e.Length);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "XOT: Error processing received packet");
-            }
-        }
 
         private void OnXOTBytesToSend(object? sender, PhysicalLayerEventArgs e)
         {
@@ -2959,7 +2705,13 @@ using RetroIO.Protocols.X25.DeleteMe;
                     Timestamp = DateTime.UtcNow
                 };
                 var historyItem = CreateX25HistoryItem(eventArgs, $"RX from {link.Name}");
-                AddToHistory(historyItem);
+
+                // Added through the relationship path, not straight to the history: the LAPB frame
+                // that carried this packet was already recorded by the link's own frame handler, and
+                // this is where the two lines are joined so the display can show the packet under
+                // the frame it arrived in. Until the process-wide engine was removed, the linking
+                // X.25 item was the one that engine produced.
+                HandleX25PacketRelationships(eventArgs, historyItem, ValidateX25Packet(eventArgs));
 
                 // Store link context for incoming call association (consumed by OnEndpointIncomingCall).
                 _pendingLinkForNextCall = link.Name;
@@ -4852,7 +4604,10 @@ using RetroIO.Protocols.X25.DeleteMe;
         /// </summary>
         public void SetOriginalPacketForRelationship(byte[] data)
         {
-            X25Layer?.SetOriginalPacketForRelationship(data);
+            // Nothing to hold on to. This existed so the retired engine could show the packet as it
+            // arrived rather than one rebuilt from the decoded fields, because it kept no copy. The
+            // engines report the packet they actually received or sent, so there is nothing to fix
+            // up. Kept because ILapbFramePreHandler declares it.
         }
 
         #endregion

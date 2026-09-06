@@ -76,11 +76,11 @@ namespace RetroIO.Protocols.X25.Tests
             // Use appropriate Fire method based on packet direction
 if (eventArgs.Direction == PacketDirection.Receive)
 {
-    _runtime.X25Layer.FirePacketReceived(eventArgs);
+    _runtime.PacketHistory.FirePacketReceived(eventArgs);
 }
 else
 {
-    _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+    _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 }
 
             // Assert
@@ -121,11 +121,11 @@ else
             // Use appropriate Fire method based on packet direction
 if (eventArgs.Direction == PacketDirection.Receive)
 {
-    _runtime.X25Layer.FirePacketReceived(eventArgs);
+    _runtime.PacketHistory.FirePacketReceived(eventArgs);
 }
 else
 {
-    _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+    _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 }
 
             // Assert
@@ -176,11 +176,11 @@ else
                 // Use appropriate Fire method based on packet direction
 if (eventArgs.Direction == PacketDirection.Receive)
 {
-    _runtime.X25Layer.FirePacketReceived(eventArgs);
+    _runtime.PacketHistory.FirePacketReceived(eventArgs);
 }
 else
 {
-    _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+    _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 }
             }
 
@@ -225,11 +225,11 @@ else
             // Use appropriate Fire method based on packet direction
 if (eventArgs.Direction == PacketDirection.Receive)
 {
-    _runtime.X25Layer.FirePacketReceived(eventArgs);
+    _runtime.PacketHistory.FirePacketReceived(eventArgs);
 }
 else
 {
-    _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+    _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 }
 
             // Assert - Packet should still be logged even if no module is bound
@@ -273,11 +273,11 @@ else
                 // Use appropriate Fire method based on packet direction
 if (eventArgs.Direction == PacketDirection.Receive)
 {
-    _runtime.X25Layer.FirePacketReceived(eventArgs);
+    _runtime.PacketHistory.FirePacketReceived(eventArgs);
 }
 else
 {
-    _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+    _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 }
             }
 
@@ -327,11 +327,11 @@ else
             // Use appropriate Fire method based on packet direction
 if (eventArgs.Direction == PacketDirection.Receive)
 {
-    _runtime.X25Layer.FirePacketReceived(eventArgs);
+    _runtime.PacketHistory.FirePacketReceived(eventArgs);
 }
 else
 {
-    _runtime.X25Layer.FirePacketTransmitted(eventArgs);
+    _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
 }
 
             // Assert

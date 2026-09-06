@@ -7,7 +7,6 @@ using RetroIO.Protocols.X25.Transport;
 using RetroIO.Protocols.X25;
 namespace RetroIO.Protocols.X25.Runtime
 {
-using X25 = RetroIO.Protocols.X25.DeleteMe.X25;   // TODO C3: goes with the DeleteMe engine
 
     /// <summary>
     /// Configuration for ProtocolRuntime

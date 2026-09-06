@@ -4,7 +4,6 @@ using System.Net.Sockets;
 using System.Threading;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
-using RetroIO.Protocols.X25.DeleteMe;
 
 namespace RetroIO.Protocols.X25.Transport
 {
