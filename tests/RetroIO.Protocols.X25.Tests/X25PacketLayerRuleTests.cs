@@ -1703,5 +1703,71 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(sink.LastInfo.ClearingCause, Is.EqualTo(X25Cause.OutOfOrder));
         }
+
+        /// <summary>
+        /// The cause octets are the ones in Tables 5-7 and 5-8, and the two tables differ.
+        /// </summary>
+        /// <remarks>
+        /// One constant named LocalProcedureError held 00000101 and served both tables. That octet
+        /// is the RESETTING local procedure error; the CLEARING one is 00010011, and 00000101 in a
+        /// Clear means network congestion. So every Clear this engine originated for a procedure
+        /// error or a time-out told the far DTE the network was busy when the truth was a protocol
+        /// error at this end - a wrong answer to the first question anyone asks about a dropped
+        /// call, and invisible from inside because the name read correctly at every use site.
+        ///
+        /// Found on 2026-09-07 while fixing the same family of mistakes in the C stack, where three
+        /// clearing causes were rotated onto each other's values. The bits are written beside each
+        /// value because that is how they were read: the tables print as interleaved bit columns.
+        /// </remarks>
+        [Test]
+        public void TheCauseOctetsMatchTablesFiveSevenAndFiveEight()
+        {
+            // Table 5-7, clearing.
+            Assert.That(X25Cause.DteOriginated, Is.EqualTo(0x00));
+            Assert.That(X25Cause.InvalidFacilityRequest, Is.EqualTo(0x03));          // 00000011
+            Assert.That(X25Cause.NetworkCongestion, Is.EqualTo(0x05));               // 00000101
+            Assert.That(X25Cause.OutOfOrder, Is.EqualTo(0x09));                      // 00001001
+            Assert.That(X25Cause.NotObtainable, Is.EqualTo(0x0D));                   // 00001101
+            Assert.That(X25Cause.ClearingLocalProcedureError, Is.EqualTo(0x13));     // 00010011
+
+            // Table 5-8, resetting - the same names, different octets.
+            Assert.That(X25Cause.ResettingOutOfOrder, Is.EqualTo(0x01));             // 00000001
+            Assert.That(X25Cause.ResettingLocalProcedureError, Is.EqualTo(0x05));    // 00000101
+
+            // And the pair that caused it: the same octet, two meanings.
+            Assert.That(X25Cause.NetworkCongestion, Is.EqualTo(X25Cause.ResettingLocalProcedureError));
+            Assert.That(X25Cause.ClearingLocalProcedureError, Is.Not.EqualTo(X25Cause.ResettingLocalProcedureError));
+        }
+
+        /// <summary>
+        /// A DCE clearing for a procedure error sends the CLEARING local procedure error.
+        /// </summary>
+        /// <remarks>
+        /// The engine sent 00000101 here, which Table 5-7 defines as network congestion. T23 expiry
+        /// is the shortest route to that path: the Clear Request goes unconfirmed, the engine gives
+        /// up and reports the call cleared with its own cause.
+        /// </remarks>
+        [Test]
+        public void ADceClearingForAProcedureErrorSendsTheClearingCause()
+        {
+            RecordingSink sink = new RecordingSink();
+            X25Layer dce = NewDce(sink);
+            dce.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress));
+            dce.AcceptCall(5);
+
+            int clearsBefore = sink.CountOfType(X25PacketType.ClearRequest);
+
+            // A Call Request on a circuit already in use is a procedure error, not a new call.
+            dce.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress));
+
+            // Without this the assertion below could pass on a Clear that never happened.
+            Assert.That(sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(clearsBefore + 1),
+                "the procedure error must actually clear the call");
+
+            Assert.That(sink.LastInfo.ClearingCause, Is.EqualTo(X25Cause.ClearingLocalProcedureError),
+                "0x13 clearing, not the 0x05 that means network congestion in Table 5-7");
+            Assert.That(sink.LastInfo.ClearingCause, Is.Not.EqualTo(X25Cause.ResettingLocalProcedureError),
+                "the resetting cause of the same name is a different octet");
+        }
     }
 }

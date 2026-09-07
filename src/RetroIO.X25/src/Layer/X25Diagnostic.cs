@@ -110,21 +110,63 @@ namespace RetroIO.Protocols.X25.PacketLayer
     /// Cause codes this engine originates, from X.25 Tables 5-7 (clearing), 5-8 (resetting) and 5-9
     /// (restarting).
     /// </summary>
+    /// <remarks>
+    /// The three tables use the same octet for different meanings, so a cause is only meaningful
+    /// together with the packet it rides in, and a name that does not say which table it came from
+    /// is a trap. Two that bite:
+    ///  - Local procedure error is 00010011 (0x13) when clearing and 00000101 (0x05) when
+    ///    resetting. One constant held 0x05 and was used for both, so every Clear this engine sent
+    ///    for a procedure error or a time-out carried 0x05 - which Table 5-7 defines as network
+    ///    congestion. The far DTE was told the network was busy when the truth was a protocol
+    ///    error at this end.
+    ///  - Out of order is 00001001 (0x09) when clearing and 00000001 (0x01) when resetting.
+    ///
+    /// The values are decoded from the tables bit 8 first; the extraction of the Recommendation
+    /// interleaves the bit columns, so they cannot be read straight off the page.
+    /// </remarks>
     public static class X25Cause
     {
-        /// <summary>00000000 - DTE originated. The only cause a DTE may send without bit 8 set (Table 5-7/5-8 note a).</summary>
+        /// <summary>
+        /// 00000000 - DTE originated. The only cause a DTE may send without bit 8 set
+        /// (Table 5-7/5-8 note a).
+        /// </summary>
         public const byte DteOriginated = 0x00;
 
-        /// <summary>00000101 - Local procedure error (Tables 5-7 and 5-8).</summary>
-        public const byte LocalProcedureError = 0x05;
+        /// <summary>
+        /// 00010011 - Local procedure error, clearing (Table 5-7).
+        /// </summary>
+        public const byte ClearingLocalProcedureError = 0x13;
 
-        /// <summary>00001001 - Out of order (Table 5-7).</summary>
+        /// <summary>
+        /// 00000101 - Local procedure error, resetting (Table 5-8). Not the same octet as the
+        /// clearing cause of the same name.
+        /// </summary>
+        public const byte ResettingLocalProcedureError = 0x05;
+
+        /// <summary>
+        /// 00001001 - Out of order, clearing (Table 5-7).
+        /// </summary>
         public const byte OutOfOrder = 0x09;
 
-        /// <summary>00000011 - Invalid facility request (Table 5-7).</summary>
+        /// <summary>
+        /// 00000001 - Out of order, resetting (Table 5-8).
+        /// </summary>
+        public const byte ResettingOutOfOrder = 0x01;
+
+        /// <summary>
+        /// 00000011 - Invalid facility request (Table 5-7).
+        /// </summary>
         public const byte InvalidFacilityRequest = 0x03;
 
-        /// <summary>00001101 - Not obtainable (Table 5-7).</summary>
+        /// <summary>
+        /// 00001101 - Not obtainable (Table 5-7).
+        /// </summary>
         public const byte NotObtainable = 0x0D;
+
+        /// <summary>
+        /// 00000101 - Network congestion, clearing (Table 5-7). The same octet as the RESETTING
+        /// local procedure error, which is exactly why these names carry their table.
+        /// </summary>
+        public const byte NetworkCongestion = 0x05;
     }
 }

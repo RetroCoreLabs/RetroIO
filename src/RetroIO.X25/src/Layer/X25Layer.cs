@@ -1218,13 +1218,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
         }
 
         /// <summary>
-        /// The cause this engine puts in a Clear or Reset it originates for a procedure error or a
+        /// The cause this engine puts in a Clear it originates for a procedure error or a
         /// time-out: "Local procedure error" from a DCE; from a DTE only 0 is allowed (X.25 Table
-        /// 5-7 / 5-8 note a) and the diagnostic carries the reason.
+        /// 5-7 note a) and the diagnostic carries the reason.
         /// </summary>
+        /// <remarks>
+        /// The clearing value, 00010011, not the resetting one. They differ, and a single constant
+        /// used to serve both: every Clear sent from here carried 00000101, which Table 5-7 reads
+        /// as network congestion. See <see cref="X25Cause"/>.
+        /// </remarks>
         private byte ProcedureErrorCause()
         {
-            return _config.IsDte ? X25Cause.DteOriginated : X25Cause.LocalProcedureError;
+            return _config.IsDte ? X25Cause.DteOriginated : X25Cause.ClearingLocalProcedureError;
         }
 
         /// <summary>
@@ -1312,7 +1317,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 }
 
                 ToReady(vc);
-                ReportCleared(vc, X25Cause.LocalProcedureError, X25Diagnostic.CallCollision);
+                ReportCleared(vc, X25Cause.ClearingLocalProcedureError, X25Diagnostic.CallCollision);
             }
 
             vc.State = X25VcState.CallIncoming;
@@ -1758,7 +1763,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </remarks>
         private void ResetForProcedureError(X25Vc vc, byte diagnostic)
         {
-            byte cause = _config.IsDte ? (byte)0x00 : X25Cause.LocalProcedureError;
+            byte cause = _config.IsDte ? (byte)0x00 : X25Cause.ResettingLocalProcedureError;
             vc.State = X25VcState.ResetRequest;
             vc.Cause = cause;
             vc.Diagnostic = diagnostic;
