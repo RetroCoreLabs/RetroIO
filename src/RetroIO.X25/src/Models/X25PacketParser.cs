@@ -248,9 +248,31 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         private static void ParseClearRequestPacket(byte[] data, X25PacketInfo info)
         {
-            if (data.Length < 5) return;
+            // X.25 Figure 5-6 draws the packet octet by octet: the clearing cause is
+            // octet 5 and carries no footnote, so it is mandatory. The diagnostic code
+            // in octet 6 carries footnote a) - "this field is not mandatory in the basic
+            // format of clear request packets (see 5.2.4.1)" - so it is not.
+            //
+            // The old test was "length < 5, give up quietly", which got both halves
+            // wrong. A three-octet clear request, with no cause at all, was accepted as
+            // a well-formed one with cause 0 - that is the shared vector
+            // mal-clear-request-no-cause, which the C stack rejects and this one did
+            // not. And a four-octet clear request, which is legal and says why the call
+            // is being cleared, was dropped on the floor with its cause unread.
+            if (data.Length < 4)
+            {
+                info.ParseError = "a clear request needs its clearing cause (X.25 Figure 5-6, octet 5)";
+                return;
+            }
 
             info.ClearingCause = data[3];
+
+            if (data.Length < 5)
+            {
+                // The basic format: a cause and nothing after it. Legal, and complete.
+                return;
+            }
+
             info.DiagnosticCode = data[4];
 
             int offset = 5;

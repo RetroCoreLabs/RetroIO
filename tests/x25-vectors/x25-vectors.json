@@ -405,7 +405,7 @@
       "spec": "X.25 5.2.4: clearing cause field is mandatory",
       "hex": "10 01 13",
       "expect": { "rejected": true },
-      "status": "knownFail:R17"
+      "status": "pass"
     }
   ]
 }
