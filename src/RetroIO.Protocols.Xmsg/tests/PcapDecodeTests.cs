@@ -73,7 +73,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 string file = files[f];
                 string name = Path.GetFileName(file);
 
-                IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFrames(file);
+                IReadOnlyList<CapturedFrame> frames = HdlcPcap.ReadCapturedFrames(file);
 
                 int fcsValid = frames.Count;
                 int sintran = 0;
@@ -83,7 +83,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
 
                 for (int i = 0; i < frames.Count; i++)
                 {
-                    LapbFrame frame = frames[i];
+                    LapbFrame frame = frames[i].Frame;
                     if (frame.Kind != LapbFrameKind.Information)
                     {
                         continue;
@@ -131,7 +131,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
                     report.Append("--- frame ").Append(sintran)
                           .Append("  N(S)=").Append(frame.SendSequence)
                           .Append(" N(R)=").Append(frame.ReceiveSequence)
-                          .Append("  ").Append(frame.Key.ToString()).Append('\n');
+                          .Append("  ").Append(frames[i].Key.ToString()).Append('\n');
                     report.Append(XmsgDump.ToText(decoded));
                     report.Append("raw=").Append(Convert.ToHexString(original)).Append('\n');
                     report.Append('\n');

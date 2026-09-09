@@ -577,7 +577,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
                 // state machine consumes it, so the runner can see the peer's raw traffic.
                 RawFrameReceived?.Invoke(_linkId, frameBytes);
 
-                LapbFrame frame = new LapbFrame(default, frameBytes);
+                LapbFrame frame = LapbFrame.FromCapture(frameBytes);
                 _link.OnFrameReceived(frame, CurrentMillis);
 
                 // Refresh coarse status right after each frame so a SABM/UA that brings the LAPB link

@@ -69,7 +69,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 return;
             }
 
-            IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFrames(path);
+            IReadOnlyList<CapturedFrame> frames = HdlcPcap.ReadCapturedFrames(path);
             _output.WriteLine("total LAPB frames: " + frames.Count);
 
             // Split by direction. The sender of the file is whichever side emits information frames
@@ -81,8 +81,8 @@ namespace RetroIO.Protocols.Xmsg.Tests
 
             for (int i = 0; i < frames.Count; i++)
             {
-                LapbFrame frame = frames[i];
-                string dir = frame.Key.SourcePort.ToString() + "->" + frame.Key.DestinationPort.ToString();
+                LapbFrame frame = frames[i].Frame;
+                string dir = frames[i].Key.SourcePort.ToString() + "->" + frames[i].Key.DestinationPort.ToString();
 
                 if (frame.Kind == LapbFrameKind.Information)
                 {
@@ -166,19 +166,19 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 return;
             }
 
-            IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFrames(path);
+            IReadOnlyList<CapturedFrame> frames = HdlcPcap.ReadCapturedFrames(path);
 
             // Group every frame that carries N(R) by the direction it travels in, in flow order.
             Dictionary<string, List<int>> receiveSequences = new Dictionary<string, List<int>>();
             for (int i = 0; i < frames.Count; i++)
             {
-                LapbFrame frame = frames[i];
+                LapbFrame frame = frames[i].Frame;
                 if (frame.Kind != LapbFrameKind.Information && frame.Kind != LapbFrameKind.Supervisory)
                 {
                     continue;
                 }
 
-                string dir = frame.Key.SourcePort.ToString() + "->" + frame.Key.DestinationPort.ToString();
+                string dir = frames[i].Key.SourcePort.ToString() + "->" + frames[i].Key.DestinationPort.ToString();
                 if (!receiveSequences.ContainsKey(dir)) { receiveSequences[dir] = new List<int>(); }
                 receiveSequences[dir].Add(frame.ReceiveSequence);
             }
@@ -231,17 +231,17 @@ namespace RetroIO.Protocols.Xmsg.Tests
 
             _output.WriteLine("=== " + captureName);
 
-            IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFrames(path);
+            IReadOnlyList<CapturedFrame> frames = HdlcPcap.ReadCapturedFrames(path);
 
             for (int i = 0; i < frames.Count; i++)
             {
-                LapbFrame frame = frames[i];
+                LapbFrame frame = frames[i].Frame;
                 if (frame.Kind != LapbFrameKind.Information || frame.Info.Length == 0)
                 {
                     continue;
                 }
 
-                string dir = frame.Key.SourcePort.ToString() + "->" + frame.Key.DestinationPort.ToString();
+                string dir = frames[i].Key.SourcePort.ToString() + "->" + frames[i].Key.DestinationPort.ToString();
                 ReadOnlySpan<byte> info = frame.Info.Span;
 
                 int head = info.Length < 48 ? info.Length : 48;

@@ -49,7 +49,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             raw[1] = 0x00;          // I-frame control, N(S)=0 N(R)=0
             Array.Copy(info, 0, raw, 2, info.Length);
 
-            LapbFrame frame = new LapbFrame(default(StreamKey), raw);
+            LapbFrame frame = LapbFrame.FromCapture(raw);
             Assert.Equal(LapbFrameKind.Information, frame.Kind);
             return frame;
         }

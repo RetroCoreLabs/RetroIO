@@ -268,10 +268,10 @@ namespace RetroIO.Protocols.Xmsg.Tests
             string? path = PcapFiles.File(DeleteCapture);
             if (path == null) { return bodies; }
 
-            IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFramesInCaptureOrder(path);
+            IReadOnlyList<CapturedFrame> frames = HdlcPcap.ReadCapturedFramesInCaptureOrder(path);
             for (int i = 0; i < frames.Count; i++)
             {
-                LapbFrame frame = frames[i];
+                LapbFrame frame = frames[i].Frame;
                 if (frame.Kind != LapbFrameKind.Information || frame.Info.Length <= BodyOffsetFullHeader)
                 {
                     continue;
@@ -281,7 +281,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 if (info[3] != (byte)SintranPacketSubtype.Data) { continue; }
 
                 // Node 100 is the listener, so its frames are the ones leaving port 10362.
-                if (frame.Key.SourcePort != 10362) { continue; }
+                if (frames[i].Key.SourcePort != 10362) { continue; }
 
                 bodies.Add(info.Slice(BodyOffsetFullHeader).ToArray());
             }

@@ -4,6 +4,43 @@ using System.Collections.Generic;
 namespace RetroIO.Protocols.Xmsg.Hdlc
 {
     /// <summary>
+    /// A LAPB frame together with the TCP flow it was reassembled from.
+    /// </summary>
+    /// <remarks>
+    /// The flow is a property of the CAPTURE, not of the frame. A frame that arrived on a
+    /// real link has no TCP flow at all, which is why <see cref="LapbFrame"/> no longer
+    /// carries one: every live path was passing a default key that meant nothing, and a
+    /// wire-frame type was carrying capture provenance it could not always have.
+    /// </remarks>
+    public readonly struct CapturedFrame
+    {
+        /// <summary>
+        /// The directional TCP flow the frame was reassembled from.
+        /// </summary>
+        public readonly StreamKey Key;
+
+        /// <summary>
+        /// The frame itself.
+        /// </summary>
+        public readonly LapbFrame Frame;
+
+        /// <summary>
+        /// Initialises the pairing.
+        /// </summary>
+        /// <param name="key">
+        /// The directional TCP flow.
+        /// </param>
+        /// <param name="frame">
+        /// The frame reassembled from it.
+        /// </param>
+        public CapturedFrame(StreamKey key, LapbFrame frame)
+        {
+            Key = key;
+            Frame = frame;
+        }
+    }
+
+    /// <summary>
     /// Top-level pipeline that turns a pcapng capture of the <c>nd100x --hdlc</c> TCP
     /// bridge into FCS-valid LAPB frames and their SINTRAN information fields.
     /// </summary>
@@ -34,6 +71,33 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// </exception>
         public static IReadOnlyList<LapbFrame> ReadFrames(string path)
         {
+            IReadOnlyList<CapturedFrame> captured = ReadCapturedFrames(path);
+            List<LapbFrame> frames = new List<LapbFrame>(captured.Count);
+
+            for (int i = 0; i < captured.Count; i++)
+            {
+                frames.Add(captured[i].Frame);
+            }
+
+            return frames;
+        }
+
+        /// <summary>
+        /// Reads all FCS-valid LAPB frames from a pcapng capture, each with the TCP flow it
+        /// came from.
+        /// </summary>
+        /// <param name="path">
+        /// The path of the pcapng capture file.
+        /// </param>
+        /// <returns>
+        /// The FCS-valid frames with their flows, grouped by flow and in stream order within
+        /// each flow.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="path"/> is null.
+        /// </exception>
+        public static IReadOnlyList<CapturedFrame> ReadCapturedFrames(string path)
+        {
             if (path == null)
             {
                 throw new ArgumentNullException(nameof(path));
@@ -57,7 +121,7 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
                 list.Add(segment);
             }
 
-            List<LapbFrame> result = new List<LapbFrame>();
+            List<CapturedFrame> result = new List<CapturedFrame>();
             for (int f = 0; f < flowOrder.Count; f++)
             {
                 StreamKey key = flowOrder[f];
@@ -73,7 +137,7 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
                     byte[] frameBytes = frames[i];
                     if (Fcs16.IsValid(frameBytes))
                     {
-                        result.Add(new LapbFrame(key, frameBytes));
+                        result.Add(new CapturedFrame(key, LapbFrame.FromCapture(frameBytes)));
                     }
                 }
             }
@@ -111,6 +175,31 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// Thrown when <paramref name="path"/> is null.
         /// </exception>
         public static IReadOnlyList<LapbFrame> ReadFramesInCaptureOrder(string path)
+        {
+            IReadOnlyList<CapturedFrame> captured = ReadCapturedFramesInCaptureOrder(path);
+            List<LapbFrame> frames = new List<LapbFrame>(captured.Count);
+
+            for (int i = 0; i < captured.Count; i++)
+            {
+                frames.Add(captured[i].Frame);
+            }
+
+            return frames;
+        }
+
+        /// <summary>
+        /// Reads all FCS-valid LAPB frames in capture order, each with the TCP flow it came from.
+        /// </summary>
+        /// <param name="path">
+        /// The path of the pcapng capture file.
+        /// </param>
+        /// <returns>
+        /// The FCS-valid frames with their flows, interleaved in capture order.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="path"/> is null.
+        /// </exception>
+        public static IReadOnlyList<CapturedFrame> ReadCapturedFramesInCaptureOrder(string path)
         {
             if (path == null)
             {
@@ -157,13 +246,13 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
                     }
 
                     int ordinal = FindSegmentOrdinal(list, endOffsets[i]);
-                    ordered.Add(new OrderedFrame(ordinal, ordered.Count, new LapbFrame(key, frameBytes)));
+                    ordered.Add(new OrderedFrame(ordinal, ordered.Count, new CapturedFrame(key, LapbFrame.FromCapture(frameBytes))));
                 }
             }
 
             ordered.Sort(CompareOrderedFrames);
 
-            List<LapbFrame> result = new List<LapbFrame>(ordered.Count);
+            List<CapturedFrame> result = new List<CapturedFrame>(ordered.Count);
             for (int i = 0; i < ordered.Count; i++)
             {
                 result.Add(ordered[i].Frame);
@@ -240,9 +329,9 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
             public readonly int Tiebreak;
 
             /// <summary>
-            /// The frame itself.
+            /// The frame, with the flow it came from.
             /// </summary>
-            public readonly LapbFrame Frame;
+            public readonly CapturedFrame Frame;
 
             /// <summary>
             /// Initialises the pairing.
@@ -256,7 +345,7 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
             /// <param name="frame">
             /// The frame.
             /// </param>
-            public OrderedFrame(int ordinal, int tiebreak, LapbFrame frame)
+            public OrderedFrame(int ordinal, int tiebreak, CapturedFrame frame)
             {
                 Ordinal = ordinal;
                 Tiebreak = tiebreak;

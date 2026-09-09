@@ -71,20 +71,11 @@ namespace RetroIO.Protocols.X25.Models
             
             if (CallData.Length > 0)
             {
+                // The octets only. What the Call User Data MEANS is not X.25's
+                // business - X.25 5.2.2 gives the field a length and leaves its
+                // contents to the two DTEs - and decoding XMSG service ports here
+                // put a SINTRAN protocol inside the X.25 layer for a debug line.
                 summary += $" CUD({CallData.Length})=[{string.Join(" ", CallData.Select(b => $"{b:X2}"))}]";
-                
-                // Analyze CUD for XMSG protocol
-                var version = XmsgProtocolHelper.ExtractVersionFromCud(CallData);
-                if (version.HasValue)
-                {
-                    summary += $" XMSG:{version.Value}";
-                    var port = XmsgProtocolHelper.ExtractPortFromCud(CallData);
-                    if (port.HasValue)
-                    {
-                        var servicePort = (XmsgServicePort)port.Value;
-                        summary += $" Service:{servicePort}";
-                    }
-                }
             }
             
             return summary;

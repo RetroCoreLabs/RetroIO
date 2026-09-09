@@ -127,12 +127,12 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// The frame is too short to decode.
         /// </exception>
         /// <remarks>
-        /// <see cref="Key"/> is left at its default. That the frame type carries a capture key at all
-        /// is a leftover from the pcap tooling it was written for; see the parking lot in
-        /// Migration/X25 one-stack plan.md.
+        /// A frame that arrived on a live link, so the framer has already checked and stripped the
+        /// FCS. Use <see cref="FromCapture"/> for one read out of a capture, which still has its two
+        /// FCS octets on the end.
         /// </remarks>
         public LapbFrame(byte[] frameBytes)
-            : this(default, frameBytes, LiveInfoLength(frameBytes))
+            : this(frameBytes, LiveInfoLength(frameBytes))
         {
         }
 
@@ -159,21 +159,21 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// <summary>
         /// Initialises a LAPB frame from its unstuffed, FCS-valid bytes.
         /// </summary>
-        /// <param name="key">
-        /// The TCP flow the frame was reassembled from.
-        /// </param>
         /// <param name="frameBytes">
         /// The full unstuffed frame: <c>addr + ctrl + info + fcs_lo + fcs_hi</c>.
         /// </param>
+        /// <returns>
+        /// The decoded frame.
+        /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="frameBytes"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">
         /// Thrown when <paramref name="frameBytes"/> is shorter than four bytes.
         /// </exception>
-        public LapbFrame(StreamKey key, byte[] frameBytes)
-            : this(key, frameBytes, CapturedInfoLength(frameBytes))
+        public static LapbFrame FromCapture(byte[] frameBytes)
         {
+            return new LapbFrame(frameBytes, CapturedInfoLength(frameBytes));
         }
 
         /// <summary>
@@ -195,14 +195,13 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
             return frameBytes.Length - 4;
         }
 
-        private LapbFrame(StreamKey key, byte[] frameBytes, int infoLength)
+        private LapbFrame(byte[] frameBytes, int infoLength)
         {
             if (frameBytes == null)
             {
                 throw new ArgumentNullException(nameof(frameBytes));
             }
 
-            Key = key;
             Address = frameBytes[0];
             Control = frameBytes[1];
 
@@ -239,11 +238,6 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
 
             PollFinal = (Control & LapbControl.PollFinalBit) != 0;
         }
-
-        /// <summary>
-        /// Gets the TCP flow this frame was reassembled from.
-        /// </summary>
-        public StreamKey Key { get; }
 
         /// <summary>
         /// Gets the LAPB address byte.

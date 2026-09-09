@@ -285,7 +285,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                 }
 
                 OnRawFrameReceived?.Invoke(frameBytes);
-                LapbFrame frame = new LapbFrame(default, frameBytes);
+                LapbFrame frame = LapbFrame.FromCapture(frameBytes);
                 _link.OnFrameReceived(frame, _ticks);
             }
         }

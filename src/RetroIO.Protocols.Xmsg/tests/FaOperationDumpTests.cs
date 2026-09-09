@@ -72,11 +72,11 @@ namespace RetroIO.Protocols.Xmsg.Tests
 
             _output.WriteLine("=== " + captureName);
 
-            IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFramesInCaptureOrder(path);
+            IReadOnlyList<CapturedFrame> frames = HdlcPcap.ReadCapturedFramesInCaptureOrder(path);
 
             for (int i = 0; i < frames.Count; i++)
             {
-                LapbFrame frame = frames[i];
+                LapbFrame frame = frames[i].Frame;
                 if (frame.Kind != LapbFrameKind.Information || frame.Info.Length <= BodyOffsetFullHeader)
                 {
                     continue;
@@ -86,7 +86,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 if (info[3] != (byte)SintranPacketSubtype.Data) { continue; }
 
                 ReadOnlySpan<byte> body = info.Slice(BodyOffsetFullHeader);
-                string dir = frame.Key.SourcePort == 45164 ? "102->100" : "100->102";
+                string dir = frames[i].Key.SourcePort == 45164 ? "102->100" : "100->102";
 
                 _output.WriteLine(dir + "  len=" + body.Length);
                 _output.WriteLine("   hex: " + Hex(body));

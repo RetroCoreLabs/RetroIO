@@ -672,11 +672,11 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 return;
             }
 
-            IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFramesInCaptureOrder(path);
+            IReadOnlyList<CapturedFrame> frames = HdlcPcap.ReadCapturedFramesInCaptureOrder(path);
 
             for (int i = 0; i < frames.Count; i++)
             {
-                LapbFrame frame = frames[i];
+                LapbFrame frame = frames[i].Frame;
                 if (frame.Kind != LapbFrameKind.Information || frame.Info.Length < BodyOffsetFullHeader)
                 {
                     continue;
@@ -688,7 +688,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
                     continue;
                 }
 
-                string dir = frame.Key.SourcePort.ToString() + "->" + frame.Key.DestinationPort.ToString();
+                string dir = frames[i].Key.SourcePort.ToString() + "->" + frames[i].Key.DestinationPort.ToString();
                 ReadOnlySpan<byte> body = info.Slice(BodyOffsetFullHeader);
 
                 _output.WriteLine(dir + "  bodyLen=" + body.Length + "  body: " + Hex(body, 64));

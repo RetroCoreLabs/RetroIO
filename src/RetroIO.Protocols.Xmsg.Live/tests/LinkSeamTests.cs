@@ -117,7 +117,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
                     continue;
                 }
 
-                LapbFrame frame = new LapbFrame(default, frameBytes);
+                LapbFrame frame = LapbFrame.FromCapture(frameBytes);
                 if (frame.Kind != LapbFrameKind.Information)
                 {
                     continue;

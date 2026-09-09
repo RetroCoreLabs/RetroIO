@@ -153,7 +153,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             frameBytes[0] = address;
             frameBytes[1] = control;
             Array.Copy(info, 0, frameBytes, 2, info.Length);
-            link.OnFrameReceived(new LapbFrame(default, frameBytes), currentTicks);
+            link.OnFrameReceived(LapbFrame.FromCapture(frameBytes), currentTicks);
         }
     }
 }

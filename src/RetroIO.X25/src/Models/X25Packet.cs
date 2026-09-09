@@ -371,22 +371,13 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         private string AnalyzeCudData(byte[] cud)
         {
-            var result = $" CUD({cud.Length})=[{string.Join(" ", cud.Select(b => $"{b:X2}"))}]";
-            
-            // Check for XMSG protocol
-            var version = XmsgProtocolHelper.ExtractVersionFromCud(cud);
-            if (version.HasValue)
-            {
-                result += $" XMSG:{version.Value}";
-                var port = XmsgProtocolHelper.ExtractPortFromCud(cud);
-                if (port.HasValue)
-                {
-                    var servicePort = (XmsgServicePort)port.Value;
-                    result += $" Port:0x{port:X4}({servicePort.GetServiceDescription()})";
-                }
-            }
-            
-            return result;
+            // The Call User Data, as octets. What is IN it is not X.25's business:
+            // 5.2.2 gives the field a length and leaves the contents to the two
+            // DTEs. This used to decode XMSG service ports and name them, which
+            // put a SINTRAN protocol inside the X.25 packet layer for the sake of
+            // a friendlier debug line. Naming them belongs to the XMSG side, which
+            // knows what they mean; see RetroIO.Protocols.Xmsg.
+            return $" CUD({cud.Length})=[{string.Join(" ", cud.Select(b => $"{b:X2}"))}]";
         }
 
         /// <summary>

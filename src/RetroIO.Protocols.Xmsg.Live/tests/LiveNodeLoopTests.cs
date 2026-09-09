@@ -125,7 +125,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             {
                 if (Fcs16.IsValid(frames[i]))
                 {
-                    result.Add(new LapbFrame(default, frames[i]));
+                    result.Add(LapbFrame.FromCapture(frames[i]));
                 }
             }
 

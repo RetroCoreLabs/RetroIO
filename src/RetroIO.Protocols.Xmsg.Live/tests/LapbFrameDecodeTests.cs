@@ -169,7 +169,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             frameBytes[0] = address;
             frameBytes[1] = control;
             System.Array.Copy(info, 0, frameBytes, 2, info.Length);
-            return new LapbFrame(default, frameBytes);
+            return LapbFrame.FromCapture(frameBytes);
         }
     }
 }
