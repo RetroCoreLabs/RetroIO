@@ -44,7 +44,7 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 | P3 | Nothing else | Building the libraries | There are no native dependencies |
 | P4 | `eng\setup-test-data.ps1` run once | The tests that open real disk images | `dir demo\test-images` |
 | P5 | The image corpus at `Documents\RetroFS\test-images` (under your user profile) | The Dragon and PC image tests | `dir` it — those images exist only there |
-| P6 | Python 3 | `eng\gen-*.py` (code generators) and `eng\check-docs.py` | `python --version` - on Windows here the command is `python`; `python3` does not exist |
+| P6 | Python 3 | `eng\gen-*.py` (the code generators in this repository), and the documentation checker kept one level up beside the repositories | `python --version` - on Windows here the command is `python`; `python3` does not exist |
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |
 
 ```powershell
