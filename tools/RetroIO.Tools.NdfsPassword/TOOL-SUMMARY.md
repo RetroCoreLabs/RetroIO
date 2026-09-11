@@ -1,8 +1,8 @@
 # NDFS Password Tool - Complete
 
-**Location**: `E:\Dev\RCL\RetroIO\tools\RetroIO.Tools.NdfsPassword\`
+**Location**: `tools/RetroIO.Tools.NdfsPassword/`
 **Binary**: `bin\Release\net9.0\ndfs-password.exe`
-**Build Script**: `E:\Dev\RCL\RetroIO\build.ps1` (the old build-password-tool.bat is gone)
+**Build Script**: `build.ps1` at the repository root (the old build-password-tool.bat is gone)
 
 ---
 
@@ -120,7 +120,7 @@ dotnet build -c Release
 
 Copy to a directory in your PATH:
 ```powershell
-copy tools\NdfsPasswordTool\bin\Release\net9.0\ndfs-password.exe C:\Tools\
+copy publish\win-x64\ndfs-password.exe <a directory on your PATH>
 ```
 
 ---
@@ -270,6 +270,6 @@ Build succeeded.
 **Tool Complete** - Professional NDFS password management! 🛠️
 
 **Full Paths:**
-- Tool: `E:\Dev\RCL\RetroIO\tools\RetroIO.Tools.NdfsPassword\`
-- Binary: `E:\Dev\RCL\RetroIO\publish\win-x64\ndfs-password.exe` (published by build.ps1)
-- Build: `E:\Dev\RCL\RetroIO\build.ps1`
+- Tool: `tools/RetroIO.Tools.NdfsPassword/`
+- Binary: `publish/win-x64/ndfs-password.exe` (published by build.ps1)
+- Build: `build.ps1` at the repository root

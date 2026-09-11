@@ -35,7 +35,7 @@ builds on it rather than beside it.
 |---|---|
 | .NET SDK as pinned in `global.json` | |
 | **Zero dependencies** | No transport, no framing, no logging framework |
-| The specifications | `E:\Dev\RCL\Specs\X25`. Read the clause; do not cite it from memory |
+| The specifications | The X.25 specification texts, kept outside the repository. Read the clause; do not cite it from memory |
 
 ## Where it sits
 
@@ -153,7 +153,7 @@ Events: `IncomingCall` (with call user data), `CallConnected`, `DataReceived` (p
 
 ## Specification and tests
 
-Text: `E:\Dev\RCL\Specs\X25` (X.25 10/96, X.3, X.28, X.29, X.75, RFC 1613, RFC 1662,
+Text: the specification set kept outside the repository (X.25 10/96, X.3, X.28, X.29, X.75, RFC 1613, RFC 1662,
 ISO 13239). Read the clause; do not cite it from memory - the skill `x25-stack` lists the
 traps in the extracted text.
 
@@ -163,5 +163,5 @@ keep failing until someone flips it on purpose); `X25PacketLayerRuleTests` has o
 rule of the plan (R1-R21); `X25LayerTests` and `X25ClientInteropTests` run two engines back
 to back and over XOT.
 
-Created 2026-09-06 as Phase B1 of `E:\Dev\RCL\Migration\X25 one-stack plan.md`; Phase B
+Created 2026-09-06 as Phase B1 of the X.25 one-stack plan in the migration notes; Phase B
 (the rules above) completed the same day.

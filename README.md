@@ -43,14 +43,14 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 | P2 | PowerShell 7+ | `build.ps1` and the `eng\` scripts | `$PSVersionTable.PSVersion` |
 | P3 | Nothing else | Building the libraries | There are no native dependencies |
 | P4 | `eng\setup-test-data.ps1` run once | The tests that open real disk images | `dir demo\test-images` |
-| P5 | The image corpus at `C:\Users\ronny\OneDrive\Documents\RetroFS\test-images` | The Dragon and PC image tests | `dir` it — those images exist only there |
+| P5 | The image corpus at `Documents\RetroFS\test-images` (under your user profile) | The Dragon and PC image tests | `dir` it — those images exist only there |
 | P6 | Python 3 | `eng\gen-*.py` (code generators) and `eng\check-docs.py` | `python --version` - on Windows here the command is `python`; `python3` does not exist |
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |
 
 ```powershell
-cd E:\Dev\RCL\RetroIO
+# from the repository root
 .\build.ps1                                # build, test, publish the four tools
-powershell -File eng\publish-local.ps1     # pack to E:\Dev\RCL\localfeed as 0.1.0-local.<stamp>
+powershell -File eng\publish-local.ps1     # pack to ../localfeed as 0.1.0-local.<stamp>
 ```
 
 `build.ps1` runs the tests and **stops before publishing if any fail**. Useful switches:
@@ -205,7 +205,7 @@ the library honest: if an app needs a type that is not public, the package is wr
 flowchart LR
     RIO["RetroIO<br/>44 packages"]
     PACK["eng\publish-local.ps1"]
-    FEED["E:\\Dev\\RCL\\localfeed<br/>0.1.0-local.&lt;stamp&gt;"]
+    FEED["../localfeed<br/>0.1.0-local.&lt;stamp&gt;"]
 
     SRV["RetroServer<br/>daemon + RetroAdmin"]
     CMD["RetroCommander<br/>file manager"]
@@ -260,10 +260,10 @@ one-sided unit test whenever the two stacks have to agree about bytes on a wire.
 
 ## Conventions
 
-- **Naming** is governed by the workspace standard at `E:\Dev\RCL\NAMING.md` - **outside this repository**, so a path rather than a link: package id = root namespace = folder
+- **Naming** is governed by `NAMING.md` in the workspace root, one level above this repository (so a path, not a link): package id = root namespace = folder
   name; `RetroIO.Storage.*` and `RetroIO.Protocols.*` are the two sides; nothing sits directly
   under `RetroIO.` unless it belongs to neither.
-- **Diagrams** follow `E:\Dev\RCL\MERMAID_COLOR_STANDARDS.md`, also outside this repository. `python E:\Dev\RCL\eng\check-docs.py .` checks every link and diagram here.
+- **Diagrams** follow `MERMAID_COLOR_STANDARDS.md`, also in the workspace root. `python ../eng/check-docs.py .` checks every link and diagram here.
 - **The org is RetroCoreLabs.** `HackerCorpLabs` is retired and must not appear in anything new.
 - Packages ship with **SourceLink** enabled through the shared `eng/build` props. Never disable it
   in an individual csproj.

@@ -35,9 +35,9 @@ disk image is in the segment file. Finding it means walking the segment table â€
 | # | Requirement | Why | How to check |
 |---|---|---|---|
 | P1 | .NET SDK as pinned in `global.json`, or the published exe | To build or run | `dotnet --info` |
-| P2 | `.\build.ps1` run in `E:\Dev\RCL\RetroIO` | Produces `publish\win-x64\ndfs-analyzer.exe` | `dir publish\win-x64\ndfs-analyzer.exe` |
+| P2 | `.\build.ps1` run at the repository root | Produces `publish\win-x64\ndfs-analyzer.exe` | `dir publish\win-x64\ndfs-analyzer.exe` |
 | P3 | An NDFS image | Anything | `.ndfs`, `.IMG`, a raw dump |
-| P4 | **A copy of the image** | `repair`, `set-initial-commands` and `repair-initial-commands` write **in place** | copy it to `E:\Dev\RCL\_manualtest\images` first |
+| P4 | **A copy of the image** | `repair`, `set-initial-commands` and `repair-initial-commands` write **in place** | copy it to a scratch directory first |
 | P5 | A backup of the original | Because a repair can make things worse | |
 | P6 | The image's disc names | Writing initial commands | They must name a disc the machine really has |
 

@@ -32,7 +32,7 @@ through and watch.
 | # | Requirement | Why | How to check |
 |---|---|---|---|
 | P1 | .NET SDK as pinned in `global.json`, or the published exe | To build or run | `dotnet --info` |
-| P2 | `.\build.ps1` run in `E:\Dev\RCL\RetroIO` | Produces `publish\win-x64\tnfs-stress.exe` | `dir publish\win-x64\tnfs-stress.exe` |
+| P2 | `.\build.ps1` run at the repository root | Produces `publish\win-x64\tnfs-stress.exe` | `dir publish\win-x64\tnfs-stress.exe` |
 | P3 | **A TNFS server on `localhost:16384`** | The target is hard-coded — see below | `netstat -ano \| findstr 16384` |
 | P4 | A valid username and password | It authenticates on every session | A RetroIDP user |
 | P5 | Something to read | The workers do real operations | Files in the served root |

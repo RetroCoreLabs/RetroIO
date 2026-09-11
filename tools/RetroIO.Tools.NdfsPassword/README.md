@@ -33,9 +33,9 @@ reversible — write it down and you can put it back.
 | # | Requirement | Why | How to check |
 |---|---|---|---|
 | P1 | .NET SDK as pinned in `global.json`, or the published exe | To build or run | `dotnet --info` |
-| P2 | `.\build.ps1` run in `E:\Dev\RCL\RetroIO` | Produces `publish\win-x64\ndfs-password.exe` | `dir publish\win-x64\ndfs-password.exe` |
+| P2 | `.\build.ps1` run at the repository root | Produces `publish\win-x64\ndfs-password.exe` | `dir publish\win-x64\ndfs-password.exe` |
 | P3 | An NDFS image with a user file | Anything | |
-| P4 | **A copy of the image** | `clear` writes **in place** | copy it to `E:\Dev\RCL\_manualtest\images` first |
+| P4 | **A copy of the image** | `clear` writes **in place** | copy it to a scratch directory first |
 | P5 | The old value written down | To be able to undo it | The tool prints it — keep it |
 | P6 | A reason to be doing this | It is a credential change on somebody's system | |
 
@@ -94,7 +94,7 @@ Command-line tool for managing NDFS user passwords.
 
 ```powershell
 # The usual way: build.ps1 builds, tests and publishes every tool
-cd E:\Dev\RCL\RetroIO
+# from the repository root
 .\build.ps1
 ```
 
@@ -103,7 +103,7 @@ The executable is then `publish\win-x64\ndfs-password.exe`.
 To build just this project:
 
 ```powershell
-cd E:\Dev\RCL\RetroIO\tools\RetroIO.Tools.NdfsPassword
+cd tools\RetroIO.Tools.NdfsPassword
 dotnet build -c Release -nodeReuse:false
 ```
 
@@ -178,19 +178,19 @@ Output includes exact CHANGE-PAGE commands with calculated page numbers and offs
 
 ```bash
 # List users
-ndfs-password list C:\ndfs\disk.img
+ndfs-password list disk.img
 
 # Clear password for SYSTEM user
-ndfs-password clear C:\ndfs\disk.img SYSTEM
+ndfs-password clear disk.img SYSTEM
 
 # Clear password for user index 5
-ndfs-password clear C:\ndfs\disk.img 5
+ndfs-password clear disk.img 5
 
 # Get manual instructions
-ndfs-password instructions C:\ndfs\disk.img ADMIN
+ndfs-password instructions disk.img ADMIN
 
 # Save instructions to file
-ndfs-password manual C:\ndfs\disk.img ADMIN > instructions.txt
+ndfs-password manual disk.img ADMIN > instructions.txt
 ```
 
 ## Security Notes

@@ -151,7 +151,7 @@ caller on one address range.
 
 ## Specifications
 
-`E:\Dev\RCL\Specs\X25` — X.25 (10/96), X.3, X.28, X.29, X.75, RFC 1613, RFC 1662, ISO 13239. Read
+The specification texts are kept outside the repository: X.25 (10/96), X.3, X.28, X.29, X.75, RFC 1613, RFC 1662, ISO 13239. Read
 the clause rather than citing it from memory; the `x25-stack` skill lists the traps in the extracted
 text.
 

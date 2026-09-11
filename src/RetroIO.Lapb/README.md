@@ -122,11 +122,11 @@ XMSG. Renaming them is a separate cosmetic step whenever it is wanted.
 
 ## Specification and tests
 
-Text: `E:\Dev\RCL\Specs\X25` (X.25 10/96 clause 2 for ITU; `DOC\LAPB-REQUIREMENTS.md` and the
+Text: the specification set kept outside the repository (X.25 10/96 clause 2 for ITU; `DOC\LAPB-REQUIREMENTS.md` and the
 capture corpus for the ND dialect). Tests live in
 `src/RetroIO.Protocols.Xmsg.Live/tests` (`LapbLayerTests`, `LapbTimerTests`, `LapbFrmrTests`,
 `LapbConformanceVectorsTests`, `LapbItuVariantSeamTests`, ...) until they follow the code here.
 
-Created 2026-09-06 as Phase D2 of `E:\Dev\RCL\Migration\X25 one-stack plan.md`. The second LAPB
+Created 2026-09-06 as Phase D2 of the X.25 one-stack plan in the migration notes. The second LAPB
 implementation it replaced, `LapbInstance`, was deleted in Phase D3; `LapbStation` in
 `src/RetroIO.Link/src/Links/Lapb` is the event surface the links use over this engine.

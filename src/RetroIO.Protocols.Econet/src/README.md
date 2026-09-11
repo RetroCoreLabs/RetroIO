@@ -6,8 +6,8 @@ This library implements the file-server application protocol used by BBC Micro, 
 
 Design concepts and on-disk **disc layout** follow **PiFS / PiEconetBridge** (`0{DiscName}` directories). **User accounts** use **RetroIDP** (shared with TNFS), not a separate `Passwords` file. This is **not** a port of `fs.c` and **not** a drop-in replacement for PiEconetBridge.
 
-**Clean-room spec:** `E:\Dev\Ronny\RetroFS\docs\econet\PiFS-Behavior-Spec.md` and
-`E:\Dev\Ronny\RetroFS\docs\econet\Conformance-Matrix.md`. **Both still live in the pre-migration tree** - they
+**Clean-room spec:** `docs/econet/PiFS-Behavior-Spec.md` in the pre-migration RetroFS tree and
+`docs/econet/Conformance-Matrix.md` there too. **Both still live in the pre-migration tree** - they
 were not carried across with the code, so these are absolute paths rather than links. TLS transport is planned
 for a later phase.
 
@@ -30,9 +30,9 @@ for a later phase.
 `RetroIO.Protocols.Econet` is a **class library** (`net9.0`). It does not have its own executable. It is hosted by:
 
 - `RetroServer.Service` - the console/service host; starts Econet automatically.
-  `E:\Dev\RCL\RetroServer\src\RetroServer.Service\Program.cs`
+  `RetroServer/src/RetroServer.Service/Program.cs`
 - `RetroAdmin.Desktop` - the Avalonia admin UI; start via **Start Server**.
-  `E:\Dev\RCL\RetroServer\src\RetroAdmin.Desktop\Services\ServerControl\ServerLifecycleControllers.cs`
+  `RetroServer/src/RetroAdmin.Desktop/Services/ServerControl/ServerLifecycleControllers.cs`
 
 Both live in the **RetroServer repository**, not here - RetroIO is consumed as NuGet packages. They are paths
 rather than links because a relative link across repositories would 404 on GitHub. The former names were
@@ -146,7 +146,7 @@ flowchart TB
     UDP --> AUN --> FS --> Store
 ```
 
-**External reference:** PiEconetBridge docs at `E:\Dev\Emulators\6502\PiEconetBridge\docs\ECONET-AUN-FILESERVER-DEVELOPER.md` describe the full wire + bridge + AUN model. Only the **AUN UDP → port 0x99 → PiFS-style files** slice is implemented here.
+**External reference:** the PiEconetBridge documentation (`docs/ECONET-AUN-FILESERVER-DEVELOPER.md` in that project) describes the full wire + bridge + AUN model. Only the **AUN UDP → port 0x99 → PiFS-style files** slice is implemented here.
 
 ---
 
@@ -541,7 +541,7 @@ Example:
 
 ```json
 {
-  "RootDirectory": "C:\\Users\\ronny\\Documents\\RetroFS\\econet-root",
+  "RootDirectory": "Documents\\RetroFS\\econet-root",
   "DiscName": "RetroFS",
   "VersionString": null,
   "UdpPort": 32768,
@@ -581,14 +581,14 @@ Loaded in `RetroServer.Program.LoadEconetConfiguration`.
 `RetroIO.Protocols.Econet` is a library. Build and run the host:
 
 ```powershell
-cd E:\Dev\RCL\RetroIO
+# from the repository root
 .\build.ps1
 ```
 
 ### Console host (recommended for headless AUN)
 
 ```powershell
-cd E:\Dev\RCL\RetroServer\src\RetroServer.Service
+cd ..\RetroServer\src\RetroServer.Service    # a sibling repository
 dotnet run
 ```
 
@@ -597,7 +597,7 @@ Starts TNFS (16384) and Econet AUN (32768) together.
 ### Desktop UI
 
 ```powershell
-cd E:\Dev\RCL\RetroServer\src\RetroAdmin.Desktop
+cd ..\RetroServer\src\RetroAdmin.Desktop     # a sibling repository
 dotnet run
 ```
 
@@ -606,7 +606,7 @@ Click **Start Server** in the UI.
 ### Unit tests
 
 ```powershell
-cd E:\Dev\RCL\RetroIO
+# from the repository root
 dotnet test --filter "FullyQualifiedName~RetroIO.Tests.Econet"
 ```
 
@@ -789,8 +789,8 @@ Use `InMemoryAunTransport` + `EconetFileServerService` as in `EconetInMemoryTran
 | DI registration | `Server/EconetFileServerExtensions.cs` |
 | UDP transport | `Server/Transport/UdpAunTransport.cs` |
 | Host config | `../RetroIO.Server.Hosting/Configuration/EconetServerConfiguration.cs` |
-| Host wiring | `E:\Dev\RCL\RetroServer\src\RetroServer.Service\Program.cs` (separate repo) |
-| UI host | `E:\Dev\RCL\RetroServer\src\RetroAdmin.Desktop\Services\ServerControl\` (separate repo) |
+| Host wiring | `RetroServer/src/RetroServer.Service/Program.cs` (separate repo) |
+| UI host | `RetroServer/src/RetroAdmin.Desktop/Services/ServerControl/` (separate repo) |
 | Unit tests | `../../tests/RetroIO.Tests/Econet/` |
 
 ### External reference material (not implemented behaviour)
