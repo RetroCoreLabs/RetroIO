@@ -6,7 +6,10 @@ This library implements the file-server application protocol used by BBC Micro, 
 
 Design concepts and on-disk **disc layout** follow **PiFS / PiEconetBridge** (`0{DiscName}` directories). **User accounts** use **RetroIDP** (shared with TNFS), not a separate `Passwords` file. This is **not** a port of `fs.c` and **not** a drop-in replacement for PiEconetBridge.
 
-**Clean-room spec:** [`docs/econet/PiFS-Behavior-Spec.md`](../../docs/econet/PiFS-Behavior-Spec.md) and [`docs/econet/Conformance-Matrix.md`](../../docs/econet/Conformance-Matrix.md). TLS transport is planned for a later phase.
+**Clean-room spec:** `E:\Dev\Ronny\RetroFS\docs\econet\PiFS-Behavior-Spec.md` and
+`E:\Dev\Ronny\RetroFS\docs\econet\Conformance-Matrix.md`. **Both still live in the pre-migration tree** - they
+were not carried across with the code, so these are absolute paths rather than links. TLS transport is planned
+for a later phase.
 
 ---
 
@@ -26,8 +29,14 @@ Design concepts and on-disk **disc layout** follow **PiFS / PiEconetBridge** (`0
 
 `RetroIO.Protocols.Econet` is a **class library** (`net9.0`). It does not have its own executable. It is hosted by:
 
-- [`RetroServer`](../RetroServer/Program.cs) — console host, starts automatically
-- [`RetroServeUI`](../RetroServeUI/Services/RetroServerHost.cs) — Avalonia UI, start via **Start Server**
+- `RetroServer.Service` - the console/service host; starts Econet automatically.
+  `E:\Dev\RCL\RetroServer\src\RetroServer.Service\Program.cs`
+- `RetroAdmin.Desktop` - the Avalonia admin UI; start via **Start Server**.
+  `E:\Dev\RCL\RetroServer\src\RetroAdmin.Desktop\Services\ServerControl\ServerLifecycleControllers.cs`
+
+Both live in the **RetroServer repository**, not here - RetroIO is consumed as NuGet packages. They are paths
+rather than links because a relative link across repositories would 404 on GitHub. The former names were
+`RetroServer` and `RetroServeUI`.
 
 ### What is implemented
 
@@ -168,7 +177,7 @@ There are **no bridge classes** in this project.
 
 ```mermaid
 flowchart TB
-    subgraph Host["Host process (RetroServer / RetroServeUI)"]
+    subgraph Host["Host process (RetroServer.Service / RetroAdmin.Desktop)"]
         Ext["EconetFileServerExtensions.AddEconetFileServer()"]
         Svc["EconetFileServerService"]
     end
@@ -572,14 +581,14 @@ Loaded in `RetroServer.Program.LoadEconetConfiguration`.
 `RetroIO.Protocols.Econet` is a library. Build and run the host:
 
 ```powershell
-cd E:\Dev\Ronny\RetroFS
-dotnet build
+cd E:\Dev\RCL\RetroIO
+.\build.ps1
 ```
 
 ### Console host (recommended for headless AUN)
 
 ```powershell
-cd E:\Dev\Ronny\RetroFS\src\RetroServer
+cd E:\Dev\RCL\RetroServer\src\RetroServer.Service
 dotnet run
 ```
 
@@ -588,7 +597,7 @@ Starts TNFS (16384) and Econet AUN (32768) together.
 ### Desktop UI
 
 ```powershell
-cd E:\Dev\Ronny\RetroFS\src\RetroServeUI
+cd E:\Dev\RCL\RetroServer\src\RetroAdmin.Desktop
 dotnet run
 ```
 
@@ -597,7 +606,7 @@ Click **Start Server** in the UI.
 ### Unit tests
 
 ```powershell
-cd E:\Dev\Ronny\RetroFS
+cd E:\Dev\RCL\RetroIO
 dotnet test --filter "FullyQualifiedName~RetroIO.Tests.Econet"
 ```
 
@@ -700,7 +709,7 @@ For load/save, the DFS client uses FS opcodes + bulk ports after login — not p
 - **Catalogue** — 27-byte entries, simplified dates/attributes
 - **Passwords file** — removed; users are RetroIDP only
 - **Station in config** — banner shows `Net.Station` but UDP bind is `*` on port, not per-station IP binding like Pi `EXPOSE` per address
-- **RetroServeUI** — Econet monitor tab and settings panel (see `EconetMonitorView`, Settings → Econet)
+- **RetroAdmin.Desktop** — Econet monitor tab and settings panel (`Views\EconetMonitorView.axaml`,
 
 ---
 
@@ -780,8 +789,8 @@ Use `InMemoryAunTransport` + `EconetFileServerService` as in `EconetInMemoryTran
 | DI registration | `Server/EconetFileServerExtensions.cs` |
 | UDP transport | `Server/Transport/UdpAunTransport.cs` |
 | Host config | `../RetroIO.Server.Hosting/Configuration/EconetServerConfiguration.cs` |
-| Host wiring | `../RetroServer/Program.cs` |
-| UI host | `../RetroServeUI/Services/RetroServerHost.cs` |
+| Host wiring | `E:\Dev\RCL\RetroServer\src\RetroServer.Service\Program.cs` (separate repo) |
+| UI host | `E:\Dev\RCL\RetroServer\src\RetroAdmin.Desktop\Services\ServerControl\` (separate repo) |
 | Unit tests | `../../tests/RetroIO.Tests/Econet/` |
 
 ### External reference material (not implemented behaviour)

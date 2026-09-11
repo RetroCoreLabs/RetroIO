@@ -7,7 +7,7 @@ REST API for managing RetroFS servers remotely.
 ### Running the API
 
 ```powershell
-cd E:\Dev\Ronny\RetroFS\src\RetroIO.Management.Api
+cd E:\Dev\RCL\RetroIO\src\RetroIO.Management.Api
 dotnet run
 ```
 
@@ -205,4 +205,4 @@ var result = await response.Content.ReadFromJsonAsync<ApiResponse<UserListRespon
 
 ## Full Path
 
-This file is located at: `E:\Dev\Ronny\RetroFS\src\RetroIO.Management.Api\README.md`
+This file is located at: `E:\Dev\RCL\RetroIO\src\RetroIO.Management.Api\src\README.md`

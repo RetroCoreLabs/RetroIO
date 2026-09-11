@@ -1,4 +1,84 @@
-# NDFS Password Management Tool
+# ndfs-password
+
+## What it is
+
+A command-line tool for the **passwords in an NDFS user file**: list the users and whether each has one, clear
+one, and generate the equivalent FILE-SYSTEM-INVESTIGATOR instructions.
+
+## Why you need it
+
+Because a system pack you have just recovered has users on it whose passwords nobody alive knows, and SINTRAN
+will not let you in without one. There is no "forgot password" on a 1980s minicomputer.
+
+Clearing the password in the image is the way in. It is also the only way in if the `SYSTEM` user itself is
+locked, because every other route to fixing it requires being logged in as `SYSTEM`.
+
+The **FILE-SYSTEM-INVESTIGATOR instructions** matter as much as the direct edit. FSI is ND's own tool, run on the
+machine; generating the instruction sequence means the same change can be made the authentic way, or checked
+against what this tool did. It also means the knowledge is transferable to a machine this tool cannot reach.
+
+It shows the **old value** in decimal, octal and hex before clearing, which is what makes the operation
+reversible — write it down and you can put it back.
+
+## What you can use it for
+
+- Finding out **which users have passwords** on an image, and which do not.
+- Clearing one, by username or by user index.
+- Getting into a pack whose `SYSTEM` password is unknown.
+- Producing FSI instructions to make the same change on the machine itself.
+- Recording the old value before changing it, so the change can be undone.
+
+## Prerequisites
+
+| # | Requirement | Why | How to check |
+|---|---|---|---|
+| P1 | .NET SDK as pinned in `global.json`, or the published exe | To build or run | `dotnet --info` |
+| P2 | `.\build.ps1` run in `E:\Dev\RCL\RetroIO` | Produces `publish\win-x64\ndfs-password.exe` | `dir publish\win-x64\ndfs-password.exe` |
+| P3 | An NDFS image with a user file | Anything | |
+| P4 | **A copy of the image** | `clear` writes **in place** | copy it to `E:\Dev\RCL\_manualtest\images` first |
+| P5 | The old value written down | To be able to undo it | The tool prints it — keep it |
+| P6 | A reason to be doing this | It is a credential change on somebody's system | |
+
+> **`clear` modifies the file you give it.** Work on a copy, and note the old value it prints before you lose it.
+
+## Where it fits
+
+```mermaid
+flowchart TB
+    LOCKED["A pack whose SYSTEM<br/>password is unknown"]
+    LIST["ndfs-password list<br/>who has a password?"]
+    NOTE["Note the old value<br/>decimal, octal, hex"]
+    CHOICE{"Change it how?"}
+    CLEAR["ndfs-password clear<br/>- edits the image IN PLACE"]
+    FSI["Generate FSI instructions<br/>- do it on the machine, ND's own way"]
+    IN["You can log in"]
+
+    LOCKED --> LIST --> NOTE --> CHOICE
+    CHOICE --> CLEAR --> IN
+    CHOICE --> FSI --> IN
+
+    classDef bad   fill:#F44336,stroke:#C62828,stroke-width:2px,color:#fff
+    classDef core  fill:#009688,stroke:#00695C,stroke-width:2px,color:#fff
+    classDef q     fill:#FFA726,stroke:#F57C00,stroke-width:2px,color:#000
+    classDef ok    fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
+    classDef media fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:#fff
+
+    class LOCKED bad
+    class LIST,NOTE core
+    class CHOICE q
+    class CLEAR media
+    class FSI core
+    class IN ok
+```
+
+## Related
+
+- [`ndfs-analyzer`](../RetroIO.Tools.NdfsAnalyzer/README.md) — analysis, repair, and the SINTRAN initial-command
+  buffer.
+- [`RetroIO.Storage.Ndfs`](../../src/RetroIO.Storage.Ndfs/README.md) — `UserEntry`, `UserFile` and the
+  three-tier access model, as libraries.
+
+---
 
 Command-line tool for managing NDFS user passwords.
 
@@ -13,11 +93,22 @@ Command-line tool for managing NDFS user passwords.
 ## Installation
 
 ```powershell
-cd tools\NdfsPasswordTool
-dotnet build -c Release
+# The usual way: build.ps1 builds, tests and publishes every tool
+cd E:\Dev\RCL\RetroIO
+.\build.ps1
 ```
 
-Binary will be in `bin\Release\net9.0\ndfs-password.exe`
+The executable is then `publish\win-x64\ndfs-password.exe`.
+
+To build just this project:
+
+```powershell
+cd E:\Dev\RCL\RetroIO\tools\RetroIO.Tools.NdfsPassword
+dotnet build -c Release -nodeReuse:false
+```
+
+The project folder used to be `tools\NdfsPasswordTool`; it is `tools\RetroIO.Tools.NdfsPassword` now, and the old
+`build-password-tool.bat` is gone — `build.ps1` replaces it.
 
 ## Usage
 

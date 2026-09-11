@@ -1,8 +1,8 @@
 # NDFS Password Tool - Complete
 
-**Location**: `E:\Dev\Ronny\RetroFS\tools\NdfsPasswordTool\`
+**Location**: `E:\Dev\RCL\RetroIO\tools\RetroIO.Tools.NdfsPassword\`
 **Binary**: `bin\Release\net9.0\ndfs-password.exe`
-**Build Script**: `E:\Dev\Ronny\RetroFS\build-password-tool.bat`
+**Build Script**: `E:\Dev\RCL\RetroIO\build.ps1` (the old build-password-tool.bat is gone)
 
 ---
 
@@ -270,6 +270,6 @@ Build succeeded.
 **Tool Complete** - Professional NDFS password management! 🛠️
 
 **Full Paths:**
-- Tool: `E:\Dev\Ronny\RetroFS\tools\NdfsPasswordTool\`
-- Binary: `E:\Dev\Ronny\RetroFS\tools\NdfsPasswordTool\bin\Release\net9.0\ndfs-password.exe`
-- Build: `E:\Dev\Ronny\RetroFS\build-password-tool.bat`
+- Tool: `E:\Dev\RCL\RetroIO\tools\RetroIO.Tools.NdfsPassword\`
+- Binary: `E:\Dev\RCL\RetroIO\publish\win-x64\ndfs-password.exe` (published by build.ps1)
+- Build: `E:\Dev\RCL\RetroIO\build.ps1`

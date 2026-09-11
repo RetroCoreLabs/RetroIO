@@ -1,5 +1,96 @@
 # RetroIO.Lapb
 
+## What it is
+
+LAPB — Link Access Procedure, Balanced — is X.25's layer 2. It takes a line that loses and corrupts
+bytes and turns it into a **reliable, ordered frame pipe** between two stations, using HDLC in
+Asynchronous Balanced Mode.
+
+## Why you need it
+
+The packet layer above assumes delivery is reliable and in order: it numbers packets, not frames,
+and has no way to recover a dropped octet. LAPB is what makes that assumption safe — sequence
+numbers, acknowledgements, retransmission on a timer, and a frame check sequence.
+
+It is also **the** place the two dialects differ. Norsk Data equipment does not speak textbook
+ITU-T LAPB, and the differences are small enough to look like bugs and large enough to stop a link
+coming up. Having one engine with a `Variant` switch means the difference is documented in one place
+instead of being rediscovered.
+
+**It is deliberately absent for XOT**, where RFC 1613 puts the X.25 packet straight onto TCP — TCP
+already provides what LAPB provides, and running both means two retransmission schemes arguing.
+
+## What you can use it for
+
+- Bringing up a link to a real ND machine over a serial line or a TCP bridge.
+- Running X.25 over TCP *with* LAPB, to test a serial trunk without a cable.
+- Driving a whole link failure and recovery **in microseconds** in a unit test — the engine owns no
+  clock and starts no threads, so the test supplies time.
+- Decoding LAPB out of a capture: `LapbFrame` and `LapbControl` are usable on their own.
+
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| .NET SDK as pinned in `global.json` | |
+| **Zero dependencies** | Including on `RetroIO.Hdlc` — framing is the caller's business |
+
+## Where it sits, and the two dialects
+
+```mermaid
+flowchart TB
+    CALLER["The caller: a link in RetroIO.Link,<br/>or a test driving it directly"]
+    ENGINE["LapbLayer<br/>state machine, T1/T3, N2, window"]
+    VARIANT{"LapbOptions.Variant"}
+    ND["Nd (default)<br/>address by frame KIND,<br/>node number in SABM/UA/DISC/DM"]
+    ITU["Itu<br/>address by DIRECTION,<br/>A=0x03 / B=0x01"]
+    FRAMES["Frames out to the framing layer"]
+
+    CALLER -->|"OnFrameReceived, Tick, SendInformation"| ENGINE
+    ENGINE --> VARIANT
+    VARIANT --> ND
+    VARIANT --> ITU
+    ND --> FRAMES
+    ITU --> FRAMES
+
+    classDef app   fill:#2196F3,stroke:#1565C0,stroke-width:2px,color:#fff
+    classDef link  fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
+    classDef q     fill:#FFA726,stroke:#F57C00,stroke-width:2px,color:#000
+    classDef ext   fill:#E91E63,stroke:#AD1457,stroke-width:2px,color:#fff
+    classDef core  fill:#009688,stroke:#00695C,stroke-width:2px,color:#fff
+
+    class CALLER app
+    class ENGINE link
+    class VARIANT q
+    class ND ext
+    class ITU core
+    class FRAMES link
+```
+
+Link set-up, which is the same in both dialects:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Disconnected
+    Disconnected --> Setup: SABM sent
+    Setup --> Connected: UA received
+    Setup --> Disconnected: DM received, or N2 retries exhausted
+    Connected --> Recovery: T1 expired
+    Recovery --> Connected: the acknowledgement arrives
+    Recovery --> Disconnected: N2 retries exhausted
+    Connected --> Disconnected: DISC, or the link failed
+
+    classDef up   fill:#4CAF50,stroke:#2E7D32,color:#fff
+    classDef down fill:#F44336,stroke:#C62828,color:#fff
+    classDef mid  fill:#FFA726,stroke:#F57C00,color:#000
+
+    class Connected up
+    class Disconnected down
+    class Setup,Recovery mid
+```
+
+---
+
 The one LAPB data link layer for every RetroIO link. Zero dependencies.
 
 `LapbLayer` decodes and emits frames, runs the ITU-T X.25 (10/96) clause 2 state machine with its

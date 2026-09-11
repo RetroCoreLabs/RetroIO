@@ -1,5 +1,101 @@
 # RetroIO.X25
 
+## What it is
+
+X.25 itself — the packet layer, layer 3. Virtual circuits, call set-up and clearing, data transfer
+with flow control, facility negotiation, interrupts, reset and restart. It turns a reliable frame
+pipe into **many independent conversations** over one link, each with its own logical channel number,
+sequence numbers and window.
+
+## Why you need it
+
+A link carries frames; an application wants a **call**. Between the two is a great deal of
+bookkeeping: allocating a logical channel, encoding an X.121 address, negotiating packet and window
+sizes, keeping separate send and receive sequence numbers per circuit, stopping the sender when the
+receiver's window closes, recovering one circuit with a reset without disturbing the others, and
+restarting the link without losing track of what existed.
+
+Getting any of that subtly wrong produces a network that *mostly* works, which is the worst kind —
+so this is the one place in RetroIO allowed to hold X.25 packet-layer state, and every consumer
+builds on it rather than beside it.
+
+## What you can use it for
+
+- Placing and answering calls, with the cause and diagnostic codes the specification defines.
+- Many circuits on one link — which is what makes a switch possible rather than a cable.
+- **Encoding and decoding packets with no link at all**: `Models/` is stateless, which is exactly
+  how the shared conformance vectors are run.
+- Permanent virtual circuits, never cleared, reset by a restart.
+- Driving a complete call, reset and restart sequence in a unit test in microseconds — the engine
+  owns no clock and no threads.
+
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| .NET SDK as pinned in `global.json` | |
+| **Zero dependencies** | No transport, no framing, no logging framework |
+| The specifications | `E:\Dev\RCL\Specs\X25`. Read the clause; do not cite it from memory |
+
+## Where it sits
+
+```mermaid
+flowchart TB
+    APPS["X25Client, the switch engine,<br/>the desktop runtime, the XOT links"]
+    LAYER["Layer/ - X25Layer<br/>virtual-circuit state machine, timers"]
+    MODELS["Models/ - builder, parser, facilities<br/>STATELESS: usable with no link"]
+    SINK["IX25PacketSink<br/>answers Sent / Refused / LinkDown"]
+    DOWN["LAPB (serial, HDLC-TCP)<br/>or XOT framing directly"]
+
+    APPS --> LAYER
+    LAYER --> MODELS
+    LAYER --> SINK --> DOWN
+
+    classDef app   fill:#2196F3,stroke:#1565C0,stroke-width:2px,color:#fff
+    classDef core  fill:#009688,stroke:#00695C,stroke-width:2px,color:#fff
+    classDef codec fill:#FFA726,stroke:#F57C00,stroke-width:2px,color:#000
+    classDef link  fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
+
+    class APPS app
+    class LAYER core
+    class MODELS codec
+    class SINK,DOWN link
+```
+
+A circuit's life:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ready
+    Ready --> CallRequest: a call is placed
+    Ready --> Incoming: a CALL arrives
+    CallRequest --> DataTransfer: CALL CONNECTED
+    CallRequest --> Ready: CLEAR - refused, or T21 expired
+    Incoming --> DataTransfer: accepted
+    Incoming --> Ready: cleared
+    DataTransfer --> Reset: reset requested
+    Reset --> DataTransfer: reset confirmed
+    DataTransfer --> Clearing: we clear
+    Clearing --> Ready: CLEAR CONFIRM
+    DataTransfer --> Ready: CLEAR from the far end
+
+    classDef ok   fill:#4CAF50,stroke:#2E7D32,color:#fff
+    classDef idle fill:#3F51B5,stroke:#283593,color:#fff
+    classDef mid  fill:#FFA726,stroke:#F57C00,color:#000
+    classDef bad  fill:#F44336,stroke:#C62828,color:#fff
+
+    class DataTransfer ok
+    class Ready idle
+    class CallRequest,Incoming,Reset mid
+    class Clearing bad
+```
+
+**The sink contract is the detail worth knowing**: it answers `Sent`, `Refused` or `LinkDown` —
+never a byte count — and every state change that assumed a send is rolled back when the send did not
+happen. That is what makes a blocked link safe rather than silently desynchronised.
+
+---
+
 The one X.25 packet layer for every RetroIO stack. The desktop runtime, `X25Client`, the
 switch and the XOT links all build on this project, and nothing else may carry X.25
 packet-layer state. Zero dependencies. Namespaces are unchanged from where the code came
