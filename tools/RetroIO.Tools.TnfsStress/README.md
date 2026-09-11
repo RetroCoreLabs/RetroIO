@@ -1,5 +1,10 @@
 # tnfs-stress
 
+<!-- A still screenshot of RetroIO.Tools.TnfsStress doing its job. PNG, under 10 MB. Uncomment when
+     the capture exists; keep the alt text, it is all a screen reader gets.
+![RetroIO.Tools.TnfsStress in use.](../../docs/images/readme/RetroIO.Tools.TnfsStress.png)
+-->
+
 ## What it is
 
 A load generator for a **TNFS server**. It logs in with a username and password, then runs as many concurrent

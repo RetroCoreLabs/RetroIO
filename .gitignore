@@ -15,3 +15,6 @@ pcap-decode-report.txt
 pcap-decode-sample.json
 ## build.ps1 output - single-file executables, rebuildable
 publish/
+
+# Scaffold written by repo-standards\tools\apply-standards.ps1. Copy from it, then delete it.
+README.template.md

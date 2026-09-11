@@ -4,6 +4,15 @@
 [RetroCore Labs](https://github.com/RetroCoreLabs). Forty-four NuGet packages that read and write
 the disk formats, and speak the network protocols, of machines built between roughly 1975 and 1995.
 
+[![build](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/build.yml/badge.svg)](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/build.yml)
+[![packages](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/publish.yml/badge.svg)](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/publish.yml)
+[![licence](https://img.shields.io/github/license/RetroCoreLabs/RetroIO)](LICENSE)
+
+[Packages](#the-package-families) Â· [Prerequisites](#prerequisites) Â· [Tools](#the-four-tools) Â· [Building](#prerequisites) Â· [About the formats and protocols](#about-the-formats-and-protocols)
+
+```powershell
+dotnet add package RetroIO.Storage.Ndfs
+```
 ## Why it exists
 
 Retro hardware is reachable in two ways: through its **storage** and through its **wire**. A
@@ -35,6 +44,20 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 
 ---
 
+## Status
+
+Version `0.1.0`, published to the local folder feed as `0.1.0-local.<timestamp>`. Nothing is
+on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
+
+- **All forty-four packages build in Release with no errors**, and nothing in `src/` has a
+  `Main` - the library and application split is enforced by the layout, not by convention.
+- **Thirteen test projects.** The X.25 packet layer and the C emulator `x25emu` read the
+  **same** conformance vectors, so a disagreement between the two implementations is a
+  failing test rather than an argument.
+- **Not yet measured:** throughput of any driver or protocol. No performance number is
+  claimed here because none has been taken.
+
+---
 ## Prerequisites
 
 | # | Requirement | Needed for | How to check |
@@ -258,6 +281,25 @@ one-sided unit test whenever the two stacks have to agree about bytes on a wire.
 
 ---
 
+## About the formats and protocols
+
+If none of the names above mean anything, this is what they are.
+
+Between roughly 1975 and 1995 every machine kept its files in its own on-disk format and
+talked its own protocol, and almost none of them agreed. A **Norsk Data** ND-100 - a
+Norwegian minicomputer used by universities, hospitals, banks and the military across
+Scandinavia - stored files in **NDFS** and talked **XMSG** under the SINTRAN III operating
+system, and **X.25** to reach other sites. A **Commodore 64** used **D64** floppy images. A
+**BBC Micro** used **ADFS** and talked **Econet** on a school network. **TNFS** is the
+modern protocol a retro machine with a network adapter uses to reach files over IP.
+
+All of that hardware still exists and a good deal of it still runs. The formats are
+documented in manuals that are often wrong in detail, and implemented in tools that are
+either lost, platform-specific or wrong in different ways. RetroIO is one implementation of
+each, with the disagreements between the documentation and the real media written down in the
+code as comments, so the next person does not have to rediscover them.
+
+---
 ## Conventions
 
 - **Naming** is governed by `NAMING.md` in the workspace root, one level above this repository (so a path, not a link): package id = root namespace = folder
@@ -267,3 +309,13 @@ one-sided unit test whenever the two stacks have to agree about bytes on a wire.
 - **The org is RetroCoreLabs.** `HackerCorpLabs` is retired and must not appear in anything new.
 - Packages ship with **SourceLink** enabled through the shared `eng/build` props. Never disable it
   in an individual csproj.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get a build running, what the code is
+expected to look like, and what will get a change sent back. A security problem goes through
+[SECURITY.md](SECURITY.md) and never a public issue.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).

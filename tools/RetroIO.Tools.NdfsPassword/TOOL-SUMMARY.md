@@ -6,7 +6,7 @@
 
 ---
 
-## ✅ Features Implemented
+## Features Implemented
 
 ### 1. List Users
 ```bash
@@ -49,7 +49,7 @@ Generates:
 
 ---
 
-## 📊 Example Output
+## Example Output
 
 ### List Command
 
@@ -103,7 +103,7 @@ Current Password Hash:    0 (decimal) = 0 (octal) = 0x0000 (hex)
 
 ---
 
-## 🔧 Build & Install
+## Build & Install
 
 ### Build
 
@@ -125,7 +125,7 @@ copy publish\win-x64\ndfs-password.exe <a directory on your PATH>
 
 ---
 
-## 📝 All Commands
+## All Commands
 
 | Command | Description | Modifies Disk |
 |---------|-------------|---------------|
@@ -137,7 +137,7 @@ copy publish\win-x64\ndfs-password.exe <a directory on your PATH>
 
 ---
 
-## 🎯 Use Cases
+## Use Cases
 
 ### 1. Quick Password Reset
 
@@ -171,7 +171,7 @@ foreach ($user in $users) {
 
 ---
 
-## ⚠️ Safety Features
+## Safety Features
 
 ### Read-Only Mode
 
@@ -193,7 +193,7 @@ foreach ($user in $users) {
 
 ---
 
-## 🔒 Security Recommendations
+## Security Recommendations
 
 1. **Audit Logging**: Log when tool is used
    ```powershell
@@ -214,7 +214,7 @@ foreach ($user in $users) {
 
 ---
 
-## 📁 File Structure
+## File Structure
 
 ```
 tools/NdfsPasswordTool/
@@ -228,7 +228,7 @@ tools/NdfsPasswordTool/
 
 ---
 
-## ✅ Test Results
+## Test Results
 
 ### Build Status
 
@@ -249,7 +249,7 @@ Build succeeded.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ```powershell
 # 1. Build

@@ -1,5 +1,10 @@
 # ndfs-analyzer
 
+<!-- A still screenshot of RetroIO.Tools.NdfsAnalyzer doing its job. PNG, under 10 MB. Uncomment when
+     the capture exists; keep the alt text, it is all a screen reader gets.
+![RetroIO.Tools.NdfsAnalyzer in use.](../../docs/images/readme/RetroIO.Tools.NdfsAnalyzer.png)
+-->
+
 ## What it is
 
 A command-line tool for **inspecting, verifying and repairing Norsk Data NDFS disk images** — and for reading

@@ -1,5 +1,10 @@
 # ndfs-password
 
+<!-- A still screenshot of RetroIO.Tools.NdfsPassword doing its job. PNG, under 10 MB. Uncomment when
+     the capture exists; keep the alt text, it is all a screen reader gets.
+![RetroIO.Tools.NdfsPassword in use.](../../docs/images/readme/RetroIO.Tools.NdfsPassword.png)
+-->
+
 ## What it is
 
 A command-line tool for the **passwords in an NDFS user file**: list the users and whether each has one, clear

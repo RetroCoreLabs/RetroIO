@@ -1,5 +1,10 @@
 # retroio-demo
 
+<!-- A still screenshot of RetroIO.Demo doing its job. PNG, under 10 MB. Uncomment when
+     the capture exists; keep the alt text, it is all a screen reader gets.
+![RetroIO.Demo in use.](../../docs/images/readme/RetroIO.Demo.png)
+-->
+
 ## What it is
 
 An interactive console application that mounts a disk image, lists it, reads a file and reads a raw sector — a

@@ -2,7 +2,7 @@
 
 ## Current Status
 
-### ✅ Implemented (Read-Only)
+### Implemented (Read-Only)
 - [x] Mount D64 disk images (35/40/42 track variants)
 - [x] Read file data following track/sector chains
 - [x] List directory contents
@@ -15,7 +15,7 @@
 - [x] URN identifier generation
 - [x] Numeric file indexing (#1, #2, #3)
 
-### ❌ Not Implemented (Write Operations)
+### Not Implemented (Write Operations)
 
 #### BAM (Block Availability Map) Management
 - [ ] Parse BAM structure from Track 18, Sector 0
@@ -204,7 +204,7 @@ isk()
 [Test] Format_CreateValidBAM()
 ```
 
-### ❌ Not Supported (By Design)
+### Not Supported (By Design)
 
 #### Features Not in D64 Format
 - [ ] ~~Subdirectories~~ (D64 has no subdirectory support)

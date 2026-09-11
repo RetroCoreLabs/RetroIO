@@ -250,7 +250,7 @@ mockFS.AddDirectory("/tmp/tnfs/Ñoño");
 
 ## Important Notes
 
-### ⚠️ Path Normalization
+### Path Normalization
 
 The mock filesystem normalizes all paths to use forward slashes (`/`) and removes duplicate slashes:
 
@@ -261,7 +261,7 @@ mockFS.AddDirectory("/tmp//tnfs");
 mockFS.AddDirectory("\\tmp\\tnfs");  // Converted to /tmp/tnfs
 ```
 
-### ⚠️ Root Directory
+### Root Directory
 
 When configuring `SessionCommandHandler`, ensure the root directory exists in the mock:
 
@@ -276,7 +276,7 @@ mockFS.AddDirectory("/tmp/tnfs");  // MUST exist!
 // Server checks: /tmp/tnfs + "/subdir" = /tmp/tnfs/subdir (must exist)
 ```
 
-### ⚠️ Case Sensitivity
+### Case Sensitivity
 
 Mock filesystem is **case-sensitive**:
 
