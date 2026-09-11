@@ -56,7 +56,7 @@ Generates:
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║      NDFS Password Management Tool v1.0                   ║
-║      HackerCorp Labs - RetroFS Project                    ║
+║      RetroCore Labs - RetroFS Project                     ║
 ╚════════════════════════════════════════════════════════════╝
 
 Found 1 user(s) in FLOPPY-360KB.img:

@@ -236,4 +236,4 @@ dotnet run --project tools\NdfsPasswordTool -- list disk.img
 
 ## License
 
-MIT License - HackerCorp Labs
+MIT License - RetroCore Labs

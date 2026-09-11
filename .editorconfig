@@ -189,7 +189,7 @@ dotnet_diagnostic.IDE0073.severity = warning
 
 dotnet_diagnostic.IDE0073.severity = warning
 
-file_header_template = \nSPDX-License-Identifier: MIT\nCopyright (c) 1985-2026 Ronny Hansen \nHackerCorp Labs — https://github.com/HackerCorpLabs\nRetroFS -- Accessing yesterday's data with today's standards"\n
+file_header_template = \nSPDX-License-Identifier: MIT\nCopyright (c) 1985-2026 Ronny Hansen \nRetroCore Labs — https://github.com/RetroCoreLabs\nRetroFS -- Accessing yesterday's data with today's standards"\n
 
 
 # C++ Files

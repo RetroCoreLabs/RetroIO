@@ -1,7 +1,7 @@
 //
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
-// HackerCorp Labs — https://github.com/HackerCorpLabs
+// RetroCore Labs — https://github.com/RetroCoreLabs
 // NDFS Password Management Tool
 //
 
@@ -20,7 +20,7 @@ namespace RetroIO.Tools.NdfsPassword
         {
             Console.WriteLine("╔════════════════════════════════════════════════════════════╗");
             Console.WriteLine("║      NDFS Password Management Tool v1.0                   ║");
-            Console.WriteLine("║      HackerCorp Labs - RetroFS Project                    ║");
+            Console.WriteLine("║      RetroCore Labs - RetroFS Project                     ║");
             Console.WriteLine("╚════════════════════════════════════════════════════════════╝");
             Console.WriteLine();
 
