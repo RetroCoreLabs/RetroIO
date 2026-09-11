@@ -44,7 +44,7 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 | P3 | Nothing else | Building the libraries | There are no native dependencies |
 | P4 | `eng\setup-test-data.ps1` run once | The tests that open real disk images | `dir demo\test-images` |
 | P5 | The image corpus at `Documents\RetroFS\test-images` (under your user profile) | The Dragon and PC image tests | `dir` it — those images exist only there |
-| P6 | Python 3 | `eng\gen-*.py` (the code generators in this repository), and the documentation checker kept one level up beside the repositories | `python --version` - on Windows here the command is `python`; `python3` does not exist |
+| P6 | Python 3 | `eng\gen-*.py` (the code generators in this repository), and `eng\check-docs.py` (the documentation checker) | `python --version` - on Windows here the command is `python`; `python3` does not exist |
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |
 
 ```powershell
@@ -263,7 +263,7 @@ one-sided unit test whenever the two stacks have to agree about bytes on a wire.
 - **Naming** is governed by `NAMING.md` in the workspace root, one level above this repository (so a path, not a link): package id = root namespace = folder
   name; `RetroIO.Storage.*` and `RetroIO.Protocols.*` are the two sides; nothing sits directly
   under `RetroIO.` unless it belongs to neither.
-- **Diagrams** follow `MERMAID_COLOR_STANDARDS.md`, also in the workspace root. `python ../eng/check-docs.py .` checks every link and diagram here.
+- **Diagrams** follow `MERMAID_COLOR_STANDARDS.md`, also in the workspace root. `python eng/check-docs.py` checks every link and diagram here.
 - **The org is RetroCoreLabs.** `HackerCorpLabs` is retired and must not appear in anything new.
 - Packages ship with **SourceLink** enabled through the shared `eng/build` props. Never disable it
   in an individual csproj.
