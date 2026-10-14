@@ -10,7 +10,9 @@ using NUnit.Framework;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Ndfs.Creation;
 using RetroIO.Storage.Ndfs.Drivers;
+using RetroIO.Storage.Ndfs.Elements;
 using RetroIO.Storage.Ndfs.FileSystems;
+using RetroIO.Storage.Ndfs.Structures;
 
 namespace RetroIO.Tests
 {
@@ -144,6 +146,56 @@ namespace RetroIO.Tests
                 NdfsDriver driver = new NdfsDriver();
                 driver.Mount(stream, readOnly: true);
                 byte[] readBack = driver.ReadFile("/CAROL/SPARSE:DAT");
+                Assert.That(readBack, Is.EqualTo(data));
+            }
+        }
+
+        [Test]
+        public void ReadFile_EmptySubIndexEntry_KeepsThePagesBehindItInPlace()
+        {
+            // SINTRAN III leaves the sub-index entry of a group with no page in it EMPTY - no
+            // group index block at all. Measured 2026-10-14 on a domain the ND Linker B01 wrote
+            // under SINTRAN III (nd100x, ND-5000): sub-index entries 0, 2, 4 and 6 set, 1, 3 and
+            // 5 empty. The writer here always makes the group index blocks, so the file is
+            // written and entry 1 is then cleared, as SINTRAN would have written it. Page 1030
+            // must still read back at page 1030, not 512 pages earlier.
+            string image = MakeImage("empty-entry.img");
+            byte[] data = new byte[1500 * PageSize];
+            byte[] pattern = MakePattern(PageSize);
+            System.Array.Copy(pattern, 0, data, 3 * PageSize, PageSize);
+            System.Array.Copy(pattern, 0, data, 1030 * PageSize, PageSize);
+            uint subIndexBlock;
+
+            using (FileStream stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite))
+            {
+                NdfsDriver driver = new NdfsDriver();
+                driver.Mount(stream, readOnly: false);
+                driver.CreateDirectory("/GRACE");
+                driver.WriteFile("/GRACE/GAP:DAT", data);
+                ObjectEntry? entry = driver.GetFileSystem()!.GetObjectEntry("GAP", "GRACE");
+                Assert.That(entry, Is.Not.Null);
+                Assert.That(entry!.FilePointer, Is.Not.Null);
+                Assert.That(entry.FilePointer!.Type, Is.EqualTo(BlockPointer.PointerType.SubIndexed));
+                subIndexBlock = entry.FilePointer.BlockID;
+                driver.Dispose();
+            }
+
+            using (FileStream stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite))
+            {
+                // Premise: entry 1 is set before it is cleared (a group index block, type Indexed).
+                byte[] slot = new byte[4];
+                stream.Position = (long)subIndexBlock * PageSize + 4;
+                stream.ReadExactly(slot);
+                Assert.That(BlockPointer.FromBytes(slot, 0).Type, Is.EqualTo(BlockPointer.PointerType.Indexed));
+                stream.Position = (long)subIndexBlock * PageSize + 4;
+                stream.Write(new byte[4]);
+            }
+
+            using (FileStream stream = new FileStream(image, FileMode.Open, FileAccess.Read))
+            {
+                NdfsDriver driver = new NdfsDriver();
+                driver.Mount(stream, readOnly: true);
+                byte[] readBack = driver.ReadFile("/GRACE/GAP:DAT");
                 Assert.That(readBack, Is.EqualTo(data));
             }
         }

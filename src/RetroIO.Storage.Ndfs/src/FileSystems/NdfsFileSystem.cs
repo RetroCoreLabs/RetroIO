@@ -1817,7 +1817,18 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 var indexPointer = BlockPointer.FromBytes(subIndexBuffer, (int)(i * 4));
 
                 if (indexPointer.BlockID == 0)
+                {
+                    // An empty entry is a hole of 512 pages, not something to skip: entry i covers
+                    // file pages i * 512 on whether it is set or not. SINTRAN III leaves the entry of
+                    // a group with no page in it empty (a domain of the ND Linker B01, 2026-10-14:
+                    // entries 0, 2, 4, 6 set). Skipping it moved every page behind it 512 pages
+                    // (1 MB) down. BlockID 0 is a sparse hole to every reader of this list.
+                    uint holes = Math.Min(filePages, IndexPageLimit);
+                    for (uint h = 0; h < holes; h++)
+                        blockList.Add(new BlockPointer(0, BlockPointer.PointerType.Contiguous));
+                    filePages -= holes;
                     continue;
+                }
 
                 if (indexPointer.Type == BlockPointer.PointerType.Indexed)
                 {
