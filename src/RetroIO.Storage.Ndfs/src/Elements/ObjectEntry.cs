@@ -349,11 +349,12 @@ namespace RetroIO.Storage.Ndfs.Elements
                                        (data[offset + 54] << 8) |
                                        data[offset + 55]);
 
-            // Bytes in file (bytes 56-59, big-endian) + 1
-            entry.BytesInFile = (uint)((data[offset + 56] << 24) |
-                                       (data[offset + 57] << 16) |
-                                       (data[offset + 58] << 8) |
-                                       data[offset + 59]) + 1;
+            // Bytes in file (bytes 56-59, big-endian) + 1. The field is 32 bits wide, so a stored
+            // 0xFFFFFFFF (empty file) wraps to 0. uint + int would widen to long and give 4294967296.
+            entry.BytesInFile = unchecked((uint)((data[offset + 56] << 24) |
+                                                 (data[offset + 57] << 16) |
+                                                 (data[offset + 58] << 8) |
+                                                 data[offset + 59]) + 1u);
 
             // File pointer (bytes 60-63, big-endian) - stored as BlockPointer with type info
             entry.FilePointer = BlockPointer.FromBytes(data, offset + 60);
