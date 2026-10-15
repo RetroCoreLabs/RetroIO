@@ -8,7 +8,7 @@ the disk formats, and speak the network protocols, of machines built between rou
 [![packages](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/publish.yml/badge.svg)](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/publish.yml)
 [![licence](https://img.shields.io/github/license/RetroCoreLabs/RetroIO)](LICENSE)
 
-[Packages](#the-package-families) Â· [Prerequisites](#prerequisites) Â· [Tools](#the-four-tools) Â· [Building](#prerequisites) Â· [About the formats and protocols](#about-the-formats-and-protocols)
+[Packages](#the-package-families) · [Prerequisites](#prerequisites) · [Tools](#the-four-tools) · [Building](#prerequisites) · [About the formats and protocols](#about-the-formats-and-protocols)
 
 ```powershell
 dotnet add package RetroIO.Storage.Ndfs
