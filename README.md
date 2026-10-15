@@ -66,6 +66,7 @@ on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
 | P2 | PowerShell 7+ | `build.ps1` and the `eng\` scripts | `$PSVersionTable.PSVersion` |
 | P3 | Nothing else | Building the libraries | There are no native dependencies |
 | P4 | `eng\setup-test-data.ps1` run once | The tests that open real disk images | `dir demo\test-images` |
+| P4a | `eng\fetch-test-images.ps1` (or `eng/fetch-test-images.sh`) run once after cloning | The tests that need the real NDFS packs and the C64 corpus. The images are not in git; this downloads them and checks the SHA-256 in `eng/test-images.sha256`. Without them those tests are skipped | `dir tests\demo\test-images` |
 | P5 | The image corpus at `Documents\RetroFS\test-images` (under your user profile) | The Dragon and PC image tests | `dir` it — those images exist only there |
 | P6 | Python 3 | `eng\gen-*.py` (the code generators in this repository), and `eng\check-docs.py` (the documentation checker) | `python --version` - on Windows here the command is `python`; `python3` does not exist |
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |

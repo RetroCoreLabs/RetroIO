@@ -18,3 +18,7 @@ publish/
 
 # Scaffold written by repo-standards\tools\apply-standards.ps1. Copy from it, then delete it.
 README.template.md
+
+# Disk images are not in git. eng/fetch-test-images downloads them (see eng/test-images.sha256).
+tests/demo/test-images/
+tests/RetroIO.Tests/TestData/*.img.gz

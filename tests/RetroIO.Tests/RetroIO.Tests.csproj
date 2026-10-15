@@ -39,8 +39,9 @@
   <ItemGroup>
     <!-- A real SINTRAN III K pack captured 2026-08-02 with 201 users and a THRICE-relocated
          overflow object block. Gzipped: 78 MB raw, 2.7 MB compressed. Our own writer never
-         relocates, so no synthetic image can exercise the file-numbering rule this pins down. -->
-    <Content Include="TestData\BIGDISK0-K-201users.img.gz">
+         relocates, so no synthetic image can exercise the file-numbering rule this pins down.
+         The file is not in git: eng/fetch-test-images downloads it. Without it the tests that need it are skipped. -->
+    <Content Include="TestData\BIGDISK0-K-201users.img.gz" Condition="Exists('TestData\BIGDISK0-K-201users.img.gz')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>TestData\BIGDISK0-K-201users.img.gz</TargetPath>
     </Content>

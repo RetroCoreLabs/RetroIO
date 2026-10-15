@@ -64,7 +64,8 @@ namespace RetroIO.Tests
         {
             string gz = Path.Combine(
                 TestContext.CurrentContext.TestDirectory, "TestData", FixtureName);
-            Assert.That(File.Exists(gz), Is.True, $"fixture missing: {gz}");
+            if (!File.Exists(gz))
+                Assert.Ignore($"fixture not fetched: {gz} - run eng/fetch-test-images.ps1 (or .sh)");
 
             _imagePath = Path.Combine(Path.GetTempPath(), "retrofs-201users-" + Guid.NewGuid().ToString("N") + ".img");
             using (FileStream src = File.OpenRead(gz))
