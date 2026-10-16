@@ -13,6 +13,12 @@ the disk formats, and speak the network protocols, of machines built between rou
 ```powershell
 dotnet add package RetroIO.Storage.Ndfs
 ```
+## How this code was written
+
+Some of the code in this repository was written with the help of AI, mostly Claude (Anthropic).
+Ronny Hansen directs the work, tests it against real hardware and emulators, and is responsible for
+what is in the repository. We say so plainly so you know what you are using.
+
 ## Why it exists
 
 Retro hardware is reachable in two ways: through its **storage** and through its **wire**. A
