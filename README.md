@@ -45,7 +45,7 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 - **Talk to a SINTRAN machine** with **XMSG** — file access, chat, the XROUT name service, the
   request/response library, and the kernel API a SINTRAN task would have called.
 - **Put a management API on any of it** — REST plus SignalR push, with users, groups and a firewall.
-- **Write a tool in an afternoon**: the four in `tools/` are each a few hundred lines on top of
+- **Write a tool in an afternoon**: the four in `src/tools/` are each a few hundred lines on top of
   these packages.
 
 ---
@@ -68,19 +68,19 @@ on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
 
 | # | Requirement | Needed for | How to check |
 |---|---|---|---|
-| P1 | .NET SDK as pinned in `global.json` | Everything | `dotnet --info` |
+| P1 | .NET SDK as pinned in `src/global.json` | Everything | `dotnet --info` |
 | P2 | PowerShell 7+ | `build.ps1` and the `eng\` scripts | `$PSVersionTable.PSVersion` |
 | P3 | Nothing else | Building the libraries | There are no native dependencies |
-| P4 | `eng\setup-test-data.ps1` run once | The tests that open real disk images | `dir demo\test-images` |
-| P4a | `eng\fetch-test-images.ps1` (or `eng/fetch-test-images.sh`) run once after cloning | The tests that need the real NDFS packs and the C64 corpus. The images are not in git; this downloads them and checks the SHA-256 in `eng/test-images.sha256`. Without them those tests are skipped | `dir tests\demo\test-images` |
+| P4 | `src\eng\setup-test-data.ps1` run once | The tests that open real disk images | `dir src\tests\demo\test-images` |
+| P4a | `src\eng\fetch-test-images.ps1` (or `src/eng/fetch-test-images.sh`) run once after cloning | The tests that need the real NDFS packs and the C64 corpus. The images are not in git; this downloads them and checks the SHA-256 in `src/eng/test-images.sha256`. Without them those tests are skipped | `dir tests\demo\test-images` |
 | P5 | The image corpus at `Documents\RetroFS\test-images` (under your user profile) | The Dragon and PC image tests | `dir` it — those images exist only there |
-| P6 | Python 3 | `eng\gen-*.py` (the code generators in this repository), and `eng\check-docs.py` (the documentation checker) | `python --version` - on Windows here the command is `python`; `python3` does not exist |
+| P6 | Python 3 | `src\eng\gen-*.py` (the code generators in this repository), and `src\eng\check-docs.py` (the documentation checker) | `python --version` - on Windows here the command is `python`; `python3` does not exist |
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |
 
 ```powershell
 # from the repository root
-.\build.ps1                                # build, test, publish the four tools
-powershell -File eng\publish-local.ps1     # pack to ../localfeed as 0.1.0-local.<stamp>
+.\src\build.ps1                                # build, test, publish the four tools
+powershell -File src\eng\publish-local.ps1     # pack to ../localfeed as 0.1.0-local.<stamp>
 ```
 
 `build.ps1` runs the tests and **stops before publishing if any fail**. Useful switches:
@@ -97,14 +97,18 @@ the tests report green against stale code.
 
 | Folder | What is in it |
 |---|---|
-| `src/` | One folder per published package; inside each, `src/` is the code and `tests/` its own tests |
-| `tests/` | Test projects that span several packages and so belong to none of them |
-| `tools/` | Dev-only applications, never shipped as packages |
-| `eng/` | Shared MSBuild files (`eng/build/`), the package icon, and the dev scripts |
+| `src/RetroIO.*/` | One folder per published package; inside each, `src/` is the code and `tests/` its own tests |
+| `src/tests/` | Test projects that span several packages and so belong to none of them |
+| `src/tools/` | Dev-only applications, never shipped as packages |
+| `src/eng/` | Shared MSBuild files (`src/eng/build/`), the package icon, and the dev scripts |
 | `DOC` | Junction to the NDInsight XMSG research notes the protocol code cites — not RetroIO's own docs |
 | `demo/test-images` | Junction to the disk-image test corpus |
 
-Both junctions are created by `eng/setup-test-data.ps1` and are in `.gitignore`.
+Both junctions are created by `src/eng/setup-test-data.ps1` and are in `.gitignore`.
+
+The repository root holds only `README.md`, `LICENSE` and the GitHub files. The solution, the shared
+build settings (`Directory.*.props`), `global.json`, `nuget.config` and `build.ps1` live in `src/`,
+so run `dotnet` from `src/`.
 
 ---
 
@@ -214,15 +218,15 @@ flowchart TB
 
 ## The four tools
 
-Dev-only applications in `tools/`, published by `build.ps1` to `publish\win-x64\`. Each has its own
+Dev-only applications in `src/tools/`, published by `build.ps1` to `src\publish\win-x64\`. Each has its own
 README.
 
 | Tool | What it is for |
 |---|---|
-| [ndfs-analyzer](tools/RetroIO.Tools.NdfsAnalyzer/README.md) | Inspect, verify and repair a Norsk Data NDFS image |
-| [ndfs-password](tools/RetroIO.Tools.NdfsPassword/README.md) | Read, set and clear the passwords inside an NDFS image |
-| [tnfs-stress](tools/RetroIO.Tools.TnfsStress/README.md) | Load and soak a TNFS server |
-| [retroio-demo](tools/RetroIO.Demo/README.md) | A worked example of the library surface |
+| [ndfs-analyzer](src/tools/RetroIO.Tools.NdfsAnalyzer/README.md) | Inspect, verify and repair a Norsk Data NDFS image |
+| [ndfs-password](src/tools/RetroIO.Tools.NdfsPassword/README.md) | Read, set and clear the passwords inside an NDFS image |
+| [tnfs-stress](src/tools/RetroIO.Tools.TnfsStress/README.md) | Load and soak a TNFS server |
+| [retroio-demo](src/tools/RetroIO.Demo/README.md) | A worked example of the library surface |
 
 ---
 
@@ -234,7 +238,7 @@ the library honest: if an app needs a type that is not public, the package is wr
 ```mermaid
 flowchart LR
     RIO["RetroIO<br/>44 packages"]
-    PACK["eng\publish-local.ps1"]
+    PACK["src\eng\publish-local.ps1"]
     FEED["../localfeed<br/>0.1.0-local.&lt;stamp&gt;"]
 
     SRV["RetroServer<br/>daemon + RetroAdmin"]
@@ -272,13 +276,13 @@ that span packages live in `tests/`.
 | `src/RetroIO.Storage.Local/tests` | The format drivers, against real disk images |
 | `src/RetroIO.Management.Api/tests` | The REST API and the hub |
 | `src/RetroIO.Protocols.Xmsg/tests` and eight more `Xmsg.*` | The XMSG codec, kernel API, chat, Ethernet, live, NDFS, node, sync |
-| `tests/RetroIO.Protocols.X25.Tests` | The X.25 stack across packages |
-| `tests/RetroIO.Tests` | Everything that belongs to no single package |
-| `tests/RetroIO.Protocols.Xmsg.TestSupport` | Shared fixtures, not a test project itself |
+| `src/tests/RetroIO.Protocols.X25.Tests` | The X.25 stack across packages |
+| `src/tests/RetroIO.Tests` | Everything that belongs to no single package |
+| `src/tests/RetroIO.Protocols.Xmsg.TestSupport` | Shared fixtures, not a test project itself |
 
 ### One file, two implementations
 
-`tests/x25-vectors/x25-vectors.json` holds the **shared X.25 conformance vectors**. The same file
+`src/tests/x25-vectors/x25-vectors.json` holds the **shared X.25 conformance vectors**. The same file
 is read by this stack *and* by the C emulator in `x25emu` (`tests/unit/test_vectors.c`). A
 disagreement between the two therefore shows up as a failing test on both sides, rather than as a
 mystery on a trunk between them.
@@ -312,16 +316,16 @@ code as comments, so the next person does not have to rediscover them.
 - **Naming** is governed by `NAMING.md` in the workspace root, one level above this repository (so a path, not a link): package id = root namespace = folder
   name; `RetroIO.Storage.*` and `RetroIO.Protocols.*` are the two sides; nothing sits directly
   under `RetroIO.` unless it belongs to neither.
-- **Diagrams** follow `MERMAID_COLOR_STANDARDS.md`, also in the workspace root. `python eng/check-docs.py` checks every link and diagram here.
+- **Diagrams** follow `MERMAID_COLOR_STANDARDS.md`, also in the workspace root. `python src/eng/check-docs.py` checks every link and diagram here.
 - **The org is RetroCoreLabs.** `HackerCorpLabs` is retired and must not appear in anything new.
-- Packages ship with **SourceLink** enabled through the shared `eng/build` props. Never disable it
+- Packages ship with **SourceLink** enabled through the shared `src/eng/build` props. Never disable it
   in an individual csproj.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get a build running, what the code is
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for how to get a build running, what the code is
 expected to look like, and what will get a change sent back. A security problem goes through
-[SECURITY.md](SECURITY.md) and never a public issue.
+[SECURITY.md](.github/SECURITY.md) and never a public issue.
 
 ## Licence
 

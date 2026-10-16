@@ -28,7 +28,7 @@
   RID to publish for. Default win-x64. linux-x64 and osx-arm64 also work for the console apps.
 
 .PARAMETER Output
-  Where the exes go. Default: publish\<Runtime> in the repo root.
+  Where the exes go. Default: publish\<Runtime> next to this script (src\publish).
 
 .PARAMETER FrameworkDependent
   Publish small exes that need a matching .NET runtime installed, instead of self-contained ones.

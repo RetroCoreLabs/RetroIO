@@ -19,7 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.Api.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
-    <ProjectReference Include="..\..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
+    <ProjectReference Include="..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

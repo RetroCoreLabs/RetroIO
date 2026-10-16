@@ -175,7 +175,7 @@ flowchart TB
 
 ## Tests
 
-`src/RetroIO.Protocols.Xmsg/tests`, with shared fixtures in `tests/RetroIO.Protocols.Xmsg.TestSupport`.
+`src/RetroIO.Protocols.Xmsg/tests`, with shared fixtures in `src/tests/RetroIO.Protocols.Xmsg.TestSupport`.
 The codec tests run against **real captured frames** — which is the only way to be sure about a format whose
 documentation is partial. `XmsgFrameFlags` says so plainly in its own summary: the byte is only partially
 decoded, and the safe normative rule is to mirror the captured value per frame type.

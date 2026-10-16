@@ -14,24 +14,24 @@ the same code run inside a desktop application, a Windows service and a console 
 
 | # | Requirement | How to check |
 |---|---|---|
-| 1 | The .NET SDK version pinned in `global.json` | `dotnet --info` |
+| 1 | The .NET SDK version pinned in `src/global.json` | `dotnet --info` |
 | 2 | PowerShell 7 or newer | `$PSVersionTable.PSVersion` |
 | 3 | Nothing else to build the libraries | there are no native dependencies |
-| 4 | `eng\setup-test-data.ps1` run once | only for the tests that open real disk images |
+| 4 | `src\eng\setup-test-data.ps1` run once | only for the tests that open real disk images |
 
 ```powershell
 # from the repository root
-.\build.ps1
+.\src\build.ps1
 ```
 
-`build.ps1` builds, runs the tests and publishes the four tools in `tools/`. It **stops before
+`build.ps1` builds, runs the tests and publishes the four tools in `src/tools/`. It **stops before
 publishing if any test fails**. Useful switches: `-SkipTests` when you know why, `-Clean`,
 `-FrameworkDependent` for smaller executables that need .NET installed, `-Runtime linux-x64`.
 
 To hand your changes to the application repositories, pack them into the local folder feed:
 
 ```powershell
-powershell -File eng\publish-local.ps1
+powershell -File src\eng\publish-local.ps1
 ```
 
 That writes every package into `../localfeed` as `0.1.0-local.<timestamp>`. The application
@@ -52,7 +52,7 @@ point: it is what stops the NuGet cache serving a stale DLL after a change here.
  - **No LINQ, and avoid `foreach`.** Use index-based `for` loops. Where a hot path allocates, use
    `Span<T>`, `ArrayPool<T>`, `stackalloc` or a ring buffer. These are protocol and filesystem
    paths; an enumerator allocation per packet or per block is a real cost, not a theoretical one.
- - **Nothing in `src/` gets a `Main`.** If a change needs an entry point, it belongs in `tools/` or
+ - **Nothing in `src/` gets a `Main`.** If a change needs an entry point, it belongs in `src/tools/` or
    in an application repository.
  - **XML documentation on every public and protected member.** The fix for a missing-comment
    warning is to write the comment - never `<NoWarn>` and never `#pragma warning disable`.
@@ -64,7 +64,7 @@ point: it is what stops the NuGet cache serving a stale DLL after a change here.
    specification clause, or the reason a thing is NOT done the obvious way is the most valuable
    line in the file. Never delete one because a style guide prefers less; replace one only when it
    has become factually wrong.
- - **SourceLink stays enabled**, through the shared props in `eng/build`. Never disable it in an
+ - **SourceLink stays enabled**, through the shared props in `src/eng/build`. Never disable it in an
    individual `.csproj`.
  - **Plain words.** In code, comments, commit messages and documentation alike.
  - **Run `dotnet format`** if whitespace drifts.
@@ -81,7 +81,7 @@ two sides; nothing sits directly under `RetroIO.` unless it belongs to neither. 
 ## Documentation changes
 
 ```powershell
-python eng\check-docs.py
+python src\eng\check-docs.py
 ```
 
 It must exit 0. It fails on a relative link that does not resolve, a relative link that escapes the
@@ -107,7 +107,7 @@ before build-from-source, licence last.
  2. One logical change per commit. A commit message says **what changed and why**, in plain words -
     the subject line in the imperative, then a blank line, then the reasoning. If you measured
     something, put the number in the message.
- 3. `.\build.ps1` passes, including the tests, before you open the pull request.
+ 3. `.\src\build.ps1` passes, including the tests, before you open the pull request.
  4. Say in the pull request what you verified and how. "Tests pass" on its own is not useful; "the
     three LAPB timer tests now cover the T2 case, 42 tests, all green" is.
  5. A change to a wire format or an on-disk format needs a test that reads a real capture or a real
@@ -119,4 +119,4 @@ before build-from-source, licence last.
 
 ## Licence
 
-By contributing you agree your work is licensed under the MIT licence in [LICENSE](LICENSE).
+By contributing you agree your work is licensed under the MIT licence in [LICENSE](../LICENSE).

@@ -582,7 +582,7 @@ Loaded in `RetroServer.Program.LoadEconetConfiguration`.
 
 ```powershell
 # from the repository root
-.\build.ps1
+.\src\build.ps1
 ```
 
 ### Console host (recommended for headless AUN)
@@ -693,7 +693,7 @@ For load/save, the DFS client uses FS opcodes + bulk ports after login — not p
 | Outbound retry | **Missing** | — | |
 | AUN Immediate | **Missing** | Not dispatched | |
 | PiBridge op `0x60` | **Missing** | Rejected `≥64` | |
-| Unit tests | **25 tests** | `tests/RetroIO.Tests/Econet/` | |
+| Unit tests | **25 tests** | `src/tests/RetroIO.Tests/Econet/` | |
 
 ---
 
@@ -721,7 +721,7 @@ For load/save, the DFS client uses FS opcodes + bulk ports after login — not p
 2. Add handler method in `FileIoCommandHandler` or new handler class.
 3. Wire `case` in `FileServerCommandHandler.Handle` or `FileIoCommandHandler.Handle`.
 4. Build reply bytes in `Protocol/FileServer/FileServerReply.cs`.
-5. Add test in `tests/RetroIO.Tests/Econet/`.
+5. Add test in `src/tests/RetroIO.Tests/Econet/`.
 
 ### Add an OSCLI command
 

@@ -41,7 +41,7 @@ Two design decisions shape the whole package, and both were corrections:
 |---|---|---|
 | .NET SDK as pinned in `global.json` | Everything | |
 | `RetroIO.Storage.Core` | The contracts | |
-| `eng\setup-test-data.ps1` run | The tests | Creates the image-corpus junction |
+| `src\eng\setup-test-data.ps1` run | The tests | Creates the image-corpus junction |
 | The corpus at `Documents\RetroFS\test-images` | The Dragon and PC tests | Those images exist **only** there |
 
 ## The formats

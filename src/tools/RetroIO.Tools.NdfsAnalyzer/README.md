@@ -40,7 +40,7 @@ disk image is in the segment file. Finding it means walking the segment table �
 | # | Requirement | Why | How to check |
 |---|---|---|---|
 | P1 | .NET SDK as pinned in `global.json`, or the published exe | To build or run | `dotnet --info` |
-| P2 | `.\build.ps1` run at the repository root | Produces `publish\win-x64\ndfs-analyzer.exe` | `dir publish\win-x64\ndfs-analyzer.exe` |
+| P2 | `.\src\build.ps1` run at the repository root | Produces `src\publish\win-x64\ndfs-analyzer.exe` | `dir src\publish\win-x64\ndfs-analyzer.exe` |
 | P3 | An NDFS image | Anything | `.ndfs`, `.IMG`, a raw dump |
 | P4 | **A copy of the image** | `repair`, `set-initial-commands` and `repair-initial-commands` write **in place** | copy it to a scratch directory first |
 | P5 | A backup of the original | Because a repair can make things worse | |
@@ -163,11 +163,11 @@ flowchart LR
     class IMG media
 ```
 
-The work is in [`RetroIO.Storage.Ndfs`](../../src/RetroIO.Storage.Ndfs/README.md); this tool is the command line
+The work is in [`RetroIO.Storage.Ndfs`](../../RetroIO.Storage.Ndfs/README.md); this tool is the command line
 over it. Anything it can do is available to a program as a library call.
 
 ## Related
 
 - [`ndfs-password`](../RetroIO.Tools.NdfsPassword/README.md) — the passwords in the user file.
-- [`RetroIO.Storage.Ndfs`](../../src/RetroIO.Storage.Ndfs/README.md) — the filesystem, the analyser and the
+- [`RetroIO.Storage.Ndfs`](../../RetroIO.Storage.Ndfs/README.md) — the filesystem, the analyser and the
   repair tool as libraries.

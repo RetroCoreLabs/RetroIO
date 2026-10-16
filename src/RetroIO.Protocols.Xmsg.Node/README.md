@@ -149,4 +149,4 @@ responds per the wire spec, rather than driving a sequence of its own — which 
 
 ## Tests
 
-`src/RetroIO.Protocols.Xmsg.Node/tests`, with fixtures from `tests/RetroIO.Protocols.Xmsg.TestSupport`.
+`src/RetroIO.Protocols.Xmsg.Node/tests`, with fixtures from `src/tests/RetroIO.Protocols.Xmsg.TestSupport`.

@@ -38,7 +38,7 @@ how you confirm what the driver should have found in the directory.
 |---|---|---|---|
 | P1 | .NET SDK as pinned in `global.json` | To build or run | `dotnet --info` |
 | P2 | A disk image | There is nothing to show without one | A `.d64` to start with |
-| P3 | `.\build.ps1` run, or `dotnet run` | Either works | `dir publish\win-x64\retroio-demo.exe` |
+| P3 | `.\src\build.ps1` run, or `dotnet run` | Either works | `dir src\publish\win-x64\retroio-demo.exe` |
 | P4 | A terminal that renders box-drawing characters | The output is boxed | Any modern terminal |
 
 ---
@@ -61,11 +61,11 @@ dotnet run --project tools\RetroIO.Demo\RetroIO.Demo.csproj path\to\disk.d64
 # Or interactively
 dotnet run --project tools\RetroIO.Demo\RetroIO.Demo.csproj
 
-# Or the published executable, after .\build.ps1
-publish\win-x64\retroio-demo.exe path\to\disk.d64
+# Or the published executable, after .\src\build.ps1
+src\publish\win-x64\retroio-demo.exe path\to\disk.d64
 ```
 
-The project path used to be written as `demo/RetroIO.Demo.csproj`; it lives in `tools/` now.
+The project path used to be written as `demo/RetroIO.Demo.csproj`; it lives in `src/tools/` now.
 
 ## What it exercises
 

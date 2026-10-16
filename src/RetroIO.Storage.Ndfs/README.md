@@ -114,7 +114,7 @@ flowchart TB
     class FIX bad
 ```
 
-The [`ndfs-analyzer`](../../tools/RetroIO.Tools.NdfsAnalyzer/README.md) tool is this pipeline on a
+The [`ndfs-analyzer`](../tools/RetroIO.Tools.NdfsAnalyzer/README.md) tool is this pipeline on a
 command line.
 
 ## The three-tier permission model
@@ -153,5 +153,5 @@ lives at the kernel symbol `INIBU` inside the SINTRAN command segment, whose dis
 segment file. Reading it means walking the segment table; that pipeline is the device-independent half in
 `SintranInitialCommands`, with the device-bound read and write entry points on the filesystem.
 
-Related: the [`ndfs-password`](../../tools/RetroIO.Tools.NdfsPassword/README.md) tool, for the passwords
+Related: the [`ndfs-password`](../tools/RetroIO.Tools.NdfsPassword/README.md) tool, for the passwords
 in the user file.

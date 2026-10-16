@@ -157,6 +157,6 @@ text.
 
 ## Tests
 
-`tests/RetroIO.Protocols.X25.Tests`, which spans this package and `RetroIO.X25`. `X25VectorTests`
-runs `tests/x25-vectors/x25-vectors.json` — **the same file the C emulator reads**, so the two
+`src/tests/RetroIO.Protocols.X25.Tests`, which spans this package and `RetroIO.X25`. `X25VectorTests`
+runs `src/tests/x25-vectors/x25-vectors.json` — **the same file the C emulator reads**, so the two
 implementations cannot drift apart silently.

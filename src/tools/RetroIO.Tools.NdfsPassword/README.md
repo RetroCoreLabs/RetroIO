@@ -38,7 +38,7 @@ reversible — write it down and you can put it back.
 | # | Requirement | Why | How to check |
 |---|---|---|---|
 | P1 | .NET SDK as pinned in `global.json`, or the published exe | To build or run | `dotnet --info` |
-| P2 | `.\build.ps1` run at the repository root | Produces `publish\win-x64\ndfs-password.exe` | `dir publish\win-x64\ndfs-password.exe` |
+| P2 | `.\src\build.ps1` run at the repository root | Produces `src\publish\win-x64\ndfs-password.exe` | `dir src\publish\win-x64\ndfs-password.exe` |
 | P3 | An NDFS image with a user file | Anything | |
 | P4 | **A copy of the image** | `clear` writes **in place** | copy it to a scratch directory first |
 | P5 | The old value written down | To be able to undo it | The tool prints it — keep it |
@@ -80,7 +80,7 @@ flowchart TB
 
 - [`ndfs-analyzer`](../RetroIO.Tools.NdfsAnalyzer/README.md) — analysis, repair, and the SINTRAN initial-command
   buffer.
-- [`RetroIO.Storage.Ndfs`](../../src/RetroIO.Storage.Ndfs/README.md) — `UserEntry`, `UserFile` and the
+- [`RetroIO.Storage.Ndfs`](../../RetroIO.Storage.Ndfs/README.md) — `UserEntry`, `UserFile` and the
   three-tier access model, as libraries.
 
 ---
@@ -100,10 +100,10 @@ Command-line tool for managing NDFS user passwords.
 ```powershell
 # The usual way: build.ps1 builds, tests and publishes every tool
 # from the repository root
-.\build.ps1
+.\src\build.ps1
 ```
 
-The executable is then `publish\win-x64\ndfs-password.exe`.
+The executable is then `src\publish\win-x64\ndfs-password.exe`.
 
 To build just this project:
 

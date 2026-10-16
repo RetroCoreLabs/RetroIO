@@ -37,7 +37,7 @@ through and watch.
 | # | Requirement | Why | How to check |
 |---|---|---|---|
 | P1 | .NET SDK as pinned in `global.json`, or the published exe | To build or run | `dotnet --info` |
-| P2 | `.\build.ps1` run at the repository root | Produces `publish\win-x64\tnfs-stress.exe` | `dir publish\win-x64\tnfs-stress.exe` |
+| P2 | `.\src\build.ps1` run at the repository root | Produces `src\publish\win-x64\tnfs-stress.exe` | `dir src\publish\win-x64\tnfs-stress.exe` |
 | P3 | **A TNFS server on `localhost:16384`** | The target is hard-coded — see below | `netstat -ano \| findstr 16384` |
 | P4 | A valid username and password | It authenticates on every session | A RetroIDP user |
 | P5 | Something to read | The workers do real operations | Files in the served root |
@@ -140,8 +140,8 @@ the first refusal, which is not the question.
 
 ## Related
 
-- [`RetroIO.Protocols.Tnfs`](../../src/RetroIO.Protocols.Tnfs/README.md) — the server and the client being
+- [`RetroIO.Protocols.Tnfs`](../../RetroIO.Protocols.Tnfs/README.md) — the server and the client being
   exercised.
 - `RetroServer.Service` in the RetroServer repo — the usual host for the server under test.
 - The management API exposes live TNFS statistics, which are worth watching while this runs:
-  [`RetroIO.Management.Api`](../../src/RetroIO.Management.Api/README.md).
+  [`RetroIO.Management.Api`](../../RetroIO.Management.Api/README.md).

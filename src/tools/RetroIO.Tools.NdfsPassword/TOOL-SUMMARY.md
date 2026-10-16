@@ -120,7 +120,7 @@ dotnet build -c Release
 
 Copy to a directory in your PATH:
 ```powershell
-copy publish\win-x64\ndfs-password.exe <a directory on your PATH>
+copy src\publish\win-x64\ndfs-password.exe <a directory on your PATH>
 ```
 
 ---

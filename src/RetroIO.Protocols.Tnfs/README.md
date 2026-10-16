@@ -138,7 +138,7 @@ host's order.
 
 ## Related
 
-- [`tnfs-stress`](../../tools/RetroIO.Tools.TnfsStress/README.md) — load and soak a server.
+- [`tnfs-stress`](../tools/RetroIO.Tools.TnfsStress/README.md) — load and soak a server.
 - `TnfsVolumeProvider` in [`RetroIO.Storage.Providers`](../RetroIO.Storage.Providers/README.md) — the
   client side, as a mountable volume.
 - The management API exposes the live statistics; see

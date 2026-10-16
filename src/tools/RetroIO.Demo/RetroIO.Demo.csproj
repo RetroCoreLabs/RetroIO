@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Local\src\RetroIO.Storage.Local.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Ndfs\src\RetroIO.Storage.Ndfs.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Providers\src\RetroIO.Storage.Providers.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Azure\src\RetroIO.Storage.Azure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <AssemblyName>retroio-demo</AssemblyName>
+    <RootNamespace>RetroIO.Demo</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+</Project>

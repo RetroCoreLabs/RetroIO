@@ -157,8 +157,8 @@ Text: the specification set kept outside the repository (X.25 10/96, X.3, X.28, 
 ISO 13239). Read the clause; do not cite it from memory - the skill `x25-stack` lists the
 traps in the extracted text.
 
-Tests, in `tests/RetroIO.Protocols.X25.Tests`: `X25VectorTests` runs the conformance vectors
-in `tests/x25-vectors/x25-vectors.json` (shared with the C emulator; a `knownFail` vector must
+Tests, in `src/tests/RetroIO.Protocols.X25.Tests`: `X25VectorTests` runs the conformance vectors
+in `src/tests/x25-vectors/x25-vectors.json` (shared with the C emulator; a `knownFail` vector must
 keep failing until someone flips it on purpose); `X25PacketLayerRuleTests` has one group per
 rule of the plan (R1-R21); `X25LayerTests` and `X25ClientInteropTests` run two engines back
 to back and over XOT.

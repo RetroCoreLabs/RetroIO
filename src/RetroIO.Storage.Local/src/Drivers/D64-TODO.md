@@ -352,13 +352,13 @@ private void DeleteDirectoryEntry(string fileName)
 - Test individual methods in isolation
 - Mock dependencies (BAM, directory)
 - Fast execution (< 1 second per test)
-- Location: `tests/RetroIO.Tests/D64DriverWriteTests.cs`
+- Location: `src/tests/RetroIO.Tests/D64DriverWriteTests.cs`
 
 ### Integration Tests
 - Test full workflows with real disk images
 - Verify data persistence
 - May be slower (1-5 seconds per test)
-- Location: `tests/RetroIO.Tests/D64DriverIntegrationTests.cs`
+- Location: `src/tests/RetroIO.Tests/D64DriverIntegrationTests.cs`
 
 ### Test Disk Images Needed
 1. Empty formatted disk

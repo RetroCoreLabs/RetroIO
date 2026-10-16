@@ -31,15 +31,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Runtime\src\RetroIO.Protocols.X25.Runtime.csproj" />
-    <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Client\src\RetroIO.Protocols.X25.Client.csproj" />
-    <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Monitor\src\RetroIO.Protocols.X25.Monitor.csproj" />
-    <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Routing\src\RetroIO.Protocols.X25.Routing.csproj" />
-    <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Switch\src\RetroIO.Protocols.X25.Switch.csproj" />
-    <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Switch.Management\src\RetroIO.Protocols.X25.Switch.Management.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Runtime\src\RetroIO.Protocols.X25.Runtime.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Client\src\RetroIO.Protocols.X25.Client.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Monitor\src\RetroIO.Protocols.X25.Monitor.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Routing\src\RetroIO.Protocols.X25.Routing.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Switch\src\RetroIO.Protocols.X25.Switch.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Switch.Management\src\RetroIO.Protocols.X25.Switch.Management.csproj" />
     <!-- Referenced for XotSwitchPort in the socket-level switch interop tests; the app's Main is not run. -->
 
-    <ProjectReference Include="..\..\src\RetroIO.Protocols.X25.Nmc\src\RetroIO.Protocols.X25.Nmc.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Nmc\src\RetroIO.Protocols.X25.Nmc.csproj" />
   </ItemGroup>
 
 </Project>

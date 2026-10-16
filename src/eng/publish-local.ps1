@@ -2,12 +2,13 @@
 # The app repos reference 0.1.0-local.* so a fresh timestamp is always picked up and the NuGet cache never serves a stale DLL.
 param([string]$Feed = '', [switch]$Clean)
 $ErrorActionPreference = 'Stop'
+# $root is src: the solution lives there, one level above this eng folder.
 $root = Split-Path -Parent $PSScriptRoot
 # Default the feed to a "localfeed" folder beside the repositories - the same place the
-# app repos' nuget.config points at with its relative "..\localfeed". It is worked out
+# app repos' src\nuget.config points at with its relative "..\..\localfeed". It is worked out
 # from the script's own location rather than written as a drive path, because this
 # repository is published and a drive letter here is only right on one machine.
-if (-not $Feed) { $Feed = Join-Path (Split-Path -Parent $root) 'localfeed' }
+if (-not $Feed) { $Feed = Join-Path (Split-Path -Parent (Split-Path -Parent $root)) 'localfeed' }
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
 New-Item -ItemType Directory -Force $Feed | Out-Null
 
