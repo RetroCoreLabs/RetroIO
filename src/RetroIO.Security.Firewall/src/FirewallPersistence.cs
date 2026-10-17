@@ -17,6 +17,15 @@ public sealed class FirewallPersistence
     private readonly string _configPath;
     private readonly JsonSerializerOptions _jsonOptions;
 
+    /// <summary>
+    /// Creates the persistence object for a configuration file.
+    /// </summary>
+    /// <param name="configPath">
+    /// The path of the configuration file.
+    /// </param>
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="configPath"/> is null.
+    /// </exception>
     public FirewallPersistence(string configPath)
     {
         _configPath = configPath ?? throw new ArgumentNullException(nameof(configPath));

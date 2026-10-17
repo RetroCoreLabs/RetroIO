@@ -16,6 +16,18 @@ public sealed class FirewallRuleManager
     private readonly FirewallEngine _engine;
     private readonly FirewallPersistence _persistence;
 
+    /// <summary>
+    /// Creates the rule manager.
+    /// </summary>
+    /// <param name="engine">
+    /// The firewall engine whose rules are managed.
+    /// </param>
+    /// <param name="persistence">
+    /// The persistence object used to save the configuration.
+    /// </param>
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="engine"/> or <paramref name="persistence"/> is null.
+    /// </exception>
     public FirewallRuleManager(FirewallEngine engine, FirewallPersistence persistence)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));

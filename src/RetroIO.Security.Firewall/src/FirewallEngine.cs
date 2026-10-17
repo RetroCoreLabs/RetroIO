@@ -20,6 +20,15 @@ public sealed class FirewallEngine
     private readonly ConcurrentDictionary<string, (FirewallDecision Decision, DateTime ExpiresAt)> _cache;
     private readonly ReaderWriterLockSlim _configLock = new();
 
+    /// <summary>
+    /// Creates the engine for a firewall configuration.
+    /// </summary>
+    /// <param name="config">
+    /// The configuration the engine checks addresses against.
+    /// </param>
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="config"/> is null.
+    /// </exception>
     public FirewallEngine(FirewallConfiguration config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
