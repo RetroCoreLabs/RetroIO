@@ -12,19 +12,26 @@ namespace RetroIO.Server.Core.FileSystem;
 /// </summary>
 public sealed class LocalFileSystemBackend : IFileSystemBackend
 {
+    /// <inheritdoc/>
     public bool DirectoryExists(string path) => Directory.Exists(path);
 
+    /// <inheritdoc/>
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
+    /// <inheritdoc/>
     public bool FileExists(string path) => File.Exists(path);
 
+    /// <inheritdoc/>
     public IEnumerable<string> EnumerateFileSystemEntries(string path)
         => Directory.EnumerateFileSystemEntries(path);
 
+    /// <inheritdoc/>
     public string GetFileName(string path) => Path.GetFileName(path);
 
+    /// <inheritdoc/>
     public bool IsDirectory(string path) => Directory.Exists(path);
 
+    /// <inheritdoc/>
     public FileInfo? GetFileInfo(string path)
     {
         try
@@ -37,10 +44,13 @@ public sealed class LocalFileSystemBackend : IFileSystemBackend
         }
     }
 
+    /// <inheritdoc/>
     public FileStream OpenFile(string path, FileMode mode, FileAccess access)
         => File.Open(path, mode, access);
 
+    /// <inheritdoc/>
     public string GetFullPath(string path) => Path.GetFullPath(path);
 
+    /// <inheritdoc/>
     public string CombinePath(params string[] paths) => Path.Combine(paths);
 }
