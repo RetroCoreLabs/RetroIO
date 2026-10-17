@@ -78,7 +78,6 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private volatile bool _running;
         private bool _active;
         private bool _peerConnected;
-        private bool _restartSent;
         private bool _disposed;
         private int _connectAttempts;
         private long _lastConnectedMs;
@@ -328,14 +327,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                     return 0;
                 }
 
-                // X.25 4.1: the link is restarted once before the first call on it, and the engine
-                // holds the Call Request until the Restart Confirmation comes back.
-                if (!_restartSent)
-                {
-                    _restartSent = true;
-                    _layer.Restart(0, 0);
-                }
-
+                // No restart first. X.25 4.1 restarts a link before its first call, but this link is a
+                // TCP connection, and RFC 1613 6.4 says Restart "MUST NOT be sent over the TCP
+                // connection" and, if received, "MUST be silently discarded". A conforming XOT peer
+                // therefore never answers one, and the packet layer holds the Call Request until a
+                // Restart Confirmation that cannot come. That is how a call from this switch to the C
+                // emulator across a trunk failed after five seconds, although the same call worked on
+                // the port this one replaces, which never sent a restart.
                 return _layer.PlaceCall(calledAddress, callingAddress, callUserData);
             }
         }
@@ -538,7 +536,6 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _client = client;
                 _stream = client.GetStream();
                 _codec.Reset();
-                _restartSent = false;
                 _peerConnected = true;
             }
 
@@ -586,7 +583,6 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _client = null;
                 _stream = null;
                 _peerConnected = false;
-                _restartSent = false;
             }
 
             try

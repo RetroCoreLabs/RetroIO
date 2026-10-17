@@ -173,6 +173,36 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// The first call out of a port is not preceded by a Restart Request.
+        /// </summary>
+        /// <remarks>
+        /// RFC 1613 6.4: Restart "MUST NOT be sent over the TCP connection" and, if received, "MUST be
+        /// silently discarded". The port used to restart the link before its first call, the way a
+        /// LAPB link is restarted (X.25 4.1), and the packet layer then held the Call Request until a
+        /// Restart Confirmation that no XOT peer sends. Against the C emulator's switch the call was
+        /// cleared after five seconds.
+        /// </remarks>
+        [Test]
+        public void TheFirstCall_IsNotPrecededByARestart_BecauseXotCarriesNone()
+        {
+            using XotSwitchPort dce = NewDce();
+            Assert.That(dce.Start(), Is.True);
+            using XotSwitchPort dte = NewDte(dce.BoundPort);
+            List<Captured> onDte = new List<Captured>();
+            Tap(dte, onDte);
+            bool connected = false;
+            dce.IncomingCall += (port, lci, called, calling, cud) => port.AcceptCall(lci);
+            dte.CallConnected += (port, lci) => connected = true;
+
+            Assert.That(dte.Start(), Is.True);
+            Assert.That(WaitFor(() => dte.PeerConnected && dce.PeerConnected), Is.True);
+            Assert.That(dte.PlaceCall("23420001", "23400001", null), Is.Not.EqualTo((ushort)0));
+            Assert.That(WaitFor(() => connected), Is.True, "the call must go out at once and be accepted");
+
+            Assert.That(CountOf(onDte, false, X25PacketType.RestartRequest), Is.EqualTo(0), "no restart is sent over XOT");
+            Assert.That(CountOf(onDte, false, X25PacketType.CallRequest), Is.EqualTo(1));
+        }
+        /// <summary>
         /// The byte totals count X.25 packet bytes, with no XOT header: they equal the sum of the
         /// packets the tap showed, and what one port sent the other received.
         /// </summary>
