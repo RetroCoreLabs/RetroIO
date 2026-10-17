@@ -146,18 +146,6 @@ namespace RetroIO.Storage.Local.FFS.Core
             int sectorsPerFrag = _fragSize / _device.BlockSize;
             uint result = fragNum * (uint)sectorsPerFrag;
 
-            if (result > 1000000)
-            {
-                Console.WriteLine($"[ERROR FragToSector] HUGE SECTOR NUMBER!");
-                Console.WriteLine($"  fragNum={fragNum} (0x{fragNum:X8})");
-                Console.WriteLine($"  sectorsPerFrag={sectorsPerFrag}");
-                Console.WriteLine($"  result={result} (0x{result:X8})");
-            }
-            else
-            {
-                Console.WriteLine($"[DEBUG FragToSector] fragNum={fragNum}, sectorsPerFrag={sectorsPerFrag}, result={result}");
-            }
-
             return result;
         }
 
@@ -184,9 +172,6 @@ namespace RetroIO.Storage.Local.FFS.Core
             if (fileBlockNum < FfsConstants.NDADDR)
             {
                 uint fragAddr = inode.di_db[fileBlockNum];
-
-                Console.WriteLine($"[DEBUG MapFileBlock] Direct block {fileBlockNum}: di_db[{fileBlockNum}] = {fragAddr} (0x{fragAddr:X8})");
-                Console.WriteLine($"[DEBUG MapFileBlock]   Returning fragment address: {fragAddr}");
 
                 return fragAddr;
             }
@@ -343,27 +328,7 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// </summary>
         public byte[] ReadFile(FfsInode inode)
         {
-            Console.WriteLine($"[DEBUG FfsBlockMapper.ReadFile]:");
-            Console.WriteLine($"  File size: {inode.di_size} bytes");
-            Console.WriteLine($"  Direct blocks (di_db[0-11]):");
-            for (int i = 0; i < FfsConstants.NDADDR; i++)
-            {
-                Console.WriteLine($"    di_db[{i}] = {inode.di_db[i]}");
-            }
-
-            var result = ReadFileData(inode, 0, inode.di_size);
-            Console.WriteLine($"  Read {result.Length} bytes");
-            if (result.Length > 0)
-            {
-                Console.Write($"  First {Math.Min(32, result.Length)} bytes: ");
-                for (int i = 0; i < Math.Min(32, result.Length); i++)
-                {
-                    Console.Write($"{result[i]:X2} ");
-                    if ((i + 1) % 16 == 0 && i < 31) Console.Write("\n    ");
-                }
-                Console.WriteLine();
-            }
-            return result;
+            return ReadFileData(inode, 0, inode.di_size);
         }
     }
 }

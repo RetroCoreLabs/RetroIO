@@ -389,9 +389,7 @@ namespace RetroIO.Storage.Core
                     });
                 }
 
-                Console.WriteLine($"[DEBUG] Saving {config.Mounts.Count} mounts to unified config");
                 UnifiedMountConfigStore.Save(config, _configPath);
-                Console.WriteLine($"[DEBUG] Unified save complete");
             }
             catch (Exception ex)
             {

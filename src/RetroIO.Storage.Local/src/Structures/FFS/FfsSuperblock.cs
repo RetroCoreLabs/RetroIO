@@ -477,12 +477,6 @@ namespace RetroIO.Storage.Local.FFS.Structures
             sb.fs_iblkno = BsdEndianHelper.ReadUInt32BE(buffer, offset + 16);
             sb.fs_dblkno = BsdEndianHelper.ReadUInt32BE(buffer, offset + 20);
 
-            Console.WriteLine($"[DEBUG FfsSuperblock.Parse] Block addresses:");
-            Console.WriteLine($"  Bytes at offset 8-11:  {buffer[offset + 8]:X2} {buffer[offset + 9]:X2} {buffer[offset + 10]:X2} {buffer[offset + 11]:X2} = fs_sblkno={sb.fs_sblkno}");
-            Console.WriteLine($"  Bytes at offset 12-15: {buffer[offset + 12]:X2} {buffer[offset + 13]:X2} {buffer[offset + 14]:X2} {buffer[offset + 15]:X2} = fs_cblkno={sb.fs_cblkno}");
-            Console.WriteLine($"  Bytes at offset 16-19: {buffer[offset + 16]:X2} {buffer[offset + 17]:X2} {buffer[offset + 18]:X2} {buffer[offset + 19]:X2} = fs_iblkno={sb.fs_iblkno}");
-            Console.WriteLine($"  Bytes at offset 20-23: {buffer[offset + 20]:X2} {buffer[offset + 21]:X2} {buffer[offset + 22]:X2} {buffer[offset + 23]:X2} = fs_dblkno={sb.fs_dblkno}");
-
             // Cylinder group parameters (24-35)
             sb.fs_cgoffset = BsdEndianHelper.ReadUInt32BE(buffer, offset + 24);
             sb.fs_cgmask = BsdEndianHelper.ReadUInt32BE(buffer, offset + 28);

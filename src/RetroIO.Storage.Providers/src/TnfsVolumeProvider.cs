@@ -410,30 +410,21 @@ namespace RetroIO.Storage.Providers
             {
                 List<DirectoryEntry> entries = new List<DirectoryEntry>();
 
-                Console.WriteLine($"[TNFS DEBUG] Opening directory: {path}, handle={dirHandle}");
-                int readCount = 0;
-
                 while (true)
                 {
                     TnfsResult<TnfsDirectoryEntry?> readResult = mount.Client.ReadDir(dirHandle);
-                    readCount++;
-
-                    Console.WriteLine($"[TNFS DEBUG] ReadDir #{readCount}: Success={readResult.Success}, ReturnCode={readResult.ReturnCode}, Data={readResult.Data?.Name ?? "null"}");
 
                     if (!readResult.Success)
                     {
-                        Console.WriteLine($"[TNFS DEBUG] ReadDir failed: {readResult.ErrorMessage}");
                         break;
                     }
 
                     if (readResult.Data == null)
                     {
-                        Console.WriteLine($"[TNFS DEBUG] ReadDir returned null (EOF)");
                         break;
                     }
 
                     TnfsDirectoryEntry tnfsEntry = readResult.Data;
-                    Console.WriteLine($"[TNFS DEBUG] Entry: name='{tnfsEntry.Name}', size={tnfsEntry.Size}, isDir={tnfsEntry.IsDirectory}");
 
                     // BUGFIX: Ensure "." and ".." are always marked as directories
                     // Some TNFS servers return these entries without proper IsDirectory flag
@@ -461,7 +452,6 @@ namespace RetroIO.Storage.Providers
                     entries.Add(entry);
                 }
 
-                Console.WriteLine($"[TNFS DEBUG] Total entries read: {entries.Count}");
                 return entries.ToArray();
             }
             finally

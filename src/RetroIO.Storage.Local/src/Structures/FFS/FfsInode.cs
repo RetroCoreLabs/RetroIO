@@ -400,27 +400,6 @@ namespace RetroIO.Storage.Local.FFS.Structures
             for (int i = 0; i < FfsConstants.NDADDR; i++)
             {
                 inode.di_db[i] = BsdEndianHelper.ReadUInt32BE(buffer, offset + 40 + (i * 4));
-
-                // Debug: Warn if block pointer seems too large (likely reading from wrong offset)
-                if (inode.di_db[i] > 10000 && inode.di_db[i] != 0)
-                {
-                    Console.WriteLine($"[WARNING FfsInode.Parse] di_db[{i}] = {inode.di_db[i]} (0x{inode.di_db[i]:X8}) - suspiciously large!");
-                    Console.WriteLine($"  Raw bytes at offset {offset + 40 + (i * 4)}: " +
-                        $"{buffer[offset + 40 + (i * 4)]:X2} {buffer[offset + 40 + (i * 4) + 1]:X2} " +
-                        $"{buffer[offset + 40 + (i * 4) + 2]:X2} {buffer[offset + 40 + (i * 4) + 3]:X2}");
-                    Console.WriteLine($"  Expected inode offset in block: {offset} bytes");
-                    Console.WriteLine($"  ic_mode at offset {offset}: {buffer[offset]:X2} {buffer[offset + 1]:X2}");
-                    Console.WriteLine($"  Full 128 bytes starting at offset {offset}:");
-                    for (int dumpIdx = 0; dumpIdx < Math.Min(128, buffer.Length - offset); dumpIdx += 16)
-                    {
-                        Console.Write($"    Offset {offset + dumpIdx,3}: ");
-                        for (int b = 0; b < 16 && (dumpIdx + b) < 128 && (offset + dumpIdx + b) < buffer.Length; b++)
-                        {
-                            Console.Write($"{buffer[offset + dumpIdx + b]:X2} ");
-                        }
-                        Console.WriteLine();
-                    }
-                }
             }
 
             // Indirect block addresses (88-99) - ic_ib[3], each daddr_t (4 bytes)

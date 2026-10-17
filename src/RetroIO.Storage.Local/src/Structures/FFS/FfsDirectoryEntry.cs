@@ -255,11 +255,9 @@ namespace RetroIO.Storage.Local.FFS.Structures
         {
             if (buffer == null || buffer.Length == 0)
             {
-                Console.WriteLine("[DEBUG FfsDirectoryEntry.ParseAll] Buffer is null or empty");
                 return Array.Empty<FfsDirectoryEntry>();
             }
 
-            Console.WriteLine($"[DEBUG FfsDirectoryEntry.ParseAll] Parsing {buffer.Length} bytes");
             var entries = new System.Collections.Generic.List<FfsDirectoryEntry>();
             int offset = 0;
             int entryCount = 0;
@@ -269,20 +267,17 @@ namespace RetroIO.Storage.Local.FFS.Structures
                 // Ensure we have enough space for header
                 if (offset + FfsConstants.DIRENT_HEADER_SIZE > buffer.Length)
                 {
-                    Console.WriteLine($"  Entry {entryCount}: Not enough space for header at offset {offset}");
                     break;
                 }
 
                 // Parse entry
                 var entry = Parse(buffer, offset);
-                Console.WriteLine($"  Entry {entryCount} at offset {offset}: ino={entry.d_ino}, reclen={entry.d_reclen}, type={entry.d_type}, namlen={entry.d_namlen}, name=\"{entry.d_name}\"");
 
                 // Stop on invalid record length
                 // Note: d_reclen can be very large (e.g., DIRBLKSIZ) for the last entry in a block
                 // This is normal in FFS - the last entry's reclen extends to the block boundary
                 if (entry.d_reclen == 0)
                 {
-                    Console.WriteLine($"    Zero d_reclen, stopping");
                     break;
                 }
 
@@ -290,7 +285,6 @@ namespace RetroIO.Storage.Local.FFS.Structures
                 // But allow up to 64KB for very large directories
                 if (entry.d_reclen > 8192)
                 {
-                    Console.WriteLine($"    Unreasonably large d_reclen={entry.d_reclen}, stopping");
                     break;
                 }
 
@@ -299,17 +293,8 @@ namespace RetroIO.Storage.Local.FFS.Structures
                 {
                     if (includeDots || (!entry.IsDot && !entry.IsDotDot))
                     {
-                        Console.WriteLine($"    Adding entry: \"{entry.d_name}\"");
                         entries.Add(entry);
                     }
-                    else
-                    {
-                        Console.WriteLine($"    Skipping dot/dotdot entry");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"    Unused entry (ino=0)");
                 }
 
                 // Move to next entry
@@ -317,7 +302,6 @@ namespace RetroIO.Storage.Local.FFS.Structures
                 entryCount++;
             }
 
-            Console.WriteLine($"  Total entries parsed: {entryCount}, valid entries: {entries.Count}");
             return entries.ToArray();
         }
 

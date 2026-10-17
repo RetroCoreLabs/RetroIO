@@ -52,18 +52,6 @@ namespace RetroIO.Storage.Local.FFS.Core
             // This caused inode offset misalignment in old SunOS disks.
             _inodesPerBlock = (int)_superblock.fs_inopb;
 
-            Console.WriteLine($"[DEBUG FfsInodeReader Constructor]:");
-            Console.WriteLine($"  fs_iblkno={_superblock.fs_iblkno} fragments");
-            Console.WriteLine($"  fs_fsbtodb={_superblock.fs_fsbtodb}");
-            Console.WriteLine($"  fs_ipg={_superblock.fs_ipg}");
-            Console.WriteLine($"  fs_fpg={_superblock.fs_fpg}");
-            Console.WriteLine($"  fs_frag={_superblock.fs_frag}");
-            Console.WriteLine($"  fs_bsize={_superblock.fs_bsize}");
-            Console.WriteLine($"  fs_fsize={_superblock.fs_fsize}");
-            Console.WriteLine($"  fs_inopb={_superblock.fs_inopb} (inodes per block - FROM SUPERBLOCK)");
-            Console.WriteLine($"  _inodesPerBlock={_inodesPerBlock}");
-            Console.WriteLine($"  fs_cgoffset={_superblock.fs_cgoffset}");
-            Console.WriteLine($"  fs_cgmask={_superblock.fs_cgmask}");
         }
 
         /// <summary>
@@ -114,28 +102,10 @@ namespace RetroIO.Storage.Local.FFS.Core
             // Add block offset within inode area (in fragments)
             uint inodeFragmentAddr = cgimin + (blockInGroup * _superblock.fs_frag);
 
-            Console.WriteLine($"[DEBUG FfsInodeReader] Inode #{inodeNumber}:");
-            Console.WriteLine($"  CG={cylinderGroup}, inodeInGroup={inodeInGroup}");
-            Console.WriteLine($"  cgbase={cgbase} frags, cgstart={cgstart} frags, fs_iblkno={_superblock.fs_iblkno} frags");
-            Console.WriteLine($"  cgimin={cgimin} frags, blockInGroup={blockInGroup}");
-            Console.WriteLine($"  inodeFragmentAddr={inodeFragmentAddr} frags");
-            Console.WriteLine($"  offsetInBlock={offsetInBlock} bytes");
-
             // Read the block containing the inode
             // NOTE: ReadFilesystemBlock now expects fragment addresses directly
             byte[] blockData = new byte[_superblock.fs_bsize];
             _mapper.ReadFilesystemBlock(inodeFragmentAddr, blockData);
-
-            Console.WriteLine($"  Reading from fragment {inodeFragmentAddr}");
-            Console.WriteLine($"  All 128 bytes of inode at offset {offsetInBlock}:");
-            int bytesPrinted = Math.Min(128, blockData.Length - offsetInBlock);
-            for (int i = 0; i < bytesPrinted; i++)
-            {
-                if (i % 16 == 0) Console.Write($"    Offset {offsetInBlock + i,3}: ");
-                Console.Write($"{blockData[offsetInBlock + i]:X2} ");
-                if ((i + 1) % 16 == 0) Console.WriteLine();
-            }
-            if (bytesPrinted % 16 != 0) Console.WriteLine();
 
             // Parse the inode
             return FfsInode.Parse(blockData, offsetInBlock);
