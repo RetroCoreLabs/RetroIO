@@ -550,6 +550,9 @@ namespace RetroIO.Link
 
         #region IDisposable
 
+        /// <summary>
+        /// Stops and disposes every link and clears the link tables.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
@@ -587,15 +590,42 @@ namespace RetroIO.Link
     /// </summary>
     public class LinkManagerStatistics
     {
+        /// <summary>
+        /// Gets or sets the number of links held by the manager.
+        /// </summary>
         public int TotalLinks { get; set; }
+        /// <summary>
+        /// Gets or sets the number of links with status Active.
+        /// </summary>
         public int ActiveLinks { get; set; }
+        /// <summary>
+        /// Gets or sets the number of links with status Error.
+        /// </summary>
         public int ErrorLinks { get; set; }
+        /// <summary>
+        /// Gets or sets the number of links with status Stopped.
+        /// </summary>
         public int StoppedLinks { get; set; }
 
+        /// <summary>
+        /// Gets or sets the sum of bytes sent over all links.
+        /// </summary>
         public long TotalBytesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the sum of bytes received over all links.
+        /// </summary>
         public long TotalBytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the sum of frames sent over all links.
+        /// </summary>
         public long TotalFramesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the sum of frames received over all links.
+        /// </summary>
         public long TotalFramesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the sum of errors over all links.
+        /// </summary>
         public long TotalErrors { get; set; }
     }
 }

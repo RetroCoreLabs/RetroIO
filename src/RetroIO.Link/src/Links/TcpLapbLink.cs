@@ -86,12 +86,18 @@ namespace RetroIO.Link
 
         #region ILink Implementation
 
+        /// <inheritdoc/>
         public string Name => _config.Name;
+        /// <inheritdoc/>
         public LinkType Type => LinkType.TcpLapb;
+        /// <inheritdoc/>
         public LinkStatus Status => _status;
+        /// <inheritdoc/>
         public string RemoteMachineId => _config.RemoteMachineId;
+        /// <inheritdoc/>
         public ProtocolModeConfig ProtocolMode => _config.ProtocolMode;
 
+        /// <inheritdoc/>
         public bool Start()
         {
             lock (_lock)
@@ -129,6 +135,7 @@ namespace RetroIO.Link
             }
         }
 
+        /// <inheritdoc/>
         public void Stop()
         {
             lock (_lock)
@@ -182,6 +189,7 @@ namespace RetroIO.Link
             }
         }
 
+        /// <inheritdoc/>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             if (_status != LinkStatus.Active)
@@ -200,26 +208,32 @@ namespace RetroIO.Link
             return _lapbInstance.SendData(payload);
         }
 
+        /// <inheritdoc/>
         public LinkStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
             return _statistics;
         }
 
+        /// <inheritdoc/>
         public event LinkPayloadReceived? PayloadReceived;
+        /// <inheritdoc/>
         public event LinkStatusChanged? StatusChanged;
 
         #endregion
 
         #region ILapbCapable Implementation
 
+        /// <inheritdoc/>
         public LapbState LapbState => _lapbInstance.State;
 
+        /// <inheritdoc/>
         public (byte VS, byte VR, byte VA) GetSequenceNumbers()
         {
             return _lapbInstance.GetSequenceNumbers();
         }
 
+        /// <inheritdoc/>
         public void Connect()
         {
             if (_status != LinkStatus.Active)
@@ -231,29 +245,36 @@ namespace RetroIO.Link
             _lapbInstance.Connect();
         }
 
+        /// <inheritdoc/>
         public void Disconnect()
         {
             _lapbInstance.Disconnect();
         }
 
+        /// <inheritdoc/>
         public LapbStatistics GetLapbStatistics()
         {
             return _lapbInstance.GetStatistics();
         }
 
+        /// <inheritdoc/>
         public event EventHandler<LapbStateChangedEventArgs>? LapbStateChanged;
 
+        /// <inheritdoc/>
         public void InjectFrame(byte[] frameData, int length)
         {
             _lapbInstance.ReceiveFrame(frameData, length);
         }
 
+        /// <inheritdoc/>
         public void SendFrame(byte[] frame, int length)
         {
             _lapbInstance.SendFrame(frame, length);
         }
 
+        /// <inheritdoc/>
         public event EventHandler<LapbFrameEventArgs>? FrameReceived;
+        /// <inheritdoc/>
         public event EventHandler<LapbFrameEventArgs>? FrameTransmitted;
 
         #endregion
@@ -583,6 +604,7 @@ namespace RetroIO.Link
 
         #region IDisposable
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_disposed)

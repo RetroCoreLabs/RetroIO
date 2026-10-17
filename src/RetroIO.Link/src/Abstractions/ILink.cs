@@ -61,14 +61,41 @@ namespace RetroIO.Link
     /// </summary>
     public class LinkStatistics
     {
+        /// <summary>
+        /// Gets or sets the name of the link.
+        /// </summary>
         public string LinkName { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the type of the link.
+        /// </summary>
         public LinkType LinkType { get; set; }
+        /// <summary>
+        /// Gets or sets the operational status of the link.
+        /// </summary>
         public LinkStatus CurrentStatus { get; set; }
+        /// <summary>
+        /// Gets or sets the time the link was started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes sent.
+        /// </summary>
         public long BytesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received.
+        /// </summary>
         public long BytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of frames sent.
+        /// </summary>
         public long FramesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of frames received.
+        /// </summary>
         public long FramesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of errors.
+        /// </summary>
         public long Errors { get; set; }
     }
 

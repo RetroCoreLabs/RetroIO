@@ -14,6 +14,9 @@ using Microsoft.Extensions.Logging;
 namespace RetroIO.Link.Physical
 {
 
+    /// <summary>
+    /// A TCP server that accepts one client and passes received bytes to a handler, one byte at a time.
+    /// </summary>
     public class TCPServer
     {
         private readonly Microsoft.Extensions.Logging.ILogger _logger;
@@ -23,10 +26,28 @@ namespace RetroIO.Link.Physical
         Socket? clientSocket = null;
 
         // Define the delegate and the event
+        /// <summary>
+        /// Handler for a single byte received from the connected client.
+        /// </summary>
+        /// <param name="data">
+        /// The byte received.
+        /// </param>
         public delegate void ReceivedData(byte data);
+        /// <summary>
+        /// Raised for each byte received from the connected client.
+        /// </summary>
         public event ReceivedData? OnReceivedData;
 
 
+        /// <summary>
+        /// Creates the server.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger to write to.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public TCPServer(Microsoft.Extensions.Logging.ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));            
@@ -136,6 +157,15 @@ namespace RetroIO.Link.Physical
             }
         }
 
+        /// <summary>
+        /// Sends one byte to the connected client.
+        /// </summary>
+        /// <param name="data">
+        /// The byte to send.
+        /// </param>
+        /// <returns>
+        /// True when the call returned 0 sent bytes; false when there is no connected client or the send threw or sent a nonzero count.
+        /// </returns>
         public bool SendByte(byte data)
         {
 

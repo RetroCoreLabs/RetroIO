@@ -56,6 +56,21 @@ namespace RetroIO.Link.Physical
         /// </summary>
         public event EventHandler<SerialStatusEventArgs>? StatusChanged;
         
+        /// <summary>
+        /// Creates a serial transport.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger to write to.
+        /// </param>
+        /// <param name="config">
+        /// The serial port settings.
+        /// </param>
+        /// <param name="mockMode">
+        /// True to use in-memory mock data instead of a real serial port.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> or <paramref name="config"/> is null.
+        /// </exception>
         public Serial(ILogger logger, SerialConfig config, bool mockMode = false)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -462,6 +477,9 @@ namespace RetroIO.Link.Physical
             }
         }
 
+        /// <summary>
+        /// Stops the transport and disposes the serial port.
+        /// </summary>
         public void Dispose()
         {
             Stop();
@@ -474,12 +492,33 @@ namespace RetroIO.Link.Physical
     /// </summary>
     public class SerialConfig
     {
+        /// <summary>
+        /// Gets or sets the serial port name. Defaults to COM1.
+        /// </summary>
         public string PortName { get; set; } = "COM1";
+        /// <summary>
+        /// Gets or sets the baud rate. Defaults to 9600.
+        /// </summary>
         public int BaudRate { get; set; } = 9600;
+        /// <summary>
+        /// Gets or sets the number of data bits. Defaults to 8.
+        /// </summary>
         public int DataBits { get; set; } = 8;
+        /// <summary>
+        /// Gets or sets the parity setting. Defaults to none.
+        /// </summary>
         public Parity Parity { get; set; } = Parity.None;
+        /// <summary>
+        /// Gets or sets the number of stop bits. Defaults to one.
+        /// </summary>
         public StopBits StopBits { get; set; } = StopBits.One;
+        /// <summary>
+        /// Gets or sets whether the DTR line is enabled. Defaults to true.
+        /// </summary>
         public bool DtrEnable { get; set; } = true;
+        /// <summary>
+        /// Gets or sets whether the RTS line is enabled. Defaults to true.
+        /// </summary>
         public bool RtsEnable { get; set; } = true;
     }
     
@@ -488,13 +527,37 @@ namespace RetroIO.Link.Physical
     /// </summary>
     public class SerialStatistics
     {
+        /// <summary>
+        /// Gets or sets the serial port name.
+        /// </summary>
         public string PortName { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the baud rate.
+        /// </summary>
         public int BaudRate { get; set; }
+        /// <summary>
+        /// Gets or sets whether the transport is active.
+        /// </summary>
         public bool IsActive { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes sent.
+        /// </summary>
         public long BytesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received.
+        /// </summary>
         public long BytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of connection errors.
+        /// </summary>
         public int ConnectionErrors { get; set; }
         
+        /// <summary>
+        /// Returns a one-line text summary of the statistics.
+        /// </summary>
+        /// <returns>
+        /// The port name, active state, bytes sent, bytes received and error count as text.
+        /// </returns>
         public string GetSummary()
         {
             return $"Serial {PortName}: {(IsActive ? "Active" : "Inactive")}, " +
@@ -507,9 +570,24 @@ namespace RetroIO.Link.Physical
     /// </summary>
     public class SerialDataEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the received bytes.
+        /// </summary>
         public byte[] Data { get; }
+        /// <summary>
+        /// Gets the time the event object was created (UTC).
+        /// </summary>
         public DateTime Timestamp { get; }
         
+        /// <summary>
+        /// Creates event arguments for received data.
+        /// </summary>
+        /// <param name="data">
+        /// The received bytes.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is null.
+        /// </exception>
         public SerialDataEventArgs(byte[] data)
         {
             Data = data ?? throw new ArgumentNullException(nameof(data));
@@ -522,10 +600,28 @@ namespace RetroIO.Link.Physical
     /// </summary>
     public class SerialStatusEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the status text.
+        /// </summary>
         public string Status { get; }
+        /// <summary>
+        /// Gets the exception that caused the status change, or null.
+        /// </summary>
         public Exception? Error { get; }
+        /// <summary>
+        /// Gets the time the event object was created (UTC).
+        /// </summary>
         public DateTime Timestamp { get; }
         
+        /// <summary>
+        /// Creates event arguments for a status change.
+        /// </summary>
+        /// <param name="status">
+        /// The status text. A null value becomes an empty string.
+        /// </param>
+        /// <param name="error">
+        /// The exception behind the change, or null.
+        /// </param>
         public SerialStatusEventArgs(string status, Exception? error)
         {
             Status = status ?? "";
