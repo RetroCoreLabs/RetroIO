@@ -53,22 +53,55 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         private readonly Dictionary<TcpClient, string> _tcpClientToRemoteMachineId = new();
         
         // Configuration
+        /// <summary>
+        /// Gets the configuration of the layer.
+        /// </summary>
         public PhysicalLayerConfig Config { get; private set; }
         
         // Events for incoming data and calls
+        /// <summary>
+        /// Occurs when data arrives from a serial interface or a TCP connection.
+        /// </summary>
         public event EventHandler<PhysicalLayerDataEventArgs>? DataReceived;
 #pragma warning disable CS0067 // Event for future incoming call support
+        /// <summary>
+        /// Occurs for an incoming call. The layer never raises it in the current code.
+        /// </summary>
         public event EventHandler<PhysicalLayerCallEventArgs>? IncomingCall;
 #pragma warning restore CS0067
+        /// <summary>
+        /// Occurs when the status of a transport changes.
+        /// </summary>
         public event EventHandler<PhysicalLayerStatusEventArgs>? StatusChanged;
         
         // Mock serial events for testing
+        /// <summary>
+        /// Occurs when data is sent to a mock serial port in test mode.
+        /// </summary>
         public event EventHandler<MockSerialEventArgs>? MockSerialTransmit;
+        /// <summary>
+        /// Occurs when data is injected into a mock serial port.
+        /// </summary>
         public event EventHandler<MockSerialEventArgs>? MockSerialReceive;
         
         // Statistics
         private PhysicalLayerStatistics _statistics = new();
         
+        /// <summary>
+        /// Creates the physical layer.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger for messages.
+        /// </param>
+        /// <param name="config">
+        /// The layer configuration. Its LocalMachineId must be set.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> or <paramref name="config"/> is null.
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when LocalMachineId in <paramref name="config"/> is null.
+        /// </exception>
         public PhysicalLayer(ILogger logger, PhysicalLayerConfig config)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -855,6 +888,9 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         
         #endregion
         
+        /// <summary>
+        /// Stops the layer by calling Stop.
+        /// </summary>
         public void Dispose()
         {
             Stop();
@@ -877,19 +913,49 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         public bool TestMode { get; set; } = false;
         
         // Serial configuration
+        /// <summary>
+        /// Gets or sets whether the serial interface is enabled. The default is false.
+        /// </summary>
         public bool SerialEnabled { get; set; } = false;
+        /// <summary>
+        /// Gets or sets the serial port name. The default is COM1.
+        /// </summary>
         public string? SerialPortName { get; set; } = "COM1";
+        /// <summary>
+        /// Gets or sets the serial baud rate. The default is 9600.
+        /// </summary>
         public int SerialBaudRate { get; set; } = 9600;
+        /// <summary>
+        /// Gets or sets the number of serial data bits. The default is 8.
+        /// </summary>
         public int SerialDataBits { get; set; } = 8;
+        /// <summary>
+        /// Gets or sets the serial parity. The default is none.
+        /// </summary>
         public Parity SerialParity { get; set; } = Parity.None;
+        /// <summary>
+        /// Gets or sets the number of serial stop bits. The default is one.
+        /// </summary>
         public StopBits SerialStopBits { get; set; } = StopBits.One;
         
         // TCP server configuration
+        /// <summary>
+        /// Gets or sets whether the TCP server is enabled. The default is false.
+        /// </summary>
         public bool TcpServerEnabled { get; set; } = false;
+        /// <summary>
+        /// Gets or sets the TCP port the server listens on. The default is 1998, the standard XOT port.
+        /// </summary>
         public int TcpListenerPort { get; set; } = 1998; // Standard XOT port
         
         // TCP client configuration  
+        /// <summary>
+        /// Gets or sets the remote host for outbound TCP connections. The default is 127.0.0.1.
+        /// </summary>
         public string? TcpRemoteHost { get; set; } = "127.0.0.1";
+        /// <summary>
+        /// Gets or sets the remote TCP port for outbound connections. The default is 1998.
+        /// </summary>
         public int TcpRemotePort { get; set; } = 1998;
     }
     
@@ -898,22 +964,61 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
     /// </summary>
     public class PhysicalLayerStatistics
     {
+        /// <summary>
+        /// Gets or sets the time the layer started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets the time since StartTime, measured against the current UTC time.
+        /// </summary>
         public TimeSpan Uptime => DateTime.UtcNow - StartTime;
         
         // Serial statistics
+        /// <summary>
+        /// Gets or sets whether a serial interface is active.
+        /// </summary>
         public bool SerialActive { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes sent over serial interfaces.
+        /// </summary>
         public long SerialBytesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received over serial interfaces.
+        /// </summary>
         public long SerialBytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of serial errors.
+        /// </summary>
         public int SerialErrors { get; set; }
         
         // TCP statistics
+        /// <summary>
+        /// Gets or sets whether the TCP server is active.
+        /// </summary>
         public bool TcpServerActive { get; set; }
+        /// <summary>
+        /// Gets or sets the number of active TCP connections.
+        /// </summary>
         public int ActiveTcpConnections { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes sent over TCP.
+        /// </summary>
         public long TcpBytesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received over TCP.
+        /// </summary>
         public long TcpBytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of TCP errors.
+        /// </summary>
         public int TcpErrors { get; set; }
         
+        /// <summary>
+        /// Returns a one-line text with the serial and TCP state, the connection count and the total sent and received bytes.
+        /// </summary>
+        /// <returns>
+        /// The summary text.
+        /// </returns>
         public string GetSummary()
         {
             return $"PhysicalLayer: Serial={SerialActive} TCP={TcpServerActive} Connections={ActiveTcpConnections} " +
@@ -946,6 +1051,18 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         /// </summary>
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
         
+        /// <summary>
+        /// Creates the event data and sets the time to the current UTC time.
+        /// </summary>
+        /// <param name="mockPort">
+        /// The mock port number.
+        /// </param>
+        /// <param name="portName">
+        /// The port name.
+        /// </param>
+        /// <param name="data">
+        /// The data. A null value becomes an empty array.
+        /// </param>
         public MockSerialEventArgs(int mockPort, string portName, byte[] data)
         {
             MockPort = mockPort;

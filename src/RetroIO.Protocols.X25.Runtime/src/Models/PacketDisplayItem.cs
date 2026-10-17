@@ -28,6 +28,18 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// </summary>
         public ProtocolRuntime Runtime { get; set; }
 
+        /// <summary>
+        /// Creates a display item for a packet.
+        /// </summary>
+        /// <param name="packet">
+        /// The history item to show.
+        /// </param>
+        /// <param name="runtime">
+        /// The runtime used to look up packet relationships.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="packet"/> or <paramref name="runtime"/> is null.
+        /// </exception>
         public PacketDisplayItem(HistoryItem packet, ProtocolRuntime runtime)
         {
             Packet = packet ?? throw new ArgumentNullException(nameof(packet));
@@ -154,6 +166,12 @@ namespace RetroIO.Protocols.X25.Runtime.Models
             return relationship?.DerivedFromId;
         }
 
+        /// <summary>
+        /// Returns the display text of the packet, the same as GetDisplayText with no display manager.
+        /// </summary>
+        /// <returns>
+        /// The display text.
+        /// </returns>
         public override string ToString()
         {
             return GetDisplayText();

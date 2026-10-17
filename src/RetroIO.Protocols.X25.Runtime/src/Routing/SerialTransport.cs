@@ -26,6 +26,21 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         private TransportStatus _status = TransportStatus.Stopped;
         private readonly TransportStatistics _statistics;
 
+        /// <summary>
+        /// Creates a serial transport.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger for messages.
+        /// </param>
+        /// <param name="runtime">
+        /// The protocol runtime that owns the physical layer.
+        /// </param>
+        /// <param name="config">
+        /// The transport configuration.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/>, <paramref name="runtime"/> or <paramref name="config"/> is null.
+        /// </exception>
         public SerialTransport(ILogger logger, ProtocolRuntime runtime, SerialTransportConfig config)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -46,10 +61,14 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
 
         #region ITransportInterface Implementation
 
+        /// <inheritdoc/>
         public string Name => _config.Name;
+        /// <inheritdoc/>
         public TransportType Type => TransportType.Serial;
+        /// <inheritdoc/>
         public TransportStatus Status => _status;
 
+        /// <inheritdoc/>
         public bool PlaceCall(X25CallRequest callRequest)
         {
             if (_status != TransportStatus.Active)
@@ -89,6 +108,18 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
+        /// <summary>
+        /// Counts an inbound call as accepted and returns true when the transport is active.
+        /// </summary>
+        /// <remarks>
+        /// The method only writes log messages and updates the statistics. It does not send anything on the serial link.
+        /// </remarks>
+        /// <param name="callRequest">
+        /// The call request to accept.
+        /// </param>
+        /// <returns>
+        /// True when the transport is active. False when it is not active.
+        /// </returns>
         public bool AcceptCall(X25CallRequest callRequest)
         {
             if (_status != TransportStatus.Active)
@@ -127,6 +158,21 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
+        /// <summary>
+        /// Counts an inbound call as rejected and returns true when the transport is active.
+        /// </summary>
+        /// <remarks>
+        /// The method only writes log messages and updates the statistics. It does not send anything on the serial link.
+        /// </remarks>
+        /// <param name="callRequest">
+        /// The call request to reject.
+        /// </param>
+        /// <param name="cause">
+        /// The clear cause code, which is only written to the log.
+        /// </param>
+        /// <returns>
+        /// True when the transport is active. False when it is not active.
+        /// </returns>
         public bool RejectCall(X25CallRequest callRequest, byte cause)
         {
             if (_status != TransportStatus.Active)
@@ -161,6 +207,7 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
+        /// <inheritdoc/>
         public bool Start()
         {
             if (_status != TransportStatus.Stopped)
@@ -201,6 +248,7 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
+        /// <inheritdoc/>
         public void Stop()
         {
             if (_status == TransportStatus.Stopped || _status == TransportStatus.Stopping)
@@ -228,6 +276,7 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
+        /// <inheritdoc/>
         public TransportStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
@@ -238,9 +287,12 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             return _statistics;
         }
 
+        /// <inheritdoc/>
         public event EventHandler<X25CallRequest>? IncomingCall;
+        /// <inheritdoc/>
         public event EventHandler<TransportStatusEventArgs>? StatusChanged;
 #pragma warning disable CS0067 // Event required by interface, uses HDLC layer events instead
+        /// <inheritdoc/>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
 #pragma warning restore CS0067
 

@@ -41,6 +41,9 @@ namespace RetroIO.Protocols.X25.Runtime
 
         // Layer instances (public concrete classes). Stack A (LinkLayer/HdlcLayer/LapbLayer/XOTLayer) has
         // been retired to _retired/; the multi-link Stack B (LinkManager) is the sole link path now.
+        /// <summary>
+        /// Gets the physical layer used for serial and XOT transport.
+        /// </summary>
         public Layers.PhysicalLayer PhysicalLayer { get; private set; }  // Actual physical layer for serial/XOT
         /// <summary>
         /// The retired process-wide engine. Removed 2026-09-06: every connection - each XOT
@@ -50,6 +53,9 @@ namespace RetroIO.Protocols.X25.Runtime
 
         /// <inheritdoc/>
         public Services.X25PacketHistory PacketHistory { get; } = new Services.X25PacketHistory();
+        /// <summary>
+        /// Gets the routing layer.
+        /// </summary>
         public X25RoutingLayer RoutingLayer { get; private set; }
 
         // New multi-link architecture with per-link LAPB instances
@@ -3273,6 +3279,12 @@ namespace RetroIO.Protocols.X25.Runtime
         {
         }
 
+        /// <summary>
+        /// Finds the lowest logical channel number from 1 to 4095 that has no module bound to it.
+        /// </summary>
+        /// <returns>
+        /// The free logical channel number, or 0 when all of them are bound.
+        /// </returns>
         public ushort FindAvailableLCN()
         {
             lock (_routingLock)
