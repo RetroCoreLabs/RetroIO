@@ -531,6 +531,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         private void OpenConnection(TcpClient client, string how)
         {
+            // Nagle's algorithm off. A switch passes small packets - receive-ready acknowledgements,
+            // call set-up, a few bytes of terminal data - and every hop that holds one back until the
+            // previous segment is acknowledged adds its delay to the whole call. Every other XOT link
+            // in RetroIO sets this, as does the C emulator, and the port this one replaces did too.
+            client.NoDelay = true;
+
             lock (_sync)
             {
                 _client = client;
