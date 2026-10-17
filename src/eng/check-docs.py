@@ -543,6 +543,16 @@ def application_folders(root, config):
 # ---------------------------------------------------------------------------- main
 
 def main():
+    # A finding quotes the offending line, and an EMOJI-HEADING finding quotes an emoji. On a
+    # Windows console the default output encoding is cp1252, which cannot write one, so the
+    # checker died with UnicodeEncodeError while PRINTING its own report - after doing all the
+    # work, and before the summary line. Measured 28 September 2026 on RetroTerm. Write UTF-8
+    # and replace what the console still cannot show, rather than crash.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass  # a stream without reconfigure (older Python, or redirected oddly): leave it
+
     root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".")
     if not os.path.isdir(root):
         print("not a directory: " + root)
