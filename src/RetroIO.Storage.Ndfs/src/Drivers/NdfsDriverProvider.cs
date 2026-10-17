@@ -19,8 +19,10 @@ namespace RetroIO.Storage.Ndfs.Drivers
     {
         private static readonly string[] SupportedExtensions = { ".nd", ".ndfs", ".nord", ".ndf" };
 
+        /// <inheritdoc/>
         public override string FileSystemType => "NDFS";
 
+        /// <inheritdoc/>
         public override string Description => "Nord Disk File System";
 
         /// <summary>
@@ -28,6 +30,15 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// </summary>
         public override int RequiredHeaderBytes => NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
 
+        /// <summary>
+        /// Scores how likely the file is an NDFS image.
+        /// </summary>
+        /// <param name="hints">
+        /// The file name, size and header bytes of the file.
+        /// </param>
+        /// <returns>
+        /// A score from 0.0 to 1.0, where 0.0 means the file is not NDFS.
+        /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
             if (hints == null)
@@ -92,6 +103,12 @@ namespace RetroIO.Storage.Ndfs.Drivers
             return score;
         }
 
+        /// <summary>
+        /// Creates a new <see cref="NdfsDriver"/>.
+        /// </summary>
+        /// <returns>
+        /// A new NDFS driver that is not mounted.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new NdfsDriver();

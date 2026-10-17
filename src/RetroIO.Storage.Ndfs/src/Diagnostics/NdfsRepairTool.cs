@@ -26,6 +26,21 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
         private readonly AnalysisReport _report;
         private readonly List<RepairAction> _performedActions;
 
+        /// <summary>
+        /// Creates a repair tool for the given file system, using the issues in an analysis report.
+        /// </summary>
+        /// <param name="fileSystem">
+        /// The file system to repair.
+        /// </param>
+        /// <param name="device">
+        /// The block device that holds the file system.
+        /// </param>
+        /// <param name="report">
+        /// The analysis report to repair from.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="fileSystem"/>, <paramref name="device"/> or <paramref name="report"/> is null.
+        /// </exception>
         public NdfsRepairTool(NdfsFileSystem fileSystem, IBlockDevice device, AnalysisReport report)
         {
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
@@ -568,13 +583,34 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
         }
     }
 
+    /// <summary>
+    /// A list of planned repair actions.
+    /// </summary>
     public class RepairPlan
     {
+        /// <summary>
+        /// Gets or sets the planned actions.
+        /// </summary>
         public List<RepairAction> Actions { get; set; } = new List<RepairAction>();
+        /// <summary>
+        /// Gets or sets the number of planned actions.
+        /// </summary>
         public int TotalActions { get; set; }
+        /// <summary>
+        /// Gets or sets the number of actions that are approved automatically.
+        /// </summary>
         public int AutoApproveCount { get; set; }
+        /// <summary>
+        /// Gets or sets the number of actions that need manual approval.
+        /// </summary>
         public int ManualApproveCount { get; set; }
 
+        /// <summary>
+        /// Builds a plain text summary of the plan.
+        /// </summary>
+        /// <returns>
+        /// The summary text.
+        /// </returns>
         public string GenerateTextSummary()
         {
             var sb = new StringBuilder();
@@ -625,48 +661,144 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
         }
     }
 
+    /// <summary>
+    /// One planned repair.
+    /// </summary>
     public class RepairAction
     {
+        /// <summary>
+        /// Gets or sets the kind of repair.
+        /// </summary>
         public RepairActionType ActionType { get; set; }
+        /// <summary>
+        /// Gets or sets the text that describes the repair.
+        /// </summary>
         public string Description { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the blocks the repair changes.
+        /// </summary>
         public List<uint> AffectedBlocks { get; set; } = new List<uint>();
+        /// <summary>
+        /// Gets or sets how risky the repair is.
+        /// </summary>
         public RepairRisk Risk { get; set; }
+        /// <summary>
+        /// Gets or sets whether the repair runs without manual approval.
+        /// </summary>
         public bool AutoApprove { get; set; }
+        /// <summary>
+        /// Gets or sets whether the repair has been approved manually.
+        /// </summary>
         public bool IsApproved { get; set; }
+        /// <summary>
+        /// Gets or sets a warning to show before the repair runs.
+        /// </summary>
         public string WarningMessage { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the error text when the repair threw an exception.
+        /// </summary>
         public string ErrorMessage { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// The kind of a repair.
+    /// </summary>
     public enum RepairActionType
     {
+        /// <summary>
+        /// Marks orphaned blocks as free in the bitmap.
+        /// </summary>
         FreeOrphanedBlocks,
+        /// <summary>
+        /// Fixes blocks whose bitmap state does not match their pointers.
+        /// </summary>
         FixBitmapMismatch,
+        /// <summary>
+        /// Fixes the pages used recorded for users.
+        /// </summary>
         FixUserQuotas,
+        /// <summary>
+        /// Fixes the unreserved page count in the master block.
+        /// </summary>
         FixUnreservedPages,
+        /// <summary>
+        /// Removes pointers that refer to blocks beyond the size of the disk.
+        /// </summary>
         RemoveInvalidPointers,
+        /// <summary>
+        /// Copies blocks that more than one pointer refers to.
+        /// </summary>
         DuplicateMultiReferencedBlocks
     }
 
+    /// <summary>
+    /// How risky a repair is.
+    /// </summary>
     public enum RepairRisk
     {
+        /// <summary>
+        /// Safe operations such as freeing orphaned blocks.
+        /// </summary>
         Low,      // Safe operations like freeing orphaned blocks
+        /// <summary>
+        /// Operations that change metadata.
+        /// </summary>
         Medium,   // Modifying metadata
+        /// <summary>
+        /// Operations that remove pointers or change the structure.
+        /// </summary>
         High,     // Removing pointers or modifying structure
+        /// <summary>
+        /// Operations that can destroy data.
+        /// </summary>
         Critical  // Potentially destructive operations
     }
 
+    /// <summary>
+    /// The outcome of running a repair plan.
+    /// </summary>
     public class RepairResult
     {
+        /// <summary>
+        /// Gets or sets when the repair started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets or sets when the repair ended.
+        /// </summary>
         public DateTime EndTime { get; set; }
+        /// <summary>
+        /// Gets or sets the actions that succeeded.
+        /// </summary>
         public List<RepairAction> SuccessfulActions { get; set; } = new List<RepairAction>();
+        /// <summary>
+        /// Gets or sets the actions that failed.
+        /// </summary>
         public List<RepairAction> FailedActions { get; set; } = new List<RepairAction>();
+        /// <summary>
+        /// Gets or sets the actions that were skipped because they were not approved.
+        /// </summary>
         public List<RepairAction> SkippedActions { get; set; } = new List<RepairAction>();
+        /// <summary>
+        /// Gets or sets the number of actions that succeeded.
+        /// </summary>
         public int TotalActionsPerformed { get; set; }
+        /// <summary>
+        /// Gets or sets the number of actions that failed.
+        /// </summary>
         public int TotalActionsFailed { get; set; }
 
+        /// <summary>
+        /// Gets the time between the start and the end of the repair.
+        /// </summary>
         public TimeSpan Duration => EndTime - StartTime;
 
+        /// <summary>
+        /// Builds a plain text summary of the result.
+        /// </summary>
+        /// <returns>
+        /// The summary text.
+        /// </returns>
         public string GenerateTextSummary()
         {
             var sb = new StringBuilder();

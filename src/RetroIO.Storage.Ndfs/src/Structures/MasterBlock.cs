@@ -94,12 +94,33 @@ namespace RetroIO.Storage.Ndfs.Structures
 
         // Extended information (if present)
         // Located at negative offsets from master block (addresses 1750-1757 octal)
+        /// <summary>
+        /// Gets or sets the pages available field of the extended info block (32 bits, words 1757 and 1756 octal).
+        /// </summary>
         public uint ExtPagesAvailable { get; set; }       // -1/-2: Pages available (32-bit, words 1757-1756)
+        /// <summary>
+        /// Gets or sets the number of the system that last entered the directory (word 1755 octal).
+        /// </summary>
         public uint ExtLastSystemNumber { get; set; }     // -3: System number last entering (word 1755)
+        /// <summary>
+        /// Gets or sets the flag word of the extended info block (word 1754 octal).
+        /// </summary>
         public uint ExtFlagWord { get; set; }             // -4: Flag word (word 1754)
+        /// <summary>
+        /// Gets or sets the first reserved word of the extended info block (word 1753 octal).
+        /// </summary>
         public ushort ExtReserved1 { get; set; }          // -5: Reserved (word 1753)
+        /// <summary>
+        /// Gets or sets the second reserved word of the extended info block (word 1752 octal).
+        /// </summary>
         public ushort ExtReserved2 { get; set; }          // -6: Reserved (word 1752)
+        /// <summary>
+        /// Gets or sets the third reserved word of the extended info block (word 1751 octal).
+        /// </summary>
         public ushort ExtReserved3 { get; set; }          // -7: Reserved (word 1751)
+        /// <summary>
+        /// Gets or sets the checksum stored in the extended info block (word 1750 octal).
+        /// </summary>
         public ushort ExtCheckSum { get; set; }           // -10: Checksum (word 1750)
         // REMOVED: ExtCpuNumber ("CPU serial"). The extended-info block is exactly 8 words and all
         // of them are accounted for — checksum (1750B), reserved 1-3 (1751B-1753B), flag word
@@ -107,9 +128,21 @@ namespace RetroIO.Storage.Ndfs.Structures
         // a separate "CPU serial", and nothing ever parsed one: the old field was declared but
         // never assigned, so it always read 0 and surfaced as a phantom "N/A" in the UI. The system
         // number (ExtLastSystemNumber) is the only system identifier NDFS stores.
+        /// <summary>
+        /// Gets or sets whether the extended info block is valid: not a FLOMON disk, the stored checksum is not zero and it matches the calculated one.
+        /// </summary>
         public bool ExtValid { get; set; }
+        /// <summary>
+        /// Gets or sets the checksum calculated from the extended info block.
+        /// </summary>
         public ushort ExtCalculatedChecksum { get; set; } // Calculated checksum for validation
+        /// <summary>
+        /// Gets or sets whether the stored checksum matches the calculated one.
+        /// </summary>
         public ChecksumValidationState ChecksumState { get; set; } // Checksum validation state
+        /// <summary>
+        /// Gets or sets whether page 0 has a FLOMON boot format, which marks a floppy disk.
+        /// </summary>
         public bool HasFlomon { get; set; }               // True if FLOMON signature detected (floppy disk)
 
         /// <summary>

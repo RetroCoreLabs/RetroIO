@@ -34,10 +34,28 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         // Random access file handles
         private Dictionary<int, NdfsFileHandle> _openHandles = new Dictionary<int, NdfsFileHandle>();
 
+        /// <inheritdoc/>
         public string FileSystemType => "NDFS";
+        /// <inheritdoc/>
         public string VolumeLabel => _masterBlock?.DirectoryName ?? "NDFS";
+        /// <inheritdoc/>
         public string ExtensionSeparator => ":";
 
+        /// <summary>
+        /// Reads the master block from page 0 and loads the file system structures.
+        /// </summary>
+        /// <param name="device">
+        /// The mounted block device that holds the NDFS volume.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is null.
+        /// </exception>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the device is not mounted.
+        /// </exception>
+        /// <exception cref="System.IO.InvalidDataException">
+        /// Thrown when the master block is not valid.
+        /// </exception>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -94,6 +112,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             _device.WriteBlock(BlockAddress.FromLBA(0), pageBuffer);
         }
 
+        /// <inheritdoc/>
         public bool CanHandle(IBlockDevice device)
         {
             if (device == null || !device.IsMounted)
@@ -115,6 +134,18 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             }
         }
 
+        /// <summary>
+        /// Lists the users at the root, or the files of one user.
+        /// </summary>
+        /// <param name="path">
+        /// An empty path for the root, or a single user name.
+        /// </param>
+        /// <returns>
+        /// The entries found.
+        /// </returns>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the path has more than one part, because NDFS has no subdirectories.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -210,6 +241,18 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return entries.ToArray();
         }
 
+        /// <summary>
+        /// Reads the whole contents of a file.
+        /// </summary>
+        /// <param name="path">
+        /// The file path, with or without a user part.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when no file matches the path.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -264,6 +307,21 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return ReadObjectData(obj);
         }
 
+        /// <summary>
+        /// Writes a file.
+        /// </summary>
+        /// <param name="path">
+        /// The file path.
+        /// </param>
+        /// <param name="data">
+        /// The data to write.
+        /// </param>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the device is read-only.
+        /// </exception>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is null.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             EnsureInitialized();
@@ -355,6 +413,18 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             }
         }
 
+        /// <summary>
+        /// Deletes a file.
+        /// </summary>
+        /// <param name="path">
+        /// The file path.
+        /// </param>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the device is read-only or no file matches the path.
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="path"/> has no file name.
+        /// </exception>
         public void DeleteFile(string path)
         {
             EnsureInitialized();
@@ -444,6 +514,15 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             }
         }
 
+        /// <summary>
+        /// Gets the metadata of a file.
+        /// </summary>
+        /// <param name="path">
+        /// The file path, with or without a user part.
+        /// </param>
+        /// <returns>
+        /// The metadata, or null when no file matches the path.
+        /// </returns>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -493,12 +572,30 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             };
         }
 
+        /// <summary>
+        /// Returns the number of free pages in the bitmap.
+        /// </summary>
+        /// <returns>
+        /// The number of free pages.
+        /// </returns>
         public int GetBlocksFree()
         {
             EnsureInitialized();
             return (int)_bitFile.GetFreePages();
         }
 
+        /// <summary>
+        /// Creates a user. A root-level path names the new user, and the user gets a default quota of at least 100 pages.
+        /// </summary>
+        /// <param name="path">
+        /// The root-level path whose last part is the new user name.
+        /// </param>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the device is read-only, the path has a user part, or the user could not be created.
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the path has no user name.
+        /// </exception>
         public void CreateDirectory(string path)
         {
             EnsureInitialized();
@@ -538,6 +635,21 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 throw new InvalidOperationException($"Failed to create user '{userName}'. User may already exist.");
         }
 
+        /// <summary>
+        /// Deletes a user that has no files. A root-level path names the user.
+        /// </summary>
+        /// <param name="path">
+        /// The root-level path whose last part is the user name.
+        /// </param>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the device is read-only, the path has a user part, the user still has files, or the user could not be deleted.
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the path has no user name.
+        /// </exception>
+        /// <exception cref="System.IO.DirectoryNotFoundException">
+        /// Thrown when the user does not exist.
+        /// </exception>
         public void DeleteDirectory(string path)
         {
             EnsureInitialized();
@@ -583,6 +695,24 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 throw new InvalidOperationException($"Failed to delete user '{userName}'");
         }
 
+        /// <summary>
+        /// Renames a file within the same user.
+        /// </summary>
+        /// <param name="oldPath">
+        /// The current file path.
+        /// </param>
+        /// <param name="newPath">
+        /// The new file path.
+        /// </param>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the device is read-only.
+        /// </exception>
+        /// <exception cref="System.NotSupportedException">
+        /// Thrown when the paths name users, or the new path names a different user.
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when either path has no file name.
+        /// </exception>
         public void Rename(string oldPath, string newPath)
         {
             EnsureInitialized();
@@ -647,18 +777,35 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
         // ==================== INdfsFileSystem Implementation ====================
 
+        /// <inheritdoc/>
         public IReadOnlyList<UserEntry> GetUsers()
         {
             EnsureInitialized();
             return _userFile.GetUsers();
         }
 
+        /// <inheritdoc/>
         public UserEntry? GetUser(int userIndex)
         {
             EnsureInitialized();
             return _userFile.GetUser(userIndex);
         }
 
+        /// <summary>
+        /// Adds a user and writes the user entry to the disk.
+        /// </summary>
+        /// <param name="userName">
+        /// The user name. It is stored in upper case and may be at most 16 characters.
+        /// </param>
+        /// <param name="reservedPages">
+        /// The number of pages reserved for the user.
+        /// </param>
+        /// <returns>
+        /// True when the user was added, false when a user with that name already exists.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="userName"/> is empty or longer than 16 characters.
+        /// </exception>
         public bool AddUser(string userName, uint reservedPages)
         {
             EnsureInitialized();
@@ -766,6 +913,18 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             _bitFile.WriteToDisk(_device, _masterBlock.BitFilePointer);
         }
 
+        /// <summary>
+        /// Removes a user that has no files.
+        /// </summary>
+        /// <param name="userIndex">
+        /// The index of the user to remove.
+        /// </param>
+        /// <returns>
+        /// True when the user was removed, false when the user does not exist.
+        /// </returns>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the user still has files.
+        /// </exception>
         public bool RemoveUser(int userIndex)
         {
             EnsureInitialized();
@@ -794,12 +953,25 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return true;
         }
 
+        /// <summary>
+        /// Sets the number of reserved pages of a user in the loaded user file.
+        /// </summary>
+        /// <param name="userIndex">
+        /// The index of the user.
+        /// </param>
+        /// <param name="newReservedPages">
+        /// The new number of reserved pages.
+        /// </param>
+        /// <returns>
+        /// True when the user was found, otherwise false.
+        /// </returns>
         public bool UpdateUserQuota(int userIndex, uint newReservedPages)
         {
             EnsureInitialized();
             return _userFile.UpdateUserQuota(userIndex, newReservedPages);
         }
 
+        /// <inheritdoc/>
         public bool ClearUserPassword(int userIndex)
         {
             EnsureInitialized();
@@ -828,6 +1000,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return true;
         }
 
+        /// <inheritdoc/>
         public bool ClearUserPassword(string userName)
         {
             EnsureInitialized();
@@ -842,6 +1015,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return ClearUserPassword(user.UserIndex);
         }
 
+        /// <inheritdoc/>
         public string? GetPasswordClearInstructions(int userIndex)
         {
             EnsureInitialized();
@@ -948,6 +1122,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return sb.ToString();
         }
 
+        /// <inheritdoc/>
         public string? GetPasswordClearInstructions(string userName)
         {
             EnsureInitialized();
@@ -962,54 +1137,73 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return GetPasswordClearInstructions(user.UserIndex);
         }
 
+        /// <inheritdoc/>
         public BitFile GetBitFile()
         {
             EnsureInitialized();
             return _bitFile;
         }
 
+        /// <inheritdoc/>
         public bool IsBlockUsed(uint blockId)
         {
             EnsureInitialized();
             return _bitFile.IsBlockUsed(blockId);
         }
 
+        /// <summary>
+        /// Returns the unreserved page count held in the loaded master block.
+        /// </summary>
+        /// <returns>
+        /// The unreserved page count.
+        /// </returns>
         public uint GetUnreservedPages()
         {
             EnsureInitialized();
             return _masterBlock?.UnreservedPages ?? 0;
         }
 
+        /// <summary>
+        /// Returns the number of free pages in the bitmap.
+        /// </summary>
+        /// <returns>
+        /// The number of free pages.
+        /// </returns>
         public uint GetPagesAvailable()
         {
             EnsureInitialized();
             return _bitFile.GetFreePages();
         }
 
+        /// <inheritdoc/>
         public IReadOnlyList<ObjectEntry> GetObjectEntries()
         {
             EnsureInitialized();
             return _objectFile.GetObjects();
         }
 
+        /// <inheritdoc/>
         public ObjectEntry? GetObjectEntry(string objectName, string userName)
         {
             EnsureInitialized();
             return _objectFile.FindObject(objectName, userName);
         }
 
+        /// <inheritdoc/>
         public ObjectFile GetObjectFile()
         {
             EnsureInitialized();
             return _objectFile;
         }
 
+        /// <inheritdoc/>
         public MasterBlock GetMasterBlock()
         {
             EnsureInitialized();
             return _masterBlock!;
         }
 
+        /// <inheritdoc/>
         public string GetDirectoryName()
         {
             EnsureInitialized();
@@ -1100,6 +1294,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return true;
         }
 
+        /// <inheritdoc/>
         public string GenerateBitmapReport()
         {
             EnsureInitialized();
@@ -1133,6 +1328,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return sb.ToString();
         }
 
+        /// <inheritdoc/>
         public string DumpFileSystemInfo()
         {
             EnsureInitialized();
@@ -1160,6 +1356,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return sb.ToString();
         }
 
+        /// <inheritdoc/>
         public bool VerifyFileSystemIntegrity()
         {
             EnsureInitialized();
@@ -3417,6 +3614,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return _masterBlock != null && _masterBlock.ExtValid;
         }
 
+        /// <summary>
+        /// Marks the file system as not initialized and drops the reference to the block device. The device itself is not disposed.
+        /// </summary>
         public void Dispose()
         {
             _initialized = false;

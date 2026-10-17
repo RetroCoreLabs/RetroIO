@@ -28,6 +28,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         // Kernel symbol INIBU (start of the buffer) per SINTRAN version.
         // Source: SYMBOL-1-LIST.SYMB.TXT of each version (octal values).
         //   K03 = 067172, L07 = 074123, M06 = 102327
+        /// <summary>
+        /// Gets the byte address of the kernel symbol <c>INIBU</c>, the start of the buffer, for each SINTRAN version letter.
+        /// </summary>
         public static IReadOnlyDictionary<char, int> Inibu { get; } = new Dictionary<char, int>
         {
             { 'K', 0x6E7A /* 067172 octal */ },
@@ -39,15 +42,30 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         //   INIBU+0..+129  command text        (260 bytes)
         //   INIBU+130      length cell         (byte count of the text)
         //   INIBU+131      INCOM               (executable code - never write here)
+        /// <summary>
+        /// The size of the buffer region in words, covering the text area and the length cell.
+        /// </summary>
         public const int CapWords = 131;
+        /// <summary>
+        /// The size of the buffer region in bytes.
+        /// </summary>
         public const int CapBytes = CapWords * 2;               // 262
+        /// <summary>
+        /// The word offset of the length cell from the start of the buffer.
+        /// </summary>
         public const int LengthCellWords = 130;                 // word offset of the length cell
+        /// <summary>
+        /// The byte offset of the length cell from the start of the buffer.
+        /// </summary>
         public const int LengthCellBytes = LengthCellWords * 2; // 260
 
         // Maximum text length SINTRAN itself accepts. Read from the NEXIN handler: a character is stored
         // only while its byte offset X <= 252 (literal 0o374 = 252), then the length becomes (X+2)
         // rounded down to even => at most 254. Verified on both the L07 and M06 handlers (identical
         // instruction sequence); K03 is laid out the same, so 254 is expected there too.
+        /// <summary>
+        /// The largest text length in bytes that SINTRAN accepts for the buffer.
+        /// </summary>
         public const int MaxTextBytes = 254;
 
         private const int SegEntryBytes = 16;   // 8 words
@@ -174,6 +192,15 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             /// </summary>
             public readonly int TextLen;
 
+            /// <summary>
+            /// Creates an encoded buffer.
+            /// </summary>
+            /// <param name="bytes">
+            /// The encoded bytes.
+            /// </param>
+            /// <param name="textLen">
+            /// The text length for the length cell.
+            /// </param>
             public EncodedBuffer(byte[] bytes, int textLen) { Bytes = bytes; TextLen = textLen; }
         }
 
@@ -317,11 +344,29 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// </summary>
         public sealed class Candidate
         {
+            /// <summary>
+            /// Gets the SINTRAN version letter whose <c>INIBU</c> symbol matched.
+            /// </summary>
             public char VersionLetter { get; init; }
+            /// <summary>
+            /// Gets the segment table entry number of the segment.
+            /// </summary>
             public int SegmentNumber { get; init; }
+            /// <summary>
+            /// Gets the segment address in NDFS pages inside SEGFIL0.
+            /// </summary>
             public uint Madr { get; init; }
+            /// <summary>
+            /// Gets the byte offset of the buffer start inside the SEGFIL0 file data.
+            /// </summary>
             public long ByteOffset { get; init; }
+            /// <summary>
+            /// Gets the value stored in the length cell.
+            /// </summary>
             public int LengthCell { get; init; }
+            /// <summary>
+            /// Gets whether the length cell value is plausible.
+            /// </summary>
             public bool LengthPlausible { get; init; }
             /// <summary>
             /// Parsed commands, or null when the region does not decode to a plausible buffer.
@@ -497,13 +542,37 @@ namespace RetroIO.Storage.Ndfs.FileSystems
     /// </summary>
     public sealed class SintranInitialCommandBufferLocation
     {
+        /// <summary>
+        /// Gets the commands decoded from the buffer.
+        /// </summary>
         public System.Collections.Generic.IReadOnlyList<string> Commands { get; init; } = new System.Collections.Generic.List<string>();
+        /// <summary>
+        /// Gets the SINTRAN version letter whose <c>INIBU</c> symbol matched.
+        /// </summary>
         public char VersionLetter { get; init; }
+        /// <summary>
+        /// Gets the segment table entry number of the segment.
+        /// </summary>
         public int SegmentNumber { get; init; }
+        /// <summary>
+        /// Gets the segment address in NDFS pages inside SEGFIL0.
+        /// </summary>
         public uint Madr { get; init; }
+        /// <summary>
+        /// Gets the byte offset of the buffer start inside the SEGFIL0 file data.
+        /// </summary>
         public long ByteOffset { get; init; }
+        /// <summary>
+        /// Gets the page in SEGFIL0 where the segment table was found.
+        /// </summary>
         public int SegmentTablePage { get; init; }
+        /// <summary>
+        /// Gets the text byte count held in the length cell.
+        /// </summary>
         public int TextLength { get; init; }
+        /// <summary>
+        /// Gets the byte offset of the length cell inside the SEGFIL0 file data.
+        /// </summary>
         public long LengthCellOffset { get; init; }
     }
 }

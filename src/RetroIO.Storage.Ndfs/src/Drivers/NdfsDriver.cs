@@ -32,10 +32,14 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// </summary>
         public INdfsFileSystem? GetFileSystem() => _filesystem;
 
+        /// <inheritdoc/>
         public string FileSystemType => _filesystem?.FileSystemType ?? "NDFS";
+        /// <inheritdoc/>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
+        /// <inheritdoc/>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ":";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read |
             DriverCapabilities.Write |          // WriteFile: real implementation (files <=1MB, Indexed allocation)
@@ -53,16 +57,26 @@ namespace RetroIO.Storage.Ndfs.Drivers
                                                 // so it falls through to IFileSystemDriver's default NotSupportedException (user
                                                 // rename is a known, documented gap, not implemented here).
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <inheritdoc/>
         public bool CanWrite => true; // Write support enabled (files ≤1MB, uses Indexed allocation)
+        /// <inheritdoc/>
         public bool HasBlockAccess => true;
 
+        /// <summary>
+        /// Returns null, because this driver has no NDFS metadata descriptor yet.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor()
         {
             // TODO: Implement NDFS metadata descriptor (user, pages, type)
             return null;
         }
 
+        /// <inheritdoc/>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -80,18 +94,21 @@ namespace RetroIO.Storage.Ndfs.Drivers
             _filesystem.Initialize(_blockDevice);
         }
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
+        /// <inheritdoc/>
         public void WriteFile(string path, byte[] data)
         {
             EnsureMounted();
             _filesystem!.WriteFile(path, data);
         }
 
+        /// <inheritdoc/>
         public void DeleteFile(string path)
         {
             EnsureMounted();
@@ -100,42 +117,54 @@ namespace RetroIO.Storage.Ndfs.Drivers
 
         // NDFS has no nested directories: a root-level "directory" is a User. NdfsFileSystem
         // interprets a path like "/ALICE" as "create user ALICE" with a default quota.
+        /// <summary>
+        /// Creates a user. NDFS has no nested directories, so a root-level path such as <c>/ALICE</c> is passed to the file system, which creates a user with a default quota.
+        /// </summary>
+        /// <param name="path">
+        /// The root-level path whose last part is the new user name.
+        /// </param>
         public void CreateDirectory(string path)
         {
             EnsureMounted();
             _filesystem!.CreateDirectory(path);
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
             return _filesystem!.GetMetadata(path);
         }
 
+        /// <inheritdoc/>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
+        /// <inheritdoc/>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             EnsureMounted();
             _blockDevice!.WriteBlock(address, data);
         }
 
+        /// <inheritdoc/>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();
             return _blockDevice!.GetBlockDeviceInfo();
         }
 
+        /// <inheritdoc/>
         public FileSystemCapabilities GetCapabilities()
         {
             // NDFS supports full extended attributes (23 metadata fields)
@@ -156,18 +185,21 @@ namespace RetroIO.Storage.Ndfs.Drivers
             };
         }
 
+        /// <inheritdoc/>
         public System.Collections.Generic.IDictionary<string, object>? GetFileProperties(string path)
         {
             EnsureMounted();
             return _filesystem!.GetFileProperties(path);
         }
 
+        /// <inheritdoc/>
         public void WriteFileWithProperties(string path, byte[] data, System.Collections.Generic.IDictionary<string, object> propertyBag)
         {
             EnsureMounted();
             _filesystem!.WriteFileWithProperties(path, data, propertyBag);
         }
 
+        /// <inheritdoc/>
         public byte[] ReadFileWithProperties(string path, System.Collections.Generic.IDictionary<string, object> propertyBag)
         {
             EnsureMounted();
@@ -316,6 +348,7 @@ namespace RetroIO.Storage.Ndfs.Drivers
             return info;
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             _filesystem?.Dispose();

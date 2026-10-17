@@ -241,6 +241,12 @@ namespace RetroIO.Storage.Ndfs.Elements
                    $"{(DirectoryAccess ? 'D' : '-')}";
         }
 
+        /// <summary>
+        /// Returns the text <c>[Empty]</c> for an unused entry, otherwise the friend user index and the permission string.
+        /// </summary>
+        /// <returns>
+        /// The text form of the entry.
+        /// </returns>
         public override string ToString()
         {
             if (!EntryUsed)
@@ -255,11 +261,29 @@ namespace RetroIO.Storage.Ndfs.Elements
     /// </summary>
     public enum FileOperation
     {
+        /// <summary>
+        /// Read a file.
+        /// </summary>
         Read,
+        /// <summary>
+        /// Write a file.
+        /// </summary>
         Write,
+        /// <summary>
+        /// Append to a file.
+        /// </summary>
         Append,
+        /// <summary>
+        /// Delete a file.
+        /// </summary>
         Delete,
+        /// <summary>
+        /// List a directory.
+        /// </summary>
         List,
+        /// <summary>
+        /// Execute a file.
+        /// </summary>
         Execute
     }
 }

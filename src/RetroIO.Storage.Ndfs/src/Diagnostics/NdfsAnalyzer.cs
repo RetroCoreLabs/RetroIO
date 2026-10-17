@@ -28,6 +28,18 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
         private readonly Dictionary<uint, BlockInfo> _blockMap;
         private readonly List<AnalysisIssue> _issues;
 
+        /// <summary>
+        /// Creates an analyzer for the given file system and block device.
+        /// </summary>
+        /// <param name="fileSystem">
+        /// The file system to analyze.
+        /// </param>
+        /// <param name="device">
+        /// The block device that holds the file system.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="fileSystem"/> or <paramref name="device"/> is null.
+        /// </exception>
         public NdfsAnalyzer(NdfsFileSystem fileSystem, IBlockDevice device)
         {
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
@@ -605,54 +617,165 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
     /// </summary>
     public class BlockInfo
     {
+        /// <summary>
+        /// Gets or sets the block number.
+        /// </summary>
         public uint BlockId { get; set; }
+        /// <summary>
+        /// Gets or sets whether the bit file marks the block as used.
+        /// </summary>
         public bool IsMarkedUsedInBitmap { get; set; }
+        /// <summary>
+        /// Gets or sets the pointers found that refer to this block.
+        /// </summary>
         public List<PointerInfo> PointedToBy { get; set; } = new List<PointerInfo>();
+        /// <summary>
+        /// Gets or sets the kind of data the block holds.
+        /// </summary>
         public BlockType BlockType { get; set; }
     }
 
+    /// <summary>
+    /// A pointer to a block, with a text description of where it was found.
+    /// </summary>
     public class PointerInfo
     {
+        /// <summary>
+        /// Gets or sets the pointer.
+        /// </summary>
         public BlockPointer Pointer { get; set; } = new BlockPointer();
+        /// <summary>
+        /// Gets or sets the text that says where the pointer was found, for example <c>MasterBlock->ObjectFile</c>.
+        /// </summary>
         public string Source { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// The kind of data a block holds.
+    /// </summary>
     public enum BlockType
     {
+        /// <summary>
+        /// The block type is not known.
+        /// </summary>
         Unknown,
+        /// <summary>
+        /// The master block.
+        /// </summary>
         MasterBlock,
+        /// <summary>
+        /// A block in the reserved system area.
+        /// </summary>
         SystemReserved,
+        /// <summary>
+        /// The index block of the object file.
+        /// </summary>
         ObjectFileIndex,
+        /// <summary>
+        /// A data block of the object file.
+        /// </summary>
         ObjectFileData,
+        /// <summary>
+        /// The index block of the user file.
+        /// </summary>
         UserFileIndex,
+        /// <summary>
+        /// A data block of the user file.
+        /// </summary>
         UserFileData,
+        /// <summary>
+        /// The bit file block.
+        /// </summary>
         BitFile,
+        /// <summary>
+        /// The index block of a file.
+        /// </summary>
         FileIndex,
+        /// <summary>
+        /// A data block of a file.
+        /// </summary>
         FileData
     }
 
+    /// <summary>
+    /// The master block fields that the analyzer reads from the disk.
+    /// </summary>
     public class MasterBlock
     {
+        /// <summary>
+        /// Gets or sets the directory name.
+        /// </summary>
         public string DirectoryName { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the total number of pages stored in the master block.
+        /// </summary>
         public uint TotalPages { get; set; }
+        /// <summary>
+        /// Gets or sets the pointer to the object file.
+        /// </summary>
         public BlockPointer ObjectFilePointer { get; set; } = new BlockPointer();
+        /// <summary>
+        /// Gets or sets the pointer to the user file.
+        /// </summary>
         public BlockPointer UserFilePointer { get; set; } = new BlockPointer();
+        /// <summary>
+        /// Gets or sets the pointer to the bit file.
+        /// </summary>
         public BlockPointer BitFilePointer { get; set; } = new BlockPointer();
+        /// <summary>
+        /// Gets or sets the unreserved page count stored in the master block.
+        /// </summary>
         public uint UnreservedPages { get; set; }
     }
 
+    /// <summary>
+    /// The result of an analysis run.
+    /// </summary>
     public class AnalysisReport
     {
+        /// <summary>
+        /// Gets or sets when the analysis started.
+        /// </summary>
         public DateTime AnalysisStartTime { get; set; }
+        /// <summary>
+        /// Gets or sets when the analysis ended.
+        /// </summary>
         public DateTime AnalysisEndTime { get; set; }
+        /// <summary>
+        /// Gets or sets the number of blocks on the device.
+        /// </summary>
         public uint TotalBlocks { get; set; }
+        /// <summary>
+        /// Gets or sets the information collected per block, keyed by block number.
+        /// </summary>
         public Dictionary<uint, BlockInfo> BlockMap { get; set; } = new Dictionary<uint, BlockInfo>();
+        /// <summary>
+        /// Gets or sets the issues found.
+        /// </summary>
         public List<AnalysisIssue> Issues { get; set; } = new List<AnalysisIssue>();
+        /// <summary>
+        /// Gets or sets the master block fields that were read.
+        /// </summary>
         public MasterBlock MasterBlock { get; set; } = new MasterBlock();
+        /// <summary>
+        /// Gets or sets the number of issues found.
+        /// </summary>
         public int TotalIssues { get; set; }
 
+        /// <summary>
+        /// Gets the time between the start and the end of the analysis.
+        /// </summary>
         public TimeSpan AnalysisDuration => AnalysisEndTime - AnalysisStartTime;
 
+        /// <summary>
+        /// Counts the issues with the given severity.
+        /// </summary>
+        /// <param name="severity">
+        /// The severity to count.
+        /// </param>
+        /// <returns>
+        /// The number of issues with that severity.
+        /// </returns>
         public int GetIssueCount(IssueSeverity severity)
         {
             int count = 0;
@@ -664,6 +787,15 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
             return count;
         }
 
+        /// <summary>
+        /// Counts the issues in the given category.
+        /// </summary>
+        /// <param name="category">
+        /// The category to count.
+        /// </param>
+        /// <returns>
+        /// The number of issues in that category.
+        /// </returns>
         public int GetIssueCount(IssueCategory category)
         {
             int count = 0;
@@ -675,6 +807,12 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
             return count;
         }
 
+        /// <summary>
+        /// Builds a plain text report of the master block, block usage and issues.
+        /// </summary>
+        /// <returns>
+        /// The report text.
+        /// </returns>
         public string GenerateTextReport()
         {
             var sb = new StringBuilder();
@@ -784,30 +922,84 @@ namespace RetroIO.Storage.Ndfs.Diagnostics
         }
     }
 
+    /// <summary>
+    /// One problem found by the analyzer.
+    /// </summary>
     public class AnalysisIssue
     {
+        /// <summary>
+        /// Gets or sets how serious the issue is.
+        /// </summary>
         public IssueSeverity Severity { get; set; }
+        /// <summary>
+        /// Gets or sets the kind of issue.
+        /// </summary>
         public IssueCategory Category { get; set; }
+        /// <summary>
+        /// Gets or sets the block the issue is about, or null when it is not about one block.
+        /// </summary>
         public uint? BlockId { get; set; }
+        /// <summary>
+        /// Gets or sets the text that describes the issue.
+        /// </summary>
         public string Description { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the text that says how to fix the issue.
+        /// </summary>
         public string Recommendation { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// How serious an issue is.
+    /// </summary>
     public enum IssueSeverity
     {
+        /// <summary>
+        /// Information only.
+        /// </summary>
         Info,
+        /// <summary>
+        /// A warning.
+        /// </summary>
         Warning,
+        /// <summary>
+        /// An error.
+        /// </summary>
         Error,
+        /// <summary>
+        /// A critical error.
+        /// </summary>
         Critical
     }
 
+    /// <summary>
+    /// The kind of an issue.
+    /// </summary>
     public enum IssueCategory
     {
+        /// <summary>
+        /// A block is marked used in the bitmap but nothing points to it.
+        /// </summary>
         OrphanedBlock,
+        /// <summary>
+        /// More than one pointer refers to the same block.
+        /// </summary>
         MultiplePointers,
+        /// <summary>
+        /// A block has pointers to it but the bitmap marks it free.
+        /// </summary>
         BitmapMismatch,
+        /// <summary>
+        /// A pointer refers to a block beyond the size of the disk.
+        /// </summary>
         InvalidPointer,
+        /// <summary>
+        /// The pages used recorded for a user differ from the pages found in use.
+        /// </summary>
         QuotaMismatch,
+        /// <summary>
+        /// The unreserved page count in the master block differs from the number of free blocks found.
+        /// </summary>
         UnreservedPagesMismatch
     }
 }

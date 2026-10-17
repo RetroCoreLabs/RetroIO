@@ -28,9 +28,21 @@ namespace RetroIO.Storage.Ndfs.Structures
         /// </summary>
         public enum PointerType
         {
+            /// <summary>
+            /// Sequential blocks. Encoded as binary 00.
+            /// </summary>
             Contiguous = 0,   // b00 - Sequential blocks
+            /// <summary>
+            /// An index block that points to data blocks. Encoded as binary 01.
+            /// </summary>
             Indexed = 1,      // b01 - Index block pointing to data blocks
+            /// <summary>
+            /// An index block that points to index blocks. Encoded as binary 10.
+            /// </summary>
             SubIndexed = 2,   // b10 - Index block pointing to index blocks
+            /// <summary>
+            /// Invalid or reserved. Encoded as binary 11.
+            /// </summary>
             Reserved = 3      // b11 - Invalid/Reserved
         }
 
@@ -145,6 +157,12 @@ namespace RetroIO.Storage.Ndfs.Structures
             };
         }
 
+        /// <summary>
+        /// Returns the block number followed by the pointer type in parentheses.
+        /// </summary>
+        /// <returns>
+        /// The text form of the pointer.
+        /// </returns>
         public override string ToString()
         {
             return $"{BlockID} ({Type})";
