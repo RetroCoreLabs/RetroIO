@@ -90,7 +90,24 @@ Note the symmetry, and that it is the useful part: RetroIO can be a **client** o
 | `TnfsVolumeProvider` | A TNFS server as a volume |
 | `EconetVolumeProvider` | An Acorn Level-3 file server over UDP AUN |
 | `FtpVolumeProvider` | FTP (RFC 959) |
-| `SftpVolumeProvider` | SFTP over SSH (RFC 4251) |
+| `SftpVolumeProvider` | SFTP over SSH (RFC 4251). Checks the server's host key, see below |
+| `SftpHostKeyPolicy` | Decides whether to trust the host key an SFTP server presents |
 | `VfsFileSystemBackend` | The VFS presented as an `IFileSystemBackend` for a server |
 | `CompositeVfsFileSystemBackend` | Several VFS-mounted discs presented to the Econet server as one |
 | `DiscMount` | One disc within such a composition |
+
+### SFTP host keys
+
+An SFTP mount **refuses a server whose host key it does not know**. Without that check anyone who can
+intercept the connection could pose as the server and read the password or the files. Give the mount one
+of these, as query values on the `sftp://` URI:
+
+| Option | Effect |
+|---|---|
+| `hostKey=SHA256:...` | Pin the key. The fingerprint is the one `ssh-keygen -lf` prints. Several, separated by commas, are allowed |
+| `hostKeyCheck=accept-new` | Trust a host the first time you see it and remember its key |
+| `hostKeyCheck=off` | No check at all. Only for a network you fully control |
+| `knownHosts=<path>` | The file where remembered keys live. The default is `.retroio/sftp-known-hosts` in your user profile folder |
+
+A server whose key **changes** is always refused, whatever the mode, and the file is never overwritten.
+The refusal message tells you the fingerprint the server presented and what to add.

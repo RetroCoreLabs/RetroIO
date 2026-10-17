@@ -11,6 +11,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 using Renci.SshNet.Sftp;
 using RetroIO.Storage.Core;
 
@@ -24,7 +25,7 @@ namespace RetroIO.Storage.Providers
     /// Supports:
     /// - Password authentication
     /// - SSH key authentication (RSA, DSA, ECDSA, ED25519)
-    /// - Host key verification
+    /// - Host key verification: the server's key must be pinned, already known, or (with hostKeyCheck=accept-new) new; see SftpHostKeyPolicy
     /// - Directory listing, file upload/download
     /// - Async operations for non-blocking I/O
     ///
@@ -103,6 +104,9 @@ namespace RetroIO.Storage.Providers
         /// </summary>
         /// <remarks>
         /// The URI has the form sftp, then ://, then optional user name and password followed by an at sign, then host, optional port and path. The default port is 22 and the default user name is the current operating system user. With a password in the URI, password login is used. Without one, the key file from the query value keyFile is used, with the optional query value keyPassphrase, or else the first default key found under the .ssh folder of the user. The connection is not opened until the first operation, with a connection timeout of 30 seconds.
+        /// <para>
+        /// The server's host key is checked on every connection by <see cref="SftpHostKeyPolicy"/>. By default a server whose key is not pinned and not in the known-hosts file is refused. The query values hostKey, hostKeyCheck and knownHosts choose the keys to accept and how strict to be; see that class.
+        /// </para>
         /// </remarks>
         /// <param name="uri">
         /// The URI of the SFTP server and path.
@@ -117,7 +121,7 @@ namespace RetroIO.Storage.Providers
         /// Information about the mounted volume.
         /// </returns>
         /// <exception cref="System.ArgumentException">
-        /// Thrown when <paramref name="uri"/> or <paramref name="volumeId"/> is empty, the volume identifier is already mounted, or the URI has no password and no key file is found.
+        /// Thrown when <paramref name="uri"/> or <paramref name="volumeId"/> is empty, the volume identifier is already mounted, the URI has no password and no key file is found, or a host key option is not valid.
         /// </exception>
         public MountInfo Mount(string uri, string volumeId, bool readOnly)
         {
@@ -137,6 +141,9 @@ namespace RetroIO.Storage.Providers
             string username = string.IsNullOrEmpty(sftpUri.UserInfo) ? Environment.UserName : sftpUri.UserInfo.Split(':')[0];
             string? password = sftpUri.UserInfo.Contains(':') ? sftpUri.UserInfo.Split(':', 2)[1] : null;
             string remotePath = sftpUri.AbsolutePath;
+
+            // Read the host key options first, so a bad option fails the mount before anything is created.
+            SftpHostKeyPolicy hostKeyPolicy = SftpHostKeyPolicy.FromQuery(sftpUri.Query);
 
             // Create SFTP client
             SftpClient client;
@@ -183,6 +190,15 @@ namespace RetroIO.Storage.Providers
                 RemotePath = remotePath,
                 IsReadOnly = readOnly,
                 Client = client
+            };
+
+            // SSH.NET trusts every host key unless something is subscribed to HostKeyReceived.
+            client.HostKeyReceived += (sender, e) =>
+            {
+                SftpHostKeyDecision decision = hostKeyPolicy.Evaluate(host, port, e.FingerPrintSHA256);
+                e.CanTrust = decision.Trust;
+                // SSH.NET reports a refused key only as "key exchange failed", so keep the reason.
+                mount.HostKeyRefusal = decision.Trust ? null : decision.Reason;
             };
 
             _mounts[volumeId] = mount;
@@ -634,7 +650,15 @@ namespace RetroIO.Storage.Providers
         {
             if (!mount.Client.IsConnected)
             {
-                mount.Client.Connect();
+                try
+                {
+                    mount.Client.Connect();
+                }
+                catch (SshConnectionException ex) when (mount.HostKeyRefusal != null)
+                {
+                    // The host key policy said no. Say why, instead of SSH.NET's generic key exchange error.
+                    throw new IOException("SFTP connection to " + mount.Host + ":" + mount.Port + " refused: " + mount.HostKeyRefusal, ex);
+                }
             }
         }
 
@@ -727,6 +751,7 @@ namespace RetroIO.Storage.Providers
             public string RemotePath { get; set; } = "/";
             public bool IsReadOnly { get; set; }
             public SftpClient Client { get; set; } = null!;
+            public string? HostKeyRefusal { get; set; }
         }
     }
 }
