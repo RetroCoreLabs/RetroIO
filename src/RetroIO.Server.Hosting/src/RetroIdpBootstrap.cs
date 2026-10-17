@@ -11,8 +11,26 @@ using RetroIO.Identity;
 
 namespace RetroIO.Server.Hosting;
 
+/// <summary>
+/// Prepares the identity provider at server start.
+/// </summary>
 public static class RetroIdpBootstrap
 {
+    /// <summary>
+    /// Loads the identity provider, makes sure the admin and SYST users exist with protocol access, and saves.
+    /// </summary>
+    /// <remarks>
+    /// A missing admin user or SYST user is created with the password retroadmin. An existing admin is set to allow TNFS and Econet. An existing SYST user is set to allow Econet, to refuse TNFS and to be an administrator. A changed user is updated, and the provider is saved at the end.
+    /// </remarks>
+    /// <param name="services">
+    /// The service provider that supplies the logger factory and the identity provider.
+    /// </param>
+    /// <param name="ct">
+    /// A token that cancels the calls to the identity provider.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the setup is saved.
+    /// </returns>
     public static async Task InitializeAsync(IServiceProvider services, CancellationToken ct = default)
     {
         ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();

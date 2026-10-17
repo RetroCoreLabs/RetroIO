@@ -11,8 +11,26 @@ using RetroIO.Server.Hosting.Configuration;
 
 namespace RetroIO.Server.Hosting;
 
+/// <summary>
+/// Loads the TNFS and Econet server settings from JSON files and application configuration.
+/// </summary>
 public static class ProtocolConfigurationLoader
 {
+    /// <summary>
+    /// Loads the TNFS settings from tnfs-config.json, applies overrides from the application configuration, and writes the file back.
+    /// </summary>
+    /// <remarks>
+    /// When the file is missing or cannot be read, the defaults are used. The keys Tnfs:RootDirectory, Tnfs:UdpPort and Tnfs:TcpPort override the loaded values when they are set. The result is always written to the file, and a failed write is only reported on the console.
+    /// </remarks>
+    /// <param name="retroFsPath">
+    /// The folder that holds the JSON file.
+    /// </param>
+    /// <param name="configuration">
+    /// The application configuration with the optional overrides.
+    /// </param>
+    /// <returns>
+    /// The TNFS settings.
+    /// </returns>
     public static TnfsServerConfiguration LoadTnfsConfiguration(string retroFsPath, IConfiguration configuration)
     {
         string configPath = Path.Combine(retroFsPath, "tnfs-config.json");
@@ -43,6 +61,21 @@ public static class ProtocolConfigurationLoader
         return config;
     }
 
+    /// <summary>
+    /// Loads the Econet settings from econet-config.json, applies overrides from the application configuration, and writes the file back.
+    /// </summary>
+    /// <remarks>
+    /// When the file is missing or cannot be read, the defaults are used. The keys Econet:RootDirectory and Econet:UdpPort override the loaded values when they are set. The result is always written to the file, and a failed write is only reported on the console.
+    /// </remarks>
+    /// <param name="retroFsPath">
+    /// The folder that holds the JSON file.
+    /// </param>
+    /// <param name="configuration">
+    /// The application configuration with the optional overrides.
+    /// </param>
+    /// <returns>
+    /// The Econet settings.
+    /// </returns>
     public static EconetServerConfiguration LoadEconetConfiguration(string retroFsPath, IConfiguration configuration)
     {
         string configPath = Path.Combine(retroFsPath, "econet-config.json");

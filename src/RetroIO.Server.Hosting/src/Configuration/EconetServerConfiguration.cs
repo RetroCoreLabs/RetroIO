@@ -11,15 +11,42 @@ using RetroIO.Storage.Utilities;
 
 namespace RetroIO.Server.Hosting.Configuration;
 
+/// <summary>
+/// Settings of the Econet file server.
+/// </summary>
 public sealed class EconetServerConfiguration
 {
+    /// <summary>
+    /// Gets or sets the root directory of the served files.
+    /// </summary>
     public string RootDirectory { get; set; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the disc name. The default is RetroFS.
+    /// </summary>
     public string DiscName { get; set; } = "RetroFS";
+    /// <summary>
+    /// Gets or sets the version string of the server, or null for none.
+    /// </summary>
     public string? VersionString { get; set; }
+    /// <summary>
+    /// Gets or sets the UDP port. The default is 32768.
+    /// </summary>
     public int UdpPort { get; set; } = 32768;
+    /// <summary>
+    /// Gets or sets the Econet network number of the server. The default is 1.
+    /// </summary>
     public byte Net { get; set; } = 1;
+    /// <summary>
+    /// Gets or sets the Econet station number of the server. The default is 254.
+    /// </summary>
     public byte Station { get; set; } = 254;
+    /// <summary>
+    /// Gets or sets the octet index passed, together with the network number, to the AUN address mapper. The default is 3.
+    /// </summary>
     public byte AunStationOctetIndex { get; set; } = 3;
+    /// <summary>
+    /// Gets or sets whether the UDP transport is enabled. The default is true.
+    /// </summary>
     public bool EnableUdp { get; set; } = true;
 
     /// <summary>
@@ -62,6 +89,15 @@ public sealed class EconetServerConfiguration
     /// </summary>
     public List<EconetDiscConfiguration>? Discs { get; set; }
 
+    /// <summary>
+    /// Creates the default configuration.
+    /// </summary>
+    /// <remarks>
+    /// The root directory is the folder econet-root inside the RetroFS data folder. The disc name is RetroFS, the network is 1, the station is 254, the UDP port is 32768 and UDP is enabled.
+    /// </remarks>
+    /// <returns>
+    /// A new configuration with the default values.
+    /// </returns>
     public static EconetServerConfiguration GetDefault()
     {
         return new EconetServerConfiguration

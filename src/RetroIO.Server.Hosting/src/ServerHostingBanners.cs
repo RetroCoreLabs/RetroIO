@@ -12,8 +12,17 @@ using RetroIO.Storage.Utilities;
 
 namespace RetroIO.Server.Hosting;
 
+/// <summary>
+/// Prints the start-up settings of the servers to the console.
+/// </summary>
 public static class ServerHostingBanners
 {
+    /// <summary>
+    /// Prints the rate limit settings in a box.
+    /// </summary>
+    /// <param name="rateLimitConfig">
+    /// The settings to print.
+    /// </param>
     public static void PrintRateLimitConfiguration(RateLimitConfig rateLimitConfig)
     {
         ConsoleBox.Top();
@@ -34,6 +43,9 @@ public static class ServerHostingBanners
         ConsoleBox.Bottom();
     }
 
+    /// <summary>
+    /// Prints the header for the local file system backend in a box.
+    /// </summary>
     public static void PrintLocalBackendHeader()
     {
         ConsoleBox.Top();
@@ -42,6 +54,9 @@ public static class ServerHostingBanners
         Console.WriteLine();
     }
 
+    /// <summary>
+    /// Prints the header for the Azure blob storage backend. The box stays open for PrintAzureBackendDetails.
+    /// </summary>
     public static void PrintAzureBackendHeader()
     {
         ConsoleBox.Top();
@@ -49,6 +64,12 @@ public static class ServerHostingBanners
         ConsoleBox.Divider();
     }
 
+    /// <summary>
+    /// Prints the Azure container, authentication method and cache folder and closes the box.
+    /// </summary>
+    /// <param name="azureOptions">
+    /// The Azure options to print.
+    /// </param>
     public static void PrintAzureBackendDetails(AzureBlobOptions azureOptions)
     {
         ConsoleBox.LabelValue("  Container:       ", azureOptions.ContainerName);
@@ -58,6 +79,12 @@ public static class ServerHostingBanners
         Console.WriteLine();
     }
 
+    /// <summary>
+    /// Prints the TNFS server settings in a box.
+    /// </summary>
+    /// <param name="config">
+    /// The settings to print.
+    /// </param>
     public static void PrintTnfsConfiguration(TnfsServerConfiguration config)
     {
         ConsoleBox.Top();
@@ -72,6 +99,12 @@ public static class ServerHostingBanners
         Console.WriteLine();
     }
 
+    /// <summary>
+    /// Prints the Econet file server settings in a box.
+    /// </summary>
+    /// <param name="config">
+    /// The settings to print.
+    /// </param>
     public static void PrintEconetConfiguration(EconetServerConfiguration config)
     {
         ConsoleBox.Top();
