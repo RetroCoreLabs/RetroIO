@@ -59,4 +59,17 @@ public sealed class FileServerOpcodeErrorNamesTests
         Assert.That(FileServerOpcodeNames.GetOsCliDisplayName("I AM SYST "), Is.EqualTo("*I AM"));
         Assert.That(FileServerOpcodeNames.GetOsCliDisplayName("CAT $."), Is.EqualTo("*CAT"));
     }
+
+    [Test]
+    public void OsCliNames_EverySpellingOfCat_IsLabelledStarCat_AndNothingElseIs()
+    {
+        // The command table registers CAT (shortest abbreviation 2) and "." (shortest 1) as the same
+        // catalogue command, as PiFS does: fs_parse_cmd(command, "CAT", 2, ...) || fs_parse_cmd(command, ".", 1, ...).
+        // The label must follow the same rule, so a spelling the server runs as *CAT reads as *CAT,
+        // and a word that merely starts with CAT does not.
+        Assert.That(FileServerOpcodeNames.GetOsCliDisplayName("."), Is.EqualTo("*CAT"));
+        Assert.That(FileServerOpcodeNames.GetOsCliDisplayName("CAT"), Is.EqualTo("*CAT"));
+        Assert.That(FileServerOpcodeNames.GetOsCliDisplayName("CA. $"), Is.EqualTo("*CAT"));
+        Assert.That(FileServerOpcodeNames.GetOsCliDisplayName("CATALOGUE"), Is.EqualTo("*CATALOGUE"));
+    }
 }

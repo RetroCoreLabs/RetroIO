@@ -6,6 +6,7 @@
 //
 
 using RetroIO.Protocols.Econet.Common;
+using RetroIO.Protocols.Econet.FileServer.Dispatch;
 using RetroIO.Protocols.Econet.Protocol;
 
 namespace RetroIO.Protocols.Econet.Protocol.FileServer;
@@ -173,8 +174,14 @@ public static class FileServerOpcodeNames
         if (normalized == "BYE" || normalized.StartsWith("BYE ", StringComparison.Ordinal))
             return "*BYE";
 
-        if (normalized == "." || normalized.StartsWith("CAT", StringComparison.Ordinal))
-            return normalized == "." ? "*CAT" : "*CAT";
+        // CAT (shortest abbreviation 2) and "." (shortest 1) are one catalogue command, in the command
+        // table here and in PiFS (fs_parse_cmd(command, "CAT", 2, ...) || fs_parse_cmd(command, ".", 1, ...)).
+        // Use the matcher the dispatcher uses, so the label names a command the server would actually run.
+        if (OsCliCommandMatcher.TryMatch(normalized, "CAT", 2, out _) ||
+            OsCliCommandMatcher.TryMatch(normalized, ".", 1, out _))
+        {
+            return "*CAT";
+        }
 
         if (normalized.StartsWith("DIR", StringComparison.Ordinal))
             return "*DIR";

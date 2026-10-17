@@ -235,7 +235,7 @@ public sealed class FileServerSessionManager
     }
 
     /// <summary>
-    /// Moves a session to another disc and sets its home, current and library directories to the USER directory of that disc, or to the disc root when there is no USER directory.
+    /// Moves a session to another disc and sets its home, current and library directories to the USER directory of that disc, or to the disc root when there is no USER directory. The matching Acorn paths move with them.
     /// </summary>
     /// <param name="session">
     /// The session to change.
@@ -276,10 +276,17 @@ public sealed class FileServerSessionManager
         if (!_fileSystem.DirectoryExists(homeUnix))
             homeUnix = discPath;
 
+        // The Acorn paths are what *DIR and *LIB resolve against, so they move with the Unix paths.
+        // Built the same way TryLogin builds them for a user whose home is on this disc.
+        string acornHome = BuildAcornPath($":{disc.AcornName}.$", discPath, homeUnix);
+
         session.CurrentDisc = disc.Index;
         session.HomeDirectoryUnix = homeUnix;
         session.CurrentDirectoryUnix = homeUnix;
         session.LibraryDirectoryUnix = homeUnix;
+        session.AcornHomePath = acornHome;
+        session.AcornCwdPath = acornHome;
+        session.AcornLibPath = acornHome;
         return true;
     }
 

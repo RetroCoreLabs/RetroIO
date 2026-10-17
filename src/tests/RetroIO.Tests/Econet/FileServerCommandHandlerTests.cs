@@ -31,6 +31,7 @@ public sealed class FileServerCommandHandlerTests
 {
     private MockFileSystemBackend _fileSystem = null!;
     private FileServerCommandHandler _handler = null!;
+    private FileServerSessionManager _sessions = null!;
 
     [SetUp]
     public void SetUp()
@@ -41,6 +42,7 @@ public sealed class FileServerCommandHandlerTests
         EconetUserDirectory users = EconetTestUsers.CreateDirectory(out _);
         DiscCatalog discs = new DiscCatalog(_fileSystem, "/econet-root", "RetroFS");
         FileServerSessionManager sessions = new FileServerSessionManager(_fileSystem, users, discs, "/econet-root");
+        _sessions = sessions;
         FileServerHandleManager handles = new FileServerHandleManager();
         PathResolver paths = new PathResolver(_fileSystem, discs, "/econet-root");
         BulkTransferManager bulk = new BulkTransferManager();
@@ -139,6 +141,24 @@ public sealed class FileServerCommandHandlerTests
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Payload[0], Is.EqualTo(0));
         Assert.That(response.Payload[1], Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Sdisc_AfterLogin_MovesTheAcornPathsToTheNewDisc_NotOnlyTheUnixPaths()
+    {
+        // Regression: TryChangeDisc updated the Unix home, current and library directories but left
+        // the Acorn paths (what *DIR and *LIB resolve against) on the disc the user logged in to.
+        Login();
+        FileServerSession session = _sessions.GetSession(1, 1)!;
+        Assert.That(session.AcornHomePath, Does.StartWith(":RetroFS."), "login puts the user on the first disc");
+
+        EconetMessage? response = _handler.Handle(CreateRequest(FileServerOpcodes.OsCli, Encoding.ASCII.GetBytes("SDISC STORAGE\r")));
+
+        Assert.That(response!.Payload[0], Is.EqualTo(0));
+        Assert.That(session.HomeDirectoryUnix, Does.Contain("1STORAGE"));
+        Assert.That(session.AcornHomePath, Does.StartWith(":STORAGE."));
+        Assert.That(session.AcornCwdPath, Is.EqualTo(session.AcornHomePath));
+        Assert.That(session.AcornLibPath, Is.EqualTo(session.AcornHomePath));
     }
 
     [Test]
