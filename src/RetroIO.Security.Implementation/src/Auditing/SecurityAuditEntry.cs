@@ -107,43 +107,127 @@ namespace RetroIO.Security.Implementation.Auditing
     public enum SecurityEventType
     {
         // Authentication Events
+        /// <summary>
+        /// A login succeeded.
+        /// </summary>
         AuthenticationSuccess,
+        /// <summary>
+        /// A login failed.
+        /// </summary>
         AuthenticationFailure,
+        /// <summary>
+        /// An authentication token has expired.
+        /// </summary>
         AuthenticationTokenExpired,
+        /// <summary>
+        /// An authentication token was revoked.
+        /// </summary>
         AuthenticationTokenRevoked,
 
         // Authorization Events
+        /// <summary>
+        /// An access request was granted.
+        /// </summary>
         AuthorizationGranted,
+        /// <summary>
+        /// An access request was denied.
+        /// </summary>
         AuthorizationDenied,
 
         // Connection Events
+        /// <summary>
+        /// A connection was accepted.
+        /// </summary>
         ConnectionAccepted,
+        /// <summary>
+        /// A connection was rejected.
+        /// </summary>
         ConnectionRejected,
+        /// <summary>
+        /// The firewall blocked an address.
+        /// </summary>
         FirewallBlocked,
+        /// <summary>
+        /// The firewall allowed an address.
+        /// </summary>
         FirewallAllowed,
 
         // File Access Events
+        /// <summary>
+        /// A file was read.
+        /// </summary>
         FileRead,
+        /// <summary>
+        /// A file was written.
+        /// </summary>
         FileWrite,
+        /// <summary>
+        /// A file was deleted.
+        /// </summary>
         FileDelete,
+        /// <summary>
+        /// A file was opened.
+        /// </summary>
         FileOpen,
+        /// <summary>
+        /// A file was closed.
+        /// </summary>
         FileClose,
+        /// <summary>
+        /// A seek was done in a file.
+        /// </summary>
         FileSeek,
+        /// <summary>
+        /// A file was renamed.
+        /// </summary>
         FileRename,
+        /// <summary>
+        /// A directory was listed.
+        /// </summary>
         DirectoryList,
+        /// <summary>
+        /// A directory was created.
+        /// </summary>
         DirectoryCreate,
+        /// <summary>
+        /// A directory was deleted.
+        /// </summary>
         DirectoryDelete,
+        /// <summary>
+        /// A mount operation was done.
+        /// </summary>
         MountOperation,
 
         // Security Violations
+        /// <summary>
+        /// A path traversal attempt was detected.
+        /// </summary>
         PathTraversalAttempt,
+        /// <summary>
+        /// A rate limit was exceeded.
+        /// </summary>
         RateLimitExceeded,
+        /// <summary>
+        /// An invalid token was presented.
+        /// </summary>
         InvalidToken,
+        /// <summary>
+        /// Suspicious activity was detected.
+        /// </summary>
         SuspiciousActivity,
 
         // System Events
+        /// <summary>
+        /// A session was created.
+        /// </summary>
         SessionCreated,
+        /// <summary>
+        /// A session was terminated.
+        /// </summary>
         SessionTerminated,
+        /// <summary>
+        /// A configuration was changed.
+        /// </summary>
         ConfigurationChanged
     }
 
@@ -152,9 +236,21 @@ namespace RetroIO.Security.Implementation.Auditing
     /// </summary>
     public enum AuditSeverity
     {
+        /// <summary>
+        /// Normal operation, for example a file read or a successful login.
+        /// </summary>
         Info,        // Normal operation (file read, login success)
+        /// <summary>
+        /// Suspicious but not critical, for example an exceeded rate limit.
+        /// </summary>
         Warning,     // Suspicious but not critical (rate limit exceeded)
+        /// <summary>
+        /// A security violation, for example a path traversal or a failed login.
+        /// </summary>
         Error,       // Security violation (path traversal, auth failure)
+        /// <summary>
+        /// A severe incident, for example repeated failed logins.
+        /// </summary>
         Critical     // Severe security incident (multiple auth failures, brute force)
     }
 }

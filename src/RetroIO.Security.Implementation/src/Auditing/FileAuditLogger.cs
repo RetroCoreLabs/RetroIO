@@ -24,6 +24,18 @@ namespace RetroIO.Security.Implementation.Auditing
         private readonly SemaphoreSlim _writeLock = new(1, 1);
         private readonly JsonSerializerOptions _jsonOptions;
 
+        /// <summary>
+        /// Creates a logger that writes to a directory.
+        /// </summary>
+        /// <remarks>
+        /// The directory is created when it does not exist.
+        /// </remarks>
+        /// <param name="logDirectory">
+        /// The directory for the audit files.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logDirectory"/> is null.
+        /// </exception>
         public FileAuditLogger(string logDirectory)
         {
             _logDirectory = logDirectory ?? throw new ArgumentNullException(nameof(logDirectory));
@@ -40,6 +52,21 @@ namespace RetroIO.Security.Implementation.Auditing
             };
         }
 
+        /// <summary>
+        /// Appends an entry as one line of JSON to the audit file of the current UTC day.
+        /// </summary>
+        /// <remarks>
+        /// The file is named with the date, in the form yyyy-MM-dd.audit.jsonl. Writes are serialized with a lock.
+        /// </remarks>
+        /// <param name="entry">
+        /// The entry to write.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the lock and the write.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="entry"/> is null.
+        /// </exception>
         public async ValueTask LogSecurityEventAsync(
             SecurityAuditEntry entry, CancellationToken ct = default)
         {
@@ -62,6 +89,9 @@ namespace RetroIO.Security.Implementation.Auditing
             }
         }
 
+        /// <summary>
+        /// Releases the write lock.
+        /// </summary>
         public void Dispose()
         {
             _writeLock?.Dispose();

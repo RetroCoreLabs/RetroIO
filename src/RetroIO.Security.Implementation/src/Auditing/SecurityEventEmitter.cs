@@ -25,6 +25,21 @@ namespace RetroIO.Security.Implementation.Auditing
         private readonly SemaphoreSlim _flushLock = new(1, 1);
         private bool _disposed;
 
+        /// <summary>
+        /// Creates an emitter that buffers entries and writes them with a timer.
+        /// </summary>
+        /// <param name="logger">
+        /// The audit logger that receives the flushed entries.
+        /// </param>
+        /// <param name="batchSize">
+        /// The buffer size that triggers a flush, and the largest number of entries written per flush.
+        /// </param>
+        /// <param name="flushInterval">
+        /// The time between timed flushes. When null, 5 seconds is used.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public SecurityEventEmitter(
             FileAuditLogger logger,
             int batchSize = 1000,
@@ -159,6 +174,9 @@ namespace RetroIO.Security.Implementation.Auditing
             }
         }
 
+        /// <summary>
+        /// Stops the timer, flushes the buffer once and releases the flush lock.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)

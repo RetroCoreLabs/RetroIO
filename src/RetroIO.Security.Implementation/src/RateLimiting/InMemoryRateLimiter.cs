@@ -24,6 +24,18 @@ namespace RetroIO.Security.Implementation.RateLimiting
         private readonly SemaphoreSlim _lock = new(1, 1);
         private readonly Timer _persistenceTimer;
 
+        /// <summary>
+        /// Creates the limiter and starts the timer that saves its state.
+        /// </summary>
+        /// <remarks>
+        /// When RestoreStateOnStartup is set in the configuration, the state is loaded from disk, otherwise it starts empty.
+        /// </remarks>
+        /// <param name="config">
+        /// The rate limit configuration.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="config"/> is null.
+        /// </exception>
         public InMemoryRateLimiter(RateLimitConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -41,6 +53,30 @@ namespace RetroIO.Security.Implementation.RateLimiting
                 period: _config.PersistenceInterval);
         }
 
+        /// <summary>
+        /// Checks whether a request is within the server, user and IP limits, and counts it when it is.
+        /// </summary>
+        /// <remarks>
+        /// The server-wide limits are checked first. After that, admins are allowed without further checks when SkipLimitsForAdmins is set. Otherwise the per-user limits apply to an authenticated user, and the per-IP limits apply when the user identifier is empty. A denial from the server limits has status 503 and a denial from a user or IP limit has status 429.
+        /// </remarks>
+        /// <param name="userId">
+        /// The identifier of the user, or an empty GUID for a guest.
+        /// </param>
+        /// <param name="ipAddress">
+        /// The IP address of the client.
+        /// </param>
+        /// <param name="bytesToTransfer">
+        /// The number of bytes the request will transfer.
+        /// </param>
+        /// <param name="isAdmin">
+        /// True when the user is an administrator.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the lock.
+        /// </param>
+        /// <returns>
+        /// A result that says whether the request is allowed and, when it is not, the reason, the retry delay and the status code.
+        /// </returns>
         public async ValueTask<RateLimitResult> CheckRateLimitAsync(
             Guid userId,
             string ipAddress,
@@ -301,6 +337,9 @@ namespace RetroIO.Security.Implementation.RateLimiting
             }
         }
 
+        /// <summary>
+        /// Stops the save timer, saves the state to disk once and releases the lock.
+        /// </summary>
         public void Dispose()
         {
             _persistenceTimer?.Dispose();

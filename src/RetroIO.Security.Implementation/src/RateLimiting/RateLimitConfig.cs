@@ -87,16 +87,49 @@ namespace RetroIO.Security.Implementation.RateLimiting
     /// </summary>
     public sealed class RateLimitResult
     {
+        /// <summary>
+        /// Gets or sets whether the request is allowed.
+        /// </summary>
         public bool IsAllowed { get; set; }
+        /// <summary>
+        /// Gets or sets the reason for a denial, or null when the request is allowed.
+        /// </summary>
         public string? DenialReason { get; set; }
+        /// <summary>
+        /// Gets or sets how long the caller should wait before trying again.
+        /// </summary>
         public TimeSpan RetryAfter { get; set; }
+        /// <summary>
+        /// Gets or sets the status code for the result. The default is 200.
+        /// </summary>
         public int StatusCode { get; set; } = 200;
 
+        /// <summary>
+        /// Creates a result that allows the request.
+        /// </summary>
+        /// <returns>
+        /// A result with IsAllowed true.
+        /// </returns>
         public static RateLimitResult Allowed()
         {
             return new RateLimitResult { IsAllowed = true };
         }
 
+        /// <summary>
+        /// Creates a result that denies the request.
+        /// </summary>
+        /// <param name="reason">
+        /// The reason for the denial.
+        /// </param>
+        /// <param name="retryAfter">
+        /// How long the caller should wait before trying again.
+        /// </param>
+        /// <param name="statusCode">
+        /// The status code for the denial.
+        /// </param>
+        /// <returns>
+        /// A result with IsAllowed false and the given values.
+        /// </returns>
         public static RateLimitResult Denied(string reason, TimeSpan retryAfter, int statusCode)
         {
             return new RateLimitResult

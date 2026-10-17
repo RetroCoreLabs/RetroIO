@@ -41,10 +41,25 @@ namespace RetroIO.Security.Implementation.RateLimiting
     /// </summary>
     public sealed class UserRateLimitState
     {
+        /// <summary>
+        /// Gets or sets the identifier of the user.
+        /// </summary>
         public Guid UserId { get; set; }
+        /// <summary>
+        /// Gets or sets the number of requests counted in the current second.
+        /// </summary>
         public int RequestsThisSecond { get; set; }
+        /// <summary>
+        /// Gets or sets the start of the current one-second window.
+        /// </summary>
         public DateTime CurrentSecondStart { get; set; } = DateTime.UtcNow;
+        /// <summary>
+        /// Gets or sets the number of bytes counted in the current hour.
+        /// </summary>
         public long BytesThisHour { get; set; }
+        /// <summary>
+        /// Gets or sets the start of the current one-hour window.
+        /// </summary>
         public DateTime CurrentHourStart { get; set; } = DateTime.UtcNow;
     }
 
@@ -53,10 +68,25 @@ namespace RetroIO.Security.Implementation.RateLimiting
     /// </summary>
     public sealed class IpRateLimitState
     {
+        /// <summary>
+        /// Gets or sets the IP address.
+        /// </summary>
         public string IpAddress { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the number of requests counted in the current second.
+        /// </summary>
         public int RequestsThisSecond { get; set; }
+        /// <summary>
+        /// Gets or sets the start of the current one-second window.
+        /// </summary>
         public DateTime CurrentSecondStart { get; set; } = DateTime.UtcNow;
+        /// <summary>
+        /// Gets or sets the number of bytes counted in the current hour.
+        /// </summary>
         public long BytesThisHour { get; set; }
+        /// <summary>
+        /// Gets or sets the start of the current one-hour window.
+        /// </summary>
         public DateTime CurrentHourStart { get; set; } = DateTime.UtcNow;
     }
 
@@ -65,9 +95,21 @@ namespace RetroIO.Security.Implementation.RateLimiting
     /// </summary>
     public sealed class ServerRateLimitState
     {
+        /// <summary>
+        /// Gets or sets the number of requests counted in the current second.
+        /// </summary>
         public int RequestsThisSecond { get; set; }
+        /// <summary>
+        /// Gets or sets the start of the current one-second window.
+        /// </summary>
         public DateTime CurrentSecondStart { get; set; } = DateTime.UtcNow;
+        /// <summary>
+        /// Gets or sets the number of bytes counted in the current hour.
+        /// </summary>
         public long BytesThisHour { get; set; }
+        /// <summary>
+        /// Gets or sets the start of the current one-hour window.
+        /// </summary>
         public DateTime CurrentHourStart { get; set; } = DateTime.UtcNow;
     }
 }
