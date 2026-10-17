@@ -23,6 +23,8 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private long _callsCleared;
         private long _packetsIn;
         private long _packetsOut;
+        private long _bytesIn;
+        private long _bytesOut;
 
         /// <summary>
         /// Number of calls received on this port.
@@ -48,6 +50,20 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// Number of packets sent from this port.
         /// </summary>
         public uint PacketsOut => (uint)Interlocked.Read(ref _packetsOut);
+
+        /// <summary>
+        /// Total bytes of X.25 packets received on this port.
+        /// </summary>
+        /// <remarks>
+        /// Counted at the X.25 packet layer, so any XOT or HDLC framing is not included. The C
+        /// emulator counts the same way, so the two report identical totals for the same traffic.
+        /// </remarks>
+        public long BytesIn => Interlocked.Read(ref _bytesIn);
+
+        /// <summary>
+        /// Total bytes of X.25 packets sent from this port, counted as <see cref="BytesIn"/> is.
+        /// </summary>
+        public long BytesOut => Interlocked.Read(ref _bytesOut);
 
         /// <summary>
         /// Increments the calls-received counter.
@@ -87,6 +103,28 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         public void IncrementPacketsOut()
         {
             Interlocked.Increment(ref _packetsOut);
+        }
+
+        /// <summary>
+        /// Adds the size of a received packet to the bytes-received total.
+        /// </summary>
+        /// <param name="count">
+        /// The packet length in bytes.
+        /// </param>
+        public void AddBytesIn(int count)
+        {
+            Interlocked.Add(ref _bytesIn, count);
+        }
+
+        /// <summary>
+        /// Adds the size of a sent packet to the bytes-sent total.
+        /// </summary>
+        /// <param name="count">
+        /// The packet length in bytes.
+        /// </param>
+        public void AddBytesOut(int count)
+        {
+            Interlocked.Add(ref _bytesOut, count);
         }
     }
 }

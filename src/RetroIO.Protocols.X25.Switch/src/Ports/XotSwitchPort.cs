@@ -9,6 +9,8 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RetroIO.Link.Framing;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.PacketLayer;
@@ -41,6 +43,14 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// one lock. Events are raised inside it, so a handler must not block or call back into the same
     /// port. That is the same rule <c>LapbStation</c> follows for the link layer.
     /// </para>
+    /// <para>
+    /// What a monitoring switch needs from it: <see cref="PacketCaptured"/> shows every packet in
+    /// both directions, <see cref="Counters"/> carries the packet and byte totals, and
+    /// <see cref="ConnectAttempts"/>, <see cref="LastConnectedMs"/> and <see cref="LastDisconnectedMs"/>
+    /// describe the link. They are counted as the C emulator counts them, so the two report the same
+    /// numbers for the same traffic. The optional logger gets one line for each thing that happens to
+    /// the link: listening, dialling, connection up, connection down, and a port that cannot start.
+    /// </para>
     /// </remarks>
     public sealed class XotSwitchPort : ISwitchPort, IDisposable
     {
@@ -56,6 +66,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         private readonly object _sync = new object();
         private readonly PortConfig _config;
+        private readonly ILogger _logger;
         private readonly X25Layer _layer;
         private readonly XotFrameCodec _codec;
         private readonly Timer _ticker;
@@ -69,18 +80,29 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private bool _peerConnected;
         private bool _restartSent;
         private bool _disposed;
+        private int _connectAttempts;
+        private long _lastConnectedMs;
+        private long _lastDisconnectedMs;
 
         /// <summary>
         /// Creates the port. Nothing happens on the network until <see cref="Start"/>.
         /// </summary>
         /// <param name="config">
         /// The port's configuration. <c>Mode</c> decides whether it listens or dials, <c>Port</c>
-        /// and <c>Host</c> say where, and <c>LciBase</c> and <c>LciCount</c> give the engine its
-        /// range of logical channels.
+        /// and <c>Host</c> say where (for a listening port <c>Host</c> is the local address to bind,
+        /// and empty or <c>0.0.0.0</c> means every address), and <c>LciBase</c> and <c>LciCount</c>
+        /// give the engine its range of logical channels.
         /// </param>
-        public XotSwitchPort(PortConfig config)
+        /// <param name="logger">
+        /// Where the port reports what happens to its link. Null reports nothing.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="config"/> is null.
+        /// </exception>
+        public XotSwitchPort(PortConfig config, ILogger? logger = null)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _logger = logger ?? NullLogger.Instance;
             Id = config.Id;
 
             X25Config layerConfig = new X25Config
@@ -158,6 +180,33 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         public event PortStateChanged? StateChanged;
 
         /// <summary>
+        /// Raised for every X.25 packet the port receives or writes, for a monitor to show.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="PortPacketCaptured"/> for what the handler may do. Nothing is copied while
+        /// no handler is attached.
+        /// </remarks>
+        public event PortPacketCaptured? PacketCaptured;
+
+        /// <summary>
+        /// Gets how many times the port has tried to make a connection: each dial for a DTE port
+        /// and each accepted connection for a DCE port.
+        /// </summary>
+        public int ConnectAttempts => Volatile.Read(ref _connectAttempts);
+
+        /// <summary>
+        /// Gets the time, as <see cref="Environment.TickCount64"/>, at which a peer last connected;
+        /// 0 if none has.
+        /// </summary>
+        public long LastConnectedMs => Interlocked.Read(ref _lastConnectedMs);
+
+        /// <summary>
+        /// Gets the time, as <see cref="Environment.TickCount64"/>, at which a connected peer last
+        /// went away; 0 if none has.
+        /// </summary>
+        public long LastDisconnectedMs => Interlocked.Read(ref _lastDisconnectedMs);
+
+        /// <summary>
         /// The port the listener actually bound to. Zero until a DCE port has started.
         /// </summary>
         /// <remarks>
@@ -183,10 +232,17 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 if (_config.Mode == PortMode.Dce)
                 {
-                    TcpListener listener = new TcpListener(IPAddress.Any, _config.Port);
+                    TcpListener listener = new TcpListener(ParseBindAddress(_config.Host), _config.Port);
                     listener.Start();
                     _listener = listener;
                     BoundPort = (ushort)((IPEndPoint)listener.LocalEndpoint).Port;
+                    _logger.LogInformation("Port {Id} ({Mode} {Type}): listening on {Address}:{Port}",
+                        Id, _config.Mode, _config.Type, ((IPEndPoint)listener.LocalEndpoint).Address, BoundPort);
+                }
+                else
+                {
+                    _logger.LogInformation("Port {Id} ({Mode} {Type}): dialling {Host}:{Port}",
+                        Id, _config.Mode, _config.Type, _config.Host, _config.Port);
                 }
 
                 _reader = new Thread(RunTransport) { IsBackground = true, Name = "XotSwitchPort" + Id };
@@ -196,12 +252,46 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 SetActive(true);
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // A port that cannot start is reported, not hidden: a switch that goes on without its
+                // listener still answers its management console and looks healthy while every call
+                // routed to the port goes nowhere.
+                _logger.LogError(ex, "Port {Id} ({Mode} {Type}): could NOT start on {Host}:{Port} - the port is down",
+                    Id, _config.Mode, _config.Type, _config.Host, _config.Port);
                 _running = false;
                 SetActive(false);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Works out the local address a listening port binds to.
+        /// </summary>
+        /// <param name="host">
+        /// The configured <c>Host</c>: empty or <c>0.0.0.0</c> for every address, otherwise an address
+        /// such as <c>127.0.0.1</c>.
+        /// </param>
+        /// <returns>
+        /// The address to listen on.
+        /// </returns>
+        /// <exception cref="FormatException">
+        /// Thrown when <paramref name="host"/> is not an address. A host name is not accepted, because
+        /// the C emulator takes the same setting as an address.
+        /// </exception>
+        private static IPAddress ParseBindAddress(string host)
+        {
+            if (string.IsNullOrEmpty(host) || host == "0.0.0.0")
+            {
+                return IPAddress.Any;
+            }
+
+            if (!IPAddress.TryParse(host, out IPAddress? address))
+            {
+                throw new FormatException("'" + host + "' is not an address the port can listen on");
+            }
+
+            return address;
         }
 
         /// <inheritdoc/>
@@ -219,7 +309,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 // Already down; the reader thread leaves on its own.
             }
 
-            CloseConnection();
+            CloseConnection("port stopped");
 
             Thread? reader = _reader;
             _reader = null;
@@ -371,6 +461,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         {
             while (_running)
             {
+                string reason = "closed by peer";
                 try
                 {
                     TcpClient? client = _config.Mode == PortMode.Dce ? Accept() : Dial();
@@ -379,16 +470,18 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                         continue;
                     }
 
-                    OpenConnection(client);
+                    OpenConnection(client, _config.Mode == PortMode.Dce ? "accepted" : "dialled");
                     ReadUntilClosed(client);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    // A dropped connection is ordinary. The loop makes or waits for the next one.
+                    // A dropped connection is ordinary. The loop makes or waits for the next one; the
+                    // reason is kept for the "connection down" line.
+                    reason = ex.Message;
                 }
                 finally
                 {
-                    CloseConnection();
+                    CloseConnection(reason);
                 }
             }
         }
@@ -403,7 +496,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
             try
             {
-                return listener.AcceptTcpClient();
+                TcpClient accepted = listener.AcceptTcpClient();
+                Interlocked.Increment(ref _connectAttempts);
+                return accepted;
             }
             catch (Exception)
             {
@@ -415,12 +510,17 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         {
             try
             {
+                Interlocked.Increment(ref _connectAttempts);
                 TcpClient client = new TcpClient();
                 client.Connect(_config.Host, _config.Port);
                 return client;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // A peer that is down is ordinary and is retried, so this is not worth a line at the
+                // default level every two seconds.
+                _logger.LogDebug("Port {Id}: dial to {Host}:{Port} failed ({Reason})", Id, _config.Host, _config.Port, ex.Message);
+
                 // Wait before dialling again, so a port whose peer is down does not spin.
                 for (int waited = 0; waited < RedialDelayMs && _running; waited += 100)
                 {
@@ -431,7 +531,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        private void OpenConnection(TcpClient client)
+        private void OpenConnection(TcpClient client, string how)
         {
             lock (_sync)
             {
@@ -441,6 +541,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _restartSent = false;
                 _peerConnected = true;
             }
+
+            Interlocked.Exchange(ref _lastConnectedMs, Environment.TickCount64);
+            _logger.LogInformation("Port {Id} ({Mode} {Type}): connection up ({How})", Id, _config.Mode, _config.Type, how);
         }
 
         private void ReadUntilClosed(TcpClient client)
@@ -463,7 +566,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        private void CloseConnection()
+        /// <summary>
+        /// Drops the connection, if there is one. The "connection down" line and the disconnect time
+        /// are recorded only when a connected peer actually went away, so several paths that see the
+        /// same drop report it once.
+        /// </summary>
+        /// <param name="reason">
+        /// Why the connection ended, for the log line.
+        /// </param>
+        private void CloseConnection(string reason)
         {
             TcpClient? client;
             bool wasConnected;
@@ -489,6 +600,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
             if (wasConnected)
             {
+                Interlocked.Exchange(ref _lastDisconnectedMs, Environment.TickCount64);
+                _logger.LogInformation("Port {Id} ({Mode} {Type}): connection down ({Reason})", Id, _config.Mode, _config.Type, reason);
+
                 // The circuits on this port are gone with the connection. The switch clears the far
                 // leg of each of them when it sees the port go down.
                 StateChanged?.Invoke(this, false);
@@ -539,6 +653,17 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private void OnXotFrame(string linkId, ReadOnlySpan<byte> frame)
         {
             // Already inside the lock: the reader thread takes it before calling the codec.
+            //
+            // The packet is counted and shown to the tap before the engine sees it, so a packet the
+            // engine then refuses still appears in the monitor and in the byte total, as it crossed
+            // the wire.
+            Counters.AddBytesIn(frame.Length);
+            PortPacketCaptured? tap = PacketCaptured;
+            if (tap != null)
+            {
+                tap(Id, true, frame.ToArray());
+            }
+
             _layer.ProcessPacket(frame);
         }
 
@@ -562,11 +687,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private void OnLayerIncomingCall(X25Layer layer, ushort lci, string called, string calling, byte[] cud)
         {
             Counters.IncrementCallsIn();
+            _logger.LogInformation("Port {Id}: incoming call {Calling} -> {Called} LCI={Lci}", Id, calling, called, lci);
             IncomingCall?.Invoke(this, lci, called, calling, cud);
         }
 
         private void OnLayerCallConnected(X25Layer layer, ushort lci)
         {
+            _logger.LogInformation("Port {Id}: call accepted LCI={Lci}", Id, lci);
             CallConnected?.Invoke(this, lci);
         }
 
@@ -579,6 +706,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private void OnLayerCleared(X25Layer layer, ushort lci, byte cause, byte diagnostic)
         {
             Counters.IncrementCallsCleared();
+            _logger.LogInformation("Port {Id}: clear LCI={Lci} cause={Cause} diag={Diag}", Id, lci, cause, diagnostic);
             CallCleared?.Invoke(this, lci, cause, diagnostic);
         }
 
@@ -628,6 +756,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 {
                     _owner._codec.SendFrame(packet);
                     _owner.Counters.IncrementPacketsOut();
+                    _owner.Counters.AddBytesOut(packet.Length);
+
+                    // Only a packet that was written is shown and counted as sent.
+                    PortPacketCaptured? tap = _owner.PacketCaptured;
+                    if (tap != null)
+                    {
+                        tap(_owner.Id, false, packet.ToArray());
+                    }
+
                     return X25SendResult.Sent;
                 }
                 catch (Exception)
