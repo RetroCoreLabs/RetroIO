@@ -8,6 +8,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
+using RetroIO.Identity;
 using RetroIO.Protocols.Econet.FileServer;
 using RetroIO.Protocols.Econet.FileServer.Bulk;
 using RetroIO.Protocols.Econet.FileServer.Configuration;
@@ -18,7 +19,6 @@ using RetroIO.Protocols.Econet.FileServer.Sessions;
 using RetroIO.Protocols.Econet.FileServer.Users;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 using RetroIO.Protocols.Econet.Server;
-using RetroIO.Identity;
 using RetroIO.Tests.TNFS;
 
 namespace RetroIO.Tests.Econet;

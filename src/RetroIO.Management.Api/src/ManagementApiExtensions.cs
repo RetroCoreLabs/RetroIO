@@ -12,13 +12,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi.Models;
 using RetroIO.Management.Api.Authentication;
 using RetroIO.Management.Api.Hubs;
 using RetroIO.Management.Api.Services;
 using RetroIO.Management.Contracts;
 using RetroIO.Server.Core.FileSystem;
 using RetroIO.Server.Hosting;
-using Microsoft.OpenApi.Models;
 
 namespace RetroIO.Management.Api;
 

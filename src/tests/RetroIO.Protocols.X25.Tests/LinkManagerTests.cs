@@ -6,12 +6,12 @@
 //
 
 using System;
-using NUnit.Framework;
 using Microsoft.Extensions.Logging;
+using NUnit.Framework;
+using RetroIO.Link;
 using RetroIO.Link.Lapb;
 using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Runtime.Layers;
-using RetroIO.Link;
 
 namespace RetroIO.Protocols.X25.Tests
 {

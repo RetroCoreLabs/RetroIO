@@ -7,12 +7,11 @@
 
 using System;
 using Microsoft.Extensions.Logging;
-using RetroIO.Protocols.X25.Protocols;
-using RetroIO.Protocols.X25.Sintran;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
-
+using RetroIO.Protocols.X25.Protocols;
 using RetroIO.Protocols.X25.Services;
+using RetroIO.Protocols.X25.Sintran;
 namespace RetroIO.Protocols.X25.Sintran.Services
 {
     /// <summary>

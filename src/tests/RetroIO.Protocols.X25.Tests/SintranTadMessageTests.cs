@@ -5,11 +5,11 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
+using System.Text;
 using NUnit.Framework;
 using RetroIO.Protocols.X25.Protocols;
 using RetroIO.Protocols.X25.Sintran;
-using System;
-using System.Text;
 
 namespace RetroIO.Protocols.X25.Tests
 {

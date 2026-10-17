@@ -11,10 +11,9 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
-using RetroIO.Protocols.X25.Sintran;
 using RetroIO.Protocols.X25.Modules;
-
 using RetroIO.Protocols.X25.Protocols;
+using RetroIO.Protocols.X25.Sintran;
 namespace RetroIO.Protocols.X25.Sintran
 {
     /// <summary>

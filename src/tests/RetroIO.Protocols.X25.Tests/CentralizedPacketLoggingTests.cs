@@ -5,21 +5,21 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
-using Xunit;
-using Microsoft.Extensions.Logging;
-using RetroIO.Protocols.X25;
-using RetroIO.Protocols.X25.Runtime;
-using RetroIO.Link.Models;
-using RetroIO.Protocols.X25.Models;
-using RetroIO.Protocols.X25.Runtime.Models;
-using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Protocols.X25.Modules;
-using RetroIO.Protocols.X25.Services;
-using RetroIO.Protocols.X25.Sintran.Services;
-using RetroIO.Protocols.X25.Protocols;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
+using Microsoft.Extensions.Logging;
+using RetroIO.Link.Models;
+using RetroIO.Protocols.X25;
+using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Modules;
+using RetroIO.Protocols.X25.Protocols;
+using RetroIO.Protocols.X25.Runtime;
+using RetroIO.Protocols.X25.Runtime.Models;
+using RetroIO.Protocols.X25.Services;
+using RetroIO.Protocols.X25.Sintran;
+using RetroIO.Protocols.X25.Sintran.Services;
+using Xunit;
 
 namespace RetroIO.Protocols.X25.Tests
 {

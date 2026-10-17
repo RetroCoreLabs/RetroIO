@@ -9,16 +9,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-
 using RetroIO.Protocols.Xmsg;
-using RetroIO.Protocols.Xmsg.Live.Seam;
 using RetroIO.Protocols.Xmsg.Codec;
 using RetroIO.Protocols.Xmsg.ListRouting;
 using RetroIO.Protocols.Xmsg.Live;
+using RetroIO.Protocols.Xmsg.Live.Seam;
 using RetroIO.Protocols.Xmsg.Node;
 using RetroIO.Protocols.Xmsg.Node.Seam;
 using RetroIO.Protocols.Xmsg.Node.Tad;
-
 using Xunit;
 
 namespace RetroIO.Protocols.Xmsg.Live.Tests

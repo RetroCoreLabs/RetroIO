@@ -8,11 +8,11 @@
 using System;
 using System.Text;
 using NUnit.Framework;
+using RetroIO.Identity;
 using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 using RetroIO.Protocols.Econet.Server;
-using RetroIO.Identity;
 
 namespace RetroIO.Tests.Econet;
 

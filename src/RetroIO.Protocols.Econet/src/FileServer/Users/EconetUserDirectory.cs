@@ -5,8 +5,8 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
-using RetroIO.Protocols.Econet.Common;
 using RetroIO.Identity;
+using RetroIO.Protocols.Econet.Common;
 
 namespace RetroIO.Protocols.Econet.FileServer.Users;
 

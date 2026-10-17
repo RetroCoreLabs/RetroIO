@@ -8,9 +8,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
+using RetroIO.Identity;
 using RetroIO.Management.Api.Authentication;
 using RetroIO.Management.Contracts;
-using RetroIO.Identity;
 
 namespace RetroIO.Management.Api.Tests;
 

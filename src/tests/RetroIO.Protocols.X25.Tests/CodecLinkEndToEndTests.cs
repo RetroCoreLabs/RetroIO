@@ -10,11 +10,11 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using RetroIO.Link;
+using RetroIO.Link.Framing;
 using RetroIO.Link.Lapb;
 using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Runtime.Layers;
-using RetroIO.Link;
-using RetroIO.Link.Framing;
 
 namespace RetroIO.Protocols.X25.Tests
 {

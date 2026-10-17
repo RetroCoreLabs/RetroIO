@@ -6,9 +6,9 @@
 //
 
 using System;
-using NUnit.Framework;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
+using NUnit.Framework;
 using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Runtime;
 

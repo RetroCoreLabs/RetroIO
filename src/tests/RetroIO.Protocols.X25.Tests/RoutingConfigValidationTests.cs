@@ -6,9 +6,9 @@
 //
 
 using System;
-using Xunit;
 using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Runtime;
+using Xunit;
 
 namespace RetroIO.Protocols.X25.Tests
 {

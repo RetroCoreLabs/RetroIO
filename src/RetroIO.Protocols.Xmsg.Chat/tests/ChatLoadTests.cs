@@ -7,11 +7,9 @@
 
 using System;
 using System.Collections.Generic;
-
+using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Api;
 using RetroIO.Protocols.Xmsg.Chat;
-using RetroIO.Protocols.Xmsg;
-
 using Xunit;
 
 namespace RetroIO.Protocols.Xmsg.Chat.Tests

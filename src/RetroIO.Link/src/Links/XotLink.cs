@@ -5,12 +5,12 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
-using RetroIO.Link.Framing;
 using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using RetroIO.Link.Framing;
 using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
 

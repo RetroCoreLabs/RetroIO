@@ -9,12 +9,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-
 using RetroIO.Protocols.Xmsg;
-using RetroIO.Protocols.Xmsg.Node;
 using RetroIO.Protocols.Xmsg.Hdlc;
 using RetroIO.Protocols.Xmsg.Live;
-
+using RetroIO.Protocols.Xmsg.Node;
 using Xunit;
 
 namespace RetroIO.Protocols.Xmsg.Live.Tests

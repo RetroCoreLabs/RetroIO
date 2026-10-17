@@ -7,10 +7,9 @@
 
 using System;
 using System.Collections.Generic;
-using RetroIO.Protocols.Xmsg.Hdlc;
 using RetroIO.Protocols.Xmsg.Fa;
+using RetroIO.Protocols.Xmsg.Hdlc;
 using RetroIO.Protocols.Xmsg.Tests;
-
 using Xunit;
 using Xunit.Abstractions;
 

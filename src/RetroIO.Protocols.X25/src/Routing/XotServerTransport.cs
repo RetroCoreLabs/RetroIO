@@ -5,9 +5,9 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
-using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 

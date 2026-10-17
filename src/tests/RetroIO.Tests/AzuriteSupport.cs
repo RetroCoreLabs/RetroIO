@@ -7,13 +7,12 @@
 
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Globalization;
+using System.IO;
 using System.Management;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-
 using NUnit.Framework;
 
 namespace RetroIO.Tests

@@ -6,16 +6,16 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
-using Xunit;
-using RetroIO.Protocols.X25.Protocols;
-using RetroIO.Protocols.X25.Sintran;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Protocols;
 using RetroIO.Protocols.X25.Runtime.Models;
-using System.Collections.Generic;
+using RetroIO.Protocols.X25.Sintran;
+using Xunit;
 
 namespace RetroIO.Protocols.X25.Tests
 {

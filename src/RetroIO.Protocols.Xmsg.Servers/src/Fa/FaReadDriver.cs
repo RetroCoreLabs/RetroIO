@@ -7,10 +7,9 @@
 
 using System;
 using System.Collections.Generic;
-
+using RetroIO.Protocols.Xmsg.Fa;
 using RetroIO.Protocols.Xmsg.Node.Services;
 using RetroIO.Protocols.Xmsg.Packet;
-using RetroIO.Protocols.Xmsg.Fa;
 
 namespace RetroIO.Protocols.Xmsg.Servers.Fa
 {

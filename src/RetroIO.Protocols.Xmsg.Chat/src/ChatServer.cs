@@ -8,9 +8,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-
-using RetroIO.Protocols.Xmsg.Api;
 using RetroIO.Protocols.Xmsg;
+using RetroIO.Protocols.Xmsg.Api;
 
 namespace RetroIO.Protocols.Xmsg.Chat
 {

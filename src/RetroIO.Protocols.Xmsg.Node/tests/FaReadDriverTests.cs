@@ -7,13 +7,11 @@
 
 using System;
 using System.Collections.Generic;
-
 using RetroIO.Protocols.Xmsg;
-using RetroIO.Protocols.Xmsg.Node.Services;
 using RetroIO.Protocols.Xmsg.Fa;
+using RetroIO.Protocols.Xmsg.Node.Services;
 using RetroIO.Protocols.Xmsg.Qform;
 using RetroIO.Protocols.Xmsg.Servers.Fa;
-
 using Xunit;
 using Xunit.Abstractions;
 

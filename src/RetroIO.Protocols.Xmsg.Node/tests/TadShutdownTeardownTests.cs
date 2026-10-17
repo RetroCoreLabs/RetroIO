@@ -7,12 +7,10 @@
 
 using System;
 using System.Collections.Generic;
-
+using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Node.Services;
 using RetroIO.Protocols.Xmsg.Node.Tad;
-using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Servers.Tad;
-
 using Xunit;
 
 namespace RetroIO.Protocols.Xmsg.Node.Tests

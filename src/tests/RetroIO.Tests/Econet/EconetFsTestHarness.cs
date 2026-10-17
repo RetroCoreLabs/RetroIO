@@ -8,6 +8,7 @@
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
+using RetroIO.Identity;
 using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer;
 using RetroIO.Protocols.Econet.FileServer.Bulk;
@@ -21,7 +22,6 @@ using RetroIO.Protocols.Econet.Protocol;
 using RetroIO.Protocols.Econet.Protocol.Aun;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 using RetroIO.Protocols.Econet.Server;
-using RetroIO.Identity;
 using RetroIO.Server.Core.FileSystem;
 using RetroIO.Tests.TNFS;
 

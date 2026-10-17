@@ -6,8 +6,8 @@
 //
 
 using Microsoft.AspNetCore.Mvc;
-using RetroIO.Management.Contracts;
 using RetroIO.Management.Api.Services;
+using RetroIO.Management.Contracts;
 
 namespace RetroIO.Management.Api.Controllers;
 

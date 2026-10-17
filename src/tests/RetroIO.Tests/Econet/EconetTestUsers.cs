@@ -18,12 +18,9 @@
 
 
 using System;
-
 using System.IO;
-
-using RetroIO.Protocols.Econet.FileServer.Users;
-
 using RetroIO.Identity;
+using RetroIO.Protocols.Econet.FileServer.Users;
 
 
 

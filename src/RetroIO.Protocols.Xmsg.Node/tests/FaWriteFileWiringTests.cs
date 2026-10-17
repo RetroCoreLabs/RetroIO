@@ -8,14 +8,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-
+using RetroIO.Protocols.Xmsg.Fa;
 using RetroIO.Protocols.Xmsg.Ndfs;
 using RetroIO.Protocols.Xmsg.Node.Services;
-using RetroIO.Protocols.Xmsg.Fa;
 using RetroIO.Protocols.Xmsg.Qform;
-using RetroIO.Protocols.Xmsg.Sintran;
 using RetroIO.Protocols.Xmsg.Servers.Fa;
-
+using RetroIO.Protocols.Xmsg.Sintran;
 using Xunit;
 using Xunit.Abstractions;
 

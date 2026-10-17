@@ -6,19 +6,19 @@
 //
 
 using System;
+using System.IO.Ports;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
-using Xunit;
-using RetroIO.Protocols.X25;
-using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Link.Lapb;
+using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Layers;
-using RetroIO.Protocols.X25.Runtime.Layers;
 using RetroIO.Protocols.X25.Modules;
-using System.Threading;
-using System.Text;
-using System.IO.Ports;
+using RetroIO.Protocols.X25.Runtime;
+using RetroIO.Protocols.X25.Runtime.Layers;
+using Xunit;
 
 namespace RetroIO.Protocols.X25.Tests
 {

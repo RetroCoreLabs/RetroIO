@@ -12,14 +12,13 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
+using RetroIO.Link.Physical;
+using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Link.Physical;
-
-using RetroIO.Link.Lapb;
-using RetroIO.Protocols.X25.Layers;
 namespace RetroIO.Protocols.X25.Runtime.Layers
 {
     /// <summary>

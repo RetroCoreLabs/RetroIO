@@ -7,13 +7,13 @@
 
 using System;
 using System.Threading;
-using NUnit.Framework;
 using Microsoft.Extensions.Logging;
+using NUnit.Framework;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Protocols.X25.Modules;
 
 namespace RetroIO.Protocols.X25.Tests
 {

@@ -9,14 +9,14 @@ using System;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
-using Xunit;
-using RetroIO.Protocols.X25;
-using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Link.Models;
+using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Modules;
+using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Protocols.X25.Modules;
+using Xunit;
 
 namespace RetroIO.Protocols.X25.Tests
 {

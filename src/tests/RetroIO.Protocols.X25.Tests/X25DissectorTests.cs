@@ -8,9 +8,9 @@
 using NUnit.Framework;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Monitor;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Protocols.X25.Monitor;
 
 namespace RetroIO.Protocols.X25.Tests
 {

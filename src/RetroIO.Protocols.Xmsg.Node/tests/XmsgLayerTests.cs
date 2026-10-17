@@ -7,15 +7,13 @@
 
 using System;
 using System.Collections.Generic;
-
 using RetroIO.Protocols.Xmsg;
-using RetroIO.Protocols.Xmsg.Node;
 using RetroIO.Protocols.Xmsg.Codec;
 using RetroIO.Protocols.Xmsg.ListRouting;
+using RetroIO.Protocols.Xmsg.Node;
 using RetroIO.Protocols.Xmsg.Node.Seam;
 using RetroIO.Protocols.Xmsg.Node.Tad;
 using RetroIO.Protocols.Xmsg.Packet;
-
 using Xunit;
 
 namespace RetroIO.Protocols.Xmsg.Node.Tests

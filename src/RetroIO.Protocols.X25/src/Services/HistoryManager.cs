@@ -8,8 +8,8 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
-using RetroIO.Protocols.X25.Diagnostics;
 using RetroIO.Link.Models;
+using RetroIO.Protocols.X25.Diagnostics;
 using RetroIO.Protocols.X25.Models;
 
 namespace RetroIO.Protocols.X25.Services

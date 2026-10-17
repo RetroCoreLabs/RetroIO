@@ -7,8 +7,8 @@
 
 using System.Collections.Generic;
 using RetroIO.Link.Lapb;
-using RetroIO.Protocols.X25.Layers;
 using RetroIO.Link.Models;
+using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.Services;

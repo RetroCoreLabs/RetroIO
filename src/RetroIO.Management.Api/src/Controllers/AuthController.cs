@@ -9,9 +9,9 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RetroIO.Identity;
 using RetroIO.Management.Api.Authentication;
 using RetroIO.Management.Contracts;
-using RetroIO.Identity;
 
 namespace RetroIO.Management.Api.Controllers;
 

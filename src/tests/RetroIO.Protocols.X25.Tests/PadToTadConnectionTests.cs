@@ -6,17 +6,17 @@
 //
 
 using Microsoft.Extensions.Logging;
+using RetroIO.Link.Models;
+using RetroIO.Protocols.X25;
+using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Modules;
+using RetroIO.Protocols.X25.Runtime;
+using RetroIO.Protocols.X25.Runtime.Models;
+using RetroIO.Protocols.X25.Services;
+using RetroIO.Protocols.X25.Sintran;
+using RetroIO.Protocols.X25.Sintran.Services;
 using Xunit;
 using Xunit.Abstractions;
-using RetroIO.Protocols.X25;
-using RetroIO.Protocols.X25.Runtime;
-using RetroIO.Link.Models;
-using RetroIO.Protocols.X25.Models;
-using RetroIO.Protocols.X25.Runtime.Models;
-using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Protocols.X25.Modules;
-using RetroIO.Protocols.X25.Services;
-using RetroIO.Protocols.X25.Sintran.Services;
 
 namespace RetroIO.Protocols.X25.Tests
 {

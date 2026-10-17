@@ -7,13 +7,12 @@
 
 using System;
 using Microsoft.Extensions.Logging;
+using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
-using RetroIO.Protocols.X25.Transport;
 using RetroIO.Protocols.X25.Services;
-
-using RetroIO.Link.Lapb;
+using RetroIO.Protocols.X25.Transport;
 namespace RetroIO.Protocols.X25.Layers
 {
     /// <summary>

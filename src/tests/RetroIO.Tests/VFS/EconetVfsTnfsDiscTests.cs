@@ -14,14 +14,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
-using RetroIO.Storage.Core.VFS;
 using RetroIO.Protocols.Tnfs.Server;
 using RetroIO.Protocols.Tnfs.Server.Handlers;
 using RetroIO.Protocols.Tnfs.Server.Transport;
-using RetroIO.Storage.Providers;
 using RetroIO.Server.Core.FileSystem;
 using RetroIO.Server.Hosting;
 using RetroIO.Server.Hosting.Configuration;
+using RetroIO.Storage.Core.VFS;
+using RetroIO.Storage.Providers;
 
 namespace RetroIO.Tests.VFS;
 

@@ -9,23 +9,23 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using RetroIO.Link;
 using RetroIO.Link.Lapb;
+using RetroIO.Link.Models;
 using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Common;
 using RetroIO.Protocols.X25.Diagnostics;
 using RetroIO.Protocols.X25.Layers;
-using RetroIO.Protocols.X25.Runtime.Layers;
-using RetroIO.Link;
-using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
-using RetroIO.Protocols.X25.Runtime.Models;
-using RetroIO.Protocols.X25.Sintran;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.Protocols;
+using RetroIO.Protocols.X25.Runtime.Layers;
+using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Runtime.Transport;
-using RetroIO.Protocols.X25.Transport;
 using RetroIO.Protocols.X25.Services;
+using RetroIO.Protocols.X25.Sintran;
 using RetroIO.Protocols.X25.Sintran.Services;
+using RetroIO.Protocols.X25.Transport;
 
 namespace RetroIO.Protocols.X25.Runtime
 {

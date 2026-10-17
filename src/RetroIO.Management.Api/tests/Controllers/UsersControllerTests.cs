@@ -8,9 +8,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
+using RetroIO.Identity;
 using RetroIO.Management.Api.Controllers;
 using RetroIO.Management.Contracts;
-using RetroIO.Identity;
 
 namespace RetroIO.Management.Api.Tests.Controllers;
 

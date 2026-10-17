@@ -7,8 +7,8 @@
 
 using System;
 using Microsoft.Extensions.Logging;
-using RetroIO.Link.Lapb;
 using RetroIO.Link.Framing;
+using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
 
 namespace RetroIO.Link

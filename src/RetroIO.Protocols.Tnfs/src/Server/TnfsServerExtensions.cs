@@ -7,10 +7,10 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RetroIO.Identity;
 using RetroIO.Protocols.Tnfs.Server;
 using RetroIO.Protocols.Tnfs.Server.Handlers;
 using RetroIO.Protocols.Tnfs.Server.Transport;
-using RetroIO.Identity;
 using RetroIO.Security.Firewall;
 using RetroIO.Security.Implementation.Auditing;
 using RetroIO.Security.Implementation.RateLimiting;

@@ -10,11 +10,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
+using RetroIO.Server.Hosting;
+using RetroIO.Server.Hosting.Configuration;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Core.VFS;
 using RetroIO.Storage.Providers;
-using RetroIO.Server.Hosting;
-using RetroIO.Server.Hosting.Configuration;
 
 namespace RetroIO.Tests.VFS;
 

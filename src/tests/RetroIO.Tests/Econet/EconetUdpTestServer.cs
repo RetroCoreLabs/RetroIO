@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using RetroIO.Identity;
 using RetroIO.Protocols.Econet.FileServer;
 using RetroIO.Protocols.Econet.FileServer.Bulk;
 using RetroIO.Protocols.Econet.FileServer.Configuration;
@@ -24,7 +25,6 @@ using RetroIO.Protocols.Econet.FileServer.Users;
 using RetroIO.Protocols.Econet.Protocol.Aun;
 using RetroIO.Protocols.Econet.Server;
 using RetroIO.Protocols.Econet.Server.Transport;
-using RetroIO.Identity;
 using RetroIO.Server.Core.FileSystem;
 using RetroIO.Tests.TNFS;
 

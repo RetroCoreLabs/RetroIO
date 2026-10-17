@@ -7,15 +7,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
-using RetroIO.Protocols.X25;
-using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Link.Models;
+using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Sintran;
-using System.IO;
 using Xunit.Abstractions;
 
 namespace RetroIO.Protocols.X25.Tests

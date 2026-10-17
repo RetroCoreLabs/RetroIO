@@ -10,9 +10,9 @@ using System.Text;
 using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
-using RetroIO.Protocols.X25.Client;
 using RetroIO.Link;
 using RetroIO.Link.Framing;
+using RetroIO.Protocols.X25.Client;
 using RetroIO.Protocols.X25.PacketLayer;
 using ClientVc = RetroIO.Protocols.X25.Client.X25Vc;
 

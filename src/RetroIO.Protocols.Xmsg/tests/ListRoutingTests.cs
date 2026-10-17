@@ -5,11 +5,9 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System.Collections.Generic;
 using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.ListRouting;
-
-using System.Collections.Generic;
-
 using Xunit;
 
 namespace RetroIO.Protocols.Xmsg.Tests

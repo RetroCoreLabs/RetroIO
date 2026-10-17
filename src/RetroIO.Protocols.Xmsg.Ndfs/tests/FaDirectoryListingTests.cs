@@ -6,8 +6,8 @@
 //
 
 using System;
-using RetroIO.Protocols.Xmsg.Ndfs;
 using RetroIO.Protocols.Xmsg.Fa;
+using RetroIO.Protocols.Xmsg.Ndfs;
 using RetroIO.Storage.Ndfs.Elements;
 using Xunit;
 using static RetroIO.Protocols.Xmsg.TestSupport.TestHex;

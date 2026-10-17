@@ -9,8 +9,8 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using NUnit.Framework;
-using RetroIO.Protocols.Econet.FileServer.Users;
 using RetroIO.Identity;
+using RetroIO.Protocols.Econet.FileServer.Users;
 
 namespace RetroIO.Tests.Econet;
 

@@ -10,8 +10,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using RetroIO.Storage.Core;
 using RetroIO.Protocols.Econet.Client;
+using RetroIO.Storage.Core;
 
 namespace RetroIO.Storage.Providers
 {

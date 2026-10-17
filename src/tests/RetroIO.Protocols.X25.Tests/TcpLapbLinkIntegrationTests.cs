@@ -7,14 +7,14 @@
 
 using System;
 using System.Threading;
-using NUnit.Framework;
 using Microsoft.Extensions.Logging;
-using RetroIO.Link.Lapb;
-using RetroIO.Protocols.X25.Layers;
-using RetroIO.Protocols.X25.Runtime.Layers;
+using NUnit.Framework;
 using RetroIO.Link;
+using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
+using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Runtime.Layers;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Sintran;
 

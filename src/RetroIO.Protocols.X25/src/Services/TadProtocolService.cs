@@ -8,9 +8,9 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using RetroIO.Protocols.X25.Protocols;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Protocols;
 
 namespace RetroIO.Protocols.X25.Services
 {

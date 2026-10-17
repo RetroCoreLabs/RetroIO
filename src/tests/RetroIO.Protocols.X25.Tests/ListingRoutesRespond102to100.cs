@@ -9,18 +9,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using NUnit.Framework;
 using Microsoft.Extensions.Logging;
-using RetroIO.Protocols.X25;
-using RetroIO.Protocols.X25.Runtime;
+using NUnit.Framework;
 using RetroIO.Link.Models;
-using RetroIO.Protocols.X25.Models;
-using RetroIO.Protocols.X25.Runtime.Models;
-using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Protocols.X25.Modules;
-using RetroIO.Protocols.X25.Runtime.Transport;
-using RetroIO.Protocols.X25.Transport;
 using RetroIO.Link.Physical;
+using RetroIO.Protocols.X25;
+using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Modules;
+using RetroIO.Protocols.X25.Runtime;
+using RetroIO.Protocols.X25.Runtime.Models;
+using RetroIO.Protocols.X25.Runtime.Transport;
+using RetroIO.Protocols.X25.Sintran;
+using RetroIO.Protocols.X25.Transport;
 
 namespace RetroIO.Protocols.X25.Tests
 {

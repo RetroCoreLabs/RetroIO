@@ -5,11 +5,11 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
-using Xunit;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Sintran;
+using Xunit;
 
 namespace RetroIO.Protocols.X25.Tests
 {

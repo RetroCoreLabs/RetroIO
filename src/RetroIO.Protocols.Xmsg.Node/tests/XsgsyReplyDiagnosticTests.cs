@@ -6,11 +6,9 @@
 //
 
 using System;
-
 using RetroIO.Protocols.Xmsg;
-using RetroIO.Protocols.Xmsg.Node;
 using RetroIO.Protocols.Xmsg.ListRouting;
-
+using RetroIO.Protocols.Xmsg.Node;
 using Xunit;
 using Xunit.Abstractions;
 

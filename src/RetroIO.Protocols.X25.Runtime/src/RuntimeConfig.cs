@@ -7,11 +7,10 @@
 
 using System;
 using RetroIO.Link;
+using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.Runtime.Transport;
 using RetroIO.Protocols.X25.Transport;
-
-using RetroIO.Protocols.X25;
 namespace RetroIO.Protocols.X25.Runtime
 {
 

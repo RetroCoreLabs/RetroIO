@@ -18,14 +18,10 @@
 
 
 using System;
-
 using NUnit.Framework;
-
-using RetroIO.Protocols.Econet.Common;
-
-using RetroIO.Protocols.Econet.FileServer.Users;
-
 using RetroIO.Identity;
+using RetroIO.Protocols.Econet.Common;
+using RetroIO.Protocols.Econet.FileServer.Users;
 
 
 

@@ -7,9 +7,8 @@
 
 using System;
 using System.Collections.Generic;
-
-using RetroIO.Protocols.Xmsg.Ndfs;
 using RetroIO.Protocols.Xmsg.Fa;
+using RetroIO.Protocols.Xmsg.Ndfs;
 
 namespace RetroIO.Protocols.Xmsg.Servers.Fa
 {

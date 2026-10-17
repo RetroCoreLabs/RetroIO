@@ -8,11 +8,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-
 using RetroIO.Protocols.Xmsg.Node.Tad;
-using RetroIO.Protocols.Xmsg.TestSupport;
 using RetroIO.Protocols.Xmsg.Packet;
-
+using RetroIO.Protocols.Xmsg.TestSupport;
 using Xunit;
 using Xunit.Abstractions;
 

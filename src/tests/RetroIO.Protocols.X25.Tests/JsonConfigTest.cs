@@ -11,8 +11,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using RetroIO.Protocols.X25;
-using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Modules;
+using RetroIO.Protocols.X25.Runtime;
 
 namespace RetroIO.Protocols.X25.Tests
 {

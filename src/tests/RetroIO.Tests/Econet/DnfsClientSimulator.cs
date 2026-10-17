@@ -8,10 +8,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using RetroIO.Identity;
 using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 using RetroIO.Protocols.Econet.Server;
-using RetroIO.Identity;
 
 namespace RetroIO.Tests.Econet;
 
