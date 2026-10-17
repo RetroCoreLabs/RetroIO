@@ -16,6 +16,10 @@ namespace RetroIO.Server.Hosting;
 /// </summary>
 public static class RetroIdpBootstrap
 {
+    // The public first-run password of the admin and SYST accounts. It is written in the Econet README,
+    // so any account that still accepts it is open to anyone who can reach the server.
+    private const string DefaultPassword = "retroadmin";
+
     /// <summary>
     /// Loads the identity provider, makes sure the admin and SYST users exist with protocol access, and saves.
     /// </summary>
@@ -46,7 +50,7 @@ public static class RetroIdpBootstrap
 
             RetroUser newAdmin = WellKnownPrincipals.CreateAdminPrincipal();
             await idp.CreateUserAsync(newAdmin, ct);
-            await idp.SetPasswordAsync(WellKnownPrincipals.AdminUserId, "retroadmin", ct);
+            await idp.SetPasswordAsync(WellKnownPrincipals.AdminUserId, DefaultPassword, ct);
 
             logger.LogWarning(
                 "Default admin user created with username '{Username}' and password 'retroadmin'",
@@ -67,7 +71,7 @@ public static class RetroIdpBootstrap
 
             RetroUser newSyst = WellKnownPrincipals.CreateSystPrincipal();
             await idp.CreateUserAsync(newSyst, ct);
-            await idp.SetPasswordAsync(WellKnownPrincipals.SystUserId, "retroadmin", ct);
+            await idp.SetPasswordAsync(WellKnownPrincipals.SystUserId, DefaultPassword, ct);
 
             logger.LogWarning(
                 "Default SYST user created with password 'retroadmin' (BBC: *I AM SYST retroadmin)");
@@ -77,7 +81,25 @@ public static class RetroIdpBootstrap
             await idp.UpdateUserAsync(systUser, ct);
         }
 
+        // Warn at EVERY start, not only when the accounts are created, for as long as either of them
+        // still accepts the public default password.
+        await WarnIfStillDefaultPasswordAsync(idp, logger, WellKnownPrincipals.AdminUserId, WellKnownPrincipals.AdminUsername, ct);
+        await WarnIfStillDefaultPasswordAsync(idp, logger, WellKnownPrincipals.SystUserId, WellKnownPrincipals.SystUsername, ct);
+
         await idp.SaveAsync(ct);
+    }
+
+    private static async Task WarnIfStillDefaultPasswordAsync(
+        IRetroIDP idp, ILogger logger, Guid userId, string username, CancellationToken ct)
+    {
+        if (await idp.VerifyPasswordAsync(userId, DefaultPassword, ct))
+        {
+            logger.LogWarning(
+                "SECURITY: user '{Username}' still uses the default password '{Password}'. " +
+                "Anyone who can reach this server can log in as an administrator. Change it now, " +
+                "for example with *PASS from a BBC logged in as '{Username}'.",
+                username, DefaultPassword, username);
+        }
     }
 
     private static bool EnsureAdminProtocolAccess(RetroUser admin)

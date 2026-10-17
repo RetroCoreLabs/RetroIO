@@ -348,8 +348,14 @@ flowchart TD
 
 Default login on first **RetroServer** run:
 
-- RetroIDP creates **`admin`** / **`retroadmin`** (change immediately).
+- RetroIDP creates **`admin`** / **`retroadmin`** and **`SYST`** / **`retroadmin`**.
 - On the BBC: `*I AM admin retroadmin` (same RetroIDP username, case-insensitive).
+
+> **Change both default passwords before you let anyone else reach the server.**
+> `retroadmin` is public: it is written in this document. Anyone who can reach the server's
+> Econet or TNFS port can log in as `admin` or `SYST` with it, and both accounts have
+> administrator rights. Change them first, with `*PASS` on the BBC or in the RetroIDP user
+> database. Until you do, the server logs a security warning every time it starts.
 
 Unit tests use a dedicated **`SYST`** RetroIDP user with `econet.allowEmptyPassword=true` (see `EconetTestUsers`).
 
@@ -449,7 +455,7 @@ User accounts live in **RetroIDP** (`Documents/RetroFS/idp/users.json`), not und
 |------|----------|
 | User database | **RetroIDP** — `{RetroFS}/idp/users.json` (shared with TNFS) |
 | Econet profile | `RetroUser.Metadata` keys — see `EconetMetadataKeys` |
-| Default account | `admin` / `retroadmin` |
+| Default accounts | `admin` / `retroadmin` and `SYST` / `retroadmin`. **Change both passwords** (see the warning under "Connection and login") |
 | Bootstrap | `EconetUserBootstrap.EnsureProfilesAsync` — default `econet.*` metadata only |
 
 ### Econet metadata keys (`EconetMetadataKeys`)
@@ -505,6 +511,7 @@ Passwords are intentionally stricter than PiFS for RetroIDP security. Usernames 
 
 | Risk | Detail |
 |------|--------|
+| **Default passwords** | `admin` and `SYST` are created with the public password `retroadmin` and have administrator rights. **Change both before the server is reachable by anyone else.** The server logs a warning at every start while either still accepts it |
 | Plaintext passwords | Stored in RetroIDP `users.json` (same store as TNFS) |
 | No encryption | AUN over UDP is unencrypted |
 | LAN trust model | Any host that can send UDP may attempt login |
