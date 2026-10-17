@@ -164,7 +164,7 @@ namespace RetroIO.Link.Physical
         /// The byte to send.
         /// </param>
         /// <returns>
-        /// True when the call returned 0 sent bytes; false when there is no connected client or the send threw or sent a nonzero count.
+        /// True when the byte was sent; false when there is no connected client, the send threw, or the byte was not sent.
         /// </returns>
         public bool SendByte(byte data)
         {
@@ -176,8 +176,9 @@ namespace RetroIO.Link.Physical
             {
                 byte[] databuf = new byte[1];
                 databuf[0] = data;
+                // Socket.Send returns how many bytes it sent: 1 for a successful one-byte send.
                 int len = clientSocket.Send(databuf);
-                if (len == 0) return true;
+                if (len == databuf.Length) return true;
             }
             catch (SocketException sox)
             {

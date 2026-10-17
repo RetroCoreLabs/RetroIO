@@ -649,7 +649,14 @@ namespace RetroIO.Storage.Providers
             string normalizedFull = Path.GetFullPath(fullPath);
             string normalizedRoot = Path.GetFullPath(mount.RootPath);
 
-            if (!normalizedFull.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            // Compare against the root WITH a trailing separator. A plain StartsWith(root) also accepts a
+            // sibling folder whose name begins with the root's name ("root" and "rootX").
+            string rootWithSeparator = Path.EndsInDirectorySeparator(normalizedRoot)
+                ? normalizedRoot
+                : normalizedRoot + Path.DirectorySeparatorChar;
+
+            bool isRoot = string.Equals(normalizedFull, normalizedRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+            if (!isRoot && !normalizedFull.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
                 throw new UnauthorizedAccessException("Path traversal attempt detected.");
 
             return normalizedFull;
