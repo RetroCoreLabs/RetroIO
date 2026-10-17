@@ -1,3 +1,10 @@
+//
+// SPDX-License-Identifier: MIT
+// Copyright (c) 1985-2026 Ronny Hansen
+// RetroCore Labs — https://github.com/RetroCoreLabs
+// RetroIO - Accessing yesterday's data with today's standards
+//
+
 // =============================================================================
 // X.25 flow control parameter negotiation facilities - packet size and window
 // size - encoded and decoded per the standard's own field layout.

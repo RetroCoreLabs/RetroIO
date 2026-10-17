@@ -1,4 +1,11 @@
-﻿namespace RetroIO.Protocols.Xmsg.Chat
+//
+// SPDX-License-Identifier: MIT
+// Copyright (c) 1985-2026 Ronny Hansen
+// RetroCore Labs — https://github.com/RetroCoreLabs
+// RetroIO - Accessing yesterday's data with today's standards
+//
+
+namespace RetroIO.Protocols.Xmsg.Chat
 {
     /// <summary>
     /// The message types the chat service exchanges.
