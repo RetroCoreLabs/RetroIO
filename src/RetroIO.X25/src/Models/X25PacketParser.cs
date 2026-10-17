@@ -502,22 +502,61 @@ namespace RetroIO.Protocols.X25.Models
     public class X25PacketInfo
     {
         // Header fields
+        /// <summary>
+        /// Gets or sets the qualifier bit.
+        /// </summary>
         public bool QBit { get; set; }
+        /// <summary>
+        /// Gets or sets the delivery confirmation bit.
+        /// </summary>
         public bool DBit { get; set; }
+        /// <summary>
+        /// Gets or sets whether the packet uses modulo 128 sequence numbering.
+        /// </summary>
         public bool Modulo128 { get; set; }
+        /// <summary>
+        /// Gets or sets the logical channel number.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the packet type.
+        /// </summary>
         public X25PacketType PacketType { get; set; }
+        /// <summary>
+        /// Gets or sets the raw packet type identifier octet.
+        /// </summary>
         public byte RawPTI { get; set; }
 
         // Data packet fields
+        /// <summary>
+        /// Gets or sets the send sequence number P(S) of a data packet.
+        /// </summary>
         public byte PS { get; set; }
+        /// <summary>
+        /// Gets or sets the receive sequence number P(R).
+        /// </summary>
         public byte PR { get; set; }
+        /// <summary>
+        /// Gets or sets the more data bit of a data packet.
+        /// </summary>
         public bool MBit { get; set; }
+        /// <summary>
+        /// Gets or sets the user data of a data packet.
+        /// </summary>
         public byte[] UserData { get; set; } = Array.Empty<byte>();
 
         // Call establishment fields
+        /// <summary>
+        /// Gets or sets the called address of a call packet.
+        /// </summary>
         public string CalledAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the calling address of a call packet.
+        /// </summary>
         public string CallingAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the facilities bytes of a call packet.
+        /// </summary>
         public byte[] Facilities { get; set; } = Array.Empty<byte>();
 
         /// <summary>
@@ -527,28 +566,61 @@ namespace RetroIO.Protocols.X25.Models
         /// the leftover octets as call user data, which is what this parser did until 2026-09-06.
         /// </summary>
         public string? ParseError { get; set; }
+        /// <summary>
+        /// Gets or sets the call user data of a call packet.
+        /// </summary>
         public byte[] CallUserData { get; set; } = Array.Empty<byte>();
 
         // Clearing fields
+        /// <summary>
+        /// Gets or sets the cause code of a clear packet.
+        /// </summary>
         public byte ClearingCause { get; set; }
+        /// <summary>
+        /// Gets or sets the user data of a clear packet.
+        /// </summary>
         public byte[] ClearUserData { get; set; } = Array.Empty<byte>();
 
         // Reset fields
+        /// <summary>
+        /// Gets or sets the cause code of a reset packet.
+        /// </summary>
         public byte ResetCause { get; set; }
 
         // Restart fields
+        /// <summary>
+        /// Gets or sets the cause code of a restart packet.
+        /// </summary>
         public byte RestartCause { get; set; }
 
         // Interrupt fields
+        /// <summary>
+        /// Gets or sets the user data of an interrupt packet.
+        /// </summary>
         public byte[] InterruptData { get; set; } = Array.Empty<byte>();
 
         // Registration fields
+        /// <summary>
+        /// Gets or sets the DTE address of a registration packet.
+        /// </summary>
         public string DTEAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the cause code of a registration packet.
+        /// </summary>
         public byte RegistrationCause { get; set; }
+        /// <summary>
+        /// Gets or sets the parameter bytes of a registration packet.
+        /// </summary>
         public byte[] RegistrationParameters { get; set; } = Array.Empty<byte>();
 
         // Diagnostic fields
+        /// <summary>
+        /// Gets or sets the diagnostic code of a clear, reset, restart, registration or diagnostic packet.
+        /// </summary>
         public byte DiagnosticCode { get; set; }
+        /// <summary>
+        /// Gets or sets the diagnostic information bytes of a diagnostic packet.
+        /// </summary>
         public byte[] DiagnosticInfo { get; set; } = Array.Empty<byte>();
 
         /// <summary>

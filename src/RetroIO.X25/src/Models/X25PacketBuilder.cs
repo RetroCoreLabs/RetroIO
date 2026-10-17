@@ -25,18 +25,39 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public static class GFI
         {
+            /// <summary>
+            /// Mask of the qualifier bit in the first octet, bit 7.
+            /// </summary>
             public const byte Q_BIT_MASK = 0x80;      // Bit 7: Qualifier bit
+            /// <summary>
+            /// Mask of the delivery confirmation bit in the first octet, bit 6.
+            /// </summary>
             public const byte D_BIT_MASK = 0x40;      // Bit 6: Delivery confirmation bit
+            /// <summary>
+            /// Mask of the address bit in the first octet, bit 5. It is always 0 for modulo 8.
+            /// </summary>
             public const byte A_BIT_MASK = 0x20;      // Bit 5: Address bit (always 0 for modulo 8)
+            /// <summary>
+            /// Mask of the two sequence numbering bits, bits 5 and 4.
+            /// </summary>
             public const byte MODULO_MASK = 0x30;     // Bits 5-4: Modulo/sequence numbering
             // X.25 5.1.2: the GFI is bits 8-5 of octet 1, so the logical channel GROUP is bits 4-1 -
             // FOUR bits, 0..15, and the channel number is twelve bits, 0..4095 (5.1.3). Until
             // 2026-09-06 this was 0x07, which corrupted every channel above 2047 in both directions
             // (pinned by the vector pkt-clear-request-not-obtainable) and, once the engine started
             // choosing channels from the top of the range as a DTE should, broke the first call.
+            /// <summary>
+            /// Mask of the logical channel group, bits 4 to 1 of the first octet.
+            /// </summary>
             public const byte LCG_MASK = 0x0F;        // Bits 4-1: Logical Channel Group
 
+            /// <summary>
+            /// Value of the sequence numbering bits for modulo 8, binary 01 in bits 5 and 4.
+            /// </summary>
             public const byte MODULO_8 = 0x10;        // 01 in bits 5-4 = Modulo 8 (X.25 standard)
+            /// <summary>
+            /// Value of the sequence numbering bits for modulo 128, binary 10 in bits 5 and 4.
+            /// </summary>
             public const byte MODULO_128 = 0x20;      // 10 in bits 5-4 = Modulo 128
 
             /// <summary>
@@ -63,31 +84,88 @@ namespace RetroIO.Protocols.X25.Models
         public static class PTI
         {
             // Call establishment/clearing (fixed values)
+            /// <summary>
+            /// Packet type identifier of a call request. The value is 0x0B.
+            /// </summary>
             public const byte CALL_REQUEST = 0x0B;
+            /// <summary>
+            /// Packet type identifier of a call accepted. The value is 0x0F.
+            /// </summary>
             public const byte CALL_ACCEPTED = 0x0F;
+            /// <summary>
+            /// Packet type identifier of a clear request. The value is 0x13.
+            /// </summary>
             public const byte CLEAR_REQUEST = 0x13;
+            /// <summary>
+            /// Packet type identifier of a clear confirmation. The value is 0x17.
+            /// </summary>
             public const byte CLEAR_CONFIRMATION = 0x17;
 
             // Interrupt packets
+            /// <summary>
+            /// Packet type identifier of an interrupt. The value is 0x23.
+            /// </summary>
             public const byte INTERRUPT = 0x23;
+            /// <summary>
+            /// Packet type identifier of an interrupt confirmation. The value is 0x27.
+            /// </summary>
             public const byte INTERRUPT_CONFIRMATION = 0x27;
 
             // Reset packets
+            /// <summary>
+            /// Packet type identifier of a reset request. The value is 0x1B.
+            /// </summary>
             public const byte RESET_REQUEST = 0x1B;
+            /// <summary>
+            /// Packet type identifier of a reset confirmation. The value is 0x1F.
+            /// </summary>
             public const byte RESET_CONFIRMATION = 0x1F;
 
             // Restart packets
+            /// <summary>
+            /// Packet type identifier of a restart request. The value is 0xFB.
+            /// </summary>
             public const byte RESTART_REQUEST = 0xFB;
+            /// <summary>
+            /// Packet type identifier of a restart confirmation. The value is 0xFF.
+            /// </summary>
             public const byte RESTART_CONFIRMATION = 0xFF;
 
             // Registration packets
+            /// <summary>
+            /// Packet type identifier of a registration request. The value is 0xF3.
+            /// </summary>
             public const byte REGISTRATION_REQUEST = 0xF3;
+            /// <summary>
+            /// Packet type identifier of a registration confirmation. The value is 0xF7.
+            /// </summary>
             public const byte REGISTRATION_CONFIRMATION = 0xF7;
 
             // Diagnostic
+            /// <summary>
+            /// Packet type identifier of a diagnostic packet. The value is 0xF1.
+            /// </summary>
             public const byte DIAGNOSTIC = 0xF1;
 
             // Data packets: LSB = 0, bits 1-3 = P(S), bits 5-7 = P(R)
+            /// <summary>
+            /// Creates the packet type identifier octet of a data packet.
+            /// </summary>
+            /// <remarks>
+            /// Bits 7 to 5 hold the receive sequence number, bits 3 to 1 hold the send sequence number, and bit 4 holds the more data bit. Bit 0 is 0. Each sequence number is cut to its lower three bits.
+            /// </remarks>
+            /// <param name="ps">
+            /// The send sequence number P(S).
+            /// </param>
+            /// <param name="pr">
+            /// The receive sequence number P(R).
+            /// </param>
+            /// <param name="mBit">
+            /// True to set the more data bit.
+            /// </param>
+            /// <returns>
+            /// The packet type identifier octet.
+            /// </returns>
             public static byte CreateDataPTI(byte ps, byte pr, bool mBit = false)
             {
                 byte pti = (byte)((pr & 0x07) << 5 | (ps & 0x07) << 1);
@@ -96,8 +174,44 @@ namespace RetroIO.Protocols.X25.Models
             }
 
             // Flow control packets: Variable based on P(R)
+            /// <summary>
+            /// Creates the packet type identifier octet of a receive ready (RR) packet.
+            /// </summary>
+            /// <remarks>
+            /// The octet is 0x01 with the receive sequence number in bits 7 to 5, cut to its lower three bits.
+            /// </remarks>
+            /// <param name="pr">
+            /// The receive sequence number P(R).
+            /// </param>
+            /// <returns>
+            /// The packet type identifier octet.
+            /// </returns>
             public static byte CreateRR(byte pr) => (byte)(0x01 | ((pr & 0x07) << 5));
+            /// <summary>
+            /// Creates the packet type identifier octet of a receive not ready (RNR) packet.
+            /// </summary>
+            /// <remarks>
+            /// The octet is 0x05 with the receive sequence number in bits 7 to 5, cut to its lower three bits.
+            /// </remarks>
+            /// <param name="pr">
+            /// The receive sequence number P(R).
+            /// </param>
+            /// <returns>
+            /// The packet type identifier octet.
+            /// </returns>
             public static byte CreateRNR(byte pr) => (byte)(0x05 | ((pr & 0x07) << 5));
+            /// <summary>
+            /// Creates the packet type identifier octet of a reject (REJ) packet.
+            /// </summary>
+            /// <remarks>
+            /// The octet is 0x09 with the receive sequence number in bits 7 to 5, cut to its lower three bits.
+            /// </remarks>
+            /// <param name="pr">
+            /// The receive sequence number P(R).
+            /// </param>
+            /// <returns>
+            /// The packet type identifier octet.
+            /// </returns>
             public static byte CreateREJ(byte pr) => (byte)(0x09 | ((pr & 0x07) << 5));
         }
 
@@ -733,23 +847,77 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public static class X25ClearingCause
     {
+        /// <summary>
+        /// Clearing cause DTE originated, the value 0x00.
+        /// </summary>
         public const byte DTE_ORIGINATED = 0x00;
+        /// <summary>
+        /// Clearing cause number busy, the value 0x01.
+        /// </summary>
         public const byte NUMBER_BUSY = 0x01;
+        /// <summary>
+        /// Clearing cause invalid facility request, the value 0x03.
+        /// </summary>
         public const byte INVALID_FACILITY_REQUEST = 0x03;
+        /// <summary>
+        /// Clearing cause network congestion, the value 0x05.
+        /// </summary>
         public const byte NETWORK_CONGESTION = 0x05;
+        /// <summary>
+        /// Clearing cause out of order, the value 0x09.
+        /// </summary>
         public const byte OUT_OF_ORDER = 0x09;
+        /// <summary>
+        /// Clearing cause access barred, the value 0x0B.
+        /// </summary>
         public const byte ACCESS_BARRED = 0x0B;
+        /// <summary>
+        /// Clearing cause not obtainable, the value 0x0D.
+        /// </summary>
         public const byte NOT_OBTAINABLE = 0x0D;
+        /// <summary>
+        /// Clearing cause remote procedure error, the value 0x11.
+        /// </summary>
         public const byte REMOTE_PROCEDURE_ERROR = 0x11;
+        /// <summary>
+        /// Clearing cause local procedure error, the value 0x13.
+        /// </summary>
         public const byte LOCAL_PROCEDURE_ERROR = 0x13;
+        /// <summary>
+        /// Clearing cause RPOA out of order, the value 0x15.
+        /// </summary>
         public const byte RPOA_OUT_OF_ORDER = 0x15;
+        /// <summary>
+        /// Clearing cause reverse charging not subscribed, the value 0x19.
+        /// </summary>
         public const byte REVERSE_CHARGING_NOT_SUBSCRIBED = 0x19;
+        /// <summary>
+        /// Clearing cause incompatible destination, the value 0x21.
+        /// </summary>
         public const byte INCOMPATIBLE_DESTINATION = 0x21;
+        /// <summary>
+        /// Clearing cause fast select not subscribed, the value 0x29.
+        /// </summary>
         public const byte FAST_SELECT_NOT_SUBSCRIBED = 0x29;
+        /// <summary>
+        /// Clearing cause ship absent, the value 0x39.
+        /// </summary>
         public const byte SHIP_ABSENT = 0x39;
+        /// <summary>
+        /// Clearing cause invalid called DTE address, the value 0x3B.
+        /// </summary>
         public const byte INVALID_CALLED_DTE_ADDRESS = 0x3B;
+        /// <summary>
+        /// Clearing cause invalid calling DTE address, the value 0x3D.
+        /// </summary>
         public const byte INVALID_CALLING_DTE_ADDRESS = 0x3D;
+        /// <summary>
+        /// Clearing cause invalid facility length, the value 0x41.
+        /// </summary>
         public const byte INVALID_FACILITY_LENGTH = 0x41;
+        /// <summary>
+        /// Clearing cause illegal facility code, the value 0x43.
+        /// </summary>
         public const byte ILLEGAL_FACILITY_CODE = 0x43;
     }
 
@@ -758,14 +926,41 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public static class X25ResetCause
     {
+        /// <summary>
+        /// Reset cause DTE originated, the value 0x00.
+        /// </summary>
         public const byte DTE_ORIGINATED = 0x00;
+        /// <summary>
+        /// Reset cause out of order, the value 0x01.
+        /// </summary>
         public const byte OUT_OF_ORDER = 0x01;
+        /// <summary>
+        /// Reset cause remote procedure error, the value 0x03.
+        /// </summary>
         public const byte REMOTE_PROCEDURE_ERROR = 0x03;
+        /// <summary>
+        /// Reset cause local procedure error, the value 0x05.
+        /// </summary>
         public const byte LOCAL_PROCEDURE_ERROR = 0x05;
+        /// <summary>
+        /// Reset cause network congestion, the value 0x07.
+        /// </summary>
         public const byte NETWORK_CONGESTION = 0x07;
+        /// <summary>
+        /// Reset cause remote DTE operational, the value 0x09.
+        /// </summary>
         public const byte REMOTE_DTE_OPERATIONAL = 0x09;
+        /// <summary>
+        /// Reset cause network operational, the value 0x0F.
+        /// </summary>
         public const byte NETWORK_OPERATIONAL = 0x0F;
+        /// <summary>
+        /// Reset cause incompatible destination, the value 0x11.
+        /// </summary>
         public const byte INCOMPATIBLE_DESTINATION = 0x11;
+        /// <summary>
+        /// Reset cause network out of order, the value 0x1D.
+        /// </summary>
         public const byte NETWORK_OUT_OF_ORDER = 0x1D;
     }
 
@@ -774,10 +969,25 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public static class X25RestartCause
     {
+        /// <summary>
+        /// Restart cause DTE originated, the value 0x00.
+        /// </summary>
         public const byte DTE_ORIGINATED = 0x00;
+        /// <summary>
+        /// Restart cause local procedure error, the value 0x01.
+        /// </summary>
         public const byte LOCAL_PROCEDURE_ERROR = 0x01;
+        /// <summary>
+        /// Restart cause network congestion, the value 0x03.
+        /// </summary>
         public const byte NETWORK_CONGESTION = 0x03;
+        /// <summary>
+        /// Restart cause network operational, the value 0x07.
+        /// </summary>
         public const byte NETWORK_OPERATIONAL = 0x07;
+        /// <summary>
+        /// Restart cause registration cancellation confirmed, the value 0x7F.
+        /// </summary>
         public const byte REGISTRATION_CANCELLATION_CONFIRMED = 0x7F;
     }
 
@@ -786,16 +996,49 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public static class X25DiagnosticCode
     {
+        /// <summary>
+        /// Diagnostic code no additional info, the value 0x00.
+        /// </summary>
         public const byte NO_ADDITIONAL_INFO = 0x00;
+        /// <summary>
+        /// Diagnostic code invalid P(S), the value 0x01.
+        /// </summary>
         public const byte INVALID_PS = 0x01;
+        /// <summary>
+        /// Diagnostic code invalid P(R), the value 0x02.
+        /// </summary>
         public const byte INVALID_PR = 0x02;
+        /// <summary>
+        /// Diagnostic code packet type invalid, the value 0x10.
+        /// </summary>
         public const byte PACKET_TYPE_INVALID = 0x10;
+        /// <summary>
+        /// Diagnostic code packet type invalid for state, the value 0x11.
+        /// </summary>
         public const byte PACKET_TYPE_INVALID_FOR_STATE = 0x11;
+        /// <summary>
+        /// Diagnostic code packet length invalid, the value 0x12.
+        /// </summary>
         public const byte PACKET_LENGTH_INVALID = 0x12;
+        /// <summary>
+        /// Diagnostic code packet not allowed, the value 0x13.
+        /// </summary>
         public const byte PACKET_NOT_ALLOWED = 0x13;
+        /// <summary>
+        /// Diagnostic code timer expired incoming call, the value 0x20.
+        /// </summary>
         public const byte TIMER_EXPIRED_INCOMING_CALL = 0x20;
+        /// <summary>
+        /// Diagnostic code timer expired clear indication, the value 0x21.
+        /// </summary>
         public const byte TIMER_EXPIRED_CLEAR_INDICATION = 0x21;
+        /// <summary>
+        /// Diagnostic code timer expired reset indication, the value 0x22.
+        /// </summary>
         public const byte TIMER_EXPIRED_RESET_INDICATION = 0x22;
+        /// <summary>
+        /// Diagnostic code timer expired restart indication, the value 0x23.
+        /// </summary>
         public const byte TIMER_EXPIRED_RESTART_INDICATION = 0x23;
     }
 
