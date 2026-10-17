@@ -165,6 +165,93 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        /// <summary>
+        /// When a caller clears, the far leg is cleared once and the caller's own channel is not sent
+        /// a second clear request.
+        /// </summary>
+        /// <remarks>
+        /// The far leg's clear confirmation raises a clear event on its port. While the switch still
+        /// held the stitch, that event found it and cleared the caller's leg again, so a C emulator
+        /// caller saw a clear request on a channel it had already seen confirmed. The check is on the
+        /// packets each port wrote, taken from the port's tap.
+        /// </remarks>
+        [Test]
+        public void ACallerClear_ClearsTheFarLegOnce_AndNotTheCallersChannelAgain()
+        {
+            object gate = new object();
+            int clearsSentToCaller = 0;
+            int clearsSentToCallee = 0;
+            int callClearEvents = 0;
+            bool calleeLegDone = false;
+
+            // Every packet in order, kept for the failure message: when the count is wrong, the
+            // sequence shows which packet it was.
+            StringBuilder wire = new StringBuilder();
+            _portA.PacketCaptured += (id, inbound, packet) =>
+            {
+                lock (wire)
+                {
+                    wire.Append("caller port ").Append(inbound ? "IN  " : "OUT ").Append(Models.X25PacketParser.ParsePacket(packet).PacketType).AppendLine();
+                }
+
+                if (!inbound && Models.X25PacketParser.ParsePacket(packet).PacketType == Models.X25PacketType.ClearRequest)
+                {
+                    Interlocked.Increment(ref clearsSentToCaller);
+                }
+            };
+            _portB.PacketCaptured += (id, inbound, packet) =>
+            {
+                lock (wire)
+                {
+                    wire.Append("callee port ").Append(inbound ? "IN  " : "OUT ").Append(Models.X25PacketParser.ParsePacket(packet).PacketType).AppendLine();
+                }
+
+                if (!inbound && Models.X25PacketParser.ParsePacket(packet).PacketType == Models.X25PacketType.ClearRequest)
+                {
+                    Interlocked.Increment(ref clearsSentToCallee);
+                }
+            };
+            _core.CallClear += (port, lci, cause, diag) => Interlocked.Increment(ref callClearEvents);
+
+            // This handler is added after the switch's own, so by the time it runs the switch has
+            // finished handling the same event: the far leg has been confirmed and nothing more is due.
+            _portB.CallCleared += (port, lci, cause, diag) =>
+            {
+                lock (gate)
+                {
+                    calleeLegDone = true;
+                }
+            };
+
+            using X25Client callee = Dial(_portB.BoundPort, "23420001");
+            callee.SetOnIncoming((c, vc) => c.Accept(vc));
+            using X25Client caller = Dial(_portA.BoundPort, "23400001");
+
+            WaitFor(() => _portA.PeerConnected && _portB.PeerConnected, 3000);
+            X25Vc? callerVc = caller.CallWait("23420001", 5000);
+            Assert.That(callerVc, Is.Not.Null);
+
+            caller.Clear(callerVc!);
+
+            WaitFor(() => { lock (gate) { return calleeLegDone; } }, 5000);
+            lock (gate)
+            {
+                Assert.That(calleeLegDone, Is.True, "the far leg must have been cleared and confirmed");
+            }
+
+            Assert.That(Volatile.Read(ref clearsSentToCallee), Is.EqualTo(1), "the far leg is cleared once");
+            string seen;
+            lock (wire)
+            {
+                seen = wire.ToString();
+            }
+
+            Assert.That(Volatile.Read(ref clearsSentToCaller), Is.EqualTo(0),
+                "the caller cleared its own channel; it is confirmed, not cleared again. Packets in order:" + Environment.NewLine + seen);
+            Assert.That(Volatile.Read(ref callClearEvents), Is.EqualTo(1), "the switch reports the call cleared once");
+            Assert.That(_node.ActiveStitchCount, Is.EqualTo(0));
+        }
+
         [Test]
         public void ACallToAnAddressWithNoRoute_IsCleared()
         {
