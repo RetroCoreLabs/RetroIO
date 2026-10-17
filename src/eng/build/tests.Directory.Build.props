@@ -3,5 +3,8 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Shared run settings (a test's output is shown once). A project that names its own file in its
+         csproj replaces this one, and must then carry the same ConsoleOut setting itself. -->
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)test.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 </Project>

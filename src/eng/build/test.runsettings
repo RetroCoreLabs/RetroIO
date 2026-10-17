@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <!--
+    Run settings every RetroIO test project gets, through tests.Directory.Build.props.
+
+    ConsoleOut 0: a test's output is shown once. The NUnit adapter's default sends everything a test
+    writes to TestContext.Out twice: once as a live message while the test runs, and again in the
+    result's "Standard Output Messages". The console logger at verbosity=detailed prints both, so
+    a test that wrote 40 lines showed 80 (and 160 with the older adapter 4.6.0, which also repeated
+    the text inside the result). The result still carries the output, so the Test Explorer and the
+    TRX report show it as before; only the live copy is dropped.
+  -->
+  <NUnit>
+    <ConsoleOut>0</ConsoleOut>
+  </NUnit>
+</RunSettings>

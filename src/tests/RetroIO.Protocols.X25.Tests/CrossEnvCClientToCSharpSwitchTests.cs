@@ -114,11 +114,34 @@ namespace RetroIO.Protocols.X25.Tests
             });
 
             SwitchNode node = new SwitchNode(cfg);
-            using XotSwitchPort access = new XotSwitchPort(new PortConfig { Id = 0, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = 16 });
+
+            // The two ends of a link have to agree on the logical channels. x25traffic declares 2048
+            // of them (cfg.num_vcs in its source) and, as a DTE, starts from the highest, so its first
+            // call arrives on channel 2048. A port that owned only 1..16 was right to answer that with
+            // a diagnostic, "packet on unassigned logical channel" (36), and this test failed on it
+            // for as long as it has existed; the cause was the range configured here, and the note
+            // that it needed WSL to reach a Windows socket was not the cause (the connection works).
+            const ushort CChannelCount = 2048;
+            using XotSwitchPort access = new XotSwitchPort(new PortConfig { Id = 0, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = CChannelCount });
             using XotSwitchPort service = new XotSwitchPort(new PortConfig { Id = 1, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = 16 });
 
             Assert.That(access.Start(), Is.True);
             Assert.That(service.Start(), Is.True);
+
+            // Every packet that crosses either port, with its direction, so a failure shows what the
+            // two implementations actually said to each other instead of only that the call failed.
+            System.Text.StringBuilder wire = new System.Text.StringBuilder();
+            PortPacketCaptured record = (portId, inbound, packet) =>
+            {
+                lock (wire)
+                {
+                    wire.Append("port ").Append(portId).Append(inbound ? " IN  " : " OUT ")
+                        .AppendLine(BitConverter.ToString(packet).Replace("-", " "));
+                }
+            };
+            access.PacketCaptured += record;
+            service.PacketCaptured += record;
+
             node.AddPort(access);
             node.AddPort(service);
             SwitchCore core = new SwitchCore(node);
@@ -180,9 +203,17 @@ namespace RetroIO.Protocols.X25.Tests
             TestContext.Out.WriteLine(stdout);
             TestContext.Out.WriteLine(stderr);
             TestContext.Out.WriteLine($"switch stitches: {node.ActiveStitchCount}");
+            string packetsSeen;
+            lock (wire)
+            {
+                packetsSeen = wire.ToString();
+            }
+
+            TestContext.Out.WriteLine("packets seen by the C# switch's ports:");
+            TestContext.Out.WriteLine(packetsSeen);
 
             Assert.That(got, Is.EqualTo(5),
-                $"the C client's data should have crossed the C# switch (stdout: {stdout.Trim()}; stderr: {stderr.Trim()})");
+                $"the C client's data should have crossed the C# switch (stdout: {stdout.Trim()}; stderr: {stderr.Trim()}; packets: {packetsSeen})");
             Assert.That(gotBytes, Is.EqualTo(5 * 64));
         }
     }
