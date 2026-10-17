@@ -83,39 +83,35 @@ namespace RetroIO.Storage.Local.V7.FileSystems
             // Try to read disk label (if enabled)
             if (UseDiskLabel)
             {
-                try
+                // ReadDiskLabel returns null when the label cannot be read or parsed; that case is
+                // handled as "no label" below. It is deliberately NOT wrapped in a catch-all: the
+                // checks that follow throw when the label names a partition this class cannot use,
+                // and that has to reach the caller instead of silently falling back to block 0.
+                _diskLabel = ReadDiskLabel();
+
+                if (_diskLabel != null && _diskLabel.IsValid())
                 {
-                    _diskLabel = ReadDiskLabel();
+                    // Find the specified partition
+                    int partitionIndex = BsdPartition.GetPartitionIndex(PartitionLetter);
+                    _currentPartition = _diskLabel.Partitions[partitionIndex];
 
-                    if (_diskLabel != null && _diskLabel.IsValid())
+                    if (_currentPartition.Value.IsUnused)
                     {
-                        // Find the specified partition
-                        int partitionIndex = BsdPartition.GetPartitionIndex(PartitionLetter);
-                        _currentPartition = _diskLabel.Partitions[partitionIndex];
-
-                        if (_currentPartition.Value.IsUnused)
-                        {
-                            throw new InvalidOperationException($"Partition '{PartitionLetter}' is not in use");
-                        }
-
-                        if (!_currentPartition.Value.IsV7Filesystem)
-                        {
-                            throw new InvalidOperationException(
-                                $"Partition '{PartitionLetter}' is not a V7 filesystem (type={_currentPartition.Value.FileSystemTypeName})");
-                        }
-
-                        // Calculate partition start in filesystem blocks
-                        _partitionStartBlock = ConvertSectorToFsBlock(_currentPartition.Value.Offset);
+                        throw new InvalidOperationException($"Partition '{PartitionLetter}' is not in use");
                     }
-                    else
+
+                    if (!_currentPartition.Value.IsV7Filesystem)
                     {
-                        // No valid label, assume filesystem starts at block 0
-                        _partitionStartBlock = 0;
+                        throw new InvalidOperationException(
+                            $"Partition '{PartitionLetter}' is not a V7 filesystem (type={_currentPartition.Value.FileSystemTypeName})");
                     }
+
+                    // Calculate partition start in filesystem blocks
+                    _partitionStartBlock = ConvertSectorToFsBlock(_currentPartition.Value.Offset);
                 }
-                catch
+                else
                 {
-                    // Failed to read label, assume no partitions
+                    // No valid label (none, or unreadable), assume filesystem starts at block 0
                     _partitionStartBlock = 0;
                 }
             }

@@ -127,79 +127,76 @@ namespace RetroIO.Storage.Local.FFS.FileSystems
             // Try to read BSD or Sun disk label (if enabled)
             else if (UseDiskLabel)
             {
-                try
+                // ReadDiskLabel and ReadSunDiskLabel return null when a label cannot be read or parsed;
+                // that is treated as "no label" and falls through to raw filesystem mode below. The block
+                // is deliberately NOT wrapped in a catch-all: the checks inside throw when a label names a
+                // partition this class cannot use, and that has to reach the caller.
+                // Try BSD disk label first (sector 1)
+                _diskLabel = ReadDiskLabel();
+
+                if (_diskLabel != null && _diskLabel.IsValid())
                 {
-                    // Try BSD disk label first (sector 1)
-                    _diskLabel = ReadDiskLabel();
+                    // Found BSD disk label
+                    int partitionIndex = BsdPartition.GetPartitionIndex(PartitionLetter);
+                    _currentPartition = _diskLabel.Partitions[partitionIndex];
 
-                    if (_diskLabel != null && _diskLabel.IsValid())
+                    if (_currentPartition.Value.IsUnused)
                     {
-                        // Found BSD disk label
-                        int partitionIndex = BsdPartition.GetPartitionIndex(PartitionLetter);
-                        _currentPartition = _diskLabel.Partitions[partitionIndex];
+                        throw new InvalidOperationException($"Partition '{PartitionLetter}' is not in use");
+                    }
 
-                        if (_currentPartition.Value.IsUnused)
+                    if (!_currentPartition.Value.IsFfsFilesystem)
+                    {
+                        throw new InvalidOperationException(
+                            $"Partition '{PartitionLetter}' is not an FFS filesystem (type={_currentPartition.Value.FileSystemTypeName})");
+                    }
+
+                    // Wrap device in partition accessor
+                    fsDevice = new PartitionBlockDevice(
+                        device,
+                        _currentPartition.Value.Offset,
+                        _currentPartition.Value.Size,
+                        PartitionLetter.ToString());
+
+                    ResolvedFilesystemOffsetBytes = (long)_currentPartition.Value.Offset * device.BlockSize;
+                }
+                else
+                {
+                    // Try Sun disk label (sector 0)
+                    _sunDiskLabel = ReadSunDiskLabel();
+
+                    if (_sunDiskLabel != null && _sunDiskLabel.IsValid())
+                    {
+                        // Found Sun disk label
+                        int partitionIndex = PartitionLetter - 'a';
+                        if (partitionIndex < 0 || partitionIndex >= SunDiskLabel.MAX_PARTITIONS)
                         {
-                            throw new InvalidOperationException($"Partition '{PartitionLetter}' is not in use");
+                            throw new InvalidOperationException($"Invalid Sun partition letter '{PartitionLetter}'");
                         }
 
-                        if (!_currentPartition.Value.IsFfsFilesystem)
+                        _currentSunPartition = _sunDiskLabel.Partitions[partitionIndex];
+
+                        if (_currentSunPartition.Value.IsUnused)
                         {
-                            throw new InvalidOperationException(
-                                $"Partition '{PartitionLetter}' is not an FFS filesystem (type={_currentPartition.Value.FileSystemTypeName})");
+                            throw new InvalidOperationException($"Sun partition '{PartitionLetter}' is not in use");
                         }
+
+                        // Calculate partition start sector (Sun uses cylinders)
+                        var partMgr = new SunPartitionManager(device);
+                        uint startSector = partMgr.GetPartitionStartSector(_currentSunPartition.Value, _sunDiskLabel);
+
+                        System.Diagnostics.Debug.WriteLine($"[FfsFileSystem] Sun partition '{PartitionLetter}': start={startSector}, size={_currentSunPartition.Value.NumSectors}");
 
                         // Wrap device in partition accessor
                         fsDevice = new PartitionBlockDevice(
                             device,
-                            _currentPartition.Value.Offset,
-                            _currentPartition.Value.Size,
+                            startSector,
+                            _currentSunPartition.Value.NumSectors,
                             PartitionLetter.ToString());
 
-                        ResolvedFilesystemOffsetBytes = (long)_currentPartition.Value.Offset * device.BlockSize;
+                        ResolvedFilesystemOffsetBytes = (long)startSector * device.BlockSize;
                     }
-                    else
-                    {
-                        // Try Sun disk label (sector 0)
-                        _sunDiskLabel = ReadSunDiskLabel();
-
-                        if (_sunDiskLabel != null && _sunDiskLabel.IsValid())
-                        {
-                            // Found Sun disk label
-                            int partitionIndex = PartitionLetter - 'a';
-                            if (partitionIndex < 0 || partitionIndex >= SunDiskLabel.MAX_PARTITIONS)
-                            {
-                                throw new InvalidOperationException($"Invalid Sun partition letter '{PartitionLetter}'");
-                            }
-
-                            _currentSunPartition = _sunDiskLabel.Partitions[partitionIndex];
-
-                            if (_currentSunPartition.Value.IsUnused)
-                            {
-                                throw new InvalidOperationException($"Sun partition '{PartitionLetter}' is not in use");
-                            }
-
-                            // Calculate partition start sector (Sun uses cylinders)
-                            var partMgr = new SunPartitionManager(device);
-                            uint startSector = partMgr.GetPartitionStartSector(_currentSunPartition.Value, _sunDiskLabel);
-
-                            System.Diagnostics.Debug.WriteLine($"[FfsFileSystem] Sun partition '{PartitionLetter}': start={startSector}, size={_currentSunPartition.Value.NumSectors}");
-
-                            // Wrap device in partition accessor
-                            fsDevice = new PartitionBlockDevice(
-                                device,
-                                startSector,
-                                _currentSunPartition.Value.NumSectors,
-                                PartitionLetter.ToString());
-
-                            ResolvedFilesystemOffsetBytes = (long)startSector * device.BlockSize;
-                        }
-                        // If no valid label, fall through to raw filesystem mode
-                    }
-                }
-                catch
-                {
-                    // Failed to read label, assume no partitions
+                    // If no valid label, fall through to raw filesystem mode
                 }
             }
 
@@ -319,7 +316,6 @@ namespace RetroIO.Storage.Local.FFS.FileSystems
             for (int i = 0; i < ffsEntries.Length; i++)
             {
                 var ffsEntry = ffsEntries[i];
-                Console.WriteLine($"[DEBUG FfsFileSystem.ListDirectory] Reading inode #{ffsEntry.d_ino} for entry '{ffsEntry.d_name}'");
                 var entryInode = _inodeReader!.ReadInode(ffsEntry.d_ino);
 
                 // Construct full path for navigation
