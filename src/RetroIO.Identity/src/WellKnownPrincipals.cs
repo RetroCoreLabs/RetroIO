@@ -19,6 +19,9 @@ namespace RetroIO.Identity
         /// Used for: Anonymous access, guest browsing
         /// </summary>
         public static readonly Guid UnknownUserId = Guid.Empty;
+        /// <summary>
+        /// The name of the unauthenticated principal, UNKNOWN.
+        /// </summary>
         public const string UnknownUsername = "UNKNOWN";
 
         /// <summary>
@@ -27,6 +30,9 @@ namespace RetroIO.Identity
         /// </summary>
         public static readonly Guid SystemUserId =
             new Guid("5757300D-0000-0000-0000-000000000001"); // SYSTEM00
+        /// <summary>
+        /// The name of the system principal, SYSTEM.
+        /// </summary>
         public const string SystemUsername = "SYSTEM";
 
         /// <summary>
@@ -36,6 +42,9 @@ namespace RetroIO.Identity
         public static readonly Guid AdminUserId = new Guid("C001D00D-0000-0000-0000-000000000000"); // COOL DUDE
 
 
+        /// <summary>
+        /// The name of the default administrator principal, admin.
+        /// </summary>
         public const string AdminUsername = "admin";
 
         /// <summary>
@@ -43,6 +52,9 @@ namespace RetroIO.Identity
         /// </summary>
         public static readonly Guid SystUserId =
             new Guid("53595354-0000-0000-0000-000000000001"); // SYST0001
+        /// <summary>
+        /// The name of the Econet file-server manager principal, SYST.
+        /// </summary>
         public const string SystUsername = "SYST";
 
         /// <summary>

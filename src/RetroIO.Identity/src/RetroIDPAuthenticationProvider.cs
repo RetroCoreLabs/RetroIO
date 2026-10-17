@@ -19,6 +19,15 @@ namespace RetroIO.Identity
     {
         private readonly IRetroIDP _idp;
 
+        /// <summary>
+        /// Creates a provider that uses the given identity provider.
+        /// </summary>
+        /// <param name="idp">
+        /// The identity provider to check logins against.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="idp"/> is null.
+        /// </exception>
         public RetroIDPAuthenticationProvider(IRetroIDP idp)
         {
             _idp = idp ?? throw new ArgumentNullException(nameof(idp));
@@ -101,10 +110,28 @@ namespace RetroIO.Identity
     /// </summary>
     public sealed class AuthenticationResult
     {
+        /// <summary>
+        /// Gets or sets whether the login succeeded.
+        /// </summary>
         public bool IsSuccess { get; set; }
+        /// <summary>
+        /// Gets or sets the authenticated user, or null after a failure.
+        /// </summary>
         public RetroUser? User { get; set; }
+        /// <summary>
+        /// Gets or sets the error message, or null after a success.
+        /// </summary>
         public string? ErrorMessage { get; set; }
 
+        /// <summary>
+        /// Creates a successful result for a user.
+        /// </summary>
+        /// <param name="user">
+        /// The authenticated user.
+        /// </param>
+        /// <returns>
+        /// A result with IsSuccess true and the user set.
+        /// </returns>
         public static AuthenticationResult Success(RetroUser user)
         {
             return new AuthenticationResult
@@ -114,6 +141,15 @@ namespace RetroIO.Identity
             };
         }
 
+        /// <summary>
+        /// Creates a failed result with an error message.
+        /// </summary>
+        /// <param name="errorMessage">
+        /// The reason for the failure.
+        /// </param>
+        /// <returns>
+        /// A result with IsSuccess false and the message set.
+        /// </returns>
         public static AuthenticationResult Failed(string errorMessage)
         {
             return new AuthenticationResult

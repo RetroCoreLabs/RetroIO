@@ -101,8 +101,14 @@ namespace RetroIO.Identity
         /// </summary>
         public Dictionary<string, string> Metadata { get; set; } = new();
 
+        /// <summary>
+        /// Gets whether TNFS access is allowed, which is true when AllowTnfs is not set.
+        /// </summary>
         public bool EffectiveAllowTnfs => AllowTnfs ?? true;
 
+        /// <summary>
+        /// Gets whether Econet access is allowed, which is false when AllowEconet is not set.
+        /// </summary>
         public bool EffectiveAllowEconet => AllowEconet ?? false;
     }
 }

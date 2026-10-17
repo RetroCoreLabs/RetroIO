@@ -24,6 +24,18 @@ public static class Argon2idPasswordHasher
     private const int Parallelism = 4;
     private const string Prefix = "$argon2id$v=19$";
 
+    /// <summary>
+    /// Hashes a password with Argon2id and a new random 16-byte salt.
+    /// </summary>
+    /// <remarks>
+    /// The result is a string with the prefix $argon2id$v=19$, then the parameters m=65536,t=3,p=4, then the salt and the 32-byte hash, all separated by $ characters. The salt and the hash are in Base64.
+    /// </remarks>
+    /// <param name="password">
+    /// The password to hash. It is converted to UTF-8 bytes first.
+    /// </param>
+    /// <returns>
+    /// The encoded hash string.
+    /// </returns>
     public static string Hash(string password)
     {
         byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
@@ -39,6 +51,24 @@ public static class Argon2idPasswordHasher
             Convert.ToBase64String(hash));
     }
 
+    /// <summary>
+    /// Checks a password against a stored hash.
+    /// </summary>
+    /// <remarks>
+    /// A hash that starts with the Argon2id prefix is recomputed with the parameters stored in the string and compared in fixed time. Any other non-empty string is compared as a legacy hash, which is the Base64 of the password followed by the text _HASHED.
+    /// </remarks>
+    /// <param name="password">
+    /// The password to check.
+    /// </param>
+    /// <param name="encodedHash">
+    /// The stored hash string.
+    /// </param>
+    /// <param name="upgradedFromLegacy">
+    /// Set to true when the password matched a legacy hash, so the caller can store a new Argon2id hash. Otherwise false.
+    /// </param>
+    /// <returns>
+    /// True when the password matches the stored hash. False when it does not match, or when the stored hash is null or empty.
+    /// </returns>
     public static bool Verify(string password, string encodedHash, out bool upgradedFromLegacy)
     {
         upgradedFromLegacy = false;
@@ -58,6 +88,15 @@ public static class Argon2idPasswordHasher
         return false;
     }
 
+    /// <summary>
+    /// Returns whether a stored hash is in the legacy format.
+    /// </summary>
+    /// <param name="encodedHash">
+    /// The stored hash string.
+    /// </param>
+    /// <returns>
+    /// True when the string is not empty and does not start with the Argon2id prefix.
+    /// </returns>
     public static bool IsLegacyHash(string encodedHash)
     {
         return !string.IsNullOrEmpty(encodedHash) &&

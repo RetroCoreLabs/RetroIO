@@ -30,6 +30,21 @@ namespace RetroIO.Identity
         private Dictionary<string, Guid> _usernameIndex = new();
         private Dictionary<string, Guid> _externalIdentityIndex = new(); // "provider:externalUserId" -> userId
 
+        /// <summary>
+        /// Creates a provider that keeps users and groups in two JSON files.
+        /// </summary>
+        /// <remarks>
+        /// The files are not read until LoadAsync is called.
+        /// </remarks>
+        /// <param name="usersFilePath">
+        /// Path of the users JSON file.
+        /// </param>
+        /// <param name="groupsFilePath">
+        /// Path of the groups JSON file.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="usersFilePath"/> or <paramref name="groupsFilePath"/> is null.
+        /// </exception>
         public JsonRetroIDP(string usersFilePath, string groupsFilePath)
         {
             _usersFilePath = usersFilePath ?? throw new ArgumentNullException(nameof(usersFilePath));
@@ -40,6 +55,27 @@ namespace RetroIO.Identity
         // USER MANAGEMENT
         // ====================================================================
 
+        /// <summary>
+        /// Adds a user and returns its identifier.
+        /// </summary>
+        /// <remarks>
+        /// A new GUID is assigned when the user has an empty identifier. The user is held in memory until SaveAsync is called.
+        /// </remarks>
+        /// <param name="user">
+        /// The user to add.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// The identifier of the added user.
+        /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="user"/> is null.
+        /// </exception>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown when the username already exists. The comparison ignores case.
+        /// </exception>
         public async ValueTask<Guid> CreateUserAsync(RetroUser user, CancellationToken ct = default)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
@@ -74,6 +110,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroUser?> GetUserAsync(Guid userId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -87,6 +124,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroUser?> GetUserByUsernameAsync(string username, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(username)) return null;
@@ -106,6 +144,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroUser?> GetUserByExternalIdentityAsync(
             string provider, string externalUserId, CancellationToken ct = default)
         {
@@ -128,6 +167,24 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Replaces the stored user that has the same identifier.
+        /// </summary>
+        /// <remarks>
+        /// The username and external identity indexes are rebuilt for the user.
+        /// </remarks>
+        /// <param name="user">
+        /// The new user data.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the user existed and was replaced. False when no user has that identifier.
+        /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="user"/> is null.
+        /// </exception>
         public async ValueTask<bool> UpdateUserAsync(RetroUser user, CancellationToken ct = default)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
@@ -159,6 +216,18 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Removes a user, its username and external identity index entries, and its entries in all group member lists.
+        /// </summary>
+        /// <param name="userId">
+        /// The identifier of the user to remove.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the user existed and was removed. False otherwise.
+        /// </returns>
         public async ValueTask<bool> DeleteUserAsync(Guid userId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -185,6 +254,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroUser[]> ListUsersAsync(CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -208,6 +278,27 @@ namespace RetroIO.Identity
         // PASSWORD MANAGEMENT
         // ====================================================================
 
+        /// <summary>
+        /// Hashes a password with Argon2id and stores it on the user.
+        /// </summary>
+        /// <remarks>
+        /// The change is held in memory until SaveAsync is called.
+        /// </remarks>
+        /// <param name="userId">
+        /// The identifier of the user.
+        /// </param>
+        /// <param name="password">
+        /// The new password.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the user exists and the hash was stored. False when no user has that identifier.
+        /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="password"/> is null, empty or only white space.
+        /// </exception>
         public async ValueTask<bool> SetPasswordAsync(Guid userId, string password, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(password))
@@ -228,6 +319,24 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Checks a password against the stored hash of a user.
+        /// </summary>
+        /// <remarks>
+        /// When the stored hash is in the legacy format and the password matches, the hash is replaced with a new Argon2id hash in memory.
+        /// </remarks>
+        /// <param name="userId">
+        /// The identifier of the user.
+        /// </param>
+        /// <param name="password">
+        /// The password to check.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the password matches. False when the password is empty, the user is unknown, the user has no hash, or the password does not match.
+        /// </returns>
         public async ValueTask<bool> VerifyPasswordAsync(Guid userId, string password, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(password)) return false;
@@ -253,6 +362,21 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Looks up a user by name and checks a password against the stored hash.
+        /// </summary>
+        /// <param name="username">
+        /// The username to look up.
+        /// </param>
+        /// <param name="password">
+        /// The password to check.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the user exists and the password matches. False otherwise.
+        /// </returns>
         public async ValueTask<bool> VerifyPasswordAsync(string username, string password, CancellationToken ct = default)
         {
             RetroUser? user = await GetUserByUsernameAsync(username, ct);
@@ -264,6 +388,24 @@ namespace RetroIO.Identity
         // GROUP MANAGEMENT
         // ====================================================================
 
+        /// <summary>
+        /// Adds a group and returns its identifier.
+        /// </summary>
+        /// <remarks>
+        /// A new GUID is assigned when the group has an empty identifier. An existing group with the same identifier is replaced.
+        /// </remarks>
+        /// <param name="group">
+        /// The group to add.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// The identifier of the added group.
+        /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="group"/> is null.
+        /// </exception>
         public async ValueTask<Guid> CreateGroupAsync(RetroGroup group, CancellationToken ct = default)
         {
             if (group == null) throw new ArgumentNullException(nameof(group));
@@ -286,6 +428,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroGroup?> GetGroupAsync(Guid groupId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -299,6 +442,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroGroup?> GetGroupByNameAsync(string groupName, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(groupName)) return null;
@@ -321,6 +465,21 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Replaces the stored group that has the same identifier.
+        /// </summary>
+        /// <param name="group">
+        /// The new group data.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the group existed and was replaced. False otherwise.
+        /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="group"/> is null.
+        /// </exception>
         public async ValueTask<bool> UpdateGroupAsync(RetroGroup group, CancellationToken ct = default)
         {
             if (group == null) throw new ArgumentNullException(nameof(group));
@@ -340,6 +499,18 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Removes a group and removes its identifier from the group list of every user.
+        /// </summary>
+        /// <param name="groupId">
+        /// The identifier of the group to remove.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the group existed and was removed. False otherwise.
+        /// </returns>
         public async ValueTask<bool> DeleteGroupAsync(Guid groupId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -362,6 +533,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroGroup[]> ListGroupsAsync(CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -385,6 +557,21 @@ namespace RetroIO.Identity
         // GROUP MEMBERSHIP
         // ====================================================================
 
+        /// <summary>
+        /// Adds a user to a group on both sides, in the group list of the user and in the member list of the group.
+        /// </summary>
+        /// <param name="userId">
+        /// The identifier of the user.
+        /// </param>
+        /// <param name="groupId">
+        /// The identifier of the group.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when both the user and the group exist. False otherwise.
+        /// </returns>
         public async ValueTask<bool> AddUserToGroupAsync(Guid userId, Guid groupId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -414,6 +601,21 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Removes a user from a group on both sides, for each side that exists.
+        /// </summary>
+        /// <param name="userId">
+        /// The identifier of the user.
+        /// </param>
+        /// <param name="groupId">
+        /// The identifier of the group.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// Always true, even when the user or the group does not exist.
+        /// </returns>
         public async ValueTask<bool> RemoveUserFromGroupAsync(Guid userId, Guid groupId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -437,6 +639,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroGroup[]> GetUserGroupsAsync(Guid userId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -462,6 +665,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<RetroUser[]> GetGroupMembersAsync(Guid groupId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -487,6 +691,21 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Checks the group list of a user for a group identifier.
+        /// </summary>
+        /// <param name="userId">
+        /// The identifier of the user.
+        /// </param>
+        /// <param name="groupId">
+        /// The identifier of the group.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the user exists and lists the group. False otherwise.
+        /// </returns>
         public async ValueTask<bool> IsUserInGroupAsync(Guid userId, Guid groupId, CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -507,6 +726,27 @@ namespace RetroIO.Identity
         // EXTERNAL IDENTITY MAPPING
         // ====================================================================
 
+        /// <summary>
+        /// Links an external identity to a user.
+        /// </summary>
+        /// <remarks>
+        /// The identity gets the identifier of the user as its internal user. An existing link with the same provider and external user identifier is replaced.
+        /// </remarks>
+        /// <param name="userId">
+        /// The identifier of the user.
+        /// </param>
+        /// <param name="externalIdentity">
+        /// The external identity to link.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// True when the user exists. False otherwise.
+        /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="externalIdentity"/> is null.
+        /// </exception>
         public async ValueTask<bool> LinkExternalIdentityAsync(
             Guid userId, ExternalIdentity externalIdentity, CancellationToken ct = default)
         {
@@ -551,6 +791,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<bool> UnlinkExternalIdentityAsync(
             Guid userId, string provider, string externalUserId, CancellationToken ct = default)
         {
@@ -582,6 +823,7 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask<ExternalIdentity[]> GetExternalIdentitiesAsync(
             Guid userId, CancellationToken ct = default)
         {
@@ -603,6 +845,24 @@ namespace RetroIO.Identity
         // AUTHENTICATION
         // ====================================================================
 
+        /// <summary>
+        /// Checks a username and password and returns the user.
+        /// </summary>
+        /// <remarks>
+        /// Sets the last login time of the user to the current UTC time on success.
+        /// </remarks>
+        /// <param name="username">
+        /// The username to look up.
+        /// </param>
+        /// <param name="password">
+        /// The password to check.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// The user, or null when the user is unknown, is not active, or the password does not match.
+        /// </returns>
         public async ValueTask<RetroUser?> AuthenticateAsync(
             string username, string password, CancellationToken ct = default)
         {
@@ -619,6 +879,30 @@ namespace RetroIO.Identity
             return user;
         }
 
+        /// <summary>
+        /// Finds the user linked to an external identity, and can create the user when none is linked.
+        /// </summary>
+        /// <remarks>
+        /// When no user is linked and <paramref name="autoProvision"/> is true, a new active non-admin user is created. Its username is the lower-case provider, an underscore and the external username, and the identity is linked to it. For a found or created user, the last login time and the last authentication time of the identity are set to the current UTC time.
+        /// </remarks>
+        /// <param name="provider">
+        /// The name of the external identity provider.
+        /// </param>
+        /// <param name="externalUserId">
+        /// The identifier of the user at the provider.
+        /// </param>
+        /// <param name="externalUsername">
+        /// The user name at the provider.
+        /// </param>
+        /// <param name="autoProvision">
+        /// True to create a user when none is linked.
+        /// </param>
+        /// <param name="ct">
+        /// A token that cancels waiting for the internal lock.
+        /// </param>
+        /// <returns>
+        /// The user, or null when none is linked and <paramref name="autoProvision"/> is false.
+        /// </returns>
         public async ValueTask<RetroUser?> AuthenticateViaExternalIdentityAsync(
             string provider, string externalUserId, string externalUsername,
             bool autoProvision = true, CancellationToken ct = default)
@@ -677,6 +961,12 @@ namespace RetroIO.Identity
         // PERSISTENCE
         // ====================================================================
 
+        /// <summary>
+        /// Writes all users and all groups to their JSON files.
+        /// </summary>
+        /// <param name="ct">
+        /// A token that cancels the write.
+        /// </param>
         public async ValueTask SaveAsync(CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -698,6 +988,15 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Replaces the in-memory users and groups with the content of the JSON files.
+        /// </summary>
+        /// <remarks>
+        /// A file that does not exist is skipped, so that part stays empty. The username and external identity indexes are rebuilt.
+        /// </remarks>
+        /// <param name="ct">
+        /// A token that cancels the read.
+        /// </param>
         public async ValueTask LoadAsync(CancellationToken ct = default)
         {
             await _lock.WaitAsync(ct);
@@ -772,6 +1071,9 @@ namespace RetroIO.Identity
             }
         }
 
+        /// <summary>
+        /// Releases the internal lock.
+        /// </summary>
         public void Dispose()
         {
             _lock?.Dispose();
