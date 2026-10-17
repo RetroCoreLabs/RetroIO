@@ -23,6 +23,24 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
     private readonly BlobContainerClient _containerClient;
     private readonly ILogger<AzureBlobFileSystemBackend> _logger;
 
+    /// <summary>
+    /// Creates the backend and its blob container client.
+    /// </summary>
+    /// <remarks>
+    /// The client is created from the managed identity and the storage account URI when UseManagedIdentity is set, otherwise from the connection string. The container is created when CreateContainerIfNotExists is set, and the temporary cache directory is created.
+    /// </remarks>
+    /// <param name="options">
+    /// The Azure blob settings.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for messages.
+    /// </param>
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="options"/> or <paramref name="logger"/> is null.
+    /// </exception>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown when the managed identity is used without a storage account URI, or when the connection string is used and it is empty.
+    /// </exception>
     public AzureBlobFileSystemBackend(
         AzureBlobOptions options,
         ILogger<AzureBlobFileSystemBackend> logger)

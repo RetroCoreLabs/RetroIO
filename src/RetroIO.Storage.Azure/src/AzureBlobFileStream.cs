@@ -22,6 +22,27 @@ public sealed class AzureBlobFileStream : FileStream
     private readonly ILogger? _logger;
     private bool _disposed;
 
+    /// <summary>
+    /// Creates a stream that shares the file handle of an open temporary file and uploads the file to a blob when it is closed.
+    /// </summary>
+    /// <param name="innerStream">
+    /// The open temporary file. Its file handle is used by this stream.
+    /// </param>
+    /// <param name="blobClient">
+    /// The client of the blob that receives the upload.
+    /// </param>
+    /// <param name="tempFilePath">
+    /// The path of the temporary file. It is deleted when the stream is closed.
+    /// </param>
+    /// <param name="access">
+    /// The access mode. An upload happens only for write or read-write access.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for messages, or null for none.
+    /// </param>
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="blobClient"/> or <paramref name="tempFilePath"/> is null.
+    /// </exception>
     public AzureBlobFileStream(
         FileStream innerStream,
         BlobClient blobClient,
@@ -36,6 +57,15 @@ public sealed class AzureBlobFileStream : FileStream
         _logger = logger;
     }
 
+    /// <summary>
+    /// Flushes the stream, uploads the temporary file to the blob when the stream was opened for writing, then deletes the temporary file.
+    /// </summary>
+    /// <remarks>
+    /// The upload overwrites an existing blob. An upload error is logged and thrown again. An error while deleting the temporary file is logged and ignored.
+    /// </remarks>
+    /// <param name="disposing">
+    /// True when called from Dispose, false when called from the finalizer. Flush and upload happen only when true.
+    /// </param>
     protected override void Dispose(bool disposing)
     {
         if (_disposed)
@@ -95,6 +125,12 @@ public sealed class AzureBlobFileStream : FileStream
         }
     }
 
+    /// <summary>
+    /// Does the same as Dispose, but flushes and uploads asynchronously.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the upload and the cleanup are done.
+    /// </returns>
     public override async ValueTask DisposeAsync()
     {
         if (_disposed)

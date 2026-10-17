@@ -20,10 +20,19 @@ namespace RetroIO.Storage.Azure;
 /// </summary>
 public sealed class AzureBlobVolumeProvider : IVolumeProvider
 {
+    /// <summary>
+    /// Gets the volume type, which is azure.
+    /// </summary>
     public string Type => "azure";
 
     // VFS Properties
+    /// <summary>
+    /// Gets the URI schemes this provider handles, azblob and azure.
+    /// </summary>
     public string[] SupportedSchemes => new[] { "azblob", "azure" };
+    /// <summary>
+    /// Gets whether the volumes are remote, which is true.
+    /// </summary>
     public bool IsRemote => true;
 
     private readonly ILogger<AzureBlobVolumeProvider>? _logger;
@@ -39,11 +48,29 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         public required BlobContainerClient ContainerClient { get; init; }
     }
 
+    /// <summary>
+    /// Creates the provider.
+    /// </summary>
+    /// <param name="logger">
+    /// The logger for messages, or null for none.
+    /// </param>
     public AzureBlobVolumeProvider(ILogger<AzureBlobVolumeProvider>? logger = null)
     {
         _logger = logger;
     }
 
+    /// <summary>
+    /// Checks that a mount entry has the azure provider type and a source URI.
+    /// </summary>
+    /// <param name="entry">
+    /// The mount entry to check.
+    /// </param>
+    /// <param name="errorMessage">
+    /// The reason when the check fails, otherwise null.
+    /// </param>
+    /// <returns>
+    /// True when the entry can be mounted. False otherwise.
+    /// </returns>
     public bool CanRestore(UnifiedMountEntry entry, out string? errorMessage)
     {
         if (entry.ProviderType != Type)
@@ -62,6 +89,21 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         return true;
     }
 
+    /// <summary>
+    /// Mounts a volume from a mount entry, using its source URI, volume identifier and read-only flag.
+    /// </summary>
+    /// <param name="entry">
+    /// The mount entry.
+    /// </param>
+    /// <returns>
+    /// Information about the mounted volume.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the entry fails the check of CanRestore, or when the volume identifier is already mounted.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when the mount fails.
+    /// </exception>
     public MountInfo MountFromConfig(UnifiedMountEntry entry)
     {
         if (!CanRestore(entry, out string? error))
@@ -72,6 +114,30 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         return Mount(entry.SourceUri, entry.VolumeId, entry.IsReadOnly);
     }
 
+    /// <summary>
+    /// Mounts an Azure blob container as a volume.
+    /// </summary>
+    /// <remarks>
+    /// The URI has the form connection string, a vertical bar character, then the container name. When the container name is left out, retrofs is used. The container is created when it does not exist.
+    /// </remarks>
+    /// <param name="uri">
+    /// The connection string and the optional container name.
+    /// </param>
+    /// <param name="volumeId">
+    /// The identifier for the new volume.
+    /// </param>
+    /// <param name="readOnly">
+    /// True to refuse writes.
+    /// </param>
+    /// <returns>
+    /// Information about the mounted volume. It reports no block access.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume identifier is already mounted.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when the connection or the container creation fails.
+    /// </exception>
     public MountInfo Mount(string uri, string volumeId, bool readOnly)
     {
         if (_mounts.ContainsKey(volumeId))
@@ -181,6 +247,15 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
             || connectionString.Contains("localhost", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Removes a volume from the provider.
+    /// </summary>
+    /// <param name="volumeId">
+    /// The identifier of the volume.
+    /// </param>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
     public void Unmount(string volumeId)
     {
         if (_mounts.TryRemove(volumeId, out var mount))
@@ -193,6 +268,15 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         }
     }
 
+    /// <summary>
+    /// Gets information about a mounted volume.
+    /// </summary>
+    /// <param name="volumeId">
+    /// The identifier of the volume.
+    /// </param>
+    /// <returns>
+    /// The mount information, or null when the volume is not found.
+    /// </returns>
     public MountInfo? GetMountInfo(string volumeId)
     {
         if (!_mounts.TryGetValue(volumeId, out var mount))
@@ -210,6 +294,12 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         };
     }
 
+    /// <summary>
+    /// Lists the mounted volumes.
+    /// </summary>
+    /// <returns>
+    /// An array with the mount information of each volume.
+    /// </returns>
     public MountInfo[] ListMounts()
     {
         var mounts = new List<MountInfo>();
@@ -222,6 +312,24 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         return mounts.ToArray();
     }
 
+    /// <summary>
+    /// Downloads a blob into a byte array.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the blob. A leading slash is removed and backslashes are changed to forward slashes.
+    /// </param>
+    /// <returns>
+    /// The content of the blob.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
+    /// <exception cref="System.IO.FileNotFoundException">
+    /// Thrown when the blob does not exist.
+    /// </exception>
     public byte[] ReadFile(UrnContext context, string path)
     {
         var mount = GetMount(context.VolumeId);
@@ -240,6 +348,27 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         }
     }
 
+    /// <summary>
+    /// Uploads a byte array to a blob and replaces an existing blob.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the blob.
+    /// </param>
+    /// <param name="data">
+    /// The content to write.
+    /// </param>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when the volume is mounted read-only.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when Azure reports an error.
+    /// </exception>
     public void WriteFile(UrnContext context, string path, byte[] data)
     {
         var mount = GetMount(context.VolumeId);
@@ -261,6 +390,21 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         }
     }
 
+    /// <summary>
+    /// Deletes a blob if it exists. No error occurs when the blob does not exist.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the blob.
+    /// </param>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when the volume is mounted read-only.
+    /// </exception>
     public void DeleteFile(UrnContext context, string path)
     {
         var mount = GetMount(context.VolumeId);
@@ -274,6 +418,24 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         blobClient.DeleteIfExists();
     }
 
+    /// <summary>
+    /// Lists the blobs and the virtual directories directly under a path.
+    /// </summary>
+    /// <remarks>
+    /// Directories are the blob name prefixes up to the slash character. Files are reported with the file type [BLB].
+    /// </remarks>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the directory.
+    /// </param>
+    /// <returns>
+    /// An array with one entry for each virtual directory and each blob.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
     public DirectoryEntry[] ListDirectory(UrnContext context, string path)
     {
         var mount = GetMount(context.VolumeId);
@@ -330,6 +492,24 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         return entries.ToArray();
     }
 
+    /// <summary>
+    /// Gets the metadata of a blob, or of a virtual directory.
+    /// </summary>
+    /// <remarks>
+    /// A path is a directory when at least one blob name starts with the path followed by a slash.
+    /// </remarks>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the blob or the directory.
+    /// </param>
+    /// <returns>
+    /// The metadata, or null when nothing is found or an error occurs.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
     public FileMetadata? GetMetadata(UrnContext context, string path)
     {
         var mount = GetMount(context.VolumeId);
@@ -369,21 +549,66 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         }
     }
 
+    /// <summary>
+    /// Not supported. Always throws.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="address">
+    /// The block address.
+    /// </param>
+    /// <param name="buffer">
+    /// The buffer that would receive the block.
+    /// </param>
+    /// <returns>
+    /// Never returns.
+    /// </returns>
+    /// <exception cref="System.NotSupportedException">
+    /// Always thrown, because Azure Blob Storage has no block-level access.
+    /// </exception>
     public int ReadBlock(UrnContext context, BlockAddress address, Span<byte> buffer)
     {
         throw new NotSupportedException("Azure Blob Storage does not support block-level access");
     }
 
+    /// <summary>
+    /// Not supported. Always throws.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="address">
+    /// The block address.
+    /// </param>
+    /// <param name="data">
+    /// The data that would be written.
+    /// </param>
+    /// <exception cref="System.NotSupportedException">
+    /// Always thrown, because Azure Blob Storage has no block-level access.
+    /// </exception>
     public void WriteBlock(UrnContext context, BlockAddress address, ReadOnlySpan<byte> data)
     {
         throw new NotSupportedException("Azure Blob Storage does not support block-level access");
     }
 
+    /// <summary>
+    /// Returns null, because there is no block access.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <returns>
+    /// Always null.
+    /// </returns>
     public BlockDeviceInfo? GetBlockDeviceInfo(UrnContext context)
     {
         return null; // No block access
     }
 
+    /// <summary>
+    /// Removes every mounted volume. Errors while removing are ignored.
+    /// </summary>
     public void Dispose()
     {
         foreach (var volumeId in _mounts.Keys.ToArray())
@@ -413,6 +638,24 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
 
     // ==================== VFS Async Methods ====================
 
+    /// <summary>
+    /// Opens a blob for reading as a stream.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the blob.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels the operation.
+    /// </param>
+    /// <returns>
+    /// A stream that reads the blob.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
     public async Task<Stream> OpenReadAsync(UrnContext context, string path, CancellationToken cancellationToken)
     {
         AzureBlobMount mount = GetMount(context.VolumeId);
@@ -422,6 +665,30 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         return await blobClient.OpenReadAsync(cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    /// Uploads a stream to a blob and replaces an existing blob.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the blob.
+    /// </param>
+    /// <param name="data">
+    /// The stream with the content to write.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels the operation.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the upload is done.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not found.
+    /// </exception>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when the volume or the context is read-only.
+    /// </exception>
     public async Task WriteAsync(UrnContext context, string path, Stream data, CancellationToken cancellationToken)
     {
         AzureBlobMount mount = GetMount(context.VolumeId);
@@ -435,12 +702,42 @@ public sealed class AzureBlobVolumeProvider : IVolumeProvider
         await blobClient.UploadAsync(data, overwrite: true, cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    /// Lists a directory by running ListDirectory on a thread pool thread.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the directory.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels waiting for the task to start.
+    /// </param>
+    /// <returns>
+    /// An array of directory entries.
+    /// </returns>
     public async Task<DirectoryEntry[]> ListDirectoryAsync(UrnContext context, string path, CancellationToken cancellationToken)
     {
         // Wrap synchronous method (or implement native async if preferred)
         return await Task.Run(() => ListDirectory(context, path), cancellationToken);
     }
 
+    /// <summary>
+    /// Gets metadata by running GetMetadata on a thread pool thread.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the blob or the directory.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels waiting for the task to start.
+    /// </param>
+    /// <returns>
+    /// The metadata, or null when nothing is found.
+    /// </returns>
     public async Task<FileMetadata?> GetMetadataAsync(UrnContext context, string path, CancellationToken cancellationToken)
     {
         // Wrap synchronous method
