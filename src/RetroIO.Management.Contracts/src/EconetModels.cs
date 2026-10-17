@@ -7,20 +7,47 @@
 
 namespace RetroIO.Management.Contracts;
 
+/// <summary>
+/// Counters for the Econet file server.
+/// </summary>
 public class EconetStatisticsResponse
 {
+    /// <summary>
+    /// Gets or sets the number of sessions that are open now.
+    /// </summary>
     public int ActiveSessions { get; set; }
+    /// <summary>
+    /// Gets or sets the total number of requests handled.
+    /// </summary>
     public long TotalRequests { get; set; }
+    /// <summary>
+    /// Gets or sets the total number of bytes transferred.
+    /// </summary>
     public long BytesTransferred { get; set; }
+    /// <summary>
+    /// Gets or sets the server uptime as text.
+    /// </summary>
     public string Uptime { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// A list of Econet sessions.
+/// </summary>
 public class EconetSessionsResponse
 {
+    /// <summary>
+    /// Gets or sets the sessions.
+    /// </summary>
     public List<EconetSessionInfo> Sessions { get; set; } = new();
+    /// <summary>
+    /// Gets or sets the number of sessions.
+    /// </summary>
     public int Total { get; set; }
 }
 
+/// <summary>
+/// One Econet client session.
+/// </summary>
 public class EconetSessionInfo
 {
     /// <summary>
@@ -59,25 +86,73 @@ public class EconetSessionInfo
     public string CurrentDirectory { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// The Econet server settings as the management API returns them.
+/// </summary>
 public class EconetSettingsDto
 {
+    /// <summary>
+    /// Gets or sets the UDP port.
+    /// </summary>
     public int UdpPort { get; set; }
+    /// <summary>
+    /// Gets or sets whether the UDP transport is enabled.
+    /// </summary>
     public bool UdpEnabled { get; set; }
+    /// <summary>
+    /// Gets or sets the network number of the server.
+    /// </summary>
     public byte Net { get; set; }
+    /// <summary>
+    /// Gets or sets the station number of the server.
+    /// </summary>
     public byte Station { get; set; }
+    /// <summary>
+    /// Gets or sets the root folder that is served.
+    /// </summary>
     public string RootPath { get; set; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the disc name.
+    /// </summary>
     public string DiscName { get; set; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the version text, or null when not set.
+    /// </summary>
     public string? VersionString { get; set; }
 }
 
+/// <summary>
+/// A request to change Econet server settings. A property left null is not changed.
+/// </summary>
 public class UpdateEconetSettingsRequest
 {
+    /// <summary>
+    /// Gets or sets the new UDP port, or null to keep the current one.
+    /// </summary>
     public int? UdpPort { get; set; }
+    /// <summary>
+    /// Gets or sets whether the UDP transport is enabled, or null to keep the current value.
+    /// </summary>
     public bool? UdpEnabled { get; set; }
+    /// <summary>
+    /// Gets or sets the new network number, or null to keep the current one.
+    /// </summary>
     public byte? Net { get; set; }
+    /// <summary>
+    /// Gets or sets the new station number, or null to keep the current one.
+    /// </summary>
     public byte? Station { get; set; }
+    /// <summary>
+    /// Gets or sets the new root folder, or null to keep the current one.
+    /// </summary>
     public string? RootPath { get; set; }
+    /// <summary>
+    /// Gets or sets the new disc name, or null to keep the current one.
+    /// </summary>
     public string? DiscName { get; set; }
+    /// <summary>
+    /// Gets or sets the new version text, or null to keep the current one.
+    /// </summary>
     public string? VersionString { get; set; }
 }
 
