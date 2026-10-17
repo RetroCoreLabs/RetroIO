@@ -13,15 +13,33 @@ using RetroIO.Protocols.Econet.Server;
 
 namespace RetroIO.Protocols.Econet.FileServer.Handlers;
 
+/// <summary>
+/// Handles the data, acknowledgement and negative acknowledgement packets of file loads and saves in progress.
+/// </summary>
 public sealed class BulkTransferHandler
 {
     private readonly FileServerContext _context;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public BulkTransferHandler(FileServerContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Writes a data packet of a save to its file. When the last byte has arrived, completes the save and builds the final reply.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound data packet. Its port selects the save transfer.
+    /// </param>
+    /// <returns>
+    /// The acknowledgement for the packet, the final reply when the save is complete, or null when no save is registered on the port.
+    /// </returns>
     public EconetMessage? HandleData(EconetMessage request)
     {
         InboundSaveTransfer? transfer = _context.BulkTransfers.GetSaveTransfer(request.EconetPort);
@@ -72,6 +90,15 @@ public sealed class BulkTransferHandler
         return BuildReply(request, transfer.AckPort, FileServerReply.Success());
     }
 
+    /// <summary>
+    /// Takes the next queued packet of the load transfer of the sending station.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound acknowledgement.
+    /// </param>
+    /// <returns>
+    /// The next packet to send, or null when the station has no packet left.
+    /// </returns>
     public EconetMessage? HandleAck(EconetMessage request)
     {
         BulkPacket? packet = _context.BulkTransfers.DequeueLoadPacket(
@@ -112,6 +139,12 @@ public sealed class BulkTransferHandler
         };
     }
 
+    /// <summary>
+    /// Aborts the load transfer of the sending station and records it as aborted in the activity log.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound negative acknowledgement.
+    /// </param>
     public void HandleNak(EconetMessage request)
     {
         OutboundLoadTransfer? transfer = _context.BulkTransfers.GetLoadTransfer(request.ClientNet, request.ClientStation);

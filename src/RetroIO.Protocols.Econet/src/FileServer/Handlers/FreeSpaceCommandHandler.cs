@@ -22,11 +22,29 @@ public sealed class FreeSpaceCommandHandler
 {
     private readonly FileServerContext _context;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public FreeSpaceCommandHandler(FileServerContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Answers the FreeSpace and UserFreeSpace opcodes.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound message.
+    /// </param>
+    /// <param name="fsRequest">
+    /// The decoded file server request.
+    /// </param>
+    /// <returns>
+    /// The reply message, or null for any other opcode.
+    /// </returns>
     public EconetMessage? Handle(EconetMessage request, FileServerRequest fsRequest)
     {
         return fsRequest.Opcode switch

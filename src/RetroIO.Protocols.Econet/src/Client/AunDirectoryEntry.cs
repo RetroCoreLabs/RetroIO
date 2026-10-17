@@ -12,7 +12,16 @@ namespace RetroIO.Protocols.Econet.Client;
 /// </summary>
 public sealed class AunDirectoryEntry
 {
+  /// <summary>
+  /// Gets the name of the entry.
+  /// </summary>
   public string Name { get; init; } = string.Empty;
+  /// <summary>
+  /// Gets a value indicating whether the entry is a directory.
+  /// </summary>
   public bool IsDirectory { get; init; }
+  /// <summary>
+  /// Gets the size of the entry in bytes.
+  /// </summary>
   public long Size { get; init; }
 }

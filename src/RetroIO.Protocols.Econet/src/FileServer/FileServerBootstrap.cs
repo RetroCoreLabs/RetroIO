@@ -9,8 +9,23 @@ using RetroIO.Server.Core.FileSystem;
 
 namespace RetroIO.Protocols.Econet.FileServer;
 
+/// <summary>
+/// Creates the directory layout a new file server needs.
+/// </summary>
 public static class FileServerBootstrap
 {
+    /// <summary>
+    /// Creates the root directory, the disc directory and its USER directory when they are missing, then writes the sample files.
+    /// </summary>
+    /// <param name="fileSystem">
+    /// The file system used to check which directories exist.
+    /// </param>
+    /// <param name="rootDirectory">
+    /// The root directory of the file server.
+    /// </param>
+    /// <param name="discName">
+    /// The disc name. The disc directory is named 0 followed by this name.
+    /// </param>
     public static void EnsureLayout(IFileSystemBackend fileSystem, string rootDirectory, string discName)
     {
         string discDirectoryName = "0" + discName;

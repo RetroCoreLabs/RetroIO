@@ -19,11 +19,29 @@ public sealed class SjOpcodeHandler
 {
     private readonly FileServerContext _context;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public SjOpcodeHandler(FileServerContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Answers the SjOperation and SjOperationReply opcodes. Both need a logged in session.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound message.
+    /// </param>
+    /// <param name="fsRequest">
+    /// The decoded file server request.
+    /// </param>
+    /// <returns>
+    /// The reply message, or null for any other opcode.
+    /// </returns>
     public EconetMessage? Handle(EconetMessage request, FileServerRequest fsRequest)
     {
         if (fsRequest.Opcode is not (FileServerOpcodes.SjOperation or FileServerOpcodes.SjOperationReply))

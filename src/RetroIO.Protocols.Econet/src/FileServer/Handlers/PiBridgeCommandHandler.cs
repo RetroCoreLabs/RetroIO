@@ -22,11 +22,29 @@ public sealed class PiBridgeCommandHandler
 {
     private readonly FileServerContext _context;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public PiBridgeCommandHandler(FileServerContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Runs the PiBridge sub-operation selected by the first parameter byte. Sub-operations 16 to 31 need an administrator session.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound message.
+    /// </param>
+    /// <param name="fsRequest">
+    /// The decoded file server request.
+    /// </param>
+    /// <returns>
+    /// The reply message.
+    /// </returns>
     public EconetMessage Handle(EconetMessage request, FileServerRequest fsRequest)
     {
         byte arg = fsRequest.Parameters.Length > 0 ? fsRequest.Parameters[0] : (byte)0;

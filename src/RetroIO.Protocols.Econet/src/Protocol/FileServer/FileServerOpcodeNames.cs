@@ -15,6 +15,18 @@ namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 /// </summary>
 public static class FileServerOpcodeNames
 {
+    /// <summary>
+    /// Converts a byte to a file server opcode.
+    /// </summary>
+    /// <param name="value">
+    /// The opcode byte.
+    /// </param>
+    /// <param name="opcode">
+    /// Receives the opcode, or the default value when the byte is not defined.
+    /// </param>
+    /// <returns>
+    /// True when the byte is a defined opcode, otherwise false.
+    /// </returns>
     public static bool TryGetOpcode(byte value, out FileServerOpcode opcode)
     {
         if (Enum.IsDefined(typeof(FileServerOpcode), value))
@@ -27,6 +39,15 @@ public static class FileServerOpcodeNames
         return false;
     }
 
+    /// <summary>
+    /// Gets the display name of an opcode byte.
+    /// </summary>
+    /// <param name="opcode">
+    /// The opcode byte.
+    /// </param>
+    /// <returns>
+    /// The name, a special text for port 0x99 used as an opcode, or Unknown opcode.
+    /// </returns>
     public static string GetName(byte opcode)
     {
         if (opcode == EconetPorts.FileServer)
@@ -37,6 +58,15 @@ public static class FileServerOpcodeNames
             : "Unknown opcode";
     }
 
+    /// <summary>
+    /// Gets the display name of an opcode byte followed by the byte in hex.
+    /// </summary>
+    /// <param name="opcode">
+    /// The opcode byte.
+    /// </param>
+    /// <returns>
+    /// The name and the hex value, or a special text for port 0x99 used as an opcode.
+    /// </returns>
     public static string GetDisplayName(byte opcode)
     {
         if (opcode == EconetPorts.FileServer)
@@ -67,6 +97,15 @@ public static class FileServerOpcodeNames
         return $"Unknown 0x{opcode:X2}";
     }
 
+    /// <summary>
+    /// Gets the display name of an opcode.
+    /// </summary>
+    /// <param name="opcode">
+    /// The opcode.
+    /// </param>
+    /// <returns>
+    /// The name, or the opcode name from the enumeration when it has no display name.
+    /// </returns>
     public static string GetName(FileServerOpcode opcode) => opcode switch
     {
         FileServerOpcode.OsCli => "OS CLI",
@@ -108,6 +147,15 @@ public static class FileServerOpcodeNames
         _ => opcode.ToString(),
     };
 
+    /// <summary>
+    /// Gets a short label for a star command.
+    /// </summary>
+    /// <param name="commandText">
+    /// The command text.
+    /// </param>
+    /// <returns>
+    /// A label such as *CAT or *DIR for a known command start, or a star followed by the first word. Returns OS CLI for an empty command.
+    /// </returns>
     public static string GetOsCliDisplayName(string commandText)
     {
         string normalized = AcornPath.NormalizeCommand(commandText);

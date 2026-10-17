@@ -15,8 +15,20 @@ namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 /// </summary>
 public static class FileServerReply
 {
+    /// <summary>
+    /// The carriage return byte, 0x0D, that ends text in a reply.
+    /// </summary>
     public const byte CarriageReturn = 0x0D;
 
+    /// <summary>
+    /// Builds a success reply.
+    /// </summary>
+    /// <param name="payloadAfterStatus">
+    /// The data placed after the two status bytes.
+    /// </param>
+    /// <returns>
+    /// The two status bytes, both 0, followed by the data.
+    /// </returns>
     public static byte[] Success(ReadOnlySpan<byte> payloadAfterStatus = default)
     {
         if (payloadAfterStatus.IsEmpty)
@@ -92,6 +104,18 @@ public static class FileServerReply
     /// </returns>
     public static byte[] UserFreeSpaceDummy() => [0, 0, 0, 0, 0, 0x10];
 
+    /// <summary>
+    /// Builds an error reply.
+    /// </summary>
+    /// <param name="errorCode">
+    /// The error code, stored in byte 1.
+    /// </param>
+    /// <param name="message">
+    /// The error text, which is followed by a carriage return.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] Error(byte errorCode, string message)
     {
         byte[] messageBytes = Encoding.ASCII.GetBytes(message);
@@ -102,6 +126,15 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds a version reply.
+    /// </summary>
+    /// <param name="versionString">
+    /// The version text.
+    /// </param>
+    /// <returns>
+    /// Two zero bytes, the text and a carriage return.
+    /// </returns>
     public static byte[] Version(string versionString)
     {
         byte[] text = Encoding.ASCII.GetBytes(versionString);
@@ -134,6 +167,24 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds the reply to a successful login.
+    /// </summary>
+    /// <param name="urd">
+    /// The internal handle of the user root directory.
+    /// </param>
+    /// <param name="cwd">
+    /// The internal handle of the current directory.
+    /// </param>
+    /// <param name="lib">
+    /// The internal handle of the library directory.
+    /// </param>
+    /// <param name="bootOpt">
+    /// The boot option.
+    /// </param>
+    /// <returns>
+    /// The login return code, 0, the three handles converted to wire bit masks, and the boot option.
+    /// </returns>
     public static byte[] LoginSuccess(byte urd, byte cwd, byte lib, byte bootOpt)
     {
         return
@@ -190,6 +241,18 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds a reply with a given return code.
+    /// </summary>
+    /// <param name="returnCode">
+    /// The return code, stored in byte 0.
+    /// </param>
+    /// <param name="payload">
+    /// The data placed after the first two bytes.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] WithReturnCode(byte returnCode, ReadOnlySpan<byte> payload)
     {
         byte[] reply = new byte[2 + payload.Length];
@@ -198,6 +261,15 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds a reply that holds text followed by a carriage return.
+    /// </summary>
+    /// <param name="text">
+    /// The text.
+    /// </param>
+    /// <returns>
+    /// Two zero bytes, the text and a carriage return.
+    /// </returns>
     public static byte[] AppendCr(string text)
     {
         byte[] ascii = Encoding.ASCII.GetBytes(text);
@@ -207,6 +279,21 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds the reply of a load command.
+    /// </summary>
+    /// <param name="loadAddress">
+    /// The load address, written as 4 bytes with the lowest byte first.
+    /// </param>
+    /// <param name="loadAddressFound">
+    /// True when the load address is known. This writes 0xFF, otherwise 0.
+    /// </param>
+    /// <param name="filename">
+    /// The file name, followed by a carriage return.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] LoadOsCli(uint loadAddress, bool loadAddressFound, string filename)
     {
         byte[] nameBytes = Encoding.ASCII.GetBytes(filename);
@@ -223,6 +310,30 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds the 16-byte reply that gives the attributes of a file to load.
+    /// </summary>
+    /// <param name="load">
+    /// The load address.
+    /// </param>
+    /// <param name="exec">
+    /// The execution address.
+    /// </param>
+    /// <param name="length">
+    /// The file length. The low 3 bytes are written.
+    /// </param>
+    /// <param name="perm">
+    /// The access byte.
+    /// </param>
+    /// <param name="day">
+    /// The day byte of the date.
+    /// </param>
+    /// <param name="monthYear">
+    /// The month and year byte of the date.
+    /// </param>
+    /// <returns>
+    /// The reply payload, with bytes 0 and 1 set to 0.
+    /// </returns>
     public static byte[] LoadMetadata(uint load, uint exec, int length, byte perm, byte day, byte monthYear)
     {
         byte[] reply = new byte[16];
@@ -237,6 +348,15 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds the reply that tells the client where to send the data of a save.
+    /// </summary>
+    /// <param name="bulkPort">
+    /// The port that receives the data.
+    /// </param>
+    /// <returns>
+    /// The bytes 0, 0, the port, 0x00 and 0x05.
+    /// </returns>
     public static byte[] SaveSetup(byte bulkPort)
     {
         return [0, 0, bulkPort, 0x00, 0x05];
@@ -275,6 +395,24 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds an examine reply.
+    /// </summary>
+    /// <param name="examined">
+    /// The number of entries, stored in byte 2.
+    /// </param>
+    /// <param name="dirSize">
+    /// The value stored in byte 3.
+    /// </param>
+    /// <param name="entries">
+    /// The entry bytes, placed from byte 4.
+    /// </param>
+    /// <param name="terminal">
+    /// True to add a final 0x80 byte.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] ExamineEntries(int examined, int dirSize, ReadOnlySpan<byte> entries, bool terminal)
     {
         int total = 4 + entries.Length + (terminal ? 1 : 0);
@@ -287,11 +425,38 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds the reply to a read byte request.
+    /// </summary>
+    /// <param name="value">
+    /// The byte that was read.
+    /// </param>
+    /// <param name="flags">
+    /// The flag byte placed after the value.
+    /// </param>
+    /// <returns>
+    /// The bytes 0, 0, the value and the flags.
+    /// </returns>
     public static byte[] GetByte(byte value, byte flags)
     {
         return [0, 0, value, flags];
     }
 
+    /// <summary>
+    /// Builds the 35-byte reply of a catalogue header request.
+    /// </summary>
+    /// <param name="dirTail">
+    /// The directory name, padded or cut to 11 characters.
+    /// </param>
+    /// <param name="ownerFlag">
+    /// The owner character, stored in byte 13.
+    /// </param>
+    /// <param name="discName">
+    /// The disc name, padded or cut to 16 characters.
+    /// </param>
+    /// <returns>
+    /// The reply payload, which ends with a carriage return and 0x80.
+    /// </returns>
     public static byte[] CatHeader(string dirTail, char ownerFlag, string discName)
     {
         byte[] reply = new byte[35];
@@ -305,6 +470,18 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds the reply that lists logged on users.
+    /// </summary>
+    /// <param name="count">
+    /// The number of entries, stored in byte 2.
+    /// </param>
+    /// <param name="entries">
+    /// The entry bytes, placed from byte 3.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] LoggedOnUsers(int count, ReadOnlySpan<byte> entries)
     {
         byte[] reply = new byte[3 + entries.Length];
@@ -313,6 +490,12 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds the reply for an object that does not exist.
+    /// </summary>
+    /// <returns>
+    /// Three zero bytes.
+    /// </returns>
     public static byte[] ObjectInfoNotFound()
     {
         return [0, 0, 0];
@@ -394,6 +577,30 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds an object information reply.
+    /// </summary>
+    /// <param name="fileType">
+    /// The object type byte.
+    /// </param>
+    /// <param name="load">
+    /// The load address.
+    /// </param>
+    /// <param name="exec">
+    /// The execution address.
+    /// </param>
+    /// <param name="length">
+    /// The length. The low 3 bytes are written.
+    /// </param>
+    /// <param name="access">
+    /// The access byte.
+    /// </param>
+    /// <param name="extra">
+    /// Extra bytes placed after the access byte.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] ObjectInfo(
         byte fileType,
         uint load,
@@ -435,6 +642,18 @@ public static class FileServerReply
         ];
     }
 
+    /// <summary>
+    /// Builds the final reply of a read bytes request.
+    /// </summary>
+    /// <param name="eof">
+    /// True to set the end of file flag, which is 0x80.
+    /// </param>
+    /// <param name="totalReceived">
+    /// The number of bytes transferred. The low 3 bytes are written.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] GetBytesComplete(bool eof, int totalReceived)
     {
         return
@@ -448,6 +667,24 @@ public static class FileServerReply
         ];
     }
 
+    /// <summary>
+    /// Builds the reply of a save command.
+    /// </summary>
+    /// <param name="load">
+    /// The load address.
+    /// </param>
+    /// <param name="exec">
+    /// The execution address.
+    /// </param>
+    /// <param name="length">
+    /// The file length. The low 3 bytes are written.
+    /// </param>
+    /// <param name="filename">
+    /// The file name, followed by a carriage return.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] SaveOsCli(uint load, uint exec, int length, string filename)
     {
         byte[] nameBytes = Encoding.ASCII.GetBytes(filename);
@@ -522,11 +759,41 @@ public static class FileServerReply
         return reply;
     }
 
+    /// <summary>
+    /// Builds a reply that holds a count as 2 bytes, lowest byte first.
+    /// </summary>
+    /// <param name="count">
+    /// The count.
+    /// </param>
+    /// <returns>
+    /// The reply payload.
+    /// </returns>
     public static byte[] LogoffCount(int count)
     {
         return [0, 0, (byte)count, (byte)(count >> 8)];
     }
 
+    /// <summary>
+    /// Writes a 27-byte catalogue entry into a buffer.
+    /// </summary>
+    /// <param name="destination">
+    /// The buffer, which must hold at least 27 bytes.
+    /// </param>
+    /// <param name="name">
+    /// The name, cut to 10 characters and padded with spaces.
+    /// </param>
+    /// <param name="isDirectory">
+    /// True for a directory. A directory gets the length 0x000200.
+    /// </param>
+    /// <param name="length">
+    /// The file length. The low 3 bytes are written for a file.
+    /// </param>
+    /// <param name="perm">
+    /// The access byte, written at offset 18.
+    /// </param>
+    /// <returns>
+    /// The number of bytes in an entry, 27.
+    /// </returns>
     public static int WriteCatalogEntry(Span<byte> destination, string name, bool isDirectory, long length, byte perm)
     {
         byte[] ascii = Encoding.ASCII.GetBytes(name);

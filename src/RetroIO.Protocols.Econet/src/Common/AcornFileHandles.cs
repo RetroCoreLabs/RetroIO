@@ -16,12 +16,30 @@ namespace RetroIO.Protocols.Econet.Common;
 /// </summary>
 public static class AcornFileHandles
 {
+    /// <summary>
+    /// Wire bit mask for the user root directory handle.
+    /// </summary>
     public const byte WireUrd = 0x01;
+    /// <summary>
+    /// Wire bit mask for the current directory handle.
+    /// </summary>
     public const byte WireCwd = 0x02;
+    /// <summary>
+    /// Wire bit mask for the library directory handle.
+    /// </summary>
     public const byte WireLib = 0x04;
 
+    /// <summary>
+    /// Internal handle index of the user root directory.
+    /// </summary>
     public const byte InternalUrd = 0x01;
+    /// <summary>
+    /// Internal handle index of the current directory.
+    /// </summary>
     public const byte InternalCwd = 0x02;
+    /// <summary>
+    /// Internal handle index of the library directory.
+    /// </summary>
     public const byte InternalLib = 0x03;
 
     /// <summary>
@@ -47,6 +65,21 @@ public static class AcornFileHandles
     public static byte MulHandle(byte internalHandle) =>
         internalHandle is >= 1 and <= 8 ? (byte)(1 << (internalHandle - 1)) : internalHandle;
 
+    /// <summary>
+    /// Converts the wire user root handle of a request to an internal handle.
+    /// </summary>
+    /// <param name="wireHandle">
+    /// The handle byte as sent on the wire.
+    /// </param>
+    /// <param name="session">
+    /// The session whose user root handle is used as fallback.
+    /// </param>
+    /// <param name="opcode">
+    /// The file server opcode of the request.
+    /// </param>
+    /// <returns>
+    /// The wire handle unchanged when the opcode skips the conversion, otherwise the internal handle, or the session user root handle when the conversion gives 0.
+    /// </returns>
     public static byte ResolveUrd(byte wireHandle, FileServerSession session, byte opcode)
     {
         if (SkipsUrdDivHandle(opcode))
@@ -56,12 +89,45 @@ public static class AcornFileHandles
         return internalHandle != 0 ? internalHandle : session.UrdHandle;
     }
 
+    /// <summary>
+    /// Converts the wire current directory handle of a request to an internal handle.
+    /// </summary>
+    /// <param name="wireHandle">
+    /// The handle byte as sent on the wire.
+    /// </param>
+    /// <param name="session">
+    /// The session whose current directory handle is used as fallback.
+    /// </param>
+    /// <returns>
+    /// The internal handle, or the session current directory handle when the conversion gives 0.
+    /// </returns>
     public static byte ResolveCwd(byte wireHandle, FileServerSession session) =>
         DivHandle(wireHandle) is byte h and not 0 ? h : session.CwdHandle;
 
+    /// <summary>
+    /// Converts the wire library handle of a request to an internal handle.
+    /// </summary>
+    /// <param name="wireHandle">
+    /// The handle byte as sent on the wire.
+    /// </param>
+    /// <param name="session">
+    /// The session whose library handle is used as fallback.
+    /// </param>
+    /// <returns>
+    /// The internal handle, or the session library handle when the conversion gives 0.
+    /// </returns>
     public static byte ResolveLib(byte wireHandle, FileServerSession session) =>
         DivHandle(wireHandle) is byte h and not 0 ? h : session.LibHandle;
 
+    /// <summary>
+    /// Reports whether the user root handle of the opcode is left as sent instead of being converted.
+    /// </summary>
+    /// <param name="opcode">
+    /// The file server opcode of the request.
+    /// </param>
+    /// <returns>
+    /// True for Save, Load, LoadAs, GetBytes and PutBytes, otherwise false.
+    /// </returns>
     public static bool SkipsUrdDivHandle(byte opcode) =>
         opcode is FileServerOpcodes.Save
             or FileServerOpcodes.Load

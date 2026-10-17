@@ -16,6 +16,9 @@ namespace RetroIO.Protocols.Econet.FileServer;
 /// </summary>
 public static class EconetSampleCatalog
 {
+    /// <summary>
+    /// The names of the sample files: HELLO, README and BASIC.
+    /// </summary>
     public static readonly IReadOnlyList<string> DefaultFileNames = ["HELLO", "README", "BASIC"];
 
     private static readonly (string Name, string Content)[] Files =
@@ -25,8 +28,23 @@ public static class EconetSampleCatalog
         ("BASIC", "10 PRINT \"Econet catalogue OK\"\r\n20 PRINT \"HELLO from RetroFS\"\r\n30 END\r\n"),
     ];
 
+    /// <summary>
+    /// Gets the name and the text of each sample file.
+    /// </summary>
+    /// <returns>
+    /// The sample files as pairs of name and content.
+    /// </returns>
     public static IReadOnlyList<(string Name, string Content)> GetSampleTexts() => Files;
 
+    /// <summary>
+    /// Writes the sample files into a directory. A file that already exists is not touched.
+    /// </summary>
+    /// <param name="fileSystem">
+    /// The file system to write to.
+    /// </param>
+    /// <param name="userDirectory">
+    /// The directory that receives the sample files.
+    /// </param>
     public static void EnsureUserSamples(IFileSystemBackend fileSystem, string userDirectory)
     {
         for (int i = 0; i < Files.Length; i++)

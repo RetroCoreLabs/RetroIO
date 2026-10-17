@@ -17,6 +17,33 @@ namespace RetroIO.Protocols.Econet.Server;
 /// </summary>
 public static class EconetServerJsonLog
 {
+    /// <summary>
+    /// Writes a JSON log event for a handled command. Does nothing when the JSON log is not configured.
+    /// </summary>
+    /// <param name="clientNet">
+    /// The network number of the client.
+    /// </param>
+    /// <param name="clientStation">
+    /// The station number of the client.
+    /// </param>
+    /// <param name="username">
+    /// The user name of the client. An empty name is logged as null.
+    /// </param>
+    /// <param name="fsRequest">
+    /// The request. Login passwords are removed from the logged bytes.
+    /// </param>
+    /// <param name="replyPayload">
+    /// The reply bytes, or null when there is no reply.
+    /// </param>
+    /// <param name="session">
+    /// The session of the client, or null when it is not logged in.
+    /// </param>
+    /// <param name="aunSequence">
+    /// The AUN sequence number of the request.
+    /// </param>
+    /// <param name="replyPort">
+    /// The reply port to log. When null, the reply port of the request is used.
+    /// </param>
     public static void WriteCommand(
         byte clientNet,
         byte clientStation,
@@ -64,6 +91,18 @@ public static class EconetServerJsonLog
         RetroFsServerJsonLog.Write("econet-command", level, fields);
     }
 
+    /// <summary>
+    /// Writes a JSON log event for a request that was too short to parse. Does nothing when the JSON log is not configured.
+    /// </summary>
+    /// <param name="clientNet">
+    /// The network number of the client.
+    /// </param>
+    /// <param name="clientStation">
+    /// The station number of the client.
+    /// </param>
+    /// <param name="payload">
+    /// The bytes of the request.
+    /// </param>
     public static void WriteMalformed(
         byte clientNet,
         byte clientStation,
@@ -82,6 +121,12 @@ public static class EconetServerJsonLog
         });
     }
 
+    /// <summary>
+    /// Writes a JSON log event for a received AUN message. Does nothing when the JSON log is not configured.
+    /// </summary>
+    /// <param name="message">
+    /// The received message.
+    /// </param>
     public static void WriteInboundAun(EconetMessage message)
     {
         if (!RetroFsServerJsonLog.IsConfigured)
@@ -99,6 +144,12 @@ public static class EconetServerJsonLog
         });
     }
 
+    /// <summary>
+    /// Writes a JSON log event for an AUN message that is sent. Only unicast messages are logged, and nothing is written when the JSON log is not configured.
+    /// </summary>
+    /// <param name="message">
+    /// The message to be sent.
+    /// </param>
     public static void WriteOutboundAun(EconetMessage message)
     {
         if (!RetroFsServerJsonLog.IsConfigured)

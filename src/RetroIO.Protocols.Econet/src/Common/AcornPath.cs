@@ -14,6 +14,15 @@ namespace RetroIO.Protocols.Econet.Common;
 /// </summary>
 public static class AcornPath
 {
+    /// <summary>
+    /// Reads an ASCII string up to the first carriage return or the end of the data.
+    /// </summary>
+    /// <param name="data">
+    /// The bytes to read from.
+    /// </param>
+    /// <returns>
+    /// The text before the first carriage return, not including it.
+    /// </returns>
     public static string ReadCrTerminatedString(ReadOnlySpan<byte> data)
     {
         int length = 0;
@@ -23,11 +32,29 @@ public static class AcornPath
         return Encoding.ASCII.GetString(data.Slice(0, length));
     }
 
+    /// <summary>
+    /// Trims a command line and converts it to upper case.
+    /// </summary>
+    /// <param name="command">
+    /// The command line.
+    /// </param>
+    /// <returns>
+    /// The trimmed upper case command.
+    /// </returns>
     public static string NormalizeCommand(string command)
     {
         return command.Trim().ToUpperInvariant();
     }
 
+    /// <summary>
+    /// Trims a string and removes one pair of double quotes around it.
+    /// </summary>
+    /// <param name="value">
+    /// The text to clean.
+    /// </param>
+    /// <returns>
+    /// The trimmed text without the surrounding quotes.
+    /// </returns>
     public static string StripQuotes(string value)
     {
         string trimmed = value.Trim();
@@ -37,6 +64,21 @@ public static class AcornPath
         return trimmed;
     }
 
+    /// <summary>
+    /// Parses a login command of the form I AM, IAM, LOGIN or LOGON followed by a user name and an optional password.
+    /// </summary>
+    /// <param name="command">
+    /// The command line.
+    /// </param>
+    /// <param name="username">
+    /// Receives the user name padded to 10 characters, or an empty string when parsing fails.
+    /// </param>
+    /// <param name="password">
+    /// Receives the password padded to 10 characters, or an empty string when parsing fails.
+    /// </param>
+    /// <returns>
+    /// True when the command starts with one of the four login words, otherwise false.
+    /// </returns>
     public static bool TryParseIam(string command, out string username, out string password)
     {
         username = string.Empty;
@@ -69,6 +111,15 @@ public static class AcornPath
         return true;
     }
 
+    /// <summary>
+    /// Cuts a user name to 10 characters and pads it with spaces.
+    /// </summary>
+    /// <param name="value">
+    /// The user name.
+    /// </param>
+    /// <returns>
+    /// The name cut to 10 characters and padded on the right with spaces to 10 characters.
+    /// </returns>
     public static string PadUsername(string value)
     {
         if (value.Length > 10)
@@ -76,11 +127,32 @@ public static class AcornPath
         return value.PadRight(10, ' ');
     }
 
+    /// <summary>
+    /// Compares two user names after trimming and padding them to 10 characters, ignoring case.
+    /// </summary>
+    /// <param name="left">
+    /// The first user name.
+    /// </param>
+    /// <param name="right">
+    /// The second user name.
+    /// </param>
+    /// <returns>
+    /// True when the two padded names are equal ignoring case.
+    /// </returns>
     public static bool UsernamesEqual(string left, string right)
     {
         return string.Equals(PadUsername(left.Trim()), PadUsername(right.Trim()), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Cuts a password to 10 characters and pads it with spaces.
+    /// </summary>
+    /// <param name="value">
+    /// The password text.
+    /// </param>
+    /// <returns>
+    /// The password cut to 10 characters and padded on the right with spaces to 10 characters.
+    /// </returns>
     public static string PadPassword(string value)
     {
         if (value.Length > 10)
@@ -258,6 +330,15 @@ public static class AcornPath
         monthYear = (byte)((utc.Month & 0x0F) | ((yearBits & 0x0F) << 4));
     }
 
+    /// <summary>
+    /// Converts an Acorn dot-separated path to a host relative path.
+    /// </summary>
+    /// <param name="acornPath">
+    /// The Acorn path. A leading colon is removed.
+    /// </param>
+    /// <returns>
+    /// The path with dots replaced by slashes, the pound sign replaced by a hash sign and leading and trailing slashes removed. Returns an empty string for an empty path or a single dot.
+    /// </returns>
     public static string AcornToUnixRelative(string acornPath)
     {
         if (string.IsNullOrWhiteSpace(acornPath) || acornPath == ".")
@@ -272,6 +353,18 @@ public static class AcornPath
         return path.Trim('/');
     }
 
+    /// <summary>
+    /// Pads or cuts a name to the 10 characters of an Acorn catalogue name.
+    /// </summary>
+    /// <param name="unixName">
+    /// The host file or directory name.
+    /// </param>
+    /// <param name="isDirectory">
+    /// Not used.
+    /// </param>
+    /// <returns>
+    /// The name cut to 10 characters and padded on the right with spaces to 10 characters.
+    /// </returns>
     public static string ToAcornCatalogName(string unixName, bool isDirectory)
     {
         string name = unixName;

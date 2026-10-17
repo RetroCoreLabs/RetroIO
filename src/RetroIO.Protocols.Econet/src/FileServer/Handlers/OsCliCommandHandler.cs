@@ -27,12 +27,30 @@ public sealed class OsCliCommandHandler
     private readonly FileServerContext _context;
     private readonly OsCliCommandRegistry _registry;
 
+    /// <summary>
+    /// Creates the handler and builds the command registry.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public OsCliCommandHandler(FileServerContext context)
     {
         _context = context;
         _registry = OsCliCommandTable.Build(context);
     }
 
+    /// <summary>
+    /// Runs the star command in the request after checking the login and system privilege the command needs.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound message.
+    /// </param>
+    /// <param name="fsRequest">
+    /// The decoded file server request.
+    /// </param>
+    /// <returns>
+    /// The reply message. A command that is not in the registry gets the unknown command reply.
+    /// </returns>
     public EconetMessage? Handle(EconetMessage request, FileServerRequest fsRequest)
     {
         string command = AcornPath.ReadCrTerminatedString(fsRequest.Parameters);

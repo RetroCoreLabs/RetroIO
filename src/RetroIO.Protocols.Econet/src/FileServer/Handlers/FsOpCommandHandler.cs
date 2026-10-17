@@ -30,6 +30,12 @@ public sealed class FsOpCommandHandler
     private readonly FileServerContext _context;
     private readonly IFileServerOperation?[] _table;
 
+    /// <summary>
+    /// Creates the handler and builds the operation table.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public FsOpCommandHandler(FileServerContext context)
     {
         _context = context;

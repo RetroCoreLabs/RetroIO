@@ -12,6 +12,9 @@ namespace RetroIO.Protocols.Econet.Server;
 /// </summary>
 public sealed class EconetActivityLog : IEconetActivityLog
 {
+    /// <summary>
+    /// The default number of entries kept for commands and for transfers, 100.
+    /// </summary>
     public const int DefaultCapacity = 100;
 
     private readonly object _sync = new();
@@ -22,6 +25,15 @@ public sealed class EconetActivityLog : IEconetActivityLog
     private int _transferHead;
     private int _transferCount;
 
+    /// <summary>
+    /// Creates the log.
+    /// </summary>
+    /// <param name="capacity">
+    /// The number of entries kept for commands and, separately, for transfers.
+    /// </param>
+    /// <exception cref="System.ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="capacity"/> is less than 1.
+    /// </exception>
     public EconetActivityLog(int capacity = DefaultCapacity)
     {
         if (capacity < 1)
@@ -32,10 +44,15 @@ public sealed class EconetActivityLog : IEconetActivityLog
         _transfers = new EconetFileTransferEntry[capacity];
     }
 
+    /// <summary>
+    /// Gets the number of entries kept for commands and, separately, for transfers.
+    /// </summary>
     public int Capacity { get; }
 
+    /// <inheritdoc/>
     public event EventHandler? ActivityRecorded;
 
+    /// <inheritdoc/>
     public void RecordCommand(EconetCommandEntry entry)
     {
         lock (_sync)
@@ -49,6 +66,7 @@ public sealed class EconetActivityLog : IEconetActivityLog
         ActivityRecorded?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <inheritdoc/>
     public void RecordFileTransfer(EconetFileTransferEntry entry)
     {
         lock (_sync)
@@ -62,12 +80,14 @@ public sealed class EconetActivityLog : IEconetActivityLog
         ActivityRecorded?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <inheritdoc/>
     public IReadOnlyList<EconetCommandEntry> GetRecentCommands(int count)
     {
         lock (_sync)
             return CopyRecent(_commands, _commandHead, _commandCount, count);
     }
 
+    /// <inheritdoc/>
     public IReadOnlyList<EconetFileTransferEntry> GetRecentTransfers(int count)
     {
         lock (_sync)

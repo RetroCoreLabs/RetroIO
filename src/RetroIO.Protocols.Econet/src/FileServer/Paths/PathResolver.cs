@@ -13,12 +13,27 @@ using RetroIO.Server.Core.FileSystem;
 
 namespace RetroIO.Protocols.Econet.FileServer.Paths;
 
+/// <summary>
+/// Turns Acorn paths into host paths for a session, using its disc and its directory handles.
+/// </summary>
 public sealed class PathResolver
 {
     private readonly IFileSystemBackend _fileSystem;
     private readonly DiscCatalog _discs;
     private readonly string _rootDirectory;
 
+    /// <summary>
+    /// Creates the resolver.
+    /// </summary>
+    /// <param name="fileSystem">
+    /// The file system the discs are stored on.
+    /// </param>
+    /// <param name="discs">
+    /// The disc catalogue.
+    /// </param>
+    /// <param name="rootDirectory">
+    /// The root directory that holds the disc directories.
+    /// </param>
     public PathResolver(IFileSystemBackend fileSystem, DiscCatalog discs, string rootDirectory)
     {
         _fileSystem = fileSystem;
@@ -26,11 +41,56 @@ public sealed class PathResolver
         _rootDirectory = rootDirectory;
     }
 
+    /// <summary>
+    /// Resolves an Acorn path relative to the current directory of the session.
+    /// </summary>
+    /// <param name="session">
+    /// The session that supplies the disc and directories.
+    /// </param>
+    /// <param name="acornPath">
+    /// The Acorn path.
+    /// </param>
+    /// <param name="unixPath">
+    /// Receives the host path.
+    /// </param>
+    /// <param name="errorCode">
+    /// Receives the file server error code. It is the not found code on failure.
+    /// </param>
+    /// <param name="errorMessage">
+    /// Receives the error text. It is Not found on failure.
+    /// </param>
+    /// <returns>
+    /// True when the path resolves to an existing file or directory.
+    /// </returns>
     public bool TryResolve(FileServerSession session, string acornPath, out string unixPath, out byte errorCode, out string errorMessage)
     {
         return TryResolve(session, acornPath, session.CwdHandle, out unixPath, out errorCode, out errorMessage);
     }
 
+    /// <summary>
+    /// Resolves an Acorn path relative to the home, current or library directory of the session.
+    /// </summary>
+    /// <param name="session">
+    /// The session that supplies the disc and directories.
+    /// </param>
+    /// <param name="acornPath">
+    /// The Acorn path. A path that starts with a colon names a disc, and a path that starts with a dollar sign starts at the root of the current disc.
+    /// </param>
+    /// <param name="relativeTo">
+    /// The directory handle the path is relative to. 1 selects the home directory, 3 the library, anything else the current directory, and 0 means the current directory handle of the session.
+    /// </param>
+    /// <param name="unixPath">
+    /// Receives the host path.
+    /// </param>
+    /// <param name="errorCode">
+    /// Receives the file server error code. It is the not found code on failure.
+    /// </param>
+    /// <param name="errorMessage">
+    /// Receives the error text. It is Not found on failure.
+    /// </param>
+    /// <returns>
+    /// True when the path resolves to an existing file or directory.
+    /// </returns>
     public bool TryResolve(FileServerSession session, string acornPath, byte relativeTo, out string unixPath, out byte errorCode, out string errorMessage)
     {
         unixPath = string.Empty;

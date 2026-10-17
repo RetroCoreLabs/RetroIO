@@ -42,6 +42,36 @@ public sealed class EconetFileServerService : BackgroundService
     // AunOutboundSequence and Econet_Message_Protocol_Analysis.md §7.7.2 / §7.7.5.
     private readonly AunOutboundSequence _outboundSequence = new();
 
+    /// <summary>
+    /// Creates the service.
+    /// </summary>
+    /// <param name="transports">
+    /// The transports that deliver AUN messages.
+    /// </param>
+    /// <param name="commandHandler">
+    /// The handler for file server commands.
+    /// </param>
+    /// <param name="bulkHandler">
+    /// The handler for bulk data transfers.
+    /// </param>
+    /// <param name="sessions">
+    /// The session manager.
+    /// </param>
+    /// <param name="logger">
+    /// The logger.
+    /// </param>
+    /// <param name="rateLimiter">
+    /// The rate limiter, or null for none.
+    /// </param>
+    /// <param name="securityEvents">
+    /// The security event emitter, or null for none.
+    /// </param>
+    /// <param name="statistics">
+    /// The statistics tracker, or null for none.
+    /// </param>
+    /// <param name="configuration">
+    /// The configuration that supplies the reply retransmit settings, or null to use an interval of 1000 ms and 5 transmissions.
+    /// </param>
     public EconetFileServerService(
         ITransport[] transports,
         FileServerCommandHandler commandHandler,
@@ -66,6 +96,15 @@ public sealed class EconetFileServerService : BackgroundService
             configuration?.AunMaxTransmits ?? 5);
     }
 
+    /// <summary>
+    /// Registers the message handler on every transport and runs all transports until the token is cancelled. Does nothing but log an error when there are no transports.
+    /// </summary>
+    /// <param name="stoppingToken">
+    /// A token that signals the service to stop.
+    /// </param>
+    /// <returns>
+    /// A task that completes when all transports have stopped.
+    /// </returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Econet file server starting with {Count} transport(s)...", _transports.Length);

@@ -16,15 +16,36 @@ using RetroIO.Protocols.Econet.Server;
 
 namespace RetroIO.Protocols.Econet.FileServer.Handlers;
 
+/// <summary>
+/// Handles the examine request, which lists the entries of a directory.
+/// </summary>
 public sealed class ExamineCommandHandler
 {
     private readonly FileServerContext _context;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public ExamineCommandHandler(FileServerContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Builds the reply to an examine request for the directory named in the request.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound message.
+    /// </param>
+    /// <param name="fsRequest">
+    /// The decoded file server request.
+    /// </param>
+    /// <returns>
+    /// The reply message.
+    /// </returns>
     public EconetMessage? Handle(EconetMessage request, FileServerRequest fsRequest)
     {
         FileServerSession? session = _context.Sessions.GetSession(request.ClientNet, request.ClientStation);

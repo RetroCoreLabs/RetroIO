@@ -15,10 +15,37 @@ namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 /// </summary>
 public static class FileServerBulkPacketLayout
 {
+    /// <summary>
+    /// Offset of the file name in a load request.
+    /// </summary>
     public const int LoadFilenameOffset = 5;
+    /// <summary>
+    /// Offset of the file name in a save request.
+    /// </summary>
     public const int SaveFilenameOffset = 16;
+    /// <summary>
+    /// The smallest length of a save request in bytes.
+    /// </summary>
     public const int SaveMinimumLength = 17;
 
+    /// <summary>
+    /// Reads the fields of a load request.
+    /// </summary>
+    /// <param name="raw">
+    /// The whole request, starting with the reply port byte.
+    /// </param>
+    /// <param name="dataPort">
+    /// Receives the port the file data is sent to, from byte 2.
+    /// </param>
+    /// <param name="relativeTo">
+    /// Receives the directory handle the name is relative to, from byte 3.
+    /// </param>
+    /// <param name="filename">
+    /// Receives the file name, up to the first carriage return and without surrounding quotes.
+    /// </param>
+    /// <returns>
+    /// True when the request is long enough, otherwise false.
+    /// </returns>
     public static bool TryParseLoad(ReadOnlySpan<byte> raw, out byte dataPort, out byte relativeTo, out string filename)
     {
         dataPort = 0;
@@ -34,6 +61,30 @@ public static class FileServerBulkPacketLayout
         return true;
     }
 
+    /// <summary>
+    /// Reads the fields of a save request.
+    /// </summary>
+    /// <param name="raw">
+    /// The whole request, starting with the reply port byte.
+    /// </param>
+    /// <param name="ackPort">
+    /// Receives the port the acknowledgements are sent to, from byte 2.
+    /// </param>
+    /// <param name="load">
+    /// Receives the load address, from bytes 5 to 8.
+    /// </param>
+    /// <param name="exec">
+    /// Receives the execution address, from bytes 9 to 12.
+    /// </param>
+    /// <param name="length">
+    /// Receives the file length, from bytes 13 to 15.
+    /// </param>
+    /// <param name="filename">
+    /// Receives the file name, up to the first carriage return and without surrounding quotes.
+    /// </param>
+    /// <returns>
+    /// True when the request is at least as long as the minimum save length, otherwise false.
+    /// </returns>
     public static bool TryParseSave(ReadOnlySpan<byte> raw, out byte ackPort, out uint load, out uint exec, out int length, out string filename)
     {
         ackPort = 0;

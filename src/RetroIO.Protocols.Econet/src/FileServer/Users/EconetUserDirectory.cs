@@ -18,11 +18,38 @@ public sealed class EconetUserDirectory
 {
     private readonly IRetroIDP _idp;
 
+    /// <summary>
+    /// Creates the directory.
+    /// </summary>
+    /// <param name="idp">
+    /// The identity provider that holds the users.
+    /// </param>
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="idp"/> is null.
+    /// </exception>
     public EconetUserDirectory(IRetroIDP idp)
     {
         _idp = idp ?? throw new ArgumentNullException(nameof(idp));
     }
 
+    /// <summary>
+    /// Checks a user name and password against the identity provider. Failed and successful logins are recorded and saved.
+    /// </summary>
+    /// <param name="loginUsername">
+    /// The user name as sent by the client.
+    /// </param>
+    /// <param name="acornPassword">
+    /// The password as sent by the client, padded with spaces.
+    /// </param>
+    /// <param name="user">
+    /// Receives the user that was found, or null when no user matches.
+    /// </param>
+    /// <param name="profile">
+    /// Receives the Acorn profile of the user on success, otherwise null.
+    /// </param>
+    /// <returns>
+    /// Success, or UnknownUser, Inactive, WrongPassword or ProtocolNotAllowed for the reason the login is refused.
+    /// </returns>
     public ProtocolAuthResult TryAuthenticate(
         string loginUsername,
         string acornPassword,
@@ -68,6 +95,15 @@ public sealed class EconetUserDirectory
         return ProtocolAuthResult.Success;
     }
 
+    /// <summary>
+    /// Gets the Acorn profile of a user.
+    /// </summary>
+    /// <param name="userId">
+    /// The user identifier.
+    /// </param>
+    /// <returns>
+    /// The profile, or null when the user does not exist or is not active.
+    /// </returns>
     public EconetUserProfile? GetProfile(Guid userId)
     {
         RetroUser? user = _idp.GetUserAsync(userId).AsTask().GetAwaiter().GetResult();
@@ -257,12 +293,33 @@ public sealed class EconetUserDirectory
         return true;
     }
 
+    /// <summary>
+    /// Reports whether a user with a given name exists.
+    /// </summary>
+    /// <param name="loginUsername">
+    /// The user name. Trailing spaces and case are ignored.
+    /// </param>
+    /// <returns>
+    /// True when the user exists.
+    /// </returns>
     public bool UserExists(string loginUsername)
     {
         string paddedUsername = AcornPath.PadUsername(loginUsername.Trim());
         return FindUserByUsername(paddedUsername) != null;
     }
 
+    /// <summary>
+    /// Gets the Acorn profile of the user with a given name.
+    /// </summary>
+    /// <param name="loginUsername">
+    /// The user name. Trailing spaces and case are ignored.
+    /// </param>
+    /// <param name="profile">
+    /// Receives the profile, or null when no user matches.
+    /// </param>
+    /// <returns>
+    /// True when the user was found, otherwise false.
+    /// </returns>
     public bool TryGetProfileByUsername(string loginUsername, out EconetUserProfile? profile)
     {
         profile = null;

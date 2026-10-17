@@ -16,6 +16,30 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 /// </summary>
 public static class AcornInfStore
 {
+    /// <summary>
+    /// Reads the load address, execution address, length and access byte of a file from its sidecar file, which has the file name followed by a comma and inf.
+    /// </summary>
+    /// <param name="fileSystem">
+    /// The file system the files are stored on.
+    /// </param>
+    /// <param name="unixPath">
+    /// The host path of the file.
+    /// </param>
+    /// <param name="load">
+    /// Receives the load address, 0 when not stored.
+    /// </param>
+    /// <param name="exec">
+    /// Receives the execution address, 0 when not stored.
+    /// </param>
+    /// <param name="length">
+    /// Receives the length from the sidecar file, or the real file size when the sidecar file has none.
+    /// </param>
+    /// <param name="access">
+    /// Receives the access byte, 0x33 when not stored.
+    /// </param>
+    /// <returns>
+    /// True when the sidecar file exists or the file itself exists, otherwise false.
+    /// </returns>
     public static bool TryReadAttributes(IFileSystemBackend fileSystem, string unixPath, out uint load, out uint exec, out int length, out byte access)
     {
         load = 0;
@@ -70,6 +94,27 @@ public static class AcornInfStore
         return true;
     }
 
+    /// <summary>
+    /// Writes the sidecar file of a file with its load address, execution address, length and access byte. An existing sidecar file is replaced.
+    /// </summary>
+    /// <param name="fileSystem">
+    /// The file system the files are stored on.
+    /// </param>
+    /// <param name="unixPath">
+    /// The host path of the file.
+    /// </param>
+    /// <param name="load">
+    /// The load address.
+    /// </param>
+    /// <param name="exec">
+    /// The execution address.
+    /// </param>
+    /// <param name="length">
+    /// The file length.
+    /// </param>
+    /// <param name="access">
+    /// The access byte.
+    /// </param>
     public static void WriteAttributes(IFileSystemBackend fileSystem, string unixPath, uint load, uint exec, int length, byte access)
     {
         string infPath = unixPath + ",inf";

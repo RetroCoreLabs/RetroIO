@@ -21,6 +21,9 @@ namespace RetroIO.Protocols.Econet.FileServer;
 /// </summary>
 public sealed class FileServerCommandHandler
 {
+    /// <summary>
+    /// The version text the server reports when none is configured.
+    /// </summary>
     public const string DefaultVersionString = "3 RetroFS Econet FS 1.0";
 
     private readonly FileServerContext _context;
@@ -33,6 +36,15 @@ public sealed class FileServerCommandHandler
     private readonly FreeSpaceCommandHandler _freeSpace;
     private readonly ILogger<FileServerCommandHandler> _logger;
 
+    /// <summary>
+    /// Creates the handler and the handlers for the individual opcodes.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
+    /// <param name="logger">
+    /// The logger.
+    /// </param>
     public FileServerCommandHandler(FileServerContext context, ILogger<FileServerCommandHandler> logger)
     {
         _context = context;
@@ -46,6 +58,15 @@ public sealed class FileServerCommandHandler
         _freeSpace = new FreeSpaceCommandHandler(context);
     }
 
+    /// <summary>
+    /// Handles a file server request: a request that is too short is recorded as malformed and gets no reply, a station that is not logged in is refused for opcodes that need a login, and any other request goes to the handler for its opcode. The command is recorded in the activity log and the result is logged.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound message.
+    /// </param>
+    /// <returns>
+    /// The reply message, or null when the request is too short to parse or no reply is built.
+    /// </returns>
     public EconetMessage? Handle(EconetMessage request)
     {
         if (!FileServerRequest.TryParse(request.Payload, out FileServerRequest fsRequest))

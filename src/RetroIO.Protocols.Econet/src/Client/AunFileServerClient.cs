@@ -43,6 +43,27 @@ public sealed class AunFileServerClient : IDisposable
   private bool _loggedIn;
   private bool _disposed;
 
+  /// <summary>
+  /// Creates a client that talks to a file server over a UDP socket bound to the loopback address.
+  /// </summary>
+  /// <param name="host">
+  /// Host name or address of the file server. Must resolve to an IPv4 address.
+  /// </param>
+  /// <param name="port">
+  /// UDP port of the file server.
+  /// </param>
+  /// <param name="clientNet">
+  /// Network number used as the client address.
+  /// </param>
+  /// <param name="clientStation">
+  /// Station number used as the client address.
+  /// </param>
+  /// <param name="clientPort">
+  /// Local UDP port the client socket binds to.
+  /// </param>
+  /// <exception cref="System.ArgumentException">
+  /// Thrown when <paramref name="host"/> is empty or cannot be resolved to an IPv4 address.
+  /// </exception>
   public AunFileServerClient(
     string host,
     int port = EconetClientConstants.DefaultAunUdpPort,
@@ -95,12 +116,24 @@ public sealed class AunFileServerClient : IDisposable
     _clientAddress = IPAddress.Loopback;
   }
 
+  /// <summary>
+  /// Gets a value indicating whether a login has completed successfully.
+  /// </summary>
   public bool IsLoggedIn => _loggedIn;
 
+  /// <summary>
+  /// Gets the user root directory handle received at login.
+  /// </summary>
   public byte UrdHandle => _urd;
 
+  /// <summary>
+  /// Gets the current directory handle received at login.
+  /// </summary>
   public byte CwdHandle => _cwd;
 
+  /// <summary>
+  /// Gets the library directory handle received at login.
+  /// </summary>
   public byte LibHandle => _lib;
 
   /// <summary>
@@ -263,6 +296,9 @@ public sealed class AunFileServerClient : IDisposable
     return fileData.ToArray();
   }
 
+  /// <summary>
+  /// Logs out and releases the UDP socket. Does nothing if the client is already disposed.
+  /// </summary>
   public void Dispose()
   {
     if (_disposed)

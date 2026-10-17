@@ -16,6 +16,9 @@ using RetroIO.Server.Core.FileSystem;
 
 namespace RetroIO.Protocols.Econet.FileServer.Sessions;
 
+/// <summary>
+/// Keeps the table of logged in sessions, one per station, and handles login and logout.
+/// </summary>
 public sealed class FileServerSessionManager
 {
     private readonly object _sync = new();
@@ -25,6 +28,21 @@ public sealed class FileServerSessionManager
     private readonly IFileSystemBackend _fileSystem;
     private readonly string _rootDirectory;
 
+    /// <summary>
+    /// Creates the manager.
+    /// </summary>
+    /// <param name="fileSystem">
+    /// The file system the discs are stored on.
+    /// </param>
+    /// <param name="users">
+    /// The user directory used to check logins.
+    /// </param>
+    /// <param name="discs">
+    /// The disc catalogue.
+    /// </param>
+    /// <param name="rootDirectory">
+    /// The root directory that holds the disc directories.
+    /// </param>
     public FileServerSessionManager(
         IFileSystemBackend fileSystem,
         EconetUserDirectory users,
@@ -37,18 +55,69 @@ public sealed class FileServerSessionManager
         _rootDirectory = rootDirectory;
     }
 
+    /// <summary>
+    /// Reports whether a station has a session.
+    /// </summary>
+    /// <param name="net">
+    /// The network number.
+    /// </param>
+    /// <param name="station">
+    /// The station number.
+    /// </param>
+    /// <returns>
+    /// True when the station is logged in.
+    /// </returns>
     public bool IsLoggedIn(byte net, byte station)
     {
         lock (_sync)
             return FindSession(net, station) != null;
     }
 
+    /// <summary>
+    /// Gets the session of a station.
+    /// </summary>
+    /// <param name="net">
+    /// The network number.
+    /// </param>
+    /// <param name="station">
+    /// The station number.
+    /// </param>
+    /// <returns>
+    /// The session, or null when the station is not logged in.
+    /// </returns>
     public FileServerSession? GetSession(byte net, byte station)
     {
         lock (_sync)
             return FindSession(net, station);
     }
 
+    /// <summary>
+    /// Checks a user name and password and creates the session of the station.
+    /// </summary>
+    /// <param name="net">
+    /// The network number.
+    /// </param>
+    /// <param name="station">
+    /// The station number.
+    /// </param>
+    /// <param name="username">
+    /// The user name.
+    /// </param>
+    /// <param name="password">
+    /// The password.
+    /// </param>
+    /// <param name="session">
+    /// Receives the new session, or null on failure.
+    /// </param>
+    /// <param name="errorCode">
+    /// Receives the file server error code on failure.
+    /// </param>
+    /// <param name="errorMessage">
+    /// Receives the error text on failure.
+    /// </param>
+    /// <returns>
+    /// True when the session was created. False when the station is already logged in, the session table is full, the login is refused or the account is locked.
+    /// </returns>
     public bool TryLogin(byte net, byte station, string username, string password, out FileServerSession? session, out byte errorCode, out string errorMessage)
     {
         session = null;
@@ -165,6 +234,27 @@ public sealed class FileServerSessionManager
         return false;
     }
 
+    /// <summary>
+    /// Moves a session to another disc and sets its home, current and library directories to the USER directory of that disc, or to the disc root when there is no USER directory.
+    /// </summary>
+    /// <param name="session">
+    /// The session to change.
+    /// </param>
+    /// <param name="profile">
+    /// The user profile whose disc mask says which discs the user may see.
+    /// </param>
+    /// <param name="discReference">
+    /// The name or index of the disc.
+    /// </param>
+    /// <param name="errorCode">
+    /// Receives the file server error code on failure.
+    /// </param>
+    /// <param name="errorMessage">
+    /// Receives the error text on failure.
+    /// </param>
+    /// <returns>
+    /// True when the disc was found and is visible to the user, otherwise false.
+    /// </returns>
     public bool TryChangeDisc(
         FileServerSession session,
         EconetUserProfile profile,
@@ -193,6 +283,15 @@ public sealed class FileServerSessionManager
         return true;
     }
 
+    /// <summary>
+    /// Removes the session of a station, if there is one.
+    /// </summary>
+    /// <param name="net">
+    /// The network number.
+    /// </param>
+    /// <param name="station">
+    /// The station number.
+    /// </param>
     public void Logout(byte net, byte station)
     {
         lock (_sync)
@@ -209,6 +308,12 @@ public sealed class FileServerSessionManager
         }
     }
 
+    /// <summary>
+    /// Hands out the next file handle number, counting up from 4 and starting again at 4 after 32.
+    /// </summary>
+    /// <returns>
+    /// The handle number.
+    /// </returns>
     public byte AllocateHandle()
     {
         lock (_sync)
@@ -235,6 +340,12 @@ public sealed class FileServerSessionManager
         return null;
     }
 
+    /// <summary>
+    /// Counts the sessions that are logged in.
+    /// </summary>
+    /// <returns>
+    /// The number of sessions.
+    /// </returns>
     public int GetActiveSessionCount()
     {
         lock (_sync)
@@ -250,6 +361,21 @@ public sealed class FileServerSessionManager
         }
     }
 
+    /// <summary>
+    /// Lists the sessions a user may see. An administrator sees all sessions, anyone else sees only their own.
+    /// </summary>
+    /// <param name="requester">
+    /// The session that asks.
+    /// </param>
+    /// <param name="start">
+    /// The number of sessions to skip.
+    /// </param>
+    /// <param name="count">
+    /// The largest number of sessions to return.
+    /// </param>
+    /// <returns>
+    /// The sessions found.
+    /// </returns>
     public FileServerSession[] GetLoggedOnUsers(FileServerSession requester, byte start, byte count)
     {
         lock (_sync)
@@ -280,6 +406,15 @@ public sealed class FileServerSessionManager
         }
     }
 
+    /// <summary>
+    /// Gets the slot number of a session in the session table.
+    /// </summary>
+    /// <param name="session">
+    /// The session to look up.
+    /// </param>
+    /// <returns>
+    /// The slot number, or 0 when the session is not in the table.
+    /// </returns>
     public ushort GetSessionIndex(FileServerSession session)
     {
         lock (_sync)
@@ -294,6 +429,21 @@ public sealed class FileServerSessionManager
         }
     }
 
+    /// <summary>
+    /// Logs out every session of a user, closing the open files and bulk transfers of the stations.
+    /// </summary>
+    /// <param name="username">
+    /// The user name. Case is ignored and trailing spaces are removed.
+    /// </param>
+    /// <param name="handles">
+    /// The open file manager.
+    /// </param>
+    /// <param name="bulkTransfers">
+    /// The bulk transfer manager.
+    /// </param>
+    /// <returns>
+    /// The number of sessions removed.
+    /// </returns>
     public int LogoutByUsername(string username, FileServerHandleManager handles, BulkTransferManager bulkTransfers)
     {
         string padded = username.TrimEnd();
@@ -319,6 +469,21 @@ public sealed class FileServerSessionManager
         return count;
     }
 
+    /// <summary>
+    /// Logs out every session whose user has a given user index, closing the open files and bulk transfers of the stations.
+    /// </summary>
+    /// <param name="userIndex">
+    /// The user index from the user profile.
+    /// </param>
+    /// <param name="handles">
+    /// The open file manager.
+    /// </param>
+    /// <param name="bulkTransfers">
+    /// The bulk transfer manager.
+    /// </param>
+    /// <returns>
+    /// The number of sessions removed.
+    /// </returns>
     public int LogoutByUserIndex(ushort userIndex, FileServerHandleManager handles, BulkTransferManager bulkTransfers)
     {
         int count = 0;
@@ -344,6 +509,12 @@ public sealed class FileServerSessionManager
         return count;
     }
 
+    /// <summary>
+    /// Gets a copy of the list of logged in sessions.
+    /// </summary>
+    /// <returns>
+    /// The sessions.
+    /// </returns>
     public FileServerSession[] GetActiveSessions()
     {
         lock (_sync)

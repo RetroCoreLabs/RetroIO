@@ -18,12 +18,27 @@ public sealed class AunOutboundRetryQueue
     private readonly List<PendingSend> _pending = new();
     private const int MaxAttempts = 3;
 
+    /// <summary>
+    /// Adds a message to the queue of messages that failed to send.
+    /// </summary>
+    /// <param name="message">
+    /// The message to send again.
+    /// </param>
     public void Enqueue(EconetMessage message)
     {
         lock (_sync)
             _pending.Add(new PendingSend(message, 0));
     }
 
+    /// <summary>
+    /// Tries to send every queued message once. A message that fails again is queued again until it has been tried 3 times. A message with no transport is dropped.
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// A token that cancels the operation. It is not used.
+    /// </param>
+    /// <returns>
+    /// A task that completes when all queued messages have been tried.
+    /// </returns>
     public async Task FlushAsync(CancellationToken cancellationToken)
     {
         List<PendingSend> snapshot;

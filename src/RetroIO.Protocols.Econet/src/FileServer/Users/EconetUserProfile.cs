@@ -15,20 +15,68 @@ namespace RetroIO.Protocols.Econet.FileServer.Users;
 /// </summary>
 public sealed class EconetUserProfile
 {
+    /// <summary>
+    /// Gets the user identifier.
+    /// </summary>
     public Guid UserId { get; init; }
+    /// <summary>
+    /// Gets the user name.
+    /// </summary>
     public string Username { get; init; } = string.Empty;
+    /// <summary>
+    /// Gets the boot option.
+    /// </summary>
     public byte BootOpt { get; init; }
+    /// <summary>
+    /// Gets the index of the home disc.
+    /// </summary>
     public byte HomeDisc { get; init; }
+    /// <summary>
+    /// Gets the disc mask. Bit n allows the disc with index n.
+    /// </summary>
     public ushort DiscMask { get; init; }
+    /// <summary>
+    /// Gets the Acorn path of the home directory. The default is the dollar sign.
+    /// </summary>
     public string Home { get; init; } = "$";
+    /// <summary>
+    /// Gets the Acorn path of the library directory. The default is LIB:$.Library.
+    /// </summary>
     public string Lib { get; init; } = "LIB:$.Library";
+    /// <summary>
+    /// Gets a value indicating whether the user may log in with a blank password.
+    /// </summary>
     public bool AllowEmptyPassword { get; init; }
+    /// <summary>
+    /// Gets a value indicating whether the user is an administrator.
+    /// </summary>
     public bool IsAdmin { get; init; }
+    /// <summary>
+    /// Gets a value indicating whether the account is locked.
+    /// </summary>
     public bool IsLocked { get; init; }
+    /// <summary>
+    /// Gets the 16-bit user index, built from the first two bytes of the user identifier.
+    /// </summary>
     public ushort UserIndex { get; init; }
+    /// <summary>
+    /// Gets the privilege byte, 0xFF for an administrator and 0 for anyone else.
+    /// </summary>
     public byte Privilege => IsAdmin ? (byte)0xFF : (byte)0x00;
+    /// <summary>
+    /// Gets the second privilege byte, always 0.
+    /// </summary>
     public byte Privilege2 => 0;
 
+    /// <summary>
+    /// Builds the profile of a user from the user record and its metadata. Missing values get defaults.
+    /// </summary>
+    /// <param name="user">
+    /// The user record.
+    /// </param>
+    /// <returns>
+    /// The profile.
+    /// </returns>
     public static EconetUserProfile FromRetroUser(RetroUser user)
     {
         ushort discMask = ReadUInt16(user, EconetMetadataKeys.DiscMask, user.IsAdmin ? (ushort)0xFFFF : (ushort)0x0001);
@@ -50,6 +98,12 @@ public sealed class EconetUserProfile
         };
     }
 
+    /// <summary>
+    /// Adds the Home, Lib and DiscMask metadata to a user record when they are missing.
+    /// </summary>
+    /// <param name="user">
+    /// The user record to update. The default disc mask is 65535 for an administrator and 1 for anyone else.
+    /// </param>
     public static void ApplyDefaults(RetroUser user)
     {
         if (!user.Metadata.ContainsKey(EconetMetadataKeys.Home))

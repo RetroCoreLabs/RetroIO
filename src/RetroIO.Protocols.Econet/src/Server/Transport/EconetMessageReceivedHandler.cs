@@ -7,4 +7,13 @@
 
 namespace RetroIO.Protocols.Econet.Server.Transport;
 
+/// <summary>
+/// The method type that is called when a transport receives a message.
+/// </summary>
+/// <param name="message">
+/// The received message.
+/// </param>
+/// <returns>
+/// A task that completes when the message has been handled.
+/// </returns>
 public delegate ValueTask EconetMessageReceivedHandler(EconetMessage message);

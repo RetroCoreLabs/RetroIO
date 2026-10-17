@@ -17,15 +17,36 @@ using RetroIO.Security.Implementation.Auditing;
 
 namespace RetroIO.Protocols.Econet.FileServer.Handlers;
 
+/// <summary>
+/// Handles the file opcodes Load, LoadAs, Save, CreateFile, Open, Close, Delete, CreateDir and Bye.
+/// </summary>
 public sealed class FileIoCommandHandler
 {
     private readonly FileServerContext _context;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="context">
+    /// The shared file server context.
+    /// </param>
     public FileIoCommandHandler(FileServerContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Runs the handler for the opcode of the request.
+    /// </summary>
+    /// <param name="request">
+    /// The inbound message.
+    /// </param>
+    /// <param name="fsRequest">
+    /// The decoded file server request.
+    /// </param>
+    /// <returns>
+    /// The reply message, or null when the opcode is not one this handler serves.
+    /// </returns>
     public EconetMessage? Handle(EconetMessage request, FileServerRequest fsRequest)
     {
         switch (fsRequest.Opcode)

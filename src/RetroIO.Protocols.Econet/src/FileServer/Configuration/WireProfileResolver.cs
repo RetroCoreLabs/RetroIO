@@ -25,6 +25,18 @@ public sealed class WireProfileResolver
     /// </summary>
     public readonly struct MachineOverride
     {
+        /// <summary>
+        /// Creates an override for one client station.
+        /// </summary>
+        /// <param name="net">
+        /// The client network number.
+        /// </param>
+        /// <param name="station">
+        /// The client station number.
+        /// </param>
+        /// <param name="profile">
+        /// The wire profile to use for that station.
+        /// </param>
         public MachineOverride(byte net, byte station, WireProfile profile)
         {
             Net = net;

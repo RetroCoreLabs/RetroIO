@@ -41,6 +41,15 @@ public sealed class AunReplyRetransmitter
     private readonly TimeSpan _retransmitInterval; // EB_CONFIG_AUN_RETX
     private readonly int _maxTransmits;             // EB_CONFIG_AUN_RETRIES (total, including initial)
 
+    /// <summary>
+    /// Creates the retransmitter.
+    /// </summary>
+    /// <param name="retransmitIntervalMs">
+    /// The time between two transmissions, in milliseconds. At least 1.
+    /// </param>
+    /// <param name="maxTransmits">
+    /// The total number of transmissions, including the first. At least 1.
+    /// </param>
     public AunReplyRetransmitter(int retransmitIntervalMs, int maxTransmits)
     {
         _retransmitInterval = TimeSpan.FromMilliseconds(Math.Max(1, retransmitIntervalMs));

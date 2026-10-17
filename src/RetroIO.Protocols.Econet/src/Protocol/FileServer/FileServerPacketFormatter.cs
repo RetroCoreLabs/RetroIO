@@ -14,6 +14,15 @@ namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 /// </summary>
 public static class FileServerPacketFormatter
 {
+    /// <summary>
+    /// Formats the reply port, the opcode and the handle bytes of a request as text, in hex.
+    /// </summary>
+    /// <param name="request">
+    /// The request.
+    /// </param>
+    /// <returns>
+    /// The text. A request shorter than 2 bytes gives its length and a hex dump of the bytes.
+    /// </returns>
     public static string FormatRequestHeader(FileServerRequest request)
     {
         if (request.Length < 2)
@@ -31,6 +40,18 @@ public static class FileServerPacketFormatter
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Formats a request as text with its header, parameters in hex and as characters, and the raw bytes.
+    /// </summary>
+    /// <param name="request">
+    /// The request.
+    /// </param>
+    /// <param name="maxHexBytes">
+    /// The largest number of bytes shown for each hex dump.
+    /// </param>
+    /// <returns>
+    /// The text.
+    /// </returns>
     public static string FormatRequestDump(FileServerRequest request, int maxHexBytes = 64)
     {
         string header = FormatRequestHeader(request);
@@ -43,6 +64,15 @@ public static class FileServerPacketFormatter
         return $"{header} | params {paramHex} ({parameters.Length} bytes) ascii=\"{paramAscii}\" | raw {FormatHex(request.Raw, maxHexBytes)}";
     }
 
+    /// <summary>
+    /// Formats a raw request payload as text, in the same way as a request.
+    /// </summary>
+    /// <param name="payload">
+    /// The payload bytes.
+    /// </param>
+    /// <returns>
+    /// The text, or empty payload for an empty payload.
+    /// </returns>
     public static string FormatRawPayload(ReadOnlySpan<byte> payload)
     {
         if (payload.IsEmpty)
@@ -71,6 +101,18 @@ public static class FileServerPacketFormatter
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Formats bytes as hex pairs separated by spaces.
+    /// </summary>
+    /// <param name="data">
+    /// The bytes.
+    /// </param>
+    /// <param name="maxBytes">
+    /// The largest number of bytes shown. A count of the bytes left out is added after them.
+    /// </param>
+    /// <returns>
+    /// The text, or (none) for empty data.
+    /// </returns>
     public static string FormatHex(ReadOnlySpan<byte> data, int maxBytes = 64)
     {
         if (data.IsEmpty)

@@ -12,6 +12,15 @@ namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 /// </summary>
 public static class FileServerErrorNames
 {
+    /// <summary>
+    /// Gets the display name of an error code.
+    /// </summary>
+    /// <param name="errorCode">
+    /// The error code.
+    /// </param>
+    /// <returns>
+    /// The name, OK for 0, or the code in hex for an unknown code.
+    /// </returns>
     public static string GetName(byte errorCode) => errorCode switch
     {
         FileServerErrors.WhoAreYou => "Not logged in",

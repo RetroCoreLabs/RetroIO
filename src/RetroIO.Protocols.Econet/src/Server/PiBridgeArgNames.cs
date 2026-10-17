@@ -12,6 +12,15 @@ namespace RetroIO.Protocols.Econet.Server;
 /// </summary>
 public static class PiBridgeArgNames
 {
+    /// <summary>
+    /// Gets the name of a PiBridge argument.
+    /// </summary>
+    /// <param name="arg">
+    /// The argument byte.
+    /// </param>
+    /// <returns>
+    /// The name, or the text arg followed by the number for an unknown argument.
+    /// </returns>
     public static string GetName(byte arg) => arg switch
     {
         0 => "Bridge version",

@@ -18,6 +18,18 @@ public static class EconetProtocolDiagnostics
 {
     private const int MaxHexBytes = 128;
 
+    /// <summary>
+    /// Formats a request as a trace line: a dump of the request with login passwords removed, the handles of the session when there is one, and a description of the parsed request when there is one.
+    /// </summary>
+    /// <param name="request">
+    /// The request.
+    /// </param>
+    /// <param name="session">
+    /// The session of the sending station, or null when it is not logged in.
+    /// </param>
+    /// <returns>
+    /// The trace text.
+    /// </returns>
     public static string FormatRequestTrace(FileServerRequest request, FileServerSession? session)
     {
         StringBuilder builder = new StringBuilder(512);
@@ -59,6 +71,21 @@ public static class EconetProtocolDiagnostics
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Formats a reply as a trace line with the result, the length and the bytes in hex, and a decoded description for some replies.
+    /// </summary>
+    /// <param name="request">
+    /// The request the reply answers.
+    /// </param>
+    /// <param name="payload">
+    /// The reply bytes, or null when there is no reply.
+    /// </param>
+    /// <param name="success">
+    /// True when the reply was judged to be a success.
+    /// </param>
+    /// <returns>
+    /// The trace text. A login reply gives Login OK, and a missing or empty reply gives a short fixed text.
+    /// </returns>
     public static string FormatReplyTrace(FileServerRequest request, byte[]? payload, bool success)
     {
         if (payload == null || payload.Length == 0)
@@ -96,6 +123,15 @@ public static class EconetProtocolDiagnostics
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Splits the reply to a get object info request with command 6 into named fields.
+    /// </summary>
+    /// <param name="payload">
+    /// The reply bytes.
+    /// </param>
+    /// <returns>
+    /// A dictionary of the field values, or a dictionary with only an error entry when the payload is shorter than 17 bytes.
+    /// </returns>
     public static IReadOnlyDictionary<string, object?> DescribeCmd6Fields(ReadOnlySpan<byte> payload)
     {
         if (payload.Length < 17)
@@ -142,6 +178,18 @@ public static class EconetProtocolDiagnostics
         return count;
     }
 
+    /// <summary>
+    /// Judges whether a reply is a success.
+    /// </summary>
+    /// <param name="fsRequest">
+    /// The request the reply answers.
+    /// </param>
+    /// <param name="payload">
+    /// The reply bytes, or null when there is no reply.
+    /// </param>
+    /// <returns>
+    /// False for the three zero byte reply, for a reply with a non-zero error byte at index 1, and for a get object info reply that is too short or reports an object type of 0. True in all other cases, including a missing reply, a reply shorter than 2 bytes and a login reply.
+    /// </returns>
     public static bool EvaluateReplySuccess(FileServerRequest fsRequest, byte[]? payload)
     {
         if (payload == null || payload.Length < 2)
@@ -173,6 +221,18 @@ public static class EconetProtocolDiagnostics
         return true;
     }
 
+    /// <summary>
+    /// Judges whether a reply is a success. Calls EvaluateReplySuccess.
+    /// </summary>
+    /// <param name="fsRequest">
+    /// The request the reply answers.
+    /// </param>
+    /// <param name="payload">
+    /// The reply bytes, or null when there is no reply.
+    /// </param>
+    /// <returns>
+    /// The result of EvaluateReplySuccess.
+    /// </returns>
     public static bool EvaluateSuccess(FileServerRequest fsRequest, byte[]? payload) =>
         EvaluateReplySuccess(fsRequest, payload);
 

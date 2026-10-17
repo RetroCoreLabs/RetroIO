@@ -14,11 +14,20 @@ public sealed class FileServerClock
 {
     private DateTime _utc = DateTime.UtcNow;
 
+    /// <summary>
+    /// Gets the current server time in UTC. It is the value last set with SetUtc, or the creation time of the clock.
+    /// </summary>
     public DateTime UtcNow
     {
         get => _utc;
     }
 
+    /// <summary>
+    /// Sets the time the clock reports.
+    /// </summary>
+    /// <param name="utc">
+    /// The new server time in UTC.
+    /// </param>
     public void SetUtc(DateTime utc)
     {
         _utc = utc;

@@ -21,6 +21,18 @@ namespace RetroIO.Protocols.Econet.FileServer.Users;
 /// </remarks>
 public static class EconetUserBootstrap
 {
+    /// <summary>
+    /// Adds the default Econet metadata to every user that lacks it, and saves the user store when anything changed.
+    /// </summary>
+    /// <param name="idp">
+    /// The identity provider that holds the users.
+    /// </param>
+    /// <param name="ct">
+    /// A token that cancels the operation.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the users have been updated and saved.
+    /// </returns>
     public static async Task EnsureProfilesAsync(IRetroIDP idp, CancellationToken ct = default)
     {
         bool anyChanged = false;

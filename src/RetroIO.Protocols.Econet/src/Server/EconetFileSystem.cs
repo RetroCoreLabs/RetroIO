@@ -26,5 +26,11 @@ public sealed class EconetFileSystem
     /// </summary>
     public IFileSystemBackend Backend { get; }
 
+    /// <summary>
+    /// Creates the wrapper.
+    /// </summary>
+    /// <param name="backend">
+    /// The file system backend the Econet file server uses.
+    /// </param>
     public EconetFileSystem(IFileSystemBackend backend) => Backend = backend;
 }

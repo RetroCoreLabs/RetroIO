@@ -44,6 +44,24 @@ public sealed class UdpAunTransport : ITransport
     private readonly SecurityEventEmitter? _securityEvents;
     private bool _disposed;
 
+    /// <summary>
+    /// Creates the transport. The socket is opened when RunAsync starts.
+    /// </summary>
+    /// <param name="port">
+    /// The UDP port to listen on.
+    /// </param>
+    /// <param name="addressMapper">
+    /// Maps the IP address of a client to a network and station number.
+    /// </param>
+    /// <param name="logger">
+    /// The logger.
+    /// </param>
+    /// <param name="firewall">
+    /// The firewall that checks each client address, or null for none.
+    /// </param>
+    /// <param name="securityEvents">
+    /// The security event emitter used when the firewall blocks a client, or null for none.
+    /// </param>
     public UdpAunTransport(
         int port,
         AunAddressMapper addressMapper,
@@ -75,8 +93,10 @@ public sealed class UdpAunTransport : ITransport
         return socket;
     }
 
+    /// <inheritdoc/>
     public string TransportType => "UDP";
 
+    /// <inheritdoc/>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -86,8 +106,18 @@ public sealed class UdpAunTransport : ITransport
         AutoAckInboundData = true,
     };
 
+    /// <inheritdoc/>
     public event EconetMessageReceivedHandler? OnMessageReceived;
 
+    /// <summary>
+    /// Opens the socket and reads datagrams until the token is cancelled. Each valid datagram is passed to the OnMessageReceived handler. The socket is closed when the method ends.
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// A token that stops the transport.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the transport has stopped.
+    /// </returns>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         Socket socket = CreateAndBind();
@@ -194,6 +224,15 @@ public sealed class UdpAunTransport : ITransport
         }
     }
 
+    /// <summary>
+    /// Sends a message as an AUN datagram to the address and port of its client. The message is dropped when the transport is not running.
+    /// </summary>
+    /// <param name="message">
+    /// The message to send.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the datagram has been sent.
+    /// </returns>
     public async ValueTask SendAsync(EconetMessage message)
     {
         byte[] buffer = new byte[AunPacket.HeaderSize + message.Payload.Length];
@@ -214,6 +253,9 @@ public sealed class UdpAunTransport : ITransport
         await socket.SendToAsync(buffer, SocketFlags.None, endPoint);
     }
 
+    /// <summary>
+    /// Disposes the socket if it is open. Does nothing when the transport is already disposed.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

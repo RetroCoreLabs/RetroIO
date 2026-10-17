@@ -16,17 +16,56 @@ namespace RetroIO.Protocols.Econet.Server;
 /// </summary>
 public sealed class EconetMessage
 {
+    /// <summary>
+    /// Gets the AUN packet type.
+    /// </summary>
     public required AunPacketType PacketType { get; init; }
+    /// <summary>
+    /// Gets the Econet port.
+    /// </summary>
     public required byte EconetPort { get; init; }
+    /// <summary>
+    /// Gets the control byte.
+    /// </summary>
     public required byte Control { get; init; }
+    /// <summary>
+    /// Gets the AUN sequence number.
+    /// </summary>
     public required uint Sequence { get; init; }
+    /// <summary>
+    /// Gets the payload bytes.
+    /// </summary>
     public required byte[] Payload { get; init; }
+    /// <summary>
+    /// Gets the IP address of the client.
+    /// </summary>
     public required IPAddress ClientAddress { get; init; }
+    /// <summary>
+    /// Gets the UDP port of the client.
+    /// </summary>
     public required int ClientPort { get; init; }
+    /// <summary>
+    /// Gets the Econet network number of the client.
+    /// </summary>
     public byte ClientNet { get; init; }
+    /// <summary>
+    /// Gets the Econet station number of the client.
+    /// </summary>
     public byte ClientStation { get; init; }
+    /// <summary>
+    /// Gets or sets the transport the message arrived on or is sent through.
+    /// </summary>
     public ITransport? Transport { get; set; }
 
+    /// <summary>
+    /// Returns a copy of the message with a different payload.
+    /// </summary>
+    /// <param name="payload">
+    /// The payload of the copy.
+    /// </param>
+    /// <returns>
+    /// The new message.
+    /// </returns>
     public EconetMessage WithPayload(byte[] payload) => new()
     {
         PacketType = PacketType,

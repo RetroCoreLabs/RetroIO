@@ -27,8 +27,23 @@ using RetroIO.Server.Core.FileSystem;
 
 namespace RetroIO.Protocols.Econet.Server;
 
+/// <summary>
+/// Registration of the Econet file server in a service collection.
+/// </summary>
 public static class EconetFileServerExtensions
 {
+    /// <summary>
+    /// Registers the Econet file server services, the AUN address mapper, the UDP transport when enabled, and the hosted service that runs the server.
+    /// </summary>
+    /// <param name="services">
+    /// The service collection to add to.
+    /// </param>
+    /// <param name="configureOptions">
+    /// A method that sets the options.
+    /// </param>
+    /// <returns>
+    /// The same service collection.
+    /// </returns>
     public static IServiceCollection AddEconetFileServer(
         this IServiceCollection services,
         Action<EconetFileServerOptions> configureOptions)
@@ -139,15 +154,42 @@ public static class EconetFileServerExtensions
     }
 }
 
+/// <summary>
+/// Settings of the Econet file server.
+/// </summary>
 public sealed class EconetFileServerOptions
 {
+    /// <summary>
+    /// Gets or sets the root directory that holds the disc directories. The default is /tmp/econet-root.
+    /// </summary>
     public string RootDirectory { get; set; } = "/tmp/econet-root";
+    /// <summary>
+    /// Gets or sets the name of the default disc. The default is RetroFS.
+    /// </summary>
     public string DiscName { get; set; } = "RetroFS";
+    /// <summary>
+    /// Gets or sets the version text the server reports, or null to use the default version text.
+    /// </summary>
     public string? VersionString { get; set; }
+    /// <summary>
+    /// Gets or sets the UDP port of the AUN transport. The default is 32768.
+    /// </summary>
     public int UdpPort { get; set; } = 32768;
+    /// <summary>
+    /// Gets or sets the network number. The default is 1.
+    /// </summary>
     public byte Net { get; set; } = 1;
+    /// <summary>
+    /// Gets or sets the station number of the server. The default is 254.
+    /// </summary>
     public byte Station { get; set; } = 254;
+    /// <summary>
+    /// Gets or sets the index, 0 to 3, of the IPv4 address byte that holds the station number of a client. The default is 3.
+    /// </summary>
     public byte AunStationOctetIndex { get; set; } = 3;
+    /// <summary>
+    /// Gets or sets a value indicating whether the UDP transport is registered. The default is true.
+    /// </summary>
     public bool EnableUdp { get; set; } = true;
 
     /// <summary>

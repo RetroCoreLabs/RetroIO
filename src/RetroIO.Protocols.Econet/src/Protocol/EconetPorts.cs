@@ -12,5 +12,8 @@ namespace RetroIO.Protocols.Econet.Protocol;
 /// </summary>
 public static class EconetPorts
 {
+    /// <summary>
+    /// Port 0x99, the Econet port that file server requests are sent to.
+    /// </summary>
     public const byte FileServer = 0x99;
 }
