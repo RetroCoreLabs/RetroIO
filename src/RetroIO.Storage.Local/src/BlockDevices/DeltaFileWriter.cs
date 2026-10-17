@@ -72,6 +72,21 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <summary>
+        /// Creates a writer for the delta file at the given path.
+        /// </summary>
+        /// <param name="deltaPath">
+        /// Path of the delta file.
+        /// </param>
+        /// <param name="blockSize">
+        /// Size of one block in bytes.
+        /// </param>
+        /// <param name="compressionMode">
+        /// How changed blocks are stored.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="deltaPath"/> is null.
+        /// </exception>
         public DeltaFileWriter(string deltaPath, int blockSize, DeltaCompressionMode compressionMode = DeltaCompressionMode.FullBlock)
         {
             _deltaPath = deltaPath ?? throw new ArgumentNullException(nameof(deltaPath));
@@ -560,6 +575,9 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <summary>
+        /// Writes the block index to the delta file, then flushes and closes the file.
+        /// </summary>
         public void Dispose()
         {
             lock (_lock)

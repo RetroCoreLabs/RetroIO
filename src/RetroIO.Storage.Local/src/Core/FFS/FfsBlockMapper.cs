@@ -25,6 +25,18 @@ namespace RetroIO.Storage.Local.FFS.Core
         private readonly int _fragsPerBlock;
         private readonly int _pointersPerBlock;
 
+        /// <summary>
+        /// Creates a block mapper and takes block size, fragment size and fragments per block from the superblock.
+        /// </summary>
+        /// <param name="device">
+        /// The device that holds the file system.
+        /// </param>
+        /// <param name="superblock">
+        /// The superblock of the file system.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> or <paramref name="superblock"/> is null.
+        /// </exception>
         public FfsBlockMapper(IBlockDevice device, FfsSuperblock superblock)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));

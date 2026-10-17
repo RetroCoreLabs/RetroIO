@@ -480,6 +480,12 @@ namespace RetroIO.Storage.Local.V7.Structures
             buffer[offset + length] = 0;
         }
 
+        /// <summary>
+        /// Returns a text with the file system name, pack name, size, inode count, free counts and the result of the validity check.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             return $"V7 Superblock: {FsName} ({FsPack}), " +

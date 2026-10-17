@@ -34,8 +34,11 @@ namespace RetroIO.Storage.Local.FileSystems
         // directory sector. Confirmed against VICE (vdrive-dir.c) and MAME (fs_cbmdos.cpp).
         private const int EntriesPerDirectorySectorValue = 8;
 
+        /// <inheritdoc/>
         public string FileSystemType => "CBM-DOS";
+        /// <inheritdoc/>
         public string VolumeLabel => _volumeLabel;
+        /// <inheritdoc/>
         public string ExtensionSeparator => "";  // CBM DOS uses FileType as separate metadata, not part of filename
 
         /// <summary>
@@ -53,6 +56,7 @@ namespace RetroIO.Storage.Local.FileSystems
             _bamTrack = bamTrack;
         }
 
+        /// <inheritdoc/>
         public void Initialize(IBlockDevice device)
         {
             if (device == null)
@@ -64,6 +68,7 @@ namespace RetroIO.Storage.Local.FileSystems
             ParseHeader();
         }
 
+        /// <inheritdoc/>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -91,6 +96,7 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -132,6 +138,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return entries.ToArray();
         }
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -156,6 +163,7 @@ namespace RetroIO.Storage.Local.FileSystems
         // builds on this and is added in later phases.
         // ==============================================================
 
+        /// <inheritdoc/>
         public void WriteFile(string path, byte[] data)
         {
             EnsureInitialized();
@@ -240,6 +248,7 @@ namespace RetroIO.Storage.Local.FileSystems
             _disk!.Flush();
         }
 
+        /// <inheritdoc/>
         public void DeleteFile(string path)
         {
             EnsureInitialized();
@@ -1081,6 +1090,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return 0x3F; // '?'
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -1115,6 +1125,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return metadata;
         }
 
+        /// <inheritdoc/>
         public int GetBlocksFree()
         {
             EnsureInitialized();
@@ -1201,16 +1212,35 @@ namespace RetroIO.Storage.Local.FileSystems
             return free;
         }
 
+        /// <summary>
+        /// Not supported, because CBM DOS has no subdirectories. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void CreateDirectory(string path)
         {
             throw new NotSupportedException("CBM DOS does not support subdirectories");
         }
 
+        /// <summary>
+        /// Not supported, because CBM DOS has no subdirectories. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteDirectory(string path)
         {
             throw new NotSupportedException("CBM DOS does not support subdirectories");
         }
 
+        /// <inheritdoc/>
         public void Rename(string oldPath, string newPath)
         {
             EnsureInitialized();

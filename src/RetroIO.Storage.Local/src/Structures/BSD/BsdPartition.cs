@@ -237,6 +237,12 @@ namespace RetroIO.Storage.Local.BSD.Structures
             return letter - 'a';
         }
 
+        /// <summary>
+        /// Returns a text with the offset, the size and the file system type, or an unused marker.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override readonly string ToString()
         {
             if (IsUnused)

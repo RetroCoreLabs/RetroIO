@@ -16,8 +16,10 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class CommodoreDiskDriverProvider : FileSystemDriverProviderBase
     {
+        /// <inheritdoc/>
         public override string FileSystemType => "Commodore";
 
+        /// <inheritdoc/>
         public override string Description => "Commodore disk images (D64/D71/D81)";
 
         /// <summary>
@@ -47,6 +49,7 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
+        /// <inheritdoc/>
         public override IFileSystemDriver CreateDriver()
         {
             return new CommodoreDiskDriver();

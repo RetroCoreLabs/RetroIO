@@ -19,6 +19,15 @@ namespace RetroIO.Storage.Local.V7.Core
     {
         private readonly V7BlockMapper _mapper;
 
+        /// <summary>
+        /// Creates a directory reader that reads blocks through the given mapper.
+        /// </summary>
+        /// <param name="mapper">
+        /// The block mapper of the file system.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="mapper"/> is null.
+        /// </exception>
         public V7DirectoryReader(V7BlockMapper mapper)
         {
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));

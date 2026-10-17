@@ -55,11 +55,29 @@ namespace RetroIO.Storage.Local.Partitions
             }
         }
 
+        /// <summary>
+        /// Gets whether the base stream can be read.
+        /// </summary>
         public override bool CanRead => _baseStream.CanRead;
+        /// <summary>
+        /// Gets true, because the constructor requires a seekable base stream.
+        /// </summary>
         public override bool CanSeek => true;
+        /// <summary>
+        /// Gets whether the base stream can be written.
+        /// </summary>
         public override bool CanWrite => _baseStream.CanWrite;
+        /// <summary>
+        /// Gets the length of the partition in bytes.
+        /// </summary>
         public override long Length => _partitionLength;
 
+        /// <summary>
+        /// Gets or sets the position inside the partition.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the value is negative or past the end of the partition.
+        /// </exception>
         public override long Position
         {
             get => _position;
@@ -74,6 +92,21 @@ namespace RetroIO.Storage.Local.Partitions
             }
         }
 
+        /// <summary>
+        /// Reads bytes from the current position of the partition. A read stops at the end of the partition.
+        /// </summary>
+        /// <param name="buffer">
+        /// Receives the bytes.
+        /// </param>
+        /// <param name="offset">
+        /// Index in <paramref name="buffer"/> where the first byte is stored.
+        /// </param>
+        /// <param name="count">
+        /// The most bytes to read.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read, or 0 at the end of the partition.
+        /// </returns>
         public override int Read(byte[] buffer, int offset, int count)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
@@ -98,6 +131,21 @@ namespace RetroIO.Storage.Local.Partitions
             return bytesRead;
         }
 
+        /// <summary>
+        /// Writes bytes at the current position of the partition.
+        /// </summary>
+        /// <param name="buffer">
+        /// The bytes to write.
+        /// </param>
+        /// <param name="offset">
+        /// Index in <paramref name="buffer"/> of the first byte to write.
+        /// </param>
+        /// <param name="count">
+        /// The number of bytes to write.
+        /// </param>
+        /// <exception cref="IOException">
+        /// Thrown when the write would go past the end of the partition.
+        /// </exception>
         public override void Write(byte[] buffer, int offset, int count)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
@@ -120,6 +168,21 @@ namespace RetroIO.Storage.Local.Partitions
             _position += count;
         }
 
+        /// <summary>
+        /// Moves the position inside the partition.
+        /// </summary>
+        /// <param name="offset">
+        /// The distance to move, relative to <paramref name="origin"/>.
+        /// </param>
+        /// <param name="origin">
+        /// The point the offset is counted from.
+        /// </param>
+        /// <returns>
+        /// The new position.
+        /// </returns>
+        /// <exception cref="IOException">
+        /// Thrown when the new position is outside the partition.
+        /// </exception>
         public override long Seek(long offset, SeekOrigin origin)
         {
             long newPosition = origin switch
@@ -139,16 +202,34 @@ namespace RetroIO.Storage.Local.Partitions
             return _position;
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="value">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public override void SetLength(long value)
         {
             throw new NotSupportedException("Cannot resize a partition stream");
         }
 
+        /// <summary>
+        /// Flushes the base stream.
+        /// </summary>
         public override void Flush()
         {
             _baseStream.Flush();
         }
 
+        /// <summary>
+        /// Marks the stream as disposed. The base stream is not disposed, because it may be shared.
+        /// </summary>
+        /// <param name="disposing">
+        /// True when called from <c>Dispose</c>, false when called from a finalizer.
+        /// </param>
         protected override void Dispose(bool disposing)
         {
             if (!_disposed && disposing)

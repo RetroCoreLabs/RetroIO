@@ -23,6 +23,18 @@ namespace RetroIO.Storage.Local.V7.Boot
         /// </summary>
         public byte[] Data { get; private set; }
 
+        /// <summary>
+        /// Creates a boot block from the given sector 0 data.
+        /// </summary>
+        /// <param name="data">
+        /// The boot block bytes. The length must equal the V7 boot block size.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="data"/> is not exactly the boot block size.
+        /// </exception>
         public V7BootBlock(byte[] data)
         {
             if (data == null)
@@ -94,6 +106,12 @@ namespace RetroIO.Storage.Local.V7.Boot
             return false;
         }
 
+        /// <summary>
+        /// Returns a text with the boot block size, the number of non-zero bytes and the result of the validity check.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             int nonZeroBytes = 0;

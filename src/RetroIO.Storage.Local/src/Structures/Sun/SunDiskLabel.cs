@@ -25,9 +25,15 @@ namespace RetroIO.Storage.Local.Sun.Structures
     public class SunDiskLabel
     {
         // Sun disk label magic number at offset 508-509 (0xDABE in big-endian)
+        /// <summary>
+        /// The magic number of a Sun disk label, 0xDABE.
+        /// </summary>
         public const ushort SUN_LABEL_MAGIC = 0xDABE;
 
         // Maximum partitions in Sun disk label
+        /// <summary>
+        /// The most partitions a Sun disk label holds.
+        /// </summary>
         public const int MAX_PARTITIONS = 8;
 
         // =================================================================

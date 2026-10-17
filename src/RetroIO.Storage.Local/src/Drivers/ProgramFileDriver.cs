@@ -30,22 +30,54 @@ namespace RetroIO.Storage.Local.Drivers
         private bool _isP00;
         private ushort _loadAddress;
 
+        /// <summary>
+        /// Gets P00 for a PC64 container and PRG for a raw program file.
+        /// </summary>
         public string FileSystemType => _isP00 ? "P00" : "PRG";
+        /// <summary>
+        /// Gets the program name. For a P00 file this is the name stored in the file, otherwise PROGRAM.
+        /// </summary>
         public string VolumeLabel => _name;
+        /// <summary>
+        /// Gets an empty string, because the program name has no extension.
+        /// </summary>
         public string ExtensionSeparator => "";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read |
             DriverCapabilities.ListDirectory |
             DriverCapabilities.FileTypes |
             DriverCapabilities.PetsciiEncoding;
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets false, because the driver is read-only.
+        /// </summary>
         public bool CanWrite => false;
+        /// <summary>
+        /// Gets false, because a program file is a container and not a block device.
+        /// </summary>
         public bool HasBlockAccess => false;
 
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor() => null;
 
+        /// <summary>
+        /// Checks whether the data starts with the C64File signature and is long enough to hold the P00 header.
+        /// </summary>
+        /// <param name="data">
+        /// The first bytes of the file.
+        /// </param>
+        /// <returns>
+        /// True for a P00 header, false otherwise.
+        /// </returns>
         public static bool IsP00(byte[] data)
         {
             if (data == null || data.Length < P00PayloadOffset)
@@ -62,6 +94,18 @@ namespace RetroIO.Storage.Local.Drivers
             return true;
         }
 
+        /// <summary>
+        /// Reads the whole file. A P00 file is split into its name and payload, and any other file is taken as a raw PRG. The load address is read from the first two bytes of the program.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the file.
+        /// </param>
+        /// <param name="readOnly">
+        /// Not used. The driver is always read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -100,6 +144,18 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
+        /// <summary>
+        /// Returns a copy of the program bytes, including the 2-byte load address.
+        /// </summary>
+        /// <param name="path">
+        /// The program name.
+        /// </param>
+        /// <returns>
+        /// The program bytes.
+        /// </returns>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when the name does not match the program name.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
@@ -113,6 +169,15 @@ namespace RetroIO.Storage.Local.Drivers
             return copy;
         }
 
+        /// <summary>
+        /// Lists the single program in the file. The path is ignored.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// An array with one entry.
+        /// </returns>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
@@ -120,6 +185,15 @@ namespace RetroIO.Storage.Local.Drivers
             return new[] { new DirectoryEntry { Name = _name, Metadata = metadata } };
         }
 
+        /// <summary>
+        /// Returns the metadata of the program, including load address and container type.
+        /// </summary>
+        /// <param name="path">
+        /// The program name.
+        /// </param>
+        /// <returns>
+        /// The metadata, or null when the name does not match.
+        /// </returns>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -144,12 +218,69 @@ namespace RetroIO.Storage.Local.Drivers
             return metadata;
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data) => throw new NotSupportedException("PRG/P00 is read-only");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path) => throw new NotSupportedException("PRG/P00 is read-only");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="buffer">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer) => throw new NotSupportedException("PRG/P00 is a container, not a block device");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data) => throw new NotSupportedException("PRG/P00 is a container, not a block device");
+        /// <summary>
+        /// Returns null, because there is no block device.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public BlockDeviceInfo? GetBlockDeviceInfo() => null;
 
+        /// <summary>
+        /// Drops the program data.
+        /// </summary>
         public void Dispose()
         {
             _program = Array.Empty<byte>();

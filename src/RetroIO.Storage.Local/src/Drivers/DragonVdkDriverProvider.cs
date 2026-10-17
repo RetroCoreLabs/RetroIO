@@ -16,10 +16,21 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonVdkDriverProvider : FileSystemDriverProviderBase
     {
+        /// <inheritdoc/>
         public override string FileSystemType => "DragonDOS";
 
+        /// <inheritdoc/>
         public override string Description => "Dragon 32/64 VDK disk images (40/80 tracks, DragonDOS)";
 
+        /// <summary>
+        /// Scores the file from its extension (.vdk), the VDK header fields and its size.
+        /// </summary>
+        /// <param name="hints">
+        /// The file name, size and header bytes.
+        /// </param>
+        /// <returns>
+        /// The confidence from 0 to 1.
+        /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
             float confidence = 0.0f;
@@ -69,6 +80,7 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
+        /// <inheritdoc/>
         public override IFileSystemDriver CreateDriver()
         {
             return new DragonVdkDriver();

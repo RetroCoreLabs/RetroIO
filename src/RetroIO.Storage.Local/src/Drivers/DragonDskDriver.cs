@@ -25,10 +25,14 @@ namespace RetroIO.Storage.Local.Drivers
         private IBlockFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
 
+        /// <inheritdoc/>
         public string FileSystemType => _filesystem?.FileSystemType ?? "DragonDOS";
+        /// <inheritdoc/>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
+        /// <inheritdoc/>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ".";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities
         {
             get
@@ -41,15 +45,47 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets false, because the driver does not write yet.
+        /// </summary>
         public bool CanWrite => false;
+        /// <inheritdoc/>
         public bool HasBlockAccess => true;
 
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor()
         {
             return null;
         }
 
+        /// <summary>
+        /// Reads the optional JVC header, checks the geometry, mounts the data part of the image as a block device and initializes the file system.
+        /// </summary>
+        /// <remarks>
+        /// The header size is the file size modulo 256. DragonDOS is tried first. For a 35-track disk the DECB file system is tried before the fall back to DragonDOS.
+        /// </remarks>
+        /// <param name="imageStream">
+        /// The stream holding the disk image.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to mount read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the header cannot be read or the sector size, first sector number, track count or data size do not fit a DragonDOS disk.
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when the track and side count are not supported.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -208,6 +244,7 @@ namespace RetroIO.Storage.Local.Drivers
                 $"Unsupported disk geometry: {tracks} tracks, {sides} side(s)");
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             if (_filesystem == null)
@@ -218,6 +255,7 @@ namespace RetroIO.Storage.Local.Drivers
             return _filesystem.ListDirectory(path);
         }
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             if (_filesystem == null)
@@ -228,16 +266,38 @@ namespace RetroIO.Storage.Local.Drivers
             return _filesystem.ReadFile(path);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             throw new NotImplementedException("Write operations not yet supported for DSK/JVC images");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path)
         {
             throw new NotImplementedException("Delete operations not yet supported for DSK/JVC images");
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             if (_filesystem == null)
@@ -248,6 +308,15 @@ namespace RetroIO.Storage.Local.Drivers
             return _filesystem.GetMetadata(path);
         }
 
+        /// <summary>
+        /// Returns the number of free blocks reported by the file system.
+        /// </summary>
+        /// <returns>
+        /// The free block count.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the image is not mounted.
+        /// </exception>
         public int GetBlocksFree()
         {
             if (_filesystem == null)
@@ -258,11 +327,18 @@ namespace RetroIO.Storage.Local.Drivers
             return _filesystem.GetBlocksFree();
         }
 
+        /// <summary>
+        /// Returns the block device of the mounted image.
+        /// </summary>
+        /// <returns>
+        /// The block device, or null when not mounted.
+        /// </returns>
         public IBlockDevice? GetBlockDevice()
         {
             return _blockDevice;
         }
 
+        /// <inheritdoc/>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             if (_blockDevice == null)
@@ -273,11 +349,24 @@ namespace RetroIO.Storage.Local.Drivers
             return _blockDevice.ReadBlock(address, buffer);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             throw new NotImplementedException("Write operations not yet supported for DSK/JVC images");
         }
 
+        /// <inheritdoc/>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             if (_blockDevice == null)
@@ -288,6 +377,9 @@ namespace RetroIO.Storage.Local.Drivers
             return _blockDevice.GetBlockDeviceInfo();
         }
 
+        /// <summary>
+        /// Drops the block device and the file system. The block device is not disposed.
+        /// </summary>
         public void Dispose()
         {
             _blockDevice = null;

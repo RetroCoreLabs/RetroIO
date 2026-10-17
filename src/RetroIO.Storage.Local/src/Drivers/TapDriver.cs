@@ -26,18 +26,50 @@ namespace RetroIO.Storage.Local.Drivers
         private byte[] _pulses = Array.Empty<byte>();
         private byte _version;
 
+        /// <summary>
+        /// Gets the text TAP.
+        /// </summary>
         public string FileSystemType => "TAP";
+        /// <summary>
+        /// Gets the text TAPE.
+        /// </summary>
         public string VolumeLabel => "TAPE";
+        /// <summary>
+        /// Gets an empty string, because the single entry has a fixed name.
+        /// </summary>
         public string ExtensionSeparator => "";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read | DriverCapabilities.ListDirectory | DriverCapabilities.VolumeLabel;
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets false, because TAP images are read-only.
+        /// </summary>
         public bool CanWrite => false;
+        /// <summary>
+        /// Gets false, because a TAP image is a container and not a block device.
+        /// </summary>
         public bool HasBlockAccess => false;
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor() => null;
 
+        /// <summary>
+        /// Checks whether the data starts with the TAP signature and is long enough to hold the header.
+        /// </summary>
+        /// <param name="data">
+        /// The first bytes of the file.
+        /// </param>
+        /// <returns>
+        /// True for a TAP header, false otherwise.
+        /// </returns>
         public static bool HasMagic(byte[] data)
         {
             if (data == null || data.Length < PulseDataOffset)
@@ -54,6 +86,21 @@ namespace RetroIO.Storage.Local.Drivers
             return true;
         }
 
+        /// <summary>
+        /// Reads the whole image, checks the signature, reads the format version and keeps the pulse data.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the TAP image.
+        /// </param>
+        /// <param name="readOnly">
+        /// Not used. The driver is always read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the signature is missing.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -80,6 +127,18 @@ namespace RetroIO.Storage.Local.Drivers
             Array.Copy(all, PulseDataOffset, _pulses, 0, len);
         }
 
+        /// <summary>
+        /// Returns a copy of the pulse data.
+        /// </summary>
+        /// <param name="path">
+        /// The entry name TAPE.RAW, with or without a leading slash.
+        /// </param>
+        /// <returns>
+        /// The pulse data.
+        /// </returns>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when the name is not TAPE.RAW.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             if (!string.Equals(Normalize(path), EntryName, StringComparison.OrdinalIgnoreCase))
@@ -91,11 +150,29 @@ namespace RetroIO.Storage.Local.Drivers
             return copy;
         }
 
+        /// <summary>
+        /// Lists the single entry TAPE.RAW. The path is ignored.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// An array with one entry.
+        /// </returns>
         public DirectoryEntry[] ListDirectory(string path)
         {
             return new[] { new DirectoryEntry { Name = EntryName, Metadata = BuildMetadata() } };
         }
 
+        /// <summary>
+        /// Returns the metadata of the entry TAPE.RAW, including the TAP version.
+        /// </summary>
+        /// <param name="path">
+        /// The entry name.
+        /// </param>
+        /// <returns>
+        /// The metadata, or null when the name is not TAPE.RAW.
+        /// </returns>
         public FileMetadata? GetMetadata(string path)
         {
             return string.Equals(Normalize(path), EntryName, StringComparison.OrdinalIgnoreCase) ? BuildMetadata() : null;
@@ -117,12 +194,69 @@ namespace RetroIO.Storage.Local.Drivers
             return metadata;
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data) => throw new NotSupportedException("TAP is read-only");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path) => throw new NotSupportedException("TAP is read-only");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="buffer">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer) => throw new NotSupportedException("TAP is a container, not a block device");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data) => throw new NotSupportedException("TAP is a container, not a block device");
+        /// <summary>
+        /// Returns null, because there is no block device.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public BlockDeviceInfo? GetBlockDeviceInfo() => null;
 
+        /// <summary>
+        /// Drops the pulse data.
+        /// </summary>
         public void Dispose() => _pulses = Array.Empty<byte>();
 
         private static string Normalize(string path)

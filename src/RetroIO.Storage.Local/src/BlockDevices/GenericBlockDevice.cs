@@ -46,6 +46,15 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// </summary>
         public override bool SupportsVariableGeometry => _descriptor.SupportsVariableGeometry;
 
+        /// <summary>
+        /// Checks that the image size equals the size the descriptor expects, or that size plus one byte per block (an error table).
+        /// </summary>
+        /// <param name="imageSize">
+        /// Size of the disk image in bytes.
+        /// </param>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the size matches neither value.
+        /// </exception>
         protected override void ValidateGeometry(long imageSize)
         {
             // Allow for error table variants (some D64 images have extra error bytes)
@@ -67,6 +76,21 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <summary>
+        /// Copies one block from the in-memory image into the buffer.
+        /// </summary>
+        /// <param name="address">
+        /// The block to read.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data. It must hold at least one block.
+        /// </param>
+        /// <returns>
+        /// The block size in bytes.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="buffer"/> is smaller than one block.
+        /// </exception>
         public override int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
@@ -86,6 +110,21 @@ namespace RetroIO.Storage.Local.BlockDevices
             return BlockSize;
         }
 
+        /// <summary>
+        /// Copies one block into the in-memory image.
+        /// </summary>
+        /// <param name="address">
+        /// The block to write.
+        /// </param>
+        /// <param name="data">
+        /// The block data. It must be exactly one block.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the device is read-only.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="data"/> is not exactly one block.
+        /// </exception>
         public override void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             EnsureMounted();
@@ -108,6 +147,12 @@ namespace RetroIO.Storage.Local.BlockDevices
             data.CopyTo(_imageData.AsSpan(offset, BlockSize));
         }
 
+        /// <summary>
+        /// Returns the geometry of the device, taken from the descriptor.
+        /// </summary>
+        /// <returns>
+        /// The device information.
+        /// </returns>
         public override BlockDeviceInfo GetBlockDeviceInfo()
         {
             EnsureMounted();
@@ -127,6 +172,21 @@ namespace RetroIO.Storage.Local.BlockDevices
             };
         }
 
+        /// <summary>
+        /// Returns the number of sectors on a track.
+        /// </summary>
+        /// <param name="track">
+        /// The track number.
+        /// </param>
+        /// <returns>
+        /// The sectors on that track, or the uniform sectors per track for a cylinder, head, sector device.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the track is outside the tracks of the device.
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when the descriptor uses another addressing mode.
+        /// </exception>
         public override int GetBlocksPerTrack(int track)
         {
             EnsureMounted();

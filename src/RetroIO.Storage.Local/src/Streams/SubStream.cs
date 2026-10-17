@@ -21,6 +21,24 @@ namespace RetroIO.Storage.Local.Streams
         private readonly long _length;
         private long _position;
 
+        /// <summary>
+        /// Creates a stream that shows a part of the base stream.
+        /// </summary>
+        /// <param name="baseStream">
+        /// The stream to read from and write to.
+        /// </param>
+        /// <param name="offset">
+        /// Position in <paramref name="baseStream"/> where the part starts.
+        /// </param>
+        /// <param name="length">
+        /// Length of the part in bytes.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="baseStream"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when <paramref name="offset"/> or <paramref name="length"/> is negative, or the part goes past the end of the base stream.
+        /// </exception>
         public SubStream(Stream baseStream, long offset, long length)
         {
             _baseStream = baseStream ?? throw new ArgumentNullException(nameof(baseStream));
@@ -44,11 +62,29 @@ namespace RetroIO.Storage.Local.Streams
             }
         }
 
+        /// <summary>
+        /// Gets whether the base stream can be read.
+        /// </summary>
         public override bool CanRead => _baseStream.CanRead;
+        /// <summary>
+        /// Gets whether the base stream can seek.
+        /// </summary>
         public override bool CanSeek => _baseStream.CanSeek;
+        /// <summary>
+        /// Gets whether the base stream can be written.
+        /// </summary>
         public override bool CanWrite => _baseStream.CanWrite;
+        /// <summary>
+        /// Gets the length of the part in bytes.
+        /// </summary>
         public override long Length => _length;
 
+        /// <summary>
+        /// Gets or sets the position inside the part.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the value is negative or past the end of the part.
+        /// </exception>
         public override long Position
         {
             get => _position;
@@ -62,11 +98,35 @@ namespace RetroIO.Storage.Local.Streams
             }
         }
 
+        /// <summary>
+        /// Flushes the base stream.
+        /// </summary>
         public override void Flush()
         {
             _baseStream.Flush();
         }
 
+        /// <summary>
+        /// Reads bytes from the current position of the part. A read stops at the end of the part.
+        /// </summary>
+        /// <param name="buffer">
+        /// Receives the bytes.
+        /// </param>
+        /// <param name="offset">
+        /// Index in <paramref name="buffer"/> where the first byte is stored.
+        /// </param>
+        /// <param name="count">
+        /// The most bytes to read.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read, or 0 at the end of the part.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="buffer"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when <paramref name="offset"/> or <paramref name="count"/> is outside the buffer.
+        /// </exception>
         public override int Read(byte[] buffer, int offset, int count)
         {
             if (buffer == null)
@@ -99,6 +159,21 @@ namespace RetroIO.Storage.Local.Streams
             return bytesRead;
         }
 
+        /// <summary>
+        /// Moves the position inside the part.
+        /// </summary>
+        /// <param name="offset">
+        /// The distance to move, relative to <paramref name="origin"/>.
+        /// </param>
+        /// <param name="origin">
+        /// The point the offset is counted from.
+        /// </param>
+        /// <returns>
+        /// The new position.
+        /// </returns>
+        /// <exception cref="IOException">
+        /// Thrown when the new position is outside the part.
+        /// </exception>
         public override long Seek(long offset, SeekOrigin origin)
         {
             long newPosition = origin switch
@@ -118,11 +193,41 @@ namespace RetroIO.Storage.Local.Streams
             return _position;
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="value">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public override void SetLength(long value)
         {
             throw new NotSupportedException("Cannot set length of SubStream");
         }
 
+        /// <summary>
+        /// Writes bytes at the current position of the part.
+        /// </summary>
+        /// <param name="buffer">
+        /// The bytes to write.
+        /// </param>
+        /// <param name="offset">
+        /// Index in <paramref name="buffer"/> of the first byte to write.
+        /// </param>
+        /// <param name="count">
+        /// The number of bytes to write.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="buffer"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when <paramref name="offset"/> or <paramref name="count"/> is outside the buffer.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the write would go past the end of the part.
+        /// </exception>
         public override void Write(byte[] buffer, int offset, int count)
         {
             if (buffer == null)
@@ -152,6 +257,12 @@ namespace RetroIO.Storage.Local.Streams
             _position += count;
         }
 
+        /// <summary>
+        /// Disposes this stream. The base stream is not disposed.
+        /// </summary>
+        /// <param name="disposing">
+        /// True when called from <c>Dispose</c>, false when called from a finalizer.
+        /// </param>
         protected override void Dispose(bool disposing)
         {
             if (disposing)

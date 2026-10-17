@@ -33,8 +33,10 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class FfsDriverProvider : FileSystemDriverProviderBase
     {
+        /// <inheritdoc/>
         public override string FileSystemType => "FFS";
 
+        /// <inheritdoc/>
         public override string Description => "Berkeley Fast File System (FFS/UFS)";
 
         /// <summary>
@@ -150,6 +152,7 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
+        /// <inheritdoc/>
         public override IFileSystemDriver CreateDriver()
         {
             return new FfsDriver();

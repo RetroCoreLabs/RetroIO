@@ -193,11 +193,29 @@ namespace RetroIO.Storage.Local.MBR.Structures
         public uint NumSectors;
 
         // CHS values (mostly unused on modern systems)
+        /// <summary>
+        /// Head number of the first sector in CHS form.
+        /// </summary>
         public byte StartHead;
+        /// <summary>
+        /// Sector number of the first sector in CHS form.
+        /// </summary>
         public byte StartSector;
+        /// <summary>
+        /// Cylinder number of the first sector in CHS form.
+        /// </summary>
         public byte StartCylinder;
+        /// <summary>
+        /// Head number of the last sector in CHS form.
+        /// </summary>
         public byte EndHead;
+        /// <summary>
+        /// Sector number of the last sector in CHS form.
+        /// </summary>
         public byte EndSector;
+        /// <summary>
+        /// Cylinder number of the last sector in CHS form.
+        /// </summary>
         public byte EndCylinder;
 
         /// <summary>

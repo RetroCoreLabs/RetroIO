@@ -24,10 +24,14 @@ namespace RetroIO.Storage.Local.Drivers
         private CbmDosFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
 
+        /// <inheritdoc/>
         public string FileSystemType => _filesystem?.FileSystemType ?? "CBM-DOS";
+        /// <inheritdoc/>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
+        /// <inheritdoc/>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? "";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities
         {
             get
@@ -57,20 +61,46 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
+        /// <inheritdoc/>
         public bool CanRead => true;
 
         // Writable when mounted read-write. D64, D71 and D81 write paths are all implemented and
         // validated against c1541.
+        /// <summary>
+        /// Gets true when the image is mounted read-write.
+        /// </summary>
         public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly && _descriptor != null;
 
+        /// <inheritdoc/>
         public bool HasBlockAccess => true;
 
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor yet.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor()
         {
             // TODO: Implement Commodore metadata descriptor (file type, record length, locked flag)
             return null;
         }
 
+        /// <summary>
+        /// Picks the disk format from the image size, mounts the block device and initializes the CBM DOS file system.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the disk image.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to mount read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the image size matches no D64, D71 or D81 size.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -134,36 +164,42 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
+        /// <inheritdoc/>
         public void WriteFile(string path, byte[] data)
         {
             EnsureMounted();
             _filesystem!.WriteFile(path, data);
         }
 
+        /// <inheritdoc/>
         public void DeleteFile(string path)
         {
             EnsureMounted();
             _filesystem!.DeleteFile(path);
         }
 
+        /// <inheritdoc/>
         public void RenameFile(string oldPath, string newPath)
         {
             EnsureMounted();
             _filesystem!.Rename(oldPath, newPath);
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -174,18 +210,21 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
+        /// <inheritdoc/>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
+        /// <inheritdoc/>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             EnsureMounted();
             _blockDevice!.WriteBlock(address, data);
         }
 
+        /// <inheritdoc/>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();
@@ -196,6 +235,9 @@ namespace RetroIO.Storage.Local.Drivers
         // LIFECYCLE
         // ===================================================================
 
+        /// <summary>
+        /// Releases the file system and disposes the block device.
+        /// </summary>
         public void Dispose()
         {
             _filesystem = null;

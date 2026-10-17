@@ -28,6 +28,15 @@ namespace RetroIO.Storage.Local.V7.Core
         /// </summary>
         public int PointersPerBlock => V7Constants.NINDIR;
 
+        /// <summary>
+        /// Creates a block mapper over the given block device.
+        /// </summary>
+        /// <param name="device">
+        /// The device that holds the file system.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is null.
+        /// </exception>
         public V7BlockMapper(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));

@@ -19,6 +19,15 @@ namespace RetroIO.Storage.Local.FFS.Core
     {
         private readonly FfsBlockMapper _mapper;
 
+        /// <summary>
+        /// Creates a directory reader that reads blocks through the given mapper.
+        /// </summary>
+        /// <param name="mapper">
+        /// The block mapper of the file system.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="mapper"/> is null.
+        /// </exception>
         public FfsDirectoryReader(FfsBlockMapper mapper)
         {
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));

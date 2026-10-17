@@ -36,10 +36,14 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int SECTORS_PER_GRANULE = 9;
         private const int MAX_GRANULES = 68;
 
+        /// <inheritdoc/>
         public string FileSystemType => "DECB";
+        /// <inheritdoc/>
         public string VolumeLabel => _volumeLabel;
+        /// <inheritdoc/>
         public string ExtensionSeparator => ".";  // DECB uses name.ext format
 
+        /// <inheritdoc/>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -80,6 +84,7 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
+        /// <inheritdoc/>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -122,6 +127,7 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -135,6 +141,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return ListRootDirectory();
         }
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -171,16 +178,38 @@ namespace RetroIO.Storage.Local.FileSystems
             return ReadFileData(entry);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             throw new NotImplementedException("DECB write operations not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path)
         {
             throw new NotImplementedException("DECB delete operations not yet implemented");
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -226,6 +255,7 @@ namespace RetroIO.Storage.Local.FileSystems
             };
         }
 
+        /// <inheritdoc/>
         public int GetBlocksFree()
         {
             EnsureInitialized();
@@ -242,16 +272,46 @@ namespace RetroIO.Storage.Local.FileSystems
             return freeGranules * SECTORS_PER_GRANULE;
         }
 
+        /// <summary>
+        /// Not supported, because DECB has no subdirectories. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void CreateDirectory(string path)
         {
             throw new NotSupportedException("DECB does not support subdirectories");
         }
 
+        /// <summary>
+        /// Not supported, because DECB has no subdirectories. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteDirectory(string path)
         {
             throw new NotSupportedException("DECB does not support subdirectories");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Not used.
+        /// </param>
+        /// <param name="newPath">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void Rename(string oldPath, string newPath)
         {
             throw new NotImplementedException("File rename not yet implemented for DECB");

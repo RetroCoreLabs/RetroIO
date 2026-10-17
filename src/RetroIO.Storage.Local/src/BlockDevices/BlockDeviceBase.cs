@@ -67,8 +67,17 @@ namespace RetroIO.Storage.Local.BlockDevices
     /// </remarks>
     public abstract class BlockDeviceBase : IBlockDevice
     {
+        /// <summary>
+        /// The whole disk image held in memory, or null when not mounted.
+        /// </summary>
         protected byte[]? _imageData;
+        /// <summary>
+        /// True when the device was mounted read-only.
+        /// </summary>
         protected bool _readOnly;
+        /// <summary>
+        /// The stream the image was loaded from and is written back to, or null when not mounted.
+        /// </summary>
         protected Stream? _imageStream;
 
         /// <summary>

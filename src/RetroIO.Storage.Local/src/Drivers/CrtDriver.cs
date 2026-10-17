@@ -27,18 +27,50 @@ namespace RetroIO.Storage.Local.Drivers
         private string _name = "CARTRIDGE";
         private readonly List<ChipEntry> _chips = new();
 
+        /// <summary>
+        /// Gets the text CRT.
+        /// </summary>
         public string FileSystemType => "CRT";
+        /// <summary>
+        /// Gets the cartridge name from the header, or CARTRIDGE when the header name is empty.
+        /// </summary>
         public string VolumeLabel => _name;
+        /// <summary>
+        /// Gets an empty string, because the chip names have no extension.
+        /// </summary>
         public string ExtensionSeparator => "";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read | DriverCapabilities.ListDirectory | DriverCapabilities.FileTypes | DriverCapabilities.VolumeLabel;
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets false, because CRT images are read-only.
+        /// </summary>
         public bool CanWrite => false;
+        /// <summary>
+        /// Gets false, because a CRT image is a container and not a block device.
+        /// </summary>
         public bool HasBlockAccess => false;
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor() => null;
 
+        /// <summary>
+        /// Checks whether the data starts with the CRT cartridge signature.
+        /// </summary>
+        /// <param name="data">
+        /// The first bytes of the file.
+        /// </param>
+        /// <returns>
+        /// True when the data starts with the 16-byte signature text, false otherwise or when the data is too short.
+        /// </returns>
         public static bool HasMagic(byte[] data)
         {
             if (data == null || data.Length < CrtMagic.Length)
@@ -55,6 +87,21 @@ namespace RetroIO.Storage.Local.Drivers
             return true;
         }
 
+        /// <summary>
+        /// Reads the whole image, checks the signature, reads the cartridge name and builds the list of CHIP packets.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the cartridge image.
+        /// </param>
+        /// <param name="readOnly">
+        /// Not used. The driver is always read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the signature is missing.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -119,6 +166,18 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
+        /// <summary>
+        /// Returns the data of one CHIP packet.
+        /// </summary>
+        /// <param name="path">
+        /// The chip name as shown by <see cref="ListDirectory"/>.
+        /// </param>
+        /// <returns>
+        /// The chip data.
+        /// </returns>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when no chip has that name.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             string name = Normalize(path);
@@ -132,6 +191,15 @@ namespace RetroIO.Storage.Local.Drivers
             return result;
         }
 
+        /// <summary>
+        /// Lists all CHIP packets of the cartridge. The path is ignored.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// One entry per CHIP packet.
+        /// </returns>
         public DirectoryEntry[] ListDirectory(string path)
         {
             DirectoryEntry[] entries = new DirectoryEntry[_chips.Count];
@@ -142,6 +210,15 @@ namespace RetroIO.Storage.Local.Drivers
             return entries;
         }
 
+        /// <summary>
+        /// Returns the metadata of one CHIP packet.
+        /// </summary>
+        /// <param name="path">
+        /// The chip name.
+        /// </param>
+        /// <returns>
+        /// The metadata, including bank, load address and chip type, or null when no chip has that name.
+        /// </returns>
         public FileMetadata? GetMetadata(string path)
         {
             ChipEntry? chip = Find(Normalize(path));
@@ -166,12 +243,69 @@ namespace RetroIO.Storage.Local.Drivers
             return metadata;
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data) => throw new NotSupportedException("CRT is read-only");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path) => throw new NotSupportedException("CRT is read-only");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="buffer">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer) => throw new NotSupportedException("CRT is a container, not a block device");
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data) => throw new NotSupportedException("CRT is a container, not a block device");
+        /// <summary>
+        /// Returns null, because there is no block device.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public BlockDeviceInfo? GetBlockDeviceInfo() => null;
 
+        /// <summary>
+        /// Drops the image data.
+        /// </summary>
         public void Dispose() => _data = Array.Empty<byte>();
 
         private ChipEntry? Find(string name)

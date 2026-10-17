@@ -26,11 +26,27 @@ namespace RetroIO.Storage.Local.BlockDevices
         private readonly CacheStatistics _statistics;
         private readonly object _lock = new object();
 
+        /// <inheritdoc/>
         public CacheStrategy Strategy => _strategy;
+        /// <inheritdoc/>
         public int MaxBlocks => _maxBlocks;
+        /// <inheritdoc/>
         public int CachedBlocks { get { lock (_lock) return _cache.Count; } }
+        /// <inheritdoc/>
         public CacheStatistics Statistics => _statistics;
 
+        /// <summary>
+        /// Creates an empty cache.
+        /// </summary>
+        /// <param name="maxBlocks">
+        /// The most blocks the cache keeps.
+        /// </param>
+        /// <param name="blockSize">
+        /// Size of one block in bytes.
+        /// </param>
+        /// <param name="strategy">
+        /// The write strategy.
+        /// </param>
         public LruBlockCache(int maxBlocks, int blockSize, CacheStrategy strategy = CacheStrategy.WriteThrough)
         {
             _maxBlocks = maxBlocks;
@@ -41,6 +57,7 @@ namespace RetroIO.Storage.Local.BlockDevices
             _statistics = new CacheStatistics();
         }
 
+        /// <inheritdoc/>
         public bool TryReadBlock(BlockAddress address, Span<byte> buffer, Func<BlockAddress, Span<byte>, int> readFunc)
         {
             long key = GetCacheKey(address);
@@ -74,6 +91,7 @@ namespace RetroIO.Storage.Local.BlockDevices
             return true;
         }
 
+        /// <inheritdoc/>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data, Action<BlockAddress, ReadOnlySpan<byte>> writeFunc)
         {
             long key = GetCacheKey(address);
@@ -134,6 +152,7 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <inheritdoc/>
         public void Invalidate(BlockAddress address)
         {
             long key = GetCacheKey(address);
@@ -149,6 +168,7 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <inheritdoc/>
         public void InvalidateAll()
         {
             lock (_lock)
@@ -162,6 +182,7 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <inheritdoc/>
         public void Flush(Action<BlockAddress, ReadOnlySpan<byte>> writeFunc)
         {
             lock (_lock)
@@ -185,6 +206,18 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <summary>
+        /// Reads a run of blocks into the cache, skipping blocks already cached.
+        /// </summary>
+        /// <param name="startAddress">
+        /// The first block.
+        /// </param>
+        /// <param name="count">
+        /// The number of blocks to read.
+        /// </param>
+        /// <param name="readFunc">
+        /// Reads a block from the underlying device.
+        /// </param>
         public void Prefetch(BlockAddress startAddress, int count, Func<BlockAddress, Span<byte>, int> readFunc)
         {
             for (int i = 0; i < count; i++)
@@ -215,6 +248,9 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <summary>
+        /// Returns the cached buffers to the pool and empties the cache.
+        /// </summary>
         public void Dispose()
         {
             lock (_lock)

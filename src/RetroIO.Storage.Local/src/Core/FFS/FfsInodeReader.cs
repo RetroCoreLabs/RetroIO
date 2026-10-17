@@ -29,6 +29,18 @@ namespace RetroIO.Storage.Local.FFS.Core
         private readonly FfsSuperblock _superblock;
         private readonly int _inodesPerBlock;
 
+        /// <summary>
+        /// Creates an inode reader. The inodes per block value comes from the superblock.
+        /// </summary>
+        /// <param name="mapper">
+        /// The block mapper of the file system.
+        /// </param>
+        /// <param name="superblock">
+        /// The superblock of the file system.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="mapper"/> or <paramref name="superblock"/> is null.
+        /// </exception>
         public FfsInodeReader(FfsBlockMapper mapper, FfsSuperblock superblock)
         {
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));

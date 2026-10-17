@@ -86,6 +86,9 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// [14]: Triple indirect block
         /// </summary>
         public uint[] di_db { get; set; } = new uint[FfsConstants.NDADDR];  // 12 direct
+        /// <summary>
+        /// Gets or sets the three indirect block addresses: single, double and triple indirect.
+        /// </summary>
         public uint[] di_ib { get; set; } = new uint[FfsConstants.NIADDR];  // 3 indirect
 
         // =================================================================
@@ -479,6 +482,12 @@ namespace RetroIO.Storage.Local.FFS.Structures
             }
         }
 
+        /// <summary>
+        /// Returns a text with the file type, size, link count, permissions, owner and group, or a free marker when the inode is not allocated.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             if (!IsAllocated)

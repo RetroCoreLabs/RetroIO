@@ -33,7 +33,9 @@ namespace RetroIO.Storage.Local
         public string Type => "diskimage";
 
         // VFS Properties
+        /// <inheritdoc/>
         public string[] SupportedSchemes => new[] { "d64", "d71", "d81", "ndfs", "ffs", "ufs", "bsd", "img", "vdk", "dmk", "t64", "diskimage" };
+        /// <inheritdoc/>
         public bool IsRemote => false;
 
         /// <summary>
@@ -585,6 +587,7 @@ namespace RetroIO.Storage.Local
 
         // ==================== VFS Async Methods ====================
 
+        /// <inheritdoc/>
         public async Task<Stream> OpenReadAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -599,6 +602,7 @@ namespace RetroIO.Storage.Local
             return new MemoryStream(data);
         }
 
+        /// <inheritdoc/>
         public async Task WriteAsync(UrnContext context, string path, Stream data, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -619,6 +623,7 @@ namespace RetroIO.Storage.Local
             await Task.Run(() => mount.Driver.WriteFile(resolvedPath, fileData), cancellationToken);
         }
 
+        /// <inheritdoc/>
         public Task<DirectoryEntry[]> ListDirectoryAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -627,6 +632,7 @@ namespace RetroIO.Storage.Local
             return Task.Run(() => ListDirectory(context, path), cancellationToken);
         }
 
+        /// <inheritdoc/>
         public Task<FileMetadata?> GetMetadataAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);

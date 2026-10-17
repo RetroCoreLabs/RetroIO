@@ -67,13 +67,37 @@ namespace RetroIO.Storage.Local.FFS.Structures
         // FILE TYPE CONSTANTS
         // =================================================================
 
+        /// <summary>
+        /// File type value for an unknown type.
+        /// </summary>
         public const byte DT_UNKNOWN = 0;   // Unknown type
+        /// <summary>
+        /// File type value for a named pipe.
+        /// </summary>
         public const byte DT_FIFO = 1;      // Named pipe (FIFO)
+        /// <summary>
+        /// File type value for a character device.
+        /// </summary>
         public const byte DT_CHR = 2;       // Character device
+        /// <summary>
+        /// File type value for a directory.
+        /// </summary>
         public const byte DT_DIR = 4;       // Directory
+        /// <summary>
+        /// File type value for a block device.
+        /// </summary>
         public const byte DT_BLK = 6;       // Block device
+        /// <summary>
+        /// File type value for a regular file.
+        /// </summary>
         public const byte DT_REG = 8;       // Regular file
+        /// <summary>
+        /// File type value for a symbolic link.
+        /// </summary>
         public const byte DT_LNK = 10;      // Symbolic link
+        /// <summary>
+        /// File type value for a socket.
+        /// </summary>
         public const byte DT_SOCK = 12;     // Socket
 
         // =================================================================
@@ -297,6 +321,12 @@ namespace RetroIO.Storage.Local.FFS.Structures
             return entries.ToArray();
         }
 
+        /// <summary>
+        /// Returns a text with the name, inode number, file type and record length, or an unused marker.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             if (IsUnused)

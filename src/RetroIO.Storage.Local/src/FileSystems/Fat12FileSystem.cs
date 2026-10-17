@@ -39,10 +39,14 @@ namespace RetroIO.Storage.Local.FileSystems
         private uint _rootDirSectors;
         private uint _dataStart;
 
+        /// <inheritdoc/>
         public string FileSystemType => "FAT12";
+        /// <inheritdoc/>
         public string VolumeLabel => _volumeLabel;
+        /// <inheritdoc/>
         public string ExtensionSeparator => ".";  // FAT uses name.ext format
 
+        /// <inheritdoc/>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -65,6 +69,7 @@ namespace RetroIO.Storage.Local.FileSystems
             ReadVolumeLabel();
         }
 
+        /// <inheritdoc/>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -216,6 +221,7 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -223,6 +229,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return ListDirectoryEntries(dir);
         }
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -235,6 +242,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return ReadFileData(raw.Entry.StartCluster, raw.Entry.FileSize);
         }
 
+        /// <inheritdoc/>
         public void WriteFile(string path, byte[] data)
         {
             EnsureInitialized();
@@ -270,6 +278,7 @@ namespace RetroIO.Storage.Local.FileSystems
             WriteNewEntry(slot, name, ArchiveAttribute, startCluster, (uint)data.Length);
         }
 
+        /// <inheritdoc/>
         public void DeleteFile(string path)
         {
             EnsureInitialized();
@@ -289,6 +298,7 @@ namespace RetroIO.Storage.Local.FileSystems
             MarkSlotDeleted(raw.Lba, raw.Offset);
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -301,6 +311,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return ToMetadata(raw.Value.Entry);
         }
 
+        /// <inheritdoc/>
         public int GetBlocksFree()
         {
             EnsureInitialized();
@@ -320,6 +331,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return freeClusters * _bootSector!.SectorsPerCluster;
         }
 
+        /// <inheritdoc/>
         public void CreateDirectory(string path)
         {
             EnsureInitialized();
@@ -338,6 +350,7 @@ namespace RetroIO.Storage.Local.FileSystems
             WriteNewEntry(slot, name, DirectoryAttribute, newCluster, 0);
         }
 
+        /// <inheritdoc/>
         public void DeleteDirectory(string path)
         {
             EnsureInitialized();
@@ -359,6 +372,7 @@ namespace RetroIO.Storage.Local.FileSystems
             MarkSlotDeleted(raw.Lba, raw.Offset);
         }
 
+        /// <inheritdoc/>
         public void Rename(string oldPath, string newPath)
         {
             EnsureInitialized();

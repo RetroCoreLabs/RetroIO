@@ -16,10 +16,21 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class PcFloppyDriverProvider : FileSystemDriverProviderBase
     {
+        /// <inheritdoc/>
         public override string FileSystemType => "PC-Floppy";
 
+        /// <inheritdoc/>
         public override string Description => "PC floppy disk images (360KB-2.88MB, FAT12/FAT16)";
 
+        /// <summary>
+        /// Scores the file from its extension, its size and its boot sector fields.
+        /// </summary>
+        /// <param name="hints">
+        /// The file name, size and header bytes.
+        /// </param>
+        /// <returns>
+        /// The confidence from 0 to 1.
+        /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
             float confidence = 0.0f;
@@ -107,6 +118,7 @@ namespace RetroIO.Storage.Local.Drivers
             return declaredBytes <= actualFileSize && declaredBytes >= actualFileSize / 2;
         }
 
+        /// <inheritdoc/>
         public override IFileSystemDriver CreateDriver()
         {
             return new PcFloppyDriver();

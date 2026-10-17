@@ -101,14 +101,35 @@ namespace RetroIO.Storage.Local.BlockDevices
     /// </summary>
     public class CacheStatistics
     {
+        /// <summary>
+        /// Gets or sets the number of reads served from the cache.
+        /// </summary>
         public long Hits { get; set; }
+        /// <summary>
+        /// Gets or sets the number of reads that were not in the cache.
+        /// </summary>
         public long Misses { get; set; }
+        /// <summary>
+        /// Gets or sets the number of writes passed to the cache.
+        /// </summary>
         public long Writes { get; set; }
+        /// <summary>
+        /// Gets or sets the number of blocks removed to make room for others.
+        /// </summary>
         public long Evictions { get; set; }
+        /// <summary>
+        /// Gets or sets the number of times the cache was flushed.
+        /// </summary>
         public long FlushCount { get; set; }
 
+        /// <summary>
+        /// Gets the hits divided by the total of hits and misses, or 0 when there were no reads.
+        /// </summary>
         public double HitRate => (Hits + Misses) > 0 ? (double)Hits / (Hits + Misses) : 0.0;
 
+        /// <summary>
+        /// Sets all counters to zero.
+        /// </summary>
         public void Reset()
         {
             Hits = 0;

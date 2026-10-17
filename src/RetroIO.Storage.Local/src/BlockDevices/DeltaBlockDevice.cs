@@ -23,6 +23,24 @@ namespace RetroIO.Storage.Local.BlockDevices
         private readonly DeltaCompressionMode _compressionMode;
         private readonly bool _applyDeltaOnMount;
 
+        /// <summary>
+        /// Creates a device that keeps all changes in a delta file and leaves the base device unchanged.
+        /// </summary>
+        /// <param name="baseDevice">
+        /// The device that supplies blocks that have not been changed.
+        /// </param>
+        /// <param name="deltaFilePath">
+        /// Path of the delta file.
+        /// </param>
+        /// <param name="compressionMode">
+        /// How changed blocks are stored in the delta file.
+        /// </param>
+        /// <param name="applyDeltaOnMount">
+        /// Stored by the constructor. The value is not used anywhere else in this class.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="baseDevice"/> is null.
+        /// </exception>
         public DeltaBlockDevice(
             IBlockDevice baseDevice,
             string deltaFilePath,
@@ -40,10 +58,17 @@ namespace RetroIO.Storage.Local.BlockDevices
         }
 
         // IBlockDevice properties
+        /// <inheritdoc/>
         public int BlockSize => _baseDevice.BlockSize;
+        /// <inheritdoc/>
         public uint TotalBlocks => _baseDevice.TotalBlocks;
+        /// <summary>
+        /// Always false, because writes go to the delta file even when the base device is read-only.
+        /// </summary>
         public bool IsReadOnly => false; // Delta allows writes even if base is read-only
+        /// <inheritdoc/>
         public bool IsMounted => _baseDevice.IsMounted;
+        /// <inheritdoc/>
         public bool SupportsVariableGeometry => _baseDevice.SupportsVariableGeometry;
 
         /// <summary>
@@ -61,11 +86,32 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// </summary>
         public double CompressionRatio => _deltaWriter.CompressionRatio;
 
+        /// <summary>
+        /// Mounts the base device.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the disk image.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to mount the base device read-only.
+        /// </param>
         public void Mount(System.IO.Stream imageStream, bool readOnly)
         {
             _baseDevice.Mount(imageStream, readOnly);
         }
 
+        /// <summary>
+        /// Reads a block from the delta file if it was changed, otherwise from the base device.
+        /// </summary>
+        /// <param name="address">
+        /// The block to read.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read.
+        /// </returns>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             uint blockId = address.LBA;
@@ -103,6 +149,15 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <summary>
+        /// Writes a block to the delta file. The base device is not written.
+        /// </summary>
+        /// <param name="address">
+        /// The block to write.
+        /// </param>
+        /// <param name="data">
+        /// The block data.
+        /// </param>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             uint blockId = address.LBA;
@@ -128,11 +183,13 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
+        /// <inheritdoc/>
         public int GetBlocksPerTrack(int track)
         {
             return _baseDevice.GetBlocksPerTrack(track);
         }
 
+        /// <inheritdoc/>
         public BlockDeviceInfo GetBlockDeviceInfo()
         {
             return _baseDevice.GetBlockDeviceInfo();
@@ -176,6 +233,9 @@ namespace RetroIO.Storage.Local.BlockDevices
             });
         }
 
+        /// <summary>
+        /// Flushes the delta writer and the base device.
+        /// </summary>
         public void Flush()
         {
             // Flush delta writer and base device
@@ -183,6 +243,9 @@ namespace RetroIO.Storage.Local.BlockDevices
             _baseDevice?.Flush();
         }
 
+        /// <summary>
+        /// Disposes the delta writer and the base device.
+        /// </summary>
         public void Dispose()
         {
             _deltaWriter?.Dispose();

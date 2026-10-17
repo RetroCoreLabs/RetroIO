@@ -30,6 +30,9 @@ namespace RetroIO.Storage.Local.Drivers
         private string? _imagePath;            // Optional: image path for hardcoded geometry detection
         private long _filesystemOffsetBytes = -1;  // -1 = discover the base (label, else scan)
 
+        /// <summary>
+        /// Gets the file system type of the mounted file system. When a disk label is used, the partition letter is appended after a dash.
+        /// </summary>
         public string FileSystemType
         {
             get
@@ -40,9 +43,14 @@ namespace RetroIO.Storage.Local.Drivers
                     : baseType;
             }
         }
+        /// <inheritdoc/>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
+        /// <summary>
+        /// Gets an empty string, because FFS names have no separate extension.
+        /// </summary>
         public string ExtensionSeparator => "";  // Unix FFS doesn't use DOS-style extensions
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read |
             DriverCapabilities.ListDirectory |
@@ -57,10 +65,21 @@ namespace RetroIO.Storage.Local.Drivers
             DriverCapabilities.HardLinks |
             DriverCapabilities.LongFilenames;
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets false, because the FFS driver does not write yet.
+        /// </summary>
         public bool CanWrite => false;  // Phase 2
+        /// <inheritdoc/>
         public bool HasBlockAccess => true;
 
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor yet.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor()
         {
             // TODO: Implement FFS metadata descriptor (permissions, uid/gid, timestamps, fragments)
@@ -124,6 +143,18 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public long FilesystemOffsetBytes => _filesystem?.ResolvedFilesystemOffsetBytes ?? 0;
 
+        /// <summary>
+        /// Mounts the image as a device of 512-byte blocks and initializes the FFS file system on the selected partition.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the disk image.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to mount read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -159,28 +190,52 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             throw new NotImplementedException("FFS write operations not yet implemented (Phase 2)");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path)
         {
             throw new NotImplementedException("FFS write operations not yet implemented (Phase 2)");
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -191,17 +246,31 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
+        /// <inheritdoc/>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             throw new NotImplementedException("FFS write operations not yet implemented (Phase 2)");
         }
 
+        /// <inheritdoc/>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();
@@ -332,6 +401,7 @@ namespace RetroIO.Storage.Local.Drivers
         // PARTITION PROVIDER INTERFACE
         // ===================================================================
 
+        /// <inheritdoc/>
         public bool SupportsPartitions()
         {
             EnsureMounted();
@@ -342,6 +412,7 @@ namespace RetroIO.Storage.Local.Drivers
             return diskLabel != null && diskLabel.IsValid();
         }
 
+        /// <inheritdoc/>
         public IReadOnlyList<PartitionMetadata> ListPartitions()
         {
             EnsureMounted();
@@ -377,6 +448,7 @@ namespace RetroIO.Storage.Local.Drivers
             return result;
         }
 
+        /// <inheritdoc/>
         public bool SelectPartition(string partitionId)
         {
             if (string.IsNullOrEmpty(partitionId) || partitionId.Length != 1)
@@ -394,12 +466,16 @@ namespace RetroIO.Storage.Local.Drivers
             return true;
         }
 
+        /// <inheritdoc/>
         public string? CurrentPartition => _useDiskLabel ? _partitionLetter.ToString() : null;
 
         // ===================================================================
         // LIFECYCLE
         // ===================================================================
 
+        /// <summary>
+        /// Releases the file system and disposes the block device.
+        /// </summary>
         public void Dispose()
         {
             _filesystem = null;

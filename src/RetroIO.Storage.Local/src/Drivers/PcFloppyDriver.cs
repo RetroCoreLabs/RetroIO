@@ -40,10 +40,14 @@ namespace RetroIO.Storage.Local.Drivers
         // already substituted _blockDevice for a partition-scoped sub-view.
         private Stream? _rawStream;
 
+        /// <inheritdoc/>
         public string FileSystemType => _filesystem?.FileSystemType ?? "FAT";
+        /// <inheritdoc/>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
+        /// <inheritdoc/>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ".";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities
         {
             get
@@ -67,16 +71,45 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets true, because the driver writes through the FAT file system.
+        /// </summary>
         public bool CanWrite => true;
+        /// <inheritdoc/>
         public bool HasBlockAccess => true;
 
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor yet.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor()
         {
             // TODO: Implement PC FAT12 metadata descriptor
             return null;
         }
 
+        /// <summary>
+        /// Mounts the image, or the selected MBR partition, as a block device and initializes a FAT12, FAT16 or FAT32 file system, chosen from the cluster count in the boot sector.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the disk image.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to mount read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when a partition is selected and the image has no valid MBR.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the selected MBR partition does not exist.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -230,42 +263,49 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
+        /// <inheritdoc/>
         public void WriteFile(string path, byte[] data)
         {
             EnsureMounted();
             _filesystem!.WriteFile(path, data);
         }
 
+        /// <inheritdoc/>
         public void DeleteFile(string path)
         {
             EnsureMounted();
             _filesystem!.DeleteFile(path);
         }
 
+        /// <inheritdoc/>
         public void CreateDirectory(string path)
         {
             EnsureMounted();
             _filesystem!.CreateDirectory(path);
         }
 
+        /// <inheritdoc/>
         public void RenameFile(string oldPath, string newPath)
         {
             EnsureMounted();
             _filesystem!.Rename(oldPath, newPath);
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -276,18 +316,21 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
+        /// <inheritdoc/>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
+        /// <inheritdoc/>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             EnsureMounted();
             _blockDevice!.WriteBlock(address, data);
         }
 
+        /// <inheritdoc/>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();
@@ -298,6 +341,12 @@ namespace RetroIO.Storage.Local.Drivers
         // MBR PARTITION SUPPORT (IPartitionProvider)
         // ===================================================================
 
+        /// <summary>
+        /// Returns true when the first sector of the image holds a valid MBR partition table.
+        /// </summary>
+        /// <returns>
+        /// True when a valid MBR is found, false otherwise or when no image is mounted yet.
+        /// </returns>
         public bool SupportsPartitions()
         {
             if (_rawStream == null)
@@ -308,6 +357,12 @@ namespace RetroIO.Storage.Local.Drivers
             return TryReadMbrTable(_rawStream, out MbrPartitionTable? table) && table!.IsValid();
         }
 
+        /// <summary>
+        /// Lists the used partitions of the MBR partition table.
+        /// </summary>
+        /// <returns>
+        /// One entry per used partition, or an empty list when there is no valid MBR.
+        /// </returns>
         public IReadOnlyList<PartitionMetadata> ListPartitions()
         {
             var result = new List<PartitionMetadata>();
@@ -371,8 +426,14 @@ namespace RetroIO.Storage.Local.Drivers
             return true;
         }
 
+        /// <summary>
+        /// Gets the selected MBR partition number as text, or null when no partition is selected.
+        /// </summary>
         public string? CurrentPartition => _selectedMbrPartitionIndex?.ToString();
 
+        /// <summary>
+        /// Clears the partition selection so the whole image is used as one file system.
+        /// </summary>
         public void SetRawMode()
         {
             _selectedMbrPartitionIndex = null;
@@ -402,6 +463,9 @@ namespace RetroIO.Storage.Local.Drivers
         // LIFECYCLE
         // ===================================================================
 
+        /// <summary>
+        /// Releases the file system and disposes the block device.
+        /// </summary>
         public void Dispose()
         {
             _filesystem = null;

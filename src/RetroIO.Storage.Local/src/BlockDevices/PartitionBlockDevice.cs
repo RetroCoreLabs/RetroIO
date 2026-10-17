@@ -79,6 +79,24 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// </summary>
         public bool SupportsVariableGeometry => false;
 
+        /// <summary>
+        /// Reads a block of the partition from the physical device, offset by the partition start.
+        /// </summary>
+        /// <param name="address">
+        /// The block to read, in LBA form.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the block is past the end of the partition.
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when the address is not in LBA form.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             // Validate partition bounds
@@ -95,6 +113,21 @@ namespace RetroIO.Storage.Local.BlockDevices
             return _physicalDevice.ReadBlock(BlockAddress.FromLBA(physicalLBA), buffer);
         }
 
+        /// <summary>
+        /// Writes a block of the partition to the physical device, offset by the partition start.
+        /// </summary>
+        /// <param name="address">
+        /// The block to write, in LBA form.
+        /// </param>
+        /// <param name="data">
+        /// The block data.
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the block is past the end of the partition.
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when the address is not in LBA form.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             // Validate partition bounds
@@ -111,6 +144,12 @@ namespace RetroIO.Storage.Local.BlockDevices
             _physicalDevice.WriteBlock(BlockAddress.FromLBA(physicalLBA), data);
         }
 
+        /// <summary>
+        /// Returns LBA-mode information for the partition. Track, cylinder and sector counts are 0.
+        /// </summary>
+        /// <returns>
+        /// The partition information.
+        /// </returns>
         public BlockDeviceInfo GetBlockDeviceInfo()
         {
             var physicalInfo = _physicalDevice.GetBlockDeviceInfo();
@@ -129,11 +168,35 @@ namespace RetroIO.Storage.Local.BlockDevices
             };
         }
 
+        /// <summary>
+        /// Always throws, because partitions use LBA addressing only.
+        /// </summary>
+        /// <param name="track">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public int GetBlocksPerTrack(int track)
         {
             throw new NotSupportedException("Track-based geometry not supported for partitions. Use LBA addressing.");
         }
 
+        /// <summary>
+        /// Always throws, because the physical device must be mounted before the partition wrapper is created.
+        /// </summary>
+        /// <param name="imageStream">
+        /// Not used.
+        /// </param>
+        /// <param name="readOnly">
+        /// Not used.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Always thrown.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             // Mounting handled by underlying physical device
@@ -144,12 +207,18 @@ namespace RetroIO.Storage.Local.BlockDevices
                 "The underlying physical device must be mounted first, then create the partition wrapper.");
         }
 
+        /// <summary>
+        /// Flushes the physical device.
+        /// </summary>
         public void Flush()
         {
             // Delegate flush to the physical device
             _physicalDevice.Flush();
         }
 
+        /// <summary>
+        /// Does nothing. The physical device may be shared, so it is not disposed here.
+        /// </summary>
         public void Dispose()
         {
             // Do NOT dispose the physical device - it may be shared by multiple partition wrappers

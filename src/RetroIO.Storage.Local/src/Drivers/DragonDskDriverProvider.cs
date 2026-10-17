@@ -17,10 +17,21 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonDskDriverProvider : FileSystemDriverProviderBase
     {
+        /// <inheritdoc/>
         public override string FileSystemType => "DragonDOS-DSK";
 
+        /// <inheritdoc/>
         public override string Description => "Dragon 32/64 DSK/JVC disk images (35/40/80 tracks, DragonDOS)";
 
+        /// <summary>
+        /// Scores the file from its extension (.dsk or .jvc), a plausible JVC header and its size. Returns 0 when the header starts with the VDK signature.
+        /// </summary>
+        /// <param name="hints">
+        /// The file name, size and header bytes.
+        /// </param>
+        /// <returns>
+        /// The confidence from 0 to 1.
+        /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
             float confidence = 0.0f;
@@ -65,6 +76,7 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
+        /// <inheritdoc/>
         public override IFileSystemDriver CreateDriver()
         {
             return new DragonDskDriver();

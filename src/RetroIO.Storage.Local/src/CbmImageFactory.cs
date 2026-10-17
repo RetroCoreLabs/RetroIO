@@ -17,8 +17,17 @@ namespace RetroIO.Storage.Local
     /// </summary>
     public enum CbmDiskType
     {
+        /// <summary>
+        /// 1541 disk, 35 tracks, 174,848 bytes.
+        /// </summary>
         D64, // 1541, 35 tracks, 174,848 bytes
+        /// <summary>
+        /// 1571 disk, 70 tracks, 349,696 bytes.
+        /// </summary>
         D71, // 1571, 70 tracks, 349,696 bytes
+        /// <summary>
+        /// 1581 disk, 80 tracks, 819,200 bytes.
+        /// </summary>
         D81  // 1581, 80 tracks, 819,200 bytes
     }
 

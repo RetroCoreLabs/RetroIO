@@ -22,6 +22,21 @@ namespace RetroIO.Storage.Local.V7.Core
         private readonly uint _partitionStartBlock;
         private readonly Dictionary<ushort, V7Inode> _inodeCache;
 
+        /// <summary>
+        /// Creates an inode reader with an empty inode cache.
+        /// </summary>
+        /// <param name="mapper">
+        /// The block mapper of the file system.
+        /// </param>
+        /// <param name="superblock">
+        /// The superblock of the file system.
+        /// </param>
+        /// <param name="partitionStartBlock">
+        /// The block where the partition starts.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="mapper"/> or <paramref name="superblock"/> is null.
+        /// </exception>
         public V7InodeReader(V7BlockMapper mapper, V7Superblock superblock, uint partitionStartBlock)
         {
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));

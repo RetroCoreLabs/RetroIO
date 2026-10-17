@@ -42,6 +42,15 @@ namespace RetroIO.Storage.Local.BSD.Partitions
         private readonly IBlockDevice _device;
         private BsdDiskLabel? _diskLabel;
 
+        /// <summary>
+        /// Creates a partition manager for the given block device.
+        /// </summary>
+        /// <param name="device">
+        /// The device that holds the disk label.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is null.
+        /// </exception>
         public BsdPartitionManager(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));

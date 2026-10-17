@@ -26,10 +26,14 @@ namespace RetroIO.Storage.Local.Drivers
         private DragonDosFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
 
+        /// <inheritdoc/>
         public string FileSystemType => _filesystem?.FileSystemType ?? "DragonDOS";
+        /// <inheritdoc/>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
+        /// <inheritdoc/>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ".";
 
+        /// <inheritdoc/>
         public DriverCapabilities Capabilities
         {
             get
@@ -43,16 +47,42 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets false, because the driver does not write yet.
+        /// </summary>
         public bool CanWrite => false; // TODO: Implement write operations
+        /// <inheritdoc/>
         public bool HasBlockAccess => true;
 
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor yet.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor()
         {
             // TODO: Implement Dragon/CoCo VDK metadata descriptor
             return null;
         }
 
+        /// <summary>
+        /// Checks the VDK header, picks the disk geometry from it, mounts the data part of the image as a block device and initializes the DragonDOS file system.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the disk image.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to mount read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the file is too small, the signature is missing, the header size is under 12 bytes, the geometry is unknown or the data size does not fit the geometry.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -166,28 +196,52 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             throw new NotImplementedException("Dragon VDK write operations not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path)
         {
             throw new NotImplementedException("Dragon VDK delete operations not yet implemented");
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -198,17 +252,31 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
+        /// <inheritdoc/>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             throw new NotImplementedException("Dragon VDK write operations not yet implemented");
         }
 
+        /// <inheritdoc/>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();
@@ -219,6 +287,9 @@ namespace RetroIO.Storage.Local.Drivers
         // LIFECYCLE
         // ===================================================================
 
+        /// <summary>
+        /// Releases the file system and disposes the block device.
+        /// </summary>
         public void Dispose()
         {
             _filesystem = null;

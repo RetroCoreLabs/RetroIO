@@ -20,6 +20,15 @@ namespace RetroIO.Storage.Local.MBR.Partitions
         private readonly IBlockDevice _device;
         private MbrPartitionTable? _partitionTable;
 
+        /// <summary>
+        /// Creates a partition manager for the given block device.
+        /// </summary>
+        /// <param name="device">
+        /// The device that holds the MBR.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is null.
+        /// </exception>
         public MbrPartitionManager(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));

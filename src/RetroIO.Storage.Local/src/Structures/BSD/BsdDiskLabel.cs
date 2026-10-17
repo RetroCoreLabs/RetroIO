@@ -428,6 +428,12 @@ namespace RetroIO.Storage.Local.BSD.Structures
             buffer[offset + length] = 0;  // Null terminator
         }
 
+        /// <summary>
+        /// Returns a text with the disk type, pack name, geometry, partition count and the results of the validity and checksum checks.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             return $"BSD Disk Label: {TypeName} ({PackName}), " +

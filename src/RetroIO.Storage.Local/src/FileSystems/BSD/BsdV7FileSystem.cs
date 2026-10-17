@@ -51,10 +51,28 @@ namespace RetroIO.Storage.Local.V7.FileSystems
         // PUBLIC PROPERTIES
         // =================================================================
 
+        /// <summary>
+        /// Gets the text V7.
+        /// </summary>
         public string FileSystemType => "V7";
 
+        /// <summary>
+        /// Gets the file system name stored in the superblock, or an empty string before initialization.
+        /// </summary>
         public string VolumeLabel => _superblock?.FsName ?? string.Empty;
 
+        /// <summary>
+        /// Reads the disk label when enabled, finds the start of the selected partition, then reads and checks the superblock and creates the inode and directory readers.
+        /// </summary>
+        /// <param name="device">
+        /// The block device that holds the file system.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the superblock is not valid.
+        /// </exception>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -129,6 +147,15 @@ namespace RetroIO.Storage.Local.V7.FileSystems
             _dirReader = new V7DirectoryReader(_mapper);
         }
 
+        /// <summary>
+        /// Checks whether the device holds a V7 superblock at block 1 with sane sizes.
+        /// </summary>
+        /// <param name="device">
+        /// The block device to check.
+        /// </param>
+        /// <returns>
+        /// True when a valid superblock is found, false otherwise.
+        /// </returns>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -153,6 +180,21 @@ namespace RetroIO.Storage.Local.V7.FileSystems
             }
         }
 
+        /// <summary>
+        /// Lists the entries of a directory.
+        /// </summary>
+        /// <param name="path">
+        /// The directory path. An empty path or a slash is the root.
+        /// </param>
+        /// <returns>
+        /// One entry for each file or subdirectory.
+        /// </returns>
+        /// <exception cref="System.IO.DirectoryNotFoundException">
+        /// Thrown when the path does not exist.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the path is not a directory.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -231,6 +273,21 @@ namespace RetroIO.Storage.Local.V7.FileSystems
             return entries.ToArray();
         }
 
+        /// <summary>
+        /// Reads the whole contents of a file.
+        /// </summary>
+        /// <param name="path">
+        /// The file path.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when the path does not exist.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the path is a directory.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -254,6 +311,15 @@ namespace RetroIO.Storage.Local.V7.FileSystems
             return _mapper!.ReadFile(fileInode);
         }
 
+        /// <summary>
+        /// Returns the name, kind, size and change, modification and access times of a file or directory.
+        /// </summary>
+        /// <param name="path">
+        /// The file or directory path.
+        /// </param>
+        /// <returns>
+        /// The metadata, or null when the path does not exist.
+        /// </returns>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -279,6 +345,12 @@ namespace RetroIO.Storage.Local.V7.FileSystems
             };
         }
 
+        /// <summary>
+        /// Returns the total number of free blocks stored in the superblock.
+        /// </summary>
+        /// <returns>
+        /// The free block count.
+        /// </returns>
         public int GetBlocksFree()
         {
             EnsureInitialized();
@@ -289,26 +361,77 @@ namespace RetroIO.Storage.Local.V7.FileSystems
         // WRITE OPERATIONS (NOT IMPLEMENTED IN READ-ONLY PHASE)
         // =================================================================
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             throw new NotImplementedException("Write operations not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path)
         {
             throw new NotImplementedException("Write operations not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void CreateDirectory(string path)
         {
             throw new NotImplementedException("Write operations not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteDirectory(string path)
         {
             throw new NotImplementedException("Write operations not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Not used.
+        /// </param>
+        /// <param name="newPath">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void Rename(string oldPath, string newPath)
         {
             throw new NotImplementedException("Write operations not yet implemented");

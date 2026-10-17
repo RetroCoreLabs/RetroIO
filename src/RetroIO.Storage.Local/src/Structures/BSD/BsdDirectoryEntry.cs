@@ -359,6 +359,12 @@ namespace RetroIO.Storage.Local.BSD.Structures
             return true;
         }
 
+        /// <summary>
+        /// Returns a text with the inode number, the name and the record length, or a deleted marker with the record length.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             if (IsDeleted)

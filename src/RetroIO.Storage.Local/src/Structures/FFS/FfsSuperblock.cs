@@ -592,6 +592,12 @@ namespace RetroIO.Storage.Local.FFS.Structures
             return System.Text.Encoding.ASCII.GetString(buffer, offset, length);
         }
 
+        /// <summary>
+        /// Returns a text with the mount name, magic, size, block and fragment size, group counts and the result of the validity check.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             return $"FFS Superblock: {fs_fsmnt}, " +

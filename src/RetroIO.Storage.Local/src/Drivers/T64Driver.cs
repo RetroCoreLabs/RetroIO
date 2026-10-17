@@ -30,8 +30,17 @@ namespace RetroIO.Storage.Local.Drivers
         private const int HeaderSize = 64;
         private const int DirectoryEntrySize = 32;
 
+        /// <summary>
+        /// Gets the text T64.
+        /// </summary>
         public string FileSystemType => "T64";
+        /// <summary>
+        /// Gets the container name stored in the T64 header.
+        /// </summary>
         public string VolumeLabel => _volumeLabel;
+        /// <summary>
+        /// Gets an empty string, because T64 entries carry a file type and no extension.
+        /// </summary>
         public string ExtensionSeparator => "";  // T64 uses Commodore-style FileType metadata, not extensions
 
         /// <summary>
@@ -51,16 +60,44 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
+        /// <inheritdoc/>
         public bool CanRead => true;
+        /// <summary>
+        /// Gets false, because the driver does not write yet.
+        /// </summary>
         public bool CanWrite => false; // TODO: Implement write operations
+        /// <summary>
+        /// Gets false, because T64 is a container and not a block device.
+        /// </summary>
         public bool HasBlockAccess => false; // T64 is not a block device
 
+        /// <summary>
+        /// Returns null, because this driver has no metadata descriptor yet.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor()
         {
             // TODO: Implement T64 metadata descriptor
             return null;
         }
 
+        /// <summary>
+        /// Reads the whole image into memory and parses the header and the directory.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The stream holding the T64 image.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to mount read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the image is too small or the signature does not match.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -82,6 +119,18 @@ namespace RetroIO.Storage.Local.Drivers
             ParseDirectory();
         }
 
+        /// <summary>
+        /// Returns the data of one entry. An empty or deleted entry gives an empty array.
+        /// </summary>
+        /// <param name="path">
+        /// The entry name, with or without a leading slash.
+        /// </param>
+        /// <returns>
+        /// The entry data.
+        /// </returns>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when no entry has that name.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
@@ -108,16 +157,46 @@ namespace RetroIO.Storage.Local.Drivers
             return fileData;
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             throw new NotImplementedException("T64 write operations not yet implemented.");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path)
         {
             throw new NotImplementedException("T64 delete operations not yet implemented.");
         }
 
+        /// <summary>
+        /// Lists the entries of the tape. Empty and deleted entries are skipped. The path is ignored.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// One entry per file, with start and end address in the metadata.
+        /// </returns>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
@@ -157,6 +236,15 @@ namespace RetroIO.Storage.Local.Drivers
             return entries.ToArray();
         }
 
+        /// <summary>
+        /// Returns the metadata of one entry, including start address, end address, data offset and data size.
+        /// </summary>
+        /// <param name="path">
+        /// The entry name, with or without a leading slash.
+        /// </param>
+        /// <returns>
+        /// The metadata, or null when no entry has that name.
+        /// </returns>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -190,21 +278,57 @@ namespace RetroIO.Storage.Local.Drivers
             return metadata;
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="buffer">
+        /// Not used.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             throw new NotSupportedException("T64 is a container format, not a block device.");
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="address">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             throw new NotSupportedException("T64 is a container format, not a block device.");
         }
 
+        /// <summary>
+        /// Returns null, because there is no block device.
+        /// </summary>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             return null; // T64 is not a block device
         }
 
+        /// <summary>
+        /// Drops the image data and the entry list.
+        /// </summary>
         public void Dispose()
         {
             _imageData = null;

@@ -33,10 +33,14 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int MAX_FILES = 160;
         private const int SECTOR_SIZE = 256;
 
+        /// <inheritdoc/>
         public string FileSystemType => "DragonDOS";
+        /// <inheritdoc/>
         public string VolumeLabel => _volumeLabel;
+        /// <inheritdoc/>
         public string ExtensionSeparator => ".";  // DragonDOS uses name.ext format
 
+        /// <inheritdoc/>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -102,6 +106,7 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
+        /// <inheritdoc/>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -151,6 +156,7 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
+        /// <inheritdoc/>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -164,6 +170,7 @@ namespace RetroIO.Storage.Local.FileSystems
             return ListRootDirectory();
         }
 
+        /// <inheritdoc/>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -200,16 +207,38 @@ namespace RetroIO.Storage.Local.FileSystems
             return ReadFileData(entry);
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             throw new NotImplementedException("DragonDOS write operations not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteFile(string path)
         {
             throw new NotImplementedException("DragonDOS delete operations not yet implemented");
         }
 
+        /// <inheritdoc/>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -255,6 +284,7 @@ namespace RetroIO.Storage.Local.FileSystems
             };
         }
 
+        /// <inheritdoc/>
         public int GetBlocksFree()
         {
             EnsureInitialized();
@@ -276,16 +306,46 @@ namespace RetroIO.Storage.Local.FileSystems
             return freeSectors;
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void CreateDirectory(string path)
         {
             throw new NotImplementedException("CreateDirectory not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void DeleteDirectory(string path)
         {
             throw new NotImplementedException("DeleteDirectory not yet implemented");
         }
 
+        /// <summary>
+        /// Not implemented. Always throws.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Not used.
+        /// </param>
+        /// <param name="newPath">
+        /// Not used.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void Rename(string oldPath, string newPath)
         {
             throw new NotImplementedException("Rename not yet implemented");

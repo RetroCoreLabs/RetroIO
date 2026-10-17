@@ -65,10 +65,25 @@ namespace RetroIO.Storage.Local.Partitions
     /// </summary>
     public enum PartitionTableType
     {
+        /// <summary>
+        /// No known partition table was found.
+        /// </summary>
         Unknown = 0,
+        /// <summary>
+        /// A BSD disk label.
+        /// </summary>
         BsdDiskLabel = 1,
+        /// <summary>
+        /// A PC master boot record.
+        /// </summary>
         Mbr = 2,
+        /// <summary>
+        /// A GUID partition table.
+        /// </summary>
         Gpt = 3,
+        /// <summary>
+        /// A Sun disk label.
+        /// </summary>
         SunLabel = 4
     }
 

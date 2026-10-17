@@ -231,6 +231,12 @@ namespace RetroIO.Storage.Local.FFS.Structures
             return true;
         }
 
+        /// <summary>
+        /// Returns a text with the group number, magic, block, inode and directory counts and the result of the validity check.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             return $"Cylinder Group {cg_cgx}: " +

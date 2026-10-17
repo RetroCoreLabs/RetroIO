@@ -343,6 +343,12 @@ namespace RetroIO.Storage.Local.V7.Structures
             }
         }
 
+        /// <summary>
+        /// Returns a text with the file type, size, link count, permissions, owner and group, or a free marker when the inode is not allocated.
+        /// </summary>
+        /// <returns>
+        /// The text.
+        /// </returns>
         public override string ToString()
         {
             if (!IsAllocated)

@@ -17,10 +17,24 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class PrgDriverProvider : FileSystemDriverProviderBase
     {
+        /// <inheritdoc/>
         public override string FileSystemType => "PRG";
+        /// <inheritdoc/>
         public override string Description => "Commodore PRG program file";
+        /// <summary>
+        /// Gets 16, the number of header bytes requested for detection.
+        /// </summary>
         public override int RequiredHeaderBytes => 16;
 
+        /// <summary>
+        /// Returns 0.6 for a file of at least 2 bytes with the extension .prg, and 0 otherwise. Files with the P00 signature always score 0.
+        /// </summary>
+        /// <param name="hints">
+        /// The file name, size and header bytes.
+        /// </param>
+        /// <returns>
+        /// The confidence from 0 to 1.
+        /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
             // A PRG needs at least a 2-byte load address.
@@ -41,6 +55,7 @@ namespace RetroIO.Storage.Local.Drivers
             return 0.0f;
         }
 
+        /// <inheritdoc/>
         public override IFileSystemDriver CreateDriver() => new ProgramFileDriver();
     }
 }

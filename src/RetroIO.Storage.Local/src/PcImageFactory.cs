@@ -20,10 +20,25 @@ namespace RetroIO.Storage.Local
     /// </summary>
     public enum PcFloppySize
     {
+        /// <summary>
+        /// 360 KB, 5.25 inch double density, 40 tracks, 2 sides, 9 sectors per track.
+        /// </summary>
         Size360K,  // 5.25" DD, 40/2/9, the normal PC/XT floppy
+        /// <summary>
+        /// 720 KB, 3.5 inch double density, 80 tracks, 2 sides, 9 sectors per track.
+        /// </summary>
         Size720K,  // 3.5" DD, 80/2/9
+        /// <summary>
+        /// 1.2 MB, 5.25 inch high density, 80 tracks, 2 sides, 15 sectors per track.
+        /// </summary>
         Size1_2M,  // 5.25" HD, 80/2/15, the normal PC/AT floppy
+        /// <summary>
+        /// 1.44 MB, 3.5 inch high density, 80 tracks, 2 sides, 18 sectors per track.
+        /// </summary>
         Size1_44M, // 3.5" HD, 80/2/18, the later AT/286/386-era standard
+        /// <summary>
+        /// 2.88 MB, 3.5 inch extra density, 80 tracks, 2 sides, 36 sectors per track.
+        /// </summary>
         Size2_88M  // 3.5" ED, 80/2/36
     }
 
@@ -33,13 +48,37 @@ namespace RetroIO.Storage.Local
     /// </summary>
     public enum PcHddPreset
     {
+        /// <summary>
+        /// 5 MB, 306 cylinders, 2 heads, 17 sectors per track (IBM XT BIOS drive type 0).
+        /// </summary>
         Xt5MB,   // 306/2/17 — IBM XT BIOS drive type 0
+        /// <summary>
+        /// 10 MB, 306 cylinders, 4 heads, 17 sectors per track (ST-412 class XT drive, also IBM AT BIOS drive type 1).
+        /// </summary>
         Xt10MB,  // 306/4/17 — the "usual" XT drive, ST-412-class (also IBM AT type 1)
+        /// <summary>
+        /// 15 MB, 306 cylinders, 6 heads, 17 sectors per track (IBM XT BIOS drive type 2).
+        /// </summary>
         Xt15MB,  // 306/6/17 — IBM XT BIOS drive type 2
+        /// <summary>
+        /// 26 MB, 375 cylinders, 8 heads, 17 sectors per track (IBM XT BIOS drive type 1).
+        /// </summary>
         Xt26MB,  // 375/8/17 — IBM XT BIOS drive type 1
+        /// <summary>
+        /// 20 MB, 615 cylinders, 4 heads, 17 sectors per track (IBM AT BIOS drive type 2).
+        /// </summary>
         At20MB,  // 615/4/17 — IBM AT BIOS drive type 2, ST-225 class
+        /// <summary>
+        /// 30 MB, 615 cylinders, 6 heads, 17 sectors per track (IBM AT BIOS drive type 3).
+        /// </summary>
         At30MB,  // 615/6/17 — IBM AT BIOS drive type 3
+        /// <summary>
+        /// 47 MB, 940 cylinders, 6 heads, 17 sectors per track (IBM AT BIOS drive type 5).
+        /// </summary>
         At47MB,  // 940/6/17 — IBM AT BIOS drive type 5
+        /// <summary>
+        /// 62 MB, 940 cylinders, 8 heads, 17 sectors per track (IBM AT BIOS drive type 4).
+        /// </summary>
         At62MB   // 940/8/17 — IBM AT BIOS drive type 4
     }
 
