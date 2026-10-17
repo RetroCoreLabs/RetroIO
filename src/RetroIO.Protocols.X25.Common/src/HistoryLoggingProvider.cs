@@ -21,18 +21,39 @@ namespace RetroIO.Protocols.X25.Common
         private readonly int _maxEntries;
         private readonly object _lock = new();
 
+        /// <summary>
+        /// Occurs after an entry is added to the history.
+        /// </summary>
         public event Action<LogEntry>? LogEntryAdded;
 
+        /// <summary>
+        /// Creates a provider that keeps a limited number of log entries.
+        /// </summary>
+        /// <param name="maxEntries">
+        /// The number of entries to keep. When it is exceeded, the oldest entries are dropped.
+        /// </param>
         public HistoryLoggingProvider(int maxEntries = 1000)
         {
             _maxEntries = maxEntries;
         }
 
+        /// <summary>
+        /// Creates a logger for a category that writes into this provider.
+        /// </summary>
+        /// <param name="categoryName">
+        /// The category name stored with each entry.
+        /// </param>
+        /// <returns>
+        /// A new logger.
+        /// </returns>
         public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName)
         {
             return new HistoryLogger(categoryName, this);
         }
 
+        /// <summary>
+        /// Does nothing. The provider holds no resources.
+        /// </summary>
         public void Dispose()
         {
             // Nothing to dispose
@@ -51,6 +72,15 @@ namespace RetroIO.Protocols.X25.Common
             LogEntryAdded?.Invoke(entry);
         }
 
+        /// <summary>
+        /// Returns the most recent entries.
+        /// </summary>
+        /// <param name="count">
+        /// The largest number of entries to return.
+        /// </param>
+        /// <returns>
+        /// A new list with at most <paramref name="count"/> entries, oldest first.
+        /// </returns>
         public IReadOnlyList<LogEntry> GetRecentLogs(int count = 1000)
         {
             var allEntries = new List<LogEntry>(_logHistory);
@@ -63,11 +93,20 @@ namespace RetroIO.Protocols.X25.Common
             return result;
         }
 
+        /// <summary>
+        /// Returns a copy of all stored entries.
+        /// </summary>
+        /// <returns>
+        /// A new list with the entries, oldest first.
+        /// </returns>
         public IReadOnlyList<LogEntry> GetAllLogs()
         {
             return new List<LogEntry>(_logHistory);
         }
 
+        /// <summary>
+        /// Removes all stored entries.
+        /// </summary>
         public void ClearHistory()
         {
             lock (_lock)
@@ -79,6 +118,12 @@ namespace RetroIO.Protocols.X25.Common
             }
         }
 
+        /// <summary>
+        /// Returns a copy of all stored entries.
+        /// </summary>
+        /// <returns>
+        /// A new list with the entries, oldest first.
+        /// </returns>
         public List<LogEntry> GetLogEntries()
         {
             return new List<LogEntry>(_logHistory);

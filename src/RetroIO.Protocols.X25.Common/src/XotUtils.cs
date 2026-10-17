@@ -15,7 +15,13 @@ namespace RetroIO.Protocols.X25.Common
     /// </summary>
     public static class XotUtils
     {
+        /// <summary>
+        /// The size of the XOT header in bytes, which is 4.
+        /// </summary>
         public const int HeaderSize = 4;
+        /// <summary>
+        /// The version value of the XOT header, which is 0.
+        /// </summary>
         public const ushort Version = 0;
 
         /// <summary>

@@ -12,9 +12,24 @@ namespace RetroIO.Protocols.X25.Common
     /// </summary>
     public interface ILapbTimerInterface
     {
+        /// <summary>
+        /// Starts the timer.
+        /// </summary>
         void Start();
+        /// <summary>
+        /// Stops the timer.
+        /// </summary>
         void Stop();
+        /// <summary>
+        /// Returns whether the timer has expired.
+        /// </summary>
+        /// <returns>
+        /// True when the timer has expired.
+        /// </returns>
         bool HasExpired();
+        /// <summary>
+        /// Gets whether the timer is running.
+        /// </summary>
         bool Running { get; }
     }
 
