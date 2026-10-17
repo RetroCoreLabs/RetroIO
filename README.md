@@ -41,7 +41,8 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 - **Read and write vintage disk images** — NDFS, D64/T64/TAP/CRT/PRG/P00, DragonDOS, FAT12/16/32,
   V7, FFS, ADFS and more — without knowing their on-disk layouts.
 - **Serve files to a real 8-bit machine** over **TNFS**, or to a BBC Micro over **Econet/AUN**.
-- **Build an X.25 network**: packet layer, LAPB, XOT, a switching engine, routing, monitoring.
+- **Build an X.25 network**: packet layer, LAPB, a switching engine, routing, monitoring. XOT (X.25
+  over TCP) is **not implemented yet** - see [Known problems](#known-problems).
 - **Talk to a SINTRAN machine** with **XMSG** — file access, chat, the XROUT name service, the
   request/response library, and the kernel API a SINTRAN task would have called.
 - **Put a management API on any of it** — REST plus SignalR push, with users, groups and a firewall.
@@ -55,13 +56,35 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 Version `0.1.0`, published to the local folder feed as `0.1.0-local.<timestamp>`. Nothing is
 on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
 
-- **All forty-four packages build in Release with no errors**, and nothing in `src/` has a
-  `Main` - the library and application split is enforced by the layout, not by convention.
+- **Forty-four packages.** Nothing in `src/` has a `Main` - the library and application split is
+  enforced by the layout, not by convention. The build is **not green on a fresh restore**: see
+  [Known problems](#known-problems).
 - **Thirteen test projects.** The X.25 packet layer and the C emulator `x25emu` read the
   **same** conformance vectors, so a disagreement between the two implementations is a
   failing test rather than an argument.
 - **Not yet measured:** throughput of any driver or protocol. No performance number is
   claimed here because none has been taken.
+
+### Known problems
+
+Found by a read-only review on 2026-10-15. Each one is a real defect, not a plan.
+
+- **The build is red on a fresh restore.** NuGet reports `NU1902` (a known vulnerability in
+  `Microsoft.Build.Tasks.Git` 8.0.0, advisory GHSA-23fw-v26w-5fgq) and warnings are errors. The
+  package version has to move before `dotnet test` runs on a clean machine.
+- **XOT is not implemented.** The XOT classes in the X.25 routing code count statistics and report
+  success without sending anything. Do not rely on them.
+- **Part of the SINTRAN PVC server guesses.** `SintranPvcServer` chooses a route from the first byte
+  of the call user data (`0x01`, `0x02`, `0x03`, `0xDD`). That rule was not taken from a capture, and
+  the source comment says so.
+- **Some tests assert nothing.** A handful call `Assert.Pass` or `Assert.True(true)`. They count in the
+  test total and prove nothing.
+- **Many real-image tests only run on one machine.** They open disk images at fixed local paths and
+  skip everywhere else, so FFS and V7 have no active real-image test off that machine.
+- **DragonDOS is unchecked.** Its free-block count and extent handling were not compared with a real
+  disk.
+
+The fix list is kept in the maintainer's notes and will be worked through after the first release.
 
 ---
 ## Prerequisites
@@ -198,7 +221,7 @@ flowchart TB
 |---|---|---|
 | `RetroIO.Hdlc` | HDLC framing: flags, transparency, frame check sequence | [README](src/RetroIO.Hdlc/README.md) |
 | `RetroIO.Lapb` | LAPB, the X.25 data link layer, with both dialects | [README](src/RetroIO.Lapb/README.md) |
-| `RetroIO.Link` | Links as a concept: serial, TCP-LAPB and XOT behind one interface | [README](src/RetroIO.Link/README.md) |
+| `RetroIO.Link` | Links as a concept: serial and TCP-LAPB behind one interface (XOT is not implemented yet) | [README](src/RetroIO.Link/README.md) |
 
 ### Cross-cutting
 
@@ -268,7 +291,7 @@ the first publish. That is expected and is not a broken build.
 
 ## How it is tested
 
-Fourteen test projects. Most live beside the package they test, in `src/<Package>/tests/`; the ones
+Thirteen test projects and one shared-fixture project. Most live beside the package they test, in `src/<Package>/tests/`; the ones
 that span packages live in `tests/`.
 
 | Project | Covers |
