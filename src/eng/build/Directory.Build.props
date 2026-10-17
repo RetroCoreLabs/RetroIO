@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
+    <!-- Run the .editorconfig code-style rules (file header IDE0073, using order) as part of the build, so a wrong header fails the build. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <!-- ImplicitUsings and GenerateDocumentationFile are deliberately NOT set here: each project keeps its own. -->

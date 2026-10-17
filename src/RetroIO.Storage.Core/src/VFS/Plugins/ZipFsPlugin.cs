@@ -94,12 +94,20 @@ namespace RetroIO.Storage.Core.VFS.Plugins
         /// Cancels the read.
         /// </param>
         /// <returns>
-        /// True when the signature is present; false when it is not, or when <paramref name="stream"/> is null or cannot seek.
+        /// True when the signature is present; false when it is not, or when <paramref name="stream"/> is null.
         /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="stream"/> cannot seek, as <see cref="IExtFsPlugin.CanHandleAsync"/> promises.
+        /// </exception>
         public async Task<bool> CanHandleAsync(Stream stream, CancellationToken cancellationToken)
         {
-            if (stream == null || !stream.CanSeek)
+            if (stream == null)
                 return false;
+
+            // The interface contract (and VfsPluginRegistry.DetectPluginAsync, which checks first)
+            // treats a stream that cannot seek as a caller error, not as "not a ZIP".
+            if (!stream.CanSeek)
+                throw new ArgumentException("Stream must be seekable for ZIP detection.", nameof(stream));
 
             // Check ZIP magic number: PK\x03\x04
             byte[] header = new byte[4];
@@ -226,7 +234,7 @@ namespace RetroIO.Storage.Core.VFS.Plugins
         }
 
         /// <summary>
-        /// Unmounts the archive and closes it, by calling <see cref="Dispose"/>.
+        /// Unmounts the archive and closes it and its stream. The plugin can then mount another archive.
         /// </summary>
         /// <param name="volumeId">
         /// The volume id the archive is mounted as.
@@ -239,7 +247,9 @@ namespace RetroIO.Storage.Core.VFS.Plugins
             if (_volumeId != volumeId)
                 throw new ArgumentException($"Volume ID '{volumeId}' not mounted.");
 
-            Dispose();
+            // Release the archive but do NOT latch _disposed: an unmounted plugin is empty and
+            // reusable, and a later Dispose must still close whatever is mounted by then.
+            CloseArchive();
         }
 
         /// <summary>
@@ -632,12 +642,18 @@ namespace RetroIO.Storage.Core.VFS.Plugins
             if (_disposed)
                 return;
 
+            CloseArchive();
+            _disposed = true;
+        }
+
+        // Closes the mounted archive and the stream it reads from, and empties the plugin.
+        private void CloseArchive()
+        {
             _archive?.Dispose();
             _containerStream?.Dispose();
             _archive = null;
             _containerStream = null;
             _volumeId = null;
-            _disposed = true;
         }
     }
 }
