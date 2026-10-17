@@ -30,19 +30,27 @@ namespace RetroIO.Management.Api.Authentication;
 /// </remarks>
 public sealed class ManagementTokenService
 {
-    /// <summary>File in the data directory holding the signing key.</summary>
+    /// <summary>
+    /// File in the data directory holding the signing key.
+    /// </summary>
     private const string KeyFileName = "management-signing-key";
 
-    /// <summary>Key length in bytes. 256 bits, matching HMAC-SHA256.</summary>
+    /// <summary>
+    /// Key length in bytes. 256 bits, matching HMAC-SHA256.
+    /// </summary>
     private const int KeySizeBytes = 32;
 
-    /// <summary>Issuer and audience. Local to one installation, so one name serves as both.</summary>
+    /// <summary>
+    /// Issuer and audience. Local to one installation, so one name serves as both.
+    /// </summary>
     private const string Issuer = "RetroFS.Management";
 
     private readonly SigningCredentials _credentials;
     private readonly TimeSpan _lifetime;
 
-    /// <summary>Token validation parameters the JWT bearer handler must be configured with.</summary>
+    /// <summary>
+    /// Token validation parameters the JWT bearer handler must be configured with.
+    /// </summary>
     /// <remarks>
     /// Exposed so the server validates with exactly the key and issuer it signs with; deriving
     /// them separately in two places is how a validator ends up quietly accepting the wrong thing.
@@ -52,8 +60,12 @@ public sealed class ManagementTokenService
     /// <summary>
     /// Loads the signing key from the data directory, creating it on first run.
     /// </summary>
-    /// <param name="dataPath">RetroFS data directory.</param>
-    /// <param name="lifetime">How long an issued token stays valid.</param>
+    /// <param name="dataPath">
+    /// RetroFS data directory.
+    /// </param>
+    /// <param name="lifetime">
+    /// How long an issued token stays valid.
+    /// </param>
     public ManagementTokenService(string dataPath, TimeSpan lifetime)
     {
         if (string.IsNullOrWhiteSpace(dataPath))
@@ -82,9 +94,15 @@ public sealed class ManagementTokenService
         };
     }
 
-    /// <summary>Issues a token for a user who has already proved their password.</summary>
-    /// <param name="user">Authenticated user.</param>
-    /// <returns>The signed token and the moment it expires.</returns>
+    /// <summary>
+    /// Issues a token for a user who has already proved their password.
+    /// </summary>
+    /// <param name="user">
+    /// Authenticated user.
+    /// </param>
+    /// <returns>
+    /// The signed token and the moment it expires.
+    /// </returns>
     public (string Token, DateTime ExpiresAtUtc) Issue(RetroUser user)
     {
         if (user == null) throw new ArgumentNullException(nameof(user));
@@ -111,9 +129,15 @@ public sealed class ManagementTokenService
         return (new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
 
-    /// <summary>Reads the signing key, generating and storing one on first run.</summary>
-    /// <param name="dataPath">RetroFS data directory.</param>
-    /// <returns>The 32-byte key.</returns>
+    /// <summary>
+    /// Reads the signing key, generating and storing one on first run.
+    /// </summary>
+    /// <param name="dataPath">
+    /// RetroFS data directory.
+    /// </param>
+    /// <returns>
+    /// The 32-byte key.
+    /// </returns>
     private static byte[] LoadOrCreateKey(string dataPath)
     {
         Directory.CreateDirectory(dataPath);

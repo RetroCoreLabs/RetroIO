@@ -41,7 +41,9 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Initialize PacketDisplayManager with default collapsed state
         /// </summary>
-        /// <param name="runtime">Protocol runtime for accessing packet data</param>
+        /// <param name="runtime">
+        /// Protocol runtime for accessing packet data
+        /// </param>
         public PacketDisplayManager(ProtocolRuntime runtime)
         {
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
@@ -52,7 +54,9 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// Get display items based on current collapse state
         /// Uses unified packets if available, falls back to legacy packets
         /// </summary>
-        /// <returns>Filtered list of packet display items</returns>
+        /// <returns>
+        /// Filtered list of packet display items
+        /// </returns>
         public List<PacketDisplayItem> GetDisplayItems()
         {
             // Try to use unified packets first
@@ -78,8 +82,12 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Get display items for unified packet system
         /// </summary>
-        /// <param name="unifiedItems">Unified packet display items</param>
-        /// <returns>Filtered list based on collapse state</returns>
+        /// <param name="unifiedItems">
+        /// Unified packet display items
+        /// </param>
+        /// <returns>
+        /// Filtered list based on collapse state
+        /// </returns>
         private List<PacketDisplayItem> GetUnifiedDisplayItems(List<PacketDisplayItem> unifiedItems)
         {
             if (!_globalCollapseEnabled)
@@ -95,8 +103,12 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Filter unified packets to show only terminal and error packets
         /// </summary>
-        /// <param name="allItems">All unified packet display items</param>
-        /// <returns>Filtered list for collapsed view</returns>
+        /// <param name="allItems">
+        /// All unified packet display items
+        /// </param>
+        /// <returns>
+        /// Filtered list for collapsed view
+        /// </returns>
         private List<PacketDisplayItem> FilterUnifiedPacketsForCollapsedView(List<PacketDisplayItem> allItems)
         {
             var filteredItems = new List<PacketDisplayItem>();
@@ -134,8 +146,12 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Filter packets to show only terminal packets and error packets
         /// </summary>
-        /// <param name="allItems">All available packet display items</param>
-        /// <returns>Filtered list showing only relevant packets for collapsed view</returns>
+        /// <param name="allItems">
+        /// All available packet display items
+        /// </param>
+        /// <returns>
+        /// Filtered list showing only relevant packets for collapsed view
+        /// </returns>
         public List<PacketDisplayItem> FilterForCollapsedView(List<PacketDisplayItem> allItems)
         {
             var filteredItems = new List<PacketDisplayItem>();
@@ -173,7 +189,9 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Toggle the global collapse state
         /// </summary>
-        /// <returns>New collapse state after toggle</returns>
+        /// <returns>
+        /// New collapse state after toggle
+        /// </returns>
         public bool ToggleGlobalCollapse()
         {
             _globalCollapseEnabled = !_globalCollapseEnabled;
@@ -187,7 +205,9 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Set the global collapse state explicitly
         /// </summary>
-        /// <param name="collapsed">True to enable collapse mode, false to disable</param>
+        /// <param name="collapsed">
+        /// True to enable collapse mode, false to disable
+        /// </param>
         public void SetGlobalCollapse(bool collapsed)
         {
             if (_globalCollapseEnabled != collapsed)
@@ -201,7 +221,9 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// Get statistics about the current display state
         /// Works with both unified and legacy packet systems
         /// </summary>
-        /// <returns>Display statistics</returns>
+        /// <returns>
+        /// Display statistics
+        /// </returns>
         public PacketDisplayStatistics GetDisplayStatistics()
         {
             // Try unified packets first
@@ -243,8 +265,12 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Get statistics for unified packet system
         /// </summary>
-        /// <param name="unifiedItems">Unified packet display items</param>
-        /// <returns>Display statistics</returns>
+        /// <param name="unifiedItems">
+        /// Unified packet display items
+        /// </param>
+        /// <returns>
+        /// Display statistics
+        /// </returns>
         private PacketDisplayStatistics GetUnifiedDisplayStatistics(List<PacketDisplayItem> unifiedItems)
         {
             var displayedItems = GetUnifiedDisplayItems(unifiedItems);

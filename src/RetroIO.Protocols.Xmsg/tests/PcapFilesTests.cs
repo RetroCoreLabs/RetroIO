@@ -82,8 +82,8 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// hunting the wrong problem.
         /// </para>
         /// <para>
-        /// <b>This test used to set the environment variable and restore it afterwards. That was a
-        /// bug.</b> xUnit runs test classes in parallel, so during that window any other test reading
+        /// This test used to set the environment variable and restore it afterwards. That was a
+        /// bug. xUnit runs test classes in parallel, so during that window any other test reading
         /// the variable saw a folder that does not exist and threw. It caused exactly one
         /// intermittent failure across the suite before it was caught. The check is now a pure
         /// function and no process-wide state is touched.

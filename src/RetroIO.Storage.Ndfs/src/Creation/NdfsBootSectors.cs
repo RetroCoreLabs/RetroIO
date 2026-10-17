@@ -13,7 +13,7 @@ namespace RetroIO.Storage.Ndfs.Creation
     /// Boot sector library with real bootstraps extracted from genuine NDFS disks.
     /// </summary>
     /// <remarks>
-    /// The bootstrap occupies page-0 bytes <b>0–1999</b> (words 0B–1747B), immediately before the
+    /// The bootstrap occupies page-0 bytes 0–1999 (words 0B–1747B), immediately before the
     /// extended-info block at byte 2000 — NOT just "the first 1024 bytes". A real SMD bootstrap runs
     /// well past byte 1024 (verified: the PACK-ONE SMD boot program has ~800 bytes of live code
     /// between bytes 1024 and 1855). Truncating at 1024 produces a bootstrap that is cut in half and

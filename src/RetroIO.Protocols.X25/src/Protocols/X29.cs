@@ -31,8 +31,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 SET PARAMETERS message
         /// </summary>
-        /// <param name="parameters">Parameters to set (parameter number → value)</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parameters">
+        /// Parameters to set (parameter number → value)
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateSetParameters(Dictionary<byte, byte> parameters)
         {
             if (parameters == null || parameters.Count == 0)
@@ -73,8 +77,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 READ PARAMETERS message  
         /// </summary>
-        /// <param name="parameterNumbers">Parameter numbers to read (empty for all)</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parameterNumbers">
+        /// Parameter numbers to read (empty for all)
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateReadParameters(params byte[] parameterNumbers)
         {
             var message = new List<byte> { (byte)X29MessageType.ReadParameters };
@@ -101,8 +109,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 SET AND READ PARAMETERS message
         /// </summary>
-        /// <param name="parameters">Parameters to set</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parameters">
+        /// Parameters to set
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateSetAndReadParameters(Dictionary<byte, byte> parameters)
         {
             if (parameters == null || parameters.Count == 0)
@@ -137,8 +149,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 PARAMETER INDICATION message
         /// </summary>
-        /// <param name="parameters">Current parameter values to indicate</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parameters">
+        /// Current parameter values to indicate
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateParameterIndication(Dictionary<byte, byte> parameters)
         {
             if (parameters == null || parameters.Count == 0)
@@ -169,7 +185,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 INVITATION TO CLEAR message
         /// </summary>
-        /// <returns>X.29 message bytes</returns>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateInvitationToClear()
         {
             _logger?.LogDebug("X.29: Created INVITATION TO CLEAR message");
@@ -179,7 +197,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 INDICATION OF BREAK message
         /// </summary>
-        /// <returns>X.29 message bytes</returns>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateIndicationOfBreak()
         {
             _logger?.LogDebug("X.29: Created INDICATION OF BREAK message");
@@ -189,9 +209,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 ERROR message
         /// </summary>
-        /// <param name="errorType">Type of error</param>
-        /// <param name="errorData">Additional error data (optional)</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="errorType">
+        /// Type of error
+        /// </param>
+        /// <param name="errorData">
+        /// Additional error data (optional)
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateError(byte errorType, byte[]? errorData = null)
         {
             var message = new List<byte> { (byte)X29MessageType.Error, errorType };
@@ -214,8 +240,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Parse X.29 message from received data
         /// </summary>
-        /// <param name="data">Raw message data</param>
-        /// <returns>Parsed X.29 message</returns>
+        /// <param name="data">
+        /// Raw message data
+        /// </param>
+        /// <returns>
+        /// Parsed X.29 message
+        /// </returns>
         public X29Message ParseMessage(byte[] data)
         {
             if (data == null || data.Length < 1)
@@ -289,9 +319,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Parse parameter number/value pairs from message data
         /// </summary>
-        /// <param name="data">Message data</param>
-        /// <param name="offset">Starting offset in data</param>
-        /// <returns>Dictionary of parameter number → value</returns>
+        /// <param name="data">
+        /// Message data
+        /// </param>
+        /// <param name="offset">
+        /// Starting offset in data
+        /// </param>
+        /// <returns>
+        /// Dictionary of parameter number → value
+        /// </returns>
         private Dictionary<byte, byte> ParseParameterPairs(byte[] data, int offset)
         {
             var parameters = new Dictionary<byte, byte>();
@@ -319,9 +355,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Parse parameter numbers from READ PARAMETERS message
         /// </summary>
-        /// <param name="data">Message data</param>
-        /// <param name="offset">Starting offset in data</param>
-        /// <returns>List of parameter numbers</returns>
+        /// <param name="data">
+        /// Message data
+        /// </param>
+        /// <param name="offset">
+        /// Starting offset in data
+        /// </param>
+        /// <returns>
+        /// List of parameter numbers
+        /// </returns>
         private List<byte> ParseParameterNumbers(byte[] data, int offset)
         {
             var parameters = new List<byte>();
@@ -348,8 +390,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get human-readable message type name
         /// </summary>
-        /// <param name="messageType">Message type byte</param>
-        /// <returns>Message type name</returns>
+        /// <param name="messageType">
+        /// Message type byte
+        /// </param>
+        /// <returns>
+        /// Message type name
+        /// </returns>
         public static string GetMessageTypeName(byte messageType)
         {
             return messageType switch
@@ -368,8 +414,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get human-readable error type name
         /// </summary>
-        /// <param name="errorType">Error type byte</param>
-        /// <returns>Error type name</returns>
+        /// <param name="errorType">
+        /// Error type byte
+        /// </param>
+        /// <returns>
+        /// Error type name
+        /// </returns>
         public static string GetErrorTypeName(byte errorType)
         {
             return errorType switch
@@ -386,8 +436,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Validate X.29 message format and content
         /// </summary>
-        /// <param name="data">Message data to validate</param>
-        /// <returns>Validation result</returns>
+        /// <param name="data">
+        /// Message data to validate
+        /// </param>
+        /// <returns>
+        /// Validation result
+        /// </returns>
         public X29ValidationResult ValidateMessage(byte[] data)
         {
             var result = new X29ValidationResult { IsValid = true };
@@ -458,8 +512,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Check if message type is valid
         /// </summary>
-        /// <param name="messageType">Message type to check</param>
-        /// <returns>True if valid message type</returns>
+        /// <param name="messageType">
+        /// Message type to check
+        /// </param>
+        /// <returns>
+        /// True if valid message type
+        /// </returns>
         private bool IsValidMessageType(byte messageType)
         {
             return messageType switch
@@ -478,9 +536,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create error response for invalid parameter
         /// </summary>
-        /// <param name="parameterNumber">Invalid parameter number</param>
-        /// <param name="parameterValue">Invalid parameter value</param>
-        /// <returns>X.29 ERROR message</returns>
+        /// <param name="parameterNumber">
+        /// Invalid parameter number
+        /// </param>
+        /// <param name="parameterValue">
+        /// Invalid parameter value
+        /// </param>
+        /// <returns>
+        /// X.29 ERROR message
+        /// </returns>
         public byte[] CreateParameterError(byte parameterNumber, byte parameterValue)
         {
             return CreateError((byte)X29ErrorCode.ParameterValueInvalid, new byte[] { parameterNumber, parameterValue });
@@ -489,9 +553,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Process X.29 control message and generate appropriate response
         /// </summary>
-        /// <param name="message">Parsed X.29 message</param>
-        /// <param name="x3Parameters">Current X.3 parameters</param>
-        /// <returns>Response message or null if no response needed</returns>
+        /// <param name="message">
+        /// Parsed X.29 message
+        /// </param>
+        /// <param name="x3Parameters">
+        /// Current X.3 parameters
+        /// </param>
+        /// <returns>
+        /// Response message or null if no response needed
+        /// </returns>
         public byte[]? ProcessControlMessage(X29Message message, X3 x3Parameters)
         {
             if (!message.IsValid)
@@ -572,12 +642,24 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Create X.29 message using the typed enum (preferred method).
         /// This is the recommended way to create X.29 messages with better type safety.
         /// </summary>
-        /// <param name="messageType">X.29 message type from enum</param>
-        /// <param name="parameters">Parameters for parameter-related messages</param>
-        /// <param name="parameterNumbers">Parameter numbers for read operations</param>
-        /// <param name="errorCode">Error code for error messages</param>
-        /// <param name="errorData">Additional error data</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="messageType">
+        /// X.29 message type from enum
+        /// </param>
+        /// <param name="parameters">
+        /// Parameters for parameter-related messages
+        /// </param>
+        /// <param name="parameterNumbers">
+        /// Parameter numbers for read operations
+        /// </param>
+        /// <param name="errorCode">
+        /// Error code for error messages
+        /// </param>
+        /// <param name="errorData">
+        /// Additional error data
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateMessage(X29MessageType messageType, 
                                    Dictionary<byte, byte>? parameters = null,
                                    byte[]? parameterNumbers = null,
@@ -602,8 +684,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 SET PARAMETERS message using enum (preferred method).
         /// </summary>
-        /// <param name="parameters">Parameters to set (parameter number → value)</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parameters">
+        /// Parameters to set (parameter number → value)
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateSetParametersEnum(Dictionary<byte, byte> parameters)
         {
             if (parameters == null || parameters.Count == 0)
@@ -643,8 +729,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 READ PARAMETERS message using enum (preferred method).
         /// </summary>
-        /// <param name="parameterNumbers">Parameter numbers to read (empty for all)</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parameterNumbers">
+        /// Parameter numbers to read (empty for all)
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateReadParametersEnum(params byte[] parameterNumbers)
         {
             var message = new List<byte> { (byte)X29MessageType.ReadParameters };
@@ -670,8 +760,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 PARAMETER INDICATION message using enum (preferred method).
         /// </summary>
-        /// <param name="parameters">Parameters to indicate (parameter number → value)</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parameters">
+        /// Parameters to indicate (parameter number → value)
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateParameterIndicationEnum(Dictionary<byte, byte> parameters)
         {
             var message = new List<byte> { (byte)X29MessageType.ParameterIndication };
@@ -697,7 +791,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 INVITATION TO CLEAR message using enum (preferred method).
         /// </summary>
-        /// <returns>X.29 message bytes</returns>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateInvitationToClearEnum()
         {
             var result = new byte[] { (byte)X29MessageType.InvitationToClear };
@@ -708,7 +804,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 INDICATION OF BREAK message using enum (preferred method).
         /// </summary>
-        /// <returns>X.29 message bytes</returns>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateIndicationOfBreakEnum()
         {
             var result = new byte[] { (byte)X29MessageType.IndicationOfBreak };
@@ -719,9 +817,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 ERROR message using enum (preferred method).
         /// </summary>
-        /// <param name="errorCode">X.29 error code</param>
-        /// <param name="errorData">Optional additional error data</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="errorCode">
+        /// X.29 error code
+        /// </param>
+        /// <param name="errorData">
+        /// Optional additional error data
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateErrorEnum(X29ErrorCode errorCode, byte[]? errorData = null)
         {
             var message = new List<byte> { (byte)X29MessageType.Error, (byte)errorCode };
@@ -744,9 +848,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.29 SET AND READ PARAMETERS message using enum (preferred method).
         /// </summary>
-        /// <param name="parametersToSet">Parameters to set</param>
-        /// <param name="parameterNumbersToRead">Parameter numbers to read</param>
-        /// <returns>X.29 message bytes</returns>
+        /// <param name="parametersToSet">
+        /// Parameters to set
+        /// </param>
+        /// <param name="parameterNumbersToRead">
+        /// Parameter numbers to read
+        /// </param>
+        /// <returns>
+        /// X.29 message bytes
+        /// </returns>
         public byte[] CreateSetAndReadParametersEnum(Dictionary<byte, byte> parametersToSet, byte[] parameterNumbersToRead)
         {
             var message = new List<byte> { (byte)X29MessageType.SetAndReadParameters };
@@ -794,7 +904,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Create PAD Call User Data according to X.25 specification
         /// PAD protocol identification: CUD = 0x01000000 (4 bytes)
         /// </summary>
-        /// <returns>PAD protocol identifier bytes</returns>
+        /// <returns>
+        /// PAD protocol identifier bytes
+        /// </returns>
         public byte[] CreatePadCallUserData()
         {
             // According to X.25 spec: PAD CUD = 0x01000000 (X.29 PAD identifier)

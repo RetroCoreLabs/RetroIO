@@ -128,46 +128,66 @@ namespace RetroIO.Link.Lapb
                 linkName, windowSize, maxRetries, t1TimeoutMs, t3TimeoutMs, isPrimary);
         }
 
-        /// <summary>The link's name.</summary>
+        /// <summary>
+        /// The link's name.
+        /// </summary>
         public string LinkName => _linkName;
 
-        /// <summary>The station's state, in the link layer's own vocabulary.</summary>
+        /// <summary>
+        /// The station's state, in the link layer's own vocabulary.
+        /// </summary>
         public LapbState State
         {
             get { lock (_sync) { return _state; } }
         }
 
-        /// <summary>V(S), the send sequence variable.</summary>
+        /// <summary>
+        /// V(S), the send sequence variable.
+        /// </summary>
         public byte VS
         {
             get { lock (_sync) { return (byte)_lapb.SendVariable; } }
         }
 
-        /// <summary>V(R), the receive sequence variable.</summary>
+        /// <summary>
+        /// V(R), the receive sequence variable.
+        /// </summary>
         public byte VR
         {
             get { lock (_sync) { return (byte)_lapb.ReceiveVariable; } }
         }
 
-        /// <summary>V(A), the last acknowledged sequence number.</summary>
+        /// <summary>
+        /// V(A), the last acknowledged sequence number.
+        /// </summary>
         public byte VA
         {
             get { lock (_sync) { return (byte)_lapb.AcknowledgeVariable; } }
         }
 
-        /// <summary>Raised for every frame the station puts on the wire.</summary>
+        /// <summary>
+        /// Raised for every frame the station puts on the wire.
+        /// </summary>
         public event EventHandler<LapbFrameEventArgs>? FrameToTransmit;
 
-        /// <summary>Raised for every frame handed to the station.</summary>
+        /// <summary>
+        /// Raised for every frame handed to the station.
+        /// </summary>
         public event EventHandler<LapbFrameEventArgs>? FrameReceived;
 
-        /// <summary>Raised with the information field of each accepted I-frame.</summary>
+        /// <summary>
+        /// Raised with the information field of each accepted I-frame.
+        /// </summary>
         public event EventHandler<byte[]>? DataReceived;
 
-        /// <summary>Raised when the station's state changes.</summary>
+        /// <summary>
+        /// Raised when the station's state changes.
+        /// </summary>
         public event EventHandler<LapbStateChangedEventArgs>? StateChanged;
 
-        /// <summary>Raised when the link fails.</summary>
+        /// <summary>
+        /// Raised when the link fails.
+        /// </summary>
         public event EventHandler<string>? ErrorOccurred;
 
         /// <summary>

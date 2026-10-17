@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>These entries are SYNTHESISED, not read off a pack.</b> A remote directory listing returns
+    /// These entries are SYNTHESISED, not read off a pack. A remote directory listing returns
     /// the SINTRAN on-disk object entry verbatim (VERIFIED - see
     /// <see cref="FaDirectoryListing"/>), and a plain Windows folder simply does not hold the
     /// ND-specific fields: the owner, the page allocation, the header flag bits and the three packed
@@ -27,7 +27,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
     /// serving a Windows folder "design B" and says a sidecar file is needed to do it properly.
     /// </para>
     /// <para>
-    /// So everything this class puts in the fields that Windows cannot supply is <b>INFERRED</b> or
+    /// So everything this class puts in the fields that Windows cannot supply is INFERRED or
     /// simply chosen, and is marked as such below. What IS honest here: the name, the type, the
     /// length in bytes, and the modification time all come from the real file.
     /// </para>
@@ -61,7 +61,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// this word as "ACCESS WORD".
         /// </para>
         /// <para>
-        /// <b>CONFIRMED END TO END 2026-08-05.</b> <c>FILE-STATISTICS</c> on D100, against a file we
+        /// CONFIRMED END TO END 2026-08-05. <c>FILE-STATISTICS</c> on D100, against a file we
         /// served with this exact word, printed our three tiers back:
         /// </para>
         /// <code>
@@ -79,7 +79,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// and peripheral files. We serve ordinary files, so we send the ordinary value.
         /// </para>
         /// <para>
-        /// <b>This used to be zero</b>, because nothing ever assigned it - a file with an access word
+        /// This used to be zero, because nothing ever assigned it - a file with an access word
         /// of zero grants NOBODY read, write or append, including its owner. That is the leading
         /// suspect for why D100 ran the whole listing conversation and then discarded it.
         /// </para>
@@ -149,23 +149,23 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// </returns>
         /// <remarks>
         /// <para>
-        /// <b>Why this exists.</b> <c>NdDateTime.ToNdDateOrUnset</c> returns 0 for anything from
+        /// Why this exists. <c>NdDateTime.ToNdDateOrUnset</c> returns 0 for anything from
         /// 2014 onwards, which is the right answer when WRITING a file to a real pack - better no
         /// timestamp than a fabricated one. It is the wrong answer for a listing record, because
         /// the wire says so: in the 49 records of
-        /// <c>DOC\captures\FA-READ-WRITE-2026-08-04\capture-list-files.txt</c>, <b>the creation date
-        /// is non-zero on every single one</b>. The last-opened fields are often zero (17 and 9
+        /// <c>DOC\captures\FA-READ-WRITE-2026-08-04\capture-list-files.txt</c>, the creation date
+        /// is non-zero on every single one. The last-opened fields are often zero (17 and 9
         /// records respectively); the creation date never is. Every record we served carried zero,
         /// because every file in a Windows folder has a present-day timestamp.
         /// </para>
         /// <para>
-        /// <b>What the fold does.</b> It subtracts whole 64-year cycles until the year is in range,
+        /// What the fold does. It subtracts whole 64-year cycles until the year is in range,
         /// so 2026 becomes 1962 and the month, day and time of day are carried across untouched. The
         /// year is therefore congruent to the real one modulo the format's own span, which makes the
         /// mapping reversible and derived from the format rather than an invented constant.
         /// </para>
         /// <para>
-        /// <b>It is still not the real year, and that is a compromise.</b> The alternatives were a
+        /// It is still not the real year, and that is a compromise. The alternatives were a
         /// zero the wire contradicts, or a fixed made-up date that carries no information at all.
         /// The proper fix is the sidecar that holds the ND-specific fields for a served folder - see
         /// <c>DOC\PLAN-CSHARP-FILE-SERVER-AND-FOLDER-SYNC-2026-08-01.md</c> section 1.

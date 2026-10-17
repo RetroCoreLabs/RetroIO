@@ -11,7 +11,7 @@ using RetroIO.Protocols.X25.Modules;
 namespace RetroIO.Protocols.X25.Client
 {
     /// <summary>
-    /// An <see cref="IPadTransport"/> that drives a <see cref="Core.Modules.PadClient"/> over the clean
+    /// An <see cref="IPadTransport"/> that drives a <see cref="PadClient"/> over the clean
     /// <see cref="X25Client"/> (transport + XOT framing + packet layer), so the console PAD runs on the
     /// same clean X.25 stack as the other tools rather than on the legacy runtime.
     /// </summary>

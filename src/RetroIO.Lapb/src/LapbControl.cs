@@ -130,7 +130,7 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
     /// <remarks>
     /// <para><b>The gap at bit 1 is deliberate</b></para>
     /// The wire positions are fixed by the specification, not sequential. Standard LAPB puts
-    /// reason <b>X</b> - "information field not permitted in this frame type" - at
+    /// reason X - "information field not permitted in this frame type" - at
     /// <c>0x02</c>. It is NOT declared here because we neither send nor recognise it, and because
     /// its bit position is derived from standard LAPB rather than read out of the ND spec.
     /// Confirm against section 2.3.3 before adding it.

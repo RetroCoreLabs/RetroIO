@@ -39,8 +39,12 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// <summary>
         /// Reads one filesystem block starting from the specified fragment address.
         /// </summary>
-        /// <param name="startFragNum">Starting fragment address (will read _fragsPerBlock fragments).</param>
-        /// <param name="buffer">Buffer to read into (must be at least _blockSize bytes).</param>
+        /// <param name="startFragNum">
+        /// Starting fragment address (will read _fragsPerBlock fragments).
+        /// </param>
+        /// <param name="buffer">
+        /// Buffer to read into (must be at least _blockSize bytes).
+        /// </param>
         /// <param name="bytesNeeded">
         /// How many bytes of the block the caller actually needs, or -1 for the whole block.
         /// Sectors beyond this are not read and are zero-filled instead.
@@ -117,7 +121,7 @@ namespace RetroIO.Storage.Local.FFS.Core
         ///
         /// In FFS, fragment addresses from inodes (di_db[], di_ib[]) are stored as
         /// "filesystem blocks" that need conversion to DEV_BSIZE (512-byte) sectors.
-        /// According to SunOS fs.h: fsbtodb(fs, b) = (b) << fs_fsbtodb
+        /// According to SunOS fs.h: fsbtodb(fs, b) is b shifted left by fs_fsbtodb bits
         ///
         /// When using PartitionBlockDevice, addresses are partition-relative.
         /// </summary>
@@ -152,9 +156,15 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// IMPORTANT: Inode block addresses (di_db, di_ib) are FRAGMENT addresses.
         /// This method returns fragment addresses directly without conversion.
         /// </summary>
-        /// <param name="inode">The inode containing block addresses.</param>
-        /// <param name="fileBlockNum">Block number within the file (0-based).</param>
-        /// <returns>Physical fragment address, or 0 if sparse/unallocated.</returns>
+        /// <param name="inode">
+        /// The inode containing block addresses.
+        /// </param>
+        /// <param name="fileBlockNum">
+        /// Block number within the file (0-based).
+        /// </param>
+        /// <returns>
+        /// Physical fragment address, or 0 if sparse/unallocated.
+        /// </returns>
         public uint MapFileBlock(FfsInode inode, uint fileBlockNum)
         {
             // Direct blocks (0-11): 12 × blocksize (48 KB for 4K blocks, 96 KB for 8K blocks)
@@ -228,9 +238,15 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// Indirect block addresses in the inode (di_ib[]) are fragment addresses.
         /// Pointers INSIDE indirect blocks are also fragment addresses.
         /// </summary>
-        /// <param name="indirectFragNum">Fragment number of the indirect block.</param>
-        /// <param name="index">Index within the indirect block (0 to pointersPerBlock-1).</param>
-        /// <returns>Fragment address stored at that index, or 0 if sparse.</returns>
+        /// <param name="indirectFragNum">
+        /// Fragment number of the indirect block.
+        /// </param>
+        /// <param name="index">
+        /// Index within the indirect block (0 to pointersPerBlock-1).
+        /// </param>
+        /// <returns>
+        /// Fragment address stored at that index, or 0 if sparse.
+        /// </returns>
         private uint ReadIndirectBlock(uint indirectFragNum, uint index)
         {
             if (indirectFragNum == 0)
@@ -254,10 +270,18 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// <summary>
         /// Reads file data starting from specified block and offset.
         /// </summary>
-        /// <param name="inode">Inode containing file metadata.</param>
-        /// <param name="offset">Byte offset within file.</param>
-        /// <param name="count">Number of bytes to read.</param>
-        /// <returns>Byte array containing file data.</returns>
+        /// <param name="inode">
+        /// Inode containing file metadata.
+        /// </param>
+        /// <param name="offset">
+        /// Byte offset within file.
+        /// </param>
+        /// <param name="count">
+        /// Number of bytes to read.
+        /// </param>
+        /// <returns>
+        /// Byte array containing file data.
+        /// </returns>
         public byte[] ReadFileData(FfsInode inode, ulong offset, ulong count)
         {
             if (offset + count > inode.di_size)

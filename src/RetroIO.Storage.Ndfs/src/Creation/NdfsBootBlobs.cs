@@ -18,7 +18,9 @@ namespace RetroIO.Storage.Ndfs.Creation
     /// </summary>
     internal static class NdfsBootBlobs
     {
-        /// <summary>Full boot region length in bytes (page-0 bytes 0..1999).</summary>
+        /// <summary>
+        /// Full boot region length in bytes (page-0 bytes 0..1999).
+        /// </summary>
         public const int BootRegionSize = 2000;
 
         // Smd -- real PACK-ONE bootstrap (PIOF + IOX 154x).

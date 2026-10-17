@@ -287,7 +287,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// <remarks>
         /// <para><b>It is an enumerator, and both searches run at once</b></para>
         /// COSMOS Programmer Guide section 3.2.16 (line 10410). Each call returns the first message
-        /// found <b>equal to or greater than</b> the one asked for, and independently the first port
+        /// found equal to or greater than the one asked for, and independently the first port
         /// found equal to or greater than the port asked for. Walk the list by passing back what you
         /// were given plus one; a zero in either field means nothing higher exists.
         /// <para>
@@ -330,7 +330,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// <remarks>
         /// <para><b>Privileged</b></para>
         /// COSMOS Programmer Guide section 4.3 (line 10551): a new task's maximum is a generated
-        /// system default, and <b>only a privileged task may change it</b> - so this fails unless
+        /// system default, and only a privileged task may change it - so this fails unless
         /// <see cref="MakePrivileged"/> has succeeded first.
         /// <para><b>Zero means no ceiling, and that is OUR choice</b></para>
         /// The real default is "system dependent and defined when the XMSG system is generated",

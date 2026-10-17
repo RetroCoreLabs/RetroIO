@@ -25,7 +25,7 @@ namespace RetroIO.Link.Hdlc
         /// ITU-T Q.921 clause 2.6, RFC 1662 section 5.2).
         /// </summary>
         /// <remarks>
-        /// <b>Not implemented.</b> Every link in this repository is octet-stuffed, and the whole
+        /// Not implemented. Every link in this repository is octet-stuffed, and the whole
         /// capture corpus is octet-stuffed. The value exists so the option is expressible and so a
         /// future bit-synchronous link has an obvious place to attach, but selecting it throws.
         /// Building an untested bit-stuffing engine that nothing exercises would be worse than not
@@ -43,16 +43,24 @@ namespace RetroIO.Link.Hdlc
     /// </remarks>
     public sealed record HdlcFramerOptions
     {
-        /// <summary>The flag octet that bounds every frame (X.25 clause 2.2.1).</summary>
+        /// <summary>
+        /// The flag octet that bounds every frame (X.25 clause 2.2.1).
+        /// </summary>
         public const byte Flag = 0x7E;
 
-        /// <summary>The control escape octet (X.25 clause 2.2.2.2).</summary>
+        /// <summary>
+        /// The control escape octet (X.25 clause 2.2.2.2).
+        /// </summary>
         public const byte ControlEscape = 0x7D;
 
-        /// <summary>The bit complemented in an escaped octet: ISO bit 6, value <c>0x20</c>.</summary>
+        /// <summary>
+        /// The bit complemented in an escaped octet: ISO bit 6, value <c>0x20</c>.
+        /// </summary>
         public const byte EscapeMask = 0x20;
 
-        /// <summary>Transparency procedure.</summary>
+        /// <summary>
+        /// Transparency procedure.
+        /// </summary>
         public HdlcTransparency Transparency { get; init; } = HdlcTransparency.OctetStuffed;
 
         /// <summary>
@@ -64,14 +72,8 @@ namespace RetroIO.Link.Hdlc
         /// This is the one genuinely irreconcilable difference between the two stacks that used to
         /// have their own framers, and it is why the option exists rather than a single behaviour:
         /// </para>
-        /// <list type="bullet">
-        ///   <item><b>X.25 side</b> - <see cref="AccmAllControlOctets"/>. The RFC 1662 section 7.1
-        ///   default, and what the old <c>HdlcFramer</c> and <c>HdlcFrameCodec</c> both did.</item>
-        ///   <item><b>XMSG / ND side</b> - <see cref="AccmNone"/>. The ITU-T X.25 clause 2.2.2.2
-        ///   minimum, which escapes only the flag and the escape. MEASURED: across every capture in
-        ///   this repository the only octets ever following <c>0x7D</c> are <c>0x5D</c> and
-        ///   <c>0x5E</c>, so the real ND machines do not ACCM-escape.</item>
-        /// </list>
+        ///  - X.25 side - <see cref="AccmAllControlOctets"/>. The RFC 1662 section 7.1 default, and what the old <c>HdlcFramer</c> and <c>HdlcFrameCodec</c> both did.
+        ///  - XMSG / ND side - <see cref="AccmNone"/>. The ITU-T X.25 clause 2.2.2.2 minimum, which escapes only the flag and the escape. MEASURED: across every capture in this repository the only octets ever following <c>0x7D</c> are <c>0x5D</c> and <c>0x5E</c>, so the real ND machines do not ACCM-escape.
         /// <para>
         /// Receive needs no equivalent option: unescaping is a blind XOR <c>0x20</c>, so a receiver
         /// accepts either policy.
@@ -79,10 +81,14 @@ namespace RetroIO.Link.Hdlc
         /// </remarks>
         public uint SendAccm { get; init; } = AccmAllControlOctets;
 
-        /// <summary>Escape every octet below <c>0x20</c> (RFC 1662 section 7.1 default).</summary>
+        /// <summary>
+        /// Escape every octet below <c>0x20</c> (RFC 1662 section 7.1 default).
+        /// </summary>
         public const uint AccmAllControlOctets = 0xFFFFFFFF;
 
-        /// <summary>Escape only the flag and the control escape (X.25 clause 2.2.2.2).</summary>
+        /// <summary>
+        /// Escape only the flag and the control escape (X.25 clause 2.2.2.2).
+        /// </summary>
         public const uint AccmNone = 0x00000000;
 
         /// <summary>
@@ -110,7 +116,7 @@ namespace RetroIO.Link.Hdlc
         /// <remarks>
         /// Four for X.25 modulo-8 (clause 2.3.5.3 b) and for RFC 1662 (section 4.3); Q.921
         /// clause 2.9 b wants five or six because its address is two octets. A runt is discarded
-        /// silently and, per RFC 1662, is explicitly <em>not</em> counted as an FCS error - which
+        /// silently and, per RFC 1662, is explicitly not counted as an FCS error - which
         /// is why <see cref="HdlcDecodeStatus.Runt"/> is a separate status.
         /// </remarks>
         public int MinFrameLength { get; init; } = HdlcFcs.MinimumFrameLength;
@@ -122,7 +128,7 @@ namespace RetroIO.Link.Hdlc
         /// <remarks>
         /// The standards define no maximum; this is a local guard, which is precisely why it used
         /// to be missing. Two of the five framers this class replaces had no cap at all and grew a
-        /// <c>List&lt;byte&gt;</c> without bound, so a peer that opened a frame and never sent a
+        /// <c>List{byte}</c> without bound, so a peer that opened a frame and never sent a
         /// closing flag could exhaust memory. The limit is enforced as each octet is unstuffed,
         /// not when the frame closes - checking at the close would leave the guard useless for the
         /// case it exists for.
@@ -141,14 +147,18 @@ namespace RetroIO.Link.Hdlc
         /// </remarks>
         public bool DeliverCorruptFrames { get; init; }
 
-        /// <summary>The policy the X.25 links use.</summary>
+        /// <summary>
+        /// The policy the X.25 links use.
+        /// </summary>
         public static HdlcFramerOptions X25 { get; } = new HdlcFramerOptions
         {
             SendAccm = AccmAllControlOctets,
             MaxFrameLength = 4096,
         };
 
-        /// <summary>The policy the XMSG / ND links use.</summary>
+        /// <summary>
+        /// The policy the XMSG / ND links use.
+        /// </summary>
         public static HdlcFramerOptions Xmsg { get; } = new HdlcFramerOptions
         {
             SendAccm = AccmNone,
@@ -204,8 +214,12 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Whether an octet must be escaped on transmit under this policy.
         /// </summary>
-        /// <param name="value">The octet.</param>
-        /// <returns><see langword="true"/> when it needs a control escape in front of it.</returns>
+        /// <param name="value">
+        /// The octet.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when it needs a control escape in front of it.
+        /// </returns>
         internal bool MustEscape(byte value)
         {
             if (value == Flag || value == ControlEscape)

@@ -92,11 +92,21 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// <summary>
         /// Scans a seekable stream for an FFS filesystem base.
         /// </summary>
-        /// <param name="stream">Image stream. Must be seekable. Position is not preserved.</param>
-        /// <param name="baseOffsetBytes">On success, the byte offset at which the filesystem begins.</param>
-        /// <param name="superblock">On success, the parsed and validated superblock.</param>
-        /// <param name="maxScanBytes">How far to scan. Defaults to <see cref="DEFAULT_MAX_SCAN_BYTES"/>.</param>
-        /// <returns>True if a valid filesystem base was found.</returns>
+        /// <param name="stream">
+        /// Image stream. Must be seekable. Position is not preserved.
+        /// </param>
+        /// <param name="baseOffsetBytes">
+        /// On success, the byte offset at which the filesystem begins.
+        /// </param>
+        /// <param name="superblock">
+        /// On success, the parsed and validated superblock.
+        /// </param>
+        /// <param name="maxScanBytes">
+        /// How far to scan. Defaults to <see cref="DEFAULT_MAX_SCAN_BYTES"/>.
+        /// </param>
+        /// <returns>
+        /// True if a valid filesystem base was found.
+        /// </returns>
         public static bool TryLocate(
             Stream stream,
             out long baseOffsetBytes,
@@ -140,11 +150,21 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// <summary>
         /// Scans a block device for an FFS filesystem base.
         /// </summary>
-        /// <param name="device">Block device to scan.</param>
-        /// <param name="baseOffsetBytes">On success, the byte offset at which the filesystem begins.</param>
-        /// <param name="superblock">On success, the parsed and validated superblock.</param>
-        /// <param name="maxScanBytes">How far to scan. Defaults to <see cref="DEFAULT_MAX_SCAN_BYTES"/>.</param>
-        /// <returns>True if a valid filesystem base was found.</returns>
+        /// <param name="device">
+        /// Block device to scan.
+        /// </param>
+        /// <param name="baseOffsetBytes">
+        /// On success, the byte offset at which the filesystem begins.
+        /// </param>
+        /// <param name="superblock">
+        /// On success, the parsed and validated superblock.
+        /// </param>
+        /// <param name="maxScanBytes">
+        /// How far to scan. Defaults to <see cref="DEFAULT_MAX_SCAN_BYTES"/>.
+        /// </param>
+        /// <returns>
+        /// True if a valid filesystem base was found.
+        /// </returns>
         public static bool TryLocate(
             IBlockDevice device,
             out long baseOffsetBytes,
@@ -216,10 +236,18 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// Verifies that a filesystem starts at a specific, caller-supplied byte offset.
         /// Used by the explicit SetFilesystemOffset() path, where we must not guess.
         /// </summary>
-        /// <param name="device">Block device to read.</param>
-        /// <param name="baseOffsetBytes">Candidate filesystem base in bytes.</param>
-        /// <param name="superblock">On success, the parsed and validated superblock.</param>
-        /// <returns>True if a valid FFS superblock lives at that base.</returns>
+        /// <param name="device">
+        /// Block device to read.
+        /// </param>
+        /// <param name="baseOffsetBytes">
+        /// Candidate filesystem base in bytes.
+        /// </param>
+        /// <param name="superblock">
+        /// On success, the parsed and validated superblock.
+        /// </param>
+        /// <returns>
+        /// True if a valid FFS superblock lives at that base.
+        /// </returns>
         public static bool TryReadAtBase(IBlockDevice device, long baseOffsetBytes, out FfsSuperblock? superblock)
         {
             superblock = null;

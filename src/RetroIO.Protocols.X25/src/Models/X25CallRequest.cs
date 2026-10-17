@@ -104,7 +104,7 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Parse CALL REQUEST packet data.
         /// X.25 address block format (ITU-T X.25 section 5.2.1):
-        ///   Byte 0: (calling_length &lt;&lt; 4) | called_length
+        ///   Byte 0: (calling_length shifted left by 4) OR called_length
         ///   Then called + calling digits packed as one contiguous BCD stream
         ///   (2 digits per byte, high nibble first, zero-padded if odd total)
         /// </summary>

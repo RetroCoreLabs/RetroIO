@@ -39,7 +39,7 @@ internal static class CatalogueEnumerator
     /// of the path.
     /// </summary>
     /// <remarks>
-    /// <b>"$" means the DISC ROOT — nothing else.</b> A directory below it reports its own leaf name,
+    /// "$" means the DISC ROOT — nothing else. A directory below it reports its own leaf name,
     /// so the user's home <c>USER</c> reports as <c>"USER"</c> (it is <c>$.USER</c> in Acorn terms).
     ///
     /// This previously keyed off the user's HOME directory instead of the disc root, which inverted

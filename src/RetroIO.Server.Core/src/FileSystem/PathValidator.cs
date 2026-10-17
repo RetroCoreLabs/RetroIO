@@ -16,10 +16,18 @@ public static class PathValidator
     /// <summary>
     /// Validate that the requested path is safe and within the root directory.
     /// </summary>
-    /// <param name="requestedPath">Path requested by client (relative to session root)</param>
-    /// <param name="sessionRoot">Session root directory (absolute path)</param>
-    /// <param name="fileSystem">File system backend (optional, uses System.IO if null)</param>
-    /// <returns>True if path is safe, false if potentially malicious</returns>
+    /// <param name="requestedPath">
+    /// Path requested by client (relative to session root)
+    /// </param>
+    /// <param name="sessionRoot">
+    /// Session root directory (absolute path)
+    /// </param>
+    /// <param name="fileSystem">
+    /// File system backend (optional, uses System.IO if null)
+    /// </param>
+    /// <returns>
+    /// True if path is safe, false if potentially malicious
+    /// </returns>
     public static bool IsPathSafe(string requestedPath, string sessionRoot, IFileSystemBackend? fileSystem = null)
     {
         try

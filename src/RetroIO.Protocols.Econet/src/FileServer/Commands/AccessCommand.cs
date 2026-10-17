@@ -13,12 +13,12 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Protocols.Econet.FileServer.Commands;
 
 /// <summary>
-/// <c>*ACCESS &lt;object&gt; [&lt;perms&gt;]</c> — sets a file or directory's access permissions.
+/// <c>*ACCESS object [perms]</c> — sets a file or directory's access permissions.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Mirrors PiEconetBridge <c>fs_access</c> (fs.c:7270-7310). The permission string is
-/// <c>&lt;owner-perms&gt;[/&lt;other-perms&gt;]</c>: before the slash the letters <c>W R H/P L</c> set the
+/// <c>owner-perms[/other-perms]</c>: before the slash the letters <c>W R H/P L</c> set the
 /// owner bits plus hidden/locked; after the slash only <c>W</c> and <c>R</c> are legal and set the
 /// public bits. An empty string clears every bit (<c>perm = 0</c>). An unrecognised letter is
 /// <c>0xCF "Bad attribute"</c>; a malformed argument is <c>0xFF</c>; an object that will not resolve is

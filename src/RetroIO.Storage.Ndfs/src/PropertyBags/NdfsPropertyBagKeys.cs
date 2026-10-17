@@ -112,7 +112,7 @@ namespace RetroIO.Storage.Ndfs.PropertyBags
         /// </para>
         /// <para>
         /// The width of the owner's own tier is UNKNOWN. <c>AccessPermissions.ParseBits</c> extracts
-        /// it as <c>AccessBits &amp; 0x1F</c>, which is five bits and therefore overlaps bits 3 and 4
+        /// it as <c>AccessBits AND 0x1F</c>, which is five bits and therefore overlaps bits 3 and 4
         /// of the friend tier, while the comment beside that line says bits 2-0 and the constructor
         /// documents it as five bits. Three of the file's own statements disagree, so the safe
         /// reading is that bits 2-0 are certainly owner bits and bits 3-4 are contested. Do not rely

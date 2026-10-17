@@ -67,7 +67,7 @@ namespace RetroIO.Protocols.Xmsg.Node
         /// one disk write per margin instead of one per frame.
         /// </para>
         /// <para>
-        /// What it missed: <b>nothing in this node recovers from being ahead.</b> The only XENSE
+        /// What it missed: nothing in this node recovers from being ahead. The only XENSE
         /// recovery is <c>XmsgServerHost.ResyncAcceptDown</c>, which handles a TAD connect-accept
         /// and gives up after a few steps. So the margin does not buy a recoverable error, it buys
         /// a permanent gap. MEASURED 2026-08-11: a restart resumed at 0x0027 having really reached

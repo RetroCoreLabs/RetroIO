@@ -17,14 +17,14 @@ namespace RetroIO.Tests.Econet;
 /// Byte-for-byte parity tests for the OSCLI (fsop 0x00) command surface against the PiFS C reference
 /// implementation at <c>E:\Dev\Emulators\6502\PiEconetBridge\utilities\fs.c</c>.
 ///
-/// PiFS dispatches every <c>*</c> command through <c>fs_parse_cmd(command, "NAME", min, &amp;param)</c>
+/// PiFS dispatches every <c>*</c> command through <c>fs_parse_cmd(command, "NAME", min, param)</c>
 /// (fs.c:9778-9849), whose contract is:
 ///
 ///   1. Scan from <c>parse+min</c> for the FIRST ' ' or '.' (fs.c:9801-9803). Everything before it is
 ///      <c>workstr</c>; everything after (with leading spaces skipped, fs.c:9816-9822) is the parameter.
 ///   2. Match iff <c>workstr</c> is a case-insensitive PREFIX OF THE COMMAND NAME (fs.c:9828), AND
 ///      EITHER it is a full-length match (fs.c:9829-9830) OR the separator was a '.' and
-///      <c>strlen(workstr) &gt;= min</c> (fs.c:9831-9834) — i.e. dot-abbreviation.
+///      <c>strlen(workstr) >= min</c> (fs.c:9831-9834) — i.e. dot-abbreviation.
 ///
 /// The direction of that prefix test is the crux: it asks "is what the user typed a prefix of my
 /// command name?", not "does what the user typed start with my command name?". RetroFS now reproduces
@@ -125,7 +125,7 @@ public sealed class OsCliParityTests
 
     /// <summary>
     /// The login spellings are tested BEFORE the logged-in gate (fs.c:9984-9987), so a wrong password
-    /// must produce &amp;BC, not &amp;BF. LIVE CAPTURE 2026-07-17: <c>00 BC "Wrong password" 0D</c>.
+    /// must produce 0xBC, not 0xBF. LIVE CAPTURE 2026-07-17: <c>00 BC "Wrong password" 0D</c>.
     /// </summary>
     [Test]
     public void Login_WrongPassword_ReturnsBcWrongPassword()
@@ -144,7 +144,7 @@ public sealed class OsCliParityTests
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// LIVE CAPTURE 2026-07-17: <c>*I AM SYST &lt;pw&gt;</c> -&gt; <c>05 00 01 02 04 00</c>, and after
+    /// LIVE CAPTURE 2026-07-17: <c>*I AM SYST pw</c> -> <c>05 00 01 02 04 00</c>, and after
     /// <c>*OPT 4,2</c> the same login returned <c>05 00 01 02 04 02</c> — i.e. the last byte is the
     /// persisted boot option. fs_login builds this reply in fs.c (return code 5 = "logged on").
     /// </summary>

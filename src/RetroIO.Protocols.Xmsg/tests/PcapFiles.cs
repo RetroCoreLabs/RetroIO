@@ -16,14 +16,14 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Why this exists.</b> Thirteen test files each had their own private copy of the same
+    /// Why this exists. Thirteen test files each had their own private copy of the same
     /// directory-walking code, and every one of them treated a missing file the same way: print
     /// "skipping" and PASS. These are the tests that check our decoder and our generator against
     /// bytes recorded off the real ND-100s, so on any machine without the files the whole set
     /// reported green while checking nothing at all.
     /// </para>
     /// <para>
-    /// <b>The policy is now the opposite.</b> Missing files are an error. A developer who genuinely
+    /// The policy is now the opposite. Missing files are an error. A developer who genuinely
     /// does not have them sets <c>XMSG_PCAP_OPTIONAL=1</c> and the tests go back to skipping - but
     /// that is a deliberate choice someone has to make, not the silent default.
     /// </para>

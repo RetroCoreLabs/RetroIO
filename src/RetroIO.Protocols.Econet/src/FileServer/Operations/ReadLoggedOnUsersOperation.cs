@@ -77,13 +77,13 @@ public sealed class ReadLoggedOnUsersOperation : IFileServerOperation
 
     /// <summary>
     /// Build the ORIGINAL 1983 fixed per-user frames: <c>[station, net, userid(10, space-padded),
-    /// privilege]</c> = 13 bytes each (Acorn <i>Econet Advanced User Guide</i>, 1983).
+    /// privilege]</c> = 13 bytes each (Acorn Econet Advanced User Guide, 1983).
     /// </summary>
     /// <remarks>
-    /// <b>VALIDATE ON A REAL CLIENT:</b> the AUG (OCR) says "next entry at byte 17", implying the first
+    /// VALIDATE ON A REAL CLIENT: the AUG (OCR) says "next entry at byte 17", implying the first
     /// frame starts at byte 4; RetroFS uses its standard <c>[cmd, rc, count]</c> header (entries from
     /// byte 3), which is internally consistent with every other reply but strides at byte 16. This
-    /// off-by-one in the OCR'd layout is unresolved — like the <c>*DIR &amp;FE</c> question, it needs a
+    /// off-by-one in the OCR'd layout is unresolved — like the <c>*DIR 0xFE</c> question, it needs a
     /// BeebEm/strict-1983-client capture before this frame can be trusted. Harmless until then: the
     /// LaterFS default is unchanged and Classic1983 is opt-in with no real client yet. The privilege
     /// byte reuses the later 1/0 (System/Normal) convention; the exact 1983 value is also unconfirmed.

@@ -313,7 +313,7 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// Gets a value indicating whether the upper layer has been told the link is usable.
         /// </summary>
         /// <remarks>
-        /// <para><b>This is NOT the same as <see cref="State"/> being Connected</b></para>
+        /// <para>This is NOT the same as <see cref="State"/> being Connected</para>
         /// <para>
         /// The spec's state table (section 8) carries "notify up" as a SEPARATE action from the
         /// state transition, and the two do not coincide. Entering CONNECTED from SABM_SENT by

@@ -42,14 +42,16 @@ public class ServerManager : IServerManager
     /// <summary>
     /// Creates the manager.
     /// </summary>
-    /// <param name="logger">Log sink.</param>
+    /// <param name="logger">
+    /// Log sink.
+    /// </param>
     /// <param name="services">
     /// Container, used to find the protocol services on first use.
     /// </param>
     /// <remarks>
-    /// Takes the container rather than IEnumerable&lt;IHostedService&gt; on purpose. Injecting the
+    /// Takes the container rather than IEnumerable{IHostedService} on purpose. Injecting the
     /// hosted services directly is a circular dependency: the host resolves
-    /// IEnumerable&lt;IHostedService&gt; to start everything, that includes LiveDataService, and
+    /// IEnumerable{IHostedService} to start everything, that includes LiveDataService, and
     /// LiveDataService needs IServerManager -- which would need the same enumerable. The process
     /// refuses to start with "A circular dependency was detected". Resolving lazily, after the
     /// graph is built, breaks the cycle.
@@ -211,23 +213,39 @@ public class ServerManager : IServerManager
         return await StartAsync();
     }
 
-    /// <summary>Builds a failed response.</summary>
-    /// <param name="message">Reason shown to the caller.</param>
-    /// <returns>The response.</returns>
+    /// <summary>
+    /// Builds a failed response.
+    /// </summary>
+    /// <param name="message">
+    /// Reason shown to the caller.
+    /// </param>
+    /// <returns>
+    /// The response.
+    /// </returns>
     private static ServerActionResponse Failed(string message) =>
         new ServerActionResponse { Success = false, Message = message };
 
-    /// <summary>Builds a successful response.</summary>
-    /// <param name="message">Message shown to the caller.</param>
-    /// <returns>The response.</returns>
+    /// <summary>
+    /// Builds a successful response.
+    /// </summary>
+    /// <param name="message">
+    /// Message shown to the caller.
+    /// </param>
+    /// <returns>
+    /// The response.
+    /// </returns>
     private static ServerActionResponse Succeeded(string message) =>
         new ServerActionResponse { Success = true, Message = message };
 
     /// <summary>
     /// Renders an uptime the way the UI displays it.
     /// </summary>
-    /// <param name="uptime">Elapsed time since start.</param>
-    /// <returns>Short human-readable duration.</returns>
+    /// <param name="uptime">
+    /// Elapsed time since start.
+    /// </param>
+    /// <returns>
+    /// Short human-readable duration.
+    /// </returns>
     private static string FormatUptime(TimeSpan uptime)
     {
         if (uptime.TotalDays >= 1)

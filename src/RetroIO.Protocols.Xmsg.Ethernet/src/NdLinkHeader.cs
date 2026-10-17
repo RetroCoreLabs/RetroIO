@@ -132,7 +132,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>The low nibble is UNVERIFIED.</b> High nibble 6 is the disconnect-request family -
+        /// The low nibble is UNVERIFIED. High nibble 6 is the disconnect-request family -
         /// that is what <c>0x6F</c> is - so a <c>0x60</c> is treated as a disconnect request too.
         /// What the <c>0</c> distinguishes from the <c>F</c> of <c>0x6F</c> is NOT established:
         /// the low nibble is unexplained across the whole family (three known kinds end in
@@ -194,7 +194,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// that was drawn from a 2026-07-24 capture of a link that never came up, which contained only
     /// retransmissions and therefore no acknowledgements to notice.
     /// </para>
-    /// <para><b>Layout</b> (VERIFIED, 96 frames, both directions)</para>
+    /// <para>Layout (VERIFIED, 96 frames, both directions)</para>
     /// Byte offsets within the header:
     ///  - <c>+0</c>: <c>0x0B</c> = 11 - the LENGTH of this header, not a magic constant. VERIFIED
     ///    2026-08-03: the 802.3 length is always 3 (LLC) + 11 (this header) + payload, and the
@@ -237,8 +237,8 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// <para>
     /// Each direction runs its own send sequence (observed stepping <c>0x43, 0x44, 0x45, ...</c>).
     /// On receiving a <see cref="NdLinkFrameKind.Data"/> frame the peer replies with an
-    /// <see cref="NdLinkFrameKind.Acknowledge"/> frame whose sequence is <b>the received sequence
-    /// plus one</b> - the next expected value - and whose payload length is zero.
+    /// <see cref="NdLinkFrameKind.Acknowledge"/> frame whose sequence is the received sequence
+    /// plus one - the next expected value - and whose payload length is zero.
     /// </para>
     /// <para><b>Link ids</b></para>
     /// <para>

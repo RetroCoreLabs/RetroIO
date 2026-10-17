@@ -89,13 +89,13 @@ namespace RetroIO.Link.Models
 
         /// <summary>
         /// Information Frame Mask (0x01) - LSB mask for frame type detection.
-        /// Information frames have LSB = 0, so (control & 0x01) == 0 indicates I-frame.
+        /// Information frames have LSB = 0, so a control byte whose bit 0 is 0 indicates I-frame.
         /// </summary>
         public const byte InformationFrameMask = 0x01;
 
         /// <summary>
         /// Supervisory Frame Mask (0x03) - Two LSB mask for frame type detection.
-        /// Supervisory frames have bits 1-0 = 01, so (control & 0x03) == 0x01 indicates S-frame.
+        /// Supervisory frames have bits 1-0 = 01, so a control byte whose two low bits are 01 indicates S-frame.
         /// </summary>
         public const byte SupervisoryFrameMask = 0x03;
 
@@ -125,7 +125,7 @@ namespace RetroIO.Link.Models
 
         /// <summary>
         /// High Byte Shift (8) - Bit shift for extracting high byte from 16-bit value.
-        /// Used in CRC calculations: (fcs >> 8) & 0xFF gives high byte.
+        /// Used in CRC calculations: the FCS shifted right by 8, then masked with 0xFF, gives the high byte.
         /// </summary>
         public const int HighByteShift = 8;
     }
@@ -159,8 +159,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines if this byte requires escape processing in HDLC frames.
         /// </summary>
-        /// <param name="specialByte">The HDLC special byte</param>
-        /// <returns>True if this byte must be escaped when appearing in frame data</returns>
+        /// <param name="specialByte">
+        /// The HDLC special byte
+        /// </param>
+        /// <returns>
+        /// True if this byte must be escaped when appearing in frame data
+        /// </returns>
         public static bool RequiresEscaping(this HdlcSpecialByte specialByte)
         {
             return specialByte == HdlcSpecialByte.Flag || specialByte == HdlcSpecialByte.Escape;
@@ -169,8 +173,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Gets the escaped version of this special byte.
         /// </summary>
-        /// <param name="specialByte">The HDLC special byte to escape</param>
-        /// <returns>The escaped version, or null if escaping is not applicable</returns>
+        /// <param name="specialByte">
+        /// The HDLC special byte to escape
+        /// </param>
+        /// <returns>
+        /// The escaped version, or null if escaping is not applicable
+        /// </returns>
         public static HdlcSpecialByte? GetEscapedVersion(this HdlcSpecialByte specialByte)
         {
             return specialByte switch
@@ -184,8 +192,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Gets the original (unescaped) version of this escaped byte.
         /// </summary>
-        /// <param name="specialByte">The escaped HDLC special byte</param>
-        /// <returns>The original version, or null if unescaping is not applicable</returns>
+        /// <param name="specialByte">
+        /// The escaped HDLC special byte
+        /// </param>
+        /// <returns>
+        /// The original version, or null if unescaping is not applicable
+        /// </returns>
         public static HdlcSpecialByte? GetUnescapedVersion(this HdlcSpecialByte specialByte)
         {
             return specialByte switch
@@ -199,8 +211,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Gets a human-readable description of the special byte.
         /// </summary>
-        /// <param name="specialByte">The HDLC special byte</param>
-        /// <returns>A descriptive string explaining the special byte's purpose</returns>
+        /// <param name="specialByte">
+        /// The HDLC special byte
+        /// </param>
+        /// <returns>
+        /// A descriptive string explaining the special byte's purpose
+        /// </returns>
         public static string GetDescription(this HdlcSpecialByte specialByte)
         {
             return specialByte switch
@@ -222,8 +238,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines if this is a valid HDLC address for point-to-point links.
         /// </summary>
-        /// <param name="address">The HDLC address value</param>
-        /// <returns>True if this is a valid point-to-point address</returns>
+        /// <param name="address">
+        /// The HDLC address value
+        /// </param>
+        /// <returns>
+        /// True if this is a valid point-to-point address
+        /// </returns>
         public static bool IsValidPointToPointAddress(this HdlcAddress address)
         {
             return address == HdlcAddress.DteToDce || address == HdlcAddress.DceToDte;
@@ -232,8 +252,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Gets the opposite address for response frames.
         /// </summary>
-        /// <param name="address">The original HDLC address</param>
-        /// <returns>The address to use in response frames</returns>
+        /// <param name="address">
+        /// The original HDLC address
+        /// </param>
+        /// <returns>
+        /// The address to use in response frames
+        /// </returns>
         public static HdlcAddress GetResponseAddress(this HdlcAddress address)
         {
             return address switch
@@ -247,8 +271,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines if this address indicates DTE origination.
         /// </summary>
-        /// <param name="address">The HDLC address value</param>
-        /// <returns>True if this frame was originated by a DTE</returns>
+        /// <param name="address">
+        /// The HDLC address value
+        /// </param>
+        /// <returns>
+        /// True if this frame was originated by a DTE
+        /// </returns>
         public static bool IsDteOriginated(this HdlcAddress address)
         {
             return address == HdlcAddress.DteToDce;
@@ -257,8 +285,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines if this address indicates DCE origination.
         /// </summary>
-        /// <param name="address">The HDLC address value</param>
-        /// <returns>True if this frame was originated by a DCE</returns>
+        /// <param name="address">
+        /// The HDLC address value
+        /// </param>
+        /// <returns>
+        /// True if this frame was originated by a DCE
+        /// </returns>
         public static bool IsDceOriginated(this HdlcAddress address)
         {
             return address == HdlcAddress.DceToDte;
@@ -267,8 +299,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Gets a human-readable description of the address.
         /// </summary>
-        /// <param name="address">The HDLC address</param>
-        /// <returns>A descriptive string explaining the address meaning</returns>
+        /// <param name="address">
+        /// The HDLC address
+        /// </param>
+        /// <returns>
+        /// A descriptive string explaining the address meaning
+        /// </returns>
         public static string GetDescription(this HdlcAddress address)
         {
             return address switch

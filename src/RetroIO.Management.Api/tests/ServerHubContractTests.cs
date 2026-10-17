@@ -24,7 +24,9 @@ namespace RetroIO.Management.Api.Tests;
 [TestFixture]
 public class ServerHubContractTests
 {
-    /// <summary>Every wire-name constant must name a real method on the hub interface.</summary>
+    /// <summary>
+    /// Every wire-name constant must name a real method on the hub interface.
+    /// </summary>
     [Test]
     public void EveryHubMethodConstant_NamesAMethodOnTheInterface()
     {
@@ -56,7 +58,9 @@ public class ServerHubContractTests
         Assert.That(checkedCount, Is.GreaterThan(0), "no push-name constants were checked");
     }
 
-    /// <summary>Every push on the hub interface must have a wire-name constant clients can use.</summary>
+    /// <summary>
+    /// Every push on the hub interface must have a wire-name constant clients can use.
+    /// </summary>
     [Test]
     public void EveryInterfaceMethod_HasAWireNameConstant()
     {

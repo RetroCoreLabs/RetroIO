@@ -382,8 +382,8 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <c>78MOD=000054</c> octal in <c>SYMBOLS/L07</c> and <c>SYMBOLS/M06</c>, and <b>absent from
-        /// K03</b> - it arrived after Release K, along with <see cref="Umod"/>.
+        /// <c>78MOD=000054</c> octal in <c>SYMBOLS/L07</c> and <c>SYMBOLS/M06</c>, and absent from
+        /// K03 - it arrived after Release K, along with <see cref="Umod"/>.
         /// </para>
         /// <para><b>Why the release matters, checked rather than assumed</b></para>
         /// <para>

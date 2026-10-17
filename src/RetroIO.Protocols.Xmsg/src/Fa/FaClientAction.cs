@@ -51,8 +51,8 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// <remarks>
         /// <para>
         /// This was called <c>SendClose</c> until 2026-08-18, and the name was wrong in the one way
-        /// that mattered. <b>Close (<c>0x07C0</c>) is the SERVER's message</b>; the client's is
-        /// <b>Release (<c>0x0782</c>)</b>. The driver built a Close for years because the name told
+        /// that mattered. Close (<c>0x07C0</c>) is the SERVER's message; the client's is
+        /// Release (<c>0x0782</c>). The driver built a Close for years because the name told
         /// it to, and that single mistake is what leaked a connection seat on every transfer.
         /// </para>
         /// <para>

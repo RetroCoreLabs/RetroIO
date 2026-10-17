@@ -199,7 +199,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
 
         /// <summary>
         /// Resets our persisted outgoing datagram sequence for a remote node back to 0x0000. Called
-        /// when that node signals an XMSG (re)start - a <b>ReachabilityRequest</b> - which zeroes its
+        /// when that node signals an XMSG (re)start - a ReachabilityRequest - which zeroes its
         /// per-node-pair expected-from-us. LIVE-VERIFIED signal: after an XMSG restart 100 sends a
         /// ReachabilityRequest and its subsequent connect arrives at Flags1 0x0000; a bare HDLC link
         /// restart does NOT send one and 100 continues its sequence. Resetting here keeps our sequence

@@ -13,8 +13,8 @@ namespace RetroIO.Tests.Econet;
 
 /// <summary>
 /// Task 0.4 — the <c>*DIR</c> not-found error code is the wire-format divergence wired end-to-end:
-/// the later FS reports <c>&amp;D6</c> (the verified default), while a machine pinned to
-/// <see cref="WireProfile.Classic1983"/> gets the 1983 <c>&amp;FE</c>. The success path and message
+/// the later FS reports <c>0xD6</c> (the verified default), while a machine pinned to
+/// <see cref="WireProfile.Classic1983"/> gets the 1983 <c>0xFE</c>. The success path and message
 /// layout are otherwise unchanged.
 /// </summary>
 [TestFixture]

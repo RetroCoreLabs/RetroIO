@@ -240,9 +240,9 @@ public static class AcornPath
     /// (utilities/econet-hpbridge.c:9321 — only disabled by an explicit CLI option). This is the standard
     /// Acorn date packing:
     ///  - 7-bit year relative to 1981: <c>yearBits = year - 1981</c>.
-    ///  - <c>day byte = (day &amp; 0x1f) | ((yearBits &amp; 0x70) &lt;&lt; 1)</c>, so the top 3 year bits
+    ///  - <c>day byte = (day AND 0x1f) OR ((yearBits AND 0x70) shifted left by 1)</c>, so the top 3 year bits
     ///    ride in day bits 5-7.
-    ///  - <c>monthyear byte = (month &amp; 0x0f) | ((yearBits &amp; 0x0f) &lt;&lt; 4)</c>, so the month
+    ///  - <c>monthyear byte = (month AND 0x0f) OR ((yearBits AND 0x0f) shifted left by 4)</c>, so the month
     ///    sits in the low nibble and the low 4 year bits in the high nibble.
     /// NOTE: the previous RetroFS packing put month in the HIGH nibble and a 2-digit year in the LOW
     /// nibble (no year bits in the day byte) — the opposite nibble order and wrong epoch, so it did not

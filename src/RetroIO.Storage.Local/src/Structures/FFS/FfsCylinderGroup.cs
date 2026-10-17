@@ -161,9 +161,15 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// <summary>
         /// Parses cylinder group from byte array (big-endian format for SunOS).
         /// </summary>
-        /// <param name="buffer">Buffer containing cylinder group structure.</param>
-        /// <param name="offset">Offset where structure starts.</param>
-        /// <returns>Parsed cylinder group.</returns>
+        /// <param name="buffer">
+        /// Buffer containing cylinder group structure.
+        /// </param>
+        /// <param name="offset">
+        /// Offset where structure starts.
+        /// </param>
+        /// <returns>
+        /// Parsed cylinder group.
+        /// </returns>
         public static FfsCylinderGroup Parse(byte[] buffer, int offset = 0)
         {
             if (buffer == null)

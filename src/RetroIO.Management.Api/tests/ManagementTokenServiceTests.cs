@@ -43,9 +43,15 @@ public class ManagementTokenServiceTests
         if (Directory.Exists(_dataPath)) Directory.Delete(_dataPath, true);
     }
 
-    /// <summary>Builds a user to issue tokens for.</summary>
-    /// <param name="isAdmin">Whether the user is an administrator.</param>
-    /// <returns>The user.</returns>
+    /// <summary>
+    /// Builds a user to issue tokens for.
+    /// </summary>
+    /// <param name="isAdmin">
+    /// Whether the user is an administrator.
+    /// </param>
+    /// <returns>
+    /// The user.
+    /// </returns>
     private static RetroUser MakeUser(bool isAdmin) => new RetroUser
     {
         UserId = Guid.NewGuid(),
@@ -55,10 +61,18 @@ public class ManagementTokenServiceTests
         IsActive = true
     };
 
-    /// <summary>Reads a token back with the service's own validation parameters.</summary>
-    /// <param name="service">Service that issued it.</param>
-    /// <param name="token">The token.</param>
-    /// <returns>The validated principal.</returns>
+    /// <summary>
+    /// Reads a token back with the service's own validation parameters.
+    /// </summary>
+    /// <param name="service">
+    /// Service that issued it.
+    /// </param>
+    /// <param name="token">
+    /// The token.
+    /// </param>
+    /// <returns>
+    /// The validated principal.
+    /// </returns>
     private static ClaimsPrincipal Validate(ManagementTokenService service, string token) =>
         new JwtSecurityTokenHandler().ValidateToken(token, service.ValidationParameters, out _);
 

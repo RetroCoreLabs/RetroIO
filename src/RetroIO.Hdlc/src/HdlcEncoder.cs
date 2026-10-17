@@ -24,8 +24,12 @@ namespace RetroIO.Link.Hdlc
         /// Upper bound on the octets <see cref="Encode(System.ReadOnlySpan{byte}, System.Span{byte}, HdlcFramerOptions)"/>
         /// will write for a body of this length.
         /// </summary>
-        /// <param name="bodyLength">Octets of address, control and information, FCS excluded.</param>
-        /// <returns>A size that is always sufficient.</returns>
+        /// <param name="bodyLength">
+        /// Octets of address, control and information, FCS excluded.
+        /// </param>
+        /// <returns>
+        /// A size that is always sufficient.
+        /// </returns>
         /// <remarks>
         /// Worst case is every octet of the body and both FCS octets needing an escape, plus the
         /// two flags.
@@ -47,11 +51,21 @@ namespace RetroIO.Link.Hdlc
         /// Address, control and information octets. The FCS is computed here and must NOT already
         /// be present.
         /// </param>
-        /// <param name="destination">At least <see cref="GetMaxEncodedLength"/> octets.</param>
-        /// <param name="options">The link's framing policy.</param>
-        /// <returns>How many octets were written.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="destination"/> is too small.</exception>
+        /// <param name="destination">
+        /// At least <see cref="GetMaxEncodedLength"/> octets.
+        /// </param>
+        /// <param name="options">
+        /// The link's framing policy.
+        /// </param>
+        /// <returns>
+        /// How many octets were written.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="options"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="destination"/> is too small.
+        /// </exception>
         public static int Encode(ReadOnlySpan<byte> body, Span<byte> destination, HdlcFramerOptions options)
         {
             if (!TryEncode(body, destination, options, out int written))
@@ -66,11 +80,21 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Encodes one frame, reporting failure instead of throwing when the buffer is too small.
         /// </summary>
-        /// <param name="body">Address, control and information octets.</param>
-        /// <param name="destination">The buffer to write into.</param>
-        /// <param name="options">The link's framing policy.</param>
-        /// <param name="written">Octets written; zero when this returns <see langword="false"/>.</param>
-        /// <returns><see langword="true"/> when the frame was written in full.</returns>
+        /// <param name="body">
+        /// Address, control and information octets.
+        /// </param>
+        /// <param name="destination">
+        /// The buffer to write into.
+        /// </param>
+        /// <param name="options">
+        /// The link's framing policy.
+        /// </param>
+        /// <param name="written">
+        /// Octets written; zero when this returns <see langword="false"/>.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the frame was written in full.
+        /// </returns>
         public static bool TryEncode(
             ReadOnlySpan<byte> body,
             Span<byte> destination,
@@ -125,9 +149,15 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Encodes one frame and returns it as a new array.
         /// </summary>
-        /// <param name="body">Address, control and information octets.</param>
-        /// <param name="options">The link's framing policy.</param>
-        /// <returns>The framed octets.</returns>
+        /// <param name="body">
+        /// Address, control and information octets.
+        /// </param>
+        /// <param name="options">
+        /// The link's framing policy.
+        /// </param>
+        /// <returns>
+        /// The framed octets.
+        /// </returns>
         /// <remarks>
         /// Allocates, so prefer <see cref="Encode(ReadOnlySpan{byte}, Span{byte}, HdlcFramerOptions)"/>
         /// on a hot path. This overload exists because most existing callers already hand an array
@@ -159,7 +189,9 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Fills a span with inter-frame time fill: contiguous complete flag octets.
         /// </summary>
-        /// <param name="destination">The span to fill.</param>
+        /// <param name="destination">
+        /// The span to fill.
+        /// </param>
         /// <remarks>
         /// X.25 clause 2.2.4 - "interframe time fill is accomplished by transmitting contiguous
         /// flags between frames" - together with clause 2.2.1, which requires complete eight-bit

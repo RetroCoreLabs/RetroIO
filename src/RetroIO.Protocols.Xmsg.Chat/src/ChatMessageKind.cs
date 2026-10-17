@@ -554,7 +554,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// deliver it twice - which is the exact fault this kind exists to stop. So the machine the
         /// line was TYPED ON stamps it, and the pair (origin, id) travels unchanged to the edge.
         /// </para>
-        /// <para><b>Why not just add the id to <see cref="TrunkRelay"/></b></para>
+        /// <para>Why not just add the id to <see cref="TrunkRelay"/></para>
         /// <para>
         /// Same reason <see cref="TrunkRelay"/> is not extra fields on <see cref="TrunkSaid"/>, and
         /// it is worth being blunt about it: these machines are upgraded ONE AT A TIME. If kind 52

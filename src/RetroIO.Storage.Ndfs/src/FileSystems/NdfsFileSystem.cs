@@ -1336,8 +1336,8 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// </summary>
         /// <remarks>
         /// <para><b>The number is not a function of the physical position</b></para>
-        /// It is <c>logicalBlock * 256 + slotInBlock</c>, where <b>logicalBlock is the ORDINAL
-        /// RANK of the entry's index-block group among the groups that user occupies</b>,
+        /// It is <c>logicalBlock * 256 + slotInBlock</c>, where logicalBlock is the ORDINAL
+        /// RANK of the entry's index-block group among the groups that user occupies,
         /// ascending — NOT the physical group number.
         /// <para>
         /// That distinction only appears once an overflow block has been relocated, and SINTRAN
@@ -2042,22 +2042,6 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         }
 
         /// <summary>
-        /// Ensure the object-file directory data page that holds
-        /// <paramref name="objectIndex"/> exists, allocating and linking it on
-        /// demand (SINTRAN grows a user's region as needed). Page index in the
-        /// object-file index block is objectIndex/32; for user U that maps to
-        /// index-pointer slots U*8..U*8+7.
-        /// </summary>
-        /// <remarks>
-        /// A plain Indexed object file caps out at 512 directory pages (16,384 files across all
-        /// users combined — 64 users' worth at 8 reserved pages each). Beyond that, the object
-        /// file must grow into a SubIndexed structure (sub-index block -> up to 512 group index
-        /// blocks -> up to 512 directory pages each), exactly like a single file's own data does
-        /// past 512 pages (see AllocateFileBlocksSparse). The one-time conversion reuses the
-        /// existing single Indexed block as group 0 — no directory data is copied or moved, only
-        /// a new level of indirection is added above it.
-        /// </remarks>
-        /// <summary>
         /// Picks a free object slot for a user, growing into a new object block when the allocated
         /// ones are full.
         /// </summary>
@@ -2146,9 +2130,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// still grantable so the caller can retry with a figure that fits.
         /// </exception>
         /// <remarks>
-        /// <para><b>The <c>@GIVE-OBJECT-BLOCKS</c> equivalent</b></para>
+        /// <para>The <c>@GIVE-OBJECT-BLOCKS</c> equivalent</para>
         /// This mirrors the SINTRAN operator command
-        /// <c>@GIVE-OBJECT-BLOCKS (&lt;directory&gt;:)&lt;user&gt;,&lt;count&gt;</c>, which likewise
+        /// <c>@GIVE-OBJECT-BLOCKS (directory:)user,count</c>, which likewise
         /// ADDS to the maximum rather than setting it. Each block is 256 files, so granting 3
         /// blocks to a default user takes the ceiling from 256 to 1024 — exactly what
         /// <c>@USER-STATISTICS</c> then reports as MAXIMUM NUMBER OF FILES. VERIFIED on a live
@@ -2215,7 +2199,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// maximum below the number of blocks actually allocated.
         /// </exception>
         /// <remarks>
-        /// <b>This has no SINTRAN equivalent.</b> No command to remove object blocks is documented
+        /// This has no SINTRAN equivalent. No command to remove object blocks is documented
         /// in the manuals, nor was one found while carving the kernel — which is consistent with
         /// the structure, since file numbers are stable identifiers derived from the block a file
         /// sits in, so dropping a block would orphan every file in it. This exists only so a tool
@@ -2336,6 +2320,22 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return user;
         }
 
+        /// <summary>
+        /// Ensure the object-file directory data page that holds
+        /// <paramref name="objectIndex"/> exists, allocating and linking it on
+        /// demand (SINTRAN grows a user's region as needed). Page index in the
+        /// object-file index block is objectIndex/32; for user U that maps to
+        /// index-pointer slots U*8..U*8+7.
+        /// </summary>
+        /// <remarks>
+        /// A plain Indexed object file caps out at 512 directory pages (16,384 files across all
+        /// users combined — 64 users' worth at 8 reserved pages each). Beyond that, the object
+        /// file must grow into a SubIndexed structure (sub-index block -> up to 512 group index
+        /// blocks -> up to 512 directory pages each), exactly like a single file's own data does
+        /// past 512 pages (see AllocateFileBlocksSparse). The one-time conversion reuses the
+        /// existing single Indexed block as group 0 — no directory data is copied or moved, only
+        /// a new level of indirection is added above it.
+        /// </remarks>
         private void EnsureObjectDirPage(int objectIndex)
         {
             if (_device == null || _masterBlock?.ObjectFilePointer == null)

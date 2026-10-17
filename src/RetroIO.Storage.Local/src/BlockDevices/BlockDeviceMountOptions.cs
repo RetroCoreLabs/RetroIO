@@ -124,10 +124,14 @@ namespace RetroIO.Storage.Local.BlockDevices
     /// </summary>
     public enum AccessMode
     {
-        /// <summary>Read-only access.</summary>
+        /// <summary>
+        /// Read-only access.
+        /// </summary>
         ReadOnly,
 
-        /// <summary>Read and write access.</summary>
+        /// <summary>
+        /// Read and write access.
+        /// </summary>
         ReadWrite
     }
 
@@ -136,13 +140,19 @@ namespace RetroIO.Storage.Local.BlockDevices
     /// </summary>
     public enum WriteStrategy
     {
-        /// <summary>Write to source and cache immediately (synchronous).</summary>
+        /// <summary>
+        /// Write to source and cache immediately (synchronous).
+        /// </summary>
         WriteThrough,
 
-        /// <summary>Write to cache only, flush to source later (deferred).</summary>
+        /// <summary>
+        /// Write to cache only, flush to source later (deferred).
+        /// </summary>
         WriteBack,
 
-        /// <summary>Write to delta file only, preserving original source.</summary>
+        /// <summary>
+        /// Write to delta file only, preserving original source.
+        /// </summary>
         Delta
     }
 

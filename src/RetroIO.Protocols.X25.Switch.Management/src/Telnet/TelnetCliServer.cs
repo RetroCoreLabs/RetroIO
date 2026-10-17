@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
     /// <summary>
     /// A raw-TCP management console server: it accepts connections on the management port and drives each
     /// through a <see cref="TelnetLineEditor"/>, dispatching completed lines to a <see cref="SwitchCli"/>
-    /// and writing the responses back with a <c>&gt; </c> prompt. No authentication.
+    /// and writing the responses back with a <c>> </c> prompt. No authentication.
     /// </summary>
     public sealed class TelnetCliServer
     {

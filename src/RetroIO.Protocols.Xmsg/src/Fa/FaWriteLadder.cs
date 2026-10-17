@@ -38,7 +38,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// op 0003  seq 000F   18 bytes  ReleaseFileEntry
     /// </code>
     /// <para>
-    /// <b>CORRECTED 2026-08-09.</b> The first version of this type listed only the opening four
+    /// CORRECTED 2026-08-09. The first version of this type listed only the opening four
     /// operations and called that the ladder, because only the first part of the capture had been
     /// read. A client built from that would have written its blocks and then simply stopped -
     /// never closing the file and never releasing the entry, leaving the server holding a session
@@ -55,7 +55,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// The sequence is the exchange count from one, but across the WriteFile repetitions every
     /// other one carries <c>0x8000</c> as well: <c>0004, 8005, 0006, 8007, 0008, 8009, 000A,
     /// 800B, 000C</c>. The three closing operations do NOT carry it, though <c>000D</c> falls
-    /// where the alternation would have set it. <b>Its meaning is UNKNOWN.</b> It is recorded here
+    /// where the alternation would have set it. Its meaning is UNKNOWN. It is recorded here
     /// rather than explained, and <see cref="SequenceForStep"/> deliberately does not invent it -
     /// a caller reproducing this traffic must take the flag from the capture, not from a rule
     /// nobody has established.
@@ -103,7 +103,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The special, the close and the release - a fresh array each call.
         /// </returns>
         /// <remarks>
-        /// <b>Do not skip these.</b> A client that stops after its last block leaves the file
+        /// Do not skip these. A client that stops after its last block leaves the file
         /// unclosed and the entry reserved. <see cref="FaOperation.SiiiSpecial"/> here carries
         /// sub-function <see cref="FaSpecialFunction.SetEndOfFile"/> and declares how long the
         /// file really is - without it the file keeps the padding of its last block.
@@ -185,7 +185,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// field says 452, less the 14-byte SINTRAN header, so 438 bytes of message.
         /// </para>
         /// <para>
-        /// <b>CORRECTED 2026-08-09. This said 424, and it was simply miscounted.</b> The wrong
+        /// CORRECTED 2026-08-09. This said 424, and it was simply miscounted. The wrong
         /// figure was what created the "block size does not reconcile" puzzle recorded below for
         /// days - see <see cref="CapturedContentMessageLength"/>. Re-measured by reassembling all
         /// eighteen pairs out of the capture rather than reading lengths off a summary.
@@ -259,7 +259,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>CORRECTED 2026-08-09.</b> This constant used to say 594 and call that the message
+        /// CORRECTED 2026-08-09. This constant used to say 594 and call that the message
         /// length, adding "which is <c>FaFileDataCodec.BlockLength</c> - the same block the read
         /// path uses". Both halves were wrong. 594 is the FIRST FRAGMENT, not the message: the
         /// message is 594 + 424 = 1018, and the fragmenting is what splits it. And
@@ -268,7 +268,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// transport's fragment boundary and called it a file block.
         /// </para>
         /// <para>
-        /// <b>Now measured at 1032</b>, which IS the read path's
+        /// Now measured at 1032, which IS the read path's
         /// <c>FaFileDataCodec.DataMessageLength</c> (8 + 1024). The write path carries the same
         /// message the read path does. This paragraph used to say the two were different and that
         /// the relationship was not established; that followed from the 424 miscount and is gone.

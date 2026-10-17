@@ -136,7 +136,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Set predefined parameter profile
         /// </summary>
-        /// <param name="profileName">Profile name (STD, TRANS, SIMPLE)</param>
+        /// <param name="profileName">
+        /// Profile name (STD, TRANS, SIMPLE)
+        /// </param>
         public bool SetProfile(string profileName)
         {
             switch (profileName?.ToUpper())
@@ -203,8 +205,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get parameter value
         /// </summary>
-        /// <param name="parameterNumber">X.3 parameter number (1-22)</param>
-        /// <returns>Parameter value or 0 if not found</returns>
+        /// <param name="parameterNumber">
+        /// X.3 parameter number (1-22)
+        /// </param>
+        /// <returns>
+        /// Parameter value or 0 if not found
+        /// </returns>
         public byte GetParameter(byte parameterNumber)
         {
             if (_parameters.TryGetValue(parameterNumber, out byte value))
@@ -220,9 +226,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Set parameter value with validation
         /// </summary>
-        /// <param name="parameterNumber">X.3 parameter number (1-22)</param>
-        /// <param name="value">Parameter value</param>
-        /// <returns>True if successfully set</returns>
+        /// <param name="parameterNumber">
+        /// X.3 parameter number (1-22)
+        /// </param>
+        /// <param name="value">
+        /// Parameter value
+        /// </param>
+        /// <returns>
+        /// True if successfully set
+        /// </returns>
         public bool SetParameter(byte parameterNumber, byte value)
         {
             if (!IsValidParameter(parameterNumber, value))
@@ -245,8 +257,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Set multiple parameters at once
         /// </summary>
-        /// <param name="parameters">Dictionary of parameter number/value pairs</param>
-        /// <returns>Number of parameters successfully set</returns>
+        /// <param name="parameters">
+        /// Dictionary of parameter number/value pairs
+        /// </param>
+        /// <returns>
+        /// Number of parameters successfully set
+        /// </returns>
         public int SetParameters(Dictionary<byte, byte> parameters)
         {
             int successCount = 0;
@@ -267,9 +283,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Validate parameter number and value according to X.3 standard
         /// </summary>
-        /// <param name="parameterNumber">Parameter number to validate</param>
-        /// <param name="value">Parameter value to validate</param>
-        /// <returns>True if valid parameter/value combination</returns>
+        /// <param name="parameterNumber">
+        /// Parameter number to validate
+        /// </param>
+        /// <param name="value">
+        /// Parameter value to validate
+        /// </param>
+        /// <returns>
+        /// True if valid parameter/value combination
+        /// </returns>
         public static bool IsValidParameter(byte parameterNumber, byte value)
         {
             return parameterNumber switch
@@ -303,8 +325,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get parameter description for display/debugging
         /// </summary>
-        /// <param name="parameterNumber">Parameter number</param>
-        /// <returns>Human-readable parameter description</returns>
+        /// <param name="parameterNumber">
+        /// Parameter number
+        /// </param>
+        /// <returns>
+        /// Human-readable parameter description
+        /// </returns>
         public static string GetParameterDescription(byte parameterNumber)
         {
             return parameterNumber switch
@@ -338,7 +364,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get all parameters as read-only dictionary
         /// </summary>
-        /// <returns>Copy of current parameters</returns>
+        /// <returns>
+        /// Copy of current parameters
+        /// </returns>
         public Dictionary<byte, byte> GetAllParameters()
         {
             return new Dictionary<byte, byte>(_parameters);
@@ -347,8 +375,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get parameters for specific numbers
         /// </summary>
-        /// <param name="parameterNumbers">List of parameter numbers to retrieve</param>
-        /// <returns>Dictionary of requested parameters</returns>
+        /// <param name="parameterNumbers">
+        /// List of parameter numbers to retrieve
+        /// </param>
+        /// <returns>
+        /// Dictionary of requested parameters
+        /// </returns>
         public Dictionary<byte, byte> GetParameters(IEnumerable<byte> parameterNumbers)
         {
             var result = new Dictionary<byte, byte>();
@@ -367,8 +399,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Check if parameter affects character processing
         /// </summary>
-        /// <param name="parameterNumber">Parameter number to check</param>
-        /// <returns>True if parameter affects character handling</returns>
+        /// <param name="parameterNumber">
+        /// Parameter number to check
+        /// </param>
+        /// <returns>
+        /// True if parameter affects character handling
+        /// </returns>
         public static bool IsCharacterProcessingParameter(byte parameterNumber)
         {
             return parameterNumber switch
@@ -387,8 +423,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Check if parameter affects data forwarding
         /// </summary>
-        /// <param name="parameterNumber">Parameter number to check</param>
-        /// <returns>True if parameter affects when data is forwarded</returns>
+        /// <param name="parameterNumber">
+        /// Parameter number to check
+        /// </param>
+        /// <returns>
+        /// True if parameter affects when data is forwarded
+        /// </returns>
         public static bool IsForwardingParameter(byte parameterNumber)
         {
             return parameterNumber switch
@@ -402,7 +442,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create a copy of this parameter set
         /// </summary>
-        /// <returns>New X3 instance with same parameters</returns>
+        /// <returns>
+        /// New X3 instance with same parameters
+        /// </returns>
         public X3 Clone()
         {
             var clone = new X3(_logger);
@@ -417,7 +459,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Reset specific parameters to default values
         /// </summary>
-        /// <param name="parameterNumbers">Parameters to reset</param>
+        /// <param name="parameterNumbers">
+        /// Parameters to reset
+        /// </param>
         public void ResetParameters(IEnumerable<byte> parameterNumbers)
         {
             var defaults = new X3();
@@ -438,7 +482,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get parameters summary for display
         /// </summary>
-        /// <returns>Formatted parameter summary</returns>
+        /// <returns>
+        /// Formatted parameter summary
+        /// </returns>
         public override string ToString()
         {
             var defaults = new X3();
@@ -465,8 +511,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Process outgoing text according to X.3 parameters
         /// </summary>
-        /// <param name="text">Text to process</param>
-        /// <returns>Processed text</returns>
+        /// <param name="text">
+        /// Text to process
+        /// </param>
+        /// <returns>
+        /// Processed text
+        /// </returns>
         public string ProcessOutgoingText(string text)
         {
             var processed = new StringBuilder(text.Length * 2);
@@ -505,8 +555,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Process incoming text according to X.3 parameters
         /// </summary>
-        /// <param name="text">Text to process</param>
-        /// <returns>Processed text</returns>
+        /// <param name="text">
+        /// Text to process
+        /// </param>
+        /// <returns>
+        /// Processed text
+        /// </returns>
         public string ProcessIncomingText(string text)
         {
             if (GetParameter(ParameterNumber.ECHO) == 0)
@@ -534,9 +588,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Check if character should be echoed based on echo mask
         /// </summary>
-        /// <param name="c">Character to check</param>
-        /// <param name="echoMask">Echo mask parameter</param>
-        /// <returns>True if character should be echoed</returns>
+        /// <param name="c">
+        /// Character to check
+        /// </param>
+        /// <param name="echoMask">
+        /// Echo mask parameter
+        /// </param>
+        /// <returns>
+        /// True if character should be echoed
+        /// </returns>
         private bool ShouldEchoCharacter(char c, byte echoMask)
         {
             // Simplified echo mask logic - full implementation would check bit patterns

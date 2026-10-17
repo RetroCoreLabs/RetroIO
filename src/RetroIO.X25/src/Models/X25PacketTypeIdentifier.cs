@@ -162,8 +162,12 @@ namespace RetroIO.Protocols.X25.Models
         /// Determines if the PTI represents a data packet.
         /// Data packets have the least significant bit (LSB) set to 0.
         /// </summary>
-        /// <param name="pti">The packet type identifier</param>
-        /// <returns>True if this is a data packet, false otherwise</returns>
+        /// <param name="pti">
+        /// The packet type identifier
+        /// </param>
+        /// <returns>
+        /// True if this is a data packet, false otherwise
+        /// </returns>
         public static bool IsDataPacket(this X25PacketTypeIdentifier pti)
         {
             return ((byte)pti & 0x01) == 0;
@@ -173,8 +177,12 @@ namespace RetroIO.Protocols.X25.Models
         /// Determines if the PTI represents a supervisory (flow control) packet.
         /// Supervisory packets include RR, RNR, and REJ with variable P(R) values.
         /// </summary>
-        /// <param name="pti">The packet type identifier</param>
-        /// <returns>True if this is a supervisory packet, false otherwise</returns>
+        /// <param name="pti">
+        /// The packet type identifier
+        /// </param>
+        /// <returns>
+        /// True if this is a supervisory packet, false otherwise
+        /// </returns>
         public static bool IsSupervisoryPacket(this X25PacketTypeIdentifier pti)
         {
             if (!((byte)pti).IsSupervisoryPacket()) return false;
@@ -187,8 +195,12 @@ namespace RetroIO.Protocols.X25.Models
         /// Determines if the PTI represents an unnumbered (control) packet.
         /// Unnumbered packets include call setup, clearing, reset, interrupt, and restart packets.
         /// </summary>
-        /// <param name="pti">The packet type identifier</param>
-        /// <returns>True if this is an unnumbered packet, false otherwise</returns>
+        /// <param name="pti">
+        /// The packet type identifier
+        /// </param>
+        /// <returns>
+        /// True if this is an unnumbered packet, false otherwise
+        /// </returns>
         public static bool IsUnnumberedPacket(this X25PacketTypeIdentifier pti)
         {
             return !IsDataPacket(pti) && !IsSupervisoryPacket(pti);
@@ -197,8 +209,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Gets the packet category description for documentation and debugging.
         /// </summary>
-        /// <param name="pti">The packet type identifier</param>
-        /// <returns>A string describing the packet category</returns>
+        /// <param name="pti">
+        /// The packet type identifier
+        /// </param>
+        /// <returns>
+        /// A string describing the packet category
+        /// </returns>
         public static string GetCategory(this X25PacketTypeIdentifier pti)
         {
             if (IsDataPacket(pti)) return "Data Transfer";
@@ -218,8 +234,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Gets a human-readable description of the packet type identifier.
         /// </summary>
-        /// <param name="pti">The packet type identifier</param>
-        /// <returns>A descriptive string explaining the packet type</returns>
+        /// <param name="pti">
+        /// The packet type identifier
+        /// </param>
+        /// <returns>
+        /// A descriptive string explaining the packet type
+        /// </returns>
         public static string GetDescription(this X25PacketTypeIdentifier pti)
         {
             return pti switch
@@ -254,8 +274,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Determines if a byte PTI value represents a supervisory packet.
         /// </summary>
-        /// <param name="pti">The PTI byte value</param>
-        /// <returns>True if this is a supervisory packet PTI, false otherwise</returns>
+        /// <param name="pti">
+        /// The PTI byte value
+        /// </param>
+        /// <returns>
+        /// True if this is a supervisory packet PTI, false otherwise
+        /// </returns>
         public static bool IsSupervisoryPacket(this byte pti)
         {
             return (pti & 0x01) != 0;

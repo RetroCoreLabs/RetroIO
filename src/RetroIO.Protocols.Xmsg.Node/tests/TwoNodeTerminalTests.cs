@@ -636,8 +636,8 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// One chat command from a logged-in terminal reaches the room and answers on screen.
         /// </summary>
         /// <remarks>
-        /// <para><b>ONE COMMAND PER SESSION is all this harness can drive, and that is a limit of
-        /// the harness rather than of the server.</b></para>
+        /// <para>ONE COMMAND PER SESSION is all this harness can drive, and that is a limit of
+        /// the harness rather than of the server.</para>
         /// <para>
         /// A command reply is a windowed burst that the server releases as the peer consumes it.
         /// A real 100 sends the secure ACK and the 7DUMM that advance that window; this test client
@@ -651,7 +651,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// join then part - is therefore covered by ChatRoomRulesTests instead, where the rules
         /// live, and the live two-user run over a real terminal is still owed.
         /// </para>
-        /// <para><b>The gate is understood, and it is the acknowledgement.</b>
+        /// <para>The gate is understood, and it is the acknowledgement.
         /// Output streams under <c>TadOutputMode.CompleteSegments</c>, whose drain returns while
         /// <c>OutstandingOutputCount</c> is above zero - and a reply's FINAL frame is tracked as
         /// outstanding like any other. Telling the server directly, <c>NotifyAck(node, flags1)</c>,

@@ -272,7 +272,7 @@ namespace RetroIO.Protocols.Xmsg.Node
         /// <see langword="null"/> when it was the first half and there is nothing to handle yet.
         /// </returns>
         /// <remarks>
-        /// <para><b>Why this is public rather than private to <see cref="HandleFrames"/></b></para>
+        /// <para>Why this is public rather than private to <see cref="HandleFrames"/></para>
         /// <para>
         /// Anything watching inbound traffic has to see WHOLE messages, not halves. The file-access
         /// CLIENT is the case that proved it: a pull driver subscribed to the layer's

@@ -115,8 +115,12 @@ namespace RetroIO.Storage.Local.MBR.Partitions
         /// Static helper: Detects MBR partitions from a disk image file.
         /// Creates necessary block device infrastructure and returns partition metadata.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <returns>List of detected MBR partitions, or empty list if no valid MBR found</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <returns>
+        /// List of detected MBR partitions, or empty list if no valid MBR found
+        /// </returns>
         public static List<PartitionMetadata> DetectFromFile(string imagePath)
         {
             var result = new List<PartitionMetadata>();

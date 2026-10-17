@@ -8,12 +8,12 @@
 namespace RetroIO.Protocols.Xmsg
 {
     /// <summary>
-    /// The byte at SINTRAN header offset 12. <b>It is not a sub-protocol selector</b> - it is the
+    /// The byte at SINTRAN header offset 12. It is not a sub-protocol selector - it is the
     /// HIGH BYTE OF THE HEADER CHECKSUM.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>CORRECTED 2026-07-31.</b> This type used to be documented as a "sub-protocol selector...
+    /// CORRECTED 2026-07-31. This type used to be documented as a "sub-protocol selector...
     /// a stable selector, not a counter", with members named for the traffic each value was seen
     /// carrying. Both the description and the names are wrong.
     /// </para>
@@ -26,13 +26,13 @@ namespace RetroIO.Protocols.Xmsg
     /// <c>SINTRAN/XMSG/DOC/XMSG-HEADER-WORD6-IS-A-CHECKSUM-2026-07-31.md</c>.
     /// </para>
     /// <para>
-    /// So the value is <b>derived, never chosen</b>. Setting it independently of the other header
+    /// So the value is derived, never chosen. Setting it independently of the other header
     /// words produces a corrupt header, which is what the documented XMSG 24B / <c>PERF_CONNCT</c>
     /// crash actually is - a peer rejecting a bad checksum, not a peer objecting to a "wrong
     /// channel".
     /// </para>
     /// <para>
-    /// <b>The member names are MISNOMERS, kept only for source compatibility.</b> They record which
+    /// The member names are MISNOMERS, kept only for source compatibility. They record which
     /// traffic happened to produce each checksum high byte in the captures we had, which is a
     /// coincidence of the header fields that traffic carried - a TAD session tends to produce
     /// <c>0xDD</c> because of its node numbers, sequence range and XMCSM, not because <c>0xDD</c>

@@ -7,14 +7,18 @@
 
 namespace RetroIO.Identity;
 
-/// <summary>RetroFS server protocols that authenticate against RetroIDP.</summary>
+/// <summary>
+/// RetroFS server protocols that authenticate against RetroIDP.
+/// </summary>
 public enum RetroFsProtocol : byte
 {
     Tnfs = 1,
     Econet = 2,
 }
 
-/// <summary>Result of a protocol-scoped username/password check.</summary>
+/// <summary>
+/// Result of a protocol-scoped username/password check.
+/// </summary>
 public enum ProtocolAuthResult : byte
 {
     Success = 0,

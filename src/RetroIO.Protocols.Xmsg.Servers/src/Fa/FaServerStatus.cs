@@ -95,7 +95,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// <c>0x0081</c>, "ILLEGAL FUNCTION CODE".
         /// </summary>
         /// <remarks>
-        /// <b>NOT CAPTURED</b>, but the NUMBER is no longer arbitrary.
+        /// NOT CAPTURED, but the NUMBER is no longer arbitrary.
         /// <para><b>CORRECTED 2026-08-07. This used to be 45, which means something else.</b></para>
         /// ND's own error table gives 45 as "RESERVED SPACE ALREADY USED". Refusing an unimplemented
         /// operation with it would have made a real client print that, which is not merely unhelpful
@@ -115,7 +115,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// "FILE-ACCESS INTERNAL ERROR; INVALID PARAMETER VALUE".
         /// </summary>
         /// <remarks>
-        /// <b>NOT CAPTURED</b>, but the number now comes from ND's FILE-ACCESS range.
+        /// NOT CAPTURED, but the number now comes from ND's FILE-ACCESS range.
         /// <para><b>CORRECTED 2026-08-07. This used to be 3, which means END OF FILE.</b></para>
         /// That was the worst of the three: a client refused with 3 is told the file ENDED
         /// NORMALLY. A read loop would stop and report success on what was actually a parse failure
@@ -129,7 +129,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// <c>0x0061</c>, "TRANSFER ERROR".
         /// </summary>
         /// <remarks>
-        /// <b>NOT CAPTURED</b>, and it never can be: this condition cannot arise on a real ND
+        /// NOT CAPTURED, and it never can be: this condition cannot arise on a real ND
         /// machine, so it stands for a host-side failure SINTRAN has no name for.
         /// <para><b>CORRECTED 2026-08-07. This used to be 2, "BAD FILE NUMBER".</b></para>
         /// That pointed the blame at the client's own file number when the fault was entirely on

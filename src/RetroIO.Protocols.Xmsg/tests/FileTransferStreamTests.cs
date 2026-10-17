@@ -30,7 +30,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     ///   -> Completed. Transfer rate: 3 Kbytes/sec
     /// </code>
     /// <para>
-    /// <b>Why this test exists.</b> A first pass over this capture counted raw TCP payload sizes and
+    /// Why this test exists. A first pass over this capture counted raw TCP payload sizes and
     /// concluded "the wire unit is a 256-byte LAPB I-frame". That was wrong: 256 is the TCP segment
     /// size of the HDLC-over-TCP bridge, and a single LAPB frame spans several segments. Every
     /// measurement here therefore goes through <see cref="HdlcPcap.ReadFrames"/>, which reassembles
@@ -148,7 +148,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>Why it is measured this way.</b> The obvious approach - walk the capture in time order
+        /// Why it is measured this way. The obvious approach - walk the capture in time order
         /// and count frames sent but not yet acknowledged - does NOT work here, because
         /// <see cref="HdlcPcap.ReadFrames"/> returns frames grouped by directional flow rather than
         /// interleaved in capture order. An earlier version of this test did exactly that and
@@ -218,7 +218,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Dumps the head of every information field, so the transfer message structure can be read.
         /// </summary>
         /// <remarks>
-        /// Reporting only - it makes no claims. The `LIST-VARIABLES` output of the same program shows
+        /// Reporting only - it makes no claims. The <c>LIST-VARIABLES</c> output of the same program shows
         /// it tracks a <c>Function</c>, a <c>page no</c> and a <c>displacement</c>, so those three
         /// should appear somewhere in these bytes; this test exists to find where.
         /// </remarks>

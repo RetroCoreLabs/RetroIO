@@ -45,7 +45,9 @@ internal static class GetObjectInfoRequestParser
         return true;
     }
 
-    /// <summary>Directory path for *CAT* cmd 6 (empty, <c>.</c>, <c>$</c>, or <c>:</c>).</summary>
+    /// <summary>
+    /// Directory path for *CAT* cmd 6 (empty, <c>.</c>, <c>$</c>, or <c>:</c>).
+    /// </summary>
     public static bool LooksLikeCataloguePath(ReadOnlySpan<byte> pathBytes)
     {
         if (pathBytes.IsEmpty)

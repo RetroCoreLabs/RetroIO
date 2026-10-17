@@ -29,8 +29,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse TNFS packet header.
         /// </summary>
-        /// <param name="packet">Packet bytes</param>
-        /// <returns>Parsed header or null if invalid</returns>
+        /// <param name="packet">
+        /// Packet bytes
+        /// </param>
+        /// <returns>
+        /// Parsed header or null if invalid
+        /// </returns>
         public static TnfsPacketHeader? ParseHeader(byte[] packet)
         {
             if (packet == null || packet.Length < HeaderSize)
@@ -49,11 +53,21 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build TNFS packet with header and optional payload.
         /// </summary>
-        /// <param name="sessionId">Session ID</param>
-        /// <param name="sequenceNumber">Sequence number</param>
-        /// <param name="command">Command code</param>
-        /// <param name="payload">Optional payload data</param>
-        /// <returns>Complete packet bytes</returns>
+        /// <param name="sessionId">
+        /// Session ID
+        /// </param>
+        /// <param name="sequenceNumber">
+        /// Sequence number
+        /// </param>
+        /// <param name="command">
+        /// Command code
+        /// </param>
+        /// <param name="payload">
+        /// Optional payload data
+        /// </param>
+        /// <returns>
+        /// Complete packet bytes
+        /// </returns>
         public static byte[] BuildPacket(ushort sessionId, byte sequenceNumber, TnfsCommand command, byte[]? payload = null)
         {
             int payloadLen = payload?.Length ?? 0;
@@ -80,8 +94,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Extract payload from TNFS packet.
         /// </summary>
-        /// <param name="packet">Complete packet</param>
-        /// <returns>Payload bytes (empty if no payload)</returns>
+        /// <param name="packet">
+        /// Complete packet
+        /// </param>
+        /// <returns>
+        /// Payload bytes (empty if no payload)
+        /// </returns>
         public static byte[] GetPayload(byte[] packet)
         {
             if (packet == null || packet.Length <= HeaderSize)
@@ -98,8 +116,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Get return code from response packet.
         /// </summary>
-        /// <param name="packet">Response packet</param>
-        /// <returns>Return code or null if invalid</returns>
+        /// <param name="packet">
+        /// Response packet
+        /// </param>
+        /// <returns>
+        /// Return code or null if invalid
+        /// </returns>
         public static TnfsReturnCode? GetReturnCode(byte[] packet)
         {
             if (packet == null || packet.Length < HeaderSize + 1)
@@ -113,12 +135,24 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build response packet with return code and optional data.
         /// </summary>
-        /// <param name="sessionId">Session ID</param>
-        /// <param name="sequenceNumber">Sequence number</param>
-        /// <param name="command">Command being responded to</param>
-        /// <param name="returnCode">Return code</param>
-        /// <param name="data">Optional response data</param>
-        /// <returns>Complete response packet</returns>
+        /// <param name="sessionId">
+        /// Session ID
+        /// </param>
+        /// <param name="sequenceNumber">
+        /// Sequence number
+        /// </param>
+        /// <param name="command">
+        /// Command being responded to
+        /// </param>
+        /// <param name="returnCode">
+        /// Return code
+        /// </param>
+        /// <param name="data">
+        /// Optional response data
+        /// </param>
+        /// <returns>
+        /// Complete response packet
+        /// </returns>
         public static byte[] BuildResponse(ushort sessionId, byte sequenceNumber, TnfsCommand command, TnfsReturnCode returnCode, byte[]? data = null)
         {
             int dataLen = data?.Length ?? 0;
@@ -142,13 +176,19 @@ namespace RetroIO.Protocols.Tnfs.Common
     /// </summary>
     public sealed class TnfsPacketHeader
     {
-        /// <summary>Session ID (0 for mount request)</summary>
+        /// <summary>
+        /// Session ID (0 for mount request)
+        /// </summary>
         public ushort SessionId { get; set; }
 
-        /// <summary>Sequence number (increments per request)</summary>
+        /// <summary>
+        /// Sequence number (increments per request)
+        /// </summary>
         public byte SequenceNumber { get; set; }
 
-        /// <summary>Command code</summary>
+        /// <summary>
+        /// Command code
+        /// </summary>
         public TnfsCommand Command { get; set; }
     }
 
@@ -157,13 +197,19 @@ namespace RetroIO.Protocols.Tnfs.Common
     /// </summary>
     public sealed class TnfsRequest
     {
-        /// <summary>Packet header</summary>
+        /// <summary>
+        /// Packet header
+        /// </summary>
         public TnfsPacketHeader Header { get; set; } = new TnfsPacketHeader();
 
-        /// <summary>Request payload (command-specific data)</summary>
+        /// <summary>
+        /// Request payload (command-specific data)
+        /// </summary>
         public byte[] Payload { get; set; } = Array.Empty<byte>();
 
-        /// <summary>Parse request from packet bytes</summary>
+        /// <summary>
+        /// Parse request from packet bytes
+        /// </summary>
         public static TnfsRequest? Parse(byte[] packet)
         {
             TnfsPacketHeader? header = TnfsProtocol.ParseHeader(packet);
@@ -179,7 +225,9 @@ namespace RetroIO.Protocols.Tnfs.Common
             };
         }
 
-        /// <summary>Build packet bytes from request</summary>
+        /// <summary>
+        /// Build packet bytes from request
+        /// </summary>
         public byte[] ToPacket()
         {
             return TnfsProtocol.BuildPacket(Header.SessionId, Header.SequenceNumber, Header.Command, Payload);
@@ -191,19 +239,29 @@ namespace RetroIO.Protocols.Tnfs.Common
     /// </summary>
     public sealed class TnfsResponse
     {
-        /// <summary>Packet header</summary>
+        /// <summary>
+        /// Packet header
+        /// </summary>
         public TnfsPacketHeader Header { get; set; } = new TnfsPacketHeader();
 
-        /// <summary>Return code</summary>
+        /// <summary>
+        /// Return code
+        /// </summary>
         public TnfsReturnCode ReturnCode { get; set; }
 
-        /// <summary>Response data (after return code)</summary>
+        /// <summary>
+        /// Response data (after return code)
+        /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();
 
-        /// <summary>Was the operation successful?</summary>
+        /// <summary>
+        /// Was the operation successful?
+        /// </summary>
         public bool Success => ReturnCode == TnfsReturnCode.SUCCESS;
 
-        /// <summary>Parse response from packet bytes</summary>
+        /// <summary>
+        /// Parse response from packet bytes
+        /// </summary>
         public static TnfsResponse? Parse(byte[] packet)
         {
             TnfsPacketHeader? header = TnfsProtocol.ParseHeader(packet);
@@ -235,7 +293,9 @@ namespace RetroIO.Protocols.Tnfs.Common
             };
         }
 
-        /// <summary>Build packet bytes from response</summary>
+        /// <summary>
+        /// Build packet bytes from response
+        /// </summary>
         public byte[] ToPacket()
         {
             return TnfsProtocol.BuildResponse(Header.SessionId, Header.SequenceNumber, Header.Command, ReturnCode, Data);

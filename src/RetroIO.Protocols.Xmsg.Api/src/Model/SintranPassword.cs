@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Xmsg.Api
     /// <para>
     /// This is NOT a cryptographic hash. SINTRAN folds the typed characters into one word:
     /// <c>acc = ROL16(acc, 3) + toupper(c)</c>, repeated until CR. Consequences that matter when
-    /// using it: it is <b>case-insensitive</b> and <b>not salted</b>, so two users with the same
+    /// using it: it is case-insensitive and not salted, so two users with the same
     /// password store the same word, and a word can be attacked by folding a dictionary. Treat a
     /// captured word as equivalent to the password itself.
     /// </para>

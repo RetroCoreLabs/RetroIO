@@ -18,13 +18,10 @@ namespace RetroIO.Protocols.X25.Routing
     /// Lookup runs as four passes, in this order, and stops at the first pass that produces a port
     /// the call may actually go to:
     /// </para>
-    /// <list type="number">
-    /// <item><description>Exact, Hunt and Regex entries, in table order.</description></item>
-    /// <item><description>The longest matching Prefix.</description></item>
-    /// <item><description>A DNIC match, which is the whole of this pass: it ranks below every
-    /// prefix, however short, so it cannot be reached while any prefix matched.</description></item>
-    /// <item><description>The Default route.</description></item>
-    /// </list>
+    ///  - Exact, Hunt and Regex entries, in table order.
+    ///  - The longest matching Prefix.
+    ///  - A DNIC match, which is the whole of this pass: it ranks below every prefix, however short, so it cannot be reached while any prefix matched.
+    ///  - The Default route.
     /// <para>
     /// A port equal to the ingress port is never the answer: routing a call back out of the
     /// interface it arrived on sends it to the party that placed it. Such a candidate is skipped and

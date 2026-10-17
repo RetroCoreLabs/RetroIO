@@ -41,8 +41,12 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <summary>
         /// Creates a CBM DOS filesystem with specified directory and BAM locations.
         /// </summary>
-        /// <param name="directoryTrack">Track containing directory (18 for D64/D71, 40 for D81)</param>
-        /// <param name="bamTrack">Track containing BAM (18 for D64/D71, 40 for D81)</param>
+        /// <param name="directoryTrack">
+        /// Track containing directory (18 for D64/D71, 40 for D81)
+        /// </param>
+        /// <param name="bamTrack">
+        /// Track containing BAM (18 for D64/D71, 40 for D81)
+        /// </param>
         public CbmDosFileSystem(int directoryTrack = 18, int bamTrack = 18)
         {
             _directoryTrack = directoryTrack;
@@ -271,8 +275,12 @@ namespace RetroIO.Storage.Local.FileSystems
         /// writes a fresh BAM, disk header (name + id + "2A" DOS type) and an empty first directory
         /// sector. Currently implements the D64 (35-track 1541) layout.
         /// </summary>
-        /// <param name="diskName">Disk name (max 16 chars, PETSCII-encoded).</param>
-        /// <param name="diskId">Two-character disk id.</param>
+        /// <param name="diskName">
+        /// Disk name (max 16 chars, PETSCII-encoded).
+        /// </param>
+        /// <param name="diskId">
+        /// Two-character disk id.
+        /// </param>
         public void Format(string diskName, string diskId)
         {
             EnsureInitialized();

@@ -15,7 +15,7 @@ namespace RetroIO.Management.Api.Controllers;
 /// Reports statistics/sessions for a live TNFS server.
 /// </summary>
 /// <remarks>
-/// <b>Known architectural limitation (2026-07-04):</b> <see cref="SessionManager"/> and
+/// Known architectural limitation (2026-07-04): <see cref="SessionManager"/> and
 /// <see cref="TnfsServerStatistics"/> are only ever registered by
 /// <c>TnfsServerExtensions.AddTnfsServer</c>, which is called solely by the standalone
 /// <c>RetroServer</c> process — never by <c>RetroIO.Management.Api</c>'s own <c>Program.cs</c>,

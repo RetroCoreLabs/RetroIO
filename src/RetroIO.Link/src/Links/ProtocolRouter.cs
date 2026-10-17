@@ -39,10 +39,18 @@ namespace RetroIO.Link
         /// <summary>
         /// Detect the protocol of a LAPB I-frame payload
         /// </summary>
-        /// <param name="payload">LAPB I-frame information field</param>
-        /// <param name="length">Payload length</param>
-        /// <param name="mode">Protocol detection mode for this link</param>
-        /// <returns>Detected protocol type</returns>
+        /// <param name="payload">
+        /// LAPB I-frame information field
+        /// </param>
+        /// <param name="length">
+        /// Payload length
+        /// </param>
+        /// <param name="mode">
+        /// Protocol detection mode for this link
+        /// </param>
+        /// <returns>
+        /// Detected protocol type
+        /// </returns>
         public DetectedProtocol DetectProtocol(byte[] payload, int length, ProtocolDetectionMode mode)
         {
             if (payload == null || length == 0)
@@ -85,9 +93,15 @@ namespace RetroIO.Link
         /// <summary>
         /// Extract SINTRAN protocol ID from a SINTRAN frame
         /// </summary>
-        /// <param name="payload">SINTRAN frame payload (with markers)</param>
-        /// <param name="length">Payload length</param>
-        /// <returns>Protocol ID (0xDD=TAD, 0xDA=PAD, 0xDE=Routing) or 0 if invalid</returns>
+        /// <param name="payload">
+        /// SINTRAN frame payload (with markers)
+        /// </param>
+        /// <param name="length">
+        /// Payload length
+        /// </param>
+        /// <returns>
+        /// Protocol ID (0xDD=TAD, 0xDA=PAD, 0xDE=Routing) or 0 if invalid
+        /// </returns>
         public byte ExtractSintranProtocolId(byte[] payload, int length)
         {
             // SINTRAN frame format:
@@ -126,9 +140,15 @@ namespace RetroIO.Link
         /// <summary>
         /// Check if payload looks like a valid X.25 packet
         /// </summary>
-        /// <param name="payload">Payload to check</param>
-        /// <param name="length">Payload length</param>
-        /// <returns>True if appears to be valid X.25</returns>
+        /// <param name="payload">
+        /// Payload to check
+        /// </param>
+        /// <param name="length">
+        /// Payload length
+        /// </param>
+        /// <returns>
+        /// True if appears to be valid X.25
+        /// </returns>
         public bool IsValidX25Packet(byte[] payload, int length)
         {
             // Minimum X.25 packet: GFI (1) + LCN (1) + PTI (1) = 3 bytes
@@ -162,10 +182,18 @@ namespace RetroIO.Link
         /// <summary>
         /// Create SINTRAN frame with proper markers
         /// </summary>
-        /// <param name="protocolId">SINTRAN protocol ID</param>
-        /// <param name="data">Protocol-specific data</param>
-        /// <param name="dataLength">Data length</param>
-        /// <returns>Complete SINTRAN frame with markers</returns>
+        /// <param name="protocolId">
+        /// SINTRAN protocol ID
+        /// </param>
+        /// <param name="data">
+        /// Protocol-specific data
+        /// </param>
+        /// <param name="dataLength">
+        /// Data length
+        /// </param>
+        /// <returns>
+        /// Complete SINTRAN frame with markers
+        /// </returns>
         public byte[] CreateSintranFrame(byte protocolId, byte[] data, int dataLength)
         {
             var frame = new byte[3 + dataLength];

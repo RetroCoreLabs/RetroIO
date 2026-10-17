@@ -23,7 +23,9 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <summary>
         /// Creates a generic block device with the specified descriptor.
         /// </summary>
-        /// <param name="descriptor">Device geometry configuration</param>
+        /// <param name="descriptor">
+        /// Device geometry configuration
+        /// </param>
         public GenericBlockDevice(BlockDeviceDescriptor descriptor)
         {
             _descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));

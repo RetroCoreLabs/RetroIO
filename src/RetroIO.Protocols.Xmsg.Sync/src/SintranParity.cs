@@ -23,7 +23,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
     ///    That is EVEN parity.
     ///  - It is content-determined: the same string appears three times in that file with an
     ///    identical bit-7 pattern each time.
-    ///  - <b>The same file also carries plain, unparitied text.</b> 120 of the 587 bytes are
+    ///  - The same file also carries plain, unparitied text. 120 of the 587 bytes are
     ///    characters parity WOULD have marked, left alone. The first 53 bytes conform completely
     ///    and the rest only 78%.
     /// <para><b>Why there is no per-extension rule here</b></para>

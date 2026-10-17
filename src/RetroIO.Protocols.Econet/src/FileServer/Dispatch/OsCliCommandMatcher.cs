@@ -22,13 +22,13 @@ namespace RetroIO.Protocols.Econet.FileServer.Dispatch;
 /// <para><b>The rule, as observable behaviour</b></para>
 /// Applied in order:
 ///  - Scan for a word boundary: the first space or dot at or after index
-///    <paramref name="minimumAbbreviation"/>. Starting the scan at the minimum rather than at zero
+///    <c>minimumAbbreviation</c>. Starting the scan at the minimum rather than at zero
 ///    is load-bearing. If neither is found, the boundary is end-of-text.
 ///  - The typed word is everything before that boundary. The argument is everything after it, with
 ///    leading spaces skipped.
 ///  - The word must be a case-insensitive prefix of the command name, and then either be exactly as
 ///    long as that name (a full, unabbreviated match), or be dot-terminated and at least
-///    <paramref name="minimumAbbreviation"/> characters long (an abbreviation).
+///    <c>minimumAbbreviation</c> characters long (an abbreviation).
 /// <para><b>Consequences</b></para>
 /// Each is covered by a test:
 ///  - A bare prefix is not a match. <c>*CA</c> does not select CAT; only <c>*CA.</c> does, because

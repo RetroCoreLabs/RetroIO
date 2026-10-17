@@ -10,7 +10,7 @@ using System.Collections.Generic;
 namespace RetroIO.Protocols.Xmsg.Node.Services
 {
     /// <summary>
-    /// A named, registered XMSG <b>server</b>: a long-running program in XROUT's registry (what
+    /// A named, registered XMSG server: a long-running program in XROUT's registry (what
     /// <c>list-servers</c> shows) that owns a name and a well-known logical port and answers XSLET
     /// letters addressed to it by name. <c>*TADADM</c> (the TAD terminal server, logical port 2) is
     /// the first implementation; <c>*XM-FIDO</c> (the file server, logical port 4) will be a second.
@@ -116,7 +116,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         void NotifyAck(ushort remoteNode, ushort ackedFlags1);
 
         /// <summary>
-        /// Gets whether this server's windowed output advances on the remote's <b>ACK</b> (subtype 0x03),
+        /// Gets whether this server's windowed output advances on the remote's ACK (subtype 0x03),
         /// so the host should drain it immediately after an incoming ACK. Servers whose output is instead
         /// paced by a different in-band signal (for example the TAD sentinel stream, which advances on
         /// 100's 7DUMM commit) return false so an ACK does NOT prematurely release the next frame.

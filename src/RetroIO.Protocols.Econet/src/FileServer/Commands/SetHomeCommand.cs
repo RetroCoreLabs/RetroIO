@@ -17,8 +17,8 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 /// <remarks>
 /// Reference behaviour (PiFS): this is a System-only command (in fs.c it lives inside the System-user
-/// command block). It accepts <c>*SETHOME &lt;dir&gt;</c> (the System user's own home) or
-/// <c>*SETHOME &lt;user&gt; &lt;dir&gt;</c> (another user's); an unknown user is <c>0xFF "No such
+/// command block). It accepts <c>*SETHOME dir</c> (the System user's own home) or
+/// <c>*SETHOME user dir</c> (another user's); an unknown user is <c>0xFF "No such
 /// user"</c> and a missing directory token is <c>0xFF "Bad parameters"</c>. <c>%</c> clears the home
 /// (reverting to the disc-layout default). A directory that does not resolve to an existing directory
 /// is <c>0xA8 "Bad directory"</c>.

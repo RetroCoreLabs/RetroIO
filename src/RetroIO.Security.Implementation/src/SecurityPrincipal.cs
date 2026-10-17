@@ -16,40 +16,64 @@ namespace RetroIO.Security.Implementation
     /// </summary>
     public sealed class SecurityPrincipal
     {
-        /// <summary>User GUID (Guid.Empty = UNKNOWN/anonymous)</summary>
+        /// <summary>
+        /// User GUID (Guid.Empty = UNKNOWN/anonymous)
+        /// </summary>
         public Guid PrincipalId { get; set; }
 
-        /// <summary>Username (for display/logging)</summary>
+        /// <summary>
+        /// Username (for display/logging)
+        /// </summary>
         public string Username { get; set; } = string.Empty;
 
-        /// <summary>Display name</summary>
+        /// <summary>
+        /// Display name
+        /// </summary>
         public string DisplayName { get; set; } = string.Empty;
 
-        /// <summary>Group GUIDs user is member of</summary>
+        /// <summary>
+        /// Group GUIDs user is member of
+        /// </summary>
         public List<Guid> Groups { get; set; } = new();
 
-        /// <summary>Is this UNKNOWN (unauthenticated)?</summary>
+        /// <summary>
+        /// Is this UNKNOWN (unauthenticated)?
+        /// </summary>
         public bool IsAnonymous => PrincipalId == Guid.Empty;
 
-        /// <summary>Is this admin? (bypass all checks)</summary>
+        /// <summary>
+        /// Is this admin? (bypass all checks)
+        /// </summary>
         public bool IsAdministrator { get; set; }
 
-        /// <summary>Session token (for multi-request sessions)</summary>
+        /// <summary>
+        /// Session token (for multi-request sessions)
+        /// </summary>
         public string? SessionToken { get; set; }
 
-        /// <summary>Token expiration</summary>
+        /// <summary>
+        /// Token expiration
+        /// </summary>
         public DateTime? ExpiresAt { get; set; }
 
-        /// <summary>Authentication method used</summary>
+        /// <summary>
+        /// Authentication method used
+        /// </summary>
         public string AuthMethod { get; set; } = "None";
 
-        /// <summary>Client IP address</summary>
+        /// <summary>
+        /// Client IP address
+        /// </summary>
         public string? IpAddress { get; set; }
 
-        /// <summary>Additional claims/metadata</summary>
+        /// <summary>
+        /// Additional claims/metadata
+        /// </summary>
         public Dictionary<string, string> Claims { get; set; } = new();
 
-        /// <summary>Create UNKNOWN principal</summary>
+        /// <summary>
+        /// Create UNKNOWN principal
+        /// </summary>
         public static SecurityPrincipal CreateUnknown(string? ipAddress = null)
         {
             return new SecurityPrincipal
@@ -63,7 +87,9 @@ namespace RetroIO.Security.Implementation
             };
         }
 
-        /// <summary>Create authenticated principal from RetroUser</summary>
+        /// <summary>
+        /// Create authenticated principal from RetroUser
+        /// </summary>
         public static SecurityPrincipal FromRetroUser(
             RetroIO.Identity.RetroUser user,
             string authMethod = "Password",

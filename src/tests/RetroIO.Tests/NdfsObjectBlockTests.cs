@@ -20,7 +20,7 @@ namespace RetroIO.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A user area holds 256 files per <i>object block</i>, one block by default and up to 16
+    /// A user area holds 256 files per object block, one block by default and up to 16
     /// (4096 files) on version K. RetroFS assumed 256 was a hard limit until 2026-08-01; these
     /// tests cover the structure that assumption hid.
     /// </para>

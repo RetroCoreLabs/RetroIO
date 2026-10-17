@@ -82,10 +82,14 @@ public sealed class EconetServerConfiguration
 /// </summary>
 public sealed class EconetDiscConfiguration
 {
-    /// <summary>Disc index (0-based). Used to synthesise the on-root directory name when unset.</summary>
+    /// <summary>
+    /// Disc index (0-based). Used to synthesise the on-root directory name when unset.
+    /// </summary>
     public int Index { get; set; }
 
-    /// <summary>The Acorn disc name shown to the BBC (e.g. "RetroFS").</summary>
+    /// <summary>
+    /// The Acorn disc name shown to the BBC (e.g. "RetroFS").
+    /// </summary>
     public string AcornName { get; set; } = "RetroFS";
 
     /// <summary>
@@ -94,13 +98,19 @@ public sealed class EconetDiscConfiguration
     /// </summary>
     public string? DirName { get; set; }
 
-    /// <summary>Inline mount provider ("native" / "tnfs" / "ftp" / "sftp"). Null when using MountRef.</summary>
+    /// <summary>
+    /// Inline mount provider ("native" / "tnfs" / "ftp" / "sftp"). Null when using MountRef.
+    /// </summary>
     public string? Provider { get; set; }
 
-    /// <summary>Inline mount URI (meaning depends on the provider). Null when using MountRef.</summary>
+    /// <summary>
+    /// Inline mount URI (meaning depends on the provider). Null when using MountRef.
+    /// </summary>
     public string? Uri { get; set; }
 
-    /// <summary>Expose this disc read-only over Econet. Can only ADD restriction to a referenced mount (a read-only mount stays read-only).</summary>
+    /// <summary>
+    /// Expose this disc read-only over Econet. Can only ADD restriction to a referenced mount (a read-only mount stays read-only).
+    /// </summary>
     public bool ReadOnly { get; set; }
 
     /// <summary>
@@ -110,7 +120,9 @@ public sealed class EconetDiscConfiguration
     /// </summary>
     public string? MountRef { get; set; }
 
-    /// <summary>The effective on-root directory name.</summary>
+    /// <summary>
+    /// The effective on-root directory name.
+    /// </summary>
     public string ResolveDirName() => string.IsNullOrEmpty(DirName) ? $"{Index}{AcornName}" : DirName!;
 }
 
@@ -120,12 +132,18 @@ public sealed class EconetDiscConfiguration
 /// </summary>
 public sealed class EconetMachineWireProfile
 {
-    /// <summary>The client's Econet network number.</summary>
+    /// <summary>
+    /// The client's Econet network number.
+    /// </summary>
     public byte Net { get; set; }
 
-    /// <summary>The client's Econet station number.</summary>
+    /// <summary>
+    /// The client's Econet station number.
+    /// </summary>
     public byte Station { get; set; }
 
-    /// <summary>The wire profile to serve this exact machine.</summary>
+    /// <summary>
+    /// The wire profile to serve this exact machine.
+    /// </summary>
     public WireProfile Profile { get; set; } = WireProfile.LaterFS;
 }

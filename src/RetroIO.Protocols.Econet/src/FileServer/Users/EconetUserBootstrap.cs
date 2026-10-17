@@ -16,18 +16,8 @@ namespace RetroIO.Protocols.Econet.FileServer.Users;
 /// <para>
 /// Intended Econet identity provisioning (task 0.1 — one owner of the SYST identity):
 /// </para>
-/// <list type="bullet">
-///   <item><description>
-///     The Acorn file-server MANAGER is the RetroIDP user whose <see cref="RetroUser.Username"/> is
-///     literally <c>SYST</c> — created by <c>RetroIdpBootstrap</c> with <see cref="RetroUser.IsAdmin"/>
-///     = true and a real password. A BBC logs in with <c>*I AM SYST &lt;pw&gt;</c>.
-///   </description></item>
-///   <item><description>
-///     <c>*I AM</c> resolves purely by username (<see cref="EconetUserDirectory.FindUserByUsername"/>) —
-///     there is NO alias mechanism. So <c>admin</c> is an ordinary, separate account; it does NOT and
-///     must not claim the SYST identity.
-///   </description></item>
-/// </list>
+///  - The Acorn file-server MANAGER is the RetroIDP user whose <see cref="RetroUser.Username"/> is literally <c>SYST</c> — created by <c>RetroIdpBootstrap</c> with <see cref="RetroUser.IsAdmin"/> = true and a real password. A BBC logs in with <c>*I AM SYST pw</c>.
+///  - <c>*I AM</c> resolves purely by username (<see cref="EconetUserDirectory.FindUserByUsername"/>) — there is NO alias mechanism. So <c>admin</c> is an ordinary, separate account; it does NOT and must not claim the SYST identity.
 /// </remarks>
 public static class EconetUserBootstrap
 {

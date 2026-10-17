@@ -47,7 +47,9 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// Set the interface config (provides RemoteIPAddress and RemotePort)
         /// </summary>
-        /// <summary>The interface configuration this transport was created from, if any.</summary>
+        /// <summary>
+        /// The interface configuration this transport was created from, if any.
+        /// </summary>
         public XotInterfaceConfig? InterfaceConfig => _interfaceConfig;
 
         public void SetInterfaceConfig(XotInterfaceConfig interfaceConfig)

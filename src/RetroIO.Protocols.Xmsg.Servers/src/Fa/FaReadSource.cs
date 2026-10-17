@@ -28,8 +28,8 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
     /// <para>
     /// That asymmetry is worth stating plainly because it is a trap for anything that pushes a file
     /// and later pulls it back - the sync daemon, for one. A name that a read accepts may be two
-    /// characters too long to have been written by us in the first place. <b>Eleven is the number
-    /// that matters when choosing a name; thirteen is only what a read will tolerate.</b>
+    /// characters too long to have been written by us in the first place. Eleven is the number
+    /// that matters when choosing a name; thirteen is only what a read will tolerate.
     /// </para>
     /// </remarks>
     public sealed class FaReadSource : FaFileEndpoint

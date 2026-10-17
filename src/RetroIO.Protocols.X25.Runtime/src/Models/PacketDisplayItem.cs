@@ -45,8 +45,12 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Get display text with enhanced visual indicators based on collapse state
         /// </summary>
-        /// <param name="displayManager">Display manager for collapse context (null for basic display)</param>
-        /// <returns>Formatted display text with visual indicators</returns>
+        /// <param name="displayManager">
+        /// Display manager for collapse context (null for basic display)
+        /// </param>
+        /// <returns>
+        /// Formatted display text with visual indicators
+        /// </returns>
         public string GetDisplayText(PacketDisplayManager? displayManager)
         {
             // Use original dictionary to get relationship info
@@ -80,9 +84,15 @@ namespace RetroIO.Protocols.X25.Runtime.Models
         /// <summary>
         /// Get visual indicator for packet based on relationship and collapse state
         /// </summary>
-        /// <param name="relationship">Packet relationship info</param>
-        /// <param name="displayManager">Display manager for collapse context</param>
-        /// <returns>Visual indicator string or empty if none needed</returns>
+        /// <param name="relationship">
+        /// Packet relationship info
+        /// </param>
+        /// <param name="displayManager">
+        /// Display manager for collapse context
+        /// </param>
+        /// <returns>
+        /// Visual indicator string or empty if none needed
+        /// </returns>
         private string GetVisualIndicator(PacketRelationshipInfo relationship, PacketDisplayManager displayManager)
         {
             // Always show error indicator for error packets

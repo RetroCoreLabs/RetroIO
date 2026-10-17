@@ -15,11 +15,17 @@ namespace RetroIO.Link
     /// </summary>
     public enum LinkType
     {
-        /// <summary>Serial port link with LAPB</summary>
+        /// <summary>
+        /// Serial port link with LAPB
+        /// </summary>
         Serial,
-        /// <summary>TCP link with HDLC byte-stuffing and LAPB</summary>
+        /// <summary>
+        /// TCP link with HDLC byte-stuffing and LAPB
+        /// </summary>
         TcpLapb,
-        /// <summary>XOT link (RFC 1613) - no LAPB</summary>
+        /// <summary>
+        /// XOT link (RFC 1613) - no LAPB
+        /// </summary>
         Xot
     }
 
@@ -28,15 +34,25 @@ namespace RetroIO.Link
     /// </summary>
     public enum LinkStatus
     {
-        /// <summary>Link is stopped/not running</summary>
+        /// <summary>
+        /// Link is stopped/not running
+        /// </summary>
         Stopped,
-        /// <summary>Link is starting up</summary>
+        /// <summary>
+        /// Link is starting up
+        /// </summary>
         Starting,
-        /// <summary>Link is active and operational</summary>
+        /// <summary>
+        /// Link is active and operational
+        /// </summary>
         Active,
-        /// <summary>Link is stopping</summary>
+        /// <summary>
+        /// Link is stopping
+        /// </summary>
         Stopping,
-        /// <summary>Link is in error state</summary>
+        /// <summary>
+        /// Link is in error state
+        /// </summary>
         Error
     }
 
@@ -60,21 +76,33 @@ namespace RetroIO.Link
     /// Handler for an opaque payload delivered up from a link (a LAPB I-frame information field, or an
     /// X.25 packet for XOT links).
     /// </summary>
-    /// <param name="link">The link that received the payload.</param>
+    /// <param name="link">
+    /// The link that received the payload.
+    /// </param>
     /// <param name="payload">
     /// The opaque payload bytes (not interpreted by the link). The buffer may be reused by the link
     /// after the handler returns; handlers that retain the payload must copy it inside the callback.
     /// </param>
-    /// <param name="length">Number of valid bytes in <paramref name="payload"/>.</param>
+    /// <param name="length">
+    /// Number of valid bytes in <paramref name="payload"/>.
+    /// </param>
     public delegate void LinkPayloadReceived(ILink link, byte[] payload, int length);
 
     /// <summary>
     /// Handler for a link operational status transition.
     /// </summary>
-    /// <param name="link">The link whose status changed.</param>
-    /// <param name="oldStatus">The status before the transition.</param>
-    /// <param name="newStatus">The status after the transition.</param>
-    /// <param name="reason">Human-readable reason for the transition.</param>
+    /// <param name="link">
+    /// The link whose status changed.
+    /// </param>
+    /// <param name="oldStatus">
+    /// The status before the transition.
+    /// </param>
+    /// <param name="newStatus">
+    /// The status after the transition.
+    /// </param>
+    /// <param name="reason">
+    /// Human-readable reason for the transition.
+    /// </param>
     public delegate void LinkStatusChanged(ILink link, LinkStatus oldStatus, LinkStatus newStatus, string reason);
 
     /// <summary>
@@ -112,7 +140,9 @@ namespace RetroIO.Link
         /// <summary>
         /// Start the link
         /// </summary>
-        /// <returns>True if started successfully</returns>
+        /// <returns>
+        /// True if started successfully
+        /// </returns>
         bool Start();
 
         /// <summary>
@@ -126,7 +156,9 @@ namespace RetroIO.Link
         /// The implementation copies the payload before returning, so the caller's buffer is free
         /// for reuse as soon as the call returns.
         /// </summary>
-        /// <param name="payload">The payload bytes to send.</param>
+        /// <param name="payload">
+        /// The payload bytes to send.
+        /// </param>
         /// <returns>
         /// True when queued for transmission; false when the link is not Active or the send window
         /// is full (logged, never thrown).

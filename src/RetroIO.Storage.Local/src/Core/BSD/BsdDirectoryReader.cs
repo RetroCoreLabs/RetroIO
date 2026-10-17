@@ -27,8 +27,12 @@ namespace RetroIO.Storage.Local.V7.Core
         /// <summary>
         /// Reads all directory entries from a directory inode.
         /// </summary>
-        /// <param name="dirInode">Directory inode.</param>
-        /// <returns>Array of directory entries (including "." and "..").</returns>
+        /// <param name="dirInode">
+        /// Directory inode.
+        /// </param>
+        /// <returns>
+        /// Array of directory entries (including "." and "..").
+        /// </returns>
         public V7DirectoryEntry[] ReadDirectory(V7Inode dirInode)
         {
             if (!dirInode.IsDirectory)
@@ -68,9 +72,15 @@ namespace RetroIO.Storage.Local.V7.Core
         /// <summary>
         /// Finds a directory entry by name within a directory.
         /// </summary>
-        /// <param name="dirInode">Directory inode.</param>
-        /// <param name="name">Entry name to find.</param>
-        /// <returns>Directory entry if found, null otherwise.</returns>
+        /// <param name="dirInode">
+        /// Directory inode.
+        /// </param>
+        /// <param name="name">
+        /// Entry name to find.
+        /// </param>
+        /// <returns>
+        /// Directory entry if found, null otherwise.
+        /// </returns>
         public V7DirectoryEntry? FindEntry(V7Inode dirInode, string name)
         {
             if (string.IsNullOrEmpty(name))
@@ -110,10 +120,18 @@ namespace RetroIO.Storage.Local.V7.Core
         /// <summary>
         /// Resolves a path starting from a given directory inode.
         /// </summary>
-        /// <param name="startInode">Starting directory inode.</param>
-        /// <param name="inodeReader">Inode reader for following references.</param>
-        /// <param name="path">Path to resolve (e.g., "usr/bin/ls").</param>
-        /// <returns>Inode number of the target, or 0 if not found.</returns>
+        /// <param name="startInode">
+        /// Starting directory inode.
+        /// </param>
+        /// <param name="inodeReader">
+        /// Inode reader for following references.
+        /// </param>
+        /// <param name="path">
+        /// Path to resolve (e.g., "usr/bin/ls").
+        /// </param>
+        /// <returns>
+        /// Inode number of the target, or 0 if not found.
+        /// </returns>
         public ushort ResolvePath(V7Inode startInode, V7InodeReader inodeReader, string path)
         {
             if (string.IsNullOrEmpty(path) || path == "/" || path == ".")

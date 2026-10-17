@@ -29,7 +29,9 @@ namespace RetroIO.Protocols.X25.Services
         /// <summary>
         /// Register a protocol service
         /// </summary>
-        /// <param name="service">Protocol service to register</param>
+        /// <param name="service">
+        /// Protocol service to register
+        /// </param>
         public void RegisterService(IProtocolService service)
         {
             if (service == null)
@@ -74,8 +76,12 @@ namespace RetroIO.Protocols.X25.Services
         /// <summary>
         /// Unregister a protocol service
         /// </summary>
-        /// <param name="serviceName">Name of service to unregister</param>
-        /// <returns>True if service was found and removed</returns>
+        /// <param name="serviceName">
+        /// Name of service to unregister
+        /// </param>
+        /// <returns>
+        /// True if service was found and removed
+        /// </returns>
         public bool UnregisterService(string serviceName)
         {
             if (string.IsNullOrEmpty(serviceName))
@@ -106,9 +112,15 @@ namespace RetroIO.Protocols.X25.Services
         /// <summary>
         /// Find a protocol service that can handle the given call
         /// </summary>
-        /// <param name="calledAddress">Called X.121 address</param>
-        /// <param name="cud">Call User Data</param>
-        /// <returns>Protocol service that can handle the call, or null if none found</returns>
+        /// <param name="calledAddress">
+        /// Called X.121 address
+        /// </param>
+        /// <param name="cud">
+        /// Call User Data
+        /// </param>
+        /// <returns>
+        /// Protocol service that can handle the call, or null if none found
+        /// </returns>
         public IProtocolService? FindServiceForCall(string calledAddress, byte[] cud)
         {
             if (string.IsNullOrEmpty(calledAddress))
@@ -152,7 +164,9 @@ namespace RetroIO.Protocols.X25.Services
         /// <summary>
         /// Get all registered services
         /// </summary>
-        /// <returns>Array of registered services (sorted by priority)</returns>
+        /// <returns>
+        /// Array of registered services (sorted by priority)
+        /// </returns>
         public IProtocolService[] GetRegisteredServices()
         {
             lock (_lock)
@@ -164,8 +178,12 @@ namespace RetroIO.Protocols.X25.Services
         /// <summary>
         /// Get service by name
         /// </summary>
-        /// <param name="serviceName">Name of service to find</param>
-        /// <returns>Service if found, null otherwise</returns>
+        /// <param name="serviceName">
+        /// Name of service to find
+        /// </param>
+        /// <returns>
+        /// Service if found, null otherwise
+        /// </returns>
         public IProtocolService? GetService(string serviceName)
         {
             if (string.IsNullOrEmpty(serviceName))
@@ -201,7 +219,9 @@ namespace RetroIO.Protocols.X25.Services
         /// <summary>
         /// Get statistics about registered services
         /// </summary>
-        /// <returns>Statistics object</returns>
+        /// <returns>
+        /// Statistics object
+        /// </returns>
         public ProtocolServiceRegistryStats GetStatistics()
         {
             lock (_lock)

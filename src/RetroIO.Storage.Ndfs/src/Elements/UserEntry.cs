@@ -103,13 +103,13 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// </summary>
         /// <remarks>
         /// <para>
-        /// A SINTRAN user area holds <b>256 files per object block</b>: one block by default, and up
+        /// A SINTRAN user area holds 256 files per object block: one block by default, and up
         /// to 16 blocks (4096 files) on version K. The operator raises the ceiling with
         /// <c>@GIVE-OBJECT-BLOCKS</c> and reads it back from <c>@USER-STATISTICS</c>, which prints
         /// it as <c>MAXIMUM NUMBER OF FILES</c> - that value is exactly this property times 256.
         /// </para>
         /// <para>
-        /// Stored on disk in the <b>high nibble of byte 47, zero-based</b> (a default user stores
+        /// Stored on disk in the high nibble of byte 47, zero-based (a default user stores
         /// <c>0x00</c> meaning one block). VERIFIED 2026-08-01 against a live SINTRAN III K pack
         /// with a control group: user BIGMAN, given 3 extra blocks and holding 482 files, stores
         /// <c>0x31</c>, giving MXOBL 4 which matches its reported maximum of 1024 files; every
@@ -132,7 +132,7 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// ACOBL 2, matching its 482 files - two blocks of 256.
         /// </para>
         /// <para>
-        /// Stored in the <b>low nibble of byte 47, zero-based</b>.
+        /// Stored in the low nibble of byte 47, zero-based.
         /// </para>
         /// <para>
         /// This value bounds where a user's entries live. Object block <c>n</c> (0-based) for user
@@ -380,8 +380,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// Checks if provided password matches stored password hash.
         /// Note: This is a simple implementation. Production should use proper hashing.
         /// </summary>
-        /// <param name="password">Password to check</param>
-        /// <returns>True if password matches</returns>
+        /// <param name="password">
+        /// Password to check
+        /// </param>
+        /// <returns>
+        /// True if password matches
+        /// </returns>
         public bool CheckPassword(ushort password)
         {
             return Password == password;
@@ -390,7 +394,9 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Sets the user name (max 16 characters, uppercase).
         /// </summary>
-        /// <param name="userName">User name to set</param>
+        /// <param name="userName">
+        /// User name to set
+        /// </param>
         public void SetName(string userName)
         {
             if (string.IsNullOrEmpty(userName))
@@ -404,8 +410,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Checks if a user is in this user's friend list.
         /// </summary>
-        /// <param name="userId">User index to check</param>
-        /// <returns>True if user is a friend</returns>
+        /// <param name="userId">
+        /// User index to check
+        /// </param>
+        /// <returns>
+        /// True if user is a friend
+        /// </returns>
         public bool IsFriend(int userId)
         {
             for (int i = 0; i < Friends.Length; i++)
@@ -419,9 +429,15 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Adds a friend to this user's friend list.
         /// </summary>
-        /// <param name="friendId">Friend's user index</param>
-        /// <param name="permissions">Permission bits</param>
-        /// <returns>True if added successfully</returns>
+        /// <param name="friendId">
+        /// Friend's user index
+        /// </param>
+        /// <param name="permissions">
+        /// Permission bits
+        /// </param>
+        /// <returns>
+        /// True if added successfully
+        /// </returns>
         public bool AddFriend(byte friendId, byte permissions)
         {
             // Find first empty slot
@@ -439,8 +455,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Removes a friend from this user's friend list.
         /// </summary>
-        /// <param name="friendId">Friend's user index</param>
-        /// <returns>True if removed successfully</returns>
+        /// <param name="friendId">
+        /// Friend's user index
+        /// </param>
+        /// <returns>
+        /// True if removed successfully
+        /// </returns>
         public bool RemoveFriend(int friendId)
         {
             for (int i = 0; i < Friends.Length; i++)
@@ -457,8 +477,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Gets friend entry for specified user.
         /// </summary>
-        /// <param name="friendId">Friend's user index</param>
-        /// <returns>UserFriend entry or null if not found</returns>
+        /// <param name="friendId">
+        /// Friend's user index
+        /// </param>
+        /// <returns>
+        /// UserFriend entry or null if not found
+        /// </returns>
         public UserFriend? GetFriend(int friendId)
         {
             for (int i = 0; i < Friends.Length; i++)
@@ -472,7 +496,9 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Increments the login counter and updates last entered date.
         /// </summary>
-        /// <param name="currentDate">Current ND date</param>
+        /// <param name="currentDate">
+        /// Current ND date
+        /// </param>
         public void RecordLogin(uint currentDate)
         {
             if (EnterCount < 255)

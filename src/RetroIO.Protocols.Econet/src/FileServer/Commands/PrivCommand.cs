@@ -17,18 +17,18 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 /// <remarks>
 /// Reference behaviour (PiFS, facts only): System-only, abbreviation 4. Argument is
-/// <c>&lt;username&gt; &lt;priv&gt;</c> where <c>priv</c> is a letter, optionally with a <c>+</c>/<c>-</c>
+/// <c>username priv</c> where <c>priv</c> is a letter, optionally with a <c>+</c>/<c>-</c>
 /// set/unset prefix. Missing username or priv is <c>0xFE "Bad command"</c>; an unknown user is
 /// <c>0xBC "User not found"</c>.
 /// <para>
 /// Supported privilege states (mutually exclusive, as in PiFS): <c>S</c>/<c>+S</c> System (admin,
 /// unlocked); <c>U</c> or <c>-S</c>/<c>-L</c> Normal; <c>L</c>/<c>+L</c> Locked (password verifies but
-/// login is refused with <c>0xBC "Account locked"</c>). System maps to <see cref="RetroUser.IsAdmin"/>,
+/// login is refused with <c>0xBC "Account locked"</c>). System maps to <see cref="RetroIO.Identity.RetroUser.IsAdmin"/>,
 /// Locked to the <c>econet.locked</c> flag checked in the login path. Persisted immediately; a live
 /// session keeps its privilege until next login.
 /// </para>
 /// <para>
-/// <b>Still deferred:</b> <c>N</c> (no-password-change), <c>C</c> (chroot) and the <c>D</c>/REMUSER
+/// Still deferred: <c>N</c> (no-password-change), <c>C</c> (chroot) and the <c>D</c>/REMUSER
 /// (delete) forms return <c>0xFF "Unsupported privilege"</c> rather than silently doing nothing —
 /// delete belongs in the management API.
 /// </para>

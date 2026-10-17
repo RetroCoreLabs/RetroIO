@@ -71,7 +71,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The logical port this server registers on.
         /// </summary>
         /// <remarks>
-        /// <b>OUR CHOICE, not a well-known number.</b> Ports are the kernel's port-table index for
+        /// OUR CHOICE, not a well-known number. Ports are the kernel's port-table index for
         /// whatever port a server happened to open, so they move with load order - two boots gave
         /// <c>*XM-FIDO</c> ports 3 and 4. Only port 0 (XROUT) is known in advance. 4 is used here
         /// simply because it does not collide with the TAD server's 2.
@@ -84,7 +84,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>APPLIED 2026-08-04.</b> <c>SintranHeader.Size + XmsgSubHeader.Size</c> is now 14 + 14
+        /// APPLIED 2026-08-04. <c>SintranHeader.Size + XmsgSubHeader.Size</c> is now 14 + 14
         /// = 28 and <see cref="SessionBody"/> uses it. <c>FaBodyOffsetTests</c> checks on a real
         /// captured datagram BOTH that 28 parses and that 32 does not.
         /// </para>
@@ -164,7 +164,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The first connection number the confirmation stamps; later connections count up.
         /// </summary>
         /// <remarks>
-        /// <b>INFERRED starting value.</b> Word 2 of the confirmation is the SERVER's own
+        /// INFERRED starting value. Word 2 of the confirmation is the SERVER's own
         /// per-connection counter, not anything the client sent - see
         /// <c>FaServerConversation.BuildConnectionConfirm</c> for the five captured values. It
         /// counts up by one per connection and survives across conversations, so where it starts
@@ -618,7 +618,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// </returns>
         /// <remarks>
         /// <para>
-        /// <b>CORRECTED 2026-08-04.</b> This used to answer with the TAD-shaped generic XSLET
+        /// CORRECTED 2026-08-04. This used to answer with the TAD-shaped generic XSLET
         /// accept (body <c>0041 0008 01020000 0202000A</c>), citing
         /// <c>DOC/XMSG-XSLET-ACCEPT-VS-XRNRO-2026-07-28.md</c>'s finding that the accept form is
         /// GENERIC rather than per-server. A live capture DISPROVES that for file access.

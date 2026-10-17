@@ -22,7 +22,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Why this test exists.</b> Every earlier note about the transfer assumed the 1030-byte
+    /// Why this test exists. Every earlier note about the transfer assumed the 1030-byte
     /// transfer message arrived as a single unit, because the message length field says 1030 and the
     /// payload obviously carries 1024 bytes of file content. It does not. The message is split across
     /// two LAPB information frames, and the split is visible in the SINTRAN header:
@@ -88,7 +88,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// marker, frame flags, role, and the four addressing words XMDSY / XMDPT / XMSSY / XMSPT.
         /// </para>
         /// <para>
-        /// <b>This is 28, not 32.</b> <c>XmsgSubHeader</c> documents a 19-byte sub-header whose
+        /// This is 28, not 32. <c>XmsgSubHeader</c> documents a 19-byte sub-header whose
         /// offsets 13..16 are a four-byte XMCSM control word. Measured against this capture, only
         /// the HIGH half of that word is a header field - and it is simply Flags2 repeated, which is
         /// why the long-standing rule "Flags2 == XMCSM >> 16" has always held. The LOW half is
@@ -133,22 +133,22 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>The experiment.</b> <c>LOAD-MODE:BATC</c> on node 102 is 167 bytes - one page, and only
+        /// The experiment. <c>LOAD-MODE:BATC</c> on node 102 is 167 bytes - one page, and only
         /// a sixth of one block. It was transferred to node 100 and recorded.
         /// </para>
         /// <para>
-        /// <b>Result: the wire looks exactly like a full transfer.</b> Two data messages, both
+        /// Result: the wire looks exactly like a full transfer. Two data messages, both
         /// declaring 1030, both split 622 + 450 with the continuation resuming at 594. Page 0 with
         /// displacement 0, then page 0 with displacement 512 words. So the sender ships the WHOLE
         /// page - two 1024-byte blocks - padded, and the message length never tracks the file.
         /// </para>
         /// <para>
-        /// <b>What this settles.</b> The 594-byte split was previously recorded as possibly an
+        /// What this settles. The 594-byte split was previously recorded as possibly an
         /// artefact of one file size. It is not: it holds across two transfers of very different
         /// files. It is safe to treat as fixed FOR TRANSFERS.
         /// </para>
         /// <para>
-        /// <b>What it does not settle.</b> Whether 594 would change for a message of some other
+        /// What it does not settle. Whether 594 would change for a message of some other
         /// length is still UNKNOWN, and cannot be tested with this protocol as we understand it -
         /// the transfer data message is the only message large enough to need splitting, and it is
         /// always 1030 bytes. So the question may simply not arise.
@@ -305,7 +305,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// type or direction, this would fail rather than one capture happening to fit.
         /// </para>
         /// <para>
-        /// <b>The transfer capture is deliberately NOT in this list</b>, because the rule does not
+        /// The transfer capture is deliberately NOT in this list, because the rule does not
         /// hold there and pretending otherwise would hide two real message classes. Flags2 is the
         /// high half of XMCSM, which is a frame-CLASS word; "body length" is what that word means for
         /// the QFORM request/reply class only. The transfer capture contains two other classes, both
@@ -380,7 +380,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// the message being acknowledged. Four data messages, four acknowledgements.
         /// </para>
         /// <para>
-        /// <b>What this does NOT establish.</b> One-ack-per-message is a COUNT, not an ordering.
+        /// What this does NOT establish. One-ack-per-message is a COUNT, not an ordering.
         /// <c>HdlcPcap.ReadFrames</c> groups frames by flow rather than interleaving them, so this
         /// test cannot see whether the sender waited for each acknowledgement before sending the next
         /// message. Whether the application layer is stop-and-wait or pipelined is still UNKNOWN and

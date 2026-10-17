@@ -22,7 +22,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
     /// responses back down through the codec, and raises application up-events.
     /// </summary>
     /// <remarks>
-    /// <para><b>Placement.</b> The plan's ideal home for <c>XmsgLayer</c> is <c>RetroIO.Protocols.Xmsg</c>,
+    /// <para>Placement. The plan's ideal home for <c>XmsgLayer</c> is <c>RetroIO.Protocols.Xmsg</c>,
     /// but the TAD session service (<see cref="TadTerminalResponder"/>, its terminal menu and frame
     /// context) and the byte-verified multi-frame orchestration (<see cref="XmsgNode.HandleFrames"/>)
     /// live in <c>RetroIO.Protocols.Xmsg.Live</c>, and <c>RetroIO.Protocols.Xmsg</c> cannot depend on <c>RetroIO.Protocols.Xmsg.Live</c>. Rather
@@ -31,7 +31,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
     /// the reachability / XSGSY / secure-ACK logic it drives remains pure in <c>RetroIO.Protocols.Xmsg</c>
     /// (<see cref="ListRoutingServer"/>, <see cref="SecureDatagramReceiver"/>). At migration,
     /// <c>XmsgLayer</c> moves together with the TAD service into the X25Emulator XMSG sibling.</para>
-    /// <para><b>Seam contract.</b> The layer knows only <see cref="IXmsgCodec"/> downward and raises
+    /// <para>Seam contract. The layer knows only <see cref="IXmsgCodec"/> downward and raises
     /// named-delegate up-events (sender/link-id first). It never touches HDLC/LAPB. Reliability
     /// (secure-delivery sequencing + <c>0x03</c> ACK) lives here, in the layer, per the plan.</para>
     /// </remarks>

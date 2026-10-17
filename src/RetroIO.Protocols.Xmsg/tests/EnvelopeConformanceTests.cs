@@ -26,7 +26,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// reads back.
     /// </summary>
     /// <remarks>
-    /// <para><b>Why this exists in addition to <see cref="PcapDecodeTests"/>.</b></para>
+    /// <para>Why this exists in addition to <see cref="PcapDecodeTests"/>.</para>
     /// The decode test parses bytes and re-serialises them - it proves the READER round-trips, but
     /// it never recomputes the Counter/Channel, so a wrong generator model would still pass it. This
     /// test drives the GENERATOR path: for every Data frame it learns the per-frame seed from
@@ -78,7 +78,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>SCOPE NARROWED, 2026-07-30 - and the reason matters.</b> This test used to require the
+        /// SCOPE NARROWED, 2026-07-30 - and the reason matters. This test used to require the
         /// channel of EVERY data frame and had been failing at 70 mismatches out of 970 since the
         /// file-server captures were added to the corpus. The cause is now identified rather than
         /// worked around.
@@ -102,7 +102,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// So the rule is not weakly true everywhere - it is exactly true on 800 frames and simply does
         /// not apply to the other class. This test now asserts the domain where the rule holds and
         /// counts the other frames without asserting on them. The correct channel behaviour for
-        /// length-valued Flags 2 is <b>UNKNOWN</b>: the wire offsets run 0, 1, 2 and 3 there, and no
+        /// length-valued Flags 2 is UNKNOWN: the wire offsets run 0, 1, 2 and 3 there, and no
         /// formula has been fitted, deliberately - three hand-checked frames are not evidence, and the
         /// only honest options are to track the channel per direction or to capture enough of that
         /// class to derive it.

@@ -21,7 +21,7 @@ namespace RetroIO.Storage.Ndfs.Elements
     /// independent ND-500/Sintran filesystem driver and a real disk-dump sample.
     ///
     /// Bit layout (32-bit word, bit 31 = MSB):
-    ///   bits 31-26 (6 bits): year, offset from 1950 (0-63 -&gt; 1950-2013)
+    ///   bits 31-26 (6 bits): year, offset from 1950 (0-63 -> 1950-2013)
     ///   bits 25-22 (4 bits): month (1-12)
     ///   bits 21-17 (5 bits): day of month (1-31)
     ///   bits 16-12 (5 bits): hour (0-23; the source system encodes 24-31 which are clamped to 0)

@@ -94,7 +94,9 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Creates a friend entry from packed bits.
         /// </summary>
-        /// <param name="bits">Packed permission bits</param>
+        /// <param name="bits">
+        /// Packed permission bits
+        /// </param>
         public UserFriend(ushort bits)
         {
             Bits = bits;
@@ -103,12 +105,24 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Creates a friend entry with specified permissions.
         /// </summary>
-        /// <param name="friendUserId">Friend's user index (0-255)</param>
-        /// <param name="read">Read permission</param>
-        /// <param name="write">Write permission</param>
-        /// <param name="append">Append permission</param>
-        /// <param name="common">Common access permission</param>
-        /// <param name="directory">Directory access permission</param>
+        /// <param name="friendUserId">
+        /// Friend's user index (0-255)
+        /// </param>
+        /// <param name="read">
+        /// Read permission
+        /// </param>
+        /// <param name="write">
+        /// Write permission
+        /// </param>
+        /// <param name="append">
+        /// Append permission
+        /// </param>
+        /// <param name="common">
+        /// Common access permission
+        /// </param>
+        /// <param name="directory">
+        /// Directory access permission
+        /// </param>
         public UserFriend(byte friendUserId, bool read = false, bool write = false,
             bool append = false, bool common = false, bool directory = false)
         {
@@ -125,7 +139,9 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Initializes from packed bits.
         /// </summary>
-        /// <param name="bits">Packed permission bits</param>
+        /// <param name="bits">
+        /// Packed permission bits
+        /// </param>
         public void Initialize(ushort bits)
         {
             Bits = bits;
@@ -134,8 +150,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Sets friend with specified permissions.
         /// </summary>
-        /// <param name="friendUserId">Friend's user index</param>
-        /// <param name="permissions">Permission bits (bits 8-12)</param>
+        /// <param name="friendUserId">
+        /// Friend's user index
+        /// </param>
+        /// <param name="permissions">
+        /// Permission bits (bits 8-12)
+        /// </param>
         public void SetFriend(byte friendUserId, byte permissions)
         {
             Bits = (ushort)friendUserId;
@@ -154,8 +174,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Checks if friend has specific permission.
         /// </summary>
-        /// <param name="operation">Operation to check</param>
-        /// <returns>True if friend has permission</returns>
+        /// <param name="operation">
+        /// Operation to check
+        /// </param>
+        /// <returns>
+        /// True if friend has permission
+        /// </returns>
         public bool HasPermission(FileOperation operation)
         {
             if (!EntryUsed) return false;

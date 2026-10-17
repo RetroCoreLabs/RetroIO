@@ -26,7 +26,9 @@ namespace RetroIO.Storage.Providers;
 /// </remarks>
 public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
 {
-    /// <summary>One disc: its on-root directory name (e.g. "0RetroFS") and the backend serving it.</summary>
+    /// <summary>
+    /// One disc: its on-root directory name (e.g. "0RetroFS") and the backend serving it.
+    /// </summary>
     public sealed class DiscMount
     {
         public string DirName { get; }

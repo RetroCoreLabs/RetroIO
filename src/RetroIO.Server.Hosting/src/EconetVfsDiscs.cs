@@ -29,9 +29,15 @@ public static class EconetVfsDiscs
     /// <c>Discs[]</c>; otherwise does nothing. MUST be called BEFORE <c>AddEconetFileServer</c> so its
     /// back-compat default does not clobber this override.
     /// </summary>
-    /// <param name="services">The DI services.</param>
-    /// <param name="config">The loaded Econet configuration.</param>
-    /// <param name="tempCacheDir">Directory for the adapters' materialized temp files.</param>
+    /// <param name="services">
+    /// The DI services.
+    /// </param>
+    /// <param name="config">
+    /// The loaded Econet configuration.
+    /// </param>
+    /// <param name="tempCacheDir">
+    /// Directory for the adapters' materialized temp files.
+    /// </param>
     /// <param name="mountsConfigPath">
     /// Path to the shared unified <c>mounts.json</c> registry (null = the default RetroFS location).
     /// Only read when a disc uses <c>MountRef</c>; ignored otherwise.
@@ -61,7 +67,9 @@ public static class EconetVfsDiscs
         return services;
     }
 
-    /// <summary>Returns true when any disc defines a <c>MountRef</c> (so the registry must be loaded).</summary>
+    /// <summary>
+    /// Returns true when any disc defines a <c>MountRef</c> (so the registry must be loaded).
+    /// </summary>
     private static bool AnyDiscUsesMountRef(List<EconetDiscConfiguration> discs)
     {
         for (int i = 0; i < discs.Count; i++)
@@ -76,8 +84,12 @@ public static class EconetVfsDiscs
     /// Builds the composite backend and its shared <see cref="VfsCore"/> from the configured discs.
     /// Pure (no DI) so it can be unit-tested directly. Caller owns/dispose the returned <see cref="VfsCore"/>.
     /// </summary>
-    /// <param name="config">The loaded Econet configuration (its <c>Discs[]</c> drive the composite).</param>
-    /// <param name="tempCacheDir">Directory for the adapters' materialized temp files.</param>
+    /// <param name="config">
+    /// The loaded Econet configuration (its <c>Discs[]</c> drive the composite).
+    /// </param>
+    /// <param name="tempCacheDir">
+    /// Directory for the adapters' materialized temp files.
+    /// </param>
     /// <param name="registryMounts">
     /// The shared RetroVFS mount registry (the entries from <c>mounts.json</c>), used to resolve a disc's
     /// <c>MountRef</c> into a concrete provider/uri/read-only definition. May be null when no disc uses a
@@ -182,7 +194,9 @@ public static class EconetVfsDiscs
         return (disc.Provider!.ToLowerInvariant(), disc.Uri!, disc.ReadOnly);
     }
 
-    /// <summary>Finds a registry entry by volume id (case-insensitive, matching the registry's own keying). No LINQ.</summary>
+    /// <summary>
+    /// Finds a registry entry by volume id (case-insensitive, matching the registry's own keying). No LINQ.
+    /// </summary>
     private static UnifiedMountEntry? FindMountByVolumeId(IReadOnlyList<UnifiedMountEntry> mounts, string volumeId)
     {
         for (int i = 0; i < mounts.Count; i++)
@@ -193,7 +207,9 @@ public static class EconetVfsDiscs
         return null;
     }
 
-    /// <summary>Builds a "known mounts: a, b, c" hint for the not-found error (or notes the registry is empty). No LINQ.</summary>
+    /// <summary>
+    /// Builds a "known mounts: a, b, c" hint for the not-found error (or notes the registry is empty). No LINQ.
+    /// </summary>
     private static string DescribeKnownMounts(IReadOnlyList<UnifiedMountEntry> mounts)
     {
         if (mounts.Count == 0)

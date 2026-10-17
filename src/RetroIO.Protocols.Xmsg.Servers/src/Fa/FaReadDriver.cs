@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
     /// answers back into the sequencing state machine, and collects the content that arrives.
     /// </summary>
     /// <remarks>
-    /// <para><b>The mirror of <see cref="FaWriteDriver"/></b></para>
+    /// <para>The mirror of <see cref="FaWriteDriver"/></para>
     /// <para>
     /// Same shape and, where the protocol is the same, the same pieces: the connect letter, the
     /// request bodies, the counter rule, the fragment reassembly. It builds no frames of its own -
@@ -174,7 +174,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// </exception>
         /// <remarks>
         /// <para>
-        /// <b>The probe transfers nothing.</b> It exists to answer what the follow-on refusal
+        /// The probe transfers nothing. It exists to answer what the follow-on refusal
         /// <c>A2 4104</c> means - see <see cref="FaReadLadder.ProbeWithoutOpen"/> and
         /// <c>DOC/CARVE-FA-READ-REFUSAL-2026-08-18.md</c>. Point it at a file that EXISTS: the
         /// question is what the server says about a block size on an entry nothing has opened, and

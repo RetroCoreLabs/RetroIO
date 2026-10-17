@@ -121,8 +121,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Process incoming character from terminal
         /// </summary>
-        /// <param name="character">Character received from terminal</param>
-        /// <returns>True if character was processed successfully</returns>
+        /// <param name="character">
+        /// Character received from terminal
+        /// </param>
+        /// <returns>
+        /// True if character was processed successfully
+        /// </returns>
         public bool ProcessCharacter(char character)
         {
             _lastCharacterTime = DateTime.Now;
@@ -824,8 +828,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Process PAD command and return response
         /// </summary>
-        /// <param name="command">Command string to process</param>
-        /// <returns>Response string</returns>
+        /// <param name="command">
+        /// Command string to process
+        /// </param>
+        /// <returns>
+        /// Response string
+        /// </returns>
         public CommandResult ProcessCommand(string command)
         {
             if (string.IsNullOrEmpty(command))

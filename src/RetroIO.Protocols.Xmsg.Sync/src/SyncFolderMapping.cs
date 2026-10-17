@@ -111,7 +111,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>False by default, and that is a safety decision rather than a preference.</b> A sync
+        /// False by default, and that is a safety decision rather than a preference. A sync
         /// that deletes on the far end by default turns any bad local state - a half-finished
         /// checkout, a folder that failed to mount, a wrong mapping - into the destruction of the
         /// only good copy. Nothing on the SINTRAN side is under version control.

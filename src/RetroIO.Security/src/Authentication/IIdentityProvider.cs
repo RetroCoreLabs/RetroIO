@@ -17,22 +17,34 @@ namespace RetroIO.Security.Authentication;
 /// </summary>
 public enum IdentityProviderType : byte
 {
-    /// <summary>Internal user registry (GUID-based)</summary>
+    /// <summary>
+    /// Internal user registry (GUID-based)
+    /// </summary>
     Internal = 0,
 
-    /// <summary>OAuth 2.0 provider</summary>
+    /// <summary>
+    /// OAuth 2.0 provider
+    /// </summary>
     OAuth2 = 1,
 
-    /// <summary>OpenID Connect provider</summary>
+    /// <summary>
+    /// OpenID Connect provider
+    /// </summary>
     OpenIdConnect = 2,
 
-    /// <summary>SAML 2.0 provider</summary>
+    /// <summary>
+    /// SAML 2.0 provider
+    /// </summary>
     SAML2 = 3,
 
-    /// <summary>LDAP/Active Directory</summary>
+    /// <summary>
+    /// LDAP/Active Directory
+    /// </summary>
     LDAP = 4,
 
-    /// <summary>Custom external provider</summary>
+    /// <summary>
+    /// Custom external provider
+    /// </summary>
     Custom = 5
 }
 
@@ -42,34 +54,54 @@ public enum IdentityProviderType : byte
 /// </summary>
 public sealed class ExternalIdentityMapping
 {
-    /// <summary>Internal user GUID (primary identity)</summary>
+    /// <summary>
+    /// Internal user GUID (primary identity)
+    /// </summary>
     public Guid InternalUserId { get; set; }
 
-    /// <summary>Identity provider type</summary>
+    /// <summary>
+    /// Identity provider type
+    /// </summary>
     public IdentityProviderType ProviderType { get; set; }
 
-    /// <summary>Identity provider name/ID</summary>
+    /// <summary>
+    /// Identity provider name/ID
+    /// </summary>
     public string ProviderName { get; set; } = string.Empty;
 
-    /// <summary>External user ID from IDP (e.g., OAuth sub claim)</summary>
+    /// <summary>
+    /// External user ID from IDP (e.g., OAuth sub claim)
+    /// </summary>
     public string ExternalUserId { get; set; } = string.Empty;
 
-    /// <summary>External username from IDP</summary>
+    /// <summary>
+    /// External username from IDP
+    /// </summary>
     public string? ExternalUsername { get; set; }
 
-    /// <summary>External email from IDP</summary>
+    /// <summary>
+    /// External email from IDP
+    /// </summary>
     public string? ExternalEmail { get; set; }
 
-    /// <summary>IDP-specific claims</summary>
+    /// <summary>
+    /// IDP-specific claims
+    /// </summary>
     public Dictionary<string, string> ExternalClaims { get; set; } = new();
 
-    /// <summary>Mapping creation timestamp</summary>
+    /// <summary>
+    /// Mapping creation timestamp
+    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>Last time external identity was verified</summary>
+    /// <summary>
+    /// Last time external identity was verified
+    /// </summary>
     public DateTime LastVerifiedAt { get; set; }
 
-    /// <summary>Whether mapping is active</summary>
+    /// <summary>
+    /// Whether mapping is active
+    /// </summary>
     public bool IsActive { get; set; } = true;
 }
 
@@ -78,37 +110,59 @@ public sealed class ExternalIdentityMapping
 /// </summary>
 public sealed class InternalUser
 {
-    /// <summary>Primary user GUID (internal identity)</summary>
+    /// <summary>
+    /// Primary user GUID (internal identity)
+    /// </summary>
     public Guid UserId { get; set; }
 
-    /// <summary>Username (may be from primary IDP or internal)</summary>
+    /// <summary>
+    /// Username (may be from primary IDP or internal)
+    /// </summary>
     public string Username { get; set; } = string.Empty;
 
-    /// <summary>Display name</summary>
+    /// <summary>
+    /// Display name
+    /// </summary>
     public string? DisplayName { get; set; }
 
-    /// <summary>Email address</summary>
+    /// <summary>
+    /// Email address
+    /// </summary>
     public string? Email { get; set; }
 
-    /// <summary>User roles</summary>
+    /// <summary>
+    /// User roles
+    /// </summary>
     public HashSet<string> Roles { get; set; } = new();
 
-    /// <summary>User claims</summary>
+    /// <summary>
+    /// User claims
+    /// </summary>
     public Dictionary<string, string> Claims { get; set; } = new();
 
-    /// <summary>External identity mappings (OAuth, SAML, LDAP, etc.)</summary>
+    /// <summary>
+    /// External identity mappings (OAuth, SAML, LDAP, etc.)
+    /// </summary>
     public List<ExternalIdentityMapping> ExternalIdentities { get; set; } = new();
 
-    /// <summary>User creation timestamp</summary>
+    /// <summary>
+    /// User creation timestamp
+    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>Last login timestamp</summary>
+    /// <summary>
+    /// Last login timestamp
+    /// </summary>
     public DateTime? LastLoginAt { get; set; }
 
-    /// <summary>Whether user account is active</summary>
+    /// <summary>
+    /// Whether user account is active
+    /// </summary>
     public bool IsActive { get; set; } = true;
 
-    /// <summary>Whether user account is locked</summary>
+    /// <summary>
+    /// Whether user account is locked
+    /// </summary>
     public bool IsLocked { get; set; } = false;
 }
 
@@ -117,25 +171,39 @@ public sealed class InternalUser
 /// </summary>
 public sealed class OAuthTokenInfo
 {
-    /// <summary>Access token from IDP</summary>
+    /// <summary>
+    /// Access token from IDP
+    /// </summary>
     public string AccessToken { get; set; } = string.Empty;
 
-    /// <summary>Refresh token from IDP</summary>
+    /// <summary>
+    /// Refresh token from IDP
+    /// </summary>
     public string? RefreshToken { get; set; }
 
-    /// <summary>ID token from IDP (OpenID Connect)</summary>
+    /// <summary>
+    /// ID token from IDP (OpenID Connect)
+    /// </summary>
     public string? IdToken { get; set; }
 
-    /// <summary>Token type (usually "Bearer")</summary>
+    /// <summary>
+    /// Token type (usually "Bearer")
+    /// </summary>
     public string TokenType { get; set; } = "Bearer";
 
-    /// <summary>Access token expiration</summary>
+    /// <summary>
+    /// Access token expiration
+    /// </summary>
     public DateTime ExpiresAt { get; set; }
 
-    /// <summary>Token scope</summary>
+    /// <summary>
+    /// Token scope
+    /// </summary>
     public string? Scope { get; set; }
 
-    /// <summary>IDP that issued the token</summary>
+    /// <summary>
+    /// IDP that issued the token
+    /// </summary>
     public string ProviderName { get; set; } = string.Empty;
 }
 
@@ -149,10 +217,18 @@ public interface IIdentityProvider
     /// Authenticate user via external IDP (OAuth, SAML, etc.)
     /// Maps external identity to internal user GUID
     /// </summary>
-    /// <param name="providerName">IDP provider name</param>
-    /// <param name="oauthToken">OAuth token information</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Authentication result with mapped internal principal</returns>
+    /// <param name="providerName">
+    /// IDP provider name
+    /// </param>
+    /// <param name="oauthToken">
+    /// OAuth token information
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// Authentication result with mapped internal principal
+    /// </returns>
     ValueTask<AuthenticationResult> AuthenticateViaIdpAsync(
         string providerName,
         OAuthTokenInfo oauthToken,
@@ -162,11 +238,21 @@ public interface IIdentityProvider
     /// Get or create internal user from external identity
     /// Auto-provisions internal user if mapping doesn't exist
     /// </summary>
-    /// <param name="providerName">IDP provider name</param>
-    /// <param name="externalUserId">External user ID from IDP</param>
-    /// <param name="externalClaims">Claims from IDP</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Internal user with mapped identity</returns>
+    /// <param name="providerName">
+    /// IDP provider name
+    /// </param>
+    /// <param name="externalUserId">
+    /// External user ID from IDP
+    /// </param>
+    /// <param name="externalClaims">
+    /// Claims from IDP
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// Internal user with mapped identity
+    /// </returns>
     ValueTask<InternalUser> GetOrCreateInternalUserAsync(
         string providerName,
         string externalUserId,
@@ -176,9 +262,15 @@ public interface IIdentityProvider
     /// <summary>
     /// Get internal user by GUID
     /// </summary>
-    /// <param name="userId">Internal user GUID</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Internal user or null if not found</returns>
+    /// <param name="userId">
+    /// Internal user GUID
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// Internal user or null if not found
+    /// </returns>
     ValueTask<InternalUser?> GetInternalUserAsync(
         Guid userId,
         CancellationToken ct = default);
@@ -186,9 +278,15 @@ public interface IIdentityProvider
     /// <summary>
     /// Get internal user by username
     /// </summary>
-    /// <param name="username">Username</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Internal user or null if not found</returns>
+    /// <param name="username">
+    /// Username
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// Internal user or null if not found
+    /// </returns>
     ValueTask<InternalUser?> GetInternalUserByUsernameAsync(
         string username,
         CancellationToken ct = default);
@@ -196,10 +294,18 @@ public interface IIdentityProvider
     /// <summary>
     /// Map external identity to existing internal user
     /// </summary>
-    /// <param name="internalUserId">Internal user GUID</param>
-    /// <param name="mapping">External identity mapping</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>True if mapping was added</returns>
+    /// <param name="internalUserId">
+    /// Internal user GUID
+    /// </param>
+    /// <param name="mapping">
+    /// External identity mapping
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// True if mapping was added
+    /// </returns>
     ValueTask<bool> AddExternalIdentityMappingAsync(
         Guid internalUserId,
         ExternalIdentityMapping mapping,
@@ -208,11 +314,21 @@ public interface IIdentityProvider
     /// <summary>
     /// Remove external identity mapping
     /// </summary>
-    /// <param name="internalUserId">Internal user GUID</param>
-    /// <param name="providerName">IDP provider name</param>
-    /// <param name="externalUserId">External user ID</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>True if mapping was removed</returns>
+    /// <param name="internalUserId">
+    /// Internal user GUID
+    /// </param>
+    /// <param name="providerName">
+    /// IDP provider name
+    /// </param>
+    /// <param name="externalUserId">
+    /// External user ID
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// True if mapping was removed
+    /// </returns>
     ValueTask<bool> RemoveExternalIdentityMappingAsync(
         Guid internalUserId,
         string providerName,
@@ -222,10 +338,18 @@ public interface IIdentityProvider
     /// <summary>
     /// Create SecurityPrincipal from internal user
     /// </summary>
-    /// <param name="user">Internal user</param>
-    /// <param name="sessionToken">Session token (if any)</param>
-    /// <param name="expiresAt">Token expiration (if any)</param>
-    /// <returns>SecurityPrincipal with user's roles and claims</returns>
+    /// <param name="user">
+    /// Internal user
+    /// </param>
+    /// <param name="sessionToken">
+    /// Session token (if any)
+    /// </param>
+    /// <param name="expiresAt">
+    /// Token expiration (if any)
+    /// </param>
+    /// <returns>
+    /// SecurityPrincipal with user's roles and claims
+    /// </returns>
     SecurityPrincipal CreatePrincipalFromUser(
         InternalUser user,
         string? sessionToken = null,
@@ -234,10 +358,18 @@ public interface IIdentityProvider
     /// <summary>
     /// Refresh OAuth token from IDP
     /// </summary>
-    /// <param name="providerName">IDP provider name</param>
-    /// <param name="refreshToken">Refresh token</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>New OAuth token information</returns>
+    /// <param name="providerName">
+    /// IDP provider name
+    /// </param>
+    /// <param name="refreshToken">
+    /// Refresh token
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// New OAuth token information
+    /// </returns>
     ValueTask<OAuthTokenInfo?> RefreshOAuthTokenAsync(
         string providerName,
         string refreshToken,

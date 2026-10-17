@@ -54,7 +54,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         private const int PageBytes = 2048;     // 1024 words
         private const byte CmdEnd = 0x27;       // "'" terminates a command; alone = end of buffer
 
-        /// <summary>Big-endian 16-bit word read (SINTRAN stores these words big-endian in SEGFIL0).</summary>
+        /// <summary>
+        /// Big-endian 16-bit word read (SINTRAN stores these words big-endian in SEGFIL0).
+        /// </summary>
         private static int Word(byte[] b, int o) => (b[o] << 8) | b[o + 1];
 
         private readonly struct SegEntry
@@ -156,10 +158,14 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return cmds;
         }
 
-        /// <summary>Result of <see cref="EncodeBuffer"/>: the on-disk bytes plus the length-cell value.</summary>
+        /// <summary>
+        /// Result of <see cref="EncodeBuffer"/>: the on-disk bytes plus the length-cell value.
+        /// </summary>
         public readonly struct EncodedBuffer
         {
-            /// <summary>Encoded bytes (command text + terminators, word-aligned, ending in a lone 0x27).</summary>
+            /// <summary>
+            /// Encoded bytes (command text + terminators, word-aligned, ending in a lone 0x27).
+            /// </summary>
             public readonly byte[] Bytes;
 
             /// <summary>
@@ -216,7 +222,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             catch { return false; }
         }
 
-        /// <summary>True when every character is a printable 7-bit ASCII glyph (0x20..0x7E).</summary>
+        /// <summary>
+        /// True when every character is a printable 7-bit ASCII glyph (0x20..0x7E).
+        /// </summary>
         private static bool IsPrintable(string s)
         {
             if (s.Length == 0) return false;
@@ -315,11 +323,17 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             public long ByteOffset { get; init; }
             public int LengthCell { get; init; }
             public bool LengthPlausible { get; init; }
-            /// <summary>Parsed commands, or null when the region does not decode to a plausible buffer.</summary>
+            /// <summary>
+            /// Parsed commands, or null when the region does not decode to a plausible buffer.
+            /// </summary>
             public IReadOnlyList<string>? Commands { get; init; }
-            /// <summary>True when the parse is self-consistent (re-encode == stored length): a REAL buffer.</summary>
+            /// <summary>
+            /// True when the parse is self-consistent (re-encode == stored length): a REAL buffer.
+            /// </summary>
             public bool Consistent { get; init; }
-            /// <summary>First bytes of the buffer region, for a hex/ASCII dump.</summary>
+            /// <summary>
+            /// First bytes of the buffer region, for a hex/ASCII dump.
+            /// </summary>
             public byte[] RegionHead { get; init; } = System.Array.Empty<byte>();
         }
 

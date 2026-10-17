@@ -61,10 +61,18 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// printable ASCII only); the total encoded text must fit SINTRAN's 254-byte limit. The length
         /// cell at INIBU+130 is updated so SINTRAN reads exactly the new text.
         /// </summary>
-        /// <param name="commands">The new initial commands, in execution order (may be empty to clear).</param>
-        /// <returns>True on success; false if the pack has no locatable buffer.</returns>
-        /// <exception cref="InvalidOperationException">Device is read-only, or a command overflows the buffer.</exception>
-        /// <exception cref="ArgumentException">A command is empty, contains a quote, or a non-printable character.</exception>
+        /// <param name="commands">
+        /// The new initial commands, in execution order (may be empty to clear).
+        /// </param>
+        /// <returns>
+        /// True on success; false if the pack has no locatable buffer.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Device is read-only, or a command overflows the buffer.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// A command is empty, contains a quote, or a non-printable character.
+        /// </exception>
         public bool WriteSintranInitialCommands(IReadOnlyList<string> commands)
         {
             EnsureInitialized();
@@ -107,10 +115,18 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// After this succeeds the buffer is self-consistent again, so <see cref="ReadSintranInitialCommands"/>
         /// will find it normally — the caller should re-read to VERIFY.
         /// </summary>
-        /// <param name="commands">The commands to write (the good set to restore).</param>
-        /// <param name="targetByteOffset">Set to the SEGFIL0 byte offset written, or -1 when no target was found.</param>
-        /// <param name="keywordScore">Set to the winning keyword score (higher = more confident) for reporting.</param>
-        /// <returns>True when the buffer was repaired; false when no unambiguous target was found.</returns>
+        /// <param name="commands">
+        /// The commands to write (the good set to restore).
+        /// </param>
+        /// <param name="targetByteOffset">
+        /// Set to the SEGFIL0 byte offset written, or -1 when no target was found.
+        /// </param>
+        /// <param name="keywordScore">
+        /// Set to the winning keyword score (higher = more confident) for reporting.
+        /// </param>
+        /// <returns>
+        /// True when the buffer was repaired; false when no unambiguous target was found.
+        /// </returns>
         public bool RepairSintranInitialCommands(IReadOnlyList<string> commands, out long targetByteOffset, out int keywordScore)
         {
             EnsureInitialized();

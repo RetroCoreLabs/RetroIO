@@ -12,7 +12,7 @@ namespace RetroIO.Storage.Ndfs.Creation
     /// 0..1999 (the extended-info block begins at byte 2000), not merely "the first 1024 bytes".
     /// </summary>
     /// <remarks>
-    /// Every raw HARD-DISK bootstrap starts with the same word 0 — <b>PIOF</b> (octal 150405) —
+    /// Every raw HARD-DISK bootstrap starts with the same word 0 — PIOF (octal 150405) —
     /// which disables interrupts and paging before any I/O. The controller is distinguished NOT by
     /// word 0 but by the first I/O instruction: a literal <c>IOX</c> in the controller's device
     /// window (SMD/Winchester), or the indirect <c>IOXT</c> opcode (SCSI). Floppies are different:

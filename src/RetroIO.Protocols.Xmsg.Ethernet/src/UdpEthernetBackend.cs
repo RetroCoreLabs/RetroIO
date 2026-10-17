@@ -19,7 +19,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// <remarks>
     /// <para>
     /// Interoperates with RetroCore's <c>--net=udp</c> backend. Each UDP datagram payload is
-    /// <b>one raw Ethernet frame with no wrapper</b> - no length prefix, no handshake, nothing.
+    /// one raw Ethernet frame with no wrapper - no length prefix, no handshake, nothing.
     /// Default group <c>239.3.9.4</c> (administratively scoped; the digits echo 3-0-9-4) and port
     /// <c>3094</c>, the ND Ethernet II PCB number.
     /// </para>

@@ -52,7 +52,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
     /// until the peer has been heard from, at which point it goes <see cref="LinkStatus.Active"/>.
     /// </para>
     /// <para>
-    /// <b>UNVERIFIED:</b> whether a real ND node will spontaneously address a newly defined remote
+    /// UNVERIFIED: whether a real ND node will spontaneously address a newly defined remote
     /// system, and so how long that wait is in practice, has not been observed. If it turns out a
     /// node never speaks first, learning the peer's link id needs a separate experiment - not a
     /// guessed constant here.
@@ -105,7 +105,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// Occurs when the peer re-sends a data frame this link has already taken.
         /// </summary>
         /// <remarks>
-        /// <b>Never normal.</b> A peer repeats because it has not seen our acknowledgement, which
+        /// Never normal. A peer repeats because it has not seen our acknowledgement, which
         /// on 2026-08-10 meant we were sending far ahead of the link's window and every repeat
         /// reached the file server as a fresh request. It looked like a pile of file-access defects
         /// and was one link-layer fault. Log it loudly.

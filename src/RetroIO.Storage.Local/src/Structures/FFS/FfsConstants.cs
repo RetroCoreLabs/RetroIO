@@ -285,8 +285,12 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// <summary>
         /// Calculates number of inodes per block given block size.
         /// </summary>
-        /// <param name="blockSize">Block size in bytes (4096 or 8192).</param>
-        /// <returns>Number of inodes per block (32 or 64).</returns>
+        /// <param name="blockSize">
+        /// Block size in bytes (4096 or 8192).
+        /// </param>
+        /// <returns>
+        /// Number of inodes per block (32 or 64).
+        /// </returns>
         public static int InodesPerBlock(int blockSize)
         {
             return blockSize / INODE_SIZE;
@@ -295,8 +299,12 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// <summary>
         /// Calculates number of indirect pointers per block.
         /// </summary>
-        /// <param name="blockSize">Block size in bytes.</param>
-        /// <returns>Number of 32-bit pointers (1024 or 2048).</returns>
+        /// <param name="blockSize">
+        /// Block size in bytes.
+        /// </param>
+        /// <returns>
+        /// Number of 32-bit pointers (1024 or 2048).
+        /// </returns>
         public static int PointersPerBlock(int blockSize)
         {
             return blockSize / sizeof(uint);
@@ -305,9 +313,15 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// <summary>
         /// Calculates number of fragments per block.
         /// </summary>
-        /// <param name="blockSize">Block size in bytes.</param>
-        /// <param name="fragSize">Fragment size in bytes.</param>
-        /// <returns>Number of fragments per block.</returns>
+        /// <param name="blockSize">
+        /// Block size in bytes.
+        /// </param>
+        /// <param name="fragSize">
+        /// Fragment size in bytes.
+        /// </param>
+        /// <returns>
+        /// Number of fragments per block.
+        /// </returns>
         public static int FragmentsPerBlock(int blockSize, int fragSize)
         {
             if (fragSize == 0)

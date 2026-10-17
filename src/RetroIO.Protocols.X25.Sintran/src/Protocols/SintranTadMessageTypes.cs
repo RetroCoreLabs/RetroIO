@@ -144,10 +144,14 @@ namespace RetroIO.Protocols.X25.Sintran
         /// </summary>
         public enum TadMessagePriority : byte
         {
-            /// <summary>Normal priority - queued for transmission</summary>
+            /// <summary>
+            /// Normal priority - queued for transmission
+            /// </summary>
             Normal = 0,
 
-            /// <summary>High priority - immediate transmission</summary>
+            /// <summary>
+            /// High priority - immediate transmission
+            /// </summary>
             High = 1
         }
 

@@ -38,9 +38,15 @@ namespace RetroIO.Link.Physical
         /// <summary>
         /// Start a TelnetServer on the given port
         /// </summary>
-        /// <param name="hostIP">Blank means listening on all IPAdresses.</param>
-        /// <param name="port">What port to listen on</param>
-        /// <returns></returns>
+        /// <param name="hostIP">
+        /// Blank means listening on all IPAdresses.
+        /// </param>
+        /// <param name="port">
+        /// What port to listen on
+        /// </param>
+        /// <returns>
+        ///
+        /// </returns>
         public bool StartServer(string hostIP, int port)
         {
             if (hostIP.Equals("localhost")) hostIP = "";
@@ -228,7 +234,6 @@ namespace RetroIO.Link.Physical
         /// <summary>
         /// Disconnect client
         /// </summary>
-        /// <param name="connection"></param>
         private void RemoveConnection()
         {
             if (clientSocket != null)

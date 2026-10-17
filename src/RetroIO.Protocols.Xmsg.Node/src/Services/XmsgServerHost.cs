@@ -421,7 +421,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// The node whose counter is being zeroed.
         /// </param>
         /// <remarks>
-        /// <para><b>Why this is not <see cref="ResetSequence"/></b></para>
+        /// <para>Why this is not <see cref="ResetSequence"/></para>
         /// <para>
         /// <see cref="ResetSequence"/> answers the PEER telling us it restarted, and it drops the
         /// in-memory link on purpose: a machine that has restarted may come back with different
@@ -1211,7 +1211,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// </returns>
         /// <remarks>
         /// <para>
-        /// THE ONE PLACE Flags 1 is decided. <b>CORRECTED 2026-08-04: Flags 1 is PER DIRECTION.</b>
+        /// THE ONE PLACE Flags 1 is decided. CORRECTED 2026-08-04: Flags 1 is PER DIRECTION.
         /// Each side stamps its own running count of the Data frames IT has sent, incrementing by
         /// one per Data frame. Acks are different - an Ack echoes the number of the frame it
         /// acknowledges, because its job is to identify that frame.
@@ -1219,7 +1219,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// <para>
         /// MEASURED over <c>DOC/captures/FA-READ-WRITE-2026-08-04/capture-list-files.txt</c>:
         /// seeding each side from its first Data frame and then predicting every later one from
-        /// that side's own count gives <b>222 matches, 0 mismatches</b>.
+        /// that side's own count gives 222 matches, 0 mismatches.
         /// </para>
         /// <para>
         /// This was previously modelled as ONE value per exchange, shared by both directions and

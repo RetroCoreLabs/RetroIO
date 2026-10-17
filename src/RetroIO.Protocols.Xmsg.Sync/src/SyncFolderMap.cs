@@ -225,7 +225,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// not what this builds.
         /// </para>
         /// <para>
-        /// <b>This is the REMOTE form only.</b> A LOCAL filespec quotes differently - the user
+        /// This is the REMOTE form only. A LOCAL filespec quotes differently - the user
         /// prefix goes INSIDE the quotes, as in
         /// <c>BINARY-DUMP "(UTILITY)ENCOSE0-DUMP:BPUN"</c>, and putting them after the <c>(</c>
         /// there is the error. Both forms are verified against a machine and they simply do not

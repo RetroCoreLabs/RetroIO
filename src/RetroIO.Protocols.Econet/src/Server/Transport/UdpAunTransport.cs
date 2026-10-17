@@ -23,7 +23,9 @@ public sealed class UdpAunTransport : ITransport
 {
     private const int MaxDatagramSize = 2048;
 
-    /// <summary>Port this transport binds, kept so each run can rebind it.</summary>
+    /// <summary>
+    /// Port this transport binds, kept so each run can rebind it.
+    /// </summary>
     private readonly int _port;
 
     /// <summary>
@@ -57,8 +59,12 @@ public sealed class UdpAunTransport : ITransport
         _port = port;
     }
 
-    /// <summary>Creates and binds the socket this run will use.</summary>
-    /// <returns>The bound socket.</returns>
+    /// <summary>
+    /// Creates and binds the socket this run will use.
+    /// </summary>
+    /// <returns>
+    /// The bound socket.
+    /// </returns>
     private Socket CreateAndBind()
     {
         Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);

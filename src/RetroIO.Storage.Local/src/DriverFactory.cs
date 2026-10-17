@@ -31,9 +31,15 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Registers a filesystem driver provider.
         /// </summary>
-        /// <param name="provider">Provider to register</param>
-        /// <exception cref="ArgumentNullException">Thrown when provider is null</exception>
-        /// <exception cref="ArgumentException">Thrown when provider type is already registered</exception>
+        /// <param name="provider">
+        /// Provider to register
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when provider is null
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when provider type is already registered
+        /// </exception>
         public void Register(IFileSystemDriverProvider provider)
         {
             if (provider == null)
@@ -55,10 +61,18 @@ namespace RetroIO.Storage.Local
         /// If that fails, tries detecting partition table and filesystem within first mountable partition.
         /// Reads file ONCE and provides same hints to all drivers for efficiency.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <returns>Filesystem driver instance, or null if no driver can handle the format</returns>
-        /// <exception cref="ArgumentException">Thrown when imagePath is null or empty</exception>
-        /// <exception cref="FileNotFoundException">Thrown when file does not exist</exception>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <returns>
+        /// Filesystem driver instance, or null if no driver can handle the format
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when imagePath is null or empty
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when file does not exist
+        /// </exception>
         public IFileSystemDriver? Detect(string imagePath)
         {
             if (string.IsNullOrEmpty(imagePath))
@@ -86,8 +100,12 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Checks if a partition is swap space (unmountable).
         /// </summary>
-        /// <param name="partition">Partition info to check</param>
-        /// <returns>True if partition is swap, false otherwise</returns>
+        /// <param name="partition">
+        /// Partition info to check
+        /// </param>
+        /// <returns>
+        /// True if partition is swap, false otherwise
+        /// </returns>
         private static bool IsSwapPartitionInfo(RetroIO.Storage.Local.Partitions.PartitionInfo partition)
         {
             // BSD/V7: FS_SWAP = 1
@@ -105,9 +123,15 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Detects filesystem at sector 0 (raw filesystem, no partition table).
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <param name="offsetBytes">Offset in bytes to start detection (default 0)</param>
-        /// <returns>Filesystem driver instance, or null if no driver can handle the format</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <param name="offsetBytes">
+        /// Offset in bytes to start detection (default 0)
+        /// </param>
+        /// <returns>
+        /// Filesystem driver instance, or null if no driver can handle the format
+        /// </returns>
         private IFileSystemDriver? DetectRawFilesystem(string imagePath, long offsetBytes = 0)
         {
             // Read file ONCE - create detection hints
@@ -151,8 +175,12 @@ namespace RetroIO.Storage.Local
         /// Detects filesystem within partitions when raw detection fails.
         /// Automatically finds first mountable (non-swap) partition and detects filesystem within it.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <returns>Configured filesystem driver for partition, or null if no mountable partition found</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <returns>
+        /// Configured filesystem driver for partition, or null if no mountable partition found
+        /// </returns>
         private IFileSystemDriver? DetectInPartition(string imagePath)
         {
             System.Collections.Generic.List<RetroIO.Storage.Local.Partitions.PartitionInfo>? partitions = null;
@@ -203,9 +231,15 @@ namespace RetroIO.Storage.Local
         /// Detects filesystem format from a stream and creates appropriate driver.
         /// Reads stream ONCE and provides same hints to all drivers for efficiency.
         /// </summary>
-        /// <param name="imageStream">Stream containing disk image</param>
-        /// <returns>Filesystem driver instance, or null if no driver can handle the format</returns>
-        /// <exception cref="ArgumentNullException">Thrown when imageStream is null</exception>
+        /// <param name="imageStream">
+        /// Stream containing disk image
+        /// </param>
+        /// <returns>
+        /// Filesystem driver instance, or null if no driver can handle the format
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when imageStream is null
+        /// </exception>
         public IFileSystemDriver? Detect(Stream imageStream)
         {
             if (imageStream == null)
@@ -254,9 +288,15 @@ namespace RetroIO.Storage.Local
         /// Gets detection confidence scores for specific filesystem types.
         /// Reads file ONCE and provides same hints to all requested providers for efficiency.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <param name="filesystemTypes">Array of filesystem type identifiers to check</param>
-        /// <returns>Dictionary mapping filesystem type to confidence score (0.0 to 1.0)</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <param name="filesystemTypes">
+        /// Array of filesystem type identifiers to check
+        /// </param>
+        /// <returns>
+        /// Dictionary mapping filesystem type to confidence score (0.0 to 1.0)
+        /// </returns>
         public Dictionary<string, float> GetDetectionConfidences(string imagePath, params string[] filesystemTypes)
         {
             var confidences = new Dictionary<string, float>();
@@ -300,8 +340,12 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Gets a registered provider by filesystem type.
         /// </summary>
-        /// <param name="fileSystemType">Filesystem type identifier</param>
-        /// <returns>Provider instance, or null if not registered</returns>
+        /// <param name="fileSystemType">
+        /// Filesystem type identifier
+        /// </param>
+        /// <returns>
+        /// Provider instance, or null if not registered
+        /// </returns>
         public IFileSystemDriverProvider? GetProvider(string fileSystemType)
         {
             if (string.IsNullOrEmpty(fileSystemType))
@@ -313,9 +357,15 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Creates a driver for a specific filesystem type without detection.
         /// </summary>
-        /// <param name="fileSystemType">Filesystem type identifier (e.g., "D64", "NDFS")</param>
-        /// <returns>Filesystem driver instance, or null if type is not registered</returns>
-        /// <exception cref="ArgumentException">Thrown when fileSystemType is null or empty</exception>
+        /// <param name="fileSystemType">
+        /// Filesystem type identifier (e.g., "D64", "NDFS")
+        /// </param>
+        /// <returns>
+        /// Filesystem driver instance, or null if type is not registered
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when fileSystemType is null or empty
+        /// </exception>
         public IFileSystemDriver? Create(string fileSystemType)
         {
             if (string.IsNullOrEmpty(fileSystemType))
@@ -334,7 +384,9 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Gets all registered filesystem types.
         /// </summary>
-        /// <returns>Array of registered filesystem type identifiers</returns>
+        /// <returns>
+        /// Array of registered filesystem type identifiers
+        /// </returns>
         public string[] GetRegisteredTypes()
         {
             int count = _providers.Count;
@@ -377,8 +429,12 @@ namespace RetroIO.Storage.Local
         /// Creates detection hints from a file path.
         /// Reads file once - reads enough bytes to satisfy all registered providers' requirements.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <param name="offsetBytes">Offset in bytes to start reading (default 0 for raw filesystem, use partition offset for partitioned disks)</param>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <param name="offsetBytes">
+        /// Offset in bytes to start reading (default 0 for raw filesystem, use partition offset for partitioned disks)
+        /// </param>
         private DetectionHints CreateDetectionHints(string imagePath, long offsetBytes = 0)
         {
             DetectionHints hints = new DetectionHints

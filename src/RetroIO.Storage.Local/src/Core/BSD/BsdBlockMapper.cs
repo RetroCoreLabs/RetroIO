@@ -131,9 +131,15 @@ namespace RetroIO.Storage.Local.V7.Core
         /// Maps a file block number to physical block number using inode's addressing scheme.
         /// Handles direct, single indirect, double indirect, and triple indirect blocks.
         /// </summary>
-        /// <param name="inode">The inode containing block addresses.</param>
-        /// <param name="fileBlockNum">Block number within the file (0-based).</param>
-        /// <returns>Physical block number, or 0 if sparse/unallocated.</returns>
+        /// <param name="inode">
+        /// The inode containing block addresses.
+        /// </param>
+        /// <param name="fileBlockNum">
+        /// Block number within the file (0-based).
+        /// </param>
+        /// <returns>
+        /// Physical block number, or 0 if sparse/unallocated.
+        /// </returns>
         public uint MapFileBlock(V7Inode inode, uint fileBlockNum)
         {
             // Direct blocks (0-3): 4 KB
@@ -193,9 +199,15 @@ namespace RetroIO.Storage.Local.V7.Core
         /// <summary>
         /// Reads a pointer from an indirect block.
         /// </summary>
-        /// <param name="indirectBlockNum">Block number of the indirect block.</param>
-        /// <param name="index">Index within the indirect block (0-255).</param>
-        /// <returns>Block number stored at that index, or 0 if sparse.</returns>
+        /// <param name="indirectBlockNum">
+        /// Block number of the indirect block.
+        /// </param>
+        /// <param name="index">
+        /// Index within the indirect block (0-255).
+        /// </param>
+        /// <returns>
+        /// Block number stored at that index, or 0 if sparse.
+        /// </returns>
         private uint ReadIndirectBlock(uint indirectBlockNum, uint index)
         {
             if (indirectBlockNum == 0)
@@ -228,10 +240,18 @@ namespace RetroIO.Storage.Local.V7.Core
         /// <summary>
         /// Reads file data starting from specified block and offset.
         /// </summary>
-        /// <param name="inode">Inode containing file metadata.</param>
-        /// <param name="offset">Byte offset within file.</param>
-        /// <param name="count">Number of bytes to read.</param>
-        /// <returns>Byte array containing file data.</returns>
+        /// <param name="inode">
+        /// Inode containing file metadata.
+        /// </param>
+        /// <param name="offset">
+        /// Byte offset within file.
+        /// </param>
+        /// <param name="count">
+        /// Number of bytes to read.
+        /// </param>
+        /// <returns>
+        /// Byte array containing file data.
+        /// </returns>
         public byte[] ReadFileData(V7Inode inode, uint offset, uint count)
         {
             if (offset + count > inode.Size)

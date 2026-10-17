@@ -29,7 +29,9 @@ public static class SecurityPrincipalConstants
     /// Create UNKNOWN security principal
     /// Used when no identity is known (e.g., unauthenticated mount operations)
     /// </summary>
-    /// <returns>SecurityPrincipal with UNKNOWN identity</returns>
+    /// <returns>
+    /// SecurityPrincipal with UNKNOWN identity
+    /// </returns>
     public static SecurityPrincipal CreateUnknownPrincipal()
     {
         return new SecurityPrincipal
@@ -47,8 +49,12 @@ public static class SecurityPrincipalConstants
     /// <summary>
     /// Check if principal is UNKNOWN
     /// </summary>
-    /// <param name="principal">Principal to check</param>
-    /// <returns>True if principal is UNKNOWN identity</returns>
+    /// <param name="principal">
+    /// Principal to check
+    /// </param>
+    /// <returns>
+    /// True if principal is UNKNOWN identity
+    /// </returns>
     public static bool IsUnknownPrincipal(SecurityPrincipal? principal)
     {
         return principal == null || principal.PrincipalId == UnknownPrincipalId;
@@ -57,8 +63,12 @@ public static class SecurityPrincipalConstants
     /// <summary>
     /// Check if principal GUID is UNKNOWN
     /// </summary>
-    /// <param name="principalId">Principal ID to check</param>
-    /// <returns>True if GUID is UNKNOWN (all zeros)</returns>
+    /// <param name="principalId">
+    /// Principal ID to check
+    /// </param>
+    /// <returns>
+    /// True if GUID is UNKNOWN (all zeros)
+    /// </returns>
     public static bool IsUnknownPrincipalId(Guid principalId)
     {
         return principalId == UnknownPrincipalId;

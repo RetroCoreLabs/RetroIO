@@ -81,8 +81,12 @@ namespace RetroIO.Storage.Local.Partitions
         /// <summary>
         /// Detects all partitions on a disk image file.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file.</param>
-        /// <returns>List of detected partitions.</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file.
+        /// </param>
+        /// <returns>
+        /// List of detected partitions.
+        /// </returns>
         public static List<PartitionInfo> DetectPartitions(string imagePath)
         {
             if (string.IsNullOrEmpty(imagePath))

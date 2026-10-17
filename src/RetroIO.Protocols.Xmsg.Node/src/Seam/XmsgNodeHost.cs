@@ -270,7 +270,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         /// <para>
         /// Flags 1 is each side's own count of the Data frames it has sent, and there is no way to
         /// discover the peer's expectation from the traffic - so if the two sides disagree, they
-        /// stay disagreeing. A <b>ReachabilityRequest</b> is the signal that clears it: we already
+        /// stay disagreeing. A ReachabilityRequest is the signal that clears it: we already
         /// treat an inbound one as "the peer restarted, reset my stored sequence for it"
         /// (<c>XmsgNode.HandleFrame</c>), and D100 does the same with ours.
         /// </para>
@@ -340,8 +340,8 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         /// 0x009C down, and still going when the runner was killed.
         /// </para>
         /// <para>
-        /// So this method exists to answer ONE question against a real machine: <b>does D100 reset
-        /// its expected-from-us when it receives our reachability request?</b> If it does, the frame
+        /// So this method exists to answer ONE question against a real machine: does D100 reset
+        /// its expected-from-us when it receives our reachability request? If it does, the frame
         /// we send at <c>0x0000</c> afterwards is accepted and this is the cure. If it does not, the
         /// frame is dropped in silence exactly as D103's was, and we have learned that cheaply
         /// instead of by inference. Do NOT promote this to automatic until a run says which.

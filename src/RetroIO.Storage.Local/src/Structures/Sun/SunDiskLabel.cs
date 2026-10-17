@@ -340,8 +340,12 @@ namespace RetroIO.Storage.Local.Sun.Structures
         /// SUN2.img), so for those we fall back to the Sun convention that partition 'b' is
         /// swap, exactly as <see cref="GetDisplayName"/> already does for naming.
         /// </summary>
-        /// <param name="partitionLetter">Partition letter ('a'..'h').</param>
-        /// <returns>True if this partition should be treated as swap.</returns>
+        /// <param name="partitionLetter">
+        /// Partition letter ('a'..'h').
+        /// </param>
+        /// <returns>
+        /// True if this partition should be treated as swap.
+        /// </returns>
         public readonly bool IsSwap(char partitionLetter)
         {
             if (Tag != 0)
@@ -356,8 +360,12 @@ namespace RetroIO.Storage.Local.Sun.Structures
         /// True when this partition spans the entire disk rather than holding its own
         /// filesystem ('c' by Sun convention, tag 5 = backup when tagged).
         /// </summary>
-        /// <param name="partitionLetter">Partition letter ('a'..'h').</param>
-        /// <returns>True if this partition is the whole-disk/backup slice.</returns>
+        /// <param name="partitionLetter">
+        /// Partition letter ('a'..'h').
+        /// </param>
+        /// <returns>
+        /// True if this partition is the whole-disk/backup slice.
+        /// </returns>
         public readonly bool IsWholeDisk(char partitionLetter)
         {
             if (Tag != 0)

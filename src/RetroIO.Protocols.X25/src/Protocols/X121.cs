@@ -56,8 +56,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Validate X.121 address format and content
         /// </summary>
-        /// <param name="address">Address string to validate</param>
-        /// <returns>True if valid X.121 address</returns>
+        /// <param name="address">
+        /// Address string to validate
+        /// </param>
+        /// <returns>
+        /// True if valid X.121 address
+        /// </returns>
         public bool IsValidAddress(string address)
         {
             if (string.IsNullOrEmpty(address))
@@ -100,8 +104,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Check if region code is valid according to X.121
         /// </summary>
-        /// <param name="regionCode">First digit of DNIC</param>
-        /// <returns>True if valid region code</returns>
+        /// <param name="regionCode">
+        /// First digit of DNIC
+        /// </param>
+        /// <returns>
+        /// True if valid region code
+        /// </returns>
         public bool IsValidRegionCode(char regionCode)
         {
             return regionCode >= '2' && regionCode <= '7';
@@ -110,8 +118,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Extract DNIC from X.121 address
         /// </summary>
-        /// <param name="address">X.121 address</param>
-        /// <returns>DNIC or null if address too short</returns>
+        /// <param name="address">
+        /// X.121 address
+        /// </param>
+        /// <returns>
+        /// DNIC or null if address too short
+        /// </returns>
         public string? ExtractDNIC(string address)
         {
             if (!IsValidAddress(address) || address.Length < DNIC_LENGTH)
@@ -123,8 +135,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Extract national number from X.121 address
         /// </summary>
-        /// <param name="address">X.121 address</param>
-        /// <returns>National number or original address if no DNIC</returns>
+        /// <param name="address">
+        /// X.121 address
+        /// </param>
+        /// <returns>
+        /// National number or original address if no DNIC
+        /// </returns>
         public string ExtractNationalNumber(string address)
         {
             if (!IsValidAddress(address))
@@ -141,8 +157,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Encode X.121 address in BCD format for X.25 packets
         /// </summary>
-        /// <param name="address">X.121 address string</param>
-        /// <returns>BCD encoded bytes</returns>
+        /// <param name="address">
+        /// X.121 address string
+        /// </param>
+        /// <returns>
+        /// BCD encoded bytes
+        /// </returns>
         public byte[] EncodeBCD(string address)
         {
             if (!IsValidAddress(address))
@@ -169,9 +189,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Decode BCD format to X.121 address string
         /// </summary>
-        /// <param name="bcdData">BCD encoded address</param>
-        /// <param name="addressLength">Actual address length (to handle padding)</param>
-        /// <returns>Decoded X.121 address</returns>
+        /// <param name="bcdData">
+        /// BCD encoded address
+        /// </param>
+        /// <param name="addressLength">
+        /// Actual address length (to handle padding)
+        /// </param>
+        /// <returns>
+        /// Decoded X.121 address
+        /// </returns>
         public string DecodeBCD(byte[] bcdData, int addressLength)
         {
             if (bcdData == null || bcdData.Length == 0)
@@ -210,8 +236,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Calculate required BCD byte length for address
         /// </summary>
-        /// <param name="addressLength">Address string length</param>
-        /// <returns>Required BCD byte array length</returns>
+        /// <param name="addressLength">
+        /// Address string length
+        /// </param>
+        /// <returns>
+        /// Required BCD byte array length
+        /// </returns>
         public int CalculateBCDLength(int addressLength)
         {
             return (addressLength + 1) / 2; // Round up to nearest byte
@@ -220,9 +250,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Create X.121 address from DNIC and national number
         /// </summary>
-        /// <param name="dnic">4-digit DNIC</param>
-        /// <param name="nationalNumber">National number (up to 10 digits)</param>
-        /// <returns>Complete X.121 address</returns>
+        /// <param name="dnic">
+        /// 4-digit DNIC
+        /// </param>
+        /// <param name="nationalNumber">
+        /// National number (up to 10 digits)
+        /// </param>
+        /// <returns>
+        /// Complete X.121 address
+        /// </returns>
         public string CreateAddress(string dnic, string nationalNumber)
         {
             if (string.IsNullOrEmpty(dnic) || dnic.Length != DNIC_LENGTH)
@@ -248,8 +284,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Check if address is local format (shorter than DNIC length)
         /// </summary>
-        /// <param name="address">X.121 address</param>
-        /// <returns>True if local format address</returns>
+        /// <param name="address">
+        /// X.121 address
+        /// </param>
+        /// <returns>
+        /// True if local format address
+        /// </returns>
         public bool IsLocalFormat(string address)
         {
             return IsValidAddress(address) && address.Length < DNIC_LENGTH;
@@ -258,8 +298,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Check if address is international format (includes DNIC)
         /// </summary>
-        /// <param name="address">X.121 address</param>
-        /// <returns>True if international format address</returns>
+        /// <param name="address">
+        /// X.121 address
+        /// </param>
+        /// <returns>
+        /// True if international format address
+        /// </returns>
         public bool IsInternationalFormat(string address)
         {
             return IsValidAddress(address) && address.Length >= DNIC_LENGTH;
@@ -268,8 +312,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Get region name from region code
         /// </summary>
-        /// <param name="regionCode">First digit of DNIC</param>
-        /// <returns>Region name or "Unknown"</returns>
+        /// <param name="regionCode">
+        /// First digit of DNIC
+        /// </param>
+        /// <returns>
+        /// Region name or "Unknown"
+        /// </returns>
         public string GetRegionName(char regionCode)
         {
             return regionCode switch
@@ -287,8 +335,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Parse address components for display/debugging
         /// </summary>
-        /// <param name="address">X.121 address</param>
-        /// <returns>Address information structure</returns>
+        /// <param name="address">
+        /// X.121 address
+        /// </param>
+        /// <returns>
+        /// Address information structure
+        /// </returns>
         public X121AddressInfo ParseAddress(string address)
         {
             var info = new X121AddressInfo

@@ -15,10 +15,14 @@ namespace RetroIO.Link.Hdlc
     /// </summary>
     public enum HdlcDecodeStatus : byte
     {
-        /// <summary>The input was consumed without completing a frame. Supply more octets.</summary>
+        /// <summary>
+        /// The input was consumed without completing a frame. Supply more octets.
+        /// </summary>
         NeedMoreData = 0,
 
-        /// <summary>A frame arrived and passed the FCS check; it is in <see cref="HdlcDecoder.Frame"/>.</summary>
+        /// <summary>
+        /// A frame arrived and passed the FCS check; it is in <see cref="HdlcDecoder.Frame"/>.
+        /// </summary>
         FrameComplete = 1,
 
         /// <summary>
@@ -56,19 +60,29 @@ namespace RetroIO.Link.Hdlc
     /// </summary>
     public struct HdlcStatistics
     {
-        /// <summary>Frames delivered with a valid FCS.</summary>
+        /// <summary>
+        /// Frames delivered with a valid FCS.
+        /// </summary>
         public long GoodFrames;
 
-        /// <summary>Frames discarded for an FCS error (X.25 clause 2.3.5.3 d).</summary>
+        /// <summary>
+        /// Frames discarded for an FCS error (X.25 clause 2.3.5.3 d).
+        /// </summary>
         public long FcsErrors;
 
-        /// <summary>Frames discarded for being shorter than the minimum.</summary>
+        /// <summary>
+        /// Frames discarded for being shorter than the minimum.
+        /// </summary>
         public long Runts;
 
-        /// <summary>Frames discarded for exceeding the maximum.</summary>
+        /// <summary>
+        /// Frames discarded for exceeding the maximum.
+        /// </summary>
         public long Overlong;
 
-        /// <summary>Aborts received.</summary>
+        /// <summary>
+        /// Aborts received.
+        /// </summary>
         public long Aborts;
 
         /// <summary>
@@ -77,7 +91,9 @@ namespace RetroIO.Link.Hdlc
         /// </summary>
         public long IdleFlags;
 
-        /// <summary>Octets consumed from the wire, transparency included.</summary>
+        /// <summary>
+        /// Octets consumed from the wire, transparency included.
+        /// </summary>
         public long OctetsIn;
     }
 
@@ -87,7 +103,7 @@ namespace RetroIO.Link.Hdlc
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Not thread-safe, and not re-entrant.</b> An instance holds the state of exactly one
+    /// Not thread-safe, and not re-entrant. An instance holds the state of exactly one
     /// direction of one link. Two threads calling <see cref="Decode"/> concurrently, or a handler
     /// calling back into it, will corrupt the assembly buffer and the running FCS with no
     /// diagnostic. If two threads receive from one link, serialise them yourself - an internal lock
@@ -99,8 +115,8 @@ namespace RetroIO.Link.Hdlc
     /// disposed. Steady-state decoding allocates nothing per frame.
     /// </para>
     /// <para>
-    /// <b>Flag handling</b> follows X.25 clause 2.2.1: a flag while a frame is in progress closes
-    /// that frame <em>and opens the next</em>, and a flag while no frame is in progress is time
+    /// Flag handling follows X.25 clause 2.2.1: a flag while a frame is in progress closes
+    /// that frame and opens the next, and a flag while no frame is in progress is time
     /// fill and is ignored. That single rule is what makes shared flags work and makes the length
     /// of a flag run irrelevant - two things the framer this replaces got wrong.
     /// </para>
@@ -130,8 +146,12 @@ namespace RetroIO.Link.Hdlc
 
         private HdlcStatistics _statistics;
 
-        /// <summary>Creates a decoder for a link with the given framing policy.</summary>
-        /// <param name="options">Framing policy; may be shared with other decoders and encoders.</param>
+        /// <summary>
+        /// Creates a decoder for a link with the given framing policy.
+        /// </summary>
+        /// <param name="options">
+        /// Framing policy; may be shared with other decoders and encoders.
+        /// </param>
         public HdlcDecoder(HdlcFramerOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -142,12 +162,14 @@ namespace RetroIO.Link.Hdlc
             _fcs = HdlcFcs.Init;
         }
 
-        /// <summary>The framing policy this decoder was created with.</summary>
+        /// <summary>
+        /// The framing policy this decoder was created with.
+        /// </summary>
         public HdlcFramerOptions Options => _options;
 
         /// <summary>
         /// The frame the last <see cref="Decode"/> call reported: transparency removed, FCS
-        /// <b>included</b>.
+        /// included.
         /// </summary>
         /// <value>
         /// A view into the decoder's own buffer, valid only until the next call to
@@ -162,25 +184,31 @@ namespace RetroIO.Link.Hdlc
         public ReadOnlySpan<byte> Frame =>
             _frameLength == 0 ? ReadOnlySpan<byte>.Empty : new ReadOnlySpan<byte>(_buffer, 0, _frameLength);
 
-        /// <summary>Counters since construction or the last <see cref="ResetStatistics"/>.</summary>
+        /// <summary>
+        /// Counters since construction or the last <see cref="ResetStatistics"/>.
+        /// </summary>
         public HdlcStatistics Statistics => _statistics;
 
         /// <summary>
         /// Consumes octets until one frame completes, one error is detected, or the input runs out.
         /// </summary>
-        /// <param name="input">Newly received octets.</param>
+        /// <param name="input">
+        /// Newly received octets.
+        /// </param>
         /// <param name="consumed">
         /// How many octets were taken. On any status other than
         /// <see cref="HdlcDecodeStatus.NeedMoreData"/> this stops just past the flag that ended the
         /// frame, so the rest of the buffer is still available to the next call. On
         /// <see cref="HdlcDecodeStatus.NeedMoreData"/> it always equals the input length.
         /// </param>
-        /// <returns>What happened. Nothing here throws for a framing error - they are values.</returns>
-        /// <example>
+        /// <returns>
+        /// What happened. Nothing here throws for a framing error - they are values.
+        /// </returns>
+        /// <remarks>
         /// Draining a read that may hold several frames:
         /// <code>
         /// int offset = 0;
-        /// while (offset &lt; received.Length)
+        /// while (received.Length > offset)
         /// {
         ///     HdlcDecodeStatus status = decoder.Decode(received.AsSpan(offset), out int consumed);
         ///     offset += consumed;
@@ -188,7 +216,7 @@ namespace RetroIO.Link.Hdlc
         ///     if (status == HdlcDecodeStatus.FrameComplete) Handle(decoder.Frame);
         /// }
         /// </code>
-        /// </example>
+        /// </remarks>
         public HdlcDecodeStatus Decode(ReadOnlySpan<byte> input, out int consumed)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -272,13 +300,17 @@ namespace RetroIO.Link.Hdlc
             _frameLength = 0;
         }
 
-        /// <summary>Zeroes the counters.</summary>
+        /// <summary>
+        /// Zeroes the counters.
+        /// </summary>
         public void ResetStatistics()
         {
             _statistics = default;
         }
 
-        /// <summary>Returns the assembly buffer to the pool.</summary>
+        /// <summary>
+        /// Returns the assembly buffer to the pool.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)

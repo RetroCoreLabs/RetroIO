@@ -173,8 +173,12 @@ namespace RetroIO.Protocols.X25.Tests
         /// <summary>
         /// Opens and closes one TCP connection.
         /// </summary>
-        /// <param name="host">Host to dial.</param>
-        /// <param name="port">Port to dial.</param>
+        /// <param name="host">
+        /// Host to dial.
+        /// </param>
+        /// <param name="port">
+        /// Port to dial.
+        /// </param>
         /// <returns>
         /// <see langword="true"/> when the connection was accepted inside the timeout.
         /// </returns>

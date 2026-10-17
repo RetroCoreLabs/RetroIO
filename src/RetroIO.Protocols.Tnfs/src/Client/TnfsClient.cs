@@ -47,10 +47,18 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Initializes a new TNFS client.
     /// </summary>
-    /// <param name="server">TNFS server hostname or IP address</param>
-    /// <param name="port">TNFS server port (default 16384)</param>
-    /// <param name="useTcp">Use TCP instead of UDP (default true for debugging)</param>
-    /// <param name="logger">Logger instance (optional)</param>
+    /// <param name="server">
+    /// TNFS server hostname or IP address
+    /// </param>
+    /// <param name="port">
+    /// TNFS server port (default 16384)
+    /// </param>
+    /// <param name="useTcp">
+    /// Use TCP instead of UDP (default true for debugging)
+    /// </param>
+    /// <param name="logger">
+    /// Logger instance (optional)
+    /// </param>
     public TnfsClient(string server, int port = TnfsConstants.DEFAULT_PORT, bool useTcp = true, ILogger<TnfsClient>? logger = null)
     {
         if (string.IsNullOrEmpty(server))
@@ -186,10 +194,18 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Mount the TNFS filesystem.
     /// </summary>
-    /// <param name="mountPath">Mount path on server (usually "/")</param>
-    /// <param name="username">Username for authentication (optional)</param>
-    /// <param name="password">Password for authentication (optional)</param>
-    /// <returns>Result with success/error information</returns>
+    /// <param name="mountPath">
+    /// Mount path on server (usually "/")
+    /// </param>
+    /// <param name="username">
+    /// Username for authentication (optional)
+    /// </param>
+    /// <param name="password">
+    /// Password for authentication (optional)
+    /// </param>
+    /// <returns>
+    /// Result with success/error information
+    /// </returns>
     public TnfsResult<bool> Mount(string mountPath = "/", string? username = null, string? password = null)
     {
         if (_isMounted)
@@ -284,8 +300,12 @@ public sealed class TnfsClient : IDisposable
     /// Open directory for reading.
     /// Uses OPENDIRX with default options for compatibility with TNFS_DIR_EXT servers.
     /// </summary>
-    /// <param name="path">Directory path</param>
-    /// <returns>Result with directory handle (single byte 0-15)</returns>
+    /// <param name="path">
+    /// Directory path
+    /// </param>
+    /// <returns>
+    /// Result with directory handle (single byte 0-15)
+    /// </returns>
     public TnfsResult<byte> OpenDir(string path)
     {
         if (!_isMounted)
@@ -336,8 +356,12 @@ public sealed class TnfsClient : IDisposable
     /// Read directory entry using standard READDIR command.
     /// Works with directories opened with OPENDIR or OPENDIRX.
     /// </summary>
-    /// <param name="handle">Directory handle from OpenDir (single byte)</param>
-    /// <returns>Result with directory entry or null at end</returns>
+    /// <param name="handle">
+    /// Directory handle from OpenDir (single byte)
+    /// </param>
+    /// <returns>
+    /// Result with directory entry or null at end
+    /// </returns>
     public TnfsResult<TnfsDirectoryEntry?> ReadDir(byte handle)
     {
         if (!_isMounted)
@@ -443,7 +467,9 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Close directory.
     /// </summary>
-    /// <param name="handle">Directory handle (single byte)</param>
+    /// <param name="handle">
+    /// Directory handle (single byte)
+    /// </param>
     public TnfsResult<bool> CloseDir(byte handle)
     {
         if (!_isMounted)
@@ -476,10 +502,18 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Open file for reading/writing.
     /// </summary>
-    /// <param name="path">File path</param>
-    /// <param name="flags">Open flags (read, write, etc)</param>
-    /// <param name="mode">Unix file permissions (default 0x01A4 = 0644 octal)</param>
-    /// <returns>Result with file handle</returns>
+    /// <param name="path">
+    /// File path
+    /// </param>
+    /// <param name="flags">
+    /// Open flags (read, write, etc)
+    /// </param>
+    /// <param name="mode">
+    /// Unix file permissions (default 0x01A4 = 0644 octal)
+    /// </param>
+    /// <returns>
+    /// Result with file handle
+    /// </returns>
     public TnfsResult<ushort> Open(string path, TnfsOpenFlags flags = TnfsOpenFlags.O_RDONLY, ushort mode = 0x01A4)
     {
         if (!_isMounted)
@@ -540,9 +574,15 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Read from file.
     /// </summary>
-    /// <param name="handle">File handle</param>
-    /// <param name="length">Number of bytes to read</param>
-    /// <returns>Result with read data</returns>
+    /// <param name="handle">
+    /// File handle
+    /// </param>
+    /// <param name="length">
+    /// Number of bytes to read
+    /// </param>
+    /// <returns>
+    /// Result with read data
+    /// </returns>
     public TnfsResult<byte[]> Read(ushort handle, ushort length)
     {
         if (!_isMounted)
@@ -599,7 +639,9 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Close file.
     /// </summary>
-    /// <param name="handle">File handle</param>
+    /// <param name="handle">
+    /// File handle
+    /// </param>
     public TnfsResult<bool> Close(ushort handle)
     {
         if (!_isMounted)
@@ -625,8 +667,12 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Get file status information.
     /// </summary>
-    /// <param name="path">File path</param>
-    /// <returns>Result with file status</returns>
+    /// <param name="path">
+    /// File path
+    /// </param>
+    /// <returns>
+    /// Result with file status
+    /// </returns>
     public TnfsResult<TnfsFileStat> Stat(string path)
     {
         if (!_isMounted)
@@ -663,9 +709,15 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Write data to an open file.
     /// </summary>
-    /// <param name="handle">File handle from Open()</param>
-    /// <param name="data">Data to write</param>
-    /// <returns>Result with number of bytes written</returns>
+    /// <param name="handle">
+    /// File handle from Open()
+    /// </param>
+    /// <param name="data">
+    /// Data to write
+    /// </param>
+    /// <returns>
+    /// Result with number of bytes written
+    /// </returns>
     public TnfsResult<ushort> Write(ushort handle, byte[] data)
     {
         if (!_isMounted)
@@ -712,10 +764,18 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Seek to a position in an open file.
     /// </summary>
-    /// <param name="handle">File handle from Open()</param>
-    /// <param name="offset">Offset in bytes</param>
-    /// <param name="whence">Seek mode (0=SEEK_SET, 1=SEEK_CUR, 2=SEEK_END)</param>
-    /// <returns>Result with success status</returns>
+    /// <param name="handle">
+    /// File handle from Open()
+    /// </param>
+    /// <param name="offset">
+    /// Offset in bytes
+    /// </param>
+    /// <param name="whence">
+    /// Seek mode (0=SEEK_SET, 1=SEEK_CUR, 2=SEEK_END)
+    /// </param>
+    /// <returns>
+    /// Result with success status
+    /// </returns>
     public TnfsResult<bool> Lseek(ushort handle, int offset, byte whence)
     {
         if (!_isMounted)
@@ -756,9 +816,15 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Create a new directory.
     /// </summary>
-    /// <param name="path">Directory path</param>
-    /// <param name="mode">Permission mode (default 0755)</param>
-    /// <returns>Result with success status</returns>
+    /// <param name="path">
+    /// Directory path
+    /// </param>
+    /// <param name="mode">
+    /// Permission mode (default 0755)
+    /// </param>
+    /// <returns>
+    /// Result with success status
+    /// </returns>
     public TnfsResult<bool> MkDir(string path, ushort mode = 0x01ED)
     {
         if (!_isMounted)
@@ -796,8 +862,12 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Remove a directory.
     /// </summary>
-    /// <param name="path">Directory path</param>
-    /// <returns>Result with success status</returns>
+    /// <param name="path">
+    /// Directory path
+    /// </param>
+    /// <returns>
+    /// Result with success status
+    /// </returns>
     public TnfsResult<bool> RmDir(string path)
     {
         if (!_isMounted)
@@ -833,8 +903,12 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Delete a file.
     /// </summary>
-    /// <param name="path">File path</param>
-    /// <returns>Result with success status</returns>
+    /// <param name="path">
+    /// File path
+    /// </param>
+    /// <returns>
+    /// Result with success status
+    /// </returns>
     public TnfsResult<bool> Unlink(string path)
     {
         if (!_isMounted)
@@ -870,9 +944,15 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Change file permissions.
     /// </summary>
-    /// <param name="path">File path</param>
-    /// <param name="mode">Permission mode</param>
-    /// <returns>Result with success status</returns>
+    /// <param name="path">
+    /// File path
+    /// </param>
+    /// <param name="mode">
+    /// Permission mode
+    /// </param>
+    /// <returns>
+    /// Result with success status
+    /// </returns>
     public TnfsResult<bool> Chmod(string path, ushort mode)
     {
         // BUGFIX: CHMOD is NOT implemented in C TNFS server (tnfsd/src/tnfs_file.c:340-342)
@@ -884,9 +964,15 @@ public sealed class TnfsClient : IDisposable
     /// <summary>
     /// Rename a file or directory.
     /// </summary>
-    /// <param name="sourcePath">Source path</param>
-    /// <param name="destPath">Destination path</param>
-    /// <returns>Result with success status</returns>
+    /// <param name="sourcePath">
+    /// Source path
+    /// </param>
+    /// <param name="destPath">
+    /// Destination path
+    /// </param>
+    /// <returns>
+    /// Result with success status
+    /// </returns>
     public TnfsResult<bool> Rename(string sourcePath, string destPath)
     {
         if (!_isMounted)

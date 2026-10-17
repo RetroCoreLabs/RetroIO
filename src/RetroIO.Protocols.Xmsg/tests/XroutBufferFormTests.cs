@@ -317,7 +317,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// number as parameter 2.
         /// </summary>
         /// <remarks>
-        /// `*TADADM` sat on port 4 of system 100 in that boot, which is exactly what came back.
+        /// <c>*TADADM</c> sat on port 4 of system 100 in that boot, which is exactly what came back.
         /// This is the form that resolves a name without needing privilege, and without ever
         /// yielding a magic number.
         /// </remarks>

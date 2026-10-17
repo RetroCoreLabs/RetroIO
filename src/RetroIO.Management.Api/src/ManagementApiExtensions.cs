@@ -42,18 +42,26 @@ public static class ManagementApiExtensions
     /// Registers the management API's controllers, SignalR hub, live push service and the
     /// in-memory log buffer the Logs endpoints read from.
     /// </summary>
-    /// <param name="services">Service collection to add to.</param>
+    /// <param name="services">
+    /// Service collection to add to.
+    /// </param>
     /// <param name="loggingBuilder">
     /// The host's logging builder. The in-memory log provider is attached to it so the Logs
     /// endpoints return the log of the process that is actually serving.
     /// </param>
-    /// <param name="maxLogEntries">How many log entries the in-memory buffer keeps.</param>
-    /// <param name="enableSwagger">Whether to register the Swagger/OpenAPI generator.</param>
+    /// <param name="maxLogEntries">
+    /// How many log entries the in-memory buffer keeps.
+    /// </param>
+    /// <param name="enableSwagger">
+    /// Whether to register the Swagger/OpenAPI generator.
+    /// </param>
     /// <param name="tokenLifetime">
     /// How long an issued bearer token stays valid. Null means eight hours, long enough for a
     /// working day at the console without leaving a stolen token useful indefinitely.
     /// </param>
-    /// <returns>The same collection, for chaining.</returns>
+    /// <returns>
+    /// The same collection, for chaining.
+    /// </returns>
     public static IServiceCollection AddRetroManagementApi(
         this IServiceCollection services,
         ILoggingBuilder loggingBuilder,
@@ -184,8 +192,12 @@ public static class ManagementApiExtensions
     /// <summary>
     /// Adds the authentication and authorization middleware the management API needs.
     /// </summary>
-    /// <param name="app">The host's application builder.</param>
-    /// <returns>The same builder, for chaining.</returns>
+    /// <param name="app">
+    /// The host's application builder.
+    /// </param>
+    /// <returns>
+    /// The same builder, for chaining.
+    /// </returns>
     /// <remarks>
     /// A host that registers the API but forgets this call would authenticate nobody and let
     /// every request through, so it lives here beside the registration rather than being left as
@@ -202,8 +214,12 @@ public static class ManagementApiExtensions
     /// <summary>
     /// Maps the management API's controller routes and its SignalR hub.
     /// </summary>
-    /// <param name="endpoints">Endpoint route builder from the host.</param>
-    /// <returns>The same builder, for chaining.</returns>
+    /// <param name="endpoints">
+    /// Endpoint route builder from the host.
+    /// </param>
+    /// <returns>
+    /// The same builder, for chaining.
+    /// </returns>
     public static IEndpointRouteBuilder MapRetroManagementApi(this IEndpointRouteBuilder endpoints)
     {
         // The fallback policy already covers the controllers; RequireAuthorization on the hub is
@@ -218,7 +234,9 @@ public static class ManagementApiExtensions
     /// Registers <see cref="LocalFileSystemBackend"/> unless the host already registered an
     /// <see cref="IFileSystemBackend"/>.
     /// </summary>
-    /// <param name="services">Service collection to add to.</param>
+    /// <param name="services">
+    /// Service collection to add to.
+    /// </param>
     private static void TryAddFileSystemBackend(this IServiceCollection services)
     {
         for (int i = 0; i < services.Count; i++)

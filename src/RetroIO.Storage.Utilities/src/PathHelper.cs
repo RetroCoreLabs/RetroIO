@@ -33,7 +33,9 @@ namespace RetroIO.Storage.Utilities
         /// Linux/macOS: ~/.local/share/retrofs (follows XDG Base Directory specification)
         /// Overridden in full by the RETROFS_DATA_PATH environment variable when it is set.
         /// </summary>
-        /// <returns>Full path to the RetroFS user data directory</returns>
+        /// <returns>
+        /// Full path to the RetroFS user data directory
+        /// </returns>
         public static string GetRetroFSPath()
         {
             string basePath;
@@ -73,7 +75,9 @@ namespace RetroIO.Storage.Utilities
         /// Windows: Documents\RetroFS\test-images
         /// Linux/macOS: ~/.local/share/retrofs/test-images
         /// </summary>
-        /// <returns>Full path to the test images directory</returns>
+        /// <returns>
+        /// Full path to the test images directory
+        /// </returns>
         public static string GetTestImagesPath()
         {
             string basePath = GetRetroFSPath();
@@ -83,8 +87,12 @@ namespace RetroIO.Storage.Utilities
         /// <summary>
         /// Gets the test images path for a specific filesystem type.
         /// </summary>
-        /// <param name="fileSystemType">Filesystem type (e.g., "d64", "hfs", "adf")</param>
-        /// <returns>Full path to the filesystem-specific test images directory</returns>
+        /// <param name="fileSystemType">
+        /// Filesystem type (e.g., "d64", "hfs", "adf")
+        /// </param>
+        /// <returns>
+        /// Full path to the filesystem-specific test images directory
+        /// </returns>
         public static string GetTestImagesPath(string fileSystemType)
         {
             if (string.IsNullOrEmpty(fileSystemType))
@@ -101,7 +109,9 @@ namespace RetroIO.Storage.Utilities
         /// Windows: Documents\RetroFS\config
         /// Linux/macOS: ~/.config/retrofs (XDG_CONFIG_HOME)
         /// </summary>
-        /// <returns>Full path to the configuration directory</returns>
+        /// <returns>
+        /// Full path to the configuration directory
+        /// </returns>
         public static string GetConfigPath()
         {
             if (OperatingSystem.IsWindows())
@@ -128,7 +138,9 @@ namespace RetroIO.Storage.Utilities
         /// Windows: Documents\RetroFS\cache
         /// Linux/macOS: ~/.cache/retrofs (XDG_CACHE_HOME)
         /// </summary>
-        /// <returns>Full path to the cache directory</returns>
+        /// <returns>
+        /// Full path to the cache directory
+        /// </returns>
         public static string GetCachePath()
         {
             if (OperatingSystem.IsWindows())
@@ -153,8 +165,12 @@ namespace RetroIO.Storage.Utilities
         /// <summary>
         /// Ensures a directory exists, creating it if necessary.
         /// </summary>
-        /// <param name="path">Directory path to ensure exists</param>
-        /// <returns>The same path that was passed in</returns>
+        /// <param name="path">
+        /// Directory path to ensure exists
+        /// </param>
+        /// <returns>
+        /// The same path that was passed in
+        /// </returns>
         public static string EnsureDirectory(string path)
         {
             if (!Directory.Exists(path))
@@ -187,7 +203,9 @@ namespace RetroIO.Storage.Utilities
         /// <summary>
         /// Gets a README file path for the test images directory.
         /// </summary>
-        /// <returns>Full path to TestImages README.md</returns>
+        /// <returns>
+        /// Full path to TestImages README.md
+        /// </returns>
         public static string GetTestImagesReadmePath()
         {
             return Path.Combine(GetTestImagesPath(), "README.md");

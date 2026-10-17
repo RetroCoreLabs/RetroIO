@@ -102,9 +102,15 @@ namespace RetroIO.Link
         /// <summary>
         /// Create and add a codec-based link (SLIP or HDLC framing) over the supplied transport.
         /// </summary>
-        /// <param name="config">Framing and LAPB configuration for the link.</param>
-        /// <param name="transport">The byte transport (serial or TCP) the link runs over.</param>
-        /// <returns>The created link.</returns>
+        /// <param name="config">
+        /// Framing and LAPB configuration for the link.
+        /// </param>
+        /// <param name="transport">
+        /// The byte transport (serial or TCP) the link runs over.
+        /// </param>
+        /// <returns>
+        /// The created link.
+        /// </returns>
         public CodecLink CreateCodecLink(CodecLinkConfig config, ILinkTransport transport)
         {
             lock (_lock)

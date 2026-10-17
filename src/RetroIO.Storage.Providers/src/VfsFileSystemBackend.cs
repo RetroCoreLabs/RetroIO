@@ -19,12 +19,13 @@ namespace RetroIO.Storage.Providers;
 /// tnfs / disk-image) so the Econet file server can expose it as a disc.
 /// </summary>
 /// <remarks>
-/// <para><b>Step 1 — read-only skeleton.</b></para>
+/// <para><b>Step 1 — read-only skeleton</b></para>
+/// <para>
 /// This first cut implements the read surface only. It maps the Econet backend's host-style paths to
-/// VFS URNs (<c>urn:retrofs:&lt;transport&gt;:&lt;volumeId&gt;:&lt;subPath&gt;</c>) and delegates to
-/// <see cref="VfsCore"/>. Following the established Azure precedent, files are <b>materialized to a temp
-/// cache</b> (there is no true streaming) and, per the reviewed design, the write path
-/// (<see cref="OpenFile"/> for write, <see cref="CreateDirectory"/>) is <b>not implemented yet</b> and
+/// VFS URNs of the form <c>urn:retrofs:transport:volumeId:subPath</c> and delegates to
+/// <see cref="VfsCore"/>. Following the established Azure precedent, files are materialized to a temp
+/// cache (there is no true streaming) and, per the reviewed design, the write path
+/// (<see cref="OpenFile"/> for write, <see cref="CreateDirectory"/>) is not implemented yet and
 /// throws — those land in steps 2–3 (write-back-on-close stream, and <c>VfsCore.CreateDirectoryAsync</c>).
 /// </para>
 /// <para>
@@ -45,12 +46,24 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
     /// <summary>
     /// Creates a backend over one mounted volume.
     /// </summary>
-    /// <param name="vfs">The shared VfsCore the volume is mounted in.</param>
-    /// <param name="transport">The provider transport (e.g. "native", "tnfs") — the URN's transport field.</param>
-    /// <param name="volumeId">The mount's volume id.</param>
-    /// <param name="hostRoot">The host-style path the Econet layer uses for this disc's root.</param>
-    /// <param name="tempCacheDir">Directory for materialized temp files.</param>
-    /// <param name="maxMaterializeBytes">Reject reads of files larger than this (guards against OOM on a huge remote blob).</param>
+    /// <param name="vfs">
+    /// The shared VfsCore the volume is mounted in.
+    /// </param>
+    /// <param name="transport">
+    /// The provider transport (e.g. "native", "tnfs") — the URN's transport field.
+    /// </param>
+    /// <param name="volumeId">
+    /// The mount's volume id.
+    /// </param>
+    /// <param name="hostRoot">
+    /// The host-style path the Econet layer uses for this disc's root.
+    /// </param>
+    /// <param name="tempCacheDir">
+    /// Directory for materialized temp files.
+    /// </param>
+    /// <param name="maxMaterializeBytes">
+    /// Reject reads of files larger than this (guards against OOM on a huge remote blob).
+    /// </param>
     /// <param name="readOnly">
     /// When true, reject every write (<see cref="OpenFile"/> for write, <see cref="CreateDirectory"/>)
     /// UP FRONT with <see cref="UnauthorizedAccessException"/>. The underlying provider also enforces

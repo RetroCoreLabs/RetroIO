@@ -34,23 +34,37 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// Place an outbound X.25 call request
         /// </summary>
-        /// <param name="callRequest">X.25 call request to place</param>
-        /// <returns>True if call was successfully initiated, false otherwise</returns>
+        /// <param name="callRequest">
+        /// X.25 call request to place
+        /// </param>
+        /// <returns>
+        /// True if call was successfully initiated, false otherwise
+        /// </returns>
         bool PlaceCall(X25CallRequest callRequest);
 
         /// <summary>
         /// Accept an inbound X.25 call request
         /// </summary>
-        /// <param name="callRequest">X.25 call request to accept</param>
-        /// <returns>True if call was successfully accepted, false otherwise</returns>
+        /// <param name="callRequest">
+        /// X.25 call request to accept
+        /// </param>
+        /// <returns>
+        /// True if call was successfully accepted, false otherwise
+        /// </returns>
         bool AcceptCall(X25CallRequest callRequest);
 
         /// <summary>
         /// Reject an inbound X.25 call request with specified cause
         /// </summary>
-        /// <param name="callRequest">X.25 call request to reject</param>
-        /// <param name="cause">X.25 clear cause code</param>
-        /// <returns>True if rejection was sent, false otherwise</returns>
+        /// <param name="callRequest">
+        /// X.25 call request to reject
+        /// </param>
+        /// <param name="cause">
+        /// X.25 clear cause code
+        /// </param>
+        /// <returns>
+        /// True if rejection was sent, false otherwise
+        /// </returns>
         bool RejectCall(X25CallRequest callRequest, byte cause);
 
         /// <summary>

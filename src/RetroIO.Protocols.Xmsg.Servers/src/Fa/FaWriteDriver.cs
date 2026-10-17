@@ -772,20 +772,13 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The chain, carved end to end on 2026-08-18 and written up in
         /// <c>DOC\COSMOS-RE\CARVE-ANSWER-FA-SEAT-RETURN-2026-08-18.md</c>:
         /// </para>
-        /// <list type="number">
-        /// <item>our connect letter goes to the name <c>*FA-SERVER</c>;</item>
-        /// <item>XROUT decrements that port's free-connection count and forwards the letter - the
-        /// seat is spent here, before the server has seen a byte of the body;</item>
-        /// <item>XROUT marks the port with <c>5PKOC</c>, bit 0 of the port status word, which
-        /// <c>XMSG-POFTABS-L03.SYMB</c> documents in ND's own words as
-        /// "KICK XROUT ON CLOSE (SET BY XROUT)";</item>
-        /// <item>the server serves the session on that port;</item>
-        /// <item><b>this Release</b> makes the server conclude the session: it answers Close
-        /// (<c>0x07C0</c>) and CLOSES the port;</item>
-        /// <item>the kernel's port-close routine <c>YCLOS</c> (131306) tests <c>5PKOC</c> at
-        /// <c>ram:b30e</c> and, when set, calls <c>131460 = YKROU</c> - it kicks XROUT;</item>
-        /// <item>XROUT restores the count.</item>
-        /// </list>
+        ///  - our connect letter goes to the name <c>*FA-SERVER</c>;
+        ///  - XROUT decrements that port's free-connection count and forwards the letter - the seat is spent here, before the server has seen a byte of the body;
+        ///  - XROUT marks the port with <c>5PKOC</c>, bit 0 of the port status word, which <c>XMSG-POFTABS-L03.SYMB</c> documents in ND's own words as "KICK XROUT ON CLOSE (SET BY XROUT)";
+        ///  - the server serves the session on that port;
+        ///  - this Release makes the server conclude the session: it answers Close (<c>0x07C0</c>) and CLOSES the port;
+        ///  - the kernel's port-close routine <c>YCLOS</c> (131306) tests <c>5PKOC</c> at <c>ram:b30e</c> and, when set, calls <c>131460 = YKROU</c> - it kicks XROUT;
+        ///  - XROUT restores the count.
         /// <para>
         /// So the seat is released by ending the conversation properly, and by nothing else. There
         /// is no seat-shaped message to send: the file server itself only ever calls

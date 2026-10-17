@@ -462,7 +462,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// recover from by itself.
         /// </para>
         /// <para>
-        /// <b>The alternative is not "nothing happens".</b> Dropping a write after OpenFile leaves
+        /// The alternative is not "nothing happens". Dropping a write after OpenFile leaves
         /// the file open on the peer for good: it cannot be rewritten, and it cannot be deleted -
         /// SINTRAN answers FILE ALREADY OPEN - because the file server's RT program owns it. That
         /// took a file-server restart to clear on D100.

@@ -178,8 +178,12 @@ namespace RetroIO.Protocols.X25.Sintran
         /// <summary>
         /// Check if character is a break character according to break mode matrix
         /// </summary>
-        /// <param name="ch">Character to check</param>
-        /// <returns>True if character triggers a break</returns>
+        /// <param name="ch">
+        /// Character to check
+        /// </param>
+        /// <returns>
+        /// True if character triggers a break
+        /// </returns>
         public bool IsBreakCharacter(byte ch)
         {
             if (ch >= 160) return false; // Only 160 bits in matrix
@@ -193,8 +197,12 @@ namespace RetroIO.Protocols.X25.Sintran
         /// <summary>
         /// Check if character should be echoed according to echo mode matrix
         /// </summary>
-        /// <param name="ch">Character to check</param>
-        /// <returns>True if character should be echoed</returns>
+        /// <param name="ch">
+        /// Character to check
+        /// </param>
+        /// <returns>
+        /// True if character should be echoed
+        /// </returns>
         public bool IsEchoCharacter(byte ch)
         {
             if (ch >= 160) return false; // Only 160 bits in matrix

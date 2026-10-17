@@ -28,8 +28,8 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// close reply    92 0006  92 seq                                          F2 00FF
     /// </code>
     /// <para><b>There is no file handle on the wire</b></para>
-    /// The open reply returns a file number under selector 2, and then <b>nothing ever quotes it
-    /// again</b> - no read, write or close in any capture carries one. The open file belongs to the
+    /// The open reply returns a file number under selector 2, and then nothing ever quotes it
+    /// again - no read, write or close in any capture carries one. The open file belongs to the
     /// CONVERSATION, so a server remembers it per session rather than expecting the client to name
     /// it.
     /// <para><b>The size is the byte COUNT, and the directory holds one less</b></para>

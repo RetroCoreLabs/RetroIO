@@ -35,7 +35,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
     /// composition root's concern (see <c>IProtocolDetector</c>), not the link's.
     /// </para>
     /// <para>
-    /// <b>Buffer ownership:</b> the <see cref="PayloadReceived"/> payload MAY be a buffer the adapter
+    /// Buffer ownership: the <see cref="PayloadReceived"/> payload MAY be a buffer the adapter
     /// reuses; a consumer that retains the bytes beyond the callback MUST copy them within the
     /// callback. (Today the underlying frame array is fresh per receive, so no copy is strictly
     /// required - but consumers must not rely on that.)
@@ -539,12 +539,16 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// Feeds received bytes into the shared streaming HDLC decoder and dispatches every
         /// complete, FCS-valid frame to the LAPB link.
         /// </summary>
-        /// <param name="buffer">The receive buffer.</param>
-        /// <param name="count">How many bytes of it are valid.</param>
+        /// <param name="buffer">
+        /// The receive buffer.
+        /// </param>
+        /// <param name="count">
+        /// How many bytes of it are valid.
+        /// </param>
         /// <remarks>
         /// <para>
         /// Until 2026-09-06 this was a hand-rolled byte-at-a-time flag splitter - a near-identical
-        /// copy of the one in <c>LiveNode</c> - that accumulated into a <c>List&lt;byte&gt;</c> and
+        /// copy of the one in <c>LiveNode</c> - that accumulated into a <c>List{byte}</c> and
         /// then wrapped the result back up in flags to hand to a whole-buffer de-framer, costing an
         /// extra copy of every frame.
         /// </para>

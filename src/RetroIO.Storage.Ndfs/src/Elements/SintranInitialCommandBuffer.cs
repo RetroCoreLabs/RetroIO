@@ -23,22 +23,34 @@ namespace RetroIO.Storage.Ndfs.Elements
     /// </summary>
     public sealed class SintranInitialCommandBuffer
     {
-        /// <summary>The decoded initial commands, in execution order.</summary>
+        /// <summary>
+        /// The decoded initial commands, in execution order.
+        /// </summary>
         public IReadOnlyList<string> Commands { get; init; } = new List<string>();
 
-        /// <summary>SINTRAN version letter whose INIBU symbol matched ('K', 'L' or 'M').</summary>
+        /// <summary>
+        /// SINTRAN version letter whose INIBU symbol matched ('K', 'L' or 'M').
+        /// </summary>
         public char VersionLetter { get; init; }
 
-        /// <summary>Segment-table entry number (octal in the UI) that holds the live command segment.</summary>
+        /// <summary>
+        /// Segment-table entry number (octal in the UI) that holds the live command segment.
+        /// </summary>
         public int SegmentNumber { get; init; }
 
-        /// <summary>MADR (memory/disk address, in NDFS pages) of that segment inside SEGFIL0.</summary>
+        /// <summary>
+        /// MADR (memory/disk address, in NDFS pages) of that segment inside SEGFIL0.
+        /// </summary>
         public uint Madr { get; init; }
 
-        /// <summary>Byte offset of the buffer start (INIBU) WITHIN the SEGFIL0 file data.</summary>
+        /// <summary>
+        /// Byte offset of the buffer start (INIBU) WITHIN the SEGFIL0 file data.
+        /// </summary>
         public long ByteOffset { get; init; }
 
-        /// <summary>Page (in SEGFIL0) where the self-describing segment table was found.</summary>
+        /// <summary>
+        /// Page (in SEGFIL0) where the self-describing segment table was found.
+        /// </summary>
         public int SegmentTablePage { get; init; }
 
         /// <summary>
@@ -47,10 +59,14 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// </summary>
         public int TextLength { get; init; }
 
-        /// <summary>Byte offset of the length cell WITHIN the SEGFIL0 file data (= <see cref="ByteOffset"/> + 260).</summary>
+        /// <summary>
+        /// Byte offset of the length cell WITHIN the SEGFIL0 file data (= <see cref="ByteOffset"/> + 260).
+        /// </summary>
         public long LengthCellOffset { get; init; }
 
-        /// <summary>Path (USER/NAME:TYPE) of the SEGFIL0 object file the buffer was read from.</summary>
+        /// <summary>
+        /// Path (USER/NAME:TYPE) of the SEGFIL0 object file the buffer was read from.
+        /// </summary>
         public string SegfilPath { get; init; } = string.Empty;
     }
 }

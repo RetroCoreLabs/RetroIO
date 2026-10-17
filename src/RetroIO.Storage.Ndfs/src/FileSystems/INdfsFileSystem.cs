@@ -46,7 +46,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// </returns>
         /// <remarks>
         /// The library equivalent of the SINTRAN operator command
-        /// <c>@GIVE-OBJECT-BLOCKS &lt;user&gt;,&lt;count&gt;</c>, which likewise ADDS to the
+        /// <c>@GIVE-OBJECT-BLOCKS user,count</c>, which likewise ADDS to the
         /// maximum rather than setting it. One block is 256 files; the ceiling is 16 blocks,
         /// i.e. 4096 files. Blocks are allocated on demand, so this moves only the maximum.
         /// </remarks>
@@ -100,29 +100,45 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// <summary>
         /// Clears (sets to 0) a user's password.
         /// </summary>
-        /// <param name="userIndex">User index to clear password for</param>
-        /// <returns>True if password was cleared successfully</returns>
+        /// <param name="userIndex">
+        /// User index to clear password for
+        /// </param>
+        /// <returns>
+        /// True if password was cleared successfully
+        /// </returns>
         bool ClearUserPassword(int userIndex);
 
         /// <summary>
         /// Clears (sets to 0) a user's password by username.
         /// </summary>
-        /// <param name="userName">Username to clear password for</param>
-        /// <returns>True if user found and password cleared successfully</returns>
+        /// <param name="userName">
+        /// Username to clear password for
+        /// </param>
+        /// <returns>
+        /// True if user found and password cleared successfully
+        /// </returns>
         bool ClearUserPassword(string userName);
 
         /// <summary>
         /// Gets the exact manual instructions for clearing a user's password using FILE-SYSTEM-INVESTIGATOR.
         /// </summary>
-        /// <param name="userIndex">User index to get instructions for</param>
-        /// <returns>Detailed instructions string, or null if user not found</returns>
+        /// <param name="userIndex">
+        /// User index to get instructions for
+        /// </param>
+        /// <returns>
+        /// Detailed instructions string, or null if user not found
+        /// </returns>
         string? GetPasswordClearInstructions(int userIndex);
 
         /// <summary>
         /// Gets the exact manual instructions for clearing a user's password using FILE-SYSTEM-INVESTIGATOR.
         /// </summary>
-        /// <param name="userName">Username to get instructions for</param>
-        /// <returns>Detailed instructions string, or null if user not found</returns>
+        /// <param name="userName">
+        /// Username to get instructions for
+        /// </param>
+        /// <returns>
+        /// Detailed instructions string, or null if user not found
+        /// </returns>
         string? GetPasswordClearInstructions(string userName);
 
         // ==================== Bitmap Operations ====================
@@ -190,7 +206,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// No-op (returns false) when the volume has no valid Extended Info (e.g. FLOMON
         /// floppies) or the flag was already clear.
         /// </summary>
-        /// <returns>True if the flag was set and has now been cleared and persisted.</returns>
+        /// <returns>
+        /// True if the flag was set and has now been cleared and persisted.
+        /// </returns>
         bool ClearEnteredDirectory();
 
         // ==================== Diagnostics ====================
@@ -216,19 +234,25 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// Loads boot code from NDFS block 0.
         /// Supports BPUN, FLOMON, and raw binary formats.
         /// </summary>
-        /// <returns>Boot code information, or null if no valid boot code found</returns>
+        /// <returns>
+        /// Boot code information, or null if no valid boot code found
+        /// </returns>
         NdfsBootCode? LoadBootCode();
 
         /// <summary>
         /// Detects the boot format without loading full code.
         /// </summary>
-        /// <returns>Boot format detected (None, Binary, BPUN, or FloMon)</returns>
+        /// <returns>
+        /// Boot format detected (None, Binary, BPUN, or FloMon)
+        /// </returns>
         NdfsBootFormat DetectBootFormat();
 
         /// <summary>
         /// Checks if the NDFS disk is bootable.
         /// </summary>
-        /// <returns>True if valid boot code exists in block 0</returns>
+        /// <returns>
+        /// True if valid boot code exists in block 0
+        /// </returns>
         bool IsBootable();
 
         /// <summary>
@@ -268,24 +292,40 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// <summary>
         /// Reads a file and populates PropertyBag with NDFS-specific metadata.
         /// </summary>
-        /// <param name="path">Path to file</param>
-        /// <param name="propertyBag">Dictionary to populate with properties</param>
-        /// <returns>File contents</returns>
+        /// <param name="path">
+        /// Path to file
+        /// </param>
+        /// <param name="propertyBag">
+        /// Dictionary to populate with properties
+        /// </param>
+        /// <returns>
+        /// File contents
+        /// </returns>
         byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag);
 
         /// <summary>
         /// Writes a file and applies NDFS-specific metadata from PropertyBag.
         /// </summary>
-        /// <param name="path">Path to file</param>
-        /// <param name="data">File contents</param>
-        /// <param name="propertyBag">Dictionary containing properties to apply</param>
+        /// <param name="path">
+        /// Path to file
+        /// </param>
+        /// <param name="data">
+        /// File contents
+        /// </param>
+        /// <param name="propertyBag">
+        /// Dictionary containing properties to apply
+        /// </param>
         void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag);
 
         /// <summary>
         /// Gets PropertyBag for a file without reading its contents.
         /// </summary>
-        /// <param name="path">Path to file</param>
-        /// <returns>Dictionary containing file properties, or null if not found</returns>
+        /// <param name="path">
+        /// Path to file
+        /// </param>
+        /// <returns>
+        /// Dictionary containing file properties, or null if not found
+        /// </returns>
         IDictionary<string, object>? GetFileProperties(string path);
 
         // ==================== Extended Master Block Information ====================
@@ -294,7 +334,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// Gets the Extended Master Block information (if available).
         /// Extended Info is only valid for hard disks (not FLOMON floppy disks).
         /// </summary>
-        /// <returns>Dictionary with Extended Info fields, or null if not valid</returns>
+        /// <returns>
+        /// Dictionary with Extended Info fields, or null if not valid
+        /// </returns>
         IDictionary<string, object>? GetExtendedMasterBlockInfo();
 
         /// <summary>
@@ -302,7 +344,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// Valid Extended Info has: Reserved fields = 0, Checksum != 0.
         /// FLOMON floppy disks have non-zero Reserved fields and should return false.
         /// </summary>
-        /// <returns>True if Extended Info is valid (hard disk), false if FLOMON (floppy)</returns>
+        /// <returns>
+        /// True if Extended Info is valid (hard disk), false if FLOMON (floppy)
+        /// </returns>
         bool HasValidExtendedInfo();
 
         // ==================== SINTRAN Initial-Command Buffer ====================

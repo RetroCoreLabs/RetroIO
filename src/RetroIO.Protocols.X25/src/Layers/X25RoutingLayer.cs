@@ -42,12 +42,24 @@ namespace RetroIO.Protocols.X25.Layers
         /// Place Call Request with module binding support
         /// Routes outbound X.25 call through local services or transport interfaces
         /// </summary>
-        /// <param name="calledAddress">Called X.121 address</param>
-        /// <param name="callingAddress">Calling X.121 address (optional)</param>
-        /// <param name="callUserData">Call User Data (optional)</param>
-        /// <param name="facilities">X.25 facilities (optional)</param>
-        /// <param name="callingModule">Module requesting the call (optional)</param>
-        /// <returns>True if call was successfully routed</returns>
+        /// <param name="calledAddress">
+        /// Called X.121 address
+        /// </param>
+        /// <param name="callingAddress">
+        /// Calling X.121 address (optional)
+        /// </param>
+        /// <param name="callUserData">
+        /// Call User Data (optional)
+        /// </param>
+        /// <param name="facilities">
+        /// X.25 facilities (optional)
+        /// </param>
+        /// <param name="callingModule">
+        /// Module requesting the call (optional)
+        /// </param>
+        /// <returns>
+        /// True if call was successfully routed
+        /// </returns>
         public bool PlaceCallRequest(string calledAddress, string? callingAddress = null,
                                    byte[]? callUserData = null, byte[]? facilities = null,
                                    IProtocolModule? callingModule = null)
@@ -120,11 +132,21 @@ namespace RetroIO.Protocols.X25.Layers
         /// Place Call Request (backward compatibility method)
         /// Routes outbound X.25 call through local services or transport interfaces
         /// </summary>
-        /// <param name="calledAddress">Called X.121 address</param>
-        /// <param name="callingAddress">Calling X.121 address (optional)</param>
-        /// <param name="callUserData">Call User Data (optional)</param>
-        /// <param name="facilities">X.25 facilities (optional)</param>
-        /// <returns>True if call was successfully routed</returns>
+        /// <param name="calledAddress">
+        /// Called X.121 address
+        /// </param>
+        /// <param name="callingAddress">
+        /// Calling X.121 address (optional)
+        /// </param>
+        /// <param name="callUserData">
+        /// Call User Data (optional)
+        /// </param>
+        /// <param name="facilities">
+        /// X.25 facilities (optional)
+        /// </param>
+        /// <returns>
+        /// True if call was successfully routed
+        /// </returns>
         public bool PlaceCallRequest(string calledAddress, string? callingAddress = null,
                                    byte[]? callUserData = null, byte[]? facilities = null)
         {
@@ -134,10 +156,18 @@ namespace RetroIO.Protocols.X25.Layers
         /// <summary>
         /// Route call to local protocol service
         /// </summary>
-        /// <param name="callRequest">X.25 call request</param>
-        /// <param name="service">Target protocol service</param>
-        /// <param name="callingModule">Module requesting the call</param>
-        /// <returns>True if successfully routed</returns>
+        /// <param name="callRequest">
+        /// X.25 call request
+        /// </param>
+        /// <param name="service">
+        /// Target protocol service
+        /// </param>
+        /// <param name="callingModule">
+        /// Module requesting the call
+        /// </param>
+        /// <returns>
+        /// True if successfully routed
+        /// </returns>
         private bool RouteToLocalService(X25CallRequest callRequest, IProtocolService service, IProtocolModule? callingModule)
         {
             try
@@ -211,12 +241,24 @@ namespace RetroIO.Protocols.X25.Layers
         /// Handle incoming Call Request from internal X.25 processing
         /// Routes calls to local services or forwards to other transports
         /// </summary>
-        /// <param name="lcn">Logical Channel Number</param>
-        /// <param name="calledAddress">Called X.121 address</param>
-        /// <param name="callingAddress">Calling X.121 address</param>
-        /// <param name="callUserData">Call User Data</param>
-        /// <param name="facilities">X.25 facilities</param>
-        /// <returns>Protocol module to bind to LCN, or null if call should be rejected</returns>
+        /// <param name="lcn">
+        /// Logical Channel Number
+        /// </param>
+        /// <param name="calledAddress">
+        /// Called X.121 address
+        /// </param>
+        /// <param name="callingAddress">
+        /// Calling X.121 address
+        /// </param>
+        /// <param name="callUserData">
+        /// Call User Data
+        /// </param>
+        /// <param name="facilities">
+        /// X.25 facilities
+        /// </param>
+        /// <returns>
+        /// Protocol module to bind to LCN, or null if call should be rejected
+        /// </returns>
         public IProtocolModule? HandleIncomingCall(ushort lcn, string calledAddress, string callingAddress,
                                                   byte[] callUserData, byte[]? facilities = null)
         {

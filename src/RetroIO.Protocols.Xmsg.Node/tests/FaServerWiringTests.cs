@@ -24,8 +24,8 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
     /// Covers the wiring that makes an inbound file-access request reach
     /// <see cref="FaServer"/> and come back out as a frame: the name-based routing of the connect
     /// letter, the port-based routing of the requests that follow, the directory walk over a real
-    /// Windows folder, and - the point of the whole exercise - that <b>no request path can end in
-    /// silence</b>.
+    /// Windows folder, and - the point of the whole exercise - that no request path can end in
+    /// silence.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1042,7 +1042,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// f1=N+1  102->100  the reply       -- a NEW exchange, one higher
         /// </code>
         /// <para>
-        /// <b>Flags 1 is PER DIRECTION</b> - each side counts the Data frames IT sends. Measured
+        /// Flags 1 is PER DIRECTION - each side counts the Data frames IT sends. Measured
         /// over the same capture: seeding each side from its first Data frame and predicting every
         /// later one from that side's own count gives 222 matches, 0 mismatches. The tests here
         /// therefore assert OUR count, not the request's number.

@@ -71,7 +71,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>OBSERVED, NOT CAPTURED.</b> D100 sent <c>0781 0042 0002 8000 0014</c> - the same ten
+        /// OBSERVED, NOT CAPTURED. D100 sent <c>0781 0042 0002 8000 0014</c> - the same ten
         /// bytes, the same layout, at the same point in the conversation as the captured
         /// <see cref="SessionFinished"/>. It appears in NONE of the four 2026-08-04 captures.
         /// </para>

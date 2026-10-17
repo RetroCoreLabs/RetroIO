@@ -26,7 +26,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     ///    the constant <c>0x0002</c> because that is its usual value - see
     ///    <see cref="ResponderConversation"/> for the four captures that disprove the constant and
     ///    the live stall it caused.
-    ///  - Its session token is <c>0x9081</c> on <b>every</b> exchange including the first. The client
+    ///  - Its session token is <c>0x9081</c> on every exchange including the first. The client
     ///    is different: it sends <c>0x0001</c> on the first exchange and <c>0xD761</c> thereafter.
     ///    Assuming the two sides behaved alike here would produce a wrong first reply.
     /// </remarks>
@@ -150,7 +150,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// </code>
         /// <para>
         /// The echoed word itself comes from the connect letter's extras, so the client chooses it
-        /// and it is <b>not</b> always <c>0x0002</c>.
+        /// and it is not always <c>0x0002</c>.
         /// </para>
         /// <para>
         /// What the constant did live: the client accepted the connection, sent its first request,

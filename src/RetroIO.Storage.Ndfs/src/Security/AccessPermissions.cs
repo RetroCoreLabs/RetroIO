@@ -56,7 +56,9 @@ namespace RetroIO.Storage.Ndfs.Security
         /// <summary>
         /// Creates permissions from raw AccessBits value.
         /// </summary>
-        /// <param name="accessBits">15-bit access bits</param>
+        /// <param name="accessBits">
+        /// 15-bit access bits
+        /// </param>
         public AccessPermissions(ushort accessBits)
         {
             AccessBits = accessBits;
@@ -66,9 +68,15 @@ namespace RetroIO.Storage.Ndfs.Security
         /// <summary>
         /// Creates permissions with explicit values for each tier.
         /// </summary>
-        /// <param name="ownPerms">Owner permissions (5 bits)</param>
-        /// <param name="friendPerms">Friend permissions (6 bits)</param>
-        /// <param name="publicPerms">Public permissions (6 bits)</param>
+        /// <param name="ownPerms">
+        /// Owner permissions (5 bits)
+        /// </param>
+        /// <param name="friendPerms">
+        /// Friend permissions (6 bits)
+        /// </param>
+        /// <param name="publicPerms">
+        /// Public permissions (6 bits)
+        /// </param>
         public AccessPermissions(byte ownPerms, byte friendPerms, byte publicPerms)
         {
             OwnPermissions = (byte)(ownPerms & 0x1F);
@@ -107,9 +115,15 @@ namespace RetroIO.Storage.Ndfs.Security
         /// <summary>
         /// Checks if specified permission bit is set for given access level.
         /// </summary>
-        /// <param name="accessType">Access level (Own/Friend/Public)</param>
-        /// <param name="permissionBit">Permission bit to check (0-5)</param>
-        /// <returns>True if permission is granted</returns>
+        /// <param name="accessType">
+        /// Access level (Own/Friend/Public)
+        /// </param>
+        /// <param name="permissionBit">
+        /// Permission bit to check (0-5)
+        /// </param>
+        /// <returns>
+        /// True if permission is granted
+        /// </returns>
         public bool HasPermission(FileAccessType accessType, int permissionBit)
         {
             byte perms = accessType switch

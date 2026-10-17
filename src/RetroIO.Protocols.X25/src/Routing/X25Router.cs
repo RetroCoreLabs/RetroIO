@@ -149,10 +149,18 @@ namespace RetroIO.Protocols.X25.Transport
         /// Find the best matching route for an X.121 address and direction
         /// Returns routes in priority order for failover scenarios
         /// </summary>
-        /// <param name="calledX121Address">Called X.121 address</param>
-        /// <param name="direction">Call direction</param>
-        /// <param name="callUserData">Optional call user data for additional matching</param>
-        /// <returns>List of matching routes ordered by priority</returns>
+        /// <param name="calledX121Address">
+        /// Called X.121 address
+        /// </param>
+        /// <param name="direction">
+        /// Call direction
+        /// </param>
+        /// <param name="callUserData">
+        /// Optional call user data for additional matching
+        /// </param>
+        /// <returns>
+        /// List of matching routes ordered by priority
+        /// </returns>
         public List<X25Route> FindRoutes(string calledX121Address, RouteDirection direction, byte[]? callUserData = null)
         {
             if (string.IsNullOrEmpty(calledX121Address))
@@ -204,8 +212,12 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// Route an outbound X.25 call request
         /// </summary>
-        /// <param name="callRequest">X.25 call request to route</param>
-        /// <returns>True if call was successfully routed, false otherwise</returns>
+        /// <param name="callRequest">
+        /// X.25 call request to route
+        /// </param>
+        /// <returns>
+        /// True if call was successfully routed, false otherwise
+        /// </returns>
         public bool RouteOutboundCall(X25CallRequest callRequest)
         {
             if (callRequest == null)

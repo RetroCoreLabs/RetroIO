@@ -12,7 +12,7 @@ namespace RetroIO.Tests.Econet;
 
 /// <summary>
 /// Validates SetBootOpt (fsop 0x16) against the PiFS reference (utilities/fs.c fs_set_bootopt):
-/// updates the live session, persists to the user record (survives re-login), and rejects options &gt; 7.
+/// updates the live session, persists to the user record (survives re-login), and rejects options > 7.
 /// This is the server side of the SHIFT-BREAK / !BOOT autoboot handshake (the boot option is reported
 /// back in the login reply so the NFS ROM can LOAD/RUN/EXEC !BOOT).
 /// </summary>

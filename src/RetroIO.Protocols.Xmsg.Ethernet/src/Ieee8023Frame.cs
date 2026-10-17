@@ -13,11 +13,11 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// Builds and parses the IEEE 802.3 + LLC1 frame that carries COSMOS traffic on Ethernet.
     /// </summary>
     /// <remarks>
-    /// <para><b>Frame layout</b> (VERIFIED on the wire 2026-08-01)</para>
+    /// <para>Frame layout (VERIFIED on the wire 2026-08-01)</para>
     /// Byte offsets from the start of the frame:
     ///  - <c>0</c>..<c>5</c>: destination MAC (see <see cref="NdMacAddress"/>).
     ///  - <c>6</c>..<c>11</c>: source MAC.
-    ///  - <c>12</c>..<c>13</c>: the 802.3 <b>LENGTH</b>, big-endian - <b>NOT an EtherType</b>.
+    ///  - <c>12</c>..<c>13</c>: the 802.3 LENGTH, big-endian - NOT an EtherType.
     ///  - <c>14</c>: LLC DSAP, <c>0xA8</c>.
     ///  - <c>15</c>: LLC SSAP, <c>0xA8</c>.
     ///  - <c>16</c>: LLC control, <c>0x03</c> = UI (unnumbered information).

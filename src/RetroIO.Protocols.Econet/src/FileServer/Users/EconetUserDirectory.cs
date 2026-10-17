@@ -153,6 +153,9 @@ public sealed class EconetUserDirectory
     /// <param name="newAcornPassword">
     /// The new password; an empty value clears the password when the account permits empty passwords.
     /// </param>
+    /// <param name="errorMessage">
+    /// Receives the reason when the change fails; empty on success.
+    /// </param>
     /// <returns>
     /// True on success. On failure, <paramref name="errorMessage"/> explains why.
     /// </returns>
@@ -196,10 +199,18 @@ public sealed class EconetUserDirectory
     /// Clearing (empty) is only allowed when the target account permits an empty password, mirroring
     /// <see cref="TryChangePassword"/>.
     /// </summary>
-    /// <param name="userId">The user whose password is being set.</param>
-    /// <param name="newAcornPassword">The new password; empty clears it (if permitted).</param>
-    /// <param name="errorMessage">On failure, why.</param>
-    /// <returns>True on success.</returns>
+    /// <param name="userId">
+    /// The user whose password is being set.
+    /// </param>
+    /// <param name="newAcornPassword">
+    /// The new password; empty clears it (if permitted).
+    /// </param>
+    /// <param name="errorMessage">
+    /// On failure, why.
+    /// </param>
+    /// <returns>
+    /// True on success.
+    /// </returns>
     public bool TrySetPassword(Guid userId, string newAcornPassword, out string errorMessage)
     {
         errorMessage = string.Empty;
@@ -229,9 +240,9 @@ public sealed class EconetUserDirectory
 
     /// <summary>
     /// Sets a user's privilege STATE for <c>*PRIV</c>. PiFS treats System / Normal / Locked as mutually
-    /// exclusive, so both flags are written together: System maps to <see cref="RetroUser.IsAdmin"/>,
+    /// exclusive, so both flags are written together: System maps to <see cref="RetroIO.Identity.RetroUser.IsAdmin"/>,
     /// Locked to the <c>econet.locked</c> metadata (refused at login by
-    /// <see cref="FileServerSessionManager"/>). Persisted immediately; a live session keeps its
+    /// <c>FileServerSessionManager</c>). Persisted immediately; a live session keeps its
     /// privilege until the user's next login.
     /// </summary>
     public bool TrySetPrivilege(Guid userId, bool isAdmin, bool isLocked)

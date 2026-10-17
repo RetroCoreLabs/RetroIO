@@ -171,11 +171,11 @@ namespace RetroIO.Storage.Ndfs.Structures
         /// </returns>
         /// <remarks>
         /// <para>
-        /// <b>KNOWN INCOMPLETE (2026-08-01): this only ever searches ONE object block, so it cannot
-        /// place file 257.</b>
+        /// KNOWN INCOMPLETE (2026-08-01): this only ever searches ONE object block, so it cannot
+        /// place file 257.
         /// </para>
         /// <para>
-        /// A SINTRAN user area holds 256 files per <i>object block</i>, and may be granted up to 16
+        /// A SINTRAN user area holds 256 files per object block, and may be granted up to 16
         /// blocks (4096 files) with <c>@GIVE-OBJECT-BLOCKS</c>. Block <c>n</c> for user <c>U</c>
         /// lives at object-file pages <c>n*512 + U*8 .. +7</c>, so a correct search spans every
         /// ALLOCATED block (<see cref="Elements.UserEntry.AllocatedObjectBlocks"/>) and returns
@@ -266,7 +266,7 @@ namespace RetroIO.Storage.Ndfs.Structures
         /// </remarks>
         /// <remarks>
         /// <para>
-        /// <b>Block 1 and above overlap the high-user region.</b> An index block holds 512 pages =
+        /// Block 1 and above overlap the high-user region. An index block holds 512 pages =
         /// 64 users at 8 pages each, so index-block group <c>g</c> is where this library places
         /// users <c>g*64 .. g*64+63</c>. SINTRAN instead puts user <c>U</c>'s object block
         /// <c>n</c> in group <c>n</c> at the same offset - so a second block for user <c>U</c>

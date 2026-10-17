@@ -26,7 +26,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
     /// separated "structural, every record has it" from "content, differs per file".
     /// </para>
     /// <para>
-    /// <b>Why this file exists at all:</b> <c>FaFolderEntry</c> had NO test. Several of the fields
+    /// Why this file exists at all: <c>FaFolderEntry</c> had NO test. Several of the fields
     /// below were silently zero on every record we ever sent, and it took reading a capture to
     /// notice. A unit test cannot prove a real client accepts the record - only the machine can -
     /// but it can stop them regressing back to zero unnoticed.

@@ -247,7 +247,7 @@ public sealed class LiveCaptureGoldenTests
     }
 
     /// <summary>
-    /// An fsop that arrives before login must be refused with &amp;BF regardless of which opcode it is.
+    /// An fsop that arrives before login must be refused with 0xBF regardless of which opcode it is.
     /// The live capture showed fsop 0x16 (SetBootOpt) arriving from a stale ROM state before *I AM.
     ///
     /// NOTE on the message bytes: the 2026-07-17 capture showed RetroFS emitting <c>"Who are you?"</c>

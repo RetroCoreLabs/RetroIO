@@ -17,13 +17,21 @@ namespace RetroIO.Link
     /// </summary>
     public class FrameEventArgs : EventArgs
     {
-        /// <summary>Frame data (unstuffed, FCS stripped)</summary>
+        /// <summary>
+        /// Frame data (unstuffed, FCS stripped)
+        /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();
-        /// <summary>Frame length</summary>
+        /// <summary>
+        /// Frame length
+        /// </summary>
         public int Length { get; set; }
-        /// <summary>Whether FCS was valid</summary>
+        /// <summary>
+        /// Whether FCS was valid
+        /// </summary>
         public bool FcsValid { get; set; }
-        /// <summary>Timestamp</summary>
+        /// <summary>
+        /// Timestamp
+        /// </summary>
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 
@@ -39,17 +47,11 @@ namespace RetroIO.Link
     /// framing itself is no longer implemented here.
     /// </para>
     /// <para>
-    /// <b>Two long-standing defects went away with the change</b>, both from treating a flag as a
+    /// Two long-standing defects went away with the change, both from treating a flag as a
     /// pure toggle rather than as a delimiter:
     /// </para>
-    /// <list type="bullet">
-    ///   <item>a single flag shared as one frame's closing flag and the next frame's opening flag
-    ///   lost the second frame, although ITU-T X.25 clause 2.2.1 permits sharing in as many
-    ///   words;</item>
-    ///   <item>a RUN of flags alternated the in-frame state, so whether the following frame was
-    ///   seen at all depended on whether the run length was odd or even - and inter-frame time
-    ///   fill IS a run of flags (clause 2.2.4).</item>
-    /// </list>
+    ///  - a single flag shared as one frame's closing flag and the next frame's opening flag lost the second frame, although ITU-T X.25 clause 2.2.1 permits sharing in as many words;
+    ///  - a RUN of flags alternated the in-frame state, so whether the following frame was seen at all depended on whether the run length was odd or even - and inter-frame time fill IS a run of flags (clause 2.2.4).
     /// <para>
     /// Both were pinned by <c>HdlcFramerTests</c> before the merge and those tests were updated
     /// when the fix landed.
@@ -97,8 +99,12 @@ namespace RetroIO.Link
         /// <summary>
         /// Process received raw bytes (from serial port or TCP)
         /// </summary>
-        /// <param name="buffer">Received bytes</param>
-        /// <param name="length">Number of bytes</param>
+        /// <param name="buffer">
+        /// Received bytes
+        /// </param>
+        /// <param name="length">
+        /// Number of bytes
+        /// </param>
         public void ProcessBytes(byte[] buffer, int length)
         {
             if (buffer == null || length <= 0)
@@ -145,7 +151,9 @@ namespace RetroIO.Link
         /// <summary>
         /// Hands the decoder's current frame to subscribers with the FCS stripped.
         /// </summary>
-        /// <param name="fcsValid">Whether the frame passed its FCS check.</param>
+        /// <param name="fcsValid">
+        /// Whether the frame passed its FCS check.
+        /// </param>
         /// <remarks>
         /// The shared decoder delivers the frame WITH its FCS, because a framer should not have to
         /// know how wide the checksum is for the layer above. This surface has always stripped it,
@@ -179,8 +187,12 @@ namespace RetroIO.Link
         /// <summary>
         /// Build and emit a stuffed frame with its FCS.
         /// </summary>
-        /// <param name="frameData">Frame data (Address + Control + Information)</param>
-        /// <param name="length">Frame length</param>
+        /// <param name="frameData">
+        /// Frame data (Address + Control + Information)
+        /// </param>
+        /// <param name="length">
+        /// Frame length
+        /// </param>
         public void SendFrame(byte[] frameData, int length)
         {
             if (frameData == null || length <= 0)
@@ -206,7 +218,9 @@ namespace RetroIO.Link
             _logger.LogDebug("HDLC[{Link}]: Framer reset", _linkName);
         }
 
-        /// <summary>Returns the decoder's pooled assembly buffer.</summary>
+        /// <summary>
+        /// Returns the decoder's pooled assembly buffer.
+        /// </summary>
         public void Dispose()
         {
             _decoder.Dispose();

@@ -104,7 +104,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// NDIX disk driver skips physical cylinder 0 (reserved for SINTRAN) and maps logical
         /// block 0 to sector 90, i.e. byte 90 * 1024 = 92160.
         /// </summary>
-        /// <param name="offsetBytes">Filesystem base in bytes. Must be a multiple of the block size.</param>
+        /// <param name="offsetBytes">
+        /// Filesystem base in bytes. Must be a multiple of the block size.
+        /// </param>
         public void SetFilesystemOffset(long offsetBytes)
         {
             if (offsetBytes < 0)

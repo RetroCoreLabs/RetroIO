@@ -85,10 +85,18 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// Check if this route matches the given X.121 address and direction
         /// </summary>
-        /// <param name="x121Address">X.121 address to match</param>
-        /// <param name="direction">Call direction to check</param>
-        /// <param name="callUserData">Optional call user data for additional matching</param>
-        /// <returns>True if route matches, false otherwise</returns>
+        /// <param name="x121Address">
+        /// X.121 address to match
+        /// </param>
+        /// <param name="direction">
+        /// Call direction to check
+        /// </param>
+        /// <param name="callUserData">
+        /// Optional call user data for additional matching
+        /// </param>
+        /// <returns>
+        /// True if route matches, false otherwise
+        /// </returns>
         public bool Matches(string x121Address, RouteDirection direction, byte[]? callUserData = null)
         {
             if (!Enabled)

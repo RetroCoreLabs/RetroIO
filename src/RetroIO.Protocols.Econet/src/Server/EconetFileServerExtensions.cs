@@ -162,7 +162,9 @@ public sealed class EconetFileServerOptions
     /// </summary>
     public WireProfileResolver.MachineOverride[]? WireProfileOverrides { get; set; }
 
-    /// <summary>Builds the resolver these two settings describe (used by the context factory).</summary>
+    /// <summary>
+    /// Builds the resolver these two settings describe (used by the context factory).
+    /// </summary>
     public WireProfileResolver BuildWireProfileResolver()
     {
         // Fast path: an unconfigured server (default profile, no overrides) shares the singleton so it

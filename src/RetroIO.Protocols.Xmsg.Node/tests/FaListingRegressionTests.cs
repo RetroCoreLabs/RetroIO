@@ -110,7 +110,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </para>
         /// <para>
         /// That update is exactly the deliberate kind the class remarks call for, and its diff is
-        /// worth knowing: <b>only bytes 12-13 of each frame moved</b> - <c>DE53</c> became
+        /// worth knowing: only bytes 12-13 of each frame moved - <c>DE53</c> became
         /// <c>9053</c>, <c>DDF7</c> became <c>8FF7</c>, and so on down the list. Every other byte on
         /// every frame is unchanged, which is the evidence that the fix touched word 6 and nothing
         /// else.

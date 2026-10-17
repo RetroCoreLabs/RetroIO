@@ -64,10 +64,18 @@ namespace RetroIO.Protocols.X25.Sintran
         /// Message format (from RP-P2-TAD.NPL:162-178):
         /// [Optional Pad 0x00] [Message Type] [Byte Count] [Data...]
         /// </summary>
-        /// <param name="data">Message bytes</param>
-        /// <param name="offset">Starting offset in data array</param>
-        /// <param name="length">Number of bytes to parse</param>
-        /// <returns>Parsed TAD message</returns>
+        /// <param name="data">
+        /// Message bytes
+        /// </param>
+        /// <param name="offset">
+        /// Starting offset in data array
+        /// </param>
+        /// <param name="length">
+        /// Number of bytes to parse
+        /// </param>
+        /// <returns>
+        /// Parsed TAD message
+        /// </returns>
         public static SintranTadMessage Parse(byte[] data, int offset = 0, int length = -1)
         {
             if (data == null)
@@ -130,8 +138,12 @@ namespace RetroIO.Protocols.X25.Sintran
         /// Build TAD message to byte array
         /// Message format: [Optional Pad] [Type] [Count] [Data]
         /// </summary>
-        /// <param name="includePadding">True to include padding byte at start</param>
-        /// <returns>Message bytes</returns>
+        /// <param name="includePadding">
+        /// True to include padding byte at start
+        /// </param>
+        /// <returns>
+        /// Message bytes
+        /// </returns>
         public byte[] Build(bool includePadding = false)
         {
             if (Data.Length > SintranTadMessageTypes.MAX_MESSAGE_DATA_SIZE)

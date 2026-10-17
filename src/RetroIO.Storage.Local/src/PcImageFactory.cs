@@ -15,7 +15,9 @@ using RetroIO.Storage.Local.Streams;
 
 namespace RetroIO.Storage.Local
 {
-    /// <summary>PC floppy sizes that can be created blank (all formatted FAT12, matching real DOS).</summary>
+    /// <summary>
+    /// PC floppy sizes that can be created blank (all formatted FAT12, matching real DOS).
+    /// </summary>
     public enum PcFloppySize
     {
         Size360K,  // 5.25" DD, 40/2/9, the normal PC/XT floppy
@@ -70,7 +72,9 @@ namespace RetroIO.Storage.Local
             return ms.ToArray();
         }
 
-        /// <summary>Creates a blank floppy image and writes it to <paramref name="path"/>.</summary>
+        /// <summary>
+        /// Creates a blank floppy image and writes it to <paramref name="path"/>.
+        /// </summary>
         public static void CreateBlankFloppyFile(PcFloppySize size, string path, string volumeLabel = "")
         {
             File.WriteAllBytes(path, CreateBlankFloppy(size, volumeLabel));
@@ -131,7 +135,9 @@ namespace RetroIO.Storage.Local
             return ms.ToArray();
         }
 
-        /// <summary>Creates a blank hard disk image and writes it to <paramref name="path"/>.</summary>
+        /// <summary>
+        /// Creates a blank hard disk image and writes it to <paramref name="path"/>.
+        /// </summary>
         public static void CreateBlankHardDiskFile(PcHddPreset preset, string path, string volumeLabel = "")
         {
             File.WriteAllBytes(path, CreateBlankHardDisk(preset, volumeLabel));
@@ -150,7 +156,9 @@ namespace RetroIO.Storage.Local
             };
         }
 
-        /// <summary>Real MS-DOS defaults: (sectors/cluster, root directory entry count).</summary>
+        /// <summary>
+        /// Real MS-DOS defaults: (sectors/cluster, root directory entry count).
+        /// </summary>
         private static (byte SectorsPerCluster, ushort RootEntryCount) FloppyFatParamsFor(PcFloppySize size)
         {
             return size switch
@@ -180,10 +188,14 @@ namespace RetroIO.Storage.Local
             };
         }
 
-        /// <summary>Maps a floppy size to its conventional file extension.</summary>
+        /// <summary>
+        /// Maps a floppy size to its conventional file extension.
+        /// </summary>
         public static string ExtensionFor(PcFloppySize size) => ".img";
 
-        /// <summary>Maps a hard disk preset to its conventional file extension.</summary>
+        /// <summary>
+        /// Maps a hard disk preset to its conventional file extension.
+        /// </summary>
         public static string ExtensionFor(PcHddPreset preset) => ".img";
     }
 }

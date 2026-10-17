@@ -738,7 +738,9 @@ namespace RetroIO.Tests
 
         // ---- Detection hardening: reject look-alikes, accept genuine NDFS ----
 
-        /// <summary>Builds a page-0 that satisfies the structural core (3 in-bounds pointers, user = object + 2).</summary>
+        /// <summary>
+        /// Builds a page-0 that satisfies the structural core (3 in-bounds pointers, user = object + 2).
+        /// </summary>
         private static byte[] BuildStructuralPage(uint objectBlock, uint bitBlock, string name)
         {
             byte[] page = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];

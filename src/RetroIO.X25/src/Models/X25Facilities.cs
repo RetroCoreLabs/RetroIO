@@ -14,22 +14,34 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public enum X25FacilityError
     {
-        /// <summary>The field decoded.</summary>
+        /// <summary>
+        /// The field decoded.
+        /// </summary>
         None,
 
-        /// <summary>An element's parameter octets run past the end of the field (X.25 7.1, Table 7-1).</summary>
+        /// <summary>
+        /// An element's parameter octets run past the end of the field (X.25 7.1, Table 7-1).
+        /// </summary>
         Truncated,
 
-        /// <summary>A window size of 0, or above 7 with modulo 8 numbering (7.3.1.2).</summary>
+        /// <summary>
+        /// A window size of 0, or above 7 with modulo 8 numbering (7.3.1.2).
+        /// </summary>
         WindowOutOfRange,
 
-        /// <summary>A packet size code outside 4..12 (7.3.1.1).</summary>
+        /// <summary>
+        /// A packet size code outside 4..12 (7.3.1.1).
+        /// </summary>
         PacketSizeOutOfRange,
 
-        /// <summary>A bit the clause says "must be zero" is set (bits 8-5 of a packet size octet, bit 8 of a window octet).</summary>
+        /// <summary>
+        /// A bit the clause says "must be zero" is set (bits 8-5 of a packet size octet, bit 8 of a window octet).
+        /// </summary>
         ReservedBitsSet,
 
-        /// <summary>The same X.25 facility code appears twice ("Facility code repeated", Annex E 66).</summary>
+        /// <summary>
+        /// The same X.25 facility code appears twice ("Facility code repeated", Annex E 66).
+        /// </summary>
         RepeatedCode,
     }
 
@@ -45,18 +57,10 @@ namespace RetroIO.Protocols.X25.Models
     /// 10 three, 11 a length octet then that many). Two constructs interrupt that walk and both were
     /// misread by the codec this one replaces:
     /// </para>
-    /// <list type="bullet">
-    ///   <item>the <b>marker</b> - code 0x00 with one parameter octet - "used to separate requests for
-    ///   X.25 facilities ... from other categories". Nothing after a marker is an X.25 facility. The old
-    ///   codec read the marker as a class-A code and went on interpreting national facilities as X.25
-    ///   ones, so a national 0x42 after the marker became our packet size (the C emulator's F-01-01);</item>
-    ///   <item>the <b>extension</b> - code 0xFF, "reserved for extension of the facility code. The octet
-    ///   following this octet indicates an extended facility code having the format A, B, C and D as
-    ///   defined above. Repetition of facility code 11111111 is permitted." The old codec read 0xFF
-    ///   as class D and the next octet as its length (F-01-02).</item>
-    /// </list>
+    ///  - the marker - code 0x00 with one parameter octet - "used to separate requests for X.25 facilities ... from other categories". Nothing after a marker is an X.25 facility. The old codec read the marker as a class-A code and went on interpreting national facilities as X.25 ones, so a national 0x42 after the marker became our packet size (the C emulator's F-01-01);
+    ///  - the extension - code 0xFF, "reserved for extension of the facility code. The octet following this octet indicates an extended facility code having the format A, B, C and D as defined above. Repetition of facility code 11111111 is permitted." The old codec read 0xFF as class D and the next octet as its length (F-01-02).
     /// <para>
-    /// <b>What is interpreted.</b> Only packet size (0x42, 7.3.1.1) and window size (0x43, 7.3.1.2),
+    /// What is interpreted. Only packet size (0x42, 7.3.1.1) and window size (0x43, 7.3.1.2),
     /// because those are the two the engine changes its behaviour on. Everything else - reverse
     /// charging and fast select (0x01), closed user groups (0x03 / 0x47), NUI, charging, address
     /// extensions, markers and all that follows them, extended codes - is kept byte for byte in
@@ -66,7 +70,7 @@ namespace RetroIO.Protocols.X25.Models
     /// more facilities can be added without changing the bytes.
     /// </para>
     /// <para>
-    /// <b>What is rejected.</b> A truncated element, a window of 0 or above 7 (this stack runs modulo
+    /// What is rejected. A truncated element, a window of 0 or above 7 (this stack runs modulo
     /// 8), a packet size code outside 4..12, a set bit the clause says must be zero, and a repeated
     /// X.25 code. The old codec accepted window 0 (which blocks sending for ever) and window 8 (which
     /// never closes) and turned an invalid packet size into 128 silently (F-01-04). The caller decides
@@ -82,49 +86,79 @@ namespace RetroIO.Protocols.X25.Models
     /// </remarks>
     public sealed class X25Facilities
     {
-        /// <summary>Facility code for packet size negotiation (X.25 Table 7-2: 01000010).</summary>
+        /// <summary>
+        /// Facility code for packet size negotiation (X.25 Table 7-2: 01000010).
+        /// </summary>
         public const byte PacketSizeCode = 0x42;
 
-        /// <summary>Facility code for window size negotiation (X.25 Table 7-2: 01000011).</summary>
+        /// <summary>
+        /// Facility code for window size negotiation (X.25 Table 7-2: 01000011).
+        /// </summary>
         public const byte WindowSizeCode = 0x43;
 
-        /// <summary>The marker code (X.25 7.1: "The first octet of the marker is a facility code field and is set to zero").</summary>
+        /// <summary>
+        /// The marker code (X.25 7.1: "The first octet of the marker is a facility code field and is set to zero").
+        /// </summary>
         public const byte MarkerCode = 0x00;
 
-        /// <summary>The extension code (X.25 7.1: "Facility code 11111111 is reserved for extension").</summary>
+        /// <summary>
+        /// The extension code (X.25 7.1: "Facility code 11111111 is reserved for extension").
+        /// </summary>
         public const byte ExtensionCode = 0xFF;
 
-        /// <summary>X.25 7.3.1.1: network default packet size.</summary>
+        /// <summary>
+        /// X.25 7.3.1.1: network default packet size.
+        /// </summary>
         public const int DefaultPacketSize = 128;
 
-        /// <summary>X.25 7.3.1.2: network default window size.</summary>
+        /// <summary>
+        /// X.25 7.3.1.2: network default window size.
+        /// </summary>
         public const byte DefaultWindowSize = 2;
 
-        /// <summary>Smallest packet size code (2^4 = 16 octets).</summary>
+        /// <summary>
+        /// Smallest packet size code (2^4 = 16 octets).
+        /// </summary>
         public const int MinPacketSizeLog2 = 4;
 
-        /// <summary>Largest packet size code (2^12 = 4096 octets).</summary>
+        /// <summary>
+        /// Largest packet size code (2^12 = 4096 octets).
+        /// </summary>
         public const int MaxPacketSizeLog2 = 12;
 
-        /// <summary>Largest window with modulo 8 sequence numbering.</summary>
+        /// <summary>
+        /// Largest window with modulo 8 sequence numbering.
+        /// </summary>
         public const byte MaxWindowModulo8 = 7;
 
-        /// <summary>Packet size for the direction from the called DTE (first parameter octet of 0x42).</summary>
+        /// <summary>
+        /// Packet size for the direction from the called DTE (first parameter octet of 0x42).
+        /// </summary>
         public int PacketSizeFromCalled { get; set; } = DefaultPacketSize;
 
-        /// <summary>Packet size for the direction from the calling DTE (second parameter octet of 0x42).</summary>
+        /// <summary>
+        /// Packet size for the direction from the calling DTE (second parameter octet of 0x42).
+        /// </summary>
         public int PacketSizeFromCalling { get; set; } = DefaultPacketSize;
 
-        /// <summary>Window for the direction from the called DTE (first parameter octet of 0x43).</summary>
+        /// <summary>
+        /// Window for the direction from the called DTE (first parameter octet of 0x43).
+        /// </summary>
         public byte WindowFromCalled { get; set; } = DefaultWindowSize;
 
-        /// <summary>Window for the direction from the calling DTE (second parameter octet of 0x43).</summary>
+        /// <summary>
+        /// Window for the direction from the calling DTE (second parameter octet of 0x43).
+        /// </summary>
         public byte WindowFromCalling { get; set; } = DefaultWindowSize;
 
-        /// <summary>True when a packet size facility was carried; false when the defaults apply.</summary>
+        /// <summary>
+        /// True when a packet size facility was carried; false when the defaults apply.
+        /// </summary>
         public bool HasPacketSize { get; set; }
 
-        /// <summary>True when a window size facility was carried; false when the defaults apply.</summary>
+        /// <summary>
+        /// True when a window size facility was carried; false when the defaults apply.
+        /// </summary>
         public bool HasWindowSize { get; set; }
 
         /// <summary>

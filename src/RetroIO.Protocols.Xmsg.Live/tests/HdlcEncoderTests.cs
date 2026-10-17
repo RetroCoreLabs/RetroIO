@@ -191,12 +191,8 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
         /// escape policies in this repository and they produce different wire bytes for the
         /// same LAPB body:
         /// </para>
-        /// <list type="bullet">
-        ///   <item>this encoder escapes ONLY the flag and the escape octet, which is the
-        ///   minimum required by ITU-T X.25 clause 2.2.2.2;</item>
-        ///   <item>the X.25 side (HdlcFramer, HdlcFrameCodec) additionally escapes every
-        ///   octet below <c>0x20</c> - the RFC 1662 section 7.1 default ACCM.</item>
-        /// </list>
+        ///  - this encoder escapes ONLY the flag and the escape octet, which is the minimum required by ITU-T X.25 clause 2.2.2.2;
+        ///  - the X.25 side (HdlcFramer, HdlcFrameCodec) additionally escapes every octet below <c>0x20</c> - the RFC 1662 section 7.1 default ACCM.
         /// <para>
         /// The measurement settles which one belongs here: across every capture in this
         /// repository, the only octets ever following <c>0x7D</c> are <c>0x5D</c> and

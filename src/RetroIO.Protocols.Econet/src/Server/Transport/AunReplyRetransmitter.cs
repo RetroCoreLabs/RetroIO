@@ -16,7 +16,7 @@ namespace RetroIO.Protocols.Econet.Server.Transport;
 ///
 /// PiEconetBridge model:
 ///   * EB_CONFIG_AUN_RETX    = 1000 ms between (re)transmissions of an AUN DATA packet.
-///   * EB_CONFIG_AUN_RETRIES = 5    total transmissions (the "(p->tx)++ &lt; RETRIES" loop),
+///   * EB_CONFIG_AUN_RETRIES = 5    total transmissions (the "(p->tx)++ is less than RETRIES" loop),
 ///                                  ~1 s apart, then the packet is dropped.
 ///   * Only ECONET_AUN_DATA is retransmitted; ACK/NAK are single-shot.
 ///   * When the inbound AUN listener sees the matching ACK it removes the queued packet,
@@ -69,7 +69,9 @@ public sealed class AunReplyRetransmitter
         _ = RetransmitLoopAsync(key, pending, cts.Token);
     }
 
-    /// <summary>Called when an inbound AUN ACK arrives; stops retransmitting the matching reply.</summary>
+    /// <summary>
+    /// Called when an inbound AUN ACK arrives; stops retransmitting the matching reply.
+    /// </summary>
     public void Acknowledge(byte net, byte station, uint sequence)
     {
         ReplyKey key = new ReplyKey(net, station, sequence);

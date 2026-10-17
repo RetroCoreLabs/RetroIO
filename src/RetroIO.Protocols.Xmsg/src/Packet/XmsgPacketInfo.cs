@@ -23,7 +23,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
     /// decode (TAD chain, XROUT body) during the migration.
     /// </para>
     /// <para>
-    /// <b>The universal envelope model.</b> Across all 209 verified frames the relationship
+    /// The universal envelope model. Across all 209 verified frames the relationship
     /// <c>Base = Flags1 + Counter</c> holds, and from it both the channel and the per-direction
     /// counter are recoverable (<c>Channel = 0xDE - (XMCSM>>24) - (Base>>8)</c>,
     /// <c>Counter = Base0 - Flags1</c>). <see cref="Base"/> exposes the first half of that identity;

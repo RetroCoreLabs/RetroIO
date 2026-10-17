@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 
 /// <summary>
 /// Shared argument parsing for <c>*SETLIB</c> and <c>*SETHOME</c>, which take either a single
-/// <c>&lt;dir&gt;</c> (target = the caller) or a System-only <c>&lt;user&gt; &lt;dir&gt;</c> (target =
+/// <c>dir</c> (target = the caller) or a System-only <c>user dir</c> (target =
 /// the named user). Mirrors the PiFS <c>sscanf("%10s %80s")</c> split and its error codes.
 /// </summary>
 internal static class SetDirectoryArguments
@@ -26,7 +26,9 @@ internal static class SetDirectoryArguments
     /// <summary>
     /// Parses the target user and directory token from a SETLIB/SETHOME argument.
     /// </summary>
-    /// <param name="call">The OSCLI call (for the argument text, session and user directory).</param>
+    /// <param name="call">
+    /// The OSCLI call (for the argument text, session and user directory).
+    /// </param>
     /// <param name="systemOnlyTwoArg">
     /// When true (SETLIB), the two-argument "set another user" form requires the caller to be a System
     /// user — a non-System caller supplying a space gets PiFS's <c>"Bad parameters"</c>, not
@@ -37,10 +39,18 @@ internal static class SetDirectoryArguments
     /// When true (SETLIB), a directory naming a disc (leading <c>:</c>) in the two-argument form is
     /// rejected with <c>"Can't specify disc"</c>, matching PiFS.
     /// </param>
-    /// <param name="targetUserId">The resolved target user (caller or named user).</param>
-    /// <param name="dir">The directory token (may be <c>%</c> for "clear").</param>
-    /// <param name="error">The reply to send on failure; null on success.</param>
-    /// <returns>True when parsing succeeded.</returns>
+    /// <param name="targetUserId">
+    /// The resolved target user (caller or named user).
+    /// </param>
+    /// <param name="dir">
+    /// The directory token (may be <c>%</c> for "clear").
+    /// </param>
+    /// <param name="error">
+    /// The reply to send on failure; null on success.
+    /// </param>
+    /// <returns>
+    /// True when parsing succeeded.
+    /// </returns>
     public static bool TryParse(
         in OsCliCall call,
         bool systemOnlyTwoArg,

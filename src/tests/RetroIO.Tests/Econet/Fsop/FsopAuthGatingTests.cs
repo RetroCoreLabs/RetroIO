@@ -16,8 +16,8 @@ namespace RetroIO.Tests.Econet.Fsop;
 /// <summary>
 /// Breadth coverage of the authentication/authorisation gate for EVERY fsop, driven off the real
 /// <see cref="FileServerCommandHandler"/> with a mock backend. Answers the two questions across the
-/// whole opcode surface at once: does an opcode reject a caller with **no user**, and does a
-/// **system-only** opcode reject a **normal user**?
+/// whole opcode surface at once: does an opcode reject a caller with no user, and does a
+/// system-only opcode reject a normal user?
 ///
 /// These hold regardless of the FSOP table refactor: the login gate lives centrally in
 /// <c>FileServerCommandHandler.Handle</c> and the admin gate in the individual handlers, and the

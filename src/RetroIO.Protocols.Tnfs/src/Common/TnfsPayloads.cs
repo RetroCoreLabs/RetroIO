@@ -23,8 +23,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build MOUNT request payload.
         /// </summary>
-        /// <param name="path">Mount path (usually "/")</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="path">
+        /// Mount path (usually "/")
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildMountRequest(string path)
         {
             byte[] pathBytes = Encoding.ASCII.GetBytes(path + '\0');
@@ -43,11 +47,21 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse MOUNT request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <param name="versionLSB">Protocol version LSB</param>
-        /// <param name="versionMSB">Protocol version MSB</param>
-        /// <param name="path">Mount path</param>
-        /// <returns>True if parsed successfully</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <param name="versionLSB">
+        /// Protocol version LSB
+        /// </param>
+        /// <param name="versionMSB">
+        /// Protocol version MSB
+        /// </param>
+        /// <param name="path">
+        /// Mount path
+        /// </param>
+        /// <returns>
+        /// True if parsed successfully
+        /// </returns>
         public static bool ParseMountRequest(byte[] payload, out byte versionLSB, out byte versionMSB, out string path)
         {
             versionLSB = 0;
@@ -70,9 +84,15 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build MOUNT response payload.
         /// </summary>
-        /// <param name="versionLSB">Server protocol version LSB</param>
-        /// <param name="versionMSB">Server protocol version MSB</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="versionLSB">
+        /// Server protocol version LSB
+        /// </param>
+        /// <param name="versionMSB">
+        /// Server protocol version MSB
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildMountResponse(byte versionLSB, byte versionMSB)
         {
             return new byte[] { versionLSB, versionMSB };
@@ -81,10 +101,18 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse MOUNT response payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <param name="versionLSB">Server protocol version LSB</param>
-        /// <param name="versionMSB">Server protocol version MSB</param>
-        /// <returns>True if parsed successfully</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <param name="versionLSB">
+        /// Server protocol version LSB
+        /// </param>
+        /// <param name="versionMSB">
+        /// Server protocol version MSB
+        /// </param>
+        /// <returns>
+        /// True if parsed successfully
+        /// </returns>
         public static bool ParseMountResponse(byte[] payload, out byte versionLSB, out byte versionMSB)
         {
             versionLSB = 0;
@@ -107,8 +135,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build OPENDIR request payload.
         /// </summary>
-        /// <param name="path">Directory path</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="path">
+        /// Directory path
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildOpenDirRequest(string path)
         {
             return Encoding.ASCII.GetBytes(path + '\0');
@@ -117,8 +149,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse OPENDIR request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>Directory path</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// Directory path
+        /// </returns>
         public static string ParseOpenDirRequest(byte[] payload)
         {
             if (payload == null || payload.Length == 0)
@@ -132,8 +168,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build OPENDIR response payload.
         /// </summary>
-        /// <param name="dirHandle">Directory handle</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="dirHandle">
+        /// Directory handle
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildOpenDirResponse(ushort dirHandle)
         {
             byte[] payload = new byte[2];
@@ -144,8 +184,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse OPENDIR response payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>Directory handle or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// Directory handle or null if invalid
+        /// </returns>
         public static ushort? ParseOpenDirResponse(byte[] payload)
         {
             if (payload == null || payload.Length < 2)
@@ -159,8 +203,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build READDIR request payload.
         /// </summary>
-        /// <param name="dirHandle">Directory handle</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="dirHandle">
+        /// Directory handle
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildReadDirRequest(ushort dirHandle)
         {
             byte[] payload = new byte[2];
@@ -171,8 +219,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse READDIR request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>Directory handle or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// Directory handle or null if invalid
+        /// </returns>
         public static ushort? ParseReadDirRequest(byte[] payload)
         {
             if (payload == null || payload.Length < 2)
@@ -186,8 +238,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build READDIR response payload.
         /// </summary>
-        /// <param name="entry">Directory entry</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="entry">
+        /// Directory entry
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildReadDirResponse(TnfsDirectoryEntry entry)
         {
             using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
@@ -217,8 +273,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse READDIR response payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>Directory entry or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// Directory entry or null if invalid
+        /// </returns>
         public static TnfsDirectoryEntry? ParseReadDirResponse(byte[] payload)
         {
             if (payload == null || payload.Length < 1)
@@ -256,8 +316,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build CLOSEDIR request payload.
         /// </summary>
-        /// <param name="dirHandle">Directory handle</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="dirHandle">
+        /// Directory handle
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildCloseDirRequest(ushort dirHandle)
         {
             byte[] payload = new byte[2];
@@ -268,8 +332,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse CLOSEDIR request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>Directory handle or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// Directory handle or null if invalid
+        /// </returns>
         public static ushort? ParseCloseDirRequest(byte[] payload)
         {
             if (payload == null || payload.Length < 2)
@@ -287,10 +355,18 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build OPEN request payload.
         /// </summary>
-        /// <param name="path">File path</param>
-        /// <param name="flags">Open flags</param>
-        /// <param name="mode">Unix file permissions</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="path">
+        /// File path
+        /// </param>
+        /// <param name="flags">
+        /// Open flags
+        /// </param>
+        /// <param name="mode">
+        /// Unix file permissions
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildOpenRequest(string path, TnfsOpenFlags flags, ushort mode)
         {
             using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
@@ -317,11 +393,21 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse OPEN request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <param name="flags">Open flags</param>
-        /// <param name="mode">Unix file permissions</param>
-        /// <param name="path">File path</param>
-        /// <returns>True if parsed successfully</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <param name="flags">
+        /// Open flags
+        /// </param>
+        /// <param name="mode">
+        /// Unix file permissions
+        /// </param>
+        /// <param name="path">
+        /// File path
+        /// </param>
+        /// <returns>
+        /// True if parsed successfully
+        /// </returns>
         public static bool ParseOpenRequest(byte[] payload, out TnfsOpenFlags flags, out ushort mode, out string path)
         {
             flags = TnfsOpenFlags.O_RDONLY;
@@ -348,8 +434,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build OPEN response payload.
         /// </summary>
-        /// <param name="fileHandle">File handle</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="fileHandle">
+        /// File handle
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildOpenResponse(ushort fileHandle)
         {
             byte[] payload = new byte[2];
@@ -360,8 +450,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse OPEN response payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>File handle or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// File handle or null if invalid
+        /// </returns>
         public static ushort? ParseOpenResponse(byte[] payload)
         {
             if (payload == null || payload.Length < 2)
@@ -375,9 +469,15 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build READ request payload.
         /// </summary>
-        /// <param name="fileHandle">File handle</param>
-        /// <param name="length">Number of bytes to read</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="fileHandle">
+        /// File handle
+        /// </param>
+        /// <param name="length">
+        /// Number of bytes to read
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildReadRequest(ushort fileHandle, ushort length)
         {
             byte[] payload = new byte[4];
@@ -389,10 +489,18 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse READ request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <param name="fileHandle">File handle</param>
-        /// <param name="length">Number of bytes to read</param>
-        /// <returns>True if parsed successfully</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <param name="fileHandle">
+        /// File handle
+        /// </param>
+        /// <param name="length">
+        /// Number of bytes to read
+        /// </param>
+        /// <returns>
+        /// True if parsed successfully
+        /// </returns>
         public static bool ParseReadRequest(byte[] payload, out ushort fileHandle, out ushort length)
         {
             fileHandle = 0;
@@ -411,8 +519,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build READ response payload.
         /// </summary>
-        /// <param name="data">File data</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="data">
+        /// File data
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildReadResponse(byte[] data)
         {
             ushort bytesRead = (ushort)data.Length;
@@ -430,8 +542,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse READ response payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>File data or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// File data or null if invalid
+        /// </returns>
         public static byte[]? ParseReadResponse(byte[] payload)
         {
             if (payload == null || payload.Length < 2)
@@ -454,8 +570,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build CLOSE request payload.
         /// </summary>
-        /// <param name="fileHandle">File handle</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="fileHandle">
+        /// File handle
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildCloseRequest(ushort fileHandle)
         {
             byte[] payload = new byte[2];
@@ -466,8 +586,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse CLOSE request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>File handle or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// File handle or null if invalid
+        /// </returns>
         public static ushort? ParseCloseRequest(byte[] payload)
         {
             if (payload == null || payload.Length < 2)
@@ -481,8 +605,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build STAT request payload.
         /// </summary>
-        /// <param name="path">File or directory path</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="path">
+        /// File or directory path
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildStatRequest(string path)
         {
             return Encoding.ASCII.GetBytes(path + '\0');
@@ -491,8 +619,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse STAT request payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>File path</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// File path
+        /// </returns>
         public static string ParseStatRequest(byte[] payload)
         {
             if (payload == null || payload.Length == 0)
@@ -506,8 +638,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Build STAT response payload.
         /// </summary>
-        /// <param name="stat">File stat information</param>
-        /// <returns>Payload bytes</returns>
+        /// <param name="stat">
+        /// File stat information
+        /// </param>
+        /// <returns>
+        /// Payload bytes
+        /// </returns>
         public static byte[] BuildStatResponse(TnfsFileStat stat)
         {
             byte[] payload = new byte[19]; // 4+4+4+4+1+2
@@ -543,8 +679,12 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Parse STAT response payload.
         /// </summary>
-        /// <param name="payload">Payload bytes</param>
-        /// <returns>File stat or null if invalid</returns>
+        /// <param name="payload">
+        /// Payload bytes
+        /// </param>
+        /// <returns>
+        /// File stat or null if invalid
+        /// </returns>
         public static TnfsFileStat? ParseStatResponse(byte[] payload)
         {
             if (payload == null || payload.Length < 17)
@@ -591,9 +731,15 @@ namespace RetroIO.Protocols.Tnfs.Common
         /// <summary>
         /// Read null-terminated ASCII string from byte array.
         /// </summary>
-        /// <param name="data">Byte array</param>
-        /// <param name="offset">Start offset</param>
-        /// <returns>String (without null terminator)</returns>
+        /// <param name="data">
+        /// Byte array
+        /// </param>
+        /// <param name="offset">
+        /// Start offset
+        /// </param>
+        /// <returns>
+        /// String (without null terminator)
+        /// </returns>
         private static string ReadNullTerminatedString(byte[] data, int offset)
         {
             List<byte> bytes = new List<byte>();

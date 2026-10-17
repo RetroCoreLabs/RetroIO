@@ -35,7 +35,9 @@ public static class RetroServerComposition
     /// Registers the protocol servers, identity, security, the filesystem backend and the
     /// management API.
     /// </summary>
-    /// <param name="services">Service collection to add to.</param>
+    /// <param name="services">
+    /// Service collection to add to.
+    /// </param>
     /// <param name="configuration">
     /// Host configuration. Command-line and appsettings keys under <c>Tnfs:</c> and <c>Econet:</c>
     /// override the saved protocol configuration files.
@@ -44,8 +46,12 @@ public static class RetroServerComposition
     /// Host logging builder, so the management API can attach its in-memory log buffer and the
     /// Logs endpoints return this process's own log.
     /// </param>
-    /// <param name="options">What to switch on. Null means the full server.</param>
-    /// <returns>The same collection, for chaining.</returns>
+    /// <param name="options">
+    /// What to switch on. Null means the full server.
+    /// </param>
+    /// <returns>
+    /// The same collection, for chaining.
+    /// </returns>
     public static IServiceCollection AddRetroServer(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -122,9 +128,15 @@ public static class RetroServerComposition
     /// <summary>
     /// Adds the middleware the server's HTTP surface needs, when the management API is enabled.
     /// </summary>
-    /// <param name="app">The host's application builder.</param>
-    /// <param name="options">The same options passed to <see cref="AddRetroServer"/>.</param>
-    /// <returns>The same builder, for chaining.</returns>
+    /// <param name="app">
+    /// The host's application builder.
+    /// </param>
+    /// <param name="options">
+    /// The same options passed to <see cref="AddRetroServer"/>.
+    /// </param>
+    /// <returns>
+    /// The same builder, for chaining.
+    /// </returns>
     public static IApplicationBuilder UseRetroServer(
         this IApplicationBuilder app,
         RetroServerOptions? options = null)
@@ -142,9 +154,15 @@ public static class RetroServerComposition
     /// <summary>
     /// Maps the management API routes, when it was registered.
     /// </summary>
-    /// <param name="endpoints">Endpoint route builder from the host.</param>
-    /// <param name="options">The same options passed to <see cref="AddRetroServer"/>.</param>
-    /// <returns>The same builder, for chaining.</returns>
+    /// <param name="endpoints">
+    /// Endpoint route builder from the host.
+    /// </param>
+    /// <param name="options">
+    /// The same options passed to <see cref="AddRetroServer"/>.
+    /// </param>
+    /// <returns>
+    /// The same builder, for chaining.
+    /// </returns>
     /// <remarks>
     /// The protocol servers need no mapping: they are hosted services listening on their own
     /// sockets, not HTTP endpoints.

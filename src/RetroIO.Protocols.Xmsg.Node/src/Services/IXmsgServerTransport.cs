@@ -147,7 +147,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// L21  0x0E 102->100 F1=0x01FA    its answer - the same number again
         /// </code>
         /// <para>
-        /// Unbroken through <c>0x01FF</c>. <b>UNVERIFIED</b> whether echoing is REQUIRED by the
+        /// Unbroken through <c>0x01FF</c>. UNVERIFIED whether echoing is REQUIRED by the
         /// peer or merely what a kernel holding one counter per link naturally produces - this
         /// matches observed behaviour, it is not a documented rule.
         /// </para>

@@ -12,10 +12,14 @@ namespace RetroIO.Link
     /// </summary>
     public enum DetectedProtocol
     {
-        /// <summary>X.25 packet (no SINTRAN markers).</summary>
+        /// <summary>
+        /// X.25 packet (no SINTRAN markers).
+        /// </summary>
         X25,
 
-        /// <summary>SINTRAN frame (has 0x21 0x13 markers).</summary>
+        /// <summary>
+        /// SINTRAN frame (has 0x21 0x13 markers).
+        /// </summary>
         Sintran
     }
 }

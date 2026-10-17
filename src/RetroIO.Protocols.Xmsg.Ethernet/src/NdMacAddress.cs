@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// <remarks>
     /// <para>
     /// CARVED FACT - <c>ND-60.197.01 EN Ethernet Basic Software Programmer Guide</c> section 2.4:
-    /// the controller <b>does not check bits 7-6 of the destination address</b>, so
+    /// the controller does not check bits 7-6 of the destination address, so
     /// "each Ethernet Interface has in fact four physical addresses". DIX (TCP/IP) and
     /// COSMOS traffic were designed to arrive at the SAME interface under different physical user
     /// addresses.
@@ -59,7 +59,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// <para><b>Layout</b></para>
     /// CARVED FACT - <c>ND-60.197.01</c> section 2.4, confirmed on the wire 2026-08-01:
     ///  - bytes 0-2: <c>08 00 26</c>, the Xerox/ND vendor prefix (OUI).
-    ///  - bytes 3-4: the ND system number, 16 bits, stored in <b>REVERSED byte order</b>.
+    ///  - bytes 3-4: the ND system number, 16 bits, stored in REVERSED byte order.
     ///  - byte 5: the physical user code (see <see cref="NdPhysicalUserFamily"/>).
     /// <para>
     /// The manual's words: "ND system numbers, in the range 0 - 177777B, are contained (in

@@ -73,8 +73,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Converts FileTypes flags to a readable string.
         /// </summary>
-        /// <param name="fileType">File type flags</param>
-        /// <returns>String representation (e.g., "IC" for Indexed Contiguous)</returns>
+        /// <param name="fileType">
+        /// File type flags
+        /// </param>
+        /// <returns>
+        /// String representation (e.g., "IC" for Indexed Contiguous)
+        /// </returns>
         public static string ToShortString(this FileTypes fileType)
         {
             if (fileType == FileTypes.None)
@@ -96,8 +100,12 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <summary>
         /// Converts FileTypes flags to a long descriptive string.
         /// </summary>
-        /// <param name="fileType">File type flags</param>
-        /// <returns>Descriptive string</returns>
+        /// <param name="fileType">
+        /// File type flags
+        /// </param>
+        /// <returns>
+        /// Descriptive string
+        /// </returns>
         public static string ToLongString(this FileTypes fileType)
         {
             if (fileType == FileTypes.None)

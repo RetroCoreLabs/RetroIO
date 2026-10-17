@@ -248,12 +248,16 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// Feeds received bytes into the shared streaming HDLC decoder and dispatches every
         /// complete, FCS-valid frame to the LAPB link.
         /// </summary>
-        /// <param name="buffer">The receive buffer.</param>
-        /// <param name="count">How many bytes of it are valid.</param>
+        /// <param name="buffer">
+        /// The receive buffer.
+        /// </param>
+        /// <param name="count">
+        /// How many bytes of it are valid.
+        /// </param>
         /// <remarks>
         /// <para>
         /// Until 2026-09-06 this was a hand-rolled byte-at-a-time flag splitter that accumulated
-        /// into a <c>List&lt;byte&gt;</c>, and then, to reuse the verified de-framer, wrapped the
+        /// into a <c>List{byte}</c>, and then, to reuse the verified de-framer, wrapped the
         /// accumulated content back up in flags and handed it to a whole-buffer API - an extra
         /// copy of every frame, and a near-identical copy of the code in two files.
         /// </para>

@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 /// <remarks>
 /// Reference behaviour (PiFS, facts only): System-only, abbreviation 4. Argument is
-/// <c>&lt;username&gt; &lt;password&gt;</c>; missing either is <c>0xFF "Bad parameter"</c>; an unknown
+/// <c>username password</c>; missing either is <c>0xFF "Bad parameter"</c>; an unknown
 /// user is <c>0xFF "Unknown user"</c>. Unlike <c>*PASS</c> there is no old-password verification — this
 /// is the admin override used to reset a locked-out user. The empty marker <c>""</c> clears the password
 /// (only where the account permits an empty password, else <c>0xFF "Bad password"</c>).

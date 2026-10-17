@@ -47,7 +47,9 @@ namespace RetroIO.Protocols.X25.Tests
         private volatile bool _running = true;
         private NetworkStream? _stream;
 
-        /// <summary>Every X.25 packet received, in order, without the XOT header.</summary>
+        /// <summary>
+        /// Every X.25 packet received, in order, without the XOT header.
+        /// </summary>
         public readonly List<byte[]> Received = new List<byte[]>();
 
         /// <summary>
@@ -59,7 +61,9 @@ namespace RetroIO.Protocols.X25.Tests
 
         public bool AutoAccept = true;
 
-        /// <summary>Answer a Restart Request with a Restart Confirmation, as a real DCE does (X.25 4.1.1).</summary>
+        /// <summary>
+        /// Answer a Restart Request with a Restart Confirmation, as a real DCE does (X.25 4.1.1).
+        /// </summary>
         public bool ConfirmRestart = true;
 
         public readonly ManualResetEventSlim CallSeen = new ManualResetEventSlim(false);

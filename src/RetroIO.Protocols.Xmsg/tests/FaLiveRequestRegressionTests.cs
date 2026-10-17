@@ -306,8 +306,8 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// <remarks>
         /// The captured block is <c>(SYS)'YS).(SYS)'</c> - the terminator <c>0x27</c> comes
         /// straight after the user's closing bracket, so the filespec is empty and everything
-        /// after it is residue from the caller's buffer. This is the `LIST-FILES` shape, not the
-        /// `FILE-STATISTICS` one.
+        /// after it is residue from the caller's buffer. This is the <c>LIST-FILES</c> shape, not the
+        /// <c>FILE-STATISTICS</c> one.
         /// </remarks>
         [Fact]
         public void TheLiveListFilesSpecBlockNamesNoFile()

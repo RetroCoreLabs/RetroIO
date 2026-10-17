@@ -736,8 +736,12 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         /// <summary>
         /// Inject mock data into a MOCK serial port for testing
         /// </summary>
-        /// <param name="mockPort">Mock port number (1-9)</param>
-        /// <param name="data">Data to inject</param>
+        /// <param name="mockPort">
+        /// Mock port number (1-9)
+        /// </param>
+        /// <param name="data">
+        /// Data to inject
+        /// </param>
         public void InjectMockSerialData(int mockPort, byte[] data)
         {
             if (mockPort < 1 || mockPort > 9)
@@ -780,8 +784,12 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         /// <summary>
         /// Check if a port name is a MOCK port (MOCK1-MOCK9)
         /// </summary>
-        /// <param name="portName">Port name to check</param>
-        /// <returns>Mock port number if valid, 0 if not a mock port</returns>
+        /// <param name="portName">
+        /// Port name to check
+        /// </param>
+        /// <returns>
+        /// Mock port number if valid, 0 if not a mock port
+        /// </returns>
         private int GetMockPortNumber(string portName)
         {
             if (string.IsNullOrEmpty(portName) || !portName.StartsWith("MOCK") || portName.Length != 5)
@@ -796,8 +804,12 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         /// <summary>
         /// Get the port name for a given interface name by looking up the serial configuration
         /// </summary>
-        /// <param name="interfaceName">Interface name (e.g., "Serial0")</param>
-        /// <returns>Port name (e.g., "MOCK1", "COM1") or empty string if not found</returns>
+        /// <param name="interfaceName">
+        /// Interface name (e.g., "Serial0")
+        /// </param>
+        /// <returns>
+        /// Port name (e.g., "MOCK1", "COM1") or empty string if not found
+        /// </returns>
         private string GetPortNameForInterface(string interfaceName)
         {
             // Look up the interface in our serial ports to get the port name

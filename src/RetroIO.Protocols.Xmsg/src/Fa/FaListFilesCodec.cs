@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A remote directory listing is <b>not</b> one bulk reply. It is one request/reply round trip per
+    /// A remote directory listing is not one bulk reply. It is one request/reply round trip per
     /// entry, driven by a cursor. Captured from node 102 to node 100 in
     /// <c>claude-list-files-d100-system-2026-07-29.pcapng</c>, ten entries in a row:
     /// </para>
@@ -33,7 +33,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// the entry wanted, running 1, 2, 3 and up. The reply echoes the request's serial.
     /// </para>
     /// <para>
-    /// <b>CORRECTION, 2026-07-30.</b> That sentence used to say the body was byte-identical across
+    /// CORRECTION, 2026-07-30. That sentence used to say the body was byte-identical across
     /// the whole listing, with no mention of the walk. It is not. The SYSTEM capture holds ELEVEN
     /// directory enquiries, and the one that PRECEDES the <c>0xFFFF</c> request carries the same
     /// leading filespec text with a zero-filled tail, where the ten walk requests carry values in the
@@ -43,7 +43,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// tests that. Locked in by <c>FaSpecBlockCrossUserTests.EntryWalkRequests_ShareOneSpecBlock</c>.
     /// </para>
     /// <para>
-    /// <b>The 64-byte record is deliberately opaque here.</b> It is the SINTRAN on-disk object entry
+    /// The 64-byte record is deliberately opaque here. It is the SINTRAN on-disk object entry
     /// shipped verbatim - the file server does not reformat it - so its layout belongs to the file
     /// system, not to this wire codec. Decode it with
     /// <c>RetroIO.Storage.Ndfs.Elements.ObjectEntry.FromBytes</c>; the adapter in <c>RetroIO.Protocols.Xmsg.Ndfs</c> does
@@ -51,7 +51,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// </para>
     /// <para>
     /// The 62-byte block that precedes the cursor carries the directory and user spec and is
-    /// <b>not decoded</b>. It is handled as opaque bytes so a captured listing can be replayed
+    /// not decoded. It is handled as opaque bytes so a captured listing can be replayed
     /// exactly. Do not synthesise one.
     /// </para>
     /// <para>
@@ -97,7 +97,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>CORRECTION.</b> This was previously called <c>LeadingConstant</c> and documented as
+        /// CORRECTION. This was previously called <c>LeadingConstant</c> and documented as
         /// "meaning UNKNOWN, 0x000C on every captured frame". It is not a constant. Dumping the
         /// DELETE-FILE capture alongside this one showed the same position carrying <c>0x000B</c>
         /// there, so the field is an operation code and 0x000C only looked constant because every
@@ -119,7 +119,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// <c>FaSpecBlockCrossUserTests</c>.
         /// </para>
         /// <para>
-        /// <b>But it is NOT a property of operation 0x000C.</b> Corrected 2026-07-30: the
+        /// But it is NOT a property of operation 0x000C. Corrected 2026-07-30: the
         /// <c>claude-open-W-close-102-to-100-2026-07-30.pcapng</c> recording carries an 0x000C request
         /// with <c>92 003B</c> under selector 1, and a five-byte payload of
         /// <c>A4 FFFFFFFF</c> instead of the 62-byte directory and user block:

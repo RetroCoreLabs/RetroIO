@@ -40,8 +40,12 @@ namespace RetroIO.Storage.Local
         /// Initializes a new disk image volume provider.
         /// NOTE: Persistence is handled by MountManager, not this provider.
         /// </summary>
-        /// <param name="factory">Factory for creating filesystem drivers</param>
-        /// <exception cref="ArgumentNullException">Thrown when factory is null</exception>
+        /// <param name="factory">
+        /// Factory for creating filesystem drivers
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when factory is null
+        /// </exception>
         public DiskImageVolumeProvider(IFileSystemDriverFactory factory)
         {
             _factory = factory ?? throw new ArgumentNullException(nameof(factory));
@@ -51,9 +55,15 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Validates whether a mount entry can be restored by this provider.
         /// </summary>
-        /// <param name="entry">Mount configuration entry to validate</param>
-        /// <param name="errorMessage">Error message if validation fails, or null if successful</param>
-        /// <returns>True if mount can be restored, false otherwise</returns>
+        /// <param name="entry">
+        /// Mount configuration entry to validate
+        /// </param>
+        /// <param name="errorMessage">
+        /// Error message if validation fails, or null if successful
+        /// </param>
+        /// <returns>
+        /// True if mount can be restored, false otherwise
+        /// </returns>
         public bool CanRestore(UnifiedMountEntry entry, out string? errorMessage)
         {
             // Extract and clean file path from URN
@@ -72,8 +82,12 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Mounts a volume from a unified configuration entry.
         /// </summary>
-        /// <param name="entry">Mount configuration entry containing all parameters</param>
-        /// <returns>Information about the mounted volume</returns>
+        /// <param name="entry">
+        /// Mount configuration entry containing all parameters
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume
+        /// </returns>
         public MountInfo MountFromConfig(UnifiedMountEntry entry)
         {
             return Mount(entry.SourceUri, entry.VolumeId, entry.IsReadOnly, entry.FileSystemType);
@@ -83,13 +97,27 @@ namespace RetroIO.Storage.Local
         /// Mounts a disk image and makes it accessible via the specified volume ID.
         /// Uses automatic format detection unless a specific filesystem type is provided.
         /// </summary>
-        /// <param name="uri">Path to disk image file</param>
-        /// <param name="volumeId">Unique identifier for this mount</param>
-        /// <param name="readOnly">If true, mount as read-only</param>
-        /// <returns>Information about the mounted volume</returns>
-        /// <exception cref="ArgumentException">Thrown when arguments are invalid or volume ID is already in use</exception>
-        /// <exception cref="FileNotFoundException">Thrown when image file does not exist</exception>
-        /// <exception cref="IOException">Thrown when mount operation fails</exception>
+        /// <param name="uri">
+        /// Path to disk image file
+        /// </param>
+        /// <param name="volumeId">
+        /// Unique identifier for this mount
+        /// </param>
+        /// <param name="readOnly">
+        /// If true, mount as read-only
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when arguments are invalid or volume ID is already in use
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when image file does not exist
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when mount operation fails
+        /// </exception>
         public MountInfo Mount(string uri, string volumeId, bool readOnly)
         {
             return Mount(uri, volumeId, readOnly, forceFileSystemType: null);
@@ -98,14 +126,30 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Mounts a disk image and makes it accessible via the specified volume ID.
         /// </summary>
-        /// <param name="uri">Path to disk image file</param>
-        /// <param name="volumeId">Unique identifier for this mount</param>
-        /// <param name="readOnly">If true, mount as read-only</param>
-        /// <param name="forceFileSystemType">Force specific filesystem type (e.g., "D64", "D71"), or null for automatic detection</param>
-        /// <returns>Information about the mounted volume</returns>
-        /// <exception cref="ArgumentException">Thrown when arguments are invalid, volume ID is already in use, or forced type is not registered</exception>
-        /// <exception cref="FileNotFoundException">Thrown when image file does not exist</exception>
-        /// <exception cref="IOException">Thrown when mount operation fails</exception>
+        /// <param name="uri">
+        /// Path to disk image file
+        /// </param>
+        /// <param name="volumeId">
+        /// Unique identifier for this mount
+        /// </param>
+        /// <param name="readOnly">
+        /// If true, mount as read-only
+        /// </param>
+        /// <param name="forceFileSystemType">
+        /// Force specific filesystem type (e.g., "D64", "D71"), or null for automatic detection
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when arguments are invalid, volume ID is already in use, or forced type is not registered
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when image file does not exist
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when mount operation fails
+        /// </exception>
         public MountInfo Mount(string uri, string volumeId, bool readOnly, string? forceFileSystemType)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -320,8 +364,12 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Unmounts a previously mounted volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier to unmount</param>
-        /// <exception cref="ArgumentException">Thrown when volume ID is not found</exception>
+        /// <param name="volumeId">
+        /// Volume identifier to unmount
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when volume ID is not found
+        /// </exception>
         public void Unmount(string volumeId)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -338,8 +386,12 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Gets information about a mounted volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
-        /// <returns>Mount information, or null if not found</returns>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
+        /// <returns>
+        /// Mount information, or null if not found
+        /// </returns>
         public MountInfo? GetMountInfo(string volumeId)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -364,7 +416,9 @@ namespace RetroIO.Storage.Local
         /// <summary>
         /// Lists all currently mounted volumes.
         /// </summary>
-        /// <returns>Array of mount information for all mounted volumes</returns>
+        /// <returns>
+        /// Array of mount information for all mounted volumes
+        /// </returns>
         public MountInfo[] ListMounts()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -400,9 +454,15 @@ namespace RetroIO.Storage.Local
         /// 2. URN-encoded identifier: "CARMEN%20SANDIEGO%3F"
         /// 3. Numeric index: "#3" (for third file in directory)
         /// </summary>
-        /// <param name="context">URN context with volume ID</param>
-        /// <param name="path">File path or identifier</param>
-        /// <returns>File contents as byte array</returns>
+        /// <param name="context">
+        /// URN context with volume ID
+        /// </param>
+        /// <param name="path">
+        /// File path or identifier
+        /// </param>
+        /// <returns>
+        /// File contents as byte array
+        /// </returns>
         public byte[] ReadFile(UrnContext context, string path)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -623,10 +683,18 @@ namespace RetroIO.Storage.Local
         /// Security: Applies RFC 3986 path normalization and validates against
         /// directory traversal attacks. Dot-segments (. and ..) are processed safely.
         /// </summary>
-        /// <param name="mount">Mount information containing the driver</param>
-        /// <param name="path">Path or identifier to resolve</param>
-        /// <returns>Resolved and normalized filesystem path</returns>
-        /// <exception cref="ArgumentException">Path is invalid or contains security violations</exception>
+        /// <param name="mount">
+        /// Mount information containing the driver
+        /// </param>
+        /// <param name="path">
+        /// Path or identifier to resolve
+        /// </param>
+        /// <returns>
+        /// Resolved and normalized filesystem path
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Path is invalid or contains security violations
+        /// </exception>
         private string ResolveFilePath(Mount mount, string path)
         {
             if (string.IsNullOrEmpty(path))

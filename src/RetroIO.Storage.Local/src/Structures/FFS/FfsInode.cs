@@ -277,10 +277,18 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// Calculates which filesystem block contains the given inode number.
         /// FFS inodes are numbered starting from 1 (ROOTINO = 2).
         /// </summary>
-        /// <param name="inodeNumber">Inode number (1-based).</param>
-        /// <param name="inodesPerBlock">Number of inodes per block (block_size / 128).</param>
-        /// <param name="inodeBlockStart">First block containing inodes (from superblock fs_iblkno).</param>
-        /// <returns>Block number containing the inode.</returns>
+        /// <param name="inodeNumber">
+        /// Inode number (1-based).
+        /// </param>
+        /// <param name="inodesPerBlock">
+        /// Number of inodes per block (block_size / 128).
+        /// </param>
+        /// <param name="inodeBlockStart">
+        /// First block containing inodes (from superblock fs_iblkno).
+        /// </param>
+        /// <returns>
+        /// Block number containing the inode.
+        /// </returns>
         public static uint InodeToBlock(uint inodeNumber, int inodesPerBlock, uint inodeBlockStart)
         {
             // Inode 0 is reserved, inode 1 is bad blocks, inode 2 is root
@@ -291,9 +299,15 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// <summary>
         /// Calculates offset within block for the given inode number.
         /// </summary>
-        /// <param name="inodeNumber">Inode number (1-based).</param>
-        /// <param name="inodesPerBlock">Number of inodes per block.</param>
-        /// <returns>Byte offset within block.</returns>
+        /// <param name="inodeNumber">
+        /// Inode number (1-based).
+        /// </param>
+        /// <param name="inodesPerBlock">
+        /// Number of inodes per block.
+        /// </param>
+        /// <returns>
+        /// Byte offset within block.
+        /// </returns>
         public static int InodeToOffset(uint inodeNumber, int inodesPerBlock)
         {
             return ((int)((inodeNumber - 1) % (uint)inodesPerBlock)) * FfsConstants.INODE_SIZE;

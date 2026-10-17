@@ -139,7 +139,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Thrown when <paramref name="blockCount"/> is negative.
         /// </exception>
         /// <remarks>
-        /// <b>The block count is not known when the session starts.</b> The open reply that carries
+        /// The block count is not known when the session starts. The open reply that carries
         /// the length is the SECOND step of the ladder, so a caller has to build the ladder before
         /// it can know how long the ladder is. That is why <see cref="SetBlockCount"/> exists.
         /// </remarks>
@@ -157,7 +157,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// A session running <see cref="FaReadLadder.ProbeWithoutOpen"/>.
         /// </returns>
         /// <remarks>
-        /// <para><b>Not a transfer.</b> It reads nothing and writes nothing.</para>
+        /// <para>Not a transfer. It reads nothing and writes nothing.</para>
         /// It exists to separate the two readings of the follow-on refusal <c>A2 4104</c> - see
         /// <see cref="FaReadLadder.ProbeWithoutOpen"/> for the question and
         /// <c>DOC/CARVE-FA-READ-REFUSAL-2026-08-18.md</c> for the working.

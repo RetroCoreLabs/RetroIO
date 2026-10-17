@@ -19,7 +19,9 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 internal static class ChannelSequence
 {
-    /// <summary>True when the stored sequence's low bit matches the control byte's low bit.</summary>
+    /// <summary>
+    /// True when the stored sequence's low bit matches the control byte's low bit.
+    /// </summary>
     public static bool Matches(byte storedSequence, byte control) =>
         (storedSequence & 0x01) == (control & 0x01);
 }

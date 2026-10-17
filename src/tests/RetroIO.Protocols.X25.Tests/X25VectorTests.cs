@@ -28,8 +28,8 @@ namespace RetroIO.Protocols.X25.Tests
     /// settled by the text, not by whichever one happened to be written first.
     /// </para>
     /// <para>
-    /// <b>How status works.</b> A vector marked <c>pass</c> must pass. A vector marked
-    /// <c>knownFail:&lt;rule&gt;</c> documents a defect the code has TODAY; this class asserts that
+    /// How status works. A vector marked <c>pass</c> must pass. A vector marked
+    /// <c>knownFail:rule</c> documents a defect the code has TODAY; this class asserts that
     /// it still fails, so the moment a fix lands the test goes red and somebody has to open the
     /// vector, read the rule, and flip the status to <c>pass</c> on purpose. That is the same fence
     /// the HDLC merge used (<c>_WHICH_IS_WRONG</c> tests), and it exists so that a behaviour change

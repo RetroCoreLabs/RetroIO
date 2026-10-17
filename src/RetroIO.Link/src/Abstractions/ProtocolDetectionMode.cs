@@ -12,13 +12,19 @@ namespace RetroIO.Link
     /// </summary>
     public enum ProtocolDetectionMode
     {
-        /// <summary>All traffic on this link is X.25.</summary>
+        /// <summary>
+        /// All traffic on this link is X.25.
+        /// </summary>
         X25Only,
 
-        /// <summary>All traffic on this link is SINTRAN.</summary>
+        /// <summary>
+        /// All traffic on this link is SINTRAN.
+        /// </summary>
         SintranOnly,
 
-        /// <summary>Detect protocol per frame using the 0x21 0x13 markers.</summary>
+        /// <summary>
+        /// Detect protocol per frame using the 0x21 0x13 markers.
+        /// </summary>
         AutoDetect
     }
 }

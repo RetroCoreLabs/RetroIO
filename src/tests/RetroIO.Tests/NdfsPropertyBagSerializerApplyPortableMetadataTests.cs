@@ -89,7 +89,9 @@ namespace RetroIO.Tests
         // added without anyone deciding what ApplyPortableMetadata should do with it.
         // ------------------------------------------------------------------------------------
 
-        /// <summary>Keys ApplyPortableMetadata restores onto the ObjectEntry.</summary>
+        /// <summary>
+        /// Keys ApplyPortableMetadata restores onto the ObjectEntry.
+        /// </summary>
         private static readonly string[] PortableKeys =
         {
             NdfsPropertyBagKeys.AccessBits,

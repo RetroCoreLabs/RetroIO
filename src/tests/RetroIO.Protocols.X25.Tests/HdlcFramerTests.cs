@@ -355,7 +355,9 @@ namespace RetroIO.Protocols.X25.Tests
 
         // ---------------------------------------------------------------- helpers
 
-        /// <summary>Prepends a run of extra flag octets to an already-framed buffer.</summary>
+        /// <summary>
+        /// Prepends a run of extra flag octets to an already-framed buffer.
+        /// </summary>
         private static byte[] WithLeadingFlags(byte[] frame, int extraFlags)
         {
             byte[] wire = new byte[extraFlags + frame.Length];
@@ -374,7 +376,9 @@ namespace RetroIO.Protocols.X25.Tests
             return result;
         }
 
-        /// <summary>Removes flags and byte stuffing; returns the frame content with its FCS.</summary>
+        /// <summary>
+        /// Removes flags and byte stuffing; returns the frame content with its FCS.
+        /// </summary>
         private static byte[] Unstuff(byte[] wire)
         {
             List<byte> outBytes = new List<byte>(wire.Length);

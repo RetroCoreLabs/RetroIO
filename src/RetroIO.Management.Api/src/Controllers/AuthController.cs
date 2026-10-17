@@ -30,10 +30,18 @@ public class AuthController : ControllerBase
     private readonly ManagementTokenService _tokens;
     private readonly ILogger<AuthController> _logger;
 
-    /// <summary>Creates the controller.</summary>
-    /// <param name="idp">Identity provider that verifies the password.</param>
-    /// <param name="tokens">Token issuer.</param>
-    /// <param name="logger">Log sink.</param>
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="idp">
+    /// Identity provider that verifies the password.
+    /// </param>
+    /// <param name="tokens">
+    /// Token issuer.
+    /// </param>
+    /// <param name="logger">
+    /// Log sink.
+    /// </param>
     public AuthController(IRetroIDP idp, ManagementTokenService tokens, ILogger<AuthController> logger)
     {
         _idp = idp;
@@ -41,9 +49,15 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>Exchanges credentials for a bearer token.</summary>
-    /// <param name="request">User name and password.</param>
-    /// <returns>The token, or 401 when the credentials are not accepted.</returns>
+    /// <summary>
+    /// Exchanges credentials for a bearer token.
+    /// </summary>
+    /// <param name="request">
+    /// User name and password.
+    /// </param>
+    /// <returns>
+    /// The token, or 401 when the credentials are not accepted.
+    /// </returns>
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<LoginResponse>>> Login([FromBody] LoginRequest request)

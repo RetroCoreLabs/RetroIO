@@ -35,8 +35,12 @@ public sealed class FlogCommand : IOsCliCommand
     /// <summary>
     /// Creates the command under one spelling.
     /// </summary>
-    /// <param name="name"><c>FLOG</c> or <c>LOGOFF</c>.</param>
-    /// <param name="minimumAbbreviation">The spelling's minimum abbreviation length.</param>
+    /// <param name="name">
+    /// <c>FLOG</c> or <c>LOGOFF</c>.
+    /// </param>
+    /// <param name="minimumAbbreviation">
+    /// The spelling's minimum abbreviation length.
+    /// </param>
     public FlogCommand(string name, int minimumAbbreviation)
     {
         _name = name;

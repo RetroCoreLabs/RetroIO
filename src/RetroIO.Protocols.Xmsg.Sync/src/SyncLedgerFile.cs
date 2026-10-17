@@ -25,7 +25,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
     /// exists, which SINTRAN refuses - so the first pass after every restart is a burst of
     /// failures that mean nothing.
     /// </para>
-    /// <para><b>Kept out of <see cref="SyncLedger"/> on purpose</b></para>
+    /// <para>Kept out of <see cref="SyncLedger"/> on purpose</para>
     /// <para>
     /// The ledger itself opens no file and needs no disk, which is what makes its rules cheap to
     /// test. Reading and writing are a separate concern and live here.

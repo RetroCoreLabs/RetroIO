@@ -33,7 +33,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// <para><b>Learned, not assumed</b></para>
     /// <para>
     /// The peer's link id is UNKNOWN in origin - it is neither the node number nor the system
-    /// number in the MAC - so it is <b>learned from the first frame received</b> rather than
+    /// number in the MAC - so it is learned from the first frame received rather than
     /// derived. Deriving it from the node number would be inventing a constant that merely happens
     /// to work, which is the failure mode this project has been bitten by before. Until a frame
     /// arrives, <see cref="HasLearnedPeer"/> is false and outgoing frames use
@@ -80,8 +80,8 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// <para>
         /// MEASURED 2026-08-04 against a live SINTRAN (D100 -> our node 19999). This was 0x01, on
         /// the reasoning that the captured links were already running so the true starting value was
-        /// unknown and "any value works because the peer follows what it receives". <b>That
-        /// reasoning was wrong.</b> D100 does not follow what it receives: on every fresh connection
+        /// unknown and "any value works because the peer follows what it receives". That
+        /// reasoning was wrong. D100 does not follow what it receives: on every fresh connection
         /// its own first data frame is sequence <c>0</c>, and when we opened at <c>1</c> it accepted
         /// the connection, then ignored our reply and re-sent its ReachabilityRequest - consistent
         /// with a receiver holding a frame that arrived one ahead of the sequence it was waiting for.
@@ -123,8 +123,8 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// largest a real machine sends".
         /// </para>
         /// <para>
-        /// The lesson is not "measure harder". It is that <b>a capture shows what the traffic
-        /// NEEDED, never what the protocol ALLOWS</b>. A machine that had six frames to send sends
+        /// The lesson is not "measure harder". It is that a capture shows what the traffic
+        /// NEEDED, never what the protocol ALLOWS. A machine that had six frames to send sends
         /// six; it says nothing about seven. So this value is a FLOOR on the real limit, not the
         /// limit, and no capture can ever establish the limit. What it does establish is the one
         /// thing that matters: a real ND does go this wide, so going this wide cannot flood a peer.
@@ -467,7 +467,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// an error; the conversation simply never started.
         /// </para>
         /// <para>
-        /// So the peer's position is <b>learned from its first acknowledgement</b>, the same way its
+        /// So the peer's position is learned from its first acknowledgement, the same way its
         /// link id is learned rather than derived. An acknowledgement states outright which sequence
         /// it wants next, which is the only evidence available - our own numbering says nothing
         /// about what the other end remembers.
@@ -476,8 +476,8 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// <para>
         /// The protocol has a connection request for this (<c>0x0F</c>, CR - see
         /// <c>DOC\COSMOS-ETHERNET-LINK-CONTROL-FRAMES-2026-08-03.md</c> section 3), and it would be
-        /// the tidier answer. It is not used because <b>no answer to a <c>0x0F</c> has ever been
-        /// captured</b>, and our own confirm kind byte is admittedly a guess - see
+        /// the tidier answer. It is not used because no answer to a <c>0x0F</c> has ever been
+        /// captured, and our own confirm kind byte is admittedly a guess - see
         /// <see cref="ConnectionConfirmKindUnverified"/>. Sending one and hoping would be inventing
         /// behaviour; reading the number the peer already tells us is not.
         /// </para>
@@ -553,7 +553,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// Gets the number of data frames the peer has re-sent to us.
         /// </summary>
         /// <remarks>
-        /// <b>Anything above zero is a fault, and it is almost always ours.</b> A peer repeats
+        /// Anything above zero is a fault, and it is almost always ours. A peer repeats
         /// because it has not seen our acknowledgement - either we are sending far ahead of the
         /// window (see <see cref="SendWindow"/>) or something is holding up our receive path. Check
         /// this before looking for a defect in any layer above.
@@ -650,7 +650,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// address another way.
         /// </para>
         /// <para>
-        /// <b>Queued is not sent.</b> This returned a plain bool until 2026-08-17, and the remark
+        /// Queued is not sent. This returned a plain bool until 2026-08-17, and the remark
         /// here already admitted that a true return "no longer means the bytes are on the wire" -
         /// but nothing SAID SO at runtime, so a live TAD connect hung with every log line reporting
         /// a healthy exchange. Distinguishing the two is now the caller's problem to acknowledge

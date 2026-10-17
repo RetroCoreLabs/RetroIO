@@ -23,14 +23,14 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// its own operation code and payload.
     /// </para>
     /// <para>
-    /// <b>Payloads are opaque here, on purpose.</b> The opening exchange carries a directory and user
+    /// Payloads are opaque here, on purpose. The opening exchange carries a directory and user
     /// spec whose internal layout is only partly understood, and synthesising one from a guess would
     /// produce a request the server rejects. Callers pass the QFORM field bytes they want sent -
     /// taken from a capture until the layout is decoded - and this class supplies the envelope
     /// around them.
     /// </para>
     /// <para>
-    /// <b>Structural resemblance to RR-LIB.</b> The captured conversation looks like the
+    /// Structural resemblance to RR-LIB. The captured conversation looks like the
     /// request-response model in <c>RetroIO.Protocols.Xmsg.Api.Rr</c>: an opening letter carrying user data that names
     /// the server, a confirmation, request/response pairs, then a disconnect. That resemblance is
     /// NOT verified - no document has been found stating that <c>*FA-SERVER</c> is an RR-LIB server,
@@ -77,7 +77,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// rather than as a reading.
         /// </para>
         /// <para>
-        /// <b>Bit 7 is a FLAG, not part of the count.</b> The counting rule - seven-bit counter,
+        /// Bit 7 is a FLAG, not part of the count. The counting rule - seven-bit counter,
         /// bit 7 set on everything except the first message of a content pair - is the same on both
         /// sides and lives in <see cref="FaMessageCounter"/>. This used to be an <c>int</c> that
         /// <see cref="BuildRequest"/> turned into <c>0x80 + n</c> unconditionally, which is right

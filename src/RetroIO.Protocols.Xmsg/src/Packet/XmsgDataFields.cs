@@ -45,7 +45,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// <remarks>
         /// <para>
         /// CARVED FACT, 2026-07-31 - this is not an independent "frame-class word". It equals the
-        /// true 16-bit XMCSM at wire 26-27 on <b>1449 of 1449</b> data frames in the corpus. See
+        /// true 16-bit XMCSM at wire 26-27 on 1449 of 1449 data frames in the corpus. See
         /// <see cref="XmcsmWithBodyWord"/> for the full word layout carved from the kernel symbols.
         /// </para>
         /// <para>
@@ -162,7 +162,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// </summary>
         /// <remarks>
         /// <para>
-        /// CARVED FACT, 2026-07-31 - <b>this field spans a boundary and is misnamed</b>. The XMSG
+        /// CARVED FACT, 2026-07-31 - this field spans a boundary and is misnamed. The XMSG
         /// kernel symbol list (<c>SINTRAN/NPL-SOURCE/SYMBOLS/L07/XMSG-SYMBOL-LIST.SYMB.TXT</c>)
         /// defines the transported header as SEVEN words ending at XMCSM:
         /// </para>
@@ -190,7 +190,7 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// </para>
         /// <para>
         /// Confirmed on the wire, independently of the symbol file, across the whole capture
-        /// corpus: Flags 2 (wire 10-11) equals the 16-bit XMCSM (wire 26-27) on <b>1449 of 1449</b>
+        /// corpus: Flags 2 (wire 10-11) equals the 16-bit XMCSM (wire 26-27) on 1449 of 1449
         /// data frames - so the long-documented rule "Flags2 == XMCSM >> 16" was that exact
         /// equality seen through this wrong 32-bit split. And the word at 28-29 takes values that
         /// are plainly application-layer: <c>0x07F0</c>/<c>0x07A2</c>/<c>0x07C0</c>/<c>0x07D2</c>

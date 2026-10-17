@@ -25,10 +25,18 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <summary>
         /// Creates a partition block device wrapper.
         /// </summary>
-        /// <param name="physicalDevice">The underlying physical block device containing the partition.</param>
-        /// <param name="partitionStartLBA">Starting LBA sector of the partition (in 512-byte sectors).</param>
-        /// <param name="partitionSizeLBA">Size of the partition in 512-byte sectors.</param>
-        /// <param name="partitionId">Partition identifier (e.g., "0", "1", "a", "b") for error messages.</param>
+        /// <param name="physicalDevice">
+        /// The underlying physical block device containing the partition.
+        /// </param>
+        /// <param name="partitionStartLBA">
+        /// Starting LBA sector of the partition (in 512-byte sectors).
+        /// </param>
+        /// <param name="partitionSizeLBA">
+        /// Size of the partition in 512-byte sectors.
+        /// </param>
+        /// <param name="partitionId">
+        /// Partition identifier (e.g., "0", "1", "a", "b") for error messages.
+        /// </param>
         public PartitionBlockDevice(
             IBlockDevice physicalDevice,
             uint partitionStartLBA,

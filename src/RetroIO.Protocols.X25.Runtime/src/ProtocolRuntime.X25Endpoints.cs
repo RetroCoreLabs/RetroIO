@@ -36,7 +36,7 @@ namespace RetroIO.Protocols.X25.Runtime
     /// local LCNs, and routes the engine's events to whoever is bound to the local LCN.
     /// </para>
     /// <para>
-    /// <b>Locking.</b> <c>_routingLock</c> guards the tables. An endpoint's engine is touched only
+    /// Locking. <c>_routingLock</c> guards the tables. An endpoint's engine is touched only
     /// inside <see cref="X25Endpoint.Sync"/>; the engine's events arrive inside that lock, so the
     /// handlers here take <c>_routingLock</c> briefly for table lookups and never call another
     /// endpoint while holding either.
@@ -70,6 +70,12 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <param name="isDte">
         /// True for a connection this side dialled (it calls the switch as a DTE), false for one
         /// accepted by the XOT server.
+        /// </param>
+        /// <param name="lciBase">
+        /// The first logical channel number this endpoint may use.
+        /// </param>
+        /// <param name="lciCount">
+        /// How many logical channel numbers it may use, counting from <paramref name="lciBase"/>.
         /// </param>
         private X25Endpoint EndpointFor(object connection, string name, Func<byte[], bool> send, bool isDte, ushort lciBase = 1, ushort lciCount = 4095)
         {

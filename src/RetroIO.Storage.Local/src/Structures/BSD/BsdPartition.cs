@@ -84,9 +84,15 @@ namespace RetroIO.Storage.Local.BSD.Structures
         /// <summary>
         /// Parses a partition entry from byte array.
         /// </summary>
-        /// <param name="buffer">Buffer containing partition data (at least 12 bytes).</param>
-        /// <param name="offset">Offset in buffer where partition data starts.</param>
-        /// <returns>Parsed partition structure.</returns>
+        /// <param name="buffer">
+        /// Buffer containing partition data (at least 12 bytes).
+        /// </param>
+        /// <param name="offset">
+        /// Offset in buffer where partition data starts.
+        /// </param>
+        /// <returns>
+        /// Parsed partition structure.
+        /// </returns>
         public static BsdPartition Parse(byte[] buffer, int offset)
         {
             if (buffer == null)
@@ -109,8 +115,12 @@ namespace RetroIO.Storage.Local.BSD.Structures
         /// <summary>
         /// Writes partition to byte array.
         /// </summary>
-        /// <param name="buffer">Buffer to write to (at least 12 bytes).</param>
-        /// <param name="offset">Offset in buffer where partition data should be written.</param>
+        /// <param name="buffer">
+        /// Buffer to write to (at least 12 bytes).
+        /// </param>
+        /// <param name="offset">
+        /// Offset in buffer where partition data should be written.
+        /// </param>
         public readonly void WriteTo(byte[] buffer, int offset)
         {
             if (buffer == null)
@@ -152,8 +162,12 @@ namespace RetroIO.Storage.Local.BSD.Structures
         /// <summary>
         /// Validates partition entry.
         /// </summary>
-        /// <param name="diskSize">Total disk size in sectors.</param>
-        /// <returns>True if partition is valid.</returns>
+        /// <param name="diskSize">
+        /// Total disk size in sectors.
+        /// </param>
+        /// <returns>
+        /// True if partition is valid.
+        /// </returns>
         public readonly bool Validate(uint diskSize)
         {
             // Empty partition is valid

@@ -65,8 +65,12 @@ public sealed class UdpTransport : ITransport
         _bufferPool = ArrayPool<byte>.Shared;
     }
 
-    /// <summary>Creates and binds the socket this run will use.</summary>
-    /// <returns>The bound socket.</returns>
+    /// <summary>
+    /// Creates and binds the socket this run will use.
+    /// </summary>
+    /// <returns>
+    /// The bound socket.
+    /// </returns>
     private Socket CreateAndBind()
     {
         Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);

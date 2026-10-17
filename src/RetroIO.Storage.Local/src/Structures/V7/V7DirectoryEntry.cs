@@ -77,7 +77,7 @@ namespace RetroIO.Storage.Local.V7.Structures
 
         /// <summary>
         /// Calculates the size needed for a directory entry with given name.
-        /// Formula: ((header_size + name_length + null + alignment - 1) &amp; ~(alignment - 1))
+        /// Formula: ((header_size + name_length + null + alignment - 1) AND NOT (alignment - 1))
         /// Result is always a multiple of 4 bytes.
         /// </summary>
         public static int CalculateEntrySize(string name)
@@ -99,9 +99,15 @@ namespace RetroIO.Storage.Local.V7.Structures
         /// <summary>
         /// Parses directory entry from byte array.
         /// </summary>
-        /// <param name="buffer">Buffer containing directory data.</param>
-        /// <param name="offset">Offset where entry starts.</param>
-        /// <returns>Parsed directory entry, or null if invalid.</returns>
+        /// <param name="buffer">
+        /// Buffer containing directory data.
+        /// </param>
+        /// <param name="offset">
+        /// Offset where entry starts.
+        /// </param>
+        /// <returns>
+        /// Parsed directory entry, or null if invalid.
+        /// </returns>
         public static V7DirectoryEntry? Parse(byte[] buffer, int offset)
         {
             if (buffer == null)
@@ -139,9 +145,15 @@ namespace RetroIO.Storage.Local.V7.Structures
         /// <summary>
         /// Parses all directory entries from a directory block.
         /// </summary>
-        /// <param name="buffer">Buffer containing directory block (1024 bytes).</param>
-        /// <param name="directorySize">Total size of directory in bytes.</param>
-        /// <returns>List of directory entries.</returns>
+        /// <param name="buffer">
+        /// Buffer containing directory block (1024 bytes).
+        /// </param>
+        /// <param name="directorySize">
+        /// Total size of directory in bytes.
+        /// </param>
+        /// <returns>
+        /// List of directory entries.
+        /// </returns>
         public static V7DirectoryEntry[] ParseAll(byte[] buffer, uint directorySize)
         {
             if (buffer == null)
@@ -173,8 +185,12 @@ namespace RetroIO.Storage.Local.V7.Structures
         /// <summary>
         /// Writes directory entry to byte array.
         /// </summary>
-        /// <param name="buffer">Buffer to write to.</param>
-        /// <param name="offset">Offset where entry should be written.</param>
+        /// <param name="buffer">
+        /// Buffer to write to.
+        /// </param>
+        /// <param name="offset">
+        /// Offset where entry should be written.
+        /// </param>
         public void WriteTo(byte[] buffer, int offset)
         {
             if (buffer == null)
@@ -205,8 +221,12 @@ namespace RetroIO.Storage.Local.V7.Structures
         /// <summary>
         /// Creates "." entry for a new directory.
         /// </summary>
-        /// <param name="inodeNumber">Inode number of the directory itself.</param>
-        /// <returns>Directory entry for "."</returns>
+        /// <param name="inodeNumber">
+        /// Inode number of the directory itself.
+        /// </param>
+        /// <returns>
+        /// Directory entry for "."
+        /// </returns>
         public static V7DirectoryEntry CreateDotEntry(ushort inodeNumber)
         {
             return new V7DirectoryEntry
@@ -221,9 +241,15 @@ namespace RetroIO.Storage.Local.V7.Structures
         /// <summary>
         /// Creates ".." entry for a new directory.
         /// </summary>
-        /// <param name="parentInodeNumber">Inode number of parent directory.</param>
-        /// <param name="remainingSpace">Remaining space in block (defaults to 500 bytes).</param>
-        /// <returns>Directory entry for ".."</returns>
+        /// <param name="parentInodeNumber">
+        /// Inode number of parent directory.
+        /// </param>
+        /// <param name="remainingSpace">
+        /// Remaining space in block (defaults to 500 bytes).
+        /// </param>
+        /// <returns>
+        /// Directory entry for ".."
+        /// </returns>
         public static V7DirectoryEntry CreateDotDotEntry(ushort parentInodeNumber, ushort remainingSpace = 500)
         {
             return new V7DirectoryEntry
@@ -238,9 +264,15 @@ namespace RetroIO.Storage.Local.V7.Structures
         /// <summary>
         /// Creates a new directory block with "." and ".." entries.
         /// </summary>
-        /// <param name="inodeNumber">Inode number of the directory.</param>
-        /// <param name="parentInodeNumber">Inode number of parent directory.</param>
-        /// <returns>512-byte directory template.</returns>
+        /// <param name="inodeNumber">
+        /// Inode number of the directory.
+        /// </param>
+        /// <param name="parentInodeNumber">
+        /// Inode number of parent directory.
+        /// </param>
+        /// <returns>
+        /// 512-byte directory template.
+        /// </returns>
         public static byte[] CreateDirectoryTemplate(ushort inodeNumber, ushort parentInodeNumber)
         {
             byte[] template = new byte[V7Constants.DIRBLKSIZ];

@@ -112,7 +112,9 @@ namespace RetroIO.Protocols.X25.Runtime
         // Local TAD protocol handler
         private readonly LocalTadProtocol _localTadProtocol;
 
-        /// <summary>The in-process TAD terminal service local calls are delivered to.</summary>
+        /// <summary>
+        /// The in-process TAD terminal service local calls are delivered to.
+        /// </summary>
         private LocalTadProtocol LocalTad => _localTadProtocol;
 
         // Local XMSG protocol handler
@@ -1009,8 +1011,12 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <summary>
         /// Inject LAPB frame via the default test link (new architecture).
         /// </summary>
-        /// <param name="frameData">LAPB frame data (Address + Control + Information)</param>
-        /// <param name="length">Frame length</param>
+        /// <param name="frameData">
+        /// LAPB frame data (Address + Control + Information)
+        /// </param>
+        /// <param name="length">
+        /// Frame length
+        /// </param>
         public void InjectLapbFrame(byte[] frameData, int length)
         {
             if (_disposed)
@@ -3246,17 +3252,23 @@ namespace RetroIO.Protocols.X25.Runtime
             }
         }
 
-        /// <summary>Kept for the routing layer's call sequence; the mapping is made when the call is placed.</summary>
+        /// <summary>
+        /// Kept for the routing layer's call sequence; the mapping is made when the call is placed.
+        /// </summary>
         public void RegisterOutboundXotCall(ushort localLcn, ushort remoteLcn)
         {
         }
 
-        /// <summary>Kept for the routing layer's call sequence; the mapping is made when the call is placed.</summary>
+        /// <summary>
+        /// Kept for the routing layer's call sequence; the mapping is made when the call is placed.
+        /// </summary>
         public void RegisterOutboundXotCallDeferred(ushort localLcn, ushort remoteLcn)
         {
         }
 
-        /// <summary>Kept for the routing layer's call sequence; the mapping is made when the call is placed.</summary>
+        /// <summary>
+        /// Kept for the routing layer's call sequence; the mapping is made when the call is placed.
+        /// </summary>
         public void FinalizeOutboundXotCall(ushort localLcn, object transport)
         {
         }
@@ -3866,10 +3878,18 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <summary>
         /// Create or update a unified packet - single ID with layer enrichment
         /// </summary>
-        /// <param name="packetId">Global packet ID (if known, otherwise 0 for new packet)</param>
-        /// <param name="direction">Packet direction</param>
-        /// <param name="originLayer">Layer where packet originated</param>
-        /// <returns>The global packet ID</returns>
+        /// <param name="packetId">
+        /// Global packet ID (if known, otherwise 0 for new packet)
+        /// </param>
+        /// <param name="direction">
+        /// Packet direction
+        /// </param>
+        /// <param name="originLayer">
+        /// Layer where packet originated
+        /// </param>
+        /// <returns>
+        /// The global packet ID
+        /// </returns>
         private long CreateOrUpdateUnifiedPacket(long packetId, Direction direction, LayerType originLayer)
         {
             lock (_unifiedPacketsLock)
@@ -3909,9 +3929,15 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <summary>
         /// Enrich a unified packet with layer-specific information
         /// </summary>
-        /// <param name="packetId">Global packet ID</param>
-        /// <param name="layerType">Layer providing the information</param>
-        /// <param name="layerInfo">Layer-specific information</param>
+        /// <param name="packetId">
+        /// Global packet ID
+        /// </param>
+        /// <param name="layerType">
+        /// Layer providing the information
+        /// </param>
+        /// <param name="layerInfo">
+        /// Layer-specific information
+        /// </param>
         private void EnrichUnifiedPacket(long packetId, LayerType layerType, object layerInfo)
         {
             lock (_unifiedPacketsLock)
@@ -3955,9 +3981,15 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <summary>
         /// Mark a unified packet as having an error
         /// </summary>
-        /// <param name="packetId">Global packet ID</param>
-        /// <param name="errorReason">Error reason</param>
-        /// <param name="errorLayer">Layer where error occurred</param>
+        /// <param name="packetId">
+        /// Global packet ID
+        /// </param>
+        /// <param name="errorReason">
+        /// Error reason
+        /// </param>
+        /// <param name="errorLayer">
+        /// Layer where error occurred
+        /// </param>
         private void MarkUnifiedPacketError(long packetId, string errorReason, LayerType errorLayer)
         {
             lock (_unifiedPacketsLock)
@@ -3972,7 +4004,9 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <summary>
         /// Get unified packets for display (replacement for GetPacketsForDisplay)
         /// </summary>
-        /// <returns>List of unified packet display items</returns>
+        /// <returns>
+        /// List of unified packet display items
+        /// </returns>
         public List<PacketDisplayItem> GetUnifiedPacketsForDisplay()
         {
             lock (_unifiedPacketsLock)

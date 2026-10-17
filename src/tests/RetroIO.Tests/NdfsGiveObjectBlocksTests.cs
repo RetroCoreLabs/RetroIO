@@ -23,7 +23,7 @@ namespace RetroIO.Tests
     /// <remarks>
     /// <para>
     /// <c>GiveObjectBlocks</c> mirrors the SINTRAN operator command
-    /// <c>@GIVE-OBJECT-BLOCKS &lt;user&gt;,&lt;count&gt;</c>. The behaviour asserted here was
+    /// <c>@GIVE-OBJECT-BLOCKS user,count</c>. The behaviour asserted here was
     /// measured on a live SINTRAN III K pack: user BIGMAN was a default user with a reported
     /// MAXIMUM NUMBER OF FILES of 256, and after <c>@GIVE-OBJECT-BLOCKS BIGMAN,3</c> that
     /// became 1024 — so the command ADDS blocks rather than setting a total.

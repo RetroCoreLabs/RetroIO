@@ -32,8 +32,12 @@ namespace RetroIO.Storage.Local.MBR.Structures
         /// <summary>
         /// Parses an MBR from 512 bytes.
         /// </summary>
-        /// <param name="mbrBytes">512-byte MBR sector</param>
-        /// <returns>Parsed MBR partition table</returns>
+        /// <param name="mbrBytes">
+        /// 512-byte MBR sector
+        /// </param>
+        /// <returns>
+        /// Parsed MBR partition table
+        /// </returns>
         public static MbrPartitionTable Parse(byte[] mbrBytes)
         {
             if (mbrBytes == null || mbrBytes.Length < 512)
@@ -60,7 +64,9 @@ namespace RetroIO.Storage.Local.MBR.Structures
         /// <summary>
         /// Validates the MBR structure.
         /// </summary>
-        /// <returns>True if the boot signature bytes at offset 510-511 are 0x55, 0xAA.</returns>
+        /// <returns>
+        /// True if the boot signature bytes at offset 510-511 are 0x55, 0xAA.
+        /// </returns>
         /// <remarks>
         /// Real, pre-existing bug fixed here (found via a real MBR-partitioned disk image, not
         /// assumed): <see cref="Signature"/> is parsed via <c>BitConverter.ToUInt16(mbrBytes, 510)</c>,
@@ -97,15 +103,21 @@ namespace RetroIO.Storage.Local.MBR.Structures
         /// image. Entries 1-3 are left unused. Boot code is left zeroed (this is not a bootable
         /// MBR, just a valid partition table).
         /// </summary>
-        /// <param name="totalSectors">Total size of the disk, in 512-byte sectors.</param>
-        /// <param name="partitionTypeCode">MBR partition type byte (e.g. 0x01=FAT12, 0x06=FAT16, 0x0B=FAT32).</param>
+        /// <param name="totalSectors">
+        /// Total size of the disk, in 512-byte sectors.
+        /// </param>
+        /// <param name="partitionTypeCode">
+        /// MBR partition type byte (e.g. 0x01=FAT12, 0x06=FAT16, 0x0B=FAT32).
+        /// </param>
         /// <param name="partitionStartSector">
         /// First sector of the partition. Defaults to 1 (immediately after the MBR sector).
         /// Classic DOS FDISK instead aligned to the start of head 1 (skipping the rest of
         /// cylinder 0), typically sector-per-track sectors in; callers that care about that
         /// convention can pass the real geometry's sectors-per-track here.
         /// </param>
-        /// <param name="bootable">Sets the partition's boot-indicator flag (0x80) if true.</param>
+        /// <param name="bootable">
+        /// Sets the partition's boot-indicator flag (0x80) if true.
+        /// </param>
         /// <remarks>
         /// CHS start/end fields are written as the standard 0xFE/0xFF/0xFF "use LBA instead"
         /// sentinel bytes (what modern fdisk/Windows already write for LBA-addressed partitions)
@@ -206,9 +218,15 @@ namespace RetroIO.Storage.Local.MBR.Structures
         /// <summary>
         /// Parses a partition entry from 16 bytes.
         /// </summary>
-        /// <param name="mbrBytes">MBR sector data</param>
-        /// <param name="offset">Offset to partition entry (446, 462, 478, or 494)</param>
-        /// <returns>Parsed partition entry</returns>
+        /// <param name="mbrBytes">
+        /// MBR sector data
+        /// </param>
+        /// <param name="offset">
+        /// Offset to partition entry (446, 462, 478, or 494)
+        /// </param>
+        /// <returns>
+        /// Parsed partition entry
+        /// </returns>
         public static MbrPartitionEntry Parse(byte[] mbrBytes, int offset)
         {
             return new MbrPartitionEntry

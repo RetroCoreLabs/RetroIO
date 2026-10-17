@@ -26,7 +26,7 @@ using RetroIO.Storage.Providers;
 namespace RetroIO.Tests.VFS;
 
 /// <summary>
-/// Integration test for a <b>tnfs-backed Econet disc</b>: <see cref="EconetVfsDiscs.BuildComposite"/>
+/// Integration test for a tnfs-backed Econet disc: <see cref="EconetVfsDiscs.BuildComposite"/>
 /// mounts a <c>Provider="tnfs"</c> disc against a real in-process TNFS server (TCP) and serves it over
 /// the Econet composite backend. Proves the tnfs provider wiring end-to-end (mount → read) — a BBC
 /// would <c>*SDISC</c> to this disc and read files off the TNFS server.

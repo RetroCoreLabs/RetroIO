@@ -20,7 +20,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
     /// </para>
     /// <para>
     /// Only these three values appear in the captured logins. The custom table that strategy 7 selects
-    /// is <b>16 bytes, not 20</b> - corrected 2026-08-18 against the version J NPL source, where the
+    /// is 16 bytes, not 20 - corrected 2026-08-18 against the version J NPL source, where the
     /// earlier "20-byte" reading turns out to be an OCTAL literal read as decimal.
     /// <c>CBRECTA</c> in <c>SINTRAN/NPL-SOURCE-2/NPL-CLEAN/20-COS-TAD-POF-CODE.NPL</c> copies exactly
     /// 8 words (<c>FOR X:=0 TO 7</c>) and then advances the byte pointer by <c>20</c> octal = 16

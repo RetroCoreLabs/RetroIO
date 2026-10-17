@@ -12,16 +12,24 @@ namespace RetroIO.Protocols.X25.Common
     /// </summary>
     public enum LogLevel
     {
-        /// <summary>Diagnostic detail.</summary>
+        /// <summary>
+        /// Diagnostic detail.
+        /// </summary>
         Debug,
 
-        /// <summary>Informational message.</summary>
+        /// <summary>
+        /// Informational message.
+        /// </summary>
         Info,
 
-        /// <summary>Warning condition.</summary>
+        /// <summary>
+        /// Warning condition.
+        /// </summary>
         Warning,
 
-        /// <summary>Error condition.</summary>
+        /// <summary>
+        /// Error condition.
+        /// </summary>
         Error
     }
 }

@@ -12,7 +12,9 @@ using RetroIO.Storage.Local.FileSystems;
 
 namespace RetroIO.Storage.Local
 {
-    /// <summary>Commodore sector-disk image types that can be created blank.</summary>
+    /// <summary>
+    /// Commodore sector-disk image types that can be created blank.
+    /// </summary>
     public enum CbmDiskType
     {
         D64, // 1541, 35 tracks, 174,848 bytes
@@ -26,7 +28,9 @@ namespace RetroIO.Storage.Local
     /// </summary>
     public static class CbmImageFactory
     {
-        /// <summary>Returns a freshly-formatted blank disk image of the given type.</summary>
+        /// <summary>
+        /// Returns a freshly-formatted blank disk image of the given type.
+        /// </summary>
         public static byte[] CreateBlank(CbmDiskType type, string diskName, string diskId)
         {
             BlockDeviceDescriptor descriptor;
@@ -71,13 +75,17 @@ namespace RetroIO.Storage.Local
             return ms.ToArray();
         }
 
-        /// <summary>Creates a blank disk image and writes it to <paramref name="path"/>.</summary>
+        /// <summary>
+        /// Creates a blank disk image and writes it to <paramref name="path"/>.
+        /// </summary>
         public static void CreateBlankFile(CbmDiskType type, string path, string diskName, string diskId)
         {
             File.WriteAllBytes(path, CreateBlank(type, diskName, diskId));
         }
 
-        /// <summary>Maps a disk type to its conventional file extension (".d64" etc.).</summary>
+        /// <summary>
+        /// Maps a disk type to its conventional file extension (".d64" etc.).
+        /// </summary>
         public static string ExtensionFor(CbmDiskType type)
         {
             return type switch

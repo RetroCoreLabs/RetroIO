@@ -44,7 +44,7 @@ namespace RetroIO.Protocols.X25.Transport
     /// High-performance transport bridge for transparent pass-through mode
     /// Supports XOT-to-Serial, XOT-to-XOT, and Serial-to-Serial bridging
     /// Bypasses routing layer for maximum throughput with zero-allocation design
-    /// Uses Span&lt;T&gt;, ArrayPool, and Interlocked for optimal performance
+    /// Uses Span{T}, ArrayPool, and Interlocked for optimal performance
     /// </summary>
     public class XotSerialBridge : IDisposable
     {

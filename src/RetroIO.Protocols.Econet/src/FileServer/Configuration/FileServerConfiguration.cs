@@ -25,7 +25,9 @@ public sealed class FileServerConfiguration
     public byte DefaultDirPerm { get; set; } = 0x33;
     public byte FilenameLength { get; set; } = 10;
 
-    /// <summary>Delay before SAVE close reply (ms). PiFS uses ~20ms for Beeb clients.</summary>
+    /// <summary>
+    /// Delay before SAVE close reply (ms). PiFS uses ~20ms for Beeb clients.
+    /// </summary>
     public int SaveCloseDelayMs { get; set; } = 20;
 
     /// <summary>

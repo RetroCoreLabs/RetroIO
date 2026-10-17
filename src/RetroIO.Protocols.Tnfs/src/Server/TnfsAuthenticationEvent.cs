@@ -14,16 +14,24 @@ namespace RetroIO.Protocols.Tnfs.Server;
 /// </summary>
 public sealed class TnfsAuthenticationRequest
 {
-    /// <summary>Username provided in MOUNT command</summary>
+    /// <summary>
+    /// Username provided in MOUNT command
+    /// </summary>
     public string Username { get; set; } = string.Empty;
 
-    /// <summary>Password provided in MOUNT command</summary>
+    /// <summary>
+    /// Password provided in MOUNT command
+    /// </summary>
     public string Password { get; set; } = string.Empty;
 
-    /// <summary>Client IP address for audit logging</summary>
+    /// <summary>
+    /// Client IP address for audit logging
+    /// </summary>
     public string ClientIP { get; set; } = string.Empty;
 
-    /// <summary>Mount point requested</summary>
+    /// <summary>
+    /// Mount point requested
+    /// </summary>
     public string MountPoint { get; set; } = string.Empty;
 }
 
@@ -32,19 +40,29 @@ public sealed class TnfsAuthenticationRequest
 /// </summary>
 public sealed class TnfsAuthenticationResponse
 {
-    /// <summary>Was authentication successful?</summary>
+    /// <summary>
+    /// Was authentication successful?
+    /// </summary>
     public bool IsAuthenticated { get; set; }
 
-    /// <summary>Authenticated user ID (Guid.Empty if failed)</summary>
+    /// <summary>
+    /// Authenticated user ID (Guid.Empty if failed)
+    /// </summary>
     public Guid UserId { get; set; } = Guid.Empty;
 
-    /// <summary>Authenticated username (for audit logging)</summary>
+    /// <summary>
+    /// Authenticated username (for audit logging)
+    /// </summary>
     public string Username { get; set; } = string.Empty;
 
-    /// <summary>Is authenticated user an admin (RetroIDP)?</summary>
+    /// <summary>
+    /// Is authenticated user an admin (RetroIDP)?
+    /// </summary>
     public bool IsAdmin { get; set; }
 
-    /// <summary>Error message if authentication failed</summary>
+    /// <summary>
+    /// Error message if authentication failed
+    /// </summary>
     public string? ErrorMessage { get; set; }
 
     public static TnfsAuthenticationResponse Success(Guid userId, string username, bool isAdmin = false)

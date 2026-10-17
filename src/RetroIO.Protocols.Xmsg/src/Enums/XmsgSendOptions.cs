@@ -95,7 +95,7 @@ namespace RetroIO.Protocols.Xmsg
         /// XMSG-VALUES-M.SYMB:77   XFHIP=13  % In XFSND/RTN/WRT/SFM: If not XFROU then high-priority message
         /// XMSG-VALUES-M.SYMB:80   XFRRO=13  % In XFSND: If XFROU then non-local XROUT (sysno in A-reg).
         /// </code>
-        /// So with <see cref="RoutedLetter"/> (XFROU) SET, bit 5 is <b>not</b> priority at all - it
+        /// So with <see cref="RoutedLetter"/> (XFROU) SET, bit 5 is not priority at all - it
         /// is <see cref="RemoteXrout"/>, "this XROUT request is for a system other than the local
         /// one". Use <see cref="XmsgSendOptionsExtensions.IsHighPriority"/> and
         /// <see cref="XmsgSendOptionsExtensions.IsRemoteXrout"/> rather than testing the bit

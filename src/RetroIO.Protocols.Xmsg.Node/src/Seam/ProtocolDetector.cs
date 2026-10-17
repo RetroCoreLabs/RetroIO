@@ -29,7 +29,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
 
     /// <summary>
     /// Classifies which L3 protocol a link's payload belongs to (X.25 vs XMSG). Present only as a
-    /// <b>seam</b> for now: the real mechanism is per-link binding, so the shipped implementation
+    /// seam for now: the real mechanism is per-link binding, so the shipped implementation
     /// simply returns the link's configured binding without inspecting bytes.
     /// </summary>
     /// <remarks>

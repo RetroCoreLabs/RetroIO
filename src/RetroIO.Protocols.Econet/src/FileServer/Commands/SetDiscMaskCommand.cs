@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 /// <remarks>
 /// Reference behaviour (PiFS, facts only): System-only, abbreviation 5. Argument is
-/// <c>&lt;username&gt; &lt;discs&gt;</c> where <c>discs</c> is <c>ALL</c> (0xFFFF), <c>NONE</c> (0x0000),
+/// <c>username discs</c> where <c>discs</c> is <c>ALL</c> (0xFFFF), <c>NONE</c> (0x0000),
 /// or up to four hex digits. Fewer than two tokens is <c>0xFF "Bad parameters"</c>; an unknown user is
 /// <c>0xFF "Unknown user"</c>; a value that leaves the mask unchanged (including an unparseable one) is
 /// <c>0xFF "Bad parameter or mask unchanged"</c>. Otherwise the new mask is persisted and takes effect
@@ -29,7 +29,9 @@ public sealed class SetDiscMaskCommand : IOsCliCommand
 {
     private readonly string _name;
 
-    /// <summary>Creates the command under one spelling (<c>DISCMASK</c> or <c>DISKMASK</c>).</summary>
+    /// <summary>
+    /// Creates the command under one spelling (<c>DISCMASK</c> or <c>DISKMASK</c>).
+    /// </summary>
     public SetDiscMaskCommand(string name)
     {
         _name = name;

@@ -16,16 +16,24 @@ namespace RetroIO.Security.Validation;
 /// </summary>
 public sealed class PathValidationResult
 {
-    /// <summary>Whether path is valid</summary>
+    /// <summary>
+    /// Whether path is valid
+    /// </summary>
     public bool Valid { get; set; }
 
-    /// <summary>Normalized path (absolute, cleaned)</summary>
+    /// <summary>
+    /// Normalized path (absolute, cleaned)
+    /// </summary>
     public string NormalizedPath { get; set; } = string.Empty;
 
-    /// <summary>Error message (if invalid)</summary>
+    /// <summary>
+    /// Error message (if invalid)
+    /// </summary>
     public string? Error { get; set; }
 
-    /// <summary>Create valid result</summary>
+    /// <summary>
+    /// Create valid result
+    /// </summary>
     public static PathValidationResult Success(string normalizedPath)
     {
         return new PathValidationResult
@@ -35,7 +43,9 @@ public sealed class PathValidationResult
         };
     }
 
-    /// <summary>Create invalid result</summary>
+    /// <summary>
+    /// Create invalid result
+    /// </summary>
     public static PathValidationResult Failure(string error)
     {
         return new PathValidationResult
@@ -54,9 +64,15 @@ public static class PathValidator
     /// <summary>
     /// Validate and normalize a filesystem path
     /// </summary>
-    /// <param name="path">Path to validate</param>
-    /// <param name="rootPath">Root directory path (paths must be within this root)</param>
-    /// <returns>Validation result with normalized path or error</returns>
+    /// <param name="path">
+    /// Path to validate
+    /// </param>
+    /// <param name="rootPath">
+    /// Root directory path (paths must be within this root)
+    /// </param>
+    /// <returns>
+    /// Validation result with normalized path or error
+    /// </returns>
     public static PathValidationResult ValidatePath(string path, string rootPath)
     {
         // Check for null or empty
@@ -152,8 +168,12 @@ public static class PathValidator
     /// <summary>
     /// Validate filename (not full path, just the name)
     /// </summary>
-    /// <param name="fileName">Filename to validate</param>
-    /// <returns>Validation result</returns>
+    /// <param name="fileName">
+    /// Filename to validate
+    /// </param>
+    /// <returns>
+    /// Validation result
+    /// </returns>
     public static PathValidationResult ValidateFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName))
@@ -198,8 +218,12 @@ public static class PathValidator
     /// <summary>
     /// Sanitize filename by removing invalid characters
     /// </summary>
-    /// <param name="fileName">Filename to sanitize</param>
-    /// <returns>Sanitized filename</returns>
+    /// <param name="fileName">
+    /// Filename to sanitize
+    /// </param>
+    /// <returns>
+    /// Sanitized filename
+    /// </returns>
     public static string SanitizeFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName))

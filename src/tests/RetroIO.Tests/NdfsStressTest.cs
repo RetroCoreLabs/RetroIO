@@ -672,8 +672,8 @@ namespace RetroIO.Tests
         /// file creation load.
         /// </summary>
         /// <remarks>
-        /// The "each user max 256 files" this test was built around is <b>RetroFS's current
-        /// limitation, not SINTRAN's</b>. A user area holds 256 files per object block and may be
+        /// The "each user max 256 files" this test was built around is RetroFS's current
+        /// limitation, not SINTRAN's. A user area holds 256 files per object block and may be
         /// granted up to 16 blocks (4096 files); RetroFS only searches the first block, so creation
         /// stops at 256. Verified 2026-08-01 against a live SINTRAN III K pack holding 482 files in
         /// one user. See <c>RetroFS/docs/NDFS-Object-Blocks.md</c>.

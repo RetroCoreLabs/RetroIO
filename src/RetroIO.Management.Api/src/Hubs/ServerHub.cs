@@ -15,7 +15,7 @@ namespace RetroIO.Management.Api.Hubs;
 /// </summary>
 /// <remarks>
 /// Typed on <see cref="IServerHubClient"/>, so every push this hub (and every
-/// IHubContext&lt;ServerHub, IServerHubClient&gt; pointed at it) makes is checked by the compiler
+/// IHubContext{ServerHub, IServerHubClient} pointed at it) makes is checked by the compiler
 /// against the contract the clients deserialise with. An untyped Hub would accept any method
 /// name and any payload shape, which is how the push payloads previously drifted from what the
 /// UI expected without anything failing to build.

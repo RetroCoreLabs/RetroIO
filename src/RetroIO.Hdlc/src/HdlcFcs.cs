@@ -21,7 +21,7 @@ namespace RetroIO.Link.Hdlc
     /// remainder is what goes on the wire, low octet first (X.25 2.2.7.4, RFC 1662 section 3.1).
     /// </para>
     /// <para>
-    /// <b>Why the method names are what they are.</b> This repository previously had TWO public
+    /// Why the method names are what they are. This repository previously had TWO public
     /// classes called <c>Fcs16</c>, both with a method called <c>Compute</c>, whose results
     /// differed by a final <c>~</c>: <c>RetroIO.Link.Lapb.Fcs16.Compute</c> returned the
     /// complemented value ready to transmit, and <c>RetroIO.Protocols.Xmsg.Hdlc.Fcs16.Compute</c>
@@ -44,7 +44,7 @@ namespace RetroIO.Link.Hdlc
 
         /// <summary>
         /// The register value a correct receiver holds after folding the frame content
-        /// <em>and both received FCS octets</em> (RFC 1662 <c>PPPGOODFCS16</c>).
+        /// and both received FCS octets (RFC 1662 <c>PPPGOODFCS16</c>).
         /// </summary>
         /// <remarks>
         /// X.25 clause 2.2.7.4 states the same residue bit-reversed, as
@@ -68,7 +68,9 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Builds the reflected CRC-16 table from the polynomial rather than pasting 256 literals.
         /// </summary>
-        /// <returns>One entry per possible input octet.</returns>
+        /// <returns>
+        /// One entry per possible input octet.
+        /// </returns>
         /// <remarks>
         /// Generated rather than transcribed on purpose: a table typed out by hand is 256 chances
         /// to introduce a digit nobody will ever notice, and the generator is three lines. The
@@ -102,9 +104,15 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Folds one octet into a running register.
         /// </summary>
-        /// <param name="fcs">The running register; seed it with <see cref="Init"/>.</param>
-        /// <param name="value">The octet, <em>after</em> transparency has been removed.</param>
-        /// <returns>The updated register.</returns>
+        /// <param name="fcs">
+        /// The running register; seed it with <see cref="Init"/>.
+        /// </param>
+        /// <param name="value">
+        /// The octet, after transparency has been removed.
+        /// </param>
+        /// <returns>
+        /// The updated register.
+        /// </returns>
         /// <remarks>
         /// Transparency first, then the FCS - X.25 clause 2.2.2.2 puts the unescaping "prior to FCS
         /// calculation" on receive, and the escaping "following completion of the FCS calculation"
@@ -119,9 +127,15 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Folds a run of octets into a running register.
         /// </summary>
-        /// <param name="fcs">The running register; seed it with <see cref="Init"/>.</param>
-        /// <param name="data">Octets with transparency already removed.</param>
-        /// <returns>The updated register.</returns>
+        /// <param name="fcs">
+        /// The running register; seed it with <see cref="Init"/>.
+        /// </param>
+        /// <param name="data">
+        /// Octets with transparency already removed.
+        /// </param>
+        /// <returns>
+        /// The updated register.
+        /// </returns>
         public static ushort Update(ushort fcs, ReadOnlySpan<byte> data)
         {
             ushort running = fcs;
@@ -135,8 +149,12 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Computes the FCS to transmit after a body: the ones complement of the register.
         /// </summary>
-        /// <param name="body">Address, control and information octets, transparency excluded.</param>
-        /// <returns>The value to place on the wire, low octet first.</returns>
+        /// <param name="body">
+        /// Address, control and information octets, transparency excluded.
+        /// </param>
+        /// <returns>
+        /// The value to place on the wire, low octet first.
+        /// </returns>
         public static ushort ComputeTransmitFcs(ReadOnlySpan<byte> body)
         {
             return (ushort)(Update(Init, body) ^ 0xFFFF);
@@ -145,9 +163,15 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Writes the transmit FCS for a body into a destination, in wire order.
         /// </summary>
-        /// <param name="body">Address, control and information octets.</param>
-        /// <param name="destination">Receives two octets: <b>low order first</b>.</param>
-        /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than two octets.</exception>
+        /// <param name="body">
+        /// Address, control and information octets.
+        /// </param>
+        /// <param name="destination">
+        /// Receives two octets: low order first.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="destination"/> is shorter than two octets.
+        /// </exception>
         /// <remarks>
         /// Low octet first per RFC 1662 section 3.1. X.25 clause 2.2.3.1 words it the other way
         /// round - "commencing with the coefficient of the highest term" - because octets go out
@@ -166,11 +190,15 @@ namespace RetroIO.Link.Hdlc
         }
 
         /// <summary>
-        /// Tests a running register that has already consumed the content <em>and</em> the received
+        /// Tests a running register that has already consumed the content and the received
         /// FCS octets.
         /// </summary>
-        /// <param name="fcs">The register after the final received octet.</param>
-        /// <returns><see langword="true"/> when it equals <see cref="Good"/>.</returns>
+        /// <param name="fcs">
+        /// The register after the final received octet.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when it equals <see cref="Good"/>.
+        /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsGoodResidue(ushort fcs)
         {
@@ -180,7 +208,9 @@ namespace RetroIO.Link.Hdlc
         /// <summary>
         /// Checks a whole unstuffed frame, FCS included.
         /// </summary>
-        /// <param name="frameWithFcs">Address, control, information and the two FCS octets.</param>
+        /// <param name="frameWithFcs">
+        /// Address, control, information and the two FCS octets.
+        /// </param>
         /// <returns>
         /// <see langword="true"/> when the frame is at least <see cref="MinimumFrameLength"/>
         /// octets and the residue is correct.

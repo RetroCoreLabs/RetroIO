@@ -25,8 +25,12 @@ namespace RetroIO.Storage.Ndfs.Creation
         /// <summary>
         /// Creates a new NDFS disk image with the specified options.
         /// </summary>
-        /// <param name="outputPath">Path to write the image file.</param>
-        /// <param name="options">Image creation options.</param>
+        /// <param name="outputPath">
+        /// Path to write the image file.
+        /// </param>
+        /// <param name="options">
+        /// Image creation options.
+        /// </param>
         public static void CreateImage(string outputPath, NdfsImageCreationOptions options)
         {
             if (string.IsNullOrEmpty(outputPath))
@@ -61,10 +65,18 @@ namespace RetroIO.Storage.Ndfs.Creation
         /// <summary>
         /// Creates a new NDFS disk image using a pre-defined template.
         /// </summary>
-        /// <param name="outputPath">Path to write the image file.</param>
-        /// <param name="template">Template to use.</param>
-        /// <param name="directoryName">Directory name (default "EMPTY-DISK").</param>
-        /// <param name="bootLoaderType">Boot loader type (default from template).</param>
+        /// <param name="outputPath">
+        /// Path to write the image file.
+        /// </param>
+        /// <param name="template">
+        /// Template to use.
+        /// </param>
+        /// <param name="directoryName">
+        /// Directory name (default "EMPTY-DISK").
+        /// </param>
+        /// <param name="bootLoaderType">
+        /// Boot loader type (default from template).
+        /// </param>
         public static void CreateImageFromTemplate(
             string outputPath,
             NdfsImageTemplate template,

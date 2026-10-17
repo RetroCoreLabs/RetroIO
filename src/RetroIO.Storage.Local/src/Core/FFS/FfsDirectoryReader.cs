@@ -27,9 +27,15 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// <summary>
         /// Lists all entries in a directory inode.
         /// </summary>
-        /// <param name="dirInode">Directory inode to read.</param>
-        /// <param name="includeDots">If true, include "." and ".." entries.</param>
-        /// <returns>Array of directory entries.</returns>
+        /// <param name="dirInode">
+        /// Directory inode to read.
+        /// </param>
+        /// <param name="includeDots">
+        /// If true, include "." and ".." entries.
+        /// </param>
+        /// <returns>
+        /// Array of directory entries.
+        /// </returns>
         public FfsDirectoryEntry[] ListEntries(FfsInode dirInode, bool includeDots = true)
         {
             if (!dirInode.IsDirectory)
@@ -48,9 +54,15 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// <summary>
         /// Finds a specific entry in a directory by name.
         /// </summary>
-        /// <param name="dirInode">Directory inode to search.</param>
-        /// <param name="name">Entry name to find (case-sensitive).</param>
-        /// <returns>Directory entry if found, null otherwise.</returns>
+        /// <param name="dirInode">
+        /// Directory inode to search.
+        /// </param>
+        /// <param name="name">
+        /// Entry name to find (case-sensitive).
+        /// </param>
+        /// <returns>
+        /// Directory entry if found, null otherwise.
+        /// </returns>
         public FfsDirectoryEntry? FindEntry(FfsInode dirInode, string name)
         {
             if (!dirInode.IsDirectory)

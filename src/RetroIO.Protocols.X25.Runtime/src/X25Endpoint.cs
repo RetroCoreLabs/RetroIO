@@ -26,7 +26,7 @@ namespace RetroIO.Protocols.X25.Runtime
     /// and services by local channel.
     /// </para>
     /// <para>
-    /// <b>Threading.</b> <see cref="X25Layer"/> is not thread-safe by design. Every call into it -
+    /// Threading. <see cref="X25Layer"/> is not thread-safe by design. Every call into it -
     /// packets from the transport's reader thread, sends from application threads, ticks from the
     /// timer - goes through <see cref="Sync"/>. Event handlers run inside that lock, so a handler
     /// must not block and must not call back into another endpoint while holding it.
@@ -47,7 +47,9 @@ namespace RetroIO.Protocols.X25.Runtime
         /// </remarks>
         private readonly object _windowGate = new object();
 
-        /// <summary>Set while a window is open; cleared before each attempt to send.</summary>
+        /// <summary>
+        /// Set while a window is open; cleared before each attempt to send.
+        /// </summary>
         private bool _windowIsOpen;
         private volatile bool _linkUp = true;
 
@@ -76,13 +78,19 @@ namespace RetroIO.Protocols.X25.Runtime
             Layer.WindowOpened += OnWindowOpened;
         }
 
-        /// <summary>The connection's name, for logs.</summary>
+        /// <summary>
+        /// The connection's name, for logs.
+        /// </summary>
         public string Name { get; }
 
-        /// <summary>The engine. Touch it only inside <see cref="Sync"/>.</summary>
+        /// <summary>
+        /// The engine. Touch it only inside <see cref="Sync"/>.
+        /// </summary>
         public X25Layer Layer { get; }
 
-        /// <summary>The lock every call into <see cref="Layer"/> must hold.</summary>
+        /// <summary>
+        /// The lock every call into <see cref="Layer"/> must hold.
+        /// </summary>
         public object Sync { get; } = new object();
 
         /// <summary>

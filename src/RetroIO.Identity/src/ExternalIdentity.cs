@@ -15,19 +15,29 @@ namespace RetroIO.Identity
     /// </summary>
     public sealed class ExternalIdentity
     {
-        /// <summary>Provider type (Google, GitHub, Azure AD, LDAP, etc.)</summary>
+        /// <summary>
+        /// Provider type (Google, GitHub, Azure AD, LDAP, etc.)
+        /// </summary>
         public string Provider { get; set; } = string.Empty;
 
-        /// <summary>External user ID (stable ID from provider)</summary>
+        /// <summary>
+        /// External user ID (stable ID from provider)
+        /// </summary>
         public string ExternalUserId { get; set; } = string.Empty;
 
-        /// <summary>External username/email (for display)</summary>
+        /// <summary>
+        /// External username/email (for display)
+        /// </summary>
         public string ExternalUsername { get; set; } = string.Empty;
 
-        /// <summary>Maps to this internal GUID</summary>
+        /// <summary>
+        /// Maps to this internal GUID
+        /// </summary>
         public Guid InternalUserId { get; set; }
 
-        /// <summary>Last authenticated</summary>
+        /// <summary>
+        /// Last authenticated
+        /// </summary>
         public DateTime? LastAuthAt { get; set; }
     }
 }

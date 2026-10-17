@@ -41,29 +41,41 @@ public sealed class ManagementHubClient : IAsyncDisposable
     /// </remarks>
     private readonly Func<string?>? _accessTokenProvider;
 
-    /// <summary>Raised when the server pushes a status update.</summary>
+    /// <summary>
+    /// Raised when the server pushes a status update.
+    /// </summary>
     public event Action<ServerStatusUpdate>? ServerStatusUpdated;
 
-    /// <summary>Raised when the server pushes log entries added since the last push.</summary>
+    /// <summary>
+    /// Raised when the server pushes log entries added since the last push.
+    /// </summary>
     public event Action<LogEntryDto[]>? LogsAdded;
 
-    /// <summary>Raised when the server pushes TNFS counters.</summary>
+    /// <summary>
+    /// Raised when the server pushes TNFS counters.
+    /// </summary>
     public event Action<TnfsStatsUpdate>? TnfsStatsUpdated;
 
-    /// <summary>Raised on reconnect attempts, reconnection and close, for the host to log.</summary>
+    /// <summary>
+    /// Raised on reconnect attempts, reconnection and close, for the host to log.
+    /// </summary>
     /// <remarks>
     /// Replaces the Console.WriteLine calls this class used to make, which went nowhere in a
     /// windowed application.
     /// </remarks>
     public event Action<string, Exception?>? ConnectionStateChanged;
 
-    /// <summary>True while the hub connection is up.</summary>
+    /// <summary>
+    /// True while the hub connection is up.
+    /// </summary>
     public bool IsConnected => _connection?.State == HubConnectionState.Connected;
 
     /// <summary>
     /// Creates a client for the hub hosted by the management API at <paramref name="apiBaseUrl"/>.
     /// </summary>
-    /// <param name="apiBaseUrl">Root address of the management API.</param>
+    /// <param name="apiBaseUrl">
+    /// Root address of the management API.
+    /// </param>
     /// <param name="allowUntrustedCertificates">
     /// When true, ANY server certificate is accepted. For a development server with a self-signed
     /// certificate on localhost only; defaults to false. The previous version had it always on.
@@ -86,8 +98,12 @@ public sealed class ManagementHubClient : IAsyncDisposable
         _accessTokenProvider = accessTokenProvider;
     }
 
-    /// <summary>Opens the connection, or does nothing if it is already open.</summary>
-    /// <returns>A task that completes once the connection is up.</returns>
+    /// <summary>
+    /// Opens the connection, or does nothing if it is already open.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the connection is up.
+    /// </returns>
     public async Task ConnectAsync()
     {
         if (_connection != null && _connection.State == HubConnectionState.Connected)
@@ -151,8 +167,12 @@ public sealed class ManagementHubClient : IAsyncDisposable
         ConnectionStateChanged?.Invoke("connected", null);
     }
 
-    /// <summary>Closes and disposes the connection.</summary>
-    /// <returns>A task that completes once the connection is closed.</returns>
+    /// <summary>
+    /// Closes and disposes the connection.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the connection is closed.
+    /// </returns>
     public async Task DisconnectAsync()
     {
         if (_connection == null) return;
@@ -162,8 +182,12 @@ public sealed class ManagementHubClient : IAsyncDisposable
         _connection = null;
     }
 
-    /// <summary>Closes the connection.</summary>
-    /// <returns>A task that completes once the connection is closed.</returns>
+    /// <summary>
+    /// Closes the connection.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the connection is closed.
+    /// </returns>
     public async ValueTask DisposeAsync()
     {
         await DisconnectAsync().ConfigureAwait(false);

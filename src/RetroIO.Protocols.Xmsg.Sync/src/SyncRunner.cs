@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
     /// <see cref="ISyncTransferAgent"/>, and records what actually completed in the ledger.
     /// </summary>
     /// <remarks>
-    /// <para><b>This is the half that DOES; <see cref="SyncPlanner"/> is the half that DECIDES</b></para>
+    /// <para>This is the half that DOES; <see cref="SyncPlanner"/> is the half that DECIDES</para>
     /// <para>
     /// The planner never opens a file or sends a frame. This class never decides whether a file
     /// ought to move - it is handed actions and carries them out. Keeping the two apart is what

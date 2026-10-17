@@ -27,7 +27,7 @@ namespace RetroIO.Tests
     ///     that puts the filesystem base at byte 92160.
     ///
     ///  2. di_size lives in ic_size.val[0] (NDIX h/inode.h:98), the opposite half from
-    ///     SunOS/mc68000. Reading it as a big-endian 64-bit quad yields size &lt;&lt; 32.
+    ///     SunOS/mc68000. Reading it as a big-endian 64-bit quad yields size shifted left by 32.
     ///
     /// These tests walk each available image completely and read file contents, so a
     /// regression in either area fails here rather than silently returning short data.
@@ -37,7 +37,9 @@ namespace RetroIO.Tests
     {
         private const string NdixDirectory = @"E:\Dev\Ronny\NDIX-C";
 
-        /// <summary>Filesystem base: 90 sectors of 1024 bytes (one di70 cylinder).</summary>
+        /// <summary>
+        /// Filesystem base: 90 sectors of 1024 bytes (one di70 cylinder).
+        /// </summary>
         private const long NdixFilesystemBase = 90L * 1024L;
 
         /// <summary>

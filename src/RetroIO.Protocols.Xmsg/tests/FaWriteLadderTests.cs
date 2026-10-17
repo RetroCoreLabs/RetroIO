@@ -196,7 +196,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// pair with bodies of 594 and 438 bytes, so 1032 per message.
         /// </para>
         /// <para>
-        /// <b>REWRITTEN 2026-08-09.</b> This test used to assert a GAP: that two messages carried
+        /// REWRITTEN 2026-08-09. This test used to assert a GAP: that two messages carried
         /// 2036 bytes against a declared block size of 2048, that nothing reconciled them, and
         /// that a content splitter therefore could not be written. All of that came from one wrong
         /// number - the second fragment is 438 bytes, not 424 - and the "open question" then kept

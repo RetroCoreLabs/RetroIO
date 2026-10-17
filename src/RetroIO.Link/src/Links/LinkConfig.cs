@@ -159,9 +159,13 @@ namespace RetroIO.Link
     /// </summary>
     public enum TcpMode
     {
-        /// <summary>Connect to remote server</summary>
+        /// <summary>
+        /// Connect to remote server
+        /// </summary>
         Client,
-        /// <summary>Listen for incoming connections</summary>
+        /// <summary>
+        /// Listen for incoming connections
+        /// </summary>
         Server
     }
 

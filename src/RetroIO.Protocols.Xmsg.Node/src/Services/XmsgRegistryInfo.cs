@@ -11,7 +11,7 @@ using System.Collections.Generic;
 namespace RetroIO.Protocols.Xmsg.Node.Services
 {
     /// <summary>
-    /// A snapshot of one registered <b>server</b> (a named XROUT program) for the <c>list servers</c>
+    /// A snapshot of one registered server (a named XROUT program) for the <c>list servers</c>
     /// command - the same shape as COSMOS <c>list-servers</c> (System, Port, Free SPs, Name).
     /// </summary>
     public sealed class XmsgServerInfo
@@ -78,7 +78,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
     }
 
     /// <summary>
-    /// A snapshot of one XROUT <b>service</b> (a numbered verb in the XMCSM low byte) for the
+    /// A snapshot of one XROUT service (a numbered verb in the XMCSM low byte) for the
     /// <c>list service</c> command. These are XROUT operations (XSLET, XSGSY, ...), not programs.
     /// </summary>
     public sealed class XmsgServiceInfo

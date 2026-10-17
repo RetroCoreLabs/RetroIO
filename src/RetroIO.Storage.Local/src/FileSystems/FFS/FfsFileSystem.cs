@@ -427,9 +427,15 @@ namespace RetroIO.Storage.Local.FFS.FileSystems
         /// Windows the device so that block 0 of the result is the first block of the
         /// filesystem, given a base expressed in bytes.
         /// </summary>
-        /// <param name="device">Underlying whole-image device.</param>
-        /// <param name="offsetBytes">Filesystem base in bytes. Must be a whole number of device blocks.</param>
-        /// <returns>The windowed device, or the original device when the offset is zero.</returns>
+        /// <param name="device">
+        /// Underlying whole-image device.
+        /// </param>
+        /// <param name="offsetBytes">
+        /// Filesystem base in bytes. Must be a whole number of device blocks.
+        /// </param>
+        /// <returns>
+        /// The windowed device, or the original device when the offset is zero.
+        /// </returns>
         private IBlockDevice ApplyExplicitOffset(IBlockDevice device, long offsetBytes)
         {
             if (offsetBytes == 0)

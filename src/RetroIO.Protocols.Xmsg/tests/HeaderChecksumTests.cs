@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// <remarks>
     /// <para>
     /// Carved 2026-07-31 from the XMSG kernel routine at <c>137314</c> and verified against every
-    /// FCS-valid frame in <c>E:\Dev\Ronny\X25Emulator\pcap</c> - <b>3595 of 3595</b>, across all
+    /// FCS-valid frame in <c>E:\Dev\Ronny\X25Emulator\pcap</c> - 3595 of 3595, across all
     /// eight observed subtypes, both directions and every link, with no special cases.
     /// </para>
     /// <para>
@@ -138,7 +138,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </para>
         /// <para>
         /// On 2026-08-04 our restart announce therefore went out as
-        /// <c>2113 0019 0064 0067 FFFF 0001 <b>DE00</b></c> when the checksum is <c>DE07</c>, and
+        /// <c>2113 0019 0064 0067 FFFF 0001 DE00</c> when the checksum is <c>DE07</c>, and
         /// D100 answered it by dying: <c>XMSG FATAL ERROR ... XMSG ERROR CODE: 24</c> - the
         /// documented PERF_CONNCT crash, a peer rejecting a corrupt header checksum. Every link-up
         /// killed the machine we were trying to reach.

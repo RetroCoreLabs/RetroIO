@@ -14,7 +14,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Configuration;
 /// </summary>
 /// <remarks>
 /// Two tiers, per the design in <c>docs/econet/notes/econet-remaining-roadmap.md</c> (task 0.4):
-/// a <b>server-level default</b>, plus optional <b>per-machine overrides</b> keyed by (net, station).
+/// a server-level default, plus optional per-machine overrides keyed by (net, station).
 /// Resolution: an exact per-machine override wins; otherwise the server default; the built-in
 /// <see cref="AllLaterFs"/> singleton keeps every existing caller on the verified LaterFS bytes.
 /// </remarks>
@@ -32,13 +32,19 @@ public sealed class WireProfileResolver
             Profile = profile;
         }
 
-        /// <summary>The client's Econet network number.</summary>
+        /// <summary>
+        /// The client's Econet network number.
+        /// </summary>
         public readonly byte Net;
 
-        /// <summary>The client's Econet station number.</summary>
+        /// <summary>
+        /// The client's Econet station number.
+        /// </summary>
         public readonly byte Station;
 
-        /// <summary>The wire profile to use for this exact machine.</summary>
+        /// <summary>
+        /// The wire profile to use for this exact machine.
+        /// </summary>
         public readonly WireProfile Profile;
     }
 
@@ -48,8 +54,12 @@ public sealed class WireProfileResolver
     /// <summary>
     /// Creates a resolver with a server-level default and an optional per-machine override table.
     /// </summary>
-    /// <param name="defaultProfile">The profile applied when no per-machine override matches.</param>
-    /// <param name="overrides">Per-machine overrides; null/empty means "default for everyone".</param>
+    /// <param name="defaultProfile">
+    /// The profile applied when no per-machine override matches.
+    /// </param>
+    /// <param name="overrides">
+    /// Per-machine overrides; null/empty means "default for everyone".
+    /// </param>
     public WireProfileResolver(WireProfile defaultProfile, MachineOverride[]? overrides)
     {
         _default = defaultProfile;
@@ -63,10 +73,14 @@ public sealed class WireProfileResolver
     public static WireProfileResolver AllLaterFs { get; } =
         new WireProfileResolver(WireProfile.LaterFS, null);
 
-    /// <summary>The server-level default profile (used when no per-machine override matches).</summary>
+    /// <summary>
+    /// The server-level default profile (used when no per-machine override matches).
+    /// </summary>
     public WireProfile DefaultProfile => _default;
 
-    /// <summary>Number of configured per-machine overrides.</summary>
+    /// <summary>
+    /// Number of configured per-machine overrides.
+    /// </summary>
     public int OverrideCount => _overrides.Length;
 
     /// <summary>

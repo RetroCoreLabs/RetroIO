@@ -117,8 +117,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Determines if the message type is sent from Host to PAD.
         /// </summary>
-        /// <param name="messageType">The X.29 message type</param>
-        /// <returns>True if this message is typically sent from Host to PAD</returns>
+        /// <param name="messageType">
+        /// The X.29 message type
+        /// </param>
+        /// <returns>
+        /// True if this message is typically sent from Host to PAD
+        /// </returns>
         public static bool IsHostToPadMessage(this X29MessageType messageType)
         {
             return messageType switch
@@ -134,8 +138,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Determines if the message type is sent from PAD to Host.
         /// </summary>
-        /// <param name="messageType">The X.29 message type</param>
-        /// <returns>True if this message is typically sent from PAD to Host</returns>
+        /// <param name="messageType">
+        /// The X.29 message type
+        /// </param>
+        /// <returns>
+        /// True if this message is typically sent from PAD to Host
+        /// </returns>
         public static bool IsPadToHostMessage(this X29MessageType messageType)
         {
             return messageType switch
@@ -150,8 +158,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Determines if the message type can be sent in either direction.
         /// </summary>
-        /// <param name="messageType">The X.29 message type</param>
-        /// <returns>True if this message can be sent in either direction</returns>
+        /// <param name="messageType">
+        /// The X.29 message type
+        /// </param>
+        /// <returns>
+        /// True if this message can be sent in either direction
+        /// </returns>
         public static bool IsBidirectionalMessage(this X29MessageType messageType)
         {
             return messageType switch
@@ -165,8 +177,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Gets a human-readable description of the message type.
         /// </summary>
-        /// <param name="messageType">The X.29 message type</param>
-        /// <returns>A descriptive string explaining the message type</returns>
+        /// <param name="messageType">
+        /// The X.29 message type
+        /// </param>
+        /// <returns>
+        /// A descriptive string explaining the message type
+        /// </returns>
         public static string GetDescription(this X29MessageType messageType)
         {
             return messageType switch
@@ -191,8 +207,12 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Gets a human-readable description of the error code.
         /// </summary>
-        /// <param name="errorCode">The X.29 error code</param>
-        /// <returns>A descriptive string explaining the error</returns>
+        /// <param name="errorCode">
+        /// The X.29 error code
+        /// </param>
+        /// <returns>
+        /// A descriptive string explaining the error
+        /// </returns>
         public static string GetDescription(this X29ErrorCode errorCode)
         {
             return errorCode switch

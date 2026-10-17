@@ -54,16 +54,24 @@ namespace RetroIO.Protocols.X25.Tests
         private volatile bool _running = true;
         private NetworkStream? _stream;
 
-        /// <summary>Local LCN seen in the Call Request, echoed back on every packet we send.</summary>
+        /// <summary>
+        /// Local LCN seen in the Call Request, echoed back on every packet we send.
+        /// </summary>
         private ushort _lcn;
 
-        /// <summary>DATA packets received from the device under test, in arrival order.</summary>
+        /// <summary>
+        /// DATA packets received from the device under test, in arrival order.
+        /// </summary>
         public readonly List<byte> ReceivedPs = new List<byte>();
 
-        /// <summary>Set once the Call Request has been answered.</summary>
+        /// <summary>
+        /// Set once the Call Request has been answered.
+        /// </summary>
         public readonly ManualResetEventSlim CallAccepted = new ManualResetEventSlim(false);
 
-        /// <summary>The TCP port the fake DCE listens on.</summary>
+        /// <summary>
+        /// The TCP port the fake DCE listens on.
+        /// </summary>
         public int Port { get; }
 
         public FakeXotDce()
@@ -76,16 +84,22 @@ namespace RetroIO.Protocols.X25.Tests
             _thread.Start();
         }
 
-        /// <summary>Number of DATA packets received so far.</summary>
+        /// <summary>
+        /// Number of DATA packets received so far.
+        /// </summary>
         public int DataCount
         {
             get { lock (ReceivedPs) { return ReceivedPs.Count; } }
         }
 
-        /// <summary>Sends RNR with the given P(R): "acknowledged up to here, now stop".</summary>
+        /// <summary>
+        /// Sends RNR with the given P(R): "acknowledged up to here, now stop".
+        /// </summary>
         public void SendRnr(byte pr) => SendSupervisory((byte)(0x05 | ((pr & 0x07) << 5)));
 
-        /// <summary>Sends RR with the given P(R): "acknowledged up to here, carry on".</summary>
+        /// <summary>
+        /// Sends RR with the given P(R): "acknowledged up to here, carry on".
+        /// </summary>
         public void SendRr(byte pr) => SendSupervisory((byte)(0x01 | ((pr & 0x07) << 5)));
 
         private void SendSupervisory(byte pti)

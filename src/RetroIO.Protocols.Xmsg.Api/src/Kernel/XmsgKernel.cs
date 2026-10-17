@@ -912,7 +912,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// to be able to tell those apart, and it could if only one of them named a routed message.
         /// </para>
         /// <para>
-        /// <b>Order matters.</b> Forward is tested first because XFHIP and XFRRO are the SAME BIT,
+        /// Order matters. Forward is tested first because XFHIP and XFRRO are the SAME BIT,
         /// and a letter forwarded with remote-route set would otherwise read as high priority.
         /// </para>
         /// </remarks>

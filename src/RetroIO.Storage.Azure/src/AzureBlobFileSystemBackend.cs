@@ -115,7 +115,7 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
     /// </summary>
     /// <remarks>
     /// Blob storage has no real directories — a directory "exists" when a blob with its prefix
-    /// exists. Writing an empty marker blob named <c>&lt;dir&gt;/.keep</c> makes an otherwise-empty
+    /// exists. Writing an empty marker blob named <c>dir/.keep</c> makes an otherwise-empty
     /// directory visible to <see cref="DirectoryExists"/>.
     /// </remarks>
     /// <param name="path">

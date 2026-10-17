@@ -20,7 +20,7 @@ namespace RetroIO.Storage.Local.FFS.Core
     /// Key macros from fs.h:
     /// - INOPB(fs): fs->fs_inopb (number of inodes per block)
     /// - cgbase(fs,c): fs_fpg * c (cylinder group base in fragments)
-    /// - cgstart(fs,c): cgbase + fs_cgoffset * (c &amp; ~fs_cgmask)
+    /// - cgstart(fs,c): cgbase + fs_cgoffset * (c AND NOT fs_cgmask)
     /// - cgimin(fs,c): cgstart + fs_iblkno (inode area start in fragments)
     /// </summary>
     public class FfsInodeReader
@@ -57,8 +57,12 @@ namespace RetroIO.Storage.Local.FFS.Core
         /// <summary>
         /// Reads an inode by its number.
         /// </summary>
-        /// <param name="inodeNumber">Inode number (1-based, ROOTINO = 2).</param>
-        /// <returns>Parsed inode structure.</returns>
+        /// <param name="inodeNumber">
+        /// Inode number (1-based, ROOTINO = 2).
+        /// </param>
+        /// <returns>
+        /// Parsed inode structure.
+        /// </returns>
         public FfsInode ReadInode(uint inodeNumber)
         {
             if (inodeNumber == 0)

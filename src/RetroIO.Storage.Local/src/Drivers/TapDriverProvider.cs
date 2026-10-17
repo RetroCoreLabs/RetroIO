@@ -10,7 +10,9 @@ using RetroIO.Storage.Core;
 
 namespace RetroIO.Storage.Local.Drivers
 {
-    /// <summary>Provider for Commodore TAP tape images (detected by the "C64-TAPE-RAW" magic).</summary>
+    /// <summary>
+    /// Provider for Commodore TAP tape images (detected by the "C64-TAPE-RAW" magic).
+    /// </summary>
     public sealed class TapDriverProvider : FileSystemDriverProviderBase
     {
         public override string FileSystemType => "TAP";

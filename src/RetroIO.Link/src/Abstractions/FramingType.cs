@@ -17,10 +17,14 @@ namespace RetroIO.Link
     /// </remarks>
     public enum FramingType
     {
-        /// <summary>SLIP (RFC 1055) END/ESC byte stuffing.</summary>
+        /// <summary>
+        /// SLIP (RFC 1055) END/ESC byte stuffing.
+        /// </summary>
         Slip,
 
-        /// <summary>HDLC/PPP (RFC 1662) FLAG/ESC byte stuffing.</summary>
+        /// <summary>
+        /// HDLC/PPP (RFC 1662) FLAG/ESC byte stuffing.
+        /// </summary>
         Hdlc
     }
 }

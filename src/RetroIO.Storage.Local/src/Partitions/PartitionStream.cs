@@ -26,9 +26,15 @@ namespace RetroIO.Storage.Local.Partitions
         /// <summary>
         /// Creates a partition stream wrapper.
         /// </summary>
-        /// <param name="baseStream">The underlying stream containing the full disk image.</param>
-        /// <param name="partitionStartSector">Starting sector of the partition (512-byte sectors).</param>
-        /// <param name="partitionSizeSectors">Size of the partition in 512-byte sectors.</param>
+        /// <param name="baseStream">
+        /// The underlying stream containing the full disk image.
+        /// </param>
+        /// <param name="partitionStartSector">
+        /// Starting sector of the partition (512-byte sectors).
+        /// </param>
+        /// <param name="partitionSizeSectors">
+        /// Size of the partition in 512-byte sectors.
+        /// </param>
         public PartitionStream(Stream baseStream, uint partitionStartSector, uint partitionSizeSectors)
         {
             _baseStream = baseStream ?? throw new ArgumentNullException(nameof(baseStream));

@@ -240,16 +240,24 @@ namespace RetroIO.Protocols.X25.PacketLayer
             DBit = dBit;
         }
 
-        /// <summary>The user data, at most the circuit's PacketSizeOut.</summary>
+        /// <summary>
+        /// The user data, at most the circuit's PacketSizeOut.
+        /// </summary>
         public byte[] Data { get; }
 
-        /// <summary>True on every segment but the last of a message.</summary>
+        /// <summary>
+        /// True on every segment but the last of a message.
+        /// </summary>
         public bool MBit { get; }
 
-        /// <summary>The message's qualifier bit.</summary>
+        /// <summary>
+        /// The message's qualifier bit.
+        /// </summary>
         public bool QBit { get; }
 
-        /// <summary>The message's delivery confirmation bit (carried, not honoured).</summary>
+        /// <summary>
+        /// The message's delivery confirmation bit (carried, not honoured).
+        /// </summary>
         public bool DBit { get; }
     }
 }

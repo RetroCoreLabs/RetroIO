@@ -85,15 +85,23 @@ namespace RetroIO.Link
         /// <summary>
         /// Inject a raw frame into the LAPB layer (for testing/simulation)
         /// </summary>
-        /// <param name="frameData">Frame data (Address + Control + Information)</param>
-        /// <param name="length">Frame length</param>
+        /// <param name="frameData">
+        /// Frame data (Address + Control + Information)
+        /// </param>
+        /// <param name="length">
+        /// Frame length
+        /// </param>
         void InjectFrame(byte[] frameData, int length);
 
         /// <summary>
         /// Send raw LAPB frame
         /// </summary>
-        /// <param name="frame">Frame to send</param>
-        /// <param name="length">Frame length</param>
+        /// <param name="frame">
+        /// Frame to send
+        /// </param>
+        /// <param name="length">
+        /// Frame length
+        /// </param>
         void SendFrame(byte[] frame, int length);
 
         /// <summary>

@@ -58,12 +58,16 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// <summary>
         /// Splits a byte stream into unstuffed LAPB frames, recording where each one ended.
         /// </summary>
-        /// <param name="stream">The captured or received octets.</param>
+        /// <param name="stream">
+        /// The captured or received octets.
+        /// </param>
         /// <param name="frameEndOffsets">
         /// When not null, receives the offset just past each frame's closing flag, in the same
         /// order as the returned frames. Used by the pcap tooling to keep frames in capture order.
         /// </param>
-        /// <returns>The frames, each with its FCS still attached.</returns>
+        /// <returns>
+        /// The frames, each with its FCS still attached.
+        /// </returns>
         /// <remarks>
         /// <para>
         /// Since 2026-09-06 this drives the shared streaming framer in <c>RetroIO.Link.Hdlc</c>
@@ -72,7 +76,7 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// engine underneath now.
         /// </para>
         /// <para>
-        /// <b>One behaviour deliberately changed.</b> The old loop treated the end of the buffer as
+        /// One behaviour deliberately changed. The old loop treated the end of the buffer as
         /// a frame terminator and returned a truncated tail as though it were a frame. A streaming
         /// decoder holds it instead, so a partial frame at the end of a read is simply not
         /// reported. That is the correct answer - ITU-T X.25 clause 2.3.5.3 a makes a frame invalid

@@ -51,7 +51,7 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// Whether exhausting N2 on a live link re-establishes it with a fresh SABM.
         /// </summary>
         /// <remarks>
-        /// <para><b>Defaults to <c>false</c>, which DEVIATES from the spec on purpose</b></para>
+        /// <para>Defaults to <c>false</c>, which DEVIATES from the spec on purpose</para>
         /// Spec 5.1 step 1 says a link failure from CONNECTED should reset and send a new SABM. That
         /// is correct LAPB and it is what this layer used to do unconditionally. Against a real
         /// ND-100 running XMSG it is destructive:

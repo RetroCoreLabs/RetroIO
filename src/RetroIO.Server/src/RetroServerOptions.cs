@@ -17,22 +17,36 @@ namespace RetroIO.Server;
 /// </remarks>
 public sealed class RetroServerOptions
 {
-    /// <summary>Serve TNFS. Default true.</summary>
+    /// <summary>
+    /// Serve TNFS. Default true.
+    /// </summary>
     public bool EnableTnfs { get; set; } = true;
 
-    /// <summary>Serve the Econet AUN file server. Default true.</summary>
+    /// <summary>
+    /// Serve the Econet AUN file server. Default true.
+    /// </summary>
     public bool EnableEconet { get; set; } = true;
 
-    /// <summary>Serve the management API and its SignalR hub. Default true.</summary>
+    /// <summary>
+    /// Serve the management API and its SignalR hub. Default true.
+    /// </summary>
     public bool EnableManagementApi { get; set; } = true;
 
-    /// <summary>Register the Swagger/OpenAPI generator. Default true.</summary>
+    /// <summary>
+    /// Register the Swagger/OpenAPI generator. Default true.
+    /// </summary>
     public bool EnableSwagger { get; set; } = true;
 
-    /// <summary>Print the configuration banners to the console. Default true.</summary>
-    /// <remarks>Turned off by hosts with no console, such as a Windows service.</remarks>
+    /// <summary>
+    /// Print the configuration banners to the console. Default true.
+    /// </summary>
+    /// <remarks>
+    /// Turned off by hosts with no console, such as a Windows service.
+    /// </remarks>
     public bool PrintBanners { get; set; } = true;
 
-    /// <summary>How many log entries the management API's in-memory buffer keeps.</summary>
+    /// <summary>
+    /// How many log entries the management API's in-memory buffer keeps.
+    /// </summary>
     public int MaxLogEntries { get; set; } = 1000;
 }

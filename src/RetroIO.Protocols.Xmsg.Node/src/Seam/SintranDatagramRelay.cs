@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
     /// <remarks>
     /// <para><b>The rule, and how narrow it is</b></para>
     /// <para>
-    /// A relay rewrites <b>word 0 and word 6, and nothing else</b>. The HOP COUNT in the low byte
+    /// A relay rewrites word 0 and word 6, and nothing else. The HOP COUNT in the low byte
     /// of word 0 is DECREMENTED - so word 0 <c>0x2113</c> becomes <c>0x2112</c> on the first hop,
     /// <c>0x2111</c> on the second - and the header checksum in word 6 is recomputed over the
     /// changed header. The endpoints, Flags 1, Flags 2, the subtype and the entire body are passed
@@ -30,14 +30,14 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
     /// A datagram arriving with a hop count of zero is DROPPED rather than forwarded.
     /// </para>
     /// <para>
-    /// In particular the relay does <b>not</b> renumber Flags 1. That sequence belongs to the
+    /// In particular the relay does not renumber Flags 1. That sequence belongs to the
     /// originating link, not to the relay, and acknowledgements are end-to-end: the far endpoint
     /// acknowledges the originator, not the node in the middle.
     /// </para>
     /// <para><b>Scope of the evidence</b></para>
     /// <para>
     /// The rule was read off relayed HDLC frames, and the transport-independence of the header was
-    /// verified on 128/128 frames including relayed ones. What has <b>NOT</b> been observed is a
+    /// verified on 128/128 frames including relayed ones. What has NOT been observed is a
     /// relayed frame on the ETHERNET transport - COSMOS-ETHERNET-TRANSPORT-FRAMING-2026-08-01.md
     /// lists that as an open question, and names this exact topology as the experiment: D103 on
     /// HDLC to D100, D102 on Ethernet to D100. This class implements the HDLC-derived rule

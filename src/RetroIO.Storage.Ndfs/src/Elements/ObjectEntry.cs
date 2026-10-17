@@ -79,7 +79,7 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// <para>
         /// Worked example from a verified pack: <c>F0500</c> is <c>FILE 307</c> owned by user 8, and
         /// its physical position is 18483. Reading 18483 as the old model does gives file number
-        /// <c>18483 &amp; 0xFF</c> = 51 and owner <c>18483 &gt;&gt; 8</c> = 72 - a user that does not
+        /// <c>18483 AND 0xFF</c> = 51 and owner <c>18483 shifted right by 8</c> = 72 - a user that does not
         /// exist. Both are wrong; only <see cref="ComputeFileNumber"/> gives 307.
         /// </para>
         /// </remarks>
@@ -194,7 +194,7 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// the file; byte 0 bit 13 is the matching "file is reserved" flag.
         /// </para>
         /// <para>
-        /// <b>Byte 32 is NOT a file-type code.</b> <see cref="FileType"/> reads and writes this same
+        /// Byte 32 is NOT a file-type code. <see cref="FileType"/> reads and writes this same
         /// byte, so it round-trips and nothing is corrupted, but the name is wrong: neither the
         /// Monitor Calls manual nor the System Supervisor manual has a file-type code anywhere in the
         /// entry, and an annotated dump accounts for all 32 words with none left over. The file's type
@@ -422,7 +422,7 @@ namespace RetroIO.Storage.Ndfs.Elements
         /// fields are then written over the top.
         /// </para>
         /// <para>
-        /// <b>Round-tripping this record matters beyond the local disk.</b> SINTRAN's COSMOS remote
+        /// Round-tripping this record matters beyond the local disk. SINTRAN's COSMOS remote
         /// file access server sends this exact 64-byte record over the network, unchanged, one per
         /// directory entry, when another machine lists a directory on this pack. So a field lost here
         /// is a field lost to every remote client as well as to the pack. Keep this method

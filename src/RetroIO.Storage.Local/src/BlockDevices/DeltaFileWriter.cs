@@ -183,9 +183,15 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <summary>
         /// Writes a modified block to the delta file.
         /// </summary>
-        /// <param name="blockId">Block ID (LBA)</param>
-        /// <param name="newData">New block data</param>
-        /// <param name="originalData">Original block data (required for DiffOnly mode)</param>
+        /// <param name="blockId">
+        /// Block ID (LBA)
+        /// </param>
+        /// <param name="newData">
+        /// New block data
+        /// </param>
+        /// <param name="originalData">
+        /// Original block data (required for DiffOnly mode)
+        /// </param>
         public void WriteBlock(uint blockId, ReadOnlySpan<byte> newData, ReadOnlySpan<byte> originalData = default)
         {
             if (newData.Length != _blockSize)
@@ -257,10 +263,18 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <summary>
         /// Reads a block from the delta file.
         /// </summary>
-        /// <param name="blockId">Block ID (LBA)</param>
-        /// <param name="buffer">Buffer to receive block data</param>
-        /// <param name="originalData">Original block data (required for DiffOnly mode)</param>
-        /// <returns>Number of bytes read, or 0 if block not in delta</returns>
+        /// <param name="blockId">
+        /// Block ID (LBA)
+        /// </param>
+        /// <param name="buffer">
+        /// Buffer to receive block data
+        /// </param>
+        /// <param name="originalData">
+        /// Original block data (required for DiffOnly mode)
+        /// </param>
+        /// <returns>
+        /// Number of bytes read, or 0 if block not in delta
+        /// </returns>
         public int ReadBlock(uint blockId, Span<byte> buffer, ReadOnlySpan<byte> originalData = default)
         {
             if (buffer.Length < _blockSize)
@@ -334,8 +348,12 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <summary>
         /// Merges delta file back to a base device.
         /// </summary>
-        /// <param name="baseDevice">Base block device to merge changes into</param>
-        /// <param name="readOriginalBlock">Function to read original block data (for DiffOnly mode)</param>
+        /// <param name="baseDevice">
+        /// Base block device to merge changes into
+        /// </param>
+        /// <param name="readOriginalBlock">
+        /// Function to read original block data (for DiffOnly mode)
+        /// </param>
         public void MergeToBase(IBlockDevice baseDevice, Func<uint, byte[]>? readOriginalBlock = null)
         {
             if (baseDevice == null)

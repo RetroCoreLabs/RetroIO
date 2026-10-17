@@ -21,8 +21,12 @@ namespace RetroIO.Storage.Ndfs.PropertyBags
         /// <summary>
         /// Populates a property bag with NDFS metadata from an ObjectEntry.
         /// </summary>
-        /// <param name="entry">Object entry to serialize</param>
-        /// <param name="propertyBag">Property bag to populate</param>
+        /// <param name="entry">
+        /// Object entry to serialize
+        /// </param>
+        /// <param name="propertyBag">
+        /// Property bag to populate
+        /// </param>
         public static void SerializeObjectEntry(ObjectEntry entry, IDictionary<string, object> propertyBag)
         {
             if (entry == null || propertyBag == null)
@@ -75,8 +79,12 @@ namespace RetroIO.Storage.Ndfs.PropertyBags
         /// <summary>
         /// Restores NDFS metadata from a property bag into an ObjectEntry.
         /// </summary>
-        /// <param name="propertyBag">Property bag containing metadata</param>
-        /// <param name="entry">Object entry to populate</param>
+        /// <param name="propertyBag">
+        /// Property bag containing metadata
+        /// </param>
+        /// <param name="entry">
+        /// Object entry to populate
+        /// </param>
         public static void DeserializeObjectEntry(IDictionary<string, object> propertyBag, ObjectEntry entry)
         {
             if (propertyBag == null || entry == null)

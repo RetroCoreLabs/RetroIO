@@ -649,15 +649,33 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             /// <summary>
             /// Records a letter.
             /// </summary>
-            /// <param name="remoteNode">Unused.</param>
-            /// <param name="clientSystem">Unused.</param>
-            /// <param name="clientPort">Unused.</param>
-            /// <param name="sourcePort">Unused.</param>
-            /// <param name="controlService">Unused.</param>
-            /// <param name="frameFlags">Unused.</param>
-            /// <param name="role">Unused.</param>
-            /// <param name="payload">The letter body, recorded.</param>
-            /// <param name="answeredFlags1">Recorded.</param>
+            /// <param name="remoteNode">
+            /// Unused.
+            /// </param>
+            /// <param name="clientSystem">
+            /// Unused.
+            /// </param>
+            /// <param name="clientPort">
+            /// Unused.
+            /// </param>
+            /// <param name="sourcePort">
+            /// Unused.
+            /// </param>
+            /// <param name="controlService">
+            /// Unused.
+            /// </param>
+            /// <param name="frameFlags">
+            /// Unused.
+            /// </param>
+            /// <param name="role">
+            /// Unused.
+            /// </param>
+            /// <param name="payload">
+            /// The letter body, recorded.
+            /// </param>
+            /// <param name="answeredFlags1">
+            /// Recorded.
+            /// </param>
             /// <returns>
             /// A bare frame.
             /// </returns>
@@ -673,15 +691,33 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             /// <summary>
             /// Records a body message.
             /// </summary>
-            /// <param name="remoteNode">Unused.</param>
-            /// <param name="clientSystem">Unused.</param>
-            /// <param name="clientPort">Unused.</param>
-            /// <param name="sourcePort">Unused.</param>
-            /// <param name="xmcsm">Unused.</param>
-            /// <param name="frameFlags">Unused.</param>
-            /// <param name="role">Unused.</param>
-            /// <param name="body">The body, recorded.</param>
-            /// <param name="answeredFlags1">Recorded.</param>
+            /// <param name="remoteNode">
+            /// Unused.
+            /// </param>
+            /// <param name="clientSystem">
+            /// Unused.
+            /// </param>
+            /// <param name="clientPort">
+            /// Unused.
+            /// </param>
+            /// <param name="sourcePort">
+            /// Unused.
+            /// </param>
+            /// <param name="xmcsm">
+            /// Unused.
+            /// </param>
+            /// <param name="frameFlags">
+            /// Unused.
+            /// </param>
+            /// <param name="role">
+            /// Unused.
+            /// </param>
+            /// <param name="body">
+            /// The body, recorded.
+            /// </param>
+            /// <param name="answeredFlags1">
+            /// Recorded.
+            /// </param>
             /// <returns>
             /// A bare frame.
             /// </returns>
@@ -697,14 +733,30 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             /// <summary>
             /// Records a body message that the real transport would fragment.
             /// </summary>
-            /// <param name="remoteNode">Unused.</param>
-            /// <param name="clientSystem">Unused.</param>
-            /// <param name="clientPort">Unused.</param>
-            /// <param name="sourcePort">Unused.</param>
-            /// <param name="frameFlags">Unused.</param>
-            /// <param name="role">Unused.</param>
-            /// <param name="body">The whole body, recorded ONCE however it would be split.</param>
-            /// <param name="answeredFlags1">Recorded.</param>
+            /// <param name="remoteNode">
+            /// Unused.
+            /// </param>
+            /// <param name="clientSystem">
+            /// Unused.
+            /// </param>
+            /// <param name="clientPort">
+            /// Unused.
+            /// </param>
+            /// <param name="sourcePort">
+            /// Unused.
+            /// </param>
+            /// <param name="frameFlags">
+            /// Unused.
+            /// </param>
+            /// <param name="role">
+            /// Unused.
+            /// </param>
+            /// <param name="body">
+            /// The whole body, recorded ONCE however it would be split.
+            /// </param>
+            /// <param name="answeredFlags1">
+            /// Recorded.
+            /// </param>
             /// <returns>
             /// One frame.
             /// </returns>

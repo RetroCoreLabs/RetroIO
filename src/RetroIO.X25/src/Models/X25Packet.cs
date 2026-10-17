@@ -93,7 +93,7 @@ namespace RetroIO.Protocols.X25.Models
 
         /// <summary>
         /// Logical Channel Identifier (LCI) combining Logical Channel Group and Number.
-        /// This is the 12-bit channel id used for routing (LCI = (LCG << 8) | (LCN & 0xFF)).
+        /// This is the 12-bit channel id used for routing (LCI is LCG shifted left by 8, OR-ed with the low 8 bits of LCN).
         /// Many call this value simply "LCN" in code; this property makes it explicit.
         /// </summary>
         public ushort LCI => (ushort)((LCG << 8) | (LCN & 0xFF));
@@ -450,7 +450,7 @@ namespace RetroIO.Protocols.X25.Models
 
         /// <summary>
         /// Receive Ready (Modulo 8: 0x01, 0x21, 0x41, 0x61, 0x81, 0xA1, 0xC1, 0xE1)
-        /// (PTI = 0x01 | (P(R) << 5))
+        /// (PTI is 0x01 OR-ed with P(R) shifted left by 5)
         /// Alternative names: RR, DTE RR, DCE RR  
         /// Acknowledges received data packets and indicates readiness for more
         /// </summary>
@@ -458,7 +458,7 @@ namespace RetroIO.Protocols.X25.Models
 
         /// <summary>
         /// Receive Not Ready (Modulo 8: 0x05, 0x25, 0x45, 0x65, 0x85, 0xA5, 0xC5, 0xE5)
-        /// (PTI = 0x05 | (P(R) << 5))
+        /// (PTI is 0x05 OR-ed with P(R) shifted left by 5)
         /// Alternative names: RNR, DTE RNR, DCE RNR
         /// Acknowledges received data but indicates temporary inability to receive more
         /// </summary>
@@ -466,7 +466,7 @@ namespace RetroIO.Protocols.X25.Models
 
         /// <summary>
         /// Reject (Modulo 8: 0x09, 0x29, 0x49, 0x69, 0x89, 0xA9, 0xC9, 0xE9)
-        /// (PTI = 0x09 | (P(R) << 5))
+        /// (PTI is 0x09 OR-ed with P(R) shifted left by 5)
         /// Alternative names: REJ, Reject, DTE REJ
         /// Requests retransmission of data packets starting from specified sequence number
         /// </summary>

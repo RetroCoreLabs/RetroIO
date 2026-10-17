@@ -195,8 +195,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines the category of the LAPB control field value.
         /// </summary>
-        /// <param name="controlField">The LAPB control field value</param>
-        /// <returns>The frame category (Information, Supervisory, or Unnumbered)</returns>
+        /// <param name="controlField">
+        /// The LAPB control field value
+        /// </param>
+        /// <returns>
+        /// The frame category (Information, Supervisory, or Unnumbered)
+        /// </returns>
         public static LapbFrameCategory GetCategory(this LapbControlField controlField)
         {
             byte value = (byte)controlField;
@@ -219,8 +223,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines if the control field represents a command frame.
         /// </summary>
-        /// <param name="controlField">The LAPB control field value</param>
-        /// <returns>True if this is typically a command frame</returns>
+        /// <param name="controlField">
+        /// The LAPB control field value
+        /// </param>
+        /// <returns>
+        /// True if this is typically a command frame
+        /// </returns>
         public static bool IsCommand(this LapbControlField controlField)
         {
             return controlField switch
@@ -241,8 +249,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines if the control field represents a response frame.
         /// </summary>
-        /// <param name="controlField">The LAPB control field value</param>
-        /// <returns>True if this is typically a response frame</returns>
+        /// <param name="controlField">
+        /// The LAPB control field value
+        /// </param>
+        /// <returns>
+        /// True if this is typically a response frame
+        /// </returns>
         public static bool IsResponse(this LapbControlField controlField)
         {
             return controlField switch
@@ -257,8 +269,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Determines if the control field requires a response.
         /// </summary>
-        /// <param name="controlField">The LAPB control field value</param>
-        /// <returns>True if this control field typically requires a response</returns>
+        /// <param name="controlField">
+        /// The LAPB control field value
+        /// </param>
+        /// <returns>
+        /// True if this control field typically requires a response
+        /// </returns>
         public static bool RequiresResponse(this LapbControlField controlField)
         {
             return controlField switch
@@ -276,8 +292,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Gets a human-readable description of the control field value.
         /// </summary>
-        /// <param name="controlField">The LAPB control field value</param>
-        /// <returns>A descriptive string explaining the control field</returns>
+        /// <param name="controlField">
+        /// The LAPB control field value
+        /// </param>
+        /// <returns>
+        /// A descriptive string explaining the control field
+        /// </returns>
         public static string GetDescription(this LapbControlField controlField)
         {
             return controlField switch
@@ -306,8 +326,12 @@ namespace RetroIO.Link.Models
         /// <summary>
         /// Gets the typical response control field for a command frame.
         /// </summary>
-        /// <param name="controlField">The LAPB command control field value</param>
-        /// <returns>The expected response control field value, or null if no specific response</returns>
+        /// <param name="controlField">
+        /// The LAPB command control field value
+        /// </param>
+        /// <returns>
+        /// The expected response control field value, or null if no specific response
+        /// </returns>
         public static LapbControlField? GetExpectedResponse(this LapbControlField controlField)
         {
             return controlField switch

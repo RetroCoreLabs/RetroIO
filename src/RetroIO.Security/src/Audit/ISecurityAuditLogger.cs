@@ -18,58 +18,94 @@ namespace RetroIO.Security.Audit;
 /// </summary>
 public enum SecurityEventType : byte
 {
-    /// <summary>Successful authentication</summary>
+    /// <summary>
+    /// Successful authentication
+    /// </summary>
     AuthenticationSuccess = 0,
 
-    /// <summary>Failed authentication attempt</summary>
+    /// <summary>
+    /// Failed authentication attempt
+    /// </summary>
     AuthenticationFailure = 1,
 
-    /// <summary>User logged out</summary>
+    /// <summary>
+    /// User logged out
+    /// </summary>
     Logout = 2,
 
-    /// <summary>Session token refreshed</summary>
+    /// <summary>
+    /// Session token refreshed
+    /// </summary>
     TokenRefresh = 3,
 
-    /// <summary>Successful authorization</summary>
+    /// <summary>
+    /// Successful authorization
+    /// </summary>
     AuthorizationSuccess = 4,
 
-    /// <summary>Authorization denied</summary>
+    /// <summary>
+    /// Authorization denied
+    /// </summary>
     AuthorizationDenied = 5,
 
-    /// <summary>File accessed (read)</summary>
+    /// <summary>
+    /// File accessed (read)
+    /// </summary>
     FileAccessed = 6,
 
-    /// <summary>File modified (write)</summary>
+    /// <summary>
+    /// File modified (write)
+    /// </summary>
     FileModified = 7,
 
-    /// <summary>File created</summary>
+    /// <summary>
+    /// File created
+    /// </summary>
     FileCreated = 8,
 
-    /// <summary>File deleted</summary>
+    /// <summary>
+    /// File deleted
+    /// </summary>
     FileDeleted = 9,
 
-    /// <summary>Directory created</summary>
+    /// <summary>
+    /// Directory created
+    /// </summary>
     DirectoryCreated = 10,
 
-    /// <summary>Directory deleted</summary>
+    /// <summary>
+    /// Directory deleted
+    /// </summary>
     DirectoryDeleted = 11,
 
-    /// <summary>Permissions changed</summary>
+    /// <summary>
+    /// Permissions changed
+    /// </summary>
     PermissionsChanged = 12,
 
-    /// <summary>Rate limit exceeded</summary>
+    /// <summary>
+    /// Rate limit exceeded
+    /// </summary>
     RateLimitExceeded = 13,
 
-    /// <summary>Path traversal attempt detected</summary>
+    /// <summary>
+    /// Path traversal attempt detected
+    /// </summary>
     PathTraversalAttempt = 14,
 
-    /// <summary>Invalid input detected</summary>
+    /// <summary>
+    /// Invalid input detected
+    /// </summary>
     InvalidInput = 15,
 
-    /// <summary>Configuration changed</summary>
+    /// <summary>
+    /// Configuration changed
+    /// </summary>
     ConfigurationChanged = 16,
 
-    /// <summary>Security policy violation</summary>
+    /// <summary>
+    /// Security policy violation
+    /// </summary>
     PolicyViolation = 17
 }
 
@@ -78,16 +114,24 @@ public enum SecurityEventType : byte
 /// </summary>
 public enum SecurityEventSeverity : byte
 {
-    /// <summary>Informational event</summary>
+    /// <summary>
+    /// Informational event
+    /// </summary>
     Info = 0,
 
-    /// <summary>Warning event</summary>
+    /// <summary>
+    /// Warning event
+    /// </summary>
     Warning = 1,
 
-    /// <summary>Error event</summary>
+    /// <summary>
+    /// Error event
+    /// </summary>
     Error = 2,
 
-    /// <summary>Critical security event</summary>
+    /// <summary>
+    /// Critical security event
+    /// </summary>
     Critical = 3
 }
 
@@ -96,28 +140,44 @@ public enum SecurityEventSeverity : byte
 /// </summary>
 public class SecurityAuditEntry
 {
-    /// <summary>Unique entry identifier</summary>
+    /// <summary>
+    /// Unique entry identifier
+    /// </summary>
     public Guid EntryId { get; set; } = Guid.NewGuid();
 
-    /// <summary>Timestamp of event (UTC)</summary>
+    /// <summary>
+    /// Timestamp of event (UTC)
+    /// </summary>
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
-    /// <summary>Event type</summary>
+    /// <summary>
+    /// Event type
+    /// </summary>
     public SecurityEventType EventType { get; set; }
 
-    /// <summary>Event severity</summary>
+    /// <summary>
+    /// Event severity
+    /// </summary>
     public SecurityEventSeverity Severity { get; set; }
 
-    /// <summary>Request trace ID for correlation</summary>
+    /// <summary>
+    /// Request trace ID for correlation
+    /// </summary>
     public Guid? TraceId { get; set; }
 
-    /// <summary>Client IP address</summary>
+    /// <summary>
+    /// Client IP address
+    /// </summary>
     public string? ClientIpAddress { get; set; }
 
-    /// <summary>User agent or client identifier</summary>
+    /// <summary>
+    /// User agent or client identifier
+    /// </summary>
     public string? UserAgent { get; set; }
 
-    /// <summary>Additional event data (JSON serializable)</summary>
+    /// <summary>
+    /// Additional event data (JSON serializable)
+    /// </summary>
     public string? AdditionalData { get; set; }
 }
 
@@ -126,19 +186,29 @@ public class SecurityAuditEntry
 /// </summary>
 public sealed class AuthenticationAuditEntry : SecurityAuditEntry
 {
-    /// <summary>Authentication method used</summary>
+    /// <summary>
+    /// Authentication method used
+    /// </summary>
     public AuthenticationMethod Method { get; set; }
 
-    /// <summary>Username or principal identifier</summary>
+    /// <summary>
+    /// Username or principal identifier
+    /// </summary>
     public string? PrincipalName { get; set; }
 
-    /// <summary>Whether authentication succeeded</summary>
+    /// <summary>
+    /// Whether authentication succeeded
+    /// </summary>
     public bool Success { get; set; }
 
-    /// <summary>Failure reason (if applicable)</summary>
+    /// <summary>
+    /// Failure reason (if applicable)
+    /// </summary>
     public AuthenticationFailureReason? FailureReason { get; set; }
 
-    /// <summary>Session token issued (do not log actual token value)</summary>
+    /// <summary>
+    /// Session token issued (do not log actual token value)
+    /// </summary>
     public bool TokenIssued { get; set; }
 }
 
@@ -147,25 +217,39 @@ public sealed class AuthenticationAuditEntry : SecurityAuditEntry
 /// </summary>
 public sealed class AuthorizationAuditEntry : SecurityAuditEntry
 {
-    /// <summary>Principal identifier</summary>
+    /// <summary>
+    /// Principal identifier
+    /// </summary>
     public string PrincipalName { get; set; } = string.Empty;
 
-    /// <summary>Operation being authorized</summary>
+    /// <summary>
+    /// Operation being authorized
+    /// </summary>
     public FileSystemOperation Operation { get; set; }
 
-    /// <summary>Target path</summary>
+    /// <summary>
+    /// Target path
+    /// </summary>
     public string Path { get; set; } = string.Empty;
 
-    /// <summary>Destination path (for rename)</summary>
+    /// <summary>
+    /// Destination path (for rename)
+    /// </summary>
     public string? DestinationPath { get; set; }
 
-    /// <summary>Whether authorization was granted</summary>
+    /// <summary>
+    /// Whether authorization was granted
+    /// </summary>
     public bool Allowed { get; set; }
 
-    /// <summary>Denial reason (if not allowed)</summary>
+    /// <summary>
+    /// Denial reason (if not allowed)
+    /// </summary>
     public string? DenialReason { get; set; }
 
-    /// <summary>Effective permissions</summary>
+    /// <summary>
+    /// Effective permissions
+    /// </summary>
     public PathPermissions EffectivePermissions { get; set; }
 }
 
@@ -174,25 +258,39 @@ public sealed class AuthorizationAuditEntry : SecurityAuditEntry
 /// </summary>
 public sealed class FileAccessAuditEntry : SecurityAuditEntry
 {
-    /// <summary>Principal identifier</summary>
+    /// <summary>
+    /// Principal identifier
+    /// </summary>
     public string PrincipalName { get; set; } = string.Empty;
 
-    /// <summary>File path accessed</summary>
+    /// <summary>
+    /// File path accessed
+    /// </summary>
     public string Path { get; set; } = string.Empty;
 
-    /// <summary>Operation performed</summary>
+    /// <summary>
+    /// Operation performed
+    /// </summary>
     public FileSystemOperation Operation { get; set; }
 
-    /// <summary>Number of bytes read/written</summary>
+    /// <summary>
+    /// Number of bytes read/written
+    /// </summary>
     public long BytesTransferred { get; set; }
 
-    /// <summary>Whether operation succeeded</summary>
+    /// <summary>
+    /// Whether operation succeeded
+    /// </summary>
     public bool Success { get; set; }
 
-    /// <summary>Error message (if failed)</summary>
+    /// <summary>
+    /// Error message (if failed)
+    /// </summary>
     public string? ErrorMessage { get; set; }
 
-    /// <summary>Operation duration in milliseconds</summary>
+    /// <summary>
+    /// Operation duration in milliseconds
+    /// </summary>
     public long DurationMs { get; set; }
 }
 
@@ -204,8 +302,12 @@ public interface ISecurityAuditLogger
     /// <summary>
     /// Log authentication event
     /// </summary>
-    /// <param name="entry">Authentication audit entry</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="entry">
+    /// Authentication audit entry
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
     ValueTask LogAuthenticationAsync(
         AuthenticationAuditEntry entry,
         CancellationToken ct = default);
@@ -213,8 +315,12 @@ public interface ISecurityAuditLogger
     /// <summary>
     /// Log authorization event
     /// </summary>
-    /// <param name="entry">Authorization audit entry</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="entry">
+    /// Authorization audit entry
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
     ValueTask LogAuthorizationAsync(
         AuthorizationAuditEntry entry,
         CancellationToken ct = default);
@@ -222,8 +328,12 @@ public interface ISecurityAuditLogger
     /// <summary>
     /// Log file access event
     /// </summary>
-    /// <param name="entry">File access audit entry</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="entry">
+    /// File access audit entry
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
     ValueTask LogFileAccessAsync(
         FileAccessAuditEntry entry,
         CancellationToken ct = default);
@@ -231,8 +341,12 @@ public interface ISecurityAuditLogger
     /// <summary>
     /// Log generic security event
     /// </summary>
-    /// <param name="entry">Security audit entry</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="entry">
+    /// Security audit entry
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
     ValueTask LogSecurityEventAsync(
         SecurityAuditEntry entry,
         CancellationToken ct = default);
@@ -240,13 +354,27 @@ public interface ISecurityAuditLogger
     /// <summary>
     /// Query audit log entries
     /// </summary>
-    /// <param name="startTime">Start time (UTC)</param>
-    /// <param name="endTime">End time (UTC)</param>
-    /// <param name="eventTypes">Event types to filter (null for all)</param>
-    /// <param name="principalName">Principal name to filter (null for all)</param>
-    /// <param name="maxResults">Maximum number of results</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Array of audit entries</returns>
+    /// <param name="startTime">
+    /// Start time (UTC)
+    /// </param>
+    /// <param name="endTime">
+    /// End time (UTC)
+    /// </param>
+    /// <param name="eventTypes">
+    /// Event types to filter (null for all)
+    /// </param>
+    /// <param name="principalName">
+    /// Principal name to filter (null for all)
+    /// </param>
+    /// <param name="maxResults">
+    /// Maximum number of results
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token
+    /// </param>
+    /// <returns>
+    /// Array of audit entries
+    /// </returns>
     ValueTask<SecurityAuditEntry[]> QueryAuditLogAsync(
         DateTime startTime,
         DateTime endTime,

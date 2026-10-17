@@ -126,22 +126,34 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </summary>
         public long UnexpectedPackets { get; private set; }
 
-        /// <summary>Calls that were never answered (T21 expired).</summary>
+        /// <summary>
+        /// Calls that were never answered (T21 expired).
+        /// </summary>
         public long CallTimeouts { get; private set; }
 
-        /// <summary>Reset Requests that were never confirmed through every retransmission (T22).</summary>
+        /// <summary>
+        /// Reset Requests that were never confirmed through every retransmission (T22).
+        /// </summary>
         public long ResetTimeouts { get; private set; }
 
-        /// <summary>Clear Requests that were never confirmed through every retransmission (T23).</summary>
+        /// <summary>
+        /// Clear Requests that were never confirmed through every retransmission (T23).
+        /// </summary>
         public long ClearTimeouts { get; private set; }
 
-        /// <summary>Restart Requests that were never confirmed through every retransmission (T20).</summary>
+        /// <summary>
+        /// Restart Requests that were never confirmed through every retransmission (T20).
+        /// </summary>
         public long RestartTimeouts { get; private set; }
 
-        /// <summary>Diagnostic packets this engine has sent (a DCE only; X.25 5.6).</summary>
+        /// <summary>
+        /// Diagnostic packets this engine has sent (a DCE only; X.25 5.6).
+        /// </summary>
         public long DiagnosticsSent { get; private set; }
 
-        /// <summary>Diagnostic packets received from the peer.</summary>
+        /// <summary>
+        /// Diagnostic packets received from the peer.
+        /// </summary>
         public long DiagnosticsReceived { get; private set; }
 
         /// <summary>
@@ -557,15 +569,6 @@ namespace RetroIO.Protocols.X25.PacketLayer
         }
 
         /// <summary>
-        /// Restarts the link: frees all switched circuits and notifies the peer.
-        /// </summary>
-        /// <param name="cause">
-        /// Restart cause code.
-        /// </param>
-        /// <param name="diagnostic">
-        /// Diagnostic code.
-        /// </param>
-        /// <summary>
         /// Sends an Interrupt: 1 to 32 octets that reach the peer ahead of the data queue and outside
         /// the data flow control (X.25 4.4.2).
         /// </summary>
@@ -613,6 +616,15 @@ namespace RetroIO.Protocols.X25.PacketLayer
             return true;
         }
 
+        /// <summary>
+        /// Restarts the link: frees all switched circuits and notifies the peer.
+        /// </summary>
+        /// <param name="cause">
+        /// Restart cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
         public bool Restart(byte cause = 0, byte diagnostic = 0)
         {
             cause = ApplyCauseRule(cause);

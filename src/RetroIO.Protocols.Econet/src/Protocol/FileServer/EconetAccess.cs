@@ -23,24 +23,38 @@ namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 [Flags]
 public enum EconetAccess : byte
 {
-    /// <summary>No permissions.</summary>
+    /// <summary>
+    /// No permissions.
+    /// </summary>
     None = 0x00,
 
-    /// <summary>Owner may read (<c>R</c> before the slash). fs.c <c>FS_PERM_OWN_R</c> = 0x01.</summary>
+    /// <summary>
+    /// Owner may read (<c>R</c> before the slash). fs.c <c>FS_PERM_OWN_R</c> = 0x01.
+    /// </summary>
     OwnerRead = 0x01,
 
-    /// <summary>Owner may write (<c>W</c> before the slash). fs.c <c>FS_PERM_OWN_W</c> = 0x02.</summary>
+    /// <summary>
+    /// Owner may write (<c>W</c> before the slash). fs.c <c>FS_PERM_OWN_W</c> = 0x02.
+    /// </summary>
     OwnerWrite = 0x02,
 
-    /// <summary>Object is locked against deletion (<c>L</c>). fs.c <c>FS_PERM_L</c> = 0x04.</summary>
+    /// <summary>
+    /// Object is locked against deletion (<c>L</c>). fs.c <c>FS_PERM_L</c> = 0x04.
+    /// </summary>
     Locked = 0x04,
 
-    /// <summary>Others may read (<c>R</c> after the slash). fs.c <c>FS_PERM_OTH_R</c> = 0x10.</summary>
+    /// <summary>
+    /// Others may read (<c>R</c> after the slash). fs.c <c>FS_PERM_OTH_R</c> = 0x10.
+    /// </summary>
     PublicRead = 0x10,
 
-    /// <summary>Others may write (<c>W</c> after the slash). fs.c <c>FS_PERM_OTH_W</c> = 0x20.</summary>
+    /// <summary>
+    /// Others may write (<c>W</c> after the slash). fs.c <c>FS_PERM_OTH_W</c> = 0x20.
+    /// </summary>
     PublicWrite = 0x20,
 
-    /// <summary>Object is hidden from catalogues (<c>H</c>, also spelled <c>P</c>). fs.c 0x80.</summary>
+    /// <summary>
+    /// Object is hidden from catalogues (<c>H</c>, also spelled <c>P</c>). fs.c 0x80.
+    /// </summary>
     Hidden = 0x80,
 }

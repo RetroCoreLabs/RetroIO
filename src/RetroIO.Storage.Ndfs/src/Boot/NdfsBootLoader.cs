@@ -46,19 +46,29 @@ namespace RetroIO.Storage.Ndfs.Boot
     /// </summary>
     public enum NdfsBootControllerType
     {
-        /// <summary>No recognizable IOX/IOXT device pattern found in the bootstrap.</summary>
+        /// <summary>
+        /// No recognizable IOX/IOXT device pattern found in the bootstrap.
+        /// </summary>
         Unknown,
 
-        /// <summary>SMD/ECC disk controller (ND632), literal IOX base 1540/1550/540/550 octal.</summary>
+        /// <summary>
+        /// SMD/ECC disk controller (ND632), literal IOX base 1540/1550/540/550 octal.
+        /// </summary>
         SmdEcc,
 
-        /// <summary>Winchester (ST506) controller (ND-3041/ND-3038), literal IOX base 500/510 octal.</summary>
+        /// <summary>
+        /// Winchester (ST506) controller (ND-3041/ND-3038), literal IOX base 500/510 octal.
+        /// </summary>
         Winchester,
 
-        /// <summary>SCSI disk controller (NCR-5386), identified by the fixed indirect IOXT opcode (device number in T).</summary>
+        /// <summary>
+        /// SCSI disk controller (NCR-5386), identified by the fixed indirect IOXT opcode (device number in T).
+        /// </summary>
         Scsi,
 
-        /// <summary>Floppy controller, literal IOX base 1560/1570 octal.</summary>
+        /// <summary>
+        /// Floppy controller, literal IOX base 1560/1570 octal.
+        /// </summary>
         Floppy
     }
 
@@ -71,13 +81,19 @@ namespace RetroIO.Storage.Ndfs.Boot
     /// </summary>
     public enum NdfsBootMediaAddressing
     {
-        /// <summary>Geometry block not found / not a recognised hard-disk relocator.</summary>
+        /// <summary>
+        /// Geometry block not found / not a recognised hard-disk relocator.
+        /// </summary>
         Unknown,
 
-        /// <summary>Cylinder/head/sector geometry present (SMD, Winchester).</summary>
+        /// <summary>
+        /// Cylinder/head/sector geometry present (SMD, Winchester).
+        /// </summary>
         Chs,
 
-        /// <summary>Linear block addressing — geometry slots +1..+7 all zero (SCSI).</summary>
+        /// <summary>
+        /// Linear block addressing — geometry slots +1..+7 all zero (SCSI).
+        /// </summary>
         Lba
     }
 
@@ -91,25 +107,39 @@ namespace RetroIO.Storage.Ndfs.Boot
     /// </summary>
     public readonly struct NdfsBootGeometry
     {
-        /// <summary>True when a 0o1000-anchored geometry block was located in body A.</summary>
+        /// <summary>
+        /// True when a 0o1000-anchored geometry block was located in body A.
+        /// </summary>
         public bool Found { get; }
 
-        /// <summary>Page-word index at which the 0o1000 anchor was found (geometry slot +0).</summary>
+        /// <summary>
+        /// Page-word index at which the 0o1000 anchor was found (geometry slot +0).
+        /// </summary>
         public int AnchorWord { get; }
 
-        /// <summary>Slot +0: words per sector (512 on every specimen; 1024 bytes/sector).</summary>
+        /// <summary>
+        /// Slot +0: words per sector (512 on every specimen; 1024 bytes/sector).
+        /// </summary>
         public int WordsPerSector { get; }
 
-        /// <summary>Slot +1: sectors per track (18 SMD, 9 Winchester, 0 SCSI).</summary>
+        /// <summary>
+        /// Slot +1: sectors per track (18 SMD, 9 Winchester, 0 SCSI).
+        /// </summary>
         public int SectorsPerTrack { get; }
 
-        /// <summary>Slot +2: sectors per cylinder (90 SMD, 72 Winchester, 0 SCSI).</summary>
+        /// <summary>
+        /// Slot +2: sectors per cylinder (90 SMD, 72 Winchester, 0 SCSI).
+        /// </summary>
         public int SectorsPerCylinder { get; }
 
-        /// <summary>Slot +3: cylinder count (822 SMD, 1021 Winchester, 0 SCSI). Role vs +4 is [INFERRED].</summary>
+        /// <summary>
+        /// Slot +3: cylinder count (822 SMD, 1021 Winchester, 0 SCSI). Role vs +4 is [INFERRED].
+        /// </summary>
         public int Cylinders { get; }
 
-        /// <summary>Slot +4: alternate cylinder count (821 SMD, 1011 Winchester, 0 SCSI). [INFERRED].</summary>
+        /// <summary>
+        /// Slot +4: alternate cylinder count (821 SMD, 1011 Winchester, 0 SCSI). [INFERRED].
+        /// </summary>
         public int CylindersAlt { get; }
 
         /// <summary>
@@ -117,7 +147,9 @@ namespace RetroIO.Storage.Ndfs.Boot
         /// </summary>
         public bool IsZeroGeometry => Found && SectorsPerTrack == 0 && SectorsPerCylinder == 0 && Cylinders == 0 && CylindersAlt == 0;
 
-        /// <summary>Creates a geometry record.</summary>
+        /// <summary>
+        /// Creates a geometry record.
+        /// </summary>
         public NdfsBootGeometry(bool found, int anchorWord, int wordsPerSector, int sectorsPerTrack, int sectorsPerCylinder, int cylinders, int cylindersAlt)
         {
             Found = found;
@@ -274,8 +306,12 @@ namespace RetroIO.Storage.Ndfs.Boot
         /// <summary>
         /// Loads boot code from NDFS block device
         /// </summary>
-        /// <param name="device">Block device containing NDFS filesystem</param>
-        /// <returns>Boot code information, or null if no valid boot code found</returns>
+        /// <param name="device">
+        /// Block device containing NDFS filesystem
+        /// </param>
+        /// <returns>
+        /// Boot code information, or null if no valid boot code found
+        /// </returns>
         public static NdfsBootCode? LoadBootCode(IBlockDevice device)
         {
             if (device == null || !device.IsMounted)
@@ -294,8 +330,12 @@ namespace RetroIO.Storage.Ndfs.Boot
         /// <summary>
         /// Loads boot code from raw bytes
         /// </summary>
-        /// <param name="data">First 2048 bytes from NDFS disk</param>
-        /// <returns>Boot code information, or null if no valid boot code found</returns>
+        /// <param name="data">
+        /// First 2048 bytes from NDFS disk
+        /// </param>
+        /// <returns>
+        /// Boot code information, or null if no valid boot code found
+        /// </returns>
         public static NdfsBootCode? LoadBootCodeFromBytes(byte[] data)
         {
             if (data == null || data.Length < NDFS_PAGE_SIZE)
@@ -750,8 +790,12 @@ namespace RetroIO.Storage.Ndfs.Boot
         /// <summary>
         /// Detects boot format without loading full code
         /// </summary>
-        /// <param name="device">Block device to check</param>
-        /// <returns>Boot format detected</returns>
+        /// <param name="device">
+        /// Block device to check
+        /// </param>
+        /// <returns>
+        /// Boot format detected
+        /// </returns>
         public static NdfsBootFormat DetectBootFormat(IBlockDevice device)
         {
             NdfsBootCode? boot = LoadBootCode(device);
@@ -761,8 +805,12 @@ namespace RetroIO.Storage.Ndfs.Boot
         /// <summary>
         /// Checks if NDFS disk is bootable
         /// </summary>
-        /// <param name="device">Block device to check</param>
-        /// <returns>True if valid boot code exists</returns>
+        /// <param name="device">
+        /// Block device to check
+        /// </param>
+        /// <returns>
+        /// True if valid boot code exists
+        /// </returns>
         public static bool IsBootable(IBlockDevice device)
         {
             return DetectBootFormat(device) != NdfsBootFormat.None;
@@ -773,8 +821,12 @@ namespace RetroIO.Storage.Ndfs.Boot
         /// raw-binary bootstrap. Returns <see cref="NdfsBootControllerType.Unknown"/> for
         /// BPUN/FLOMON boots (floppy media, identified separately) or non-bootable disks.
         /// </summary>
-        /// <param name="device">Block device to check</param>
-        /// <returns>Controller type detected from the bootstrap's IOX/IOXT instructions</returns>
+        /// <param name="device">
+        /// Block device to check
+        /// </param>
+        /// <returns>
+        /// Controller type detected from the bootstrap's IOX/IOXT instructions
+        /// </returns>
         public static NdfsBootControllerType DetectControllerType(IBlockDevice device)
         {
             NdfsBootCode? boot = LoadBootCode(device);

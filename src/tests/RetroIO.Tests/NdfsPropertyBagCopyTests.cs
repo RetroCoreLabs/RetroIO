@@ -46,7 +46,7 @@ namespace RetroIO.Tests
         }
 
         /// <summary>
-        /// Performs a REAL copy (source image -&gt; in-memory destination image, via the actual
+        /// Performs a REAL copy (source image -> in-memory destination image, via the actual
         /// NdfsFileSystem.WriteFileWithProperties driver path) and checks every key the source
         /// property bag contains, not a 7-key sample. Previously this test never even performed a
         /// copy — it only read the source file's own metadata and did presence-only (ContainsKey)

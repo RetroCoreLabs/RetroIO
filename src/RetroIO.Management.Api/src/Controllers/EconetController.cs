@@ -18,7 +18,9 @@ public class EconetController : ControllerBase
 {
     private readonly FileServerSessionManager? _sessionManager;
 
-    /// <summary>Activity log, absent when this process does not run the Econet server.</summary>
+    /// <summary>
+    /// Activity log, absent when this process does not run the Econet server.
+    /// </summary>
     private readonly IEconetActivityLog? _activityLog;
     private readonly ILogger<EconetController> _logger;
 
@@ -92,9 +94,15 @@ public class EconetController : ControllerBase
         }
     }
 
-    /// <summary>Returns the most recent Econet commands and file transfers.</summary>
-    /// <param name="count">How many of each to return.</param>
-    /// <returns>The activity log, or empty lists when this process does not run Econet.</returns>
+    /// <summary>
+    /// Returns the most recent Econet commands and file transfers.
+    /// </summary>
+    /// <param name="count">
+    /// How many of each to return.
+    /// </param>
+    /// <returns>
+    /// The activity log, or empty lists when this process does not run Econet.
+    /// </returns>
     /// <remarks>
     /// The last thing RetroServeUI read straight off an in-process object. Without this endpoint
     /// the UI could not show its Econet monitor against a server in another process, which is the

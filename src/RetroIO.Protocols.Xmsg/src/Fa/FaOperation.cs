@@ -47,7 +47,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// JPL / JPL / JMP     ; into shared tails
     /// </code>
     /// So these routines carry a string descriptor - a length and a pointer to the name - which
-    /// makes the row a <b>command-name table</b>, almost certainly the parser that matches a typed
+    /// makes the row a command-name table, almost certainly the parser that matches a typed
     /// command. They are NOT the wire-request handlers. Those are ordinary named functions between
     /// <c>ram:2xxx</c> and <c>ram:4xxx</c>; operation 4's is <c>fa_change_file_entry_id</c> at
     /// <c>ram:2e12</c>, reached from a helper rather than from any table.

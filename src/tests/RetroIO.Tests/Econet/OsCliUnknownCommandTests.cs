@@ -24,7 +24,7 @@ namespace RetroIO.Tests.Econet;
 /// BOTH plain <c>*SOMEPROG</c> and <c>*OPT 4,n</c> / SHIFT-BREAK autoboot work: after a login that
 /// reports a non-zero boot option, the ROM immediately issues <c>*!BOOT</c>.
 ///
-/// RetroFS previously replied <c>&amp;FE "Bad command"</c>, which the ROM treats as final — so autoboot
+/// RetroFS previously replied <c>0xFE "Bad command"</c>, which the ROM treats as final — so autoboot
 /// and every <c>*program</c> invocation failed. Caught live in BeebEm on 2026-07-17: a login carrying
 /// boot option 02 was followed by OSCLI "!BOOT" and answered "Bad command". Captured wire log:
 /// E:\Dev\Ronny\RetroFS\docs\econet-captures\beebem-session-20260717-bdmzuib2v.log
@@ -44,7 +44,7 @@ public sealed class OsCliUnknownCommandTests
     }
 
     /// <summary>
-    /// The exact case seen live: boot option set -> ROM sends "*!BOOT" -> must get 0x08, not &amp;FE.
+    /// The exact case seen live: boot option set -> ROM sends "*!BOOT" -> must get 0x08, not 0xFE.
     /// </summary>
     [Test]
     public void Bang_Boot_ReturnsUnknownCommand_NotBadCommand()
@@ -71,7 +71,9 @@ public sealed class OsCliUnknownCommandTests
         Assert.That(payload[1], Is.EqualTo(0x00));
     }
 
-    /// <summary>PiFS echoes the raw command bytes from data+5, INCLUDING the terminating CR.</summary>
+    /// <summary>
+    /// PiFS echoes the raw command bytes from data+5, INCLUDING the terminating CR.
+    /// </summary>
     [Test]
     public void UnknownCommand_EchoesOriginalTextVerbatim_IncludingCr()
     {
@@ -100,7 +102,7 @@ public sealed class OsCliUnknownCommandTests
 
     /// <summary>
     /// Login is still enforced first: an unknown command from a station that is not logged in gets
-    /// "Who are you ?" (&amp;BF), not 0x08. Verified live in BeebEm 2026-07-17 ("*P" after a server
+    /// "Who are you ?" (0xBF), not 0x08. Verified live in BeebEm 2026-07-17 ("*P" after a server
     /// restart -> 00 BF "Who are you ?"; the message text was later aligned to the reference's space
     /// before '?').
     /// </summary>

@@ -12,16 +12,24 @@ namespace RetroIO.Link.Models
     /// </summary>
     public enum LapbFrameType
     {
-        /// <summary>Information frame.</summary>
+        /// <summary>
+        /// Information frame.
+        /// </summary>
         Information = 0,
 
-        /// <summary>Supervisory frame.</summary>
+        /// <summary>
+        /// Supervisory frame.
+        /// </summary>
         Supervisory = 1,
 
-        /// <summary>Unnumbered frame.</summary>
+        /// <summary>
+        /// Unnumbered frame.
+        /// </summary>
         Unnumbered = 2,
 
-        /// <summary>Unknown frame type.</summary>
+        /// <summary>
+        /// Unknown frame type.
+        /// </summary>
         Unknown = 3
     }
 }

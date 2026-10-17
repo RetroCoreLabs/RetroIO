@@ -86,7 +86,9 @@ namespace RetroIO.Protocols.X25.Tests
 
         // ------------------------------------------------------------------ helpers
 
-        /// <summary>Places a call and feeds a Call Connected, leaving the circuit in data transfer.</summary>
+        /// <summary>
+        /// Places a call and feeds a Call Connected, leaving the circuit in data transfer.
+        /// </summary>
         private ushort ConnectOutgoing()
         {
             ushort lci = _layer.PlaceCall(RemoteAddress);
@@ -97,7 +99,9 @@ namespace RetroIO.Protocols.X25.Tests
             return lci;
         }
 
-        /// <summary>Feeds an Incoming Call on the given LCI and accepts it.</summary>
+        /// <summary>
+        /// Feeds an Incoming Call on the given LCI and accepts it.
+        /// </summary>
         private void ConnectIncoming(ushort lci)
         {
             _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(lci, LocalAddress, RemoteAddress));
@@ -1009,7 +1013,9 @@ namespace RetroIO.Protocols.X25.Tests
         // designed in rather than merely ignored. The sink now answers Sent / Refused / LinkDown and
         // every state change that assumed a send is rolled back when it did not happen.
 
-        /// <summary>A sink that refuses everything after a set number of packets, like a link whose transmit queue has filled.</summary>
+        /// <summary>
+        /// A sink that refuses everything after a set number of packets, like a link whose transmit queue has filled.
+        /// </summary>
         private sealed class RefusingSink : IX25PacketSink
         {
             public int AcceptFirst = int.MaxValue;
@@ -1328,7 +1334,9 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(got, Is.EqualTo(message));
         }
 
-        /// <summary>Two sinks that feed each other's layers, for the round-trip test.</summary>
+        /// <summary>
+        /// Two sinks that feed each other's layers, for the round-trip test.
+        /// </summary>
         private sealed class LoopSinkPair
         {
             public readonly LoopSink A = new LoopSink();

@@ -17,14 +17,14 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// emulator, or a dial-out to a central relay that joins many nodes into one segment.
     /// </summary>
     /// <remarks>
-    /// <para><b>Wire format</b> (read from RetroCore's <c>TcpEthernetBackend</c>, 2026-08-01)</para>
+    /// <para>Wire format (read from RetroCore's <c>TcpEthernetBackend</c>, 2026-08-01)</para>
     /// <para>
-    /// A one-time <b>5-byte handshake</b> <c>['R','E','T','H', version]</c> - <c>52 45 54 48 01</c>,
+    /// A one-time 5-byte handshake <c>['R','E','T','H', version]</c> - <c>52 45 54 48 01</c>,
     /// magic "RETH" for RetroCore ETHernet bridge - sent by BOTH ends and validated on the four
     /// magic bytes. Then a stream of <c>[u16 big-endian length][frame]</c>.
     /// </para>
     /// <para>
-    /// Both the handshake and the length prefix belong to the <b>emulator's transport</b>, not to
+    /// Both the handshake and the length prefix belong to the emulator's transport, not to
     /// COSMOS. Neither exists on real hardware. A client that skips the handshake is dropped.
     /// </para>
     /// <para>

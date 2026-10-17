@@ -118,7 +118,9 @@ namespace RetroIO.Link.Framing
             _decoder.Reset();
         }
 
-        /// <summary>Returns the decoder's pooled assembly buffer.</summary>
+        /// <summary>
+        /// Returns the decoder's pooled assembly buffer.
+        /// </summary>
         public void Dispose()
         {
             _decoder.Dispose();

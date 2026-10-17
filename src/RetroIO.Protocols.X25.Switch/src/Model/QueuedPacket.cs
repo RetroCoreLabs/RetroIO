@@ -42,16 +42,24 @@ namespace RetroIO.Protocols.X25.Switch.Model
             DBit = dBit;
         }
 
-        /// <summary>The packet's user data.</summary>
+        /// <summary>
+        /// The packet's user data.
+        /// </summary>
         public byte[] Data { get; }
 
-        /// <summary>The qualifier bit.</summary>
+        /// <summary>
+        /// The qualifier bit.
+        /// </summary>
         public bool QBit { get; }
 
-        /// <summary>The more-data bit.</summary>
+        /// <summary>
+        /// The more-data bit.
+        /// </summary>
         public bool MBit { get; }
 
-        /// <summary>The delivery-confirmation bit.</summary>
+        /// <summary>
+        /// The delivery-confirmation bit.
+        /// </summary>
         public bool DBit { get; }
     }
 }

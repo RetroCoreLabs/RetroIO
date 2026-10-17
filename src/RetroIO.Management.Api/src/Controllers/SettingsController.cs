@@ -25,7 +25,9 @@ public class SettingsController : ControllerBase
     /// Creates the controller. ASP.NET's DI calls this with only the logger, so settings land in
     /// the per-user config directory (see <see cref="GetConfigPath"/>).
     /// </summary>
-    /// <param name="logger">Log sink.</param>
+    /// <param name="logger">
+    /// Log sink.
+    /// </param>
     /// <param name="configPath">
     /// Directory the settings JSON files are read from and written to. Pass null (the default, and
     /// what DI does) for the real per-user directory. Tests MUST pass a temp directory here --

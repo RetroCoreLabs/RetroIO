@@ -22,10 +22,14 @@ namespace RetroIO.Storage.Ndfs.Structures
     /// </remarks>
     public enum ChecksumValidationState
     {
-        /// <summary>Full 16-bit checksum is valid.</summary>
+        /// <summary>
+        /// Full 16-bit checksum is valid.
+        /// </summary>
         CrcValid,
 
-        /// <summary>Checksum does not match.</summary>
+        /// <summary>
+        /// Checksum does not match.
+        /// </summary>
         CrcInvalid
     }
 
@@ -285,7 +289,9 @@ namespace RetroIO.Storage.Ndfs.Structures
         /// Scores how strongly this page-0 looks like a genuine NDFS volume, on a 0.0–1.0 scale,
         /// using the kernel-verified invariants. Intended for filesystem auto-detection.
         /// </summary>
-        /// <param name="devicePages">Device size in 2048-byte pages (file length / 2048).</param>
+        /// <param name="devicePages">
+        /// Device size in 2048-byte pages (file length / 2048).
+        /// </param>
         /// <remarks>
         /// <para><see cref="IsValid"/> is far too permissive for detection: it accepts a page whose
         /// 32 bytes at offset 2016 merely contain a printable name OR any one 4-byte word that
@@ -293,22 +299,17 @@ namespace RetroIO.Storage.Ndfs.Structures
         /// demands the structure a real directory label must have, and then looks for kernel-grade
         /// corroboration.</para>
         ///
-        /// <para><b>Structural core</b> (all required): the object, user and bit-file pointers must
+        /// <para>Structural core (all required): the object, user and bit-file pointers must
         /// all be in-bounds for the device (see <see cref="BlockPointer.IsValidWithin"/>), the name
         /// must be printable ASCII (empty is allowed — a freshly created directory), and the
         /// user-file pointer must sit exactly 2 blocks above the object-file pointer
         /// (<c>user == object + 2</c>) — an invariant that holds on every real image examined
         /// (PACK-ONE: 18684/18686; floppy: 611/613).</para>
         ///
-        /// <para><b>Corroboration tiers</b>:</para>
-        /// <list type="bullet">
-        /// <item>Hard disk: a VALID additive extended-info checksum (WXDIR 37702B / CHDSI 37763B)
-        /// with reserved words 1751B–1753B all zero — near-certain.</item>
-        /// <item>Floppy / bootable: a FLOMON signature, or a raw bootstrap whose first word is
-        /// PIOF/IOF. FLOMON volumes legitimately have NO valid extended-info block, so they must
-        /// never be penalised for lacking the checksum.</item>
-        /// <item>Structure only, no corroboration — plausible but unproven.</item>
-        /// </list>
+        /// <para>Corroboration tiers:</para>
+        ///  - Hard disk: a VALID additive extended-info checksum (WXDIR 37702B / CHDSI 37763B) with reserved words 1751B–1753B all zero — near-certain.
+        ///  - Floppy / bootable: a FLOMON signature, or a raw bootstrap whose first word is PIOF/IOF. FLOMON volumes legitimately have NO valid extended-info block, so they must never be penalised for lacking the checksum.
+        ///  - Structure only, no corroboration — plausible but unproven.
         /// </remarks>
         public float DetectionScore(uint devicePages)
         {

@@ -241,13 +241,19 @@ namespace RetroIO.Protocols.X25.PacketLayer
     /// </summary>
     public enum X25SendResult
     {
-        /// <summary>The link accepted the packet for transmission.</summary>
+        /// <summary>
+        /// The link accepted the packet for transmission.
+        /// </summary>
         Sent,
 
-        /// <summary>The link cannot take the packet right now; the caller may retry later.</summary>
+        /// <summary>
+        /// The link cannot take the packet right now; the caller may retry later.
+        /// </summary>
         Refused,
 
-        /// <summary>There is no link to send on.</summary>
+        /// <summary>
+        /// There is no link to send on.
+        /// </summary>
         LinkDown,
     }
 }

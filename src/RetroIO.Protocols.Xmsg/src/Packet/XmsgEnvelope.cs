@@ -11,13 +11,13 @@ namespace RetroIO.Protocols.Xmsg.Packet
 {
     /// <summary>
     /// The complete XMSG envelope arithmetic. Per link (node pair) there is one constant byte - the
-    /// <b>seed</b> - and per direction one variable - <b>Flags 1</b> (the datagram sequence, +1 per
+    /// seed - and per direction one variable - Flags 1 (the datagram sequence, +1 per
     /// data frame, starting at 0x0000). Everything else (the sub-header Counter and the sub-protocol
     /// Channel / Protocol ID) is derived arithmetically.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>SUPERSEDED 2026-07-31 - use <see cref="ComputeHeaderChecksum(SintranHeader)"/>.</b> Everything below this
+    /// SUPERSEDED 2026-07-31 - use <see cref="ComputeHeaderChecksum(SintranHeader)"/>. Everything below this
     /// notice describes a model that was FITTED to observations and is now known to be the wrong
     /// explanation. The SINTRAN header is SEVEN WORDS and word 6 is a ones-complement checksum over
     /// the other six - <c>w6 == ~ones_complement_sum(w0..w5, 0)</c> - carved from the kernel at
@@ -38,8 +38,8 @@ namespace RetroIO.Protocols.Xmsg.Packet
     /// traffic they were fitted to and NOT in general. Prefer the checksum for anything new.
     /// </para>
     /// <para><b>HISTORICAL, from here down.</b></para>
-    /// <para><b>The rule (VERIFIED against all 601 captured Data frames + 602 ACKs, zero exceptions -
-    /// see <c>SINTRAN/XMSG/DOC/XMSG-CHANNEL-SEQUENCE-ANALYSIS-2026-07-03.md</c>):</b></para>
+    /// <para>The rule (VERIFIED against all 601 captured Data frames + 602 ACKs, zero exceptions -
+    /// see <c>SINTRAN/XMSG/DOC/XMSG-CHANNEL-SEQUENCE-ANALYSIS-2026-07-03.md</c>):</para>
     /// <code>
     /// baseLow = (seed - (Flags2 AND 0xFF)) AND 0xFF        // Flags2 == XMCSM >> 16, always
     /// Counter = (baseLow - Flags1) AND 0xFF
@@ -47,12 +47,12 @@ namespace RetroIO.Protocols.Xmsg.Packet
     /// Channel = 0xDE - (XMCSM >> 24) - epoch
     /// Base    = Flags1 + Counter = baseLow + 0x100*epoch  // the old "envelope Base", now derived
     /// </code>
-    /// <para><b>Fresh-responder consequence:</b> at epoch 0 a terminal-data frame (XMCSM 0x01080000)
-    /// derives to channel <b>0xDD</b>, not DB. DB only appears at epoch 2 (a node with a high running
+    /// <para>Fresh-responder consequence: at epoch 0 a terminal-data frame (XMCSM 0x01080000)
+    /// derives to channel 0xDD, not DB. DB only appears at epoch 2 (a node with a high running
     /// sequence, e.g. the conn-to-d102 capture). The same XROUT letter class rides DD (epoch 0),
     /// DC (epoch 1) and DB (epoch 2) purely by epoch. This is why the fresh live node's terminal data
     /// belongs on DD with <c>Counter = (seed - 8 - Flags1) AND 0xFF</c>.</para>
-    /// <para><b>SCOPE LIMIT, found 2026-07-30.</b> The Channel line above holds only where the LOW BYTE
+    /// <para>SCOPE LIMIT, found 2026-07-30. The Channel line above holds only where the LOW BYTE
     /// of Flags 2 is a message-class marker - <c>0x00</c> control, <c>0x08</c> terminal data. That was
     /// the whole corpus when the rule was derived. The COSMOS file-server captures broke the
     /// assumption: there Flags 2 is the message BODY LENGTH, so <c>baseLow = seed - (Flags2 AND 0xFF)</c>
@@ -64,11 +64,11 @@ namespace RetroIO.Protocols.Xmsg.Packet
     /// </code>
     /// <para>So the rule is exactly right on 800 frames and inapplicable on the rest, rather than
     /// approximately right everywhere. The Counter line is unaffected. What the channel does on
-    /// length-valued Flags 2 is <b>UNKNOWN</b> - observed wire offsets there are 0, 1, 2 and 3, and no
+    /// length-valued Flags 2 is UNKNOWN - observed wire offsets there are 0, 1, 2 and 3, and no
     /// replacement formula has been fitted on purpose. Track the channel per direction on that traffic,
     /// or capture enough of it to derive the rule properly. See
     /// <c>ChannelOffsetDiagnosticTests</c> and <c>EnvelopeConformanceTests</c>.</para>
-    /// <para><b>Seed:</b> learn it from any received Data frame via <see cref="LearnSeed"/> rather than
+    /// <para>Seed: learn it from any received Data frame via <see cref="LearnSeed"/> rather than
     /// hardcoding. Observed seeds: 100-102 = 0x14, 100-103 = 0x13, 102-103 = 0x11 (direct) / 0x12
     /// (relayed). What the seed byte encodes is UNKNOWN; learn-from-peer sidesteps it.</para>
     /// </remarks>
@@ -108,12 +108,12 @@ namespace RetroIO.Protocols.Xmsg.Packet
         /// The SINTRAN header is SEVEN WORDS, and word 6 is this checksum over the other six with
         /// the checksum field itself counted as zero. On the wire that word reads as two bytes:
         /// offset 12 (long mislabelled "Protocol ID" or "channel") is the HIGH byte, and offset 13
-        /// (long mislabelled "Counter") is the LOW byte. <b>There is no channel, no epoch and no
-        /// per-link seed</b> - those were artifacts of curve-fitting an expression to checksum
+        /// (long mislabelled "Counter") is the LOW byte. There is no channel, no epoch and no
+        /// per-link seed - those were artifacts of curve-fitting an expression to checksum
         /// arithmetic.
         /// </para>
         /// <para>
-        /// Verified on <b>3595 of 3595</b> frames across the whole capture corpus - every subtype
+        /// Verified on 3595 of 3595 frames across the whole capture corpus - every subtype
         /// (Ack 1671, Data 1449, transfer <c>0x0A</c> 226 and <c>0x0C</c> 226, ReachRequest 10,
         /// ReachReply 6, NetworkError 3, and the <c>0xFD</c>/<c>0xFE</c> family 4), both
         /// directions, every link, with no per-subtype special cases. The model this replaces

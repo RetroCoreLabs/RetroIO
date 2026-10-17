@@ -61,12 +61,14 @@ public static class FileServerReply
     /// (<c>WireProfile.Classic1983</c>).
     /// </summary>
     /// <remarks>
-    /// Per Acorn's <i>Econet Advanced User Guide</i> (1983) the reply carries ONLY a 24-bit free-block
+    /// Per Acorn's Econet Advanced User Guide (1983) the reply carries ONLY a 24-bit free-block
     /// count at bytes 2 to 4 (5 bytes total); the total-extent field (bytes 5 to 7 of
     /// <see cref="DiscFreeSpace"/>) was a later-FS addition. See
     /// <c>docs/econet/notes/wire-format-verification.md</c>.
     /// </remarks>
-    /// <param name="free">Free space, in the disc's allocation units.</param>
+    /// <param name="free">
+    /// Free space, in the disc's allocation units.
+    /// </param>
     public static byte[] DiscFreeSpaceClassic1983(uint free)
     {
         return
@@ -165,7 +167,7 @@ public static class FileServerReply
     /// then the library). It is the mechanism behind BOTH plain <c>*SOMEPROG</c> and <c>*OPT 4,n</c> /
     /// SHIFT-BREAK autoboot, where the ROM issues <c>*!BOOT</c> straight after login.
     ///
-    /// RetroFS previously answered an unrecognised OSCLI with <c>&amp;FE "Bad command"</c>, which the
+    /// RetroFS previously answered an unrecognised OSCLI with <c>0xFE "Bad command"</c>, which the
     /// ROM treats as final — so autoboot and every <c>*program</c> invocation failed. Caught live in
     /// BeebEm 2026-07-17: right after a successful login carrying boot option 02, the client sent
     /// OSCLI "!BOOT" and got "Bad command".

@@ -129,7 +129,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>CORRECTION, 2026-07-30.</b> <c>FaListFilesCodec</c> documented the request body as
+        /// CORRECTION, 2026-07-30. <c>FaListFilesCodec</c> documented the request body as
         /// "byte-identical from one entry to the next except for the serial and the cursor". Measured
         /// over the eleven directory enquiries in the SYSTEM capture, that is only true from the
         /// <c>0xFFFF</c> request onward. The enquiry that PRECEDES it carries the same leading

@@ -32,10 +32,14 @@ namespace RetroIO.Tests
     {
         private const string NdixImagePath = @"E:\Dev\Ronny\NDIX-C\rootfs_mkproto.img";
 
-        /// <summary>Filesystem base: 90 sectors of 1024 bytes (one di70 cylinder).</summary>
+        /// <summary>
+        /// Filesystem base: 90 sectors of 1024 bytes (one di70 cylinder).
+        /// </summary>
         private const long NdixFilesystemBase = 90L * 1024L;
 
-        /// <summary>Primary superblock: filesystem base + SBLOCK_OFFSET.</summary>
+        /// <summary>
+        /// Primary superblock: filesystem base + SBLOCK_OFFSET.
+        /// </summary>
         private const long NdixSuperblockOffset = NdixFilesystemBase + 8192L;
 
         [Test]

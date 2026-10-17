@@ -10,7 +10,9 @@ using RetroIO.Storage.Core;
 
 namespace RetroIO.Storage.Local.Drivers
 {
-    /// <summary>Provider for Commodore CRT cartridge images (detected by the "C64 CARTRIDGE" magic).</summary>
+    /// <summary>
+    /// Provider for Commodore CRT cartridge images (detected by the "C64 CARTRIDGE" magic).
+    /// </summary>
     public sealed class CrtDriverProvider : FileSystemDriverProviderBase
     {
         public override string FileSystemType => "CRT";

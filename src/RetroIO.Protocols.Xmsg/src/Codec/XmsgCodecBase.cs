@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Xmsg.Codec
     /// codecs implement only the parse (<see cref="ProcessBytes"/>) and encode (<see cref="SendPacket"/>).
     /// </summary>
     /// <remarks>
-    /// This realises the seam's <b>events-up / interfaces-down</b> rule: the codec calls DOWN through
+    /// This realises the seam's events-up / interfaces-down rule: the codec calls DOWN through
     /// <see cref="Transport"/> and signals UP through the named delegate <see cref="XmsgPacketReceived"/>
     /// (sender/link-id first parameter, no <c>EventHandler</c>/<c>EventArgs</c>). The base is abstract
     /// so a test double and the real <see cref="XmsgCodec"/> share the identical up-event contract.

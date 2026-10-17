@@ -13,66 +13,106 @@ namespace RetroIO.Protocols.Tnfs.Protocol;
 public enum TnfsCommand : byte
 {
     // Session commands (0x00-0x0F)
-    /// <summary>Mount filesystem</summary>
+    /// <summary>
+    /// Mount filesystem
+    /// </summary>
     Mount = 0x00,
 
-    /// <summary>Unmount filesystem</summary>
+    /// <summary>
+    /// Unmount filesystem
+    /// </summary>
     Unmount = 0x01,
 
     // Directory commands (0x10-0x1F)
-    /// <summary>Open directory</summary>
+    /// <summary>
+    /// Open directory
+    /// </summary>
     OpenDir = 0x10,
 
-    /// <summary>Read directory entry</summary>
+    /// <summary>
+    /// Read directory entry
+    /// </summary>
     ReadDir = 0x11,
 
-    /// <summary>Close directory</summary>
+    /// <summary>
+    /// Close directory
+    /// </summary>
     CloseDir = 0x12,
 
-    /// <summary>Make directory</summary>
+    /// <summary>
+    /// Make directory
+    /// </summary>
     MkDir = 0x13,
 
-    /// <summary>Remove directory</summary>
+    /// <summary>
+    /// Remove directory
+    /// </summary>
     RmDir = 0x14,
 
-    /// <summary>Tell directory position</summary>
+    /// <summary>
+    /// Tell directory position
+    /// </summary>
     TellDir = 0x15,
 
-    /// <summary>Seek directory position</summary>
+    /// <summary>
+    /// Seek directory position
+    /// </summary>
     SeekDir = 0x16,
 
-    /// <summary>Open directory extended</summary>
+    /// <summary>
+    /// Open directory extended
+    /// </summary>
     OpenDirX = 0x17,
 
-    /// <summary>Read directory extended</summary>
+    /// <summary>
+    /// Read directory extended
+    /// </summary>
     ReadDirX = 0x18,
 
     // File commands (0x20-0x2F)
-    /// <summary>Read from file</summary>
+    /// <summary>
+    /// Read from file
+    /// </summary>
     Read = 0x21,
 
-    /// <summary>Write to file</summary>
+    /// <summary>
+    /// Write to file
+    /// </summary>
     Write = 0x22,
 
-    /// <summary>Close file</summary>
+    /// <summary>
+    /// Close file
+    /// </summary>
     Close = 0x23,
 
-    /// <summary>Get file status</summary>
+    /// <summary>
+    /// Get file status
+    /// </summary>
     Stat = 0x24,
 
-    /// <summary>Seek in file</summary>
+    /// <summary>
+    /// Seek in file
+    /// </summary>
     Seek = 0x25,
 
-    /// <summary>Unlink (delete) file</summary>
+    /// <summary>
+    /// Unlink (delete) file
+    /// </summary>
     Unlink = 0x26,
 
-    /// <summary>Change file permissions (Unix-style)</summary>
+    /// <summary>
+    /// Change file permissions (Unix-style)
+    /// </summary>
     Chmod = 0x27,
 
-    /// <summary>Rename file</summary>
+    /// <summary>
+    /// Rename file
+    /// </summary>
     Rename = 0x28,
 
-    /// <summary>Open file (CORRECT CODE per spec)</summary>
+    /// <summary>
+    /// Open file (CORRECT CODE per spec)
+    /// </summary>
     Open = 0x29
 }
 
@@ -83,111 +123,181 @@ public enum TnfsCommand : byte
 public enum TnfsReturnCode : byte
 {
     // Success
-    /// <summary>Success (0x00)</summary>
+    /// <summary>
+    /// Success (0x00)
+    /// </summary>
     SUCCESS = 0x00,
 
     // Standard Unix errors - EXACT mapping to C server
-    /// <summary>Operation not permitted (0x01)</summary>
+    /// <summary>
+    /// Operation not permitted (0x01)
+    /// </summary>
     EPERM = 0x01,
 
-    /// <summary>No such file or directory (0x02)</summary>
+    /// <summary>
+    /// No such file or directory (0x02)
+    /// </summary>
     ENOENT = 0x02,
 
-    /// <summary>I/O error (0x03)</summary>
+    /// <summary>
+    /// I/O error (0x03)
+    /// </summary>
     EIO = 0x03,
 
-    /// <summary>No such device or address (0x04)</summary>
+    /// <summary>
+    /// No such device or address (0x04)
+    /// </summary>
     ENXIO = 0x04,
 
-    /// <summary>Argument list too long (0x05)</summary>
+    /// <summary>
+    /// Argument list too long (0x05)
+    /// </summary>
     E2BIG = 0x05,
 
-    /// <summary>Bad file descriptor (0x06)</summary>
+    /// <summary>
+    /// Bad file descriptor (0x06)
+    /// </summary>
     EBADF = 0x06,
 
-    /// <summary>Try again (0x07)</summary>
+    /// <summary>
+    /// Try again (0x07)
+    /// </summary>
     EAGAIN = 0x07,
 
-    /// <summary>Out of memory (0x08)</summary>
+    /// <summary>
+    /// Out of memory (0x08)
+    /// </summary>
     ENOMEM = 0x08,
 
-    /// <summary>Permission denied (0x09)</summary>
+    /// <summary>
+    /// Permission denied (0x09)
+    /// </summary>
     EACCES = 0x09,
 
-    /// <summary>Device or resource busy (0x0A)</summary>
+    /// <summary>
+    /// Device or resource busy (0x0A)
+    /// </summary>
     EBUSY = 0x0A,
 
-    /// <summary>File exists (0x0B)</summary>
+    /// <summary>
+    /// File exists (0x0B)
+    /// </summary>
     EEXIST = 0x0B,
 
-    /// <summary>Not a directory (0x0C)</summary>
+    /// <summary>
+    /// Not a directory (0x0C)
+    /// </summary>
     ENOTDIR = 0x0C,
 
-    /// <summary>Is a directory (0x0D)</summary>
+    /// <summary>
+    /// Is a directory (0x0D)
+    /// </summary>
     EISDIR = 0x0D,
 
-    /// <summary>Invalid argument (0x0E)</summary>
+    /// <summary>
+    /// Invalid argument (0x0E)
+    /// </summary>
     EINVAL = 0x0E,
 
-    /// <summary>File table overflow (0x0F)</summary>
+    /// <summary>
+    /// File table overflow (0x0F)
+    /// </summary>
     ENFILE = 0x0F,
 
-    /// <summary>Too many open files (0x10)</summary>
+    /// <summary>
+    /// Too many open files (0x10)
+    /// </summary>
     EMFILE = 0x10,
 
-    /// <summary>File too large (0x11)</summary>
+    /// <summary>
+    /// File too large (0x11)
+    /// </summary>
     EFBIG = 0x11,
 
-    /// <summary>No space left on device (0x12)</summary>
+    /// <summary>
+    /// No space left on device (0x12)
+    /// </summary>
     ENOSPC = 0x12,
 
-    /// <summary>Illegal seek (0x13)</summary>
+    /// <summary>
+    /// Illegal seek (0x13)
+    /// </summary>
     ESPIPE = 0x13,
 
-    /// <summary>Read-only file system (0x14)</summary>
+    /// <summary>
+    /// Read-only file system (0x14)
+    /// </summary>
     EROFS = 0x14,
 
-    /// <summary>File name too long (0x15)</summary>
+    /// <summary>
+    /// File name too long (0x15)
+    /// </summary>
     ENAMETOOLONG = 0x15,
 
-    /// <summary>Function not implemented (0x16)</summary>
+    /// <summary>
+    /// Function not implemented (0x16)
+    /// </summary>
     ENOSYS = 0x16,
 
-    /// <summary>Directory not empty (0x17)</summary>
+    /// <summary>
+    /// Directory not empty (0x17)
+    /// </summary>
     ENOTEMPTY = 0x17,
 
-    /// <summary>Too many symbolic links (0x18)</summary>
+    /// <summary>
+    /// Too many symbolic links (0x18)
+    /// </summary>
     ELOOP = 0x18,
 
-    /// <summary>No data available (0x19)</summary>
+    /// <summary>
+    /// No data available (0x19)
+    /// </summary>
     ENODATA = 0x19,
 
-    /// <summary>Not a stream (0x1A)</summary>
+    /// <summary>
+    /// Not a stream (0x1A)
+    /// </summary>
     ENOSTR = 0x1A,
 
-    /// <summary>Protocol error (0x1B)</summary>
+    /// <summary>
+    /// Protocol error (0x1B)
+    /// </summary>
     EPROTO = 0x1B,
 
-    /// <summary>File descriptor in bad state (0x1C)</summary>
+    /// <summary>
+    /// File descriptor in bad state (0x1C)
+    /// </summary>
     EBADFD = 0x1C,
 
-    /// <summary>Too many users (0x1D)</summary>
+    /// <summary>
+    /// Too many users (0x1D)
+    /// </summary>
     EUSERS = 0x1D,
 
-    /// <summary>No buffer space available (0x1E)</summary>
+    /// <summary>
+    /// No buffer space available (0x1E)
+    /// </summary>
     ENOBUFS = 0x1E,
 
-    /// <summary>Operation already in progress (0x1F)</summary>
+    /// <summary>
+    /// Operation already in progress (0x1F)
+    /// </summary>
     EALREADY = 0x1F,
 
-    /// <summary>Stale file handle (0x20)</summary>
+    /// <summary>
+    /// Stale file handle (0x20)
+    /// </summary>
     ESTALE = 0x20,
 
-    /// <summary>End of file (0x21)</summary>
+    /// <summary>
+    /// End of file (0x21)
+    /// </summary>
     EOF = 0x21,
 
     // TNFS specific errors
-    /// <summary>Invalid session ID (0xFF)</summary>
+    /// <summary>
+    /// Invalid session ID (0xFF)
+    /// </summary>
     EBADSESSION = 0xFF
 }
 
@@ -198,25 +308,39 @@ public enum TnfsReturnCode : byte
 [System.Flags]
 public enum TnfsOpenFlags : ushort
 {
-    /// <summary>Open for reading only (0x0000)</summary>
+    /// <summary>
+    /// Open for reading only (0x0000)
+    /// </summary>
     O_RDONLY = 0x0000,
 
-    /// <summary>Open for writing only (0x0001)</summary>
+    /// <summary>
+    /// Open for writing only (0x0001)
+    /// </summary>
     O_WRONLY = 0x0001,
 
-    /// <summary>Open for reading and writing (0x0002)</summary>
+    /// <summary>
+    /// Open for reading and writing (0x0002)
+    /// </summary>
     O_RDWR = 0x0002,
 
-    /// <summary>Append mode (0x0008)</summary>
+    /// <summary>
+    /// Append mode (0x0008)
+    /// </summary>
     O_APPEND = 0x0008,
 
-    /// <summary>Create file if it doesn't exist (0x0100)</summary>
+    /// <summary>
+    /// Create file if it doesn't exist (0x0100)
+    /// </summary>
     O_CREAT = 0x0100,
 
-    /// <summary>Truncate file if it doesn't exist (0x0800)</summary>
+    /// <summary>
+    /// Truncate file if it doesn't exist (0x0800)
+    /// </summary>
     O_TRUNC = 0x0800,
 
-    /// <summary>Exclusive create - fail if file exists (0x0200)</summary>
+    /// <summary>
+    /// Exclusive create - fail if file exists (0x0200)
+    /// </summary>
     O_EXCL = 0x0200
 }
 
@@ -225,13 +349,19 @@ public enum TnfsOpenFlags : ushort
 /// </summary>
 public enum TnfsSeekOrigin : byte
 {
-    /// <summary>Seek from beginning of file (0x00)</summary>
+    /// <summary>
+    /// Seek from beginning of file (0x00)
+    /// </summary>
     SeekSet = 0x00,
 
-    /// <summary>Seek from current position (0x01)</summary>
+    /// <summary>
+    /// Seek from current position (0x01)
+    /// </summary>
     SeekCur = 0x01,
 
-    /// <summary>Seek from end of file (0x02)</summary>
+    /// <summary>
+    /// Seek from end of file (0x02)
+    /// </summary>
     SeekEnd = 0x02
 }
 
@@ -241,16 +371,24 @@ public enum TnfsSeekOrigin : byte
 [System.Flags]
 public enum TnfsDirEntryFlags : byte
 {
-    /// <summary>No special flags</summary>
+    /// <summary>
+    /// No special flags
+    /// </summary>
     None = 0x00,
 
-    /// <summary>Entry is a directory (0x01)</summary>
+    /// <summary>
+    /// Entry is a directory (0x01)
+    /// </summary>
     Directory = 0x01,
 
-    /// <summary>Entry is hidden (0x02)</summary>
+    /// <summary>
+    /// Entry is hidden (0x02)
+    /// </summary>
     Hidden = 0x02,
 
-    /// <summary>Entry is a special file (0x04)</summary>
+    /// <summary>
+    /// Entry is a special file (0x04)
+    /// </summary>
     Special = 0x04
 }
 
@@ -260,10 +398,14 @@ public enum TnfsDirEntryFlags : byte
 [System.Flags]
 public enum TnfsDirStatusFlags : byte
 {
-    /// <summary>No status flags</summary>
+    /// <summary>
+    /// No status flags
+    /// </summary>
     None = 0x00,
 
-    /// <summary>End of directory reached (0x01)</summary>
+    /// <summary>
+    /// End of directory reached (0x01)
+    /// </summary>
     EOF = 0x01
 }
 
@@ -273,30 +415,48 @@ public enum TnfsDirStatusFlags : byte
 [System.Flags]
 public enum TnfsFileAttributes : byte
 {
-    /// <summary>No attributes</summary>
+    /// <summary>
+    /// No attributes
+    /// </summary>
     None = 0x00,
 
-    /// <summary>Is a directory</summary>
+    /// <summary>
+    /// Is a directory
+    /// </summary>
     Directory = 0x01,
 
-    /// <summary>Is a symbolic link</summary>
+    /// <summary>
+    /// Is a symbolic link
+    /// </summary>
     SymbolicLink = 0x02,
 
-    /// <summary>Is a block device</summary>
+    /// <summary>
+    /// Is a block device
+    /// </summary>
     BlockDevice = 0x04,
 
-    /// <summary>Is a character device</summary>
+    /// <summary>
+    /// Is a character device
+    /// </summary>
     CharacterDevice = 0x08,
 
-    /// <summary>Is a named pipe (FIFO)</summary>
+    /// <summary>
+    /// Is a named pipe (FIFO)
+    /// </summary>
     NamedPipe = 0x10,
 
-    /// <summary>Is a socket</summary>
+    /// <summary>
+    /// Is a socket
+    /// </summary>
     Socket = 0x20,
 
-    /// <summary>Is hidden</summary>
+    /// <summary>
+    /// Is hidden
+    /// </summary>
     Hidden = 0x40,
 
-    /// <summary>Is system file</summary>
+    /// <summary>
+    /// Is system file
+    /// </summary>
     System = 0x80
 }

@@ -24,7 +24,9 @@ public static class AcornFileHandles
     public const byte InternalCwd = 0x02;
     public const byte InternalLib = 0x03;
 
-    /// <summary>Wire bitmask → internal handle index (1..8).</summary>
+    /// <summary>
+    /// Wire bitmask → internal handle index (1..8).
+    /// </summary>
     public static byte DivHandle(byte wireHandle) =>
         wireHandle switch
         {
@@ -39,7 +41,9 @@ public static class AcornFileHandles
             _ => wireHandle,
         };
 
-    /// <summary>Internal handle index → wire bitmask for login replies.</summary>
+    /// <summary>
+    /// Internal handle index → wire bitmask for login replies.
+    /// </summary>
     public static byte MulHandle(byte internalHandle) =>
         internalHandle is >= 1 and <= 8 ? (byte)(1 << (internalHandle - 1)) : internalHandle;
 

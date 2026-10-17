@@ -164,7 +164,7 @@ namespace RetroIO.Protocols.Xmsg.Hdlc
         /// </returns>
         /// <remarks>
         /// <para>
-        /// <b>Why this exists.</b> <see cref="ReadFrames"/> reassembles each directional TCP flow
+        /// Why this exists. <see cref="ReadFrames"/> reassembles each directional TCP flow
         /// separately and returns the flows one after another, so the two directions are never
         /// interleaved. That is fine for anything measured within one direction, but it makes any
         /// question of the form "did the sender wait for this reply before sending the next request?"

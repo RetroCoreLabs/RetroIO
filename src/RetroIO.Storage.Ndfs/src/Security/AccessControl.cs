@@ -18,10 +18,18 @@ namespace RetroIO.Storage.Ndfs.Security
         /// <summary>
         /// Determines the access level a user has for a file.
         /// </summary>
-        /// <param name="file">Object entry (file) to check</param>
-        /// <param name="user">User requesting access</param>
-        /// <param name="owner">Owner of the file</param>
-        /// <returns>Access level (Own, Friend, or Public)</returns>
+        /// <param name="file">
+        /// Object entry (file) to check
+        /// </param>
+        /// <param name="user">
+        /// User requesting access
+        /// </param>
+        /// <param name="owner">
+        /// Owner of the file
+        /// </param>
+        /// <returns>
+        /// Access level (Own, Friend, or Public)
+        /// </returns>
         public static FileAccessType GetAccessLevel(ObjectEntry file, UserEntry user, UserEntry owner)
         {
             if (file == null || user == null || owner == null)
@@ -42,11 +50,21 @@ namespace RetroIO.Storage.Ndfs.Security
         /// <summary>
         /// Checks if user can perform specific operation on file.
         /// </summary>
-        /// <param name="file">Object entry to check</param>
-        /// <param name="user">User requesting access</param>
-        /// <param name="owner">Owner of the file</param>
-        /// <param name="operation">Operation to perform</param>
-        /// <returns>True if user has permission</returns>
+        /// <param name="file">
+        /// Object entry to check
+        /// </param>
+        /// <param name="user">
+        /// User requesting access
+        /// </param>
+        /// <param name="owner">
+        /// Owner of the file
+        /// </param>
+        /// <param name="operation">
+        /// Operation to perform
+        /// </param>
+        /// <returns>
+        /// True if user has permission
+        /// </returns>
         public static bool CanPerformOperation(ObjectEntry file, UserEntry user, UserEntry owner, FileOperationType operation)
         {
             if (file == null || user == null || owner == null)
@@ -70,9 +88,15 @@ namespace RetroIO.Storage.Ndfs.Security
         /// <summary>
         /// Checks if user is in owner's friend list and gets their permissions.
         /// </summary>
-        /// <param name="user">User to check</param>
-        /// <param name="owner">Owner whose friend list to check</param>
-        /// <returns>UserFriend entry if found, null otherwise</returns>
+        /// <param name="user">
+        /// User to check
+        /// </param>
+        /// <param name="owner">
+        /// Owner whose friend list to check
+        /// </param>
+        /// <returns>
+        /// UserFriend entry if found, null otherwise
+        /// </returns>
         public static UserFriend? GetFriendPermissions(UserEntry user, UserEntry owner)
         {
             if (user == null || owner == null)
@@ -85,9 +109,15 @@ namespace RetroIO.Storage.Ndfs.Security
         /// Validates friend-specific permissions for an operation.
         /// Used when friend has custom permissions that differ from file's Friend tier.
         /// </summary>
-        /// <param name="friend">Friend entry with custom permissions</param>
-        /// <param name="operation">Operation to check</param>
-        /// <returns>True if friend has specific permission</returns>
+        /// <param name="friend">
+        /// Friend entry with custom permissions
+        /// </param>
+        /// <param name="operation">
+        /// Operation to check
+        /// </param>
+        /// <returns>
+        /// True if friend has specific permission
+        /// </returns>
         public static bool HasFriendPermission(UserFriend friend, FileOperationType operation)
         {
             if (friend == null || !friend.EntryUsed)
@@ -108,11 +138,21 @@ namespace RetroIO.Storage.Ndfs.Security
         /// <summary>
         /// Comprehensive access check combining file permissions and friend-specific permissions.
         /// </summary>
-        /// <param name="file">File to access</param>
-        /// <param name="user">User requesting access</param>
-        /// <param name="owner">File owner</param>
-        /// <param name="operation">Operation to perform</param>
-        /// <returns>True if access is granted</returns>
+        /// <param name="file">
+        /// File to access
+        /// </param>
+        /// <param name="user">
+        /// User requesting access
+        /// </param>
+        /// <param name="owner">
+        /// File owner
+        /// </param>
+        /// <param name="operation">
+        /// Operation to perform
+        /// </param>
+        /// <returns>
+        /// True if access is granted
+        /// </returns>
         public static bool CheckAccess(ObjectEntry file, UserEntry user, UserEntry owner, FileOperationType operation)
         {
             if (file == null || user == null || owner == null)

@@ -1114,7 +1114,9 @@ namespace RetroIO.Storage.Local.FileSystems
             public uint FileSize { get; set; }
         }
 
-        /// <summary>Identifies a directory to scan: either the fixed-size root, or a subdirectory's starting cluster.</summary>
+        /// <summary>
+        /// Identifies a directory to scan: either the fixed-size root, or a subdirectory's starting cluster.
+        /// </summary>
         private readonly struct DirCursor
         {
             public bool IsRoot { get; }
@@ -1130,7 +1132,9 @@ namespace RetroIO.Storage.Local.FileSystems
             public static DirCursor Sub(ushort startCluster) => new DirCursor(false, startCluster);
         }
 
-        /// <summary>The on-disk location and parsed content of a directory entry, for in-place patching.</summary>
+        /// <summary>
+        /// The on-disk location and parsed content of a directory entry, for in-place patching.
+        /// </summary>
         private readonly struct RawEntry
         {
             public uint Lba { get; init; }

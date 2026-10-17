@@ -158,15 +158,33 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             /// <summary>
             /// Records a letter.
             /// </summary>
-            /// <param name="remoteNode">Unused.</param>
-            /// <param name="clientSystem">Unused.</param>
-            /// <param name="clientPort">Unused.</param>
-            /// <param name="sourcePort">Unused.</param>
-            /// <param name="controlService">Unused.</param>
-            /// <param name="frameFlags">Unused.</param>
-            /// <param name="role">Unused.</param>
-            /// <param name="payload">The letter body, recorded.</param>
-            /// <param name="answeredFlags1">Recorded.</param>
+            /// <param name="remoteNode">
+            /// Unused.
+            /// </param>
+            /// <param name="clientSystem">
+            /// Unused.
+            /// </param>
+            /// <param name="clientPort">
+            /// Unused.
+            /// </param>
+            /// <param name="sourcePort">
+            /// Unused.
+            /// </param>
+            /// <param name="controlService">
+            /// Unused.
+            /// </param>
+            /// <param name="frameFlags">
+            /// Unused.
+            /// </param>
+            /// <param name="role">
+            /// Unused.
+            /// </param>
+            /// <param name="payload">
+            /// The letter body, recorded.
+            /// </param>
+            /// <param name="answeredFlags1">
+            /// Recorded.
+            /// </param>
             /// <returns>
             /// A bare frame; the tests read the recorded bodies, not the frames.
             /// </returns>
@@ -182,15 +200,33 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             /// <summary>
             /// Records a body message.
             /// </summary>
-            /// <param name="remoteNode">Unused.</param>
-            /// <param name="clientSystem">Unused.</param>
-            /// <param name="clientPort">Unused.</param>
-            /// <param name="sourcePort">Unused.</param>
-            /// <param name="xmcsm">Unused.</param>
-            /// <param name="frameFlags">Unused.</param>
-            /// <param name="role">Unused.</param>
-            /// <param name="body">The body, recorded.</param>
-            /// <param name="answeredFlags1">Recorded.</param>
+            /// <param name="remoteNode">
+            /// Unused.
+            /// </param>
+            /// <param name="clientSystem">
+            /// Unused.
+            /// </param>
+            /// <param name="clientPort">
+            /// Unused.
+            /// </param>
+            /// <param name="sourcePort">
+            /// Unused.
+            /// </param>
+            /// <param name="xmcsm">
+            /// Unused.
+            /// </param>
+            /// <param name="frameFlags">
+            /// Unused.
+            /// </param>
+            /// <param name="role">
+            /// Unused.
+            /// </param>
+            /// <param name="body">
+            /// The body, recorded.
+            /// </param>
+            /// <param name="answeredFlags1">
+            /// Recorded.
+            /// </param>
             /// <returns>
             /// A bare frame.
             /// </returns>
@@ -206,14 +242,30 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             /// <summary>
             /// Records a body message that the real transport would fragment.
             /// </summary>
-            /// <param name="remoteNode">Unused.</param>
-            /// <param name="clientSystem">Unused.</param>
-            /// <param name="clientPort">Unused.</param>
-            /// <param name="sourcePort">Unused.</param>
-            /// <param name="frameFlags">Unused.</param>
-            /// <param name="role">Unused.</param>
-            /// <param name="body">The whole body, recorded ONCE however it would be split.</param>
-            /// <param name="answeredFlags1">Recorded.</param>
+            /// <param name="remoteNode">
+            /// Unused.
+            /// </param>
+            /// <param name="clientSystem">
+            /// Unused.
+            /// </param>
+            /// <param name="clientPort">
+            /// Unused.
+            /// </param>
+            /// <param name="sourcePort">
+            /// Unused.
+            /// </param>
+            /// <param name="frameFlags">
+            /// Unused.
+            /// </param>
+            /// <param name="role">
+            /// Unused.
+            /// </param>
+            /// <param name="body">
+            /// The whole body, recorded ONCE however it would be split.
+            /// </param>
+            /// <param name="answeredFlags1">
+            /// Recorded.
+            /// </param>
             /// <returns>
             /// One frame.
             /// </returns>
@@ -447,7 +499,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>CORRECTED 2026-08-10.</b> This test was called
+        /// CORRECTED 2026-08-10. This test was called
         /// <c>RequestsOriginateAndAcknowledgementsEcho</c> and its remark read "on a real link
         /// Flags 1 is ONE value per exchange, shared by both directions". That is the shared-pool
         /// model, and it is WRONG - each side runs its OWN counter.

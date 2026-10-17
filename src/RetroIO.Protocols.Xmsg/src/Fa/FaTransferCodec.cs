@@ -24,14 +24,14 @@ namespace RetroIO.Protocols.Xmsg.Fa
     ///   -> Completed. Transfer rate: 3 Kbytes/sec
     /// </code>
     /// <para>
-    /// <b>This class handles message BODIES only.</b> A transfer data message is 1030 bytes and does
+    /// This class handles message BODIES only. A transfer data message is 1030 bytes and does
     /// not fit in one LAPB frame, so on the wire it is segmented across two frames using packet
     /// subtypes <c>0x0A</c> and <c>0x0C</c>. That segmentation belongs to the frame layer;
     /// <see cref="SplitForTransmission"/> is provided to compute the split, but assembling the frames
     /// themselves is not this class's job.
     /// </para>
     /// <para>
-    /// <b>The transfer is stop-and-wait.</b> Measured over the capture in wire order, the peak number
+    /// The transfer is stop-and-wait. Measured over the capture in wire order, the peak number
     /// of unacknowledged messages is exactly 1 - the sender never begins a message before the
     /// previous one is answered. A server may therefore process one message at a time and never needs
     /// to buffer a window of outstanding blocks.
@@ -70,7 +70,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The remaining <c>1030 - 594 = 436</c> bytes travel in the continuation frame.
         /// </para>
         /// <para>
-        /// <b>No longer a single-case observation, 2026-07-30.</b> This used to warn that only one
+        /// No longer a single-case observation, 2026-07-30. This used to warn that only one
         /// transfer had been recorded, so 594 might be a property of that one file. A second transfer
         /// was then recorded, of <c>LOAD-MODE:BATC</c> - a file of only 167 bytes, a sixth of one
         /// block. It splits at exactly the same point.
@@ -82,7 +82,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// split cannot vary.
         /// </para>
         /// <para>
-        /// <b>Nor is it specific to a transfer, 2026-08-05.</b> The file-access <c>ReadFile</c>
+        /// Nor is it specific to a transfer, 2026-08-05. The file-access <c>ReadFile</c>
         /// delivery is a 1032-byte message of an entirely different protocol, and
         /// <c>DOC\captures\FA-READ-WRITE-2026-08-04\capture-read.txt</c> splits it at 594 as well -
         /// <c>2113 000A ... 0408</c> then <c>2113 000C ... 0252</c>. So the split belongs to the

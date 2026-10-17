@@ -44,10 +44,14 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// </remarks>
     public sealed class XotSwitchPort : ISwitchPort, IDisposable
     {
-        /// <summary>How often the packet layer's timers are given the time.</summary>
+        /// <summary>
+        /// How often the packet layer's timers are given the time.
+        /// </summary>
         private const int TickIntervalMs = 100;
 
-        /// <summary>How long to wait before dialling again after a connection is lost.</summary>
+        /// <summary>
+        /// How long to wait before dialling again after a connection is lost.
+        /// </summary>
         private const int RedialDelayMs = 2000;
 
         private readonly object _sync = new object();

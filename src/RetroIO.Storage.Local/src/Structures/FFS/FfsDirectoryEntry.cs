@@ -140,9 +140,15 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// Uses old SunOS 3.4 format: d_ino(4) + d_reclen(2) + d_namlen(2) + d_name[]
         /// There is NO d_type field in old SunOS - that was added in later BSD versions.
         /// </summary>
-        /// <param name="buffer">Buffer containing directory entry.</param>
-        /// <param name="offset">Offset where entry starts.</param>
-        /// <returns>Parsed directory entry.</returns>
+        /// <param name="buffer">
+        /// Buffer containing directory entry.
+        /// </param>
+        /// <param name="offset">
+        /// Offset where entry starts.
+        /// </param>
+        /// <returns>
+        /// Parsed directory entry.
+        /// </returns>
         public static FfsDirectoryEntry Parse(byte[] buffer, int offset)
         {
             if (buffer == null)
@@ -189,8 +195,12 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// <summary>
         /// Calculates the actual size needed for this entry (including alignment).
         /// </summary>
-        /// <param name="nameLength">Length of file name.</param>
-        /// <returns>Size in bytes (aligned to 4-byte boundary).</returns>
+        /// <param name="nameLength">
+        /// Length of file name.
+        /// </param>
+        /// <returns>
+        /// Size in bytes (aligned to 4-byte boundary).
+        /// </returns>
         public static ushort CalculateRecordLength(int nameLength)
         {
             // Header (8 bytes) + name + null terminator + padding to 4-byte alignment
@@ -208,9 +218,15 @@ namespace RetroIO.Storage.Local.FFS.Structures
         /// <summary>
         /// Parses all directory entries from a directory data buffer.
         /// </summary>
-        /// <param name="buffer">Buffer containing directory entries.</param>
-        /// <param name="includeDots">If false, exclude "." and ".." entries.</param>
-        /// <returns>Array of parsed directory entries.</returns>
+        /// <param name="buffer">
+        /// Buffer containing directory entries.
+        /// </param>
+        /// <param name="includeDots">
+        /// If false, exclude "." and ".." entries.
+        /// </param>
+        /// <returns>
+        /// Array of parsed directory entries.
+        /// </returns>
         public static FfsDirectoryEntry[] ParseAll(byte[] buffer, bool includeDots = true)
         {
             if (buffer == null || buffer.Length == 0)

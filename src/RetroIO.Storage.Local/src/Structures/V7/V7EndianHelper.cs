@@ -22,9 +22,15 @@ namespace RetroIO.Storage.Local.V7.Structures
         /// Reads a 32-bit signed integer in PDP-endian format.
         /// PDP-11 stores 32-bit values as two 16-bit words in swapped order.
         /// </summary>
-        /// <param name="buffer">Buffer containing the data.</param>
-        /// <param name="offset">Offset where the 32-bit value starts.</param>
-        /// <returns>32-bit signed integer value.</returns>
+        /// <param name="buffer">
+        /// Buffer containing the data.
+        /// </param>
+        /// <param name="offset">
+        /// Offset where the 32-bit value starts.
+        /// </param>
+        /// <returns>
+        /// 32-bit signed integer value.
+        /// </returns>
         public static int ReadInt32PDP(byte[] buffer, int offset)
         {
             // Read two 16-bit little-endian words

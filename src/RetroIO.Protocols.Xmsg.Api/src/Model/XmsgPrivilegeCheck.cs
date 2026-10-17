@@ -21,7 +21,7 @@ namespace RetroIO.Protocols.Xmsg.Api
     /// register carries back.
     /// </para>
     /// <para><b>Cross-checked against version L, 2026-08-07 - and it was worth checking</b></para>
-    /// The Programmer Guide is based on XMSG version <b>J</b>, and ND's version-L program
+    /// The Programmer Guide is based on XMSG version J, and ND's version-L program
     /// description (210373L) section 6.4 opens with "The response from the XFCPV function has been
     /// changed" - so the guide could easily have been describing superseded behaviour. It is not.
     /// The L document lists the same four reasons in the same order:

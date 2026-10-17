@@ -62,9 +62,15 @@ namespace RetroIO.Storage.Providers
         /// Validates whether a mount entry can be restored by this provider.
         /// TNFS is a network resource, so no local file validation is needed.
         /// </summary>
-        /// <param name="entry">Mount configuration entry to validate</param>
-        /// <param name="errorMessage">Error message if validation fails, or null if successful</param>
-        /// <returns>True if mount can be restored, false otherwise</returns>
+        /// <param name="entry">
+        /// Mount configuration entry to validate
+        /// </param>
+        /// <param name="errorMessage">
+        /// Error message if validation fails, or null if successful
+        /// </param>
+        /// <returns>
+        /// True if mount can be restored, false otherwise
+        /// </returns>
         public bool CanRestore(UnifiedMountEntry entry, out string? errorMessage)
         {
             errorMessage = null;
@@ -74,8 +80,12 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Mounts a volume from a unified configuration entry.
         /// </summary>
-        /// <param name="entry">Mount configuration entry containing all parameters</param>
-        /// <returns>Information about the mounted volume</returns>
+        /// <param name="entry">
+        /// Mount configuration entry containing all parameters
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume
+        /// </returns>
         public MountInfo MountFromConfig(UnifiedMountEntry entry)
         {
             string uri = entry.SourceUri;
@@ -95,10 +105,18 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Mounts a TNFS server filesystem.
         /// </summary>
-        /// <param name="uri">TNFS server address (hostname or hostname:port, optional user:pass@)</param>
-        /// <param name="volumeId">Unique volume identifier</param>
-        /// <param name="readOnly">Read-only flag (most public TNFS servers are read-only)</param>
-        /// <returns>Mount information</returns>
+        /// <param name="uri">
+        /// TNFS server address (hostname or hostname:port, optional user:pass@)
+        /// </param>
+        /// <param name="volumeId">
+        /// Unique volume identifier
+        /// </param>
+        /// <param name="readOnly">
+        /// Read-only flag (most public TNFS servers are read-only)
+        /// </param>
+        /// <returns>
+        /// Mount information
+        /// </returns>
         public MountInfo Mount(string uri, string volumeId, bool readOnly)
         {
             ParseTnfsUri(uri, null, null, out string server, out int port, out string? username, out string? password);
@@ -172,7 +190,9 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Unmounts a TNFS volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
         public void Unmount(string volumeId)
         {
             if (!_mounts.TryGetValue(volumeId, out TnfsMount? mount))
@@ -188,8 +208,12 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Gets mount information for a volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
-        /// <returns>Mount information or null if not found</returns>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
+        /// <returns>
+        /// Mount information or null if not found
+        /// </returns>
         public MountInfo? GetMountInfo(string volumeId)
         {
             if (!_mounts.TryGetValue(volumeId, out TnfsMount? mount))
@@ -214,7 +238,9 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Lists all mounted TNFS volumes.
         /// </summary>
-        /// <returns>Array of mount information</returns>
+        /// <returns>
+        /// Array of mount information
+        /// </returns>
         public MountInfo[] ListMounts()
         {
             MountInfo[] mounts = new MountInfo[_mounts.Count];
@@ -245,9 +271,15 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Reads entire file from TNFS server.
         /// </summary>
-        /// <param name="context">URN context</param>
-        /// <param name="path">File path on TNFS server</param>
-        /// <returns>File contents</returns>
+        /// <param name="context">
+        /// URN context
+        /// </param>
+        /// <param name="path">
+        /// File path on TNFS server
+        /// </param>
+        /// <returns>
+        /// File contents
+        /// </returns>
         public byte[] ReadFile(UrnContext context, string path)
         {
             TnfsMount mount = GetMount(context.VolumeId);
@@ -304,9 +336,15 @@ namespace RetroIO.Storage.Providers
         /// Writes file to TNFS server.
         /// Note: Many public TNFS servers are read-only.
         /// </summary>
-        /// <param name="context">URN context</param>
-        /// <param name="path">File path</param>
-        /// <param name="data">Data to write</param>
+        /// <param name="context">
+        /// URN context
+        /// </param>
+        /// <param name="path">
+        /// File path
+        /// </param>
+        /// <param name="data">
+        /// Data to write
+        /// </param>
         public void WriteFile(UrnContext context, string path, byte[] data)
         {
             using MemoryStream ms = new MemoryStream(data ?? Array.Empty<byte>());
@@ -316,8 +354,12 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Deletes file from TNFS server.
         /// </summary>
-        /// <param name="context">URN context</param>
-        /// <param name="path">File path</param>
+        /// <param name="context">
+        /// URN context
+        /// </param>
+        /// <param name="path">
+        /// File path
+        /// </param>
         public void DeleteFile(UrnContext context, string path)
         {
             TnfsMount mount = GetMount(context.VolumeId);
@@ -333,9 +375,15 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Lists directory contents on TNFS server.
         /// </summary>
-        /// <param name="context">URN context</param>
-        /// <param name="path">Directory path</param>
-        /// <returns>Array of directory entries</returns>
+        /// <param name="context">
+        /// URN context
+        /// </param>
+        /// <param name="path">
+        /// Directory path
+        /// </param>
+        /// <returns>
+        /// Array of directory entries
+        /// </returns>
         public DirectoryEntry[] ListDirectory(UrnContext context, string path)
         {
             TnfsMount mount = GetMount(context.VolumeId);
@@ -419,9 +467,15 @@ namespace RetroIO.Storage.Providers
         /// <summary>
         /// Gets file/directory metadata.
         /// </summary>
-        /// <param name="context">URN context</param>
-        /// <param name="path">Path to file or directory</param>
-        /// <returns>File metadata or null if not found</returns>
+        /// <param name="context">
+        /// URN context
+        /// </param>
+        /// <param name="path">
+        /// Path to file or directory
+        /// </param>
+        /// <returns>
+        /// File metadata or null if not found
+        /// </returns>
         public FileMetadata? GetMetadata(UrnContext context, string path)
         {
             TnfsMount mount = GetMount(context.VolumeId);

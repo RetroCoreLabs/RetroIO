@@ -20,7 +20,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// <remarks>
     /// <para>
     /// <c>FaServer.SessionBody</c> took the body at <c>SintranHeader.Size + XmsgSubHeader.Size</c>
-    /// = <c>13 + 19</c> = <b>32</b>. Measured, it starts at <b>28</b>, so the server was reading
+    /// = <c>13 + 19</c> = 32. Measured, it starts at 28, so the server was reading
     /// four bytes into every request it ever handled - which means it never once parsed one
     /// correctly, and the file service could not have worked whatever else was fixed.
     /// </para>

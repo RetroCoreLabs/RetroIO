@@ -20,13 +20,19 @@ public sealed class TnfsDirectoryEntry
     private Func<string, TnfsFileStat?>? _statProvider;
     private string? _fullPath;
 
-    /// <summary>Entry name (filename or directory name)</summary>
+    /// <summary>
+    /// Entry name (filename or directory name)
+    /// </summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>File attributes</summary>
+    /// <summary>
+    /// File attributes
+    /// </summary>
     public TnfsFileAttributes Attributes { get; set; }
 
-    /// <summary>File size in bytes (lazily loaded via STAT if needed)</summary>
+    /// <summary>
+    /// File size in bytes (lazily loaded via STAT if needed)
+    /// </summary>
     public long Size
     {
         get
@@ -41,7 +47,9 @@ public sealed class TnfsDirectoryEntry
         }
     }
 
-    /// <summary>Last modification time (Unix timestamp, lazily loaded via STAT if needed)</summary>
+    /// <summary>
+    /// Last modification time (Unix timestamp, lazily loaded via STAT if needed)
+    /// </summary>
     public uint ModifiedTime
     {
         get
@@ -56,7 +64,9 @@ public sealed class TnfsDirectoryEntry
         }
     }
 
-    /// <summary>Is this entry a directory? (triggers lazy STAT if metadata not loaded)</summary>
+    /// <summary>
+    /// Is this entry a directory? (triggers lazy STAT if metadata not loaded)
+    /// </summary>
     public bool IsDirectory
     {
         get
@@ -66,7 +76,9 @@ public sealed class TnfsDirectoryEntry
         }
     }
 
-    /// <summary>Is this entry a symbolic link? (triggers lazy STAT if metadata not loaded)</summary>
+    /// <summary>
+    /// Is this entry a symbolic link? (triggers lazy STAT if metadata not loaded)
+    /// </summary>
     public bool IsSymbolicLink
     {
         get
@@ -76,7 +88,9 @@ public sealed class TnfsDirectoryEntry
         }
     }
 
-    /// <summary>Is this entry hidden? (triggers lazy STAT if metadata not loaded)</summary>
+    /// <summary>
+    /// Is this entry hidden? (triggers lazy STAT if metadata not loaded)
+    /// </summary>
     public bool IsHidden
     {
         get
@@ -86,16 +100,26 @@ public sealed class TnfsDirectoryEntry
         }
     }
 
-    /// <summary>Convert Unix timestamp to DateTime</summary>
+    /// <summary>
+    /// Convert Unix timestamp to DateTime
+    /// </summary>
     public DateTime GetModifiedDateTime()
     {
         return DateTimeOffset.FromUnixTimeSeconds(ModifiedTime).DateTime;
     }
 
-    /// <summary>Enable lazy loading of metadata via STAT command</summary>
-    /// <param name="fullPath">Full path to the file</param>
-    /// <param name="statProvider">Function to call STAT command</param>
-    /// <param name="metadataAlreadyLoaded">True if metadata was already loaded from READDIRX</param>
+    /// <summary>
+    /// Enable lazy loading of metadata via STAT command
+    /// </summary>
+    /// <param name="fullPath">
+    /// Full path to the file
+    /// </param>
+    /// <param name="statProvider">
+    /// Function to call STAT command
+    /// </param>
+    /// <param name="metadataAlreadyLoaded">
+    /// True if metadata was already loaded from READDIRX
+    /// </param>
     internal void EnableLazyLoad(string fullPath, Func<string, TnfsFileStat?> statProvider, bool metadataAlreadyLoaded = false)
     {
         _fullPath = fullPath;
@@ -126,25 +150,39 @@ public sealed class TnfsDirectoryEntry
 /// </summary>
 public sealed class TnfsFileStat
 {
-    /// <summary>File size in bytes</summary>
+    /// <summary>
+    /// File size in bytes
+    /// </summary>
     public long Size { get; set; }
 
-    /// <summary>File attributes</summary>
+    /// <summary>
+    /// File attributes
+    /// </summary>
     public TnfsFileAttributes Attributes { get; set; }
 
-    /// <summary>Last modification time (Unix timestamp)</summary>
+    /// <summary>
+    /// Last modification time (Unix timestamp)
+    /// </summary>
     public uint ModifiedTime { get; set; }
 
-    /// <summary>Creation time (Unix timestamp)</summary>
+    /// <summary>
+    /// Creation time (Unix timestamp)
+    /// </summary>
     public uint CreationTime { get; set; }
 
-    /// <summary>Last access time (Unix timestamp)</summary>
+    /// <summary>
+    /// Last access time (Unix timestamp)
+    /// </summary>
     public uint AccessTime { get; set; }
 
-    /// <summary>File permissions (Unix-style)</summary>
+    /// <summary>
+    /// File permissions (Unix-style)
+    /// </summary>
     public ushort Permissions { get; set; }
 
-    /// <summary>Is this a directory?</summary>
+    /// <summary>
+    /// Is this a directory?
+    /// </summary>
     public bool IsDirectory => (Attributes & TnfsFileAttributes.Directory) != 0;
 }
 
@@ -153,13 +191,19 @@ public sealed class TnfsFileStat
 /// </summary>
 public sealed class TnfsVersionInfo
 {
-    /// <summary>Server protocol version</summary>
+    /// <summary>
+    /// Server protocol version
+    /// </summary>
     public ushort ProtocolVersion { get; set; }
 
-    /// <summary>Server software version string</summary>
+    /// <summary>
+    /// Server software version string
+    /// </summary>
     public string ServerVersion { get; set; } = string.Empty;
 
-    /// <summary>Server platform/OS string</summary>
+    /// <summary>
+    /// Server platform/OS string
+    /// </summary>
     public string Platform { get; set; } = string.Empty;
 }
 
@@ -168,13 +212,19 @@ public sealed class TnfsVersionInfo
 /// </summary>
 public sealed class TnfsFreeSpace
 {
-    /// <summary>Total bytes available</summary>
+    /// <summary>
+    /// Total bytes available
+    /// </summary>
     public ulong TotalBytes { get; set; }
 
-    /// <summary>Free bytes available</summary>
+    /// <summary>
+    /// Free bytes available
+    /// </summary>
     public ulong FreeBytes { get; set; }
 
-    /// <summary>Used bytes</summary>
+    /// <summary>
+    /// Used bytes
+    /// </summary>
     public ulong UsedBytes => TotalBytes - FreeBytes;
 }
 
@@ -183,28 +233,44 @@ public sealed class TnfsFreeSpace
 /// </summary>
 public sealed class TnfsDirEntryExtended
 {
-    /// <summary>Entry flags</summary>
+    /// <summary>
+    /// Entry flags
+    /// </summary>
     public TnfsDirEntryFlags Flags { get; set; }
 
-    /// <summary>File size in bytes</summary>
+    /// <summary>
+    /// File size in bytes
+    /// </summary>
     public uint Size { get; set; }
 
-    /// <summary>Last modification time (Unix timestamp)</summary>
+    /// <summary>
+    /// Last modification time (Unix timestamp)
+    /// </summary>
     public uint ModifiedTime { get; set; }
 
-    /// <summary>Creation time (Unix timestamp)</summary>
+    /// <summary>
+    /// Creation time (Unix timestamp)
+    /// </summary>
     public uint CreatedTime { get; set; }
 
-    /// <summary>Entry name (filename or directory name)</summary>
+    /// <summary>
+    /// Entry name (filename or directory name)
+    /// </summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Is this entry a directory?</summary>
+    /// <summary>
+    /// Is this entry a directory?
+    /// </summary>
     public bool IsDirectory => (Flags & TnfsDirEntryFlags.Directory) != 0;
 
-    /// <summary>Is this entry hidden?</summary>
+    /// <summary>
+    /// Is this entry hidden?
+    /// </summary>
     public bool IsHidden => (Flags & TnfsDirEntryFlags.Hidden) != 0;
 
-    /// <summary>Is this entry special?</summary>
+    /// <summary>
+    /// Is this entry special?
+    /// </summary>
     public bool IsSpecial => (Flags & TnfsDirEntryFlags.Special) != 0;
 }
 
@@ -213,10 +279,14 @@ public sealed class TnfsDirEntryExtended
 /// </summary>
 public sealed class TnfsOpenDirXResult
 {
-    /// <summary>Directory handle</summary>
+    /// <summary>
+    /// Directory handle
+    /// </summary>
     public byte DirHandle { get; set; }
 
-    /// <summary>Total entry count in directory</summary>
+    /// <summary>
+    /// Total entry count in directory
+    /// </summary>
     public ushort EntryCount { get; set; }
 }
 
@@ -225,32 +295,48 @@ public sealed class TnfsOpenDirXResult
 /// </summary>
 public sealed class TnfsReadDirXResult
 {
-    /// <summary>Directory entries</summary>
+    /// <summary>
+    /// Directory entries
+    /// </summary>
     public TnfsDirEntryExtended[] Entries { get; set; } = System.Array.Empty<TnfsDirEntryExtended>();
 
-    /// <summary>Is end of directory?</summary>
+    /// <summary>
+    /// Is end of directory?
+    /// </summary>
     public bool IsEndOfDirectory { get; set; }
 }
 
 /// <summary>
 /// TNFS operation result wrapper.
 /// </summary>
-/// <typeparam name="T">Result data type</typeparam>
+/// <typeparam name="T">
+/// Result data type
+/// </typeparam>
 public sealed class TnfsResult<T>
 {
-    /// <summary>Return code from server</summary>
+    /// <summary>
+    /// Return code from server
+    /// </summary>
     public TnfsReturnCode ReturnCode { get; set; }
 
-    /// <summary>Operation succeeded?</summary>
+    /// <summary>
+    /// Operation succeeded?
+    /// </summary>
     public bool Success => ReturnCode == TnfsReturnCode.SUCCESS;
 
-    /// <summary>Result data (if successful)</summary>
+    /// <summary>
+    /// Result data (if successful)
+    /// </summary>
     public T? Data { get; set; }
 
-    /// <summary>Error message (if failed)</summary>
+    /// <summary>
+    /// Error message (if failed)
+    /// </summary>
     public string ErrorMessage { get; set; } = string.Empty;
 
-    /// <summary>Create successful result</summary>
+    /// <summary>
+    /// Create successful result
+    /// </summary>
     public static TnfsResult<T> CreateSuccess(T data)
     {
         return new TnfsResult<T>
@@ -260,7 +346,9 @@ public sealed class TnfsResult<T>
         };
     }
 
-    /// <summary>Create error result</summary>
+    /// <summary>
+    /// Create error result
+    /// </summary>
     public static TnfsResult<T> CreateError(TnfsReturnCode code, string message)
     {
         return new TnfsResult<T>

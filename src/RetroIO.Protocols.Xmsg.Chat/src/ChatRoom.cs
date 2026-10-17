@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
     /// with no transport of any kind.
     /// </summary>
     /// <remarks>
-    /// <para><b>Why the rules were pulled out of <see cref="ChatServer"/></b></para>
+    /// <para>Why the rules were pulled out of <see cref="ChatServer"/></para>
     /// <para>
     /// There are two ways into a room. One is a port-to-port conversation, which is what
     /// <see cref="ChatServer"/> serves. The other is somebody sitting at a SINTRAN terminal that

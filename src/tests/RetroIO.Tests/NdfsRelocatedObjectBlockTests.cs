@@ -24,12 +24,12 @@ namespace RetroIO.Tests
     /// <remarks>
     /// <para><b>What this pack contains, and why it matters</b></para>
     /// <c>BIGDISK0-K-201users.img.gz</c> is a real SINTRAN III K pack captured on 2026-08-02
-    /// from a live machine, carrying <b>201 users</b> — the first pack anyone here has had with
+    /// from a live machine, carrying 201 users — the first pack anyone here has had with
     /// more than 64 users AND a multi-block user at the same time.
     /// <para>
     /// On it, user 8 holds 300 files. Its block 0 is in index-block group 0; its overflow block
-    /// is in group <b>4</b>, not group 1. That is because SINTRAN <b>skips</b> a group whose
-    /// slot belongs to someone else, and <b>relocates</b> an overflow block when the rightful
+    /// is in group 4, not group 1. That is because SINTRAN skips a group whose
+    /// slot belongs to someone else, and relocates an overflow block when the rightful
     /// home owner later needs it. The block was observed moving twice:
     /// </para>
     ///  - initially at group 2
@@ -41,7 +41,7 @@ namespace RetroIO.Tests
     /// <para><b>The bug this pins down</b></para>
     /// The old formula derived the logical block from the PHYSICAL group
     /// (<c>block = page / 512</c>), which gave user 8 numbers 0..255 and then
-    /// <b>1024..1067</b> where SINTRAN says <b>256..299</b>. The logical block is the ORDINAL
+    /// 1024..1067 where SINTRAN says 256..299. The logical block is the ORDINAL
     /// RANK of the group among those the user occupies, ascending. No synthetic image can
     /// exercise this, because our own writer never relocates — only a pack SINTRAN itself
     /// rearranged can.

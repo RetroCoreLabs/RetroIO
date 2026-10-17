@@ -21,7 +21,9 @@ namespace RetroIO.Protocols.Econet.Server;
 /// </remarks>
 public sealed class EconetFileSystem
 {
-    /// <summary>The backend the Econet file server should read/write through.</summary>
+    /// <summary>
+    /// The backend the Econet file server should read/write through.
+    /// </summary>
     public IFileSystemBackend Backend { get; }
 
     public EconetFileSystem(IFileSystemBackend backend) => Backend = backend;

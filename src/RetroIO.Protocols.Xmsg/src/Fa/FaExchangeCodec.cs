@@ -27,7 +27,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     ///                   ^^^^ conversation number only
     /// </code>
     /// <para>
-    /// <b>So the operation is not named anywhere in the opening exchange.</b> That is consistent with
+    /// So the operation is not named anywhere in the opening exchange. That is consistent with
     /// the decentralised dispatch seen in the disassembly, and it is why the 16-bit word after the
     /// message type was concluded to be a conversation counter rather than an opcode: across the
     /// captures it runs 003F, 0044, 0046, 0048 and never repeats.
@@ -106,7 +106,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>NOT A CONSTANT - corrected 2026-07-30.</b> This value held on the FILE-STATISTICS and
+        /// NOT A CONSTANT - corrected 2026-07-30. This value held on the FILE-STATISTICS and
         /// DELETE-FILE recordings, so it was fixed here as a constant. The CREATE-FILE recording taken
         /// later the same day uses <c>0x909E</c> on every server reply instead.
         /// </para>

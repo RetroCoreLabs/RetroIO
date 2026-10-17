@@ -17,8 +17,8 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>*SETLIB</c> — permanently sets a user's library directory (takes effect at their next login).
 /// </summary>
 /// <remarks>
-/// Reference behaviour (PiFS): any logged-in user may set their OWN library with <c>*SETLIB &lt;dir&gt;</c>;
-/// a System user may additionally set another user's with <c>*SETLIB &lt;user&gt; &lt;dir&gt;</c>. A
+/// Reference behaviour (PiFS): any logged-in user may set their OWN library with <c>*SETLIB dir</c>;
+/// a System user may additionally set another user's with <c>*SETLIB user dir</c>. A
 /// non-System user supplying a space (i.e. attempting the two-argument form) is rejected with
 /// <c>0xFF "Bad parameters"</c>. In the System two-argument form the directory may not name a disc
 /// (leading <c>:</c>) — <c>0xFF "Can't specify disc"</c>; an unknown user is <c>0xFF "No such user"</c>.

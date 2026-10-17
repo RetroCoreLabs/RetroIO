@@ -19,7 +19,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
     /// Checks our relay against a real ND machine's own relay output, byte for byte.
     /// </summary>
     /// <remarks>
-    /// <para><b>Why this exists beside <see cref="DatagramRelayTests"/></b></para>
+    /// <para>Why this exists beside <see cref="DatagramRelayTests"/></para>
     /// Those tests build their own datagram and then assert our rule against it, so they can only
     /// ever agree with our idea of the format. That is the exact shape of test that let four
     /// defects survive a fully green suite in this project. The expected values here are not ours:

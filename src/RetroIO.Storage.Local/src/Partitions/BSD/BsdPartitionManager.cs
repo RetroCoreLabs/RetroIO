@@ -219,8 +219,12 @@ namespace RetroIO.Storage.Local.BSD.Partitions
         /// Static helper: Detects BSD partitions from a disk image file.
         /// Creates necessary block device infrastructure and returns partition metadata.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <returns>List of detected BSD partitions, or empty list if no BSD disk label found</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <returns>
+        /// List of detected BSD partitions, or empty list if no BSD disk label found
+        /// </returns>
         public static List<PartitionMetadata> DetectFromFile(string imagePath)
         {
             var result = new List<PartitionMetadata>();

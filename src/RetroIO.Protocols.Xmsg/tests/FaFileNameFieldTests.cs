@@ -21,7 +21,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>The experiment.</b> Two CREATE-FILE commands were run from node 102 against node 100 on
+    /// The experiment. Two CREATE-FILE commands were run from node 102 against node 100 on
     /// 2026-07-30, changing exactly one thing - whether the directory was named in the file
     /// specification:
     /// </para>
@@ -34,7 +34,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// So any difference in the bytes is attributable to that one change.
     /// </para>
     /// <para>
-    /// <b>Result.</b> The directory name is carried verbatim inside the SAME field as the file name.
+    /// Result. The directory name is carried verbatim inside the SAME field as the file name.
     /// There is no separate directory field, so the server parses the specification string itself.
     /// </para>
     /// </remarks>
@@ -79,7 +79,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>The encoding rule this establishes.</b> A byte string is tagged <c>0xB0 | n</c>. When
+        /// The encoding rule this establishes. A byte string is tagged <c>0xB0 | n</c>. When
         /// <c>n</c> is 1 to 15 it IS the length. When <c>n</c> is 0 the tag is a bare <c>0xB0</c> and
         /// the length is the byte that follows.
         /// </para>
@@ -141,17 +141,17 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <b>The experiment.</b> Three more files were created on 2026-07-30 with deliberately
+        /// The experiment. Three more files were created on 2026-07-30 with deliberately
         /// different name lengths - <c>A:T</c>, <c>QQQQ:T</c> and the 16-character
         /// <c>ABCDEFGHIJKLMNOP:TXT</c> - to test whether the field is fixed width with rubbish after
         /// the terminator.
         /// </para>
         /// <para>
-        /// <b>It is not fixed width.</b> The declared length tracks the name: 5, 8, 14, 22 and 31
+        /// It is not fixed width. The declared length tracks the name: 5, 8, 14, 22 and 31
         /// across the recordings. So a client must compute it, not pad to a constant.
         /// </para>
         /// <para>
-        /// <b>But it is always one byte too long.</b> In every recording the declared length is
+        /// But it is always one byte too long. In every recording the declared length is
         /// (characters + the <c>0x27</c> terminator) + 1, and that final byte differs every time
         /// without tracking the name:
         /// </para>
@@ -165,7 +165,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </code>
         /// <para>
         /// That looks like the sender measuring one past the terminator and shipping whatever sits
-        /// next in its buffer. <b>Its meaning is UNKNOWN</b> and it must not be treated as a field.
+        /// next in its buffer. Its meaning is UNKNOWN and it must not be treated as a field.
         /// </para>
         /// <para>
         /// Every one of those requests succeeded with a different value there, which suggests the

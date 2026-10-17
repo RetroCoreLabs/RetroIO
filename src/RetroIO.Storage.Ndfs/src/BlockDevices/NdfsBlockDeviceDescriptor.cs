@@ -41,8 +41,12 @@ namespace RetroIO.Storage.Ndfs.BlockDevices
         /// <summary>
         /// Creates a block device descriptor for an NDFS volume.
         /// </summary>
-        /// <param name="imageSize">Total size of the image file in bytes</param>
-        /// <returns>Configured block device descriptor for NDFS</returns>
+        /// <param name="imageSize">
+        /// Total size of the image file in bytes
+        /// </param>
+        /// <returns>
+        /// Configured block device descriptor for NDFS
+        /// </returns>
         public static BlockDeviceDescriptor Create(long imageSize)
         {
             if (imageSize < NDFS_PAGE_SIZE)

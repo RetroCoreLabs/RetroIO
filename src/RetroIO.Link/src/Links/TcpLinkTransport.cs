@@ -69,6 +69,9 @@ namespace RetroIO.Link
         /// <param name="port">
         /// TCP port. In server mode, 0 lets the OS choose a free port (readable via <see cref="Port"/>).
         /// </param>
+        /// <param name="reconnectDelayMs">
+        /// Milliseconds to wait before reconnecting after the connection drops. 0 (the default) disables automatic reconnect.
+        /// </param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="logger"/>, <paramref name="name"/>, or <paramref name="host"/> is null.
         /// </exception>

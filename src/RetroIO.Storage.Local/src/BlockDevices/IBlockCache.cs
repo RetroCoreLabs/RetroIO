@@ -59,7 +59,9 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <summary>
         /// Flushes all dirty blocks to disk (write-back mode).
         /// </summary>
-        /// <param name="writeFunc">Function to write blocks to underlying device</param>
+        /// <param name="writeFunc">
+        /// Function to write blocks to underlying device
+        /// </param>
         void Flush(Action<BlockAddress, ReadOnlySpan<byte>> writeFunc);
 
         /// <summary>
