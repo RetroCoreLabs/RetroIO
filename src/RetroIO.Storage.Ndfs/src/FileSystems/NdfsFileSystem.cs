@@ -51,10 +51,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// Thrown when <paramref name="device"/> is null.
         /// </exception>
         /// <exception cref="System.InvalidOperationException">
-        /// Thrown when the device is not mounted.
-        /// </exception>
-        /// <exception cref="System.IO.InvalidDataException">
-        /// Thrown when the master block is not valid.
+        /// Thrown when the device is not mounted, or when its master block is not a valid NDFS master block.
         /// </exception>
         public void Initialize(IBlockDevice device)
         {
@@ -70,8 +67,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // Parse master block
             _masterBlock = MasterBlock.FromBytes(pageBuffer);
 
+            // IBlockFileSystem.Initialize documents InvalidOperationException for a device that does not hold this filesystem.
             if (!_masterBlock.IsValid())
-                throw new InvalidDataException("Invalid NDFS master block");
+                throw new InvalidOperationException("Invalid NDFS master block");
 
             // Load filesystem structures
             LoadFileSystemStructures();
@@ -420,7 +418,10 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// The file path.
         /// </param>
         /// <exception cref="System.InvalidOperationException">
-        /// Thrown when the device is read-only or no file matches the path.
+        /// Thrown when the device is read-only.
+        /// </exception>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when no file matches the path.
         /// </exception>
         /// <exception cref="System.ArgumentException">
         /// Thrown when <paramref name="path"/> has no file name.
@@ -460,8 +461,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 }
             }
 
+            // IBlockFileSystem.DeleteFile documents FileNotFoundException, as ReadFile and RenameFile already throw.
             if (obj == null)
-                throw new InvalidOperationException($"File not found: {path}");
+                throw new FileNotFoundException($"File not found: {path}");
 
             // Get the user for updating pages used
             var user = _userFile.GetUser(obj.UserIndex);
@@ -954,7 +956,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         }
 
         /// <summary>
-        /// Sets the number of reserved pages of a user in the loaded user file.
+        /// Sets the number of reserved pages of a user and writes the user's page to the device.
         /// </summary>
         /// <param name="userIndex">
         /// The index of the user.
@@ -963,12 +965,29 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// The new number of reserved pages.
         /// </param>
         /// <returns>
-        /// True when the user was found, otherwise false.
+        /// True when the user was found and the change was written; false when the user does not exist or the
+        /// device is read-only, in which case nothing is changed.
         /// </returns>
         public bool UpdateUserQuota(int userIndex, uint newReservedPages)
         {
             EnsureInitialized();
-            return _userFile.UpdateUserQuota(userIndex, newReservedPages);
+
+            if (_userFile.GetUser(userIndex) == null)
+                return false;
+
+            // Refuse BEFORE changing the in-memory user: a quota that cannot reach the disk must not
+            // look changed to the rest of the program.
+            if (_device == null || _device.IsReadOnly || _masterBlock == null || _masterBlock.UserFilePointer == null)
+                return false;
+
+            if (!_userFile.UpdateUserQuota(userIndex, newReservedPages))
+                return false;
+
+            _userFile.WritePageForEntry(_device, _masterBlock.UserFilePointer, userIndex);
+
+            // The block device holds writes in memory until it is flushed (see ClearUserPassword).
+            _device.Flush();
+            return true;
         }
 
         /// <inheritdoc/>

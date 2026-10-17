@@ -310,7 +310,7 @@ namespace RetroIO.Tests
             Assert.Throws<InvalidOperationException>(() => _fileSystem.WriteFile(path, data));
         }
 
-        private void CreateTestNdfsImage(MemoryStream stream, int totalPages)
+        internal static void CreateTestNdfsImage(MemoryStream stream, int totalPages)
         {
             byte[] buffer = new byte[NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
 

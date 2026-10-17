@@ -93,7 +93,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         bool RemoveUser(int userIndex);
 
         /// <summary>
-        /// Updates a user's quota.
+        /// Updates a user's quota and writes it to the device.
         /// </summary>
         bool UpdateUserQuota(int userIndex, uint newReservedPages);
 
