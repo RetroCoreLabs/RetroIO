@@ -130,7 +130,13 @@ namespace RetroIO.Protocols.X25.Sintran
         public const byte TREP = 0x11;
 
         // Additional message types found in analysis
+        /// <summary>
+        /// Message type 0x12: Break Mode Matrix (20 bytes of data, per the comment next to it).
+        /// </summary>
         public const byte BMMX = 0x12; // Break Mode Matrix (20 bytes)
+        /// <summary>
+        /// Message type 0x13: Echo Mode Matrix (20 bytes of data, per the comment next to it).
+        /// </summary>
         public const byte ECKM = 0x13; // Echo Mode Matrix (20 bytes)
 
         // ============================================

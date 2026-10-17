@@ -26,6 +26,27 @@ namespace RetroIO.Protocols.X25.Sintran.Services
         private readonly string[] _localAddresses;
         private readonly IProtocolRuntime _runtime;
 
+        /// <summary>
+        /// Creates the service and subscribes to the packet event of the PVC server.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger to write to.
+        /// </param>
+        /// <param name="pvcServer">
+        /// The PVC server that handles the calls.
+        /// </param>
+        /// <param name="runtime">
+        /// The protocol runtime.
+        /// </param>
+        /// <param name="localAddresses">
+        /// The local X.121 addresses this service handles. At least one is required.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="logger"/>, <paramref name="pvcServer"/>, <paramref name="runtime"/> or <paramref name="localAddresses"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="localAddresses"/> is empty.
+        /// </exception>
         public SintranTadProtocolService(ILogger logger, SintranPvcServer pvcServer, IProtocolRuntime runtime, params string[] localAddresses)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -43,8 +64,11 @@ namespace RetroIO.Protocols.X25.Sintran.Services
                 string.Join(", ", _localAddresses));
         }
 
+        /// <inheritdoc/>
         public string ServiceName => "SINTRAN_TAD";
+        /// <inheritdoc/>
         public string[] LocalAddresses => _localAddresses;
+        /// <inheritdoc/>
         public int Priority => 90; // Slightly lower than standard TAD (100) but higher than generic services
 
         /// <summary>

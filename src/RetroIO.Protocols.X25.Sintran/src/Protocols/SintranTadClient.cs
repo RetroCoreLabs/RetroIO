@@ -29,19 +29,55 @@ namespace RetroIO.Protocols.X25.Sintran
         private ushort _currentLCN = 0;
         private string _remoteAddress = "";
 
+        /// <summary>
+        /// Raised when the connection state changes.
+        /// </summary>
         public event EventHandler<SintranTadClientEventArgs>? ConnectionStateChanged;
+        /// <summary>
+        /// Raised when data is received.
+        /// </summary>
         public event EventHandler<SintranTadClientDataEventArgs>? DataReceived;
+        /// <summary>
+        /// Raised when an error occurs.
+        /// </summary>
         public event EventHandler<SintranTadClientEventArgs>? ErrorOccurred;
 
+        /// <summary>
+        /// Gets the ID of the client.
+        /// </summary>
         public string ClientId { get; }
+        /// <summary>
+        /// Gets whether the session state is Active.
+        /// </summary>
         public bool IsConnected => _session.State == TadSessionState.Active;
+        /// <summary>
+        /// Gets the state of the session.
+        /// </summary>
         public TadSessionState ConnectionState => _session.State;
 
         // IProtocolModule Properties
+        /// <inheritdoc/>
         public string Name { get; set; }
+        /// <inheritdoc/>
         public string Description { get; } = "SINTRAN TAD Client for connecting to remote TAD servers";
+        /// <inheritdoc/>
         public string Version { get; } = "1.0.0";
 
+        /// <summary>
+        /// Creates the client. The name is set to the client ID.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger to write to.
+        /// </param>
+        /// <param name="runtime">
+        /// The protocol runtime.
+        /// </param>
+        /// <param name="clientId">
+        /// The ID of the client.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="logger"/>, <paramref name="runtime"/> or <paramref name="clientId"/> is null.
+        /// </exception>
         public SintranTadClient(ILogger logger, IProtocolRuntime runtime, string clientId)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -61,12 +97,14 @@ namespace RetroIO.Protocols.X25.Sintran
 
         #region IProtocolModule Implementation
 
+        /// <inheritdoc/>
         public void OnBound(ushort lcn)
         {
             _currentLCN = lcn;
             _logger.LogDebug("SintranTadClient: Bound to LCN {LCN}", lcn);
         }
 
+        /// <inheritdoc/>
         public void OnUnbound(ushort lcn)
         {
             if (lcn == _currentLCN)
@@ -77,6 +115,7 @@ namespace RetroIO.Protocols.X25.Sintran
             }
         }
 
+        /// <inheritdoc/>
         public void OnX25Event(X25PacketEventArgs args)
         {
             _logger.LogDebug("SintranTadClient: Received X25 event: PacketType={PacketType}, LCN={LCN}",
@@ -112,17 +151,20 @@ namespace RetroIO.Protocols.X25.Sintran
             }
         }
 
+        /// <inheritdoc/>
         public void Initialize()
         {
             _logger.LogInformation("SintranTadClient: Module initialized");
         }
 
+        /// <inheritdoc/>
         public void Shutdown()
         {
             Disconnect();
             _logger.LogInformation("SintranTadClient: Module shutdown");
         }
 
+        /// <inheritdoc/>
         public ModuleStatus GetStatus()
         {
             return new ModuleStatus
@@ -760,6 +802,7 @@ namespace RetroIO.Protocols.X25.Sintran
 
         #endregion
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_disposed) return;
@@ -780,8 +823,17 @@ namespace RetroIO.Protocols.X25.Sintran
     /// </summary>
     public class SintranTadClientEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the ID of the client.
+        /// </summary>
         public string ClientId { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the session state.
+        /// </summary>
         public TadSessionState State { get; set; }
+        /// <summary>
+        /// Gets or sets the message text.
+        /// </summary>
         public string Message { get; set; } = "";
     }
 
@@ -790,7 +842,13 @@ namespace RetroIO.Protocols.X25.Sintran
     /// </summary>
     public class SintranTadClientDataEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the ID of the client.
+        /// </summary>
         public string ClientId { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the received data as text.
+        /// </summary>
         public string Data { get; set; } = "";
     }
 }

@@ -33,8 +33,11 @@ namespace RetroIO.Protocols.X25.Sintran
         private readonly Dictionary<ushort, int> _lcnToTerminalId = new Dictionary<ushort, int>();
         private readonly int _maxTerminals = 8; // Default: 8 terminals (IDs 1-8)
 
+        /// <inheritdoc/>
         public string Name => "SINTRAN PVC Server";
+        /// <inheritdoc/>
         public string Description => "Manages SINTRAN permanent virtual circuits for system protocols";
+        /// <inheritdoc/>
         public string Version => "1.0.0";
 
         /// <summary>
@@ -42,6 +45,15 @@ namespace RetroIO.Protocols.X25.Sintran
         /// </summary>
         public event EventHandler<X25PacketEventArgs>? PacketGenerated;
 
+        /// <summary>
+        /// Creates the server and registers the handler factories for ROUTING, TAD, XMSG and FILE.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger to write to.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public SintranPvcServer(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -59,6 +71,9 @@ namespace RetroIO.Protocols.X25.Sintran
             _protocolFactories["FILE"] = () => new SintranFileHandler(_logger);
         }
 
+        /// <summary>
+        /// Fills the terminal ID pool with IDs 1 to 8. Does nothing if already initialized.
+        /// </summary>
         public void Initialize()
         {
             if (_initialized) return;
@@ -75,6 +90,9 @@ namespace RetroIO.Protocols.X25.Sintran
             _initialized = true;
         }
 
+        /// <summary>
+        /// Disposes and removes all handlers. Does nothing if not initialized.
+        /// </summary>
         public void Shutdown()
         {
             if (!_initialized) return;
@@ -100,11 +118,23 @@ namespace RetroIO.Protocols.X25.Sintran
             _initialized = false;
         }
 
+        /// <summary>
+        /// Logs that the module was bound to a channel.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
         public void OnBound(ushort lcn)
         {
             _logger.LogDebug("SintranPvcServer: Bound to LCN {LCN}", lcn);
         }
 
+        /// <summary>
+        /// Removes the handler of the channel, freeing its terminal ID if it is a TAD handler.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
         public void OnUnbound(ushort lcn)
         {
             _logger.LogDebug("SintranPvcServer: Unbound from LCN {LCN}", lcn);
@@ -128,6 +158,7 @@ namespace RetroIO.Protocols.X25.Sintran
             }
         }
 
+        /// <inheritdoc/>
         public void OnX25Event(X25PacketEventArgs args)
         {
             if (args.Packet == null) return;
@@ -628,6 +659,15 @@ namespace RetroIO.Protocols.X25.Sintran
 
         #region IProtocolModule Legacy Interface
 
+        /// <summary>
+        /// Wraps the data in a packet for the channel and passes it to <see cref="OnX25Event"/> as a received packet.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="data">
+        /// The packet bytes.
+        /// </param>
         public void OnX25Data(ushort lcn, byte[] data)
         {
             // Legacy interface - create synthetic event args
@@ -642,12 +682,36 @@ namespace RetroIO.Protocols.X25.Sintran
             OnX25Event(eventArgs);
         }
 
+        /// <summary>
+        /// Logs the reset. Nothing else is done.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="cause">
+        /// The reset cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The diagnostic code.
+        /// </param>
         public void OnX25Reset(ushort lcn, byte cause, byte diagnostic)
         {
             _logger.LogInformation("SintranPvcServer: Reset on LCN {LCN}, cause: {Cause}, diagnostic: {Diagnostic}", 
                 lcn, cause, diagnostic);
         }
 
+        /// <summary>
+        /// Logs the clear and then unbinds the channel with <see cref="OnUnbound"/>.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="cause">
+        /// The clear cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The diagnostic code.
+        /// </param>
         public void OnX25Clear(ushort lcn, byte cause, byte diagnostic)
         {
             _logger.LogInformation("SintranPvcServer: Clear on LCN {LCN}, cause: {Cause}, diagnostic: {Diagnostic}", 
@@ -655,33 +719,96 @@ namespace RetroIO.Protocols.X25.Sintran
             OnUnbound(lcn);
         }
 
+        /// <summary>
+        /// Logs the interrupt. Nothing else is done.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="data">
+        /// The interrupt data.
+        /// </param>
         public void OnX25Interrupt(ushort lcn, byte[] data)
         {
             _logger.LogInformation("SintranPvcServer: Interrupt on LCN {LCN}, {Bytes} bytes", lcn, data.Length);
         }
 
+        /// <summary>
+        /// Not supported. Handlers send through their ResponseReady events.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="data">
+        /// The data to send.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void SendX25Data(ushort lcn, byte[] data)
         {
             // Not implemented - handlers send via events
             throw new NotImplementedException("Use handler ResponseReady events instead");
         }
 
+        /// <summary>
+        /// Sends a reset confirmation on the channel.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="cause">
+        /// The reset cause code. Not used.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The diagnostic code. Not used.
+        /// </param>
         public void SendX25Reset(ushort lcn, byte cause, byte diagnostic)
         {
             SendResetConfirmation(lcn);
         }
 
+        /// <summary>
+        /// Sends a call clear on the channel.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="cause">
+        /// The clear cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The diagnostic code.
+        /// </param>
         public void SendX25Clear(ushort lcn, byte cause, byte diagnostic)
         {
             SendCallClear(lcn, cause, diagnostic);
         }
 
+        /// <summary>
+        /// Not supported by the SINTRAN PVC server.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="data">
+        /// The interrupt data.
+        /// </param>
+        /// <exception cref="NotImplementedException">
+        /// Always thrown.
+        /// </exception>
         public void SendX25Interrupt(ushort lcn, byte[] data)
         {
             // Not commonly used in SINTRAN protocols
             throw new NotImplementedException("Interrupt not supported by SINTRAN PVC server");
         }
 
+        /// <summary>
+        /// Returns the module status built from the server statistics.
+        /// </summary>
+        /// <returns>
+        /// The status. The error count is always 0.
+        /// </returns>
         public ModuleStatus GetStatus()
         {
             var stats = GetStats();
@@ -705,14 +832,41 @@ namespace RetroIO.Protocols.X25.Sintran
     /// </summary>
     public class SintranPvcServerStats
     {
+        /// <summary>
+        /// Gets or sets the number of handlers that report active.
+        /// </summary>
         public int ActivePvcs { get; set; }
+        /// <summary>
+        /// Gets or sets the number of handlers.
+        /// </summary>
         public int TotalHandlers { get; set; }
+        /// <summary>
+        /// Gets or sets the number of messages received, summed over all handlers.
+        /// </summary>
         public int TotalMessagesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of messages sent, summed over all handlers.
+        /// </summary>
         public int TotalMessagesSent { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received, summed over all handlers.
+        /// </summary>
         public long TotalBytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes sent, summed over all handlers.
+        /// </summary>
         public long TotalBytesSent { get; set; }
+        /// <summary>
+        /// Gets or sets the latest last-activity time of any handler.
+        /// </summary>
         public DateTime LastActivity { get; set; }
+        /// <summary>
+        /// Gets or sets the number of terminal IDs not in use.
+        /// </summary>
         public int AvailableTerminals { get; set; }
+        /// <summary>
+        /// Gets or sets the size of the terminal ID pool.
+        /// </summary>
         public int TotalTerminals { get; set; }
     }
 }

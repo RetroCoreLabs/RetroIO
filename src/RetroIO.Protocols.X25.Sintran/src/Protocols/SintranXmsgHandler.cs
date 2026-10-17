@@ -23,12 +23,25 @@ namespace RetroIO.Protocols.X25.Sintran
         private SintranHandlerStats _stats;
         private bool _initialized = false;
 
+        /// <inheritdoc/>
         public string Protocol => "XMSG";
+        /// <inheritdoc/>
         public string Description => "SINTRAN messaging system protocol";
+        /// <inheritdoc/>
         public ushort LCN { get; private set; }
 
+        /// <inheritdoc/>
         public event EventHandler<SintranResponseEventArgs>? ResponseReady;
 
+        /// <summary>
+        /// Creates the handler.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger to write to.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public SintranXmsgHandler(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -39,6 +52,7 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
+        /// <inheritdoc/>
         public void Initialize()
         {
             if (_initialized) return;
@@ -49,6 +63,7 @@ namespace RetroIO.Protocols.X25.Sintran
             _initialized = true;
         }
 
+        /// <inheritdoc/>
         public void OnChannelEstablished(ushort lcn)
         {
             LCN = lcn;
@@ -63,6 +78,7 @@ namespace RetroIO.Protocols.X25.Sintran
             SendXmsgResponse("XMSG SERVICE READY - X.25 BRIDGE ONLINE");
         }
 
+        /// <inheritdoc/>
         public void OnChannelClosed()
         {
             _stats.IsActive = false;
@@ -70,6 +86,7 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogInformation("SintranXmsgHandler: XMSG channel closed on LCN {LCN}", LCN);
         }
 
+        /// <inheritdoc/>
         public void HandleData(byte[] data)
         {
             if (data.Length == 0) return;
@@ -360,6 +377,7 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogWarning("SintranXmsgHandler: Sent XMSG error: {ErrorMessage}", errorMessage);
         }
 
+        /// <inheritdoc/>
         public SintranHandlerStats GetStats()
         {
             return new SintranHandlerStats
@@ -376,6 +394,7 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (!_initialized) return;

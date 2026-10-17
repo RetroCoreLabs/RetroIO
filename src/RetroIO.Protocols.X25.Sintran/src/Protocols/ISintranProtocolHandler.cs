@@ -72,9 +72,21 @@ namespace RetroIO.Protocols.X25.Sintran
     /// </summary>
     public class SintranResponseEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the logical channel number the response is for.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the response bytes.
+        /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the name of the protocol that produced the response.
+        /// </summary>
         public string Protocol { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the creation time of the event object (UTC by default).
+        /// </summary>
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 
@@ -83,14 +95,41 @@ namespace RetroIO.Protocols.X25.Sintran
     /// </summary>
     public class SintranHandlerStats
     {
+        /// <summary>
+        /// Gets or sets the protocol name.
+        /// </summary>
         public string Protocol { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the logical channel number.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the number of messages received.
+        /// </summary>
         public int MessagesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of messages sent.
+        /// </summary>
         public int MessagesSent { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received.
+        /// </summary>
         public long BytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes sent.
+        /// </summary>
         public long BytesSent { get; set; }
+        /// <summary>
+        /// Gets or sets the time of the last activity.
+        /// </summary>
         public DateTime LastActivity { get; set; }
+        /// <summary>
+        /// Gets or sets whether the handler is active.
+        /// </summary>
         public bool IsActive { get; set; }
+        /// <summary>
+        /// Gets or sets the status text. Defaults to Ready.
+        /// </summary>
         public string Status { get; set; } = "Ready";
     }
 }

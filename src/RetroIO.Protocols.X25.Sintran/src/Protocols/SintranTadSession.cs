@@ -167,7 +167,13 @@ namespace RetroIO.Protocols.X25.Sintran
         /// Configuration received flags
         /// </summary>
         public bool ReceivedTerminalType { get; set; }
+        /// <summary>
+        /// Gets or sets whether the terminal mode has been received.
+        /// </summary>
         public bool ReceivedTerminalMode { get; set; }
+        /// <summary>
+        /// Gets or sets whether the operating system version has been received.
+        /// </summary>
         public bool ReceivedOpsysVersion { get; set; }
 
         /// <summary>

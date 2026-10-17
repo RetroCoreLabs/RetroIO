@@ -26,12 +26,25 @@ namespace RetroIO.Protocols.X25.Sintran
         private bool _inTransferMode = false;
         private string _transferFileName = "";
 
+        /// <inheritdoc/>
         public string Protocol => "FILE";
+        /// <inheritdoc/>
         public string Description => "SINTRAN file transfer protocol";
+        /// <inheritdoc/>
         public ushort LCN { get; private set; }
 
+        /// <inheritdoc/>
         public event EventHandler<SintranResponseEventArgs>? ResponseReady;
 
+        /// <summary>
+        /// Creates the handler.
+        /// </summary>
+        /// <param name="logger">
+        /// The logger to write to.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public SintranFileHandler(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -42,6 +55,7 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
+        /// <inheritdoc/>
         public void Initialize()
         {
             if (_initialized) return;
@@ -52,6 +66,7 @@ namespace RetroIO.Protocols.X25.Sintran
             _initialized = true;
         }
 
+        /// <inheritdoc/>
         public void OnChannelEstablished(ushort lcn)
         {
             LCN = lcn;
@@ -67,6 +82,7 @@ namespace RetroIO.Protocols.X25.Sintran
             SendFileResponse($"Current directory: {_currentDirectory}");
         }
 
+        /// <inheritdoc/>
         public void OnChannelClosed()
         {
             _stats.IsActive = false;
@@ -76,6 +92,7 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogInformation("SintranFileHandler: File transfer channel closed on LCN {LCN}", LCN);
         }
 
+        /// <inheritdoc/>
         public void HandleData(byte[] data)
         {
             if (data.Length == 0) return;
@@ -471,6 +488,7 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogWarning("SintranFileHandler: Sent file error: {ErrorMessage}", errorMessage);
         }
 
+        /// <inheritdoc/>
         public SintranHandlerStats GetStats()
         {
             return new SintranHandlerStats
@@ -487,6 +505,7 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (!_initialized) return;

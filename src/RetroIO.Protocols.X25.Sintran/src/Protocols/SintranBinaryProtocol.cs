@@ -27,19 +27,31 @@ namespace RetroIO.Protocols.X25.Sintran
         /// All SINTRAN routing frames have 0x21 0x13 after LAPB address/control
         /// </summary>
         public const byte ROUTING_MARKER_1 = 0x21;
+        /// <summary>
+        /// Second routing marker byte, 0x13. The first is 0x21.
+        /// </summary>
         public const byte ROUTING_MARKER_2 = 0x13;
 
         /// <summary>
         /// SINTRAN protocol IDs (byte after routing/node info)
         /// </summary>
         public const byte PROTOCOL_ID_PAD = 0xDA;  // 218 - PAD service
+        /// <summary>
+        /// Protocol ID for the TAD service, 0xDD (221).
+        /// </summary>
         public const byte PROTOCOL_ID_TAD = 0xDD;  // 221 - TAD service
+        /// <summary>
+        /// Protocol ID for routing commands, 0xDE (222).
+        /// </summary>
         public const byte PROTOCOL_ID_ROUTING = 0xDE; // 222 - Routing commands
 
         /// <summary>
         /// Routing command codes (used with PROTOCOL_ID_ROUTING)
         /// </summary>
         public const byte ROUTING_CMD_REQUEST = 0x08;  // Request routing info
+        /// <summary>
+        /// Routing command code for a response with routing information, 0x0E.
+        /// </summary>
         public const byte ROUTING_CMD_RESPONSE = 0x0E; // Response with routing info
 
         /// <summary>
