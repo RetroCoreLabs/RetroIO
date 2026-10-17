@@ -35,14 +35,20 @@ namespace RetroIO.Storage.Core
         /// Factory reads the file ONCE and provides the same hints to all drivers for efficiency.
         /// HeaderBytes will contain at least RequiredHeaderBytes bytes (or entire file if smaller).
         /// </summary>
-        /// <param name="hints">Detection hints containing filename, size, and header bytes</param>
-        /// <returns>Confidence score from 0.0 (definitely not) to 1.0 (definitely is)</returns>
+        /// <param name="hints">
+        /// Detection hints containing filename, size, and header bytes
+        /// </param>
+        /// <returns>
+        /// Confidence score from 0.0 (definitely not) to 1.0 (definitely is)
+        /// </returns>
         float DetectConfidence(DetectionHints hints);
 
         /// <summary>
         /// Creates a new driver instance.
         /// </summary>
-        /// <returns>New filesystem driver instance</returns>
+        /// <returns>
+        /// New filesystem driver instance
+        /// </returns>
         IFileSystemDriver CreateDriver();
     }
 

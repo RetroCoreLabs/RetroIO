@@ -44,8 +44,12 @@ namespace RetroIO.Storage.Core
         /// - Digits 0-9
         /// - Unreserved symbols: - . _ ~
         /// </summary>
-        /// <param name="fileName">Original filename (may contain spaces, special chars, PETSCII)</param>
-        /// <returns>URN-safe identifier (e.g., "WHERE%20IN%20THE" or "CARMEN%20SANDIEGO%3F")</returns>
+        /// <param name="fileName">
+        /// Original filename (may contain spaces, special chars, PETSCII)
+        /// </param>
+        /// <returns>
+        /// URN-safe identifier (e.g., "WHERE%20IN%20THE" or "CARMEN%20SANDIEGO%3F")
+        /// </returns>
         public static string Encode(string fileName)
         {
             if (string.IsNullOrEmpty(fileName))
@@ -95,8 +99,12 @@ namespace RetroIO.Storage.Core
         /// sequence handling, consider using System.Web.HttpUtility.UrlDecode or
         /// implementing full UTF-8 reconstruction.
         /// </summary>
-        /// <param name="identifier">URN-safe identifier with percent-encoding</param>
-        /// <returns>Original filename with special characters restored</returns>
+        /// <param name="identifier">
+        /// URN-safe identifier with percent-encoding
+        /// </param>
+        /// <returns>
+        /// Original filename with special characters restored
+        /// </returns>
         public static string Decode(string identifier)
         {
             if (string.IsNullOrEmpty(identifier))
@@ -140,8 +148,12 @@ namespace RetroIO.Storage.Core
         /// All other characters (including space, ?, /, etc.) must be percent-encoded
         /// for URN/URI safety.
         /// </summary>
-        /// <param name="c">Character to check</param>
-        /// <returns>True if character is unreserved and doesn't need encoding</returns>
+        /// <param name="c">
+        /// Character to check
+        /// </param>
+        /// <returns>
+        /// True if character is unreserved and doesn't need encoding
+        /// </returns>
         private static bool IsUnreserved(char c)
         {
             return (c >= 'A' && c <= 'Z') ||
@@ -163,8 +175,12 @@ namespace RetroIO.Storage.Core
         ///   urn:retrofs:local::volume:/#1
         ///   urn:retrofs:local::volume:/#2
         /// </summary>
-        /// <param name="index">Zero-based index in directory listing</param>
-        /// <returns>Numeric identifier string (e.g., "#1", "#2")</returns>
+        /// <param name="index">
+        /// Zero-based index in directory listing
+        /// </param>
+        /// <returns>
+        /// Numeric identifier string (e.g., "#1", "#2")
+        /// </returns>
         public static string FromIndex(int index)
         {
             return $"#{index + 1}";
@@ -182,9 +198,15 @@ namespace RetroIO.Storage.Core
         ///   "#0"  → false (must be positive)
         ///   "#-1" → false (must be positive)
         /// </summary>
-        /// <param name="identifier">String identifier to parse (e.g., "#1", "#2")</param>
-        /// <param name="index">Output: zero-based array index if successful</param>
-        /// <returns>True if successfully parsed, false otherwise</returns>
+        /// <param name="identifier">
+        /// String identifier to parse (e.g., "#1", "#2")
+        /// </param>
+        /// <param name="index">
+        /// Output: zero-based array index if successful
+        /// </param>
+        /// <returns>
+        /// True if successfully parsed, false otherwise
+        /// </returns>
         public static bool TryParseIndex(string identifier, out int index)
         {
             index = -1;

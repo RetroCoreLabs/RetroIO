@@ -18,8 +18,12 @@ namespace RetroIO.Storage.Core.Utilities
         /// <summary>
         /// Extracts a clean file path from a URN by removing scheme and fragment.
         /// </summary>
-        /// <param name="uri">URN (e.g., "bsd:///E:/path#a", "file:///C:/test.txt")</param>
-        /// <returns>Clean file path (e.g., "E:/path", "C:/test.txt")</returns>
+        /// <param name="uri">
+        /// URN (e.g., "bsd:///E:/path#a", "file:///C:/test.txt")
+        /// </param>
+        /// <returns>
+        /// Clean file path (e.g., "E:/path", "C:/test.txt")
+        /// </returns>
         public static string ExtractFilePathFromUri(string uri)
         {
             if (string.IsNullOrEmpty(uri))
@@ -48,8 +52,12 @@ namespace RetroIO.Storage.Core.Utilities
         /// <summary>
         /// Normalizes a file path by converting separators and removing invalid prefixes.
         /// </summary>
-        /// <param name="path">Input path (e.g., "/E:/path", "/C:/folder/file.txt", "/home/user/file")</param>
-        /// <returns>Normalized path (e.g., "E:/path", "C:/folder/file.txt", "/home/user/file")</returns>
+        /// <param name="path">
+        /// Input path (e.g., "/E:/path", "/C:/folder/file.txt", "/home/user/file")
+        /// </param>
+        /// <returns>
+        /// Normalized path (e.g., "E:/path", "C:/folder/file.txt", "/home/user/file")
+        /// </returns>
         public static string NormalizePath(string path)
         {
             if (string.IsNullOrEmpty(path))
@@ -82,9 +90,15 @@ namespace RetroIO.Storage.Core.Utilities
         /// <summary>
         /// Validates that a file path exists and is accessible.
         /// </summary>
-        /// <param name="path">File path to validate</param>
-        /// <param name="errorMessage">Error message if validation fails</param>
-        /// <returns>True if path is valid, false otherwise</returns>
+        /// <param name="path">
+        /// File path to validate
+        /// </param>
+        /// <param name="errorMessage">
+        /// Error message if validation fails
+        /// </param>
+        /// <returns>
+        /// True if <paramref name="path"/> is valid, false otherwise
+        /// </returns>
         public static bool ValidateFilePath(string path, out string? errorMessage)
         {
             errorMessage = null;
@@ -115,10 +129,18 @@ namespace RetroIO.Storage.Core.Utilities
         /// <summary>
         /// Creates a URN from components.
         /// </summary>
-        /// <param name="scheme">Scheme (e.g., "bsd", "file")</param>
-        /// <param name="path">File path</param>
-        /// <param name="fragment">Optional fragment (e.g., "a", "partition1")</param>
-        /// <returns>Complete URN (e.g., "bsd:///E:/path#a")</returns>
+        /// <param name="scheme">
+        /// Scheme (e.g., "bsd", "file")
+        /// </param>
+        /// <param name="path">
+        /// File path
+        /// </param>
+        /// <param name="fragment">
+        /// Optional fragment (e.g., "a", "partition1")
+        /// </param>
+        /// <returns>
+        /// Complete URN (e.g., "bsd:///E:/path#a")
+        /// </returns>
         public static string CreateUri(string scheme, string path, string? fragment = null)
         {
             if (string.IsNullOrEmpty(scheme) || string.IsNullOrEmpty(path))

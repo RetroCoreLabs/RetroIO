@@ -67,8 +67,12 @@ namespace RetroIO.Storage.Core
         /// Analyzes a disk image file and returns complete information.
         /// Detects both filesystem type and partition table in one call.
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <returns>Complete analysis result</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <returns>
+        /// Complete analysis result
+        /// </returns>
         public static DiskImageAnalysisResult Analyze(string imagePath)
         {
             var result = new DiskImageAnalysisResult

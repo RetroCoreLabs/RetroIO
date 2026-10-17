@@ -124,7 +124,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Validate configuration values.
         /// </summary>
-        /// <exception cref="ArgumentOutOfRangeException">If any values are invalid</exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// If any values are invalid
+        /// </exception>
         public void Validate()
         {
             if (DentryCacheMaxEntries <= 0)

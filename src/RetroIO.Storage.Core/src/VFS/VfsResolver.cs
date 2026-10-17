@@ -40,7 +40,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Initializes a new VFS resolver.
         /// </summary>
-        /// <param name="pluginRegistry">Optional plugin registry for archive/container support</param>
+        /// <param name="pluginRegistry">
+        /// Optional plugin registry for archive/container support
+        /// </param>
         public VfsResolver(VfsPluginRegistry? pluginRegistry = null)
         {
             _providers = new Dictionary<string, IVolumeProvider>(StringComparer.OrdinalIgnoreCase);
@@ -51,8 +53,12 @@ namespace RetroIO.Storage.Core.VFS
         /// Registers a volume provider with the resolver.
         /// Provider will be mapped by all schemes it supports.
         /// </summary>
-        /// <param name="provider">Volume provider to register</param>
-        /// <exception cref="ArgumentNullException">Provider is null</exception>
+        /// <param name="provider">
+        /// Volume provider to register
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Provider is null
+        /// </exception>
         public void Register(IVolumeProvider provider)
         {
             if (provider == null)
@@ -76,7 +82,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Unregisters a volume provider and all its schemes.
         /// </summary>
-        /// <param name="provider">Provider to unregister</param>
+        /// <param name="provider">
+        /// Provider to unregister
+        /// </param>
         public void Unregister(IVolumeProvider provider)
         {
             if (provider == null)
@@ -103,9 +111,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Resolves a URN to the appropriate volume provider based on scheme.
         /// </summary>
-        /// <param name="urn">URN string (e.g., "ftp://server/path" or "file:///C:/path")</param>
-        /// <returns>Volume provider that handles the URN scheme, or null if no provider found</returns>
-        /// <exception cref="ArgumentException">URN is null, empty, or invalid</exception>
+        /// <param name="urn">
+        /// URN string (e.g., "ftp://server/path" or "file:///C:/path")
+        /// </param>
+        /// <returns>
+        /// Volume provider that handles the URN scheme, or null if no provider found
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// URN is null, empty, or invalid
+        /// </exception>
         public IVolumeProvider? Resolve(string urn)
         {
             if (string.IsNullOrWhiteSpace(urn))
@@ -134,7 +148,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets all registered providers.
         /// </summary>
-        /// <returns>Array of registered providers (duplicates removed)</returns>
+        /// <returns>
+        /// Array of registered providers (duplicates removed)
+        /// </returns>
         public IVolumeProvider[] GetRegisteredProviders()
         {
             // Use HashSet to remove duplicates (same provider can handle multiple schemes)
@@ -155,7 +171,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets all registered schemes.
         /// </summary>
-        /// <returns>Array of scheme names (e.g., ["file", "ftp", "sftp", "tnfs"])</returns>
+        /// <returns>
+        /// Array of scheme names (e.g., ["file", "ftp", "sftp", "tnfs"])
+        /// </returns>
         public string[] GetRegisteredSchemes()
         {
             string[] schemes = new string[_providers.Count];
@@ -174,8 +192,12 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Checks if a scheme is supported.
         /// </summary>
-        /// <param name="scheme">Scheme name (e.g., "ftp", "file")</param>
-        /// <returns>True if scheme is registered</returns>
+        /// <param name="scheme">
+        /// Scheme name (e.g., "ftp", "file")
+        /// </param>
+        /// <returns>
+        /// True if <paramref name="scheme"/> is registered
+        /// </returns>
         public bool IsSchemeSupported(string scheme)
         {
             if (string.IsNullOrWhiteSpace(scheme))
@@ -196,12 +218,24 @@ namespace RetroIO.Storage.Core.VFS
         /// Opens a file with recursive nesting support.
         /// Supports nested URNs like: ftp://host/archive.zip#zip#/file.txt
         /// </summary>
-        /// <param name="urn">URN with optional fragments for nesting</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>Stream to the requested file</returns>
-        /// <exception cref="ArgumentException">URN is invalid</exception>
-        /// <exception cref="NotSupportedException">No provider or plugin found for scheme/handler</exception>
-        /// <exception cref="FileNotFoundException">File not found</exception>
+        /// <param name="urn">
+        /// URN with optional fragments for nesting
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
+        /// <returns>
+        /// Stream to the requested file
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// URN is invalid
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// No provider or plugin found for scheme/handler
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// File not found
+        /// </exception>
         public async Task<Stream> OpenRecursiveAsync(string urn, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(urn))
@@ -271,8 +305,12 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Parses a nested URN into its components.
         /// </summary>
-        /// <param name="urn">Nested URN (e.g., "ftp://host/file.zip#zip#/inner.txt")</param>
-        /// <returns>Tuple of (base URN, handler chain, inner path)</returns>
+        /// <param name="urn">
+        /// Nested URN (e.g., "ftp://host/file.zip#zip#/inner.txt")
+        /// </param>
+        /// <returns>
+        /// Tuple of (base URN, handler chain, inner path)
+        /// </returns>
         public (string BaseUrn, string[] Handlers, string InnerPath) ParseNestedUrn(string urn)
         {
             if (string.IsNullOrWhiteSpace(urn))

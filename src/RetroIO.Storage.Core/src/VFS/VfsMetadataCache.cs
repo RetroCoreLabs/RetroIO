@@ -43,9 +43,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Initializes a new metadata cache.
         /// </summary>
-        /// <param name="maxEntries">Maximum number of cached metadata entries</param>
-        /// <param name="defaultTtl">TTL for local filesystem metadata</param>
-        /// <param name="remoteTtl">TTL for remote filesystem metadata (usually shorter)</param>
+        /// <param name="maxEntries">
+        /// Maximum number of cached metadata entries
+        /// </param>
+        /// <param name="defaultTtl">
+        /// TTL for local filesystem metadata
+        /// </param>
+        /// <param name="remoteTtl">
+        /// TTL for remote filesystem metadata (usually shorter)
+        /// </param>
         public VfsMetadataCache(int maxEntries = 2000, TimeSpan? defaultTtl = null, TimeSpan? remoteTtl = null)
         {
             if (maxEntries <= 0)
@@ -60,9 +66,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Try to get cached file metadata.
         /// </summary>
-        /// <param name="urnPath">URN path to file (e.g., "urn:retrofs:local:0:d64:/SYSTEM/README.TXT")</param>
-        /// <param name="isRemote">Whether this is a remote filesystem (affects TTL)</param>
-        /// <returns>Cached metadata, or null if not in cache or expired</returns>
+        /// <param name="urnPath">
+        /// URN path to file (e.g., "urn:retrofs:local:0:d64:/SYSTEM/README.TXT")
+        /// </param>
+        /// <param name="isRemote">
+        /// Whether this is a remote filesystem (affects TTL)
+        /// </param>
+        /// <returns>
+        /// Cached metadata, or null if not in cache or expired
+        /// </returns>
         public FileMetadata? TryGetMetadata(string urnPath, bool isRemote)
         {
             if (string.IsNullOrEmpty(urnPath))
@@ -93,9 +105,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Cache file metadata.
         /// </summary>
-        /// <param name="urnPath">URN path to file</param>
-        /// <param name="metadata">File metadata to cache</param>
-        /// <param name="isRemote">Whether this is a remote filesystem</param>
+        /// <param name="urnPath">
+        /// URN path to file
+        /// </param>
+        /// <param name="metadata">
+        /// File metadata to cache
+        /// </param>
+        /// <param name="isRemote">
+        /// Whether this is a remote filesystem
+        /// </param>
         public void CacheMetadata(string urnPath, FileMetadata metadata, bool isRemote)
         {
             if (string.IsNullOrEmpty(urnPath))
@@ -124,7 +142,9 @@ namespace RetroIO.Storage.Core.VFS
         /// Invalidate a specific file's metadata.
         /// Called when the file is modified.
         /// </summary>
-        /// <param name="urnPath">URN path to file to invalidate</param>
+        /// <param name="urnPath">
+        /// URN path to file to invalidate
+        /// </param>
         public void Invalidate(string urnPath)
         {
             if (string.IsNullOrEmpty(urnPath))
@@ -140,7 +160,9 @@ namespace RetroIO.Storage.Core.VFS
         /// Invalidate all metadata entries with a specific path prefix.
         /// Used when unmounting a volume or invalidating an entire directory.
         /// </summary>
-        /// <param name="urnPathPrefix">URN path prefix</param>
+        /// <param name="urnPathPrefix">
+        /// URN path prefix
+        /// </param>
         public void InvalidatePrefix(string urnPathPrefix)
         {
             if (string.IsNullOrEmpty(urnPathPrefix))

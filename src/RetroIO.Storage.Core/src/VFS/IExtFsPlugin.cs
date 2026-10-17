@@ -42,11 +42,12 @@ namespace RetroIO.Storage.Core.VFS
         /// Handler name used in nested URNs (e.g., "zip", "tar", "7z", "iso9660").
         /// Must be lowercase and contain only alphanumeric characters and hyphens.
         /// </summary>
-        /// <example>
-        /// ZIP plugin: "zip"
-        /// TAR plugin: "tar"
-        /// ISO 9660 plugin: "iso9660"
-        /// </example>
+        /// <remarks>
+        /// Examples:
+        ///  - ZIP plugin: "zip"
+        ///  - TAR plugin: "tar"
+        ///  - ISO 9660 plugin: "iso9660"
+        /// </remarks>
         string HandlerName { get; }
 
         /// <summary>
@@ -54,38 +55,61 @@ namespace RetroIO.Storage.Core.VFS
         /// Used for automatic plugin selection based on file extension.
         /// Extensions should include the leading dot and be lowercase.
         /// </summary>
-        /// <example>
-        /// ZIP plugin: [".zip", ".jar", ".apk", ".xpi"]
-        /// TAR plugin: [".tar", ".tar.gz", ".tgz", ".tar.bz2"]
-        /// </example>
+        /// <remarks>
+        /// Examples:
+        ///  - ZIP plugin: [".zip", ".jar", ".apk", ".xpi"]
+        ///  - TAR plugin: [".tar", ".tar.gz", ".tgz", ".tar.bz2"]
+        /// </remarks>
         string[] SupportedExtensions { get; }
 
         /// <summary>
         /// Checks if this plugin can handle the given file path based on extension.
         /// </summary>
-        /// <param name="path">File path to check</param>
-        /// <returns>True if plugin supports this file extension</returns>
+        /// <param name="path">
+        /// File path to check
+        /// </param>
+        /// <returns>
+        /// True if plugin supports this file extension
+        /// </returns>
         bool CanHandle(string path);
 
         /// <summary>
         /// Checks if this plugin can handle a stream based on magic number detection.
         /// The stream position will be reset to 0 after checking.
         /// </summary>
-        /// <param name="stream">Stream to inspect (must be seekable)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>True if plugin recognizes the stream format</returns>
-        /// <exception cref="ArgumentException">Stream is not seekable</exception>
+        /// <param name="stream">
+        /// Stream to inspect (must be seekable)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
+        /// <returns>
+        /// True if plugin recognizes the stream format
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Stream is not seekable
+        /// </exception>
         Task<bool> CanHandleAsync(Stream stream, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Mounts an archive or container from a stream.
         /// The plugin takes ownership of the stream and must dispose it when unmounted.
         /// </summary>
-        /// <param name="containerStream">Stream containing the archive/container data</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <exception cref="ArgumentNullException">Stream is null</exception>
-        /// <exception cref="InvalidDataException">Stream does not contain valid archive data</exception>
-        /// <exception cref="NotSupportedException">Archive format version not supported</exception>
+        /// <param name="containerStream">
+        /// Stream containing the archive/container data
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Stream is null
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Stream does not contain valid archive data
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Archive format version not supported
+        /// </exception>
         Task MountAsync(Stream containerStream, CancellationToken cancellationToken = default);
     }
 }

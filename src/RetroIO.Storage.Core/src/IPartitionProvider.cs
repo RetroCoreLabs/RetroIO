@@ -18,20 +18,28 @@ public interface IPartitionProvider
     /// <summary>
     /// Indicates whether the current disk image contains a partition table.
     /// </summary>
-    /// <returns>True if partition table is detected; false otherwise.</returns>
+    /// <returns>
+    /// True if partition table is detected; false otherwise.
+    /// </returns>
     bool SupportsPartitions();
 
     /// <summary>
     /// Lists all available partitions in the disk image.
     /// </summary>
-    /// <returns>List of partition identifiers and metadata. Returns empty list if no partitions found.</returns>
+    /// <returns>
+    /// List of partition identifiers and metadata. Returns empty list if no partitions found.
+    /// </returns>
     IReadOnlyList<PartitionMetadata> ListPartitions();
 
     /// <summary>
     /// Selects a specific partition to mount.
     /// </summary>
-    /// <param name="partitionId">Partition identifier (e.g., "a", "b" for BSD; "0", "1" for MBR).</param>
-    /// <returns>True if partition was successfully selected; false if partition not found.</returns>
+    /// <param name="partitionId">
+    /// Partition identifier (e.g., "a", "b" for BSD; "0", "1" for MBR).
+    /// </param>
+    /// <returns>
+    /// True if partition was successfully selected; false if partition not found.
+    /// </returns>
     bool SelectPartition(string partitionId);
 
     /// <summary>

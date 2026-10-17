@@ -35,9 +35,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Registers a plugin with the registry.
         /// </summary>
-        /// <param name="plugin">Plugin to register</param>
-        /// <exception cref="ArgumentNullException">Plugin is null</exception>
-        /// <exception cref="ArgumentException">Handler name already registered</exception>
+        /// <param name="plugin">
+        /// Plugin to register
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Plugin is null
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Handler name already registered
+        /// </exception>
         public void RegisterPlugin(IExtFsPlugin plugin)
         {
             if (plugin == null)
@@ -59,8 +65,12 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Unregisters a plugin from the registry.
         /// </summary>
-        /// <param name="plugin">Plugin to unregister</param>
-        /// <returns>True if plugin was unregistered, false if not found</returns>
+        /// <param name="plugin">
+        /// Plugin to unregister
+        /// </param>
+        /// <returns>
+        /// True if <paramref name="plugin"/> was unregistered, false if not found
+        /// </returns>
         public bool UnregisterPlugin(IExtFsPlugin plugin)
         {
             if (plugin == null)
@@ -77,8 +87,12 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets a plugin by handler name.
         /// </summary>
-        /// <param name="handlerName">Handler name (case-insensitive)</param>
-        /// <returns>Plugin instance, or null if not found</returns>
+        /// <param name="handlerName">
+        /// Handler name (case-insensitive)
+        /// </param>
+        /// <returns>
+        /// Plugin instance, or null if not found
+        /// </returns>
         public IExtFsPlugin? GetPluginByHandler(string handlerName)
         {
             if (string.IsNullOrWhiteSpace(handlerName))
@@ -91,8 +105,12 @@ namespace RetroIO.Storage.Core.VFS
         /// Gets a plugin by file extension.
         /// Returns the first plugin that supports the given extension.
         /// </summary>
-        /// <param name="path">File path to check</param>
-        /// <returns>Plugin instance, or null if no plugin supports this extension</returns>
+        /// <param name="path">
+        /// File path to check
+        /// </param>
+        /// <returns>
+        /// Plugin instance, or null if no plugin supports this extension
+        /// </returns>
         public IExtFsPlugin? GetPluginByExtension(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -112,10 +130,18 @@ namespace RetroIO.Storage.Core.VFS
         /// Returns the first plugin that recognizes the stream format.
         /// Stream position will be reset to 0.
         /// </summary>
-        /// <param name="stream">Stream to inspect (must be seekable)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>Plugin instance, or null if no plugin recognizes the format</returns>
-        /// <exception cref="ArgumentException">Stream is not seekable</exception>
+        /// <param name="stream">
+        /// Stream to inspect (must be seekable)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
+        /// <returns>
+        /// Plugin instance, or null if no plugin recognizes the format
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Stream is not seekable
+        /// </exception>
         public async Task<IExtFsPlugin?> DetectPluginAsync(Stream stream, CancellationToken cancellationToken = default)
         {
             if (stream == null)
@@ -148,7 +174,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets all registered plugins.
         /// </summary>
-        /// <returns>Array of plugin instances</returns>
+        /// <returns>
+        /// Array of plugin instances
+        /// </returns>
         public IExtFsPlugin[] GetAllPlugins()
         {
             IExtFsPlugin[] result = new IExtFsPlugin[_plugins.Count];
@@ -159,7 +187,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets all registered handler names.
         /// </summary>
-        /// <returns>Array of handler names</returns>
+        /// <returns>
+        /// Array of handler names
+        /// </returns>
         public string[] GetHandlerNames()
         {
             string[] result = new string[_handlerMap.Count];
@@ -179,8 +209,12 @@ namespace RetroIO.Storage.Core.VFS
         /// Loads plugins from assemblies in a directory.
         /// Scans all .dll files and searches for IExtFsPlugin implementations.
         /// </summary>
-        /// <param name="pluginPath">Path to plugins directory</param>
-        /// <returns>Number of plugins loaded</returns>
+        /// <param name="pluginPath">
+        /// Path to plugins directory
+        /// </param>
+        /// <returns>
+        /// Number of plugins loaded
+        /// </returns>
         public int LoadPluginsFromDirectory(string pluginPath)
         {
             if (string.IsNullOrWhiteSpace(pluginPath))

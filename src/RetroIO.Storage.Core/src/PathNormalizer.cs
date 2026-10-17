@@ -37,9 +37,15 @@ namespace RetroIO.Storage.Core
         /// Security: Prevents path traversal attacks by ensuring normalized
         /// paths cannot escape the root directory.
         /// </summary>
-        /// <param name="path">Path to normalize (may contain . and .. segments)</param>
-        /// <returns>Normalized path with dot-segments removed</returns>
-        /// <exception cref="ArgumentException">Path contains invalid characters</exception>
+        /// <param name="path">
+        /// Path to normalize (may contain . and .. segments)
+        /// </param>
+        /// <returns>
+        /// Normalized path with dot-segments removed
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Path contains invalid characters
+        /// </exception>
         public static string Normalize(string path)
         {
             if (string.IsNullOrEmpty(path))
@@ -122,9 +128,15 @@ namespace RetroIO.Storage.Core
         ///
         /// Security: All paths are normalized after resolution to prevent traversal.
         /// </summary>
-        /// <param name="basePath">Base path (must start with /)</param>
-        /// <param name="reference">Relative reference</param>
-        /// <returns>Resolved and normalized absolute path</returns>
+        /// <param name="basePath">
+        /// Base path (must start with /)
+        /// </param>
+        /// <param name="reference">
+        /// Relative reference
+        /// </param>
+        /// <returns>
+        /// Resolved and normalized absolute path
+        /// </returns>
         public static string ResolveRelative(string basePath, string reference)
         {
             if (string.IsNullOrEmpty(reference))
@@ -164,8 +176,12 @@ namespace RetroIO.Storage.Core
         ///
         /// This is a defense-in-depth check after normalization.
         /// </summary>
-        /// <param name="path">Normalized path to validate</param>
-        /// <returns>True if path is safe</returns>
+        /// <param name="path">
+        /// Normalized path to validate
+        /// </param>
+        /// <returns>
+        /// True if <paramref name="path"/> is safe
+        /// </returns>
         public static bool IsSafePath(string path)
         {
             if (string.IsNullOrEmpty(path))
@@ -209,8 +225,12 @@ namespace RetroIO.Storage.Core
         ///   "/file.txt"       → "/"
         ///   "/"               → "/"
         /// </summary>
-        /// <param name="path">File path</param>
-        /// <returns>Parent directory path</returns>
+        /// <param name="path">
+        /// File path
+        /// </param>
+        /// <returns>
+        /// Parent directory path
+        /// </returns>
         public static string GetParentDirectory(string path)
         {
             if (string.IsNullOrEmpty(path) || path == "/")
@@ -238,8 +258,12 @@ namespace RetroIO.Storage.Core
         ///   "/"               → ""
         ///   "/file.txt"       → "file.txt"
         /// </summary>
-        /// <param name="path">File path</param>
-        /// <returns>Filename without directory path</returns>
+        /// <param name="path">
+        /// File path
+        /// </param>
+        /// <returns>
+        /// Filename without directory path
+        /// </returns>
         public static string GetFileName(string path)
         {
             if (string.IsNullOrEmpty(path))

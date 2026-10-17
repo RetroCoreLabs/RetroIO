@@ -24,10 +24,18 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Builds volume info for a mounted driver.
         /// </summary>
-        /// <param name="driver">The mounted driver.</param>
-        /// <param name="imagePath">Backing image path, when known.</param>
-        /// <param name="isReadOnly">Whether the volume was mounted read-only.</param>
-        /// <returns>Volume info; never null for a non-null driver.</returns>
+        /// <param name="driver">
+        /// The mounted driver.
+        /// </param>
+        /// <param name="imagePath">
+        /// Backing image path, when known.
+        /// </param>
+        /// <param name="isReadOnly">
+        /// Whether the volume was mounted read-only.
+        /// </param>
+        /// <returns>
+        /// Volume info; never null for a non-null driver.
+        /// </returns>
         public static VolumeInfo Build(IFileSystemDriver driver, string imagePath, bool isReadOnly)
         {
             if (driver == null)

@@ -54,8 +54,12 @@ namespace RetroIO.Storage.Core
         /// Default implementation returns 0.0 (no detection).
         /// Override to provide detection logic.
         /// </summary>
-        /// <param name="hints">Pre-read detection hints (filename, size, header bytes)</param>
-        /// <returns>Confidence score from 0.0 (no match) to 1.0 (definite match)</returns>
+        /// <param name="hints">
+        /// Pre-read detection hints (filename, size, header bytes)
+        /// </param>
+        /// <returns>
+        /// Confidence score from 0.0 (no match) to 1.0 (definite match)
+        /// </returns>
         public virtual float DetectConfidence(DetectionHints hints)
         {
             return 0.0f; // Default: no detection
@@ -64,7 +68,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Creates a new driver instance.
         /// </summary>
-        /// <returns>New filesystem driver instance</returns>
+        /// <returns>
+        /// New filesystem driver instance
+        /// </returns>
         public abstract IFileSystemDriver CreateDriver();
     }
 }

@@ -68,22 +68,34 @@ namespace RetroIO.Storage.Core
     /// </summary>
     public enum PropertyCategory
     {
-        /// <summary>File type and format information.</summary>
+        /// <summary>
+        /// File type and format information.
+        /// </summary>
         FileType,
 
-        /// <summary>Timestamps (created, modified, accessed).</summary>
+        /// <summary>
+        /// Timestamps (created, modified, accessed).
+        /// </summary>
         Timestamps,
 
-        /// <summary>Access control and permissions.</summary>
+        /// <summary>
+        /// Access control and permissions.
+        /// </summary>
         Access,
 
-        /// <summary>Ownership and user information.</summary>
+        /// <summary>
+        /// Ownership and user information.
+        /// </summary>
         Ownership,
 
-        /// <summary>File attributes and flags.</summary>
+        /// <summary>
+        /// File attributes and flags.
+        /// </summary>
         Attributes,
 
-        /// <summary>Filesystem-specific custom properties.</summary>
+        /// <summary>
+        /// Filesystem-specific custom properties.
+        /// </summary>
         Custom
     }
 }

@@ -52,9 +52,15 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Initializes a new RetroVFS instance.
         /// </summary>
-        /// <param name="enablePersistence">Enable automatic save/load of mount configuration</param>
-        /// <param name="configPath">Path to configuration file (null = use default)</param>
-        /// <param name="cacheConfig">Cache configuration (null = use default)</param>
+        /// <param name="enablePersistence">
+        /// Enable automatic save/load of mount configuration
+        /// </param>
+        /// <param name="configPath">
+        /// Path to configuration file (null = use default)
+        /// </param>
+        /// <param name="cacheConfig">
+        /// Cache configuration (null = use default)
+        /// </param>
         public RetroVFS(bool enablePersistence = true, string? configPath = null, VfsCacheConfiguration? cacheConfig = null)
         {
             _registry = new MountRegistry();
@@ -86,7 +92,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Registers a volume provider with the mount manager.
         /// </summary>
-        /// <param name="provider">Provider to register</param>
+        /// <param name="provider">
+        /// Provider to register
+        /// </param>
         public void RegisterProvider(IVolumeProvider provider)
         {
             if (provider == null)
@@ -170,12 +178,24 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Mounts a volume using the appropriate provider.
         /// </summary>
-        /// <param name="providerType">Provider type (diskimage, native, tnfs, etc.)</param>
-        /// <param name="uri">Source URI</param>
-        /// <param name="volumeId">Volume identifier</param>
-        /// <param name="readOnly">Read-only flag</param>
-        /// <param name="forceFileSystemType">For disk images: force specific filesystem type</param>
-        /// <returns>Mount information</returns>
+        /// <param name="providerType">
+        /// Provider type (diskimage, native, tnfs, etc.)
+        /// </param>
+        /// <param name="uri">
+        /// Source URI
+        /// </param>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
+        /// <param name="readOnly">
+        /// Read-only flag
+        /// </param>
+        /// <param name="forceFileSystemType">
+        /// For disk images: force specific filesystem type
+        /// </param>
+        /// <returns>
+        /// Mount information
+        /// </returns>
         public MountInfo Mount(string providerType, string uri, string volumeId, bool readOnly, string? forceFileSystemType = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -225,7 +245,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Unmounts a volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
         public void Unmount(string volumeId)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -257,7 +279,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets all mounted volumes across all providers.
         /// </summary>
-        /// <returns>Array of all mount information</returns>
+        /// <returns>
+        /// Array of all mount information
+        /// </returns>
         public MountInfo[] GetAllMounts()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -267,8 +291,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets mount information for a specific volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
-        /// <returns>Mount information, or null if not found</returns>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
+        /// <returns>
+        /// Mount information, or null if not found
+        /// </returns>
         public MountInfo? GetMountInfo(string volumeId)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -278,8 +306,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets the provider for a specific volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
-        /// <returns>Volume provider, or null if not found</returns>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
+        /// <returns>
+        /// Volume provider, or null if not found
+        /// </returns>
         public IVolumeProvider? GetProvider(string volumeId)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -289,7 +321,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets the directory entry cache.
         /// </summary>
-        /// <returns>Dentry cache, or null if caching is disabled</returns>
+        /// <returns>
+        /// Dentry cache, or null if caching is disabled
+        /// </returns>
         public VfsDentryCache? GetDentryCache()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -299,7 +333,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets the file metadata cache.
         /// </summary>
-        /// <returns>Metadata cache, or null if caching is disabled</returns>
+        /// <returns>
+        /// Metadata cache, or null if caching is disabled
+        /// </returns>
         public VfsMetadataCache? GetMetadataCache()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);

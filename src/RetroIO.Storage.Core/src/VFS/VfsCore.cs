@@ -40,9 +40,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Initializes a new VfsCore instance.
         /// </summary>
-        /// <param name="enablePersistence">Enable automatic save/load of mount configuration</param>
-        /// <param name="configPath">Path to configuration file (null = use default)</param>
-        /// <param name="cacheConfig">Cache configuration (null = use default)</param>
+        /// <param name="enablePersistence">
+        /// Enable automatic save/load of mount configuration
+        /// </param>
+        /// <param name="configPath">
+        /// Path to configuration file (null = use default)
+        /// </param>
+        /// <param name="cacheConfig">
+        /// Cache configuration (null = use default)
+        /// </param>
         public VfsCore(bool enablePersistence = true, string? configPath = null, VfsCacheConfiguration? cacheConfig = null)
         {
             _vfs = new RetroVFS(enablePersistence, configPath, cacheConfig);
@@ -56,7 +62,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Registers a volume provider with the VFS.
         /// </summary>
-        /// <param name="provider">Provider to register</param>
+        /// <param name="provider">
+        /// Provider to register
+        /// </param>
         public void RegisterProvider(IVolumeProvider provider)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -75,12 +83,24 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Mounts a volume.
         /// </summary>
-        /// <param name="providerType">Provider type (diskimage, native, tnfs, etc.)</param>
-        /// <param name="uri">Source URI</param>
-        /// <param name="volumeId">Volume identifier</param>
-        /// <param name="readOnly">Read-only flag</param>
-        /// <param name="forceFileSystemType">Force specific filesystem type</param>
-        /// <returns>Mount information</returns>
+        /// <param name="providerType">
+        /// Provider type (diskimage, native, tnfs, etc.)
+        /// </param>
+        /// <param name="uri">
+        /// Source URI
+        /// </param>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
+        /// <param name="readOnly">
+        /// Read-only flag
+        /// </param>
+        /// <param name="forceFileSystemType">
+        /// Force specific filesystem type
+        /// </param>
+        /// <returns>
+        /// Mount information
+        /// </returns>
         public MountInfo Mount(string providerType, string uri, string volumeId, bool readOnly, string? forceFileSystemType = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -90,7 +110,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Unmounts a volume and invalidates all cache entries for that volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
         public void Unmount(string volumeId)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -100,7 +122,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets all mounted volumes.
         /// </summary>
-        /// <returns>Array of mount information</returns>
+        /// <returns>
+        /// Array of mount information
+        /// </returns>
         public MountInfo[] GetAllMounts()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -110,8 +134,12 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets mount information for a specific volume.
         /// </summary>
-        /// <param name="volumeId">Volume identifier</param>
-        /// <returns>Mount information, or null if not found</returns>
+        /// <param name="volumeId">
+        /// Volume identifier
+        /// </param>
+        /// <returns>
+        /// Mount information, or null if not found
+        /// </returns>
         public MountInfo? GetMountInfo(string volumeId)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -121,10 +149,18 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Reads a directory listing with automatic caching.
         /// </summary>
-        /// <param name="urnPath">URN path to directory</param>
-        /// <param name="context">URN context (optional, can be null for basic operations)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>Directory entries</returns>
+        /// <param name="urnPath">
+        /// URN path to directory
+        /// </param>
+        /// <param name="context">
+        /// URN context (optional, can be null for basic operations)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
+        /// <returns>
+        /// Directory entries
+        /// </returns>
         public async Task<DirectoryEntry[]> ReadDirectoryAsync(string urnPath, UrnContext? context = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -169,10 +205,18 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets file metadata with automatic caching.
         /// </summary>
-        /// <param name="urnPath">URN path to file</param>
-        /// <param name="context">URN context (optional, can be null for basic operations)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>File metadata</returns>
+        /// <param name="urnPath">
+        /// URN path to file
+        /// </param>
+        /// <param name="context">
+        /// URN context (optional, can be null for basic operations)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
+        /// <returns>
+        /// File metadata
+        /// </returns>
         public async Task<FileMetadata> GetMetadataAsync(string urnPath, UrnContext? context = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -220,10 +264,18 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Writes data to a file and invalidates cache.
         /// </summary>
-        /// <param name="urnPath">URN path to file</param>
-        /// <param name="data">Data to write</param>
-        /// <param name="context">URN context (optional, can be null for basic operations)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
+        /// <param name="urnPath">
+        /// URN path to file
+        /// </param>
+        /// <param name="data">
+        /// Data to write
+        /// </param>
+        /// <param name="context">
+        /// URN context (optional, can be null for basic operations)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
         public async Task WriteFileAsync(string urnPath, byte[] data, UrnContext? context = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -255,9 +307,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Deletes a file and invalidates cache.
         /// </summary>
-        /// <param name="urnPath">URN path to file</param>
-        /// <param name="context">URN context (optional, can be null for basic operations)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
+        /// <param name="urnPath">
+        /// URN path to file
+        /// </param>
+        /// <param name="context">
+        /// URN context (optional, can be null for basic operations)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
         public async Task DeleteFileAsync(string urnPath, UrnContext? context = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -290,9 +348,15 @@ namespace RetroIO.Storage.Core.VFS
         /// cache entries. Providers that cannot create directories throw
         /// <see cref="NotSupportedException"/>.
         /// </summary>
-        /// <param name="urnPath">URN path to the directory to create</param>
-        /// <param name="context">URN context (optional)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
+        /// <param name="urnPath">
+        /// URN path to the directory to create
+        /// </param>
+        /// <param name="context">
+        /// URN context (optional)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
         public async Task CreateDirectoryAsync(string urnPath, UrnContext? context = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -319,10 +383,18 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Opens a file for reading.
         /// </summary>
-        /// <param name="urnPath">URN path to file</param>
-        /// <param name="context">URN context (optional, can be null for basic operations)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>Stream to read file data</returns>
+        /// <param name="urnPath">
+        /// URN path to file
+        /// </param>
+        /// <param name="context">
+        /// URN context (optional, can be null for basic operations)
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancellation token
+        /// </param>
+        /// <returns>
+        /// Stream to read file data
+        /// </returns>
         public async Task<Stream> OpenReadAsync(string urnPath, UrnContext? context = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -357,7 +429,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Gets cache statistics.
         /// </summary>
-        /// <returns>Tuple of (dentry cache stats, metadata cache stats)</returns>
+        /// <returns>
+        /// Tuple of (dentry cache stats, metadata cache stats)
+        /// </returns>
         public (CacheStatistics? DentryCacheStats, CacheStatistics? MetadataCacheStats) GetCacheStatistics()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -367,8 +441,12 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Parses a URN to extract volume ID and determine if it's a remote filesystem.
         /// </summary>
-        /// <param name="urnPath">URN path</param>
-        /// <returns>Tuple of (volumeId, isRemote)</returns>
+        /// <param name="urnPath">
+        /// URN path
+        /// </param>
+        /// <returns>
+        /// Tuple of (volumeId, isRemote)
+        /// </returns>
         private (string VolumeId, string SubPath, bool IsRemote) ParseUrnForCaching(string urnPath)
         {
             // URN format: urn:retrofs:<transport>:<volume-id>:<path>
@@ -399,7 +477,9 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Invalidates cache entries for a file and its parent directory.
         /// </summary>
-        /// <param name="urnPath">URN path to file</param>
+        /// <param name="urnPath">
+        /// URN path to file
+        /// </param>
         private void InvalidateCacheForFile(string urnPath)
         {
             // Invalidate metadata for the file itself

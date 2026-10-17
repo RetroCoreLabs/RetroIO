@@ -56,8 +56,12 @@ namespace RetroIO.Storage.Core
         /// Detects partition table from a disk image file.
         /// Tries BSD first, then MBR, then GPT (future).
         /// </summary>
-        /// <param name="imagePath">Path to disk image file</param>
-        /// <returns>Detection result with partition metadata</returns>
+        /// <param name="imagePath">
+        /// Path to disk image file
+        /// </param>
+        /// <returns>
+        /// Detection result with partition metadata
+        /// </returns>
         public static PartitionDetectionResult DetectFromFile(string imagePath)
         {
             // Try Sun disk label first (at sector 0, most distinctive magic)

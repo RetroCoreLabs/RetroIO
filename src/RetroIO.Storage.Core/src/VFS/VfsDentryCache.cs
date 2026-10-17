@@ -44,9 +44,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Initializes a new dentry cache.
         /// </summary>
-        /// <param name="maxEntries">Maximum number of cached directory listings</param>
-        /// <param name="defaultTtl">TTL for local filesystem entries</param>
-        /// <param name="remoteTtl">TTL for remote filesystem entries (usually shorter)</param>
+        /// <param name="maxEntries">
+        /// Maximum number of cached directory listings
+        /// </param>
+        /// <param name="defaultTtl">
+        /// TTL for local filesystem entries
+        /// </param>
+        /// <param name="remoteTtl">
+        /// TTL for remote filesystem entries (usually shorter)
+        /// </param>
         public VfsDentryCache(int maxEntries = 1000, TimeSpan? defaultTtl = null, TimeSpan? remoteTtl = null)
         {
             if (maxEntries <= 0)
@@ -61,9 +67,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Try to get a cached directory listing.
         /// </summary>
-        /// <param name="urnPath">URN path to directory (e.g., "urn:retrofs:local:0:d64:/SYSTEM")</param>
-        /// <param name="isRemote">Whether this is a remote filesystem (affects TTL)</param>
-        /// <returns>Cached directory entries, or null if not in cache or expired</returns>
+        /// <param name="urnPath">
+        /// URN path to directory (e.g., "urn:retrofs:local:0:d64:/SYSTEM")
+        /// </param>
+        /// <param name="isRemote">
+        /// Whether this is a remote filesystem (affects TTL)
+        /// </param>
+        /// <returns>
+        /// Cached directory entries, or null if not in cache or expired
+        /// </returns>
         public DirectoryEntry[]? TryGetDirectory(string urnPath, bool isRemote)
         {
             if (string.IsNullOrEmpty(urnPath))
@@ -94,9 +106,15 @@ namespace RetroIO.Storage.Core.VFS
         /// <summary>
         /// Cache a directory listing.
         /// </summary>
-        /// <param name="urnPath">URN path to directory</param>
-        /// <param name="entries">Directory entries to cache</param>
-        /// <param name="isRemote">Whether this is a remote filesystem</param>
+        /// <param name="urnPath">
+        /// URN path to directory
+        /// </param>
+        /// <param name="entries">
+        /// Directory entries to cache
+        /// </param>
+        /// <param name="isRemote">
+        /// Whether this is a remote filesystem
+        /// </param>
         public void CacheDirectory(string urnPath, DirectoryEntry[] entries, bool isRemote)
         {
             if (string.IsNullOrEmpty(urnPath))
@@ -125,7 +143,9 @@ namespace RetroIO.Storage.Core.VFS
         /// Invalidate a specific directory entry.
         /// Called when the directory is modified (file added/deleted/renamed).
         /// </summary>
-        /// <param name="urnPath">URN path to directory to invalidate</param>
+        /// <param name="urnPath">
+        /// URN path to directory to invalidate
+        /// </param>
         public void Invalidate(string urnPath)
         {
             if (string.IsNullOrEmpty(urnPath))
@@ -141,7 +161,9 @@ namespace RetroIO.Storage.Core.VFS
         /// Invalidate all directory entries with a specific path prefix.
         /// Used when unmounting a volume or invalidating an entire subtree.
         /// </summary>
-        /// <param name="urnPathPrefix">URN path prefix (e.g., "urn:retrofs:local:0:d64:")</param>
+        /// <param name="urnPathPrefix">
+        /// URN path prefix (e.g., "urn:retrofs:local:0:d64:")
+        /// </param>
         public void InvalidatePrefix(string urnPathPrefix)
         {
             if (string.IsNullOrEmpty(urnPathPrefix))
@@ -242,25 +264,39 @@ namespace RetroIO.Storage.Core.VFS
     /// </summary>
     public class CacheStatistics
     {
-        /// <summary>Number of cache hits (found in cache)</summary>
+        /// <summary>
+        /// Number of cache hits (found in cache)
+        /// </summary>
         public long Hits { get; set; }
 
-        /// <summary>Number of cache misses (not found or expired)</summary>
+        /// <summary>
+        /// Number of cache misses (not found or expired)
+        /// </summary>
         public long Misses { get; set; }
 
-        /// <summary>Number of entries evicted due to size limit</summary>
+        /// <summary>
+        /// Number of entries evicted due to size limit
+        /// </summary>
         public long Evictions { get; set; }
 
-        /// <summary>Number of entries explicitly invalidated</summary>
+        /// <summary>
+        /// Number of entries explicitly invalidated
+        /// </summary>
         public long Invalidations { get; set; }
 
-        /// <summary>Current number of cached entries</summary>
+        /// <summary>
+        /// Current number of cached entries
+        /// </summary>
         public int CurrentSize { get; set; }
 
-        /// <summary>Maximum cache size</summary>
+        /// <summary>
+        /// Maximum cache size
+        /// </summary>
         public int MaxSize { get; set; }
 
-        /// <summary>Cache hit rate (0.0 to 1.0)</summary>
+        /// <summary>
+        /// Cache hit rate (0.0 to 1.0)
+        /// </summary>
         public double HitRate
         {
             get

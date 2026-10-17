@@ -80,9 +80,15 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets a property value cast to the specified type.
         /// </summary>
-        /// <typeparam name="T">Type to cast to</typeparam>
-        /// <param name="key">Property key</param>
-        /// <returns>Property value, or default(T) if not found</returns>
+        /// <typeparam name="T">
+        /// Type to cast to
+        /// </typeparam>
+        /// <param name="key">
+        /// Property key
+        /// </param>
+        /// <returns>
+        /// Property value, or default(T) if not found
+        /// </returns>
         public T? GetProperty<T>(string key)
         {
             if (Properties.TryGetValue(key, out object? value))
@@ -98,8 +104,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Sets a property value.
         /// </summary>
-        /// <param name="key">Property key</param>
-        /// <param name="value">Property value</param>
+        /// <param name="key">
+        /// Property key
+        /// </param>
+        /// <param name="value">
+        /// Property value
+        /// </param>
         public void SetProperty(string key, object value)
         {
             Properties[key] = value;
@@ -108,8 +118,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Checks if a property exists.
         /// </summary>
-        /// <param name="key">Property key</param>
-        /// <returns>True if property exists</returns>
+        /// <param name="key">
+        /// Property key
+        /// </param>
+        /// <returns>
+        /// True if property exists
+        /// </returns>
         public bool HasProperty(string key)
         {
             return Properties.ContainsKey(key);

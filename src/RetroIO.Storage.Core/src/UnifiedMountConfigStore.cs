@@ -57,9 +57,15 @@ namespace RetroIO.Storage.Core
         /// Saves unified mount configuration to JSON file.
         /// Creates directory if it doesn't exist.
         /// </summary>
-        /// <param name="config">Configuration to save</param>
-        /// <param name="filePath">Path to configuration file (null = use default)</param>
-        /// <exception cref="IOException">Thrown when save operation fails</exception>
+        /// <param name="config">
+        /// Configuration to save
+        /// </param>
+        /// <param name="filePath">
+        /// Path to configuration file (null = use default)
+        /// </param>
+        /// <exception cref="IOException">
+        /// Thrown when save operation fails
+        /// </exception>
         public static void Save(UnifiedMountConfig config, string? filePath = null)
         {
             if (config == null)
@@ -95,9 +101,15 @@ namespace RetroIO.Storage.Core
         /// Loads unified mount configuration from JSON file.
         /// Returns empty configuration if file doesn't exist.
         /// </summary>
-        /// <param name="filePath">Path to configuration file (null = use default)</param>
-        /// <returns>Loaded configuration, or empty if file doesn't exist</returns>
-        /// <exception cref="IOException">Thrown when load operation fails</exception>
+        /// <param name="filePath">
+        /// Path to configuration file (null = use default)
+        /// </param>
+        /// <returns>
+        /// Loaded configuration, or empty if file doesn't exist
+        /// </returns>
+        /// <exception cref="IOException">
+        /// Thrown when load operation fails
+        /// </exception>
         public static UnifiedMountConfig Load(string? filePath = null)
         {
             filePath ??= GetDefaultConfigPath();
@@ -129,7 +141,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Deletes the unified mount configuration file.
         /// </summary>
-        /// <param name="filePath">Path to configuration file (null = use default)</param>
+        /// <param name="filePath">
+        /// Path to configuration file (null = use default)
+        /// </param>
         public static void Delete(string? filePath = null)
         {
             filePath ??= GetDefaultConfigPath();

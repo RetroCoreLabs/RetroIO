@@ -64,9 +64,15 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Adds a section and returns it, so callers can chain field additions.
         /// </summary>
-        /// <param name="title">Section heading, e.g. "Geometry".</param>
-        /// <param name="icon">Optional leading emoji/glyph for the heading.</param>
-        /// <returns>The newly added section.</returns>
+        /// <param name="title">
+        /// Section heading, e.g. "Geometry".
+        /// </param>
+        /// <param name="icon">
+        /// Optional leading emoji/glyph for the heading.
+        /// </param>
+        /// <returns>
+        /// The newly added section.
+        /// </returns>
         public VolumeInfoSection AddSection(string title, string icon = "")
         {
             var section = new VolumeInfoSection { Title = title, Icon = icon };
@@ -80,22 +86,36 @@ namespace RetroIO.Storage.Core
     /// </summary>
     public sealed class VolumeInfoSection
     {
-        /// <summary>Section heading text.</summary>
+        /// <summary>
+        /// Section heading text.
+        /// </summary>
         public string Title { get; set; } = string.Empty;
 
-        /// <summary>Optional leading emoji/glyph shown before the title.</summary>
+        /// <summary>
+        /// Optional leading emoji/glyph shown before the title.
+        /// </summary>
         public string Icon { get; set; } = string.Empty;
 
-        /// <summary>Fields in display order.</summary>
+        /// <summary>
+        /// Fields in display order.
+        /// </summary>
         public List<VolumeInfoField> Fields { get; } = new List<VolumeInfoField>();
 
         /// <summary>
         /// Appends a field to this section.
         /// </summary>
-        /// <param name="label">Field name shown on the left.</param>
-        /// <param name="value">Pre-formatted value shown on the right.</param>
-        /// <param name="detail">Optional secondary text, e.g. a raw hex/octal form.</param>
-        /// <returns>This section, for chaining.</returns>
+        /// <param name="label">
+        /// Field name shown on the left.
+        /// </param>
+        /// <param name="value">
+        /// Pre-formatted value shown on the right.
+        /// </param>
+        /// <param name="detail">
+        /// Optional secondary text, e.g. a raw hex/octal form.
+        /// </param>
+        /// <returns>
+        /// This section, for chaining.
+        /// </returns>
         public VolumeInfoSection Add(string label, string value, string detail = "")
         {
             Fields.Add(new VolumeInfoField { Label = label, Value = value, Detail = detail });
@@ -108,10 +128,14 @@ namespace RetroIO.Storage.Core
     /// </summary>
     public sealed class VolumeInfoField
     {
-        /// <summary>Field name.</summary>
+        /// <summary>
+        /// Field name.
+        /// </summary>
         public string Label { get; set; } = string.Empty;
 
-        /// <summary>Pre-formatted value.</summary>
+        /// <summary>
+        /// Pre-formatted value.
+        /// </summary>
         public string Value { get; set; } = string.Empty;
 
         /// <summary>
@@ -136,7 +160,9 @@ namespace RetroIO.Storage.Core
         /// </summary>
         public string UnitName { get; set; } = "block";
 
-        /// <summary>Size of one unit in bytes, for the legend. 0 when not meaningful.</summary>
+        /// <summary>
+        /// Size of one unit in bytes, for the legend. 0 when not meaningful.
+        /// </summary>
         public int UnitSizeBytes { get; set; }
     }
 
@@ -145,10 +171,14 @@ namespace RetroIO.Storage.Core
     /// </summary>
     public enum VolumeAllocationState : byte
     {
-        /// <summary>Unit is free and allocatable.</summary>
+        /// <summary>
+        /// Unit is free and allocatable.
+        /// </summary>
         Free = 0,
 
-        /// <summary>Unit is in use.</summary>
+        /// <summary>
+        /// Unit is in use.
+        /// </summary>
         Used = 1,
 
         /// <summary>
@@ -157,7 +187,9 @@ namespace RetroIO.Storage.Core
         /// </summary>
         Beyond = 2,
 
-        /// <summary>Unit is reserved by the filesystem (metadata, boot area, superblock).</summary>
+        /// <summary>
+        /// Unit is reserved by the filesystem (metadata, boot area, superblock).
+        /// </summary>
         Reserved = 3
     }
 
@@ -171,7 +203,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Builds a description of the currently mounted volume.
         /// </summary>
-        /// <returns>Volume info, or null when nothing is mounted.</returns>
+        /// <returns>
+        /// Volume info, or null when nothing is mounted.
+        /// </returns>
         VolumeInfo? GetVolumeInfo();
     }
 }

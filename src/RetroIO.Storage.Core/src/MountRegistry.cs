@@ -19,6 +19,9 @@ namespace RetroIO.Storage.Core
         private readonly Dictionary<string, MountRegistryEntry> _mounts;
         private readonly object _lock = new object();
 
+        /// <summary>
+        /// Creates an empty registry. Volume ids are compared without regard to case.
+        /// </summary>
         public MountRegistry()
         {
             _mounts = new Dictionary<string, MountRegistryEntry>(StringComparer.OrdinalIgnoreCase);
@@ -27,8 +30,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Registers a mount with the central registry.
         /// </summary>
-        /// <param name="mountInfo">Mount information</param>
-        /// <param name="provider">Provider that owns this mount</param>
+        /// <param name="mountInfo">
+        /// Mount information
+        /// </param>
+        /// <param name="provider">
+        /// Provider that owns this mount
+        /// </param>
         public void RegisterMount(MountInfo mountInfo, IVolumeProvider provider)
         {
             if (mountInfo == null)
@@ -59,7 +66,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Unregisters a mount from the central registry.
         /// </summary>
-        /// <param name="volumeId">Volume ID to unregister</param>
+        /// <param name="volumeId">
+        /// Volume ID to unregister
+        /// </param>
         public void UnregisterMount(string volumeId)
         {
             lock (_lock)
@@ -71,7 +80,9 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets all registered mounts.
         /// </summary>
-        /// <returns>Array of all mount information</returns>
+        /// <returns>
+        /// Array of all mount information
+        /// </returns>
         public MountInfo[] GetAllMounts()
         {
             lock (_lock)
@@ -93,8 +104,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets mount information by volume ID.
         /// </summary>
-        /// <param name="volumeId">Volume ID</param>
-        /// <returns>Mount information, or null if not found</returns>
+        /// <param name="volumeId">
+        /// Volume ID
+        /// </param>
+        /// <returns>
+        /// Mount information, or null if not found
+        /// </returns>
         public MountInfo? GetMountInfo(string volumeId)
         {
             lock (_lock)
@@ -110,8 +125,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Gets the provider that owns a specific mount.
         /// </summary>
-        /// <param name="volumeId">Volume ID</param>
-        /// <returns>Volume provider, or null if not found</returns>
+        /// <param name="volumeId">
+        /// Volume ID
+        /// </param>
+        /// <returns>
+        /// Volume provider, or null if not found
+        /// </returns>
         public IVolumeProvider? GetProvider(string volumeId)
         {
             lock (_lock)
@@ -127,8 +146,12 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Checks if a volume ID is already registered.
         /// </summary>
-        /// <param name="volumeId">Volume ID to check</param>
-        /// <returns>True if registered, false otherwise</returns>
+        /// <param name="volumeId">
+        /// Volume ID to check
+        /// </param>
+        /// <returns>
+        /// True if registered, false otherwise
+        /// </returns>
         public bool IsRegistered(string volumeId)
         {
             lock (_lock)
