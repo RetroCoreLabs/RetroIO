@@ -25,4 +25,4 @@ docfx src/docfx/docfx.json
 
 ## Live site
 
-<https://retrocorelabs.github.io/retroio/>
+<https://retrocorelabs.github.io/RetroIO/>
