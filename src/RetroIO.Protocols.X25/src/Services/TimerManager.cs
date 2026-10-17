@@ -23,6 +23,15 @@ namespace RetroIO.Protocols.X25.Services
         private readonly object _timerLock = new();
         private bool _disposed;
 
+        /// <summary>
+        /// Creates a timer manager with no timers.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public TimerManager(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -139,6 +148,9 @@ namespace RetroIO.Protocols.X25.Services
             }
         }
 
+        /// <summary>
+        /// Disposes all timers and clears the timer table. Calling it again does nothing.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)

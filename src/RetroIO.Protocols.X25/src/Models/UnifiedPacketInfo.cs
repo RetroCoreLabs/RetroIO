@@ -269,9 +269,21 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class HdlcLayerInfo
     {
+        /// <summary>
+        /// Gets or sets the identifier of the HDLC frame.
+        /// </summary>
         public long FrameId { get; set; }
+        /// <summary>
+        /// Gets or sets whether the frame check sequence was valid.
+        /// </summary>
         public bool FcsValid { get; set; }
+        /// <summary>
+        /// Gets or sets the raw frame bytes.
+        /// </summary>
         public byte[] FrameData { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the frame length in bytes.
+        /// </summary>
         public int Length { get; set; }
     }
     
@@ -280,13 +292,37 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class LapbLayerInfo
     {
+        /// <summary>
+        /// Gets or sets the LAPB frame type.
+        /// </summary>
         public LapbFrameType FrameType { get; set; }
+        /// <summary>
+        /// Gets or sets the LAPB address byte.
+        /// </summary>
         public byte Address { get; set; }
+        /// <summary>
+        /// Gets or sets the LAPB control byte.
+        /// </summary>
         public byte Control { get; set; }
+        /// <summary>
+        /// Gets or sets the send sequence number N(S), set for information frames, otherwise null.
+        /// </summary>
         public byte? NS { get; set; }       // Send sequence number (for I-frames)
+        /// <summary>
+        /// Gets or sets the receive sequence number N(R), or null when the frame has none.
+        /// </summary>
         public byte? NR { get; set; }       // Receive sequence number
+        /// <summary>
+        /// Gets or sets the poll/final bit of the control byte.
+        /// </summary>
         public bool PollFinal { get; set; }
+        /// <summary>
+        /// Gets or sets the information field bytes.
+        /// </summary>
         public byte[] Information { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the length of the information field in bytes.
+        /// </summary>
         public int InformationLength { get; set; }
     }
     
@@ -295,12 +331,33 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class X25LayerInfo
     {
+        /// <summary>
+        /// Gets or sets the X.25 packet type.
+        /// </summary>
         public X25PacketType PacketType { get; set; }
+        /// <summary>
+        /// Gets or sets the logical channel number.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the identifier of the packet.
+        /// </summary>
         public long PacketId { get; set; }
+        /// <summary>
+        /// Gets or sets the called address, or null when the packet has none.
+        /// </summary>
         public string? CalledAddress { get; set; }
+        /// <summary>
+        /// Gets or sets the calling address, or null when the packet has none.
+        /// </summary>
         public string? CallingAddress { get; set; }
+        /// <summary>
+        /// Gets or sets the user data bytes.
+        /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the original packet this information was taken from, or null.
+        /// </summary>
         public X25Packet? Packet { get; set; }  // Reference to original packet if needed
     }
 }

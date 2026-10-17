@@ -23,6 +23,12 @@ namespace RetroIO.Protocols.X25.Protocols
         private readonly ILogger? _logger;
         
 
+        /// <summary>
+        /// Creates the X.29 helper.
+        /// </summary>
+        /// <param name="logger">
+        /// Optional diagnostics logger; may be null.
+        /// </param>
         public X29(ILogger? logger = null)
         {
             _logger = logger;
@@ -935,12 +941,27 @@ namespace RetroIO.Protocols.X25.Protocols
             set => Type = (byte)value;
         }
         
+        /// <summary>
+        /// Gets or sets whether the message was parsed as valid. The default is true.
+        /// </summary>
         public bool IsValid { get; set; } = true;
+        /// <summary>
+        /// Gets or sets the error text when the message is not valid, or null.
+        /// </summary>
         public string? ErrorMessage { get; set; }
+        /// <summary>
+        /// Gets or sets the raw message bytes, or null.
+        /// </summary>
         public byte[]? RawData { get; set; }
         
         // Parameter-related messages
+        /// <summary>
+        /// Gets or sets the parameter number and value pairs carried by the message.
+        /// </summary>
         public Dictionary<byte, byte> Parameters { get; set; } = new Dictionary<byte, byte>();
+        /// <summary>
+        /// Gets or sets the parameter numbers listed in the message.
+        /// </summary>
         public List<byte> ParameterNumbers { get; set; } = new List<byte>();
         
         // Error messages
@@ -959,8 +980,12 @@ namespace RetroIO.Protocols.X25.Protocols
             set => ErrorType = (byte)value;
         }
         
+        /// <summary>
+        /// Gets or sets the extra bytes after the error type in an error message, or null.
+        /// </summary>
         public byte[]? ErrorData { get; set; }
         
+        /// <inheritdoc/>
         public override string ToString()
         {
             if (!IsValid)
@@ -991,9 +1016,21 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class X29ValidationResult
     {
+        /// <summary>
+        /// Gets or sets whether the message passed validation.
+        /// </summary>
         public bool IsValid { get; set; }
+        /// <summary>
+        /// Gets or sets the error text when validation failed, or null.
+        /// </summary>
         public string? ErrorMessage { get; set; }
+        /// <summary>
+        /// Gets or sets the message type byte.
+        /// </summary>
         public byte MessageType { get; set; }
+        /// <summary>
+        /// Gets or sets the length of the validated data in bytes.
+        /// </summary>
         public int MessageLength { get; set; }
     }
 }

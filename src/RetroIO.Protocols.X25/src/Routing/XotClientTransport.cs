@@ -30,6 +30,18 @@ namespace RetroIO.Protocols.X25.Transport
         private readonly TransportStatistics _statistics;
         private readonly Dictionary<string, XotConnection> _connections = new Dictionary<string, XotConnection>();
 
+        /// <summary>
+        /// Creates the XOT client transport in the stopped state.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="config">
+        /// The client transport configuration.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> or <paramref name="config"/> is null.
+        /// </exception>
         public XotClientTransport(ILogger logger, XotClientConfig config)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -45,13 +57,16 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Set the interface config (provides RemoteIPAddress and RemotePort)
-        /// </summary>
-        /// <summary>
         /// The interface configuration this transport was created from, if any.
         /// </summary>
         public XotInterfaceConfig? InterfaceConfig => _interfaceConfig;
 
+        /// <summary>
+        /// Sets the interface configuration that supplies the remote IP address and port.
+        /// </summary>
+        /// <param name="interfaceConfig">
+        /// The interface configuration.
+        /// </param>
         public void SetInterfaceConfig(XotInterfaceConfig interfaceConfig)
         {
             _interfaceConfig = interfaceConfig;
@@ -64,8 +79,11 @@ namespace RetroIO.Protocols.X25.Transport
 
         #region ITransportInterface Implementation
 
+        /// <inheritdoc/>
         public string Name => _config.Name;
+        /// <inheritdoc/>
         public TransportType Type => TransportType.XOT_Client;
+        /// <inheritdoc/>
         public TransportStatus Status => _status;
 
         /// <summary>
@@ -84,6 +102,15 @@ namespace RetroIO.Protocols.X25.Transport
             return ip != null && SendX25Packet(ip, x25Packet);
         }
 
+        /// <summary>
+        /// Connects to the configured remote XOT gateway and places the call through the installed packet layer.
+        /// </summary>
+        /// <param name="callRequest">
+        /// The call request to place.
+        /// </param>
+        /// <returns>
+        /// True when the packet layer accepted the call. False when the transport is not active, no remote IP is configured, the connection failed, no packet layer is installed, or an error occurred.
+        /// </returns>
         public bool PlaceCall(X25CallRequest callRequest)
         {
             if (_status != TransportStatus.Active)
@@ -140,6 +167,15 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <summary>
+        /// Does nothing except log a warning, because a client transport does not accept incoming calls.
+        /// </summary>
+        /// <param name="callRequest">
+        /// The call request, which is ignored.
+        /// </param>
+        /// <returns>
+        /// Always false.
+        /// </returns>
         public bool AcceptCall(X25CallRequest callRequest)
         {
             // XOT Client transport typically doesn't accept incoming calls
@@ -148,6 +184,18 @@ namespace RetroIO.Protocols.X25.Transport
             return false;
         }
 
+        /// <summary>
+        /// Does nothing except log a warning, because a client transport does not reject incoming calls.
+        /// </summary>
+        /// <param name="callRequest">
+        /// The call request, which is ignored.
+        /// </param>
+        /// <param name="cause">
+        /// The clear cause code, which is ignored.
+        /// </param>
+        /// <returns>
+        /// Always false.
+        /// </returns>
         public bool RejectCall(X25CallRequest callRequest, byte cause)
         {
             // XOT Client transport typically doesn't reject incoming calls
@@ -155,6 +203,12 @@ namespace RetroIO.Protocols.X25.Transport
             return false;
         }
 
+        /// <summary>
+        /// Moves the transport to the active state; TCP connections are made later when a call is placed.
+        /// </summary>
+        /// <returns>
+        /// True when the transport is active afterwards, false when starting failed.
+        /// </returns>
         public bool Start()
         {
             if (_status != TransportStatus.Stopped)
@@ -184,6 +238,9 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <summary>
+        /// Closes all connections and moves the transport to the stopped state.
+        /// </summary>
         public void Stop()
         {
             if (_status == TransportStatus.Stopped || _status == TransportStatus.Stopping)
@@ -217,6 +274,7 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <inheritdoc/>
         public TransportStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
@@ -225,9 +283,12 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
 #pragma warning disable CS0067 // Event required by interface, not used in this implementation
+        /// <inheritdoc/>
         public event EventHandler<X25CallRequest>? IncomingCall;
 #pragma warning restore CS0067
+        /// <inheritdoc/>
         public event EventHandler<TransportStatusEventArgs>? StatusChanged;
+        /// <inheritdoc/>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
 
         #endregion

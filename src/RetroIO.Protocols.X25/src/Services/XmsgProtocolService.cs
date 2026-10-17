@@ -22,6 +22,24 @@ namespace RetroIO.Protocols.X25.Services
         private readonly LocalXMSGProtocol _xmsgProtocol;
         private readonly string[] _localAddresses;
         
+        /// <summary>
+        /// Creates the XMSG service.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="xmsgProtocol">
+        /// The local XMSG protocol handler.
+        /// </param>
+        /// <param name="localAddresses">
+        /// The local addresses this service handles; at least one is required.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when any argument is null.
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="localAddresses"/> is empty.
+        /// </exception>
         public XmsgProtocolService(ILogger logger, LocalXMSGProtocol xmsgProtocol, params string[] localAddresses)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -35,8 +53,11 @@ namespace RetroIO.Protocols.X25.Services
                 string.Join(", ", _localAddresses));
         }
         
+        /// <inheritdoc/>
         public string ServiceName => "XMSG";
+        /// <inheritdoc/>
         public string[] LocalAddresses => _localAddresses;
+        /// <inheritdoc/>
         public int Priority => 200; // Higher priority than TAD for specific XMSG protocols
         
         /// <summary>

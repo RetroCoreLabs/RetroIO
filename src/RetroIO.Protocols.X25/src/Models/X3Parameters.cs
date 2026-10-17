@@ -24,27 +24,93 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public static class ParameterNumber
         {
+            /// <summary>
+            /// X.3 parameter number 1 (PAD escape from data transfer mode).
+            /// </summary>
             public const byte ESCAPE = 1;                    // PAD escape from data transfer mode
+            /// <summary>
+            /// X.3 parameter number 2 (Echo).
+            /// </summary>
             public const byte ECHO = 2;                     // Echo
+            /// <summary>
+            /// X.3 parameter number 3 (Data forwarding signal).
+            /// </summary>
             public const byte DATA_FORWARDING = 3;          // Data forwarding signal
+            /// <summary>
+            /// X.3 parameter number 4 (Idle timer delay).
+            /// </summary>
             public const byte IDLE_TIMER = 4;               // Idle timer delay
+            /// <summary>
+            /// X.3 parameter number 5 (Ancillary device control).
+            /// </summary>
             public const byte ANCILLARY_DEVICE_CONTROL = 5; // Ancillary device control
+            /// <summary>
+            /// X.3 parameter number 6 (Control of PAD service signals).
+            /// </summary>
             public const byte CONTROL_PAD_SERVICE_SIGNALS = 6; // Control of PAD service signals
+            /// <summary>
+            /// X.3 parameter number 7 (Operation of the procedure for break).
+            /// </summary>
             public const byte OPERATION_BREAKOUT_PROCEDURE = 7; // Operation of the procedure for break
+            /// <summary>
+            /// X.3 parameter number 8 (Discard output).
+            /// </summary>
             public const byte DISCARD_OUTPUT = 8;           // Discard output
+            /// <summary>
+            /// X.3 parameter number 9 (Padding after carriage return).
+            /// </summary>
             public const byte PADDING_AFTER_CR = 9;         // Padding after carriage return
+            /// <summary>
+            /// X.3 parameter number 10 (Line folding).
+            /// </summary>
             public const byte LINE_FOLDING = 10;            // Line folding
+            /// <summary>
+            /// X.3 parameter number 11 (Binary speed (not used)).
+            /// </summary>
             public const byte BINARY_SPEED = 11;            // Binary speed (not used)
+            /// <summary>
+            /// X.3 parameter number 12 (Flow control of the PAD).
+            /// </summary>
             public const byte FLOW_CONTROL_X_ON_X_OFF = 12; // Flow control of the PAD
+            /// <summary>
+            /// X.3 parameter number 13 (Linefeed insertion after carriage return).
+            /// </summary>
             public const byte LINE_FEED_INSERTION = 13;     // Linefeed insertion after carriage return
+            /// <summary>
+            /// X.3 parameter number 14 (Padding after line feed).
+            /// </summary>
             public const byte PADDING_AFTER_LINE_FEED = 14; // Padding after line feed
+            /// <summary>
+            /// X.3 parameter number 15 (Editing).
+            /// </summary>
             public const byte EDITING = 15;                 // Editing
+            /// <summary>
+            /// X.3 parameter number 16 (Character delete).
+            /// </summary>
             public const byte CHARACTER_DELETE = 16;        // Character delete
+            /// <summary>
+            /// X.3 parameter number 17 (Line delete).
+            /// </summary>
             public const byte LINE_DELETE = 17;             // Line delete
+            /// <summary>
+            /// X.3 parameter number 18 (Line display).
+            /// </summary>
             public const byte LINE_DISPLAY = 18;            // Line display
+            /// <summary>
+            /// X.3 parameter number 19 (Editing PAD service signals).
+            /// </summary>
             public const byte EDITING_PAD_SERVICE_SIGNALS = 19; // Editing PAD service signals
+            /// <summary>
+            /// X.3 parameter number 20 (Echo mask).
+            /// </summary>
             public const byte ECHO_MASK = 20;               // Echo mask
+            /// <summary>
+            /// X.3 parameter number 21 (Parity treatment).
+            /// </summary>
             public const byte PARITY_TREATMENT = 21;        // Parity treatment
+            /// <summary>
+            /// X.3 parameter number 22 (Page wait).
+            /// </summary>
             public const byte PAGE_WAIT = 22;               // Page wait
         }
 
@@ -53,27 +119,93 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public static class DefaultValue
         {
+            /// <summary>
+            /// Default value of the escape parameter: 1 (Enabled (DLE)).
+            /// </summary>
             public const byte ESCAPE = 1;                    // Enabled (DLE)
+            /// <summary>
+            /// Default value of the echo parameter: 1 (Enabled).
+            /// </summary>
             public const byte ECHO = 1;                     // Enabled
+            /// <summary>
+            /// Default value of the data forwarding parameter: 2 (Alphanumeric characters).
+            /// </summary>
             public const byte DATA_FORWARDING = 2;          // Alphanumeric characters
+            /// <summary>
+            /// Default value of the idle timer parameter: 0 (Disabled).
+            /// </summary>
             public const byte IDLE_TIMER = 0;               // Disabled
+            /// <summary>
+            /// Default value of the ancillary device control parameter: 0 (Disabled).
+            /// </summary>
             public const byte ANCILLARY_DEVICE_CONTROL = 0; // Disabled
+            /// <summary>
+            /// Default value of the control pad service signals parameter: 1 (Enabled).
+            /// </summary>
             public const byte CONTROL_PAD_SERVICE_SIGNALS = 1; // Enabled
+            /// <summary>
+            /// Default value of the operation breakout procedure parameter: 21 (BREAK forwarded).
+            /// </summary>
             public const byte OPERATION_BREAKOUT_PROCEDURE = 21; // BREAK forwarded
+            /// <summary>
+            /// Default value of the discard output parameter: 1 (Enabled on receipt of normal data).
+            /// </summary>
             public const byte DISCARD_OUTPUT = 1;           // Enabled on receipt of normal data
+            /// <summary>
+            /// Default value of the padding after cr parameter: 0 (No padding).
+            /// </summary>
             public const byte PADDING_AFTER_CR = 0;         // No padding
+            /// <summary>
+            /// Default value of the line folding parameter: 0 (Disabled).
+            /// </summary>
             public const byte LINE_FOLDING = 0;             // Disabled
+            /// <summary>
+            /// Default value of the binary speed parameter: 0 (Not used).
+            /// </summary>
             public const byte BINARY_SPEED = 0;             // Not used
+            /// <summary>
+            /// Default value of the flow control x on x off parameter: 0 (Disabled).
+            /// </summary>
             public const byte FLOW_CONTROL_X_ON_X_OFF = 0;  // Disabled
+            /// <summary>
+            /// Default value of the line feed insertion parameter: 0 (Disabled).
+            /// </summary>
             public const byte LINE_FEED_INSERTION = 0;      // Disabled
+            /// <summary>
+            /// Default value of the padding after line feed parameter: 0 (No padding).
+            /// </summary>
             public const byte PADDING_AFTER_LINE_FEED = 0;  // No padding
+            /// <summary>
+            /// Default value of the editing parameter: 1 (Enabled).
+            /// </summary>
             public const byte EDITING = 1;                  // Enabled
+            /// <summary>
+            /// Default value of the character delete parameter: 127 (DEL character).
+            /// </summary>
             public const byte CHARACTER_DELETE = 127;       // DEL character
+            /// <summary>
+            /// Default value of the line delete parameter: 24 (CAN character).
+            /// </summary>
             public const byte LINE_DELETE = 24;             // CAN character
+            /// <summary>
+            /// Default value of the line display parameter: 18 (DC2 character).
+            /// </summary>
             public const byte LINE_DISPLAY = 18;            // DC2 character
+            /// <summary>
+            /// Default value of the editing pad service signals parameter: 0 (Disabled).
+            /// </summary>
             public const byte EDITING_PAD_SERVICE_SIGNALS = 0; // Disabled
+            /// <summary>
+            /// Default value of the echo mask parameter: 0 (All characters echoed).
+            /// </summary>
             public const byte ECHO_MASK = 0;                // All characters echoed
+            /// <summary>
+            /// Default value of the parity treatment parameter: 0 (No parity checking).
+            /// </summary>
             public const byte PARITY_TREATMENT = 0;         // No parity checking
+            /// <summary>
+            /// Default value of the page wait parameter: 0 (Disabled).
+            /// </summary>
             public const byte PAGE_WAIT = 0;                // Disabled
         }
 
@@ -243,12 +375,33 @@ namespace RetroIO.Protocols.X25.Models
     public static class X29Messages
     {
         // Message types (Q-bit = 1)
+        /// <summary>
+        /// Message type code 0x02 for SET PARAMETERS.
+        /// </summary>
         public const byte SET_PARAMETERS = 0x02;
+        /// <summary>
+        /// Message type code 0x04 for READ PARAMETERS.
+        /// </summary>
         public const byte READ_PARAMETERS = 0x04;
+        /// <summary>
+        /// Message type code 0x06 for SET AND READ PARAMETERS.
+        /// </summary>
         public const byte SET_AND_READ_PARAMETERS = 0x06;
+        /// <summary>
+        /// Message type code 0x00 for PARAMETER INDICATION.
+        /// </summary>
         public const byte PARAMETER_INDICATION = 0x00;
+        /// <summary>
+        /// Message type code 0x01 for INVITATION TO CLEAR.
+        /// </summary>
         public const byte INVITATION_TO_CLEAR = 0x01;
+        /// <summary>
+        /// Message type code 0x03 for INDICATION OF BREAK.
+        /// </summary>
         public const byte INDICATION_OF_BREAK = 0x03;
+        /// <summary>
+        /// Message type code 0x05 for ERROR.
+        /// </summary>
         public const byte ERROR = 0x05;
         
         /// <summary>
@@ -379,12 +532,28 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class X29Message
     {
+        /// <summary>
+        /// Gets or sets the X.29 message type code.
+        /// </summary>
         public byte Type { get; set; }
+        /// <summary>
+        /// Gets or sets whether the message was parsed as valid.
+        /// </summary>
         public bool IsValid { get; set; }
+        /// <summary>
+        /// Gets or sets the parameter number and value pairs carried by the message.
+        /// </summary>
         public Dictionary<byte, byte> Parameters { get; set; } = new Dictionary<byte, byte>();
+        /// <summary>
+        /// Gets or sets the parameter numbers listed in the message, in the order they appeared.
+        /// </summary>
         public List<byte> ParameterNumbers { get; set; } = new List<byte>();
+        /// <summary>
+        /// Gets or sets the error type code carried by an error message.
+        /// </summary>
         public byte ErrorType { get; set; }
         
+        /// <inheritdoc/>
         public override string ToString()
         {
             return Type switch

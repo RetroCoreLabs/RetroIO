@@ -30,8 +30,17 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public enum PadMode
         {
+            /// <summary>
+            /// Command mode: the PAD accepts PAD commands.
+            /// </summary>
             Command,        // Command mode - accepting PAD commands
+            /// <summary>
+            /// Data transfer mode: data passes through unchanged.
+            /// </summary>
             DataTransfer,   // Data transfer mode - transparent data flow
+            /// <summary>
+            /// Escape mode: a temporary return to command mode.
+            /// </summary>
             Escape         // Escape mode - temporary return to command mode
         }
 
@@ -41,14 +50,41 @@ namespace RetroIO.Protocols.X25.Protocols
         [Flags]
         public enum ForwardingCondition
         {
+            /// <summary>
+            /// No forwarding condition.
+            /// </summary>
             None = 0,
+            /// <summary>
+            /// Data is forwarded when the idle timer expires.
+            /// </summary>
             Timer = 1,                      // Idle timer expiry
+            /// <summary>
+            /// Data is forwarded when a carriage return is received.
+            /// </summary>
             CarriageReturn = 2,             // CR character received
+            /// <summary>
+            /// Data is forwarded when another control character is received.
+            /// </summary>
             ControlCharacter = 4,           // Other control characters
+            /// <summary>
+            /// Data is forwarded when the input buffer is full.
+            /// </summary>
             BufferFull = 8,                 // Input buffer full
+            /// <summary>
+            /// Data is forwarded on an explicit forward request.
+            /// </summary>
             ManualForward = 16,             // Explicit forward request
+            /// <summary>
+            /// Every character is forwarded immediately.
+            /// </summary>
             CharacterByCharacter = 32,      // Every character forwarded immediately
+            /// <summary>
+            /// Data is forwarded when a specific printable character is received.
+            /// </summary>
             SpecificCharacter = 64,         // Specific printable character
+            /// <summary>
+            /// Data is forwarded when an alphanumeric character is received (parameter 3 = 127).
+            /// </summary>
             AlphanumericCharacter = 128     // Alphanumeric character (parameter 3 = 127)
         }
 
@@ -57,37 +93,100 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public static class Commands
         {
+            /// <summary>
+            /// Command text "C": initiate call.
+            /// </summary>
             public const string CALL = "C";         // Initiate call
+            /// <summary>
+            /// Command text "CLR": clear call.
+            /// </summary>
             public const string CLEAR = "CLR";      // Clear call
+            /// <summary>
+            /// Command text "STAT": show status.
+            /// </summary>
             public const string STATUS = "STAT";    // Show status
+            /// <summary>
+            /// Command text "INT": send interrupt.
+            /// </summary>
             public const string INTERRUPT = "INT";  // Send interrupt
+            /// <summary>
+            /// Command text "RESET": reset virtual circuit.
+            /// </summary>
             public const string RESET = "RESET";    // Reset virtual circuit
+            /// <summary>
+            /// Command text "SET": set x.3 parameters.
+            /// </summary>
             public const string SET = "SET";        // Set X.3 parameters
+            /// <summary>
+            /// Command text "PAR": read x.3 parameters.
+            /// </summary>
             public const string PARAMETER = "PAR";  // Read X.3 parameters
+            /// <summary>
+            /// Command text "PROF": set parameter profile.
+            /// </summary>
             public const string PROFILE = "PROF";   // Set parameter profile
+            /// <summary>
+            /// Command text "DATA": return to data transfer mode.
+            /// </summary>
             public const string DATA = "DATA";      // Return to data transfer mode
         }
 
         // Events for terminal interface - PROPER ARCHITECTURE
+        /// <summary>
+        /// Raised when a PAD command line has been parsed.
+        /// </summary>
         public event EventHandler<X28CommandEventArgs>? CommandReceived;
+        /// <summary>
+        /// Raised when buffered data is forwarded.
+        /// </summary>
         public event EventHandler<X28DataEventArgs>? DataForwarded;
+        /// <summary>
+        /// Raised when the PAD mode changes.
+        /// </summary>
         public event EventHandler<X28ModeChangedEventArgs>? ModeChanged;
 #pragma warning disable CS0067 // Event for future character-level processing hooks
+        /// <summary>
+        /// Raised for character-level processing; nothing in this class raises it.
+        /// </summary>
         public event EventHandler<X28CharacterEventArgs>? CharacterProcessed;
 #pragma warning restore CS0067
         
         // NEW PROPER EVENTS - Replace string returns
+        /// <summary>
+        /// Raised when a character is to be echoed to the terminal.
+        /// </summary>
         public event EventHandler<CharacterEchoEventArgs>? CharacterEcho;
+        /// <summary>
+        /// Raised when a command produces response text.
+        /// </summary>
         public event EventHandler<CommandResponseEventArgs>? CommandResponse;
 #pragma warning disable CS0067 // Event for future status update hooks
+        /// <summary>
+        /// Raised for status updates; nothing in this class raises it.
+        /// </summary>
         public event EventHandler<StatusUpdateEventArgs>? StatusUpdate;
 #pragma warning restore CS0067
+        /// <summary>
+        /// Raised when an error message is produced.
+        /// </summary>
         public event EventHandler<ErrorMessageEventArgs>? ErrorMessage;
 
         private PadMode _currentMode = PadMode.Command;
         private DateTime _lastCharacterTime = DateTime.Now;
         private System.Threading.Timer? _idleTimer;
 
+        /// <summary>
+        /// Creates the X.28 interface in command mode.
+        /// </summary>
+        /// <param name="x3Parameters">
+        /// The X.3 parameters that control the PAD behavior.
+        /// </param>
+        /// <param name="logger">
+        /// Optional diagnostics logger; may be null.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="x3Parameters"/> is null.
+        /// </exception>
         public X28(X3 x3Parameters, ILogger? logger = null)
         {
             _x3Parameters = x3Parameters ?? throw new ArgumentNullException(nameof(x3Parameters));
@@ -877,11 +976,29 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class X28Command
     {
+        /// <summary>
+        /// Gets or sets the command verb.
+        /// </summary>
         public string Verb { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the command arguments.
+        /// </summary>
         public List<string> Arguments { get; set; } = new List<string>();
+        /// <summary>
+        /// Gets or sets the command line as typed.
+        /// </summary>
         public string OriginalLine { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the called address of a call command, or null.
+        /// </summary>
         public string? Address { get; set; }
+        /// <summary>
+        /// Gets or sets the profile name of a profile command, or null.
+        /// </summary>
         public string? ProfileName { get; set; }
+        /// <summary>
+        /// Gets or sets the parameter number and value pairs of a command, or null.
+        /// </summary>
         public Dictionary<byte, byte>? Parameters { get; set; }
     }
 
@@ -890,14 +1007,41 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class X28CommandEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the parsed command.
+        /// </summary>
         public X28Command Command { get; }
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="command">
+        /// The parsed command.
+        /// </param>
         public X28CommandEventArgs(X28Command command) => Command = command;
     }
 
+    /// <summary>
+    /// Event arguments for forwarded data.
+    /// </summary>
     public class X28DataEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the forwarded data.
+        /// </summary>
         public string Data { get; }
+        /// <summary>
+        /// Gets the condition that triggered the forwarding.
+        /// </summary>
         public X28.ForwardingCondition Condition { get; }
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="data">
+        /// The forwarded data.
+        /// </param>
+        /// <param name="condition">
+        /// The condition that triggered the forwarding.
+        /// </param>
         public X28DataEventArgs(string data, X28.ForwardingCondition condition)
         {
             Data = data;
@@ -905,10 +1049,28 @@ namespace RetroIO.Protocols.X25.Protocols
         }
     }
 
+    /// <summary>
+    /// Event arguments for a PAD mode change.
+    /// </summary>
     public class X28ModeChangedEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the mode before the change.
+        /// </summary>
         public X28.PadMode OldMode { get; }
+        /// <summary>
+        /// Gets the mode after the change.
+        /// </summary>
         public X28.PadMode NewMode { get; }
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="oldMode">
+        /// The mode before the change.
+        /// </param>
+        /// <param name="newMode">
+        /// The mode after the change.
+        /// </param>
         public X28ModeChangedEventArgs(X28.PadMode oldMode, X28.PadMode newMode)
         {
             OldMode = oldMode;
@@ -916,10 +1078,28 @@ namespace RetroIO.Protocols.X25.Protocols
         }
     }
 
+    /// <summary>
+    /// Event arguments for character-level processing.
+    /// </summary>
     public class X28CharacterEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the character.
+        /// </summary>
         public char Character { get; }
+        /// <summary>
+        /// Gets the response text, or null when there is none.
+        /// </summary>
         public string? Response { get; }
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="character">
+        /// The character.
+        /// </param>
+        /// <param name="response">
+        /// The response text, or null.
+        /// </param>
         public X28CharacterEventArgs(char character, string? response)
         {
             Character = character;
@@ -932,11 +1112,29 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public enum CommandResult 
     {
+        /// <summary>
+        /// The command succeeded.
+        /// </summary>
         Success,
+        /// <summary>
+        /// The command was not recognized.
+        /// </summary>
         InvalidCommand,
+        /// <summary>
+        /// The command parameters were not valid.
+        /// </summary>
         InvalidParameters, 
+        /// <summary>
+        /// The command is not allowed in the current mode.
+        /// </summary>
         NotAllowedInCurrentMode,
+        /// <summary>
+        /// The command needs a connection.
+        /// </summary>
         ConnectionRequired,
+        /// <summary>
+        /// The command failed.
+        /// </summary>
         Error
     }
 
@@ -945,10 +1143,25 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public enum EchoType
     {
+        /// <summary>
+        /// A normal character.
+        /// </summary>
         Normal,
+        /// <summary>
+        /// A backspace.
+        /// </summary>
         Backspace,
+        /// <summary>
+        /// A delete.
+        /// </summary>
         Delete,
+        /// <summary>
+        /// A carriage return.
+        /// </summary>
         CarriageReturn,
+        /// <summary>
+        /// A line feed.
+        /// </summary>
         LineFeed
     }
 
@@ -957,10 +1170,25 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public enum ResponseType
     {
+        /// <summary>
+        /// Response to a successful command.
+        /// </summary>
         Success,
+        /// <summary>
+        /// Response to a failed command.
+        /// </summary>
         Error,
+        /// <summary>
+        /// Status text.
+        /// </summary>
         Status,
+        /// <summary>
+        /// A response that is shown immediately, such as COM.
+        /// </summary>
         Immediate,  // For immediate responses like "COM"
+        /// <summary>
+        /// A prompt.
+        /// </summary>
         Prompt
     }
 
@@ -969,9 +1197,24 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class CharacterEchoEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the echoed character.
+        /// </summary>
         public char Character { get; }
+        /// <summary>
+        /// Gets the kind of echo.
+        /// </summary>
         public EchoType Type { get; }
         
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="character">
+        /// The echoed character.
+        /// </param>
+        /// <param name="type">
+        /// The kind of echo.
+        /// </param>
         public CharacterEchoEventArgs(char character, EchoType type = EchoType.Normal)
         {
             Character = character;
@@ -984,10 +1227,31 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class CommandResponseEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the response text.
+        /// </summary>
         public string Response { get; }
+        /// <summary>
+        /// Gets whether the response is shown immediately.
+        /// </summary>
         public bool IsImmediate { get; }
+        /// <summary>
+        /// Gets the response type.
+        /// </summary>
         public ResponseType Type { get; }
         
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="response">
+        /// The response text.
+        /// </param>
+        /// <param name="type">
+        /// The response type.
+        /// </param>
+        /// <param name="isImmediate">
+        /// Whether the response is shown immediately.
+        /// </param>
         public CommandResponseEventArgs(string response, ResponseType type = ResponseType.Success, bool isImmediate = false)
         {
             Response = response;
@@ -1001,8 +1265,17 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class StatusUpdateEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the status text.
+        /// </summary>
         public string Status { get; }
         
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="status">
+        /// The status text.
+        /// </param>
         public StatusUpdateEventArgs(string status)
         {
             Status = status;
@@ -1014,8 +1287,17 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class ErrorMessageEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the error message text.
+        /// </summary>
         public string ErrorMessage { get; }
         
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="errorMessage">
+        /// The error message text.
+        /// </param>
         public ErrorMessageEventArgs(string errorMessage)
         {
             ErrorMessage = errorMessage;

@@ -15,9 +15,21 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class PhysicalLayerDataEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the address the data came from.
+        /// </summary>
         public string SourceAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the kind of physical transport that delivered the data.
+        /// </summary>
         public PhysicalTransportType TransportType { get; set; }
+        /// <summary>
+        /// Gets or sets the received bytes.
+        /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the time the event was raised.
+        /// </summary>
         public DateTime Timestamp { get; set; }
 
         /// <summary>
@@ -63,10 +75,25 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class PhysicalLayerCallEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the address that was called.
+        /// </summary>
         public string CalledAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the address of the caller.
+        /// </summary>
         public string CallingAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the kind of physical transport that carried the call.
+        /// </summary>
         public PhysicalTransportType TransportType { get; set; }
+        /// <summary>
+        /// Gets or sets the call user data bytes.
+        /// </summary>
         public byte[] CallData { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the time the event was raised.
+        /// </summary>
         public DateTime Timestamp { get; set; }
 
         /// <summary>
@@ -94,9 +121,21 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class PhysicalLayerStatusEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the name of the transport the status belongs to.
+        /// </summary>
         public string TransportType { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the status text.
+        /// </summary>
         public string Status { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the exception behind the status, or null when there is none.
+        /// </summary>
         public Exception? Error { get; set; }
+        /// <summary>
+        /// Gets or sets the time the event was raised.
+        /// </summary>
         public DateTime Timestamp { get; set; }
 
         /// <summary>
@@ -120,9 +159,21 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public enum PhysicalTransportType
     {
+        /// <summary>
+        /// Transport over a serial line.
+        /// </summary>
         Serial,
+        /// <summary>
+        /// XOT transport where this side connects out to a remote XOT server.
+        /// </summary>
         XOT_Client,
+        /// <summary>
+        /// XOT transport where this side accepts connections from remote XOT clients.
+        /// </summary>
         XOT_Server,
+        /// <summary>
+        /// Transport to a local TAD service inside the same process.
+        /// </summary>
         LocalTAD
     }
     
@@ -131,9 +182,21 @@ namespace RetroIO.Protocols.X25.Models
     /// </summary>
     public class PhysicalLayerEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the received bytes.
+        /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the number of valid bytes.
+        /// </summary>
         public int Length { get; set; }
+        /// <summary>
+        /// Gets or sets the time the event was raised.
+        /// </summary>
         public DateTime Timestamp { get; set; }
+        /// <summary>
+        /// Gets or sets the error text, or null when there is no error.
+        /// </summary>
         public string? Error { get; set; }
     }
 }

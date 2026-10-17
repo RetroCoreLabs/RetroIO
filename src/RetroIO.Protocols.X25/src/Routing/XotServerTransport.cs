@@ -28,6 +28,18 @@ namespace RetroIO.Protocols.X25.Transport
         private CancellationTokenSource? _cancellationTokenSource;
         private readonly Dictionary<string, XotServerConnection> _clientConnections = new Dictionary<string, XotServerConnection>();
 
+        /// <summary>
+        /// Creates the XOT server transport in the stopped state.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="config">
+        /// The server transport configuration.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> or <paramref name="config"/> is null.
+        /// </exception>
         public XotServerTransport(ILogger logger, XotServerConfig config)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -44,10 +56,22 @@ namespace RetroIO.Protocols.X25.Transport
 
         #region ITransportInterface Implementation
 
+        /// <inheritdoc/>
         public string Name => _config.Name;
+        /// <inheritdoc/>
         public TransportType Type => TransportType.XOT_Server;
+        /// <inheritdoc/>
         public TransportStatus Status => _status;
 
+        /// <summary>
+        /// Does nothing except log a warning, because a server transport does not place outbound calls.
+        /// </summary>
+        /// <param name="callRequest">
+        /// The call request, which is ignored.
+        /// </param>
+        /// <returns>
+        /// Always false.
+        /// </returns>
         public bool PlaceCall(X25CallRequest callRequest)
         {
             // XOT Server transport typically doesn't place outbound calls
@@ -56,6 +80,15 @@ namespace RetroIO.Protocols.X25.Transport
             return false;
         }
 
+        /// <summary>
+        /// Counts the call as accepted and returns true when the transport is active. It does not send a packet.
+        /// </summary>
+        /// <param name="callRequest">
+        /// The call request to accept.
+        /// </param>
+        /// <returns>
+        /// True when the transport is active and no error occurred, otherwise false.
+        /// </returns>
         public bool AcceptCall(X25CallRequest callRequest)
         {
             if (_status != TransportStatus.Active)
@@ -88,6 +121,18 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <summary>
+        /// Counts the call as rejected and returns true when the transport is active. It does not send a clear packet.
+        /// </summary>
+        /// <param name="callRequest">
+        /// The call request to reject.
+        /// </param>
+        /// <param name="cause">
+        /// The clear cause code; it is only logged.
+        /// </param>
+        /// <returns>
+        /// True when the transport is active and no error occurred, otherwise false.
+        /// </returns>
         public bool RejectCall(X25CallRequest callRequest, byte cause)
         {
             if (_status != TransportStatus.Active)
@@ -117,6 +162,12 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <summary>
+        /// Starts a TCP listener on the configured address and port and accepts XOT connections on a background thread.
+        /// </summary>
+        /// <returns>
+        /// True when the transport is active afterwards, false when starting failed.
+        /// </returns>
         public bool Start()
         {
             if (_status != TransportStatus.Stopped)
@@ -158,6 +209,9 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <summary>
+        /// Stops the listener, closes all client connections and moves the transport to the stopped state.
+        /// </summary>
         public void Stop()
         {
             if (_status == TransportStatus.Stopped || _status == TransportStatus.Stopping)
@@ -195,6 +249,7 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <inheritdoc/>
         public TransportStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
@@ -202,8 +257,11 @@ namespace RetroIO.Protocols.X25.Transport
             return _statistics;
         }
 
+        /// <inheritdoc/>
         public event EventHandler<X25CallRequest>? IncomingCall;
+        /// <inheritdoc/>
         public event EventHandler<TransportStatusEventArgs>? StatusChanged;
+        /// <inheritdoc/>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
 
         #endregion
@@ -450,6 +508,18 @@ namespace RetroIO.Protocols.X25.Transport
         private readonly string _clientEndpoint;
         private readonly NetworkStream _stream;
 
+        /// <summary>
+        /// Creates a handler for one accepted client connection.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="tcpClient">
+        /// The accepted TCP client.
+        /// </param>
+        /// <param name="clientEndpoint">
+        /// The remote endpoint text, used in log messages.
+        /// </param>
         public XotServerConnection(ILogger logger, TcpClient tcpClient, string clientEndpoint)
         {
             _logger = logger;
@@ -458,8 +528,17 @@ namespace RetroIO.Protocols.X25.Transport
             _stream = tcpClient.GetStream();
         }
 
+        /// <summary>
+        /// Raised when a call request arrives on the connection.
+        /// </summary>
         public event EventHandler<X25CallRequest>? IncomingCall;
+        /// <summary>
+        /// Raised when the connection closes; the argument is the client endpoint text.
+        /// </summary>
         public event EventHandler<string>? ConnectionClosed;
+        /// <summary>
+        /// Raised when data arrives on the connection.
+        /// </summary>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
 
         /// <summary>
@@ -642,6 +721,9 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <summary>
+        /// Closes the network stream and the TCP client.
+        /// </summary>
         public void Close()
         {
             try

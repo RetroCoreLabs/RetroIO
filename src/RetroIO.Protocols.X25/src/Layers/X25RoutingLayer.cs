@@ -26,6 +26,21 @@ namespace RetroIO.Protocols.X25.Layers
         private readonly IProtocolRuntime _runtime;
         private readonly ProtocolServiceRegistry _protocolServices;
 
+        /// <summary>
+        /// Creates the routing layer.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="router">
+        /// The router that holds the routes and transport interfaces.
+        /// </param>
+        /// <param name="runtime">
+        /// The protocol runtime used to reach local modules.
+        /// </param>
+        /// <param name="protocolServices">
+        /// The registry of local protocol services.
+        /// </param>
         public X25RoutingLayer(ILogger logger, X25Router router, IProtocolRuntime runtime, ProtocolServiceRegistry protocolServices)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));

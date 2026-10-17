@@ -28,6 +28,18 @@ namespace RetroIO.Protocols.X25.Protocols
         private readonly string _localMachineId;
         private readonly XMSGServiceRegistry _serviceRegistry;
 
+        /// <summary>
+        /// Creates the local XMSG protocol handler and its service registry.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="localMachineId">
+        /// The address of the local machine.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> or <paramref name="localMachineId"/> is null.
+        /// </exception>
         public LocalXMSGProtocol(ILogger logger, string localMachineId)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -441,9 +453,21 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public enum XMSGSessionState
     {
+        /// <summary>
+        /// The session was created and the call is not yet accepted.
+        /// </summary>
         Connecting,
+        /// <summary>
+        /// The call was accepted.
+        /// </summary>
         Connected,
+        /// <summary>
+        /// Data transfer state; nothing in this file assigns it.
+        /// </summary>
         DataTransfer,
+        /// <summary>
+        /// The session was cleared.
+        /// </summary>
         Disconnected
     }
 
@@ -452,12 +476,33 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class LocalXMSGSession
     {
+        /// <summary>
+        /// Gets or sets the logical channel number of the session.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the called address.
+        /// </summary>
         public string CalledAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the calling address.
+        /// </summary>
         public string CallingAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the time the session started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets or sets the session state.
+        /// </summary>
         public XMSGSessionState State { get; set; }
+        /// <summary>
+        /// Gets or sets the callback used to deliver packets to the client.
+        /// </summary>
         public Action<X25PacketEventArgs> NotifyClient { get; set; } = null!;
+        /// <summary>
+        /// Gets or sets the XMSG request parsed from the call user data.
+        /// </summary>
         public XMSGRequest XMSGRequest { get; set; } = null!;
     }
 
@@ -466,10 +511,25 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class XMSGRequest
     {
+        /// <summary>
+        /// Gets or sets the version field, the first 16-bit value of the header.
+        /// </summary>
         public ushort Version { get; set; }
+        /// <summary>
+        /// Gets or sets the message type field, the second 16-bit value of the header.
+        /// </summary>
         public ushort MessageType { get; set; }
+        /// <summary>
+        /// Gets or sets the port field, the third 16-bit value of the header.
+        /// </summary>
         public ushort Port { get; set; }
+        /// <summary>
+        /// Gets or sets the message length field, the fourth 16-bit value of the header.
+        /// </summary>
         public ushort MessageLength { get; set; }
+        /// <summary>
+        /// Gets or sets the session identifier, the 32-bit value at header offset 8.
+        /// </summary>
         public uint SessionId { get; set; }
     }
 
@@ -478,11 +538,29 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class XMSGMessage
     {
+        /// <summary>
+        /// Gets or sets the version field, the first 16-bit value of the header.
+        /// </summary>
         public ushort Version { get; set; }
+        /// <summary>
+        /// Gets or sets the message type field, the second 16-bit value of the header.
+        /// </summary>
         public ushort MessageType { get; set; }
+        /// <summary>
+        /// Gets or sets the port field, the third 16-bit value of the header.
+        /// </summary>
         public ushort Port { get; set; }
+        /// <summary>
+        /// Gets or sets the message length field, the fourth 16-bit value of the header.
+        /// </summary>
         public ushort MessageLength { get; set; }
+        /// <summary>
+        /// Gets or sets the session identifier, the 32-bit value at header offset 8.
+        /// </summary>
         public uint SessionId { get; set; }
+        /// <summary>
+        /// Gets or sets the bytes that follow the 12-byte header.
+        /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();
     }
 
@@ -491,17 +569,50 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class XMSGSessionInfo
     {
+        /// <summary>
+        /// Gets or sets the logical channel number of the session.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the called address.
+        /// </summary>
         public string CalledAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the calling address.
+        /// </summary>
         public string CallingAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the XMSG port.
+        /// </summary>
         public ushort Port { get; set; }
+        /// <summary>
+        /// Gets or sets the session identifier.
+        /// </summary>
         public uint SessionId { get; set; }
+        /// <summary>
+        /// Gets or sets the session state.
+        /// </summary>
         public XMSGSessionState State { get; set; }
+        /// <summary>
+        /// Gets or sets the time the session started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets or sets the name of the service registered on the port, or Unknown.
+        /// </summary>
         public string ServiceName { get; set; } = "";
         
+        /// <summary>
+        /// Gets the time since the session started.
+        /// </summary>
         public TimeSpan Duration => DateTime.UtcNow - StartTime;
         
+        /// <summary>
+        /// Returns a text description for the port number.
+        /// </summary>
+        /// <returns>
+        /// The description for the port range, or Unknown Service when the port is outside the known ranges.
+        /// </returns>
         public string GetPortDescription()
         {
             return Port switch
@@ -524,22 +635,52 @@ namespace RetroIO.Protocols.X25.Protocols
         private readonly Dictionary<ushort, XMSGService> _services = new();
         private readonly ILogger _logger;
 
+        /// <summary>
+        /// Creates an empty service registry.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
         public XMSGServiceRegistry(ILogger logger)
         {
             _logger = logger;
         }
 
+        /// <summary>
+        /// Registers a service handler on a port, replacing any earlier one on the same port.
+        /// </summary>
+        /// <param name="port">
+        /// The XMSG port number.
+        /// </param>
+        /// <param name="name">
+        /// The service name.
+        /// </param>
+        /// <param name="handler">
+        /// The handler called with the session.
+        /// </param>
         public void RegisterService(ushort port, string name, Action<LocalXMSGSession> handler)
         {
             _services[port] = new XMSGService { Port = port, Name = name, Handler = handler };
             _logger.LogDebug("XMSG: Registered service {Name} on port {Port:X4}", name, port);
         }
 
+        /// <summary>
+        /// Looks up the service registered on a port.
+        /// </summary>
+        /// <param name="port">
+        /// The XMSG port number.
+        /// </param>
+        /// <returns>
+        /// The service, or null when none is registered on the port.
+        /// </returns>
         public XMSGService? GetService(ushort port)
         {
             return _services.TryGetValue(port, out var service) ? service : null;
         }
 
+        /// <summary>
+        /// Gets the number of registered services.
+        /// </summary>
         public int ServiceCount => _services.Count;
     }
 
@@ -548,8 +689,17 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class XMSGService
     {
+        /// <summary>
+        /// Gets or sets the XMSG port number.
+        /// </summary>
         public ushort Port { get; set; }
+        /// <summary>
+        /// Gets or sets the service name.
+        /// </summary>
         public string Name { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the handler called with the session.
+        /// </summary>
         public Action<LocalXMSGSession> Handler { get; set; } = null!;
     }
 }

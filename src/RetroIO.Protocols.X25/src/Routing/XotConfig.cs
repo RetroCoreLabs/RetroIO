@@ -177,6 +177,9 @@ namespace RetroIO.Protocols.X25
         public string Description { get; set; } = string.Empty;
 
         // Legacy property names for backward compatibility
+        /// <summary>
+        /// Gets or sets the first interface name. Obsolete alias of Interface1Name.
+        /// </summary>
         [Obsolete("Use Interface1Name instead")]
         public string XotInterfaceName
         {
@@ -184,6 +187,9 @@ namespace RetroIO.Protocols.X25
             set => Interface1Name = value;
         }
 
+        /// <summary>
+        /// Gets or sets the second interface name. Obsolete alias of Interface2Name.
+        /// </summary>
         [Obsolete("Use Interface2Name instead")]
         public string SerialInterfaceName
         {

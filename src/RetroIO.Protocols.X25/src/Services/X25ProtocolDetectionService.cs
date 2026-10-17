@@ -20,6 +20,15 @@ namespace RetroIO.Protocols.X25.Services
     {
         private readonly ILogger _logger;
 
+        /// <summary>
+        /// Creates the detection service.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public X25ProtocolDetectionService(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -222,15 +231,45 @@ namespace RetroIO.Protocols.X25.Services
     /// </summary>
     public enum X25ProtocolType
     {
+        /// <summary>
+        /// The protocol could not be identified.
+        /// </summary>
         Unknown,
+        /// <summary>
+        /// X.29 PAD, call user data 0x01000000.
+        /// </summary>
         PAD,           // X.29 PAD - CUD: 0x01000000
+        /// <summary>
+        /// TAD server, the default for local addresses.
+        /// </summary>
         TAD,           // TAD Server - Default for local addresses
+        /// <summary>
+        /// XMSG protocol, COSMOS file services.
+        /// </summary>
         XMSG,          // XMSG Protocol - COSMOS File Services
+        /// <summary>
+        /// Internet Protocol, call user data 0xCC.
+        /// </summary>
         IP,            // Internet Protocol - CUD: 0xCC
+        /// <summary>
+        /// Connectionless Network Protocol, call user data 0x81.
+        /// </summary>
         CLNP,          // Connectionless Network Protocol - CUD: 0x81  
+        /// <summary>
+        /// Novell IPX, call user data 0x800000008137.
+        /// </summary>
         IPX,           // Novell IPX - CUD: 0x800000008137
+        /// <summary>
+        /// SINTRAN routing protocol.
+        /// </summary>
         SintranRouting,// SINTRAN Routing Protocol
+        /// <summary>
+        /// SINTRAN XMSG messaging.
+        /// </summary>
         SintranXmsg,   // SINTRAN XMSG Messaging
+        /// <summary>
+        /// SINTRAN file transfer.
+        /// </summary>
         SintranFile    // SINTRAN File Transfer
     }
 
@@ -239,13 +278,37 @@ namespace RetroIO.Protocols.X25.Services
     /// </summary>
     public class X25ProtocolInfo
     {
+        /// <summary>
+        /// Gets or sets the detected protocol.
+        /// </summary>
         public X25ProtocolType Protocol { get; set; }
+        /// <summary>
+        /// Gets or sets the called address.
+        /// </summary>
         public string CalledAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the call user data bytes.
+        /// </summary>
         public byte[] CallUserData { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// Gets or sets the description text.
+        /// </summary>
         public string Description { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the service type text.
+        /// </summary>
         public string ServiceType { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the time of the detection.
+        /// </summary>
         public DateTime Timestamp { get; set; }
 
+        /// <summary>
+        /// Returns the call user data as hexadecimal bytes separated by spaces.
+        /// </summary>
+        /// <returns>
+        /// The hexadecimal text, or No CUD when the call user data is empty.
+        /// </returns>
         public string GetCUDHex()
         {
             return CallUserData.Length > 0 ? 
@@ -253,6 +316,7 @@ namespace RetroIO.Protocols.X25.Services
                 "No CUD";
         }
 
+        /// <inheritdoc/>
         public override string ToString()
         {
             return $"{Protocol} - {Description} for {CalledAddress} (CUD: {GetCUDHex()})";

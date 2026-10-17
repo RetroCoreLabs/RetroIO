@@ -548,28 +548,67 @@ namespace RetroIO.Protocols.X25.Transport
     /// </summary>
     public class BridgeStatistics
     {
+        /// <summary>
+        /// Gets or sets the name of the first interface.
+        /// </summary>
         public string Interface1Name { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the name of the second interface.
+        /// </summary>
         public string Interface2Name { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the bridge mode as text.
+        /// </summary>
         public string BridgeMode { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets whether the bridge is active.
+        /// </summary>
         public bool IsActive { get; set; }
 
         // Interface1 → Interface2 direction
+        /// <summary>
+        /// Gets or sets the bytes passed from interface 1 to interface 2.
+        /// </summary>
         public long Interface1To2Bytes { get; set; }
+        /// <summary>
+        /// Gets or sets the packets passed from interface 1 to interface 2.
+        /// </summary>
         public long Interface1To2Packets { get; set; }
+        /// <summary>
+        /// Gets or sets the frames passed from interface 1 to interface 2.
+        /// </summary>
         public long Interface1To2Frames { get; set; }
 
         // Interface2 → Interface1 direction
+        /// <summary>
+        /// Gets or sets the bytes passed from interface 2 to interface 1.
+        /// </summary>
         public long Interface2To1Bytes { get; set; }
+        /// <summary>
+        /// Gets or sets the packets passed from interface 2 to interface 1.
+        /// </summary>
         public long Interface2To1Packets { get; set; }
+        /// <summary>
+        /// Gets or sets the frames passed from interface 2 to interface 1.
+        /// </summary>
         public long Interface2To1Frames { get; set; }
 
         // Errors
+        /// <summary>
+        /// Gets or sets the number of errors.
+        /// </summary>
         public long Errors { get; set; }
 
         // Performance metrics
+        /// <summary>
+        /// Gets or sets the time the bridge has been running.
+        /// </summary>
         public TimeSpan Uptime { get; set; }
 
         // Legacy property names for backward compatibility
+        /// <summary>
+        /// Gets or sets the first interface name. Obsolete alias of Interface1Name.
+        /// </summary>
         [Obsolete("Use Interface1Name instead")]
         public string XotInterfaceName
         {
@@ -577,6 +616,9 @@ namespace RetroIO.Protocols.X25.Transport
             set => Interface1Name = value;
         }
 
+        /// <summary>
+        /// Gets or sets the second interface name. Obsolete alias of Interface2Name.
+        /// </summary>
         [Obsolete("Use Interface2Name instead")]
         public string SerialInterfaceName
         {
@@ -584,6 +626,9 @@ namespace RetroIO.Protocols.X25.Transport
             set => Interface2Name = value;
         }
 
+        /// <summary>
+        /// Gets or sets the bytes passed from interface 1 to interface 2. Obsolete alias of Interface1To2Bytes.
+        /// </summary>
         [Obsolete("Use Interface1To2Bytes instead")]
         public long XotToSerialBytes
         {
@@ -591,6 +636,9 @@ namespace RetroIO.Protocols.X25.Transport
             set => Interface1To2Bytes = value;
         }
 
+        /// <summary>
+        /// Gets or sets the bytes passed from interface 2 to interface 1. Obsolete alias of Interface2To1Bytes.
+        /// </summary>
         [Obsolete("Use Interface2To1Bytes instead")]
         public long SerialToXotBytes
         {
@@ -598,6 +646,9 @@ namespace RetroIO.Protocols.X25.Transport
             set => Interface2To1Bytes = value;
         }
 
+        /// <summary>
+        /// Gets or sets the packets passed from interface 1 to interface 2. Obsolete alias of Interface1To2Packets.
+        /// </summary>
         [Obsolete("Use Interface1To2Packets instead")]
         public long XotToSerialPackets
         {
@@ -605,6 +656,9 @@ namespace RetroIO.Protocols.X25.Transport
             set => Interface1To2Packets = value;
         }
 
+        /// <summary>
+        /// Gets or sets the packets passed from interface 2 to interface 1. Obsolete alias of Interface2To1Packets.
+        /// </summary>
         [Obsolete("Use Interface2To1Packets instead")]
         public long SerialToXotPackets
         {
@@ -612,6 +666,9 @@ namespace RetroIO.Protocols.X25.Transport
             set => Interface2To1Packets = value;
         }
 
+        /// <summary>
+        /// Gets or sets the frames passed from interface 1 to interface 2. Obsolete alias of Interface1To2Frames.
+        /// </summary>
         [Obsolete("Use Interface1To2Frames instead")]
         public long XotToSerialFrames
         {
@@ -619,6 +676,9 @@ namespace RetroIO.Protocols.X25.Transport
             set => Interface1To2Frames = value;
         }
 
+        /// <summary>
+        /// Gets or sets the frames passed from interface 2 to interface 1. Obsolete alias of Interface2To1Frames.
+        /// </summary>
         [Obsolete("Use Interface2To1Frames instead")]
         public long SerialToXotFrames
         {

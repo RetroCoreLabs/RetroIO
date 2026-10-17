@@ -55,6 +55,15 @@ namespace RetroIO.Protocols.X25.Services
         /// </summary>
         public event Action<long, bool>? DisplayUpdateRequested;
 
+        /// <summary>
+        /// Creates a history manager with a capacity of 100 items.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public HistoryManager(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -495,9 +504,21 @@ namespace RetroIO.Protocols.X25.Services
     /// </summary>
     public class PacketRelationship
     {
+        /// <summary>
+        /// Gets or sets the packet identifier.
+        /// </summary>
         public long PacketId { get; set; }
+        /// <summary>
+        /// Gets or sets whether the packet is a primary packet; the manager sets it to true.
+        /// </summary>
         public bool IsPrimary { get; set; }
+        /// <summary>
+        /// Gets or sets whether the packet is a terminal packet.
+        /// </summary>
         public bool IsTerminal { get; set; }
+        /// <summary>
+        /// Gets or sets the identifier of the packet this one was derived from, or null; the manager sets it to null.
+        /// </summary>
         public long? DerivedFromId { get; set; }
     }
 }

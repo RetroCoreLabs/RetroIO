@@ -161,8 +161,17 @@ namespace RetroIO.Protocols.X25.Transport
     /// </summary>
     public class TransportStatusEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the status before the change.
+        /// </summary>
         public TransportStatus OldStatus { get; set; }
+        /// <summary>
+        /// Gets or sets the status after the change.
+        /// </summary>
         public TransportStatus NewStatus { get; set; }
+        /// <summary>
+        /// Gets or sets the reason text for the change, or null.
+        /// </summary>
         public string? Reason { get; set; }
     }
 
@@ -200,27 +209,75 @@ namespace RetroIO.Protocols.X25.Transport
     /// </summary>
     public class TransportStatistics
     {
+        /// <summary>
+        /// Gets or sets the transport name.
+        /// </summary>
         public string TransportName { get; set; } = string.Empty;
+        /// <summary>
+        /// Gets or sets the transport type.
+        /// </summary>
         public TransportType TransportType { get; set; }
+        /// <summary>
+        /// Gets or sets the status of the transport when the statistics were read.
+        /// </summary>
         public TransportStatus CurrentStatus { get; set; }
+        /// <summary>
+        /// Gets or sets the time the transport started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets the time since the transport started.
+        /// </summary>
         public TimeSpan Uptime => DateTime.UtcNow - StartTime;
         
         // Call statistics
+        /// <summary>
+        /// Gets or sets the number of outbound calls attempted.
+        /// </summary>
         public int OutboundCallsAttempted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of outbound calls that succeeded.
+        /// </summary>
         public int OutboundCallsSucceeded { get; set; }
+        /// <summary>
+        /// Gets or sets the number of inbound calls received.
+        /// </summary>
         public int InboundCallsReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of inbound calls accepted.
+        /// </summary>
         public int InboundCallsAccepted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of inbound calls rejected.
+        /// </summary>
         public int InboundCallsRejected { get; set; }
         
         // Data statistics
+        /// <summary>
+        /// Gets or sets the number of bytes transmitted.
+        /// </summary>
         public long BytesTransmitted { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received.
+        /// </summary>
         public long BytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of active connections.
+        /// </summary>
         public int ActiveConnections { get; set; }
         
         // Error statistics
+        /// <summary>
+        /// Gets or sets the number of connection errors.
+        /// </summary>
         public int ConnectionErrors { get; set; }
+        /// <summary>
+        /// Gets or sets the number of timeout errors.
+        /// </summary>
         public int TimeoutErrors { get; set; }
+        /// <summary>
+        /// Gets or sets the number of protocol errors.
+        /// </summary>
         public int ProtocolErrors { get; set; }
     }
 }

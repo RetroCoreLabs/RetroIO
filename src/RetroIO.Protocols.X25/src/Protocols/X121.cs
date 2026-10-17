@@ -40,14 +40,38 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public static class RegionCodes
         {
+            /// <summary>
+            /// DNIC first digit for the region Europe, Africa and Middle East.
+            /// </summary>
             public const char EUROPE_AFRICA_MIDDLE_EAST = '2';
+            /// <summary>
+            /// DNIC first digit for the region North America.
+            /// </summary>
             public const char NORTH_AMERICA = '3';
+            /// <summary>
+            /// DNIC first digit for the region Asia and Oceania.
+            /// </summary>
             public const char ASIA_OCEANIA = '4';
+            /// <summary>
+            /// DNIC first digit for the region Latin America and Caribbean.
+            /// </summary>
             public const char LATIN_AMERICA_CARIBBEAN = '5';
+            /// <summary>
+            /// DNIC first digit for the region reserved (6).
+            /// </summary>
             public const char RESERVED_6 = '6';
+            /// <summary>
+            /// DNIC first digit for the region reserved (7).
+            /// </summary>
             public const char RESERVED_7 = '7';
         }
 
+        /// <summary>
+        /// Creates the X.121 helper.
+        /// </summary>
+        /// <param name="logger">
+        /// Optional diagnostics logger; may be null.
+        /// </param>
         public X121(ILogger? logger = null)
         {
             _logger = logger;
@@ -376,15 +400,40 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class X121AddressInfo
     {
+        /// <summary>
+        /// Gets or sets the address text as given.
+        /// </summary>
         public string OriginalAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets whether the address passed validation.
+        /// </summary>
         public bool IsValid { get; set; }
+        /// <summary>
+        /// Gets or sets whether the address has the local format.
+        /// </summary>
         public bool IsLocal { get; set; }
+        /// <summary>
+        /// Gets or sets whether the address has the international format.
+        /// </summary>
         public bool IsInternational { get; set; }
+        /// <summary>
+        /// Gets or sets the data network identification code, or null when the address has none.
+        /// </summary>
         public string? DNIC { get; set; }
+        /// <summary>
+        /// Gets or sets the national number part, or null.
+        /// </summary>
         public string? NationalNumber { get; set; }
+        /// <summary>
+        /// Gets or sets the first digit of the DNIC.
+        /// </summary>
         public char RegionCode { get; set; }
+        /// <summary>
+        /// Gets or sets the region name for the region code.
+        /// </summary>
         public string RegionName { get; set; } = "";
 
+        /// <inheritdoc/>
         public override string ToString()
         {
             if (!IsValid)

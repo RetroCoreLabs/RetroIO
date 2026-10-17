@@ -162,6 +162,7 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
+        /// <inheritdoc/>
         public override string ToString()
         {
             return $"{Name}: {X121AddressPattern} -> {Type}({Destination}) [Pri:{Priority}]";

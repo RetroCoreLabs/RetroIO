@@ -40,24 +40,57 @@ namespace RetroIO.Protocols.X25.Modules
         private System.Threading.Timer? _idleTimer;
         
         // Configuration
+        /// <summary>
+        /// Gets or sets the local X.121 address used as the calling address when a call is placed without one.
+        /// </summary>
         public string LocalAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the idle timeout in milliseconds; nothing in this class reads it.
+        /// </summary>
         public int IdleTimeoutMs { get; set; } = 30000;
+        /// <summary>
+        /// Gets or sets the auto-connect flag; nothing in this class reads it.
+        /// </summary>
         public bool AutoConnect { get; set; } = true;
+        /// <summary>
+        /// Gets or sets the text encoding used to turn text into bytes and bytes into text.
+        /// </summary>
         public Encoding TextEncoding { get; set; } = Encoding.ASCII;
         
         // IProtocolModule Properties
+        /// <inheritdoc/>
         public string Name { get; set; } = "PAD Client";
+        /// <inheritdoc/>
         public string Description { get; } = "X.3/X.28/X.29 PAD Client for terminal access over X.25";
+        /// <inheritdoc/>
         public string Version { get; } = "1.0.0";
 
         // Protocol Access Properties (for GUI display)
+        /// <summary>
+        /// Gets the X.28 protocol object that handles the command line and data forwarding.
+        /// </summary>
         public X28 X28Protocol => _x28Protocol;
+        /// <summary>
+        /// Gets the X.3 protocol object that holds the PAD parameters.
+        /// </summary>
         public X3 X3Protocol => _x3Protocol;
 
         // Events
+        /// <summary>
+        /// Raised when the connection state changes.
+        /// </summary>
         public event EventHandler<PadConnectionEventArgs>? ConnectionStateChanged;
+        /// <summary>
+        /// Raised when text arrives for the terminal, including the prompt and echo.
+        /// </summary>
         public event EventHandler<PadDataEventArgs>? DataReceived;
+        /// <summary>
+        /// Raised when text is sent to the remote side.
+        /// </summary>
         public event EventHandler<PadDataEventArgs>? DataSent;
+        /// <summary>
+        /// Raised when an X.29 message is received.
+        /// </summary>
         public event EventHandler<X29MessageEventArgs>? X29MessageReceived;
 
         /// <summary>
@@ -117,12 +150,14 @@ namespace RetroIO.Protocols.X25.Modules
 
         #region IProtocolModule Implementation
 
+        /// <inheritdoc/>
         public void OnBound(ushort lcn)
         {
             _currentLCN = lcn;
             _logger.LogDebug("PAD Client bound to LCN {LCN}", lcn);
         }
 
+        /// <inheritdoc/>
         public void OnUnbound(ushort lcn)
         {
             if (lcn == _currentLCN)
@@ -133,6 +168,7 @@ namespace RetroIO.Protocols.X25.Modules
             }
         }
 
+        /// <inheritdoc/>
         public void OnX25Event(X25PacketEventArgs args)
         {
             _logger.LogDebug("PAD Client received X25 event: PacketType={PacketType}, LCN={LCN}, Current LCN={CurrentLCN}", 
@@ -1065,6 +1101,9 @@ namespace RetroIO.Protocols.X25.Modules
 
         #region IDisposable
 
+        /// <summary>
+        /// Stops the idle timer, unsubscribes from the X.28 and X.3 events and clears the input and output buffers.
+        /// </summary>
         public void Dispose()
         {
             StopIdleTimer();
@@ -1092,12 +1131,21 @@ namespace RetroIO.Protocols.X25.Modules
             _outputBuffer.Clear();
         }
 
+        /// <summary>
+        /// Passes one typed character to the PAD character processing.
+        /// </summary>
+        /// <param name="keyChar">
+        /// The typed character; it is cast to a byte.
+        /// </param>
         public void OnKey(char keyChar)
         {
             // Delegate to the existing ProcessCharacter method with direct char conversion
             ProcessCharacter((byte)keyChar);
         }
 
+        /// <summary>
+        /// Sends the PAD prompt to the terminal output.
+        /// </summary>
         public void Start()
         {
             SendPrompt();
@@ -1131,8 +1179,17 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public enum PadConnectionState
     {
+        /// <summary>
+        /// No call is active.
+        /// </summary>
         Disconnected,
+        /// <summary>
+        /// A call has been placed and is not yet accepted.
+        /// </summary>
         Connecting,
+        /// <summary>
+        /// The call was accepted.
+        /// </summary>
         Connected
     }
 
@@ -1141,7 +1198,13 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public enum PadDataDirection
     {
+        /// <summary>
+        /// Text sent by the PAD to the remote side.
+        /// </summary>
         Sent,
+        /// <summary>
+        /// Text received for the terminal.
+        /// </summary>
         Received
     }
 
@@ -1150,9 +1213,24 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public class PadConnectionEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the new connection state.
+        /// </summary>
         public PadConnectionState State { get; }
+        /// <summary>
+        /// Gets the reason text for the state change.
+        /// </summary>
         public string Reason { get; }
 
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="state">
+        /// The new connection state.
+        /// </param>
+        /// <param name="reason">
+        /// The reason text for the change.
+        /// </param>
         public PadConnectionEventArgs(PadConnectionState state, string reason)
         {
             State = state;
@@ -1165,9 +1243,24 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public class PadDataEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the text that was sent or received.
+        /// </summary>
         public string Data { get; }
+        /// <summary>
+        /// Gets whether the text was sent or received.
+        /// </summary>
         public PadDataDirection Direction { get; }
 
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="data">
+        /// The text that was sent or received.
+        /// </param>
+        /// <param name="direction">
+        /// Whether the text was sent or received.
+        /// </param>
         public PadDataEventArgs(string data, PadDataDirection direction)
         {
             Data = data;
@@ -1180,8 +1273,17 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public class PadCharacterEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the character value.
+        /// </summary>
         public byte Character { get; }
 
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="character">
+        /// The character value.
+        /// </param>
         public PadCharacterEventArgs(byte character)
         {
             Character = character;
@@ -1193,8 +1295,17 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public class X29MessageEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the X.29 message.
+        /// </summary>
         public RetroIO.Protocols.X25.Protocols.X29Message Message { get; }
 
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="message">
+        /// The X.29 message.
+        /// </param>
         public X29MessageEventArgs(RetroIO.Protocols.X25.Protocols.X29Message message)
         {
             Message = message;

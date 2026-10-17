@@ -32,6 +32,18 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public event EventHandler<X25PacketEventArgs>? PacketGenerated;
 
+        /// <summary>
+        /// Creates the local TAD protocol handler.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="localMachineId">
+        /// The address of the local machine; calls to this address are handled here.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> or <paramref name="localMachineId"/> is null.
+        /// </exception>
         public LocalTadProtocol(ILogger logger, string localMachineId)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -856,11 +868,29 @@ namespace RetroIO.Protocols.X25.Protocols
     /// </summary>
     public class LocalTadSessionInfo
     {
+        /// <summary>
+        /// Gets or sets the logical channel number of the session.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the called address.
+        /// </summary>
         public string CalledAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the calling address.
+        /// </summary>
         public string CallingAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the time the session started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets or sets the time since the session started.
+        /// </summary>
         public TimeSpan Duration { get; set; }
+        /// <summary>
+        /// Gets the session identifier, built from the logical channel number.
+        /// </summary>
         public string SessionId => $"LCN-{LCN}"; // Unique session identifier
     }
 

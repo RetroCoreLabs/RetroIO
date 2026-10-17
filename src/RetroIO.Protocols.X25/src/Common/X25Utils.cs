@@ -16,6 +16,9 @@ namespace RetroIO.Protocols.X25
     /// </summary>
     public static class X25Utils
     {
+        /// <summary>
+        /// Smallest X.25 packet header size in bytes, used as the default header size when extracting a payload.
+        /// </summary>
         public const int MinHeaderSize = 3;
 
         /// <summary>

@@ -21,6 +21,15 @@ namespace RetroIO.Protocols.X25.Services
         private readonly List<IProtocolService> _services = new();
         private readonly object _lock = new();
         
+        /// <summary>
+        /// Creates an empty registry.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public ProtocolServiceRegistry(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -258,10 +267,20 @@ namespace RetroIO.Protocols.X25.Services
     /// </summary>
     public class ProtocolServiceRegistryStats
     {
+        /// <summary>
+        /// Gets or sets the number of registered services.
+        /// </summary>
         public int TotalServices { get; set; }
+        /// <summary>
+        /// Gets or sets the names of the registered services.
+        /// </summary>
         public string[] ServiceNames { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// Gets or sets the number of distinct local addresses.
+        /// </summary>
         public int TotalAddresses { get; set; }
         
+        /// <inheritdoc/>
         public override string ToString()
         {
             return $"Services: {TotalServices}, Addresses: {TotalAddresses}, Names: [{string.Join(", ", ServiceNames)}]";

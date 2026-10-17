@@ -22,6 +22,15 @@ namespace RetroIO.Protocols.X25.Transport
         private readonly Dictionary<string, ITransportInterface> _interfaces;
         private readonly object _routeLock = new object();
 
+        /// <summary>
+        /// Creates an empty router.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="logger"/> is null.
+        /// </exception>
         public X25Router(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -543,8 +552,17 @@ namespace RetroIO.Protocols.X25.Transport
     /// </summary>
     public class IncomingCallRoutedEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets or sets the call request that was routed.
+        /// </summary>
         public required X25CallRequest CallRequest { get; set; }
+        /// <summary>
+        /// Gets or sets the route the call was matched to.
+        /// </summary>
         public required X25Route Route { get; set; }
+        /// <summary>
+        /// Gets or sets the interface the call came in on, or null.
+        /// </summary>
         public ITransportInterface? SourceInterface { get; set; }
     }
 
@@ -553,9 +571,21 @@ namespace RetroIO.Protocols.X25.Transport
     /// </summary>
     public class RoutingStatistics
     {
+        /// <summary>
+        /// Gets or sets the total number of routes.
+        /// </summary>
         public int TotalRoutes { get; set; }
+        /// <summary>
+        /// Gets or sets the number of enabled routes.
+        /// </summary>
         public int EnabledRoutes { get; set; }
+        /// <summary>
+        /// Gets or sets the number of registered interfaces.
+        /// </summary>
         public int RegisteredInterfaces { get; set; }
+        /// <summary>
+        /// Gets or sets the number of routes for each route type.
+        /// </summary>
         public Dictionary<RouteType, int> RoutesByType { get; set; } = new();
     }
 }

@@ -27,22 +27,58 @@ namespace RetroIO.Protocols.X25.Modules
         private readonly object _sessionsLock = new object();
 
         // Configuration
+        /// <summary>
+        /// Gets or sets the address this server answers to; a call to it gets the loopback echo service.
+        /// </summary>
         public string LocalAddress { get; set; } = "200"; // Default loopback test address
+        /// <summary>
+        /// Gets or sets whether text received through the legacy data callback is echoed back.
+        /// </summary>
         public bool EnableEchoService { get; set; } = true;
+        /// <summary>
+        /// Gets or sets the loopback test flag; nothing in this class reads it.
+        /// </summary>
         public bool EnableLoopbackTest { get; set; } = true;
+        /// <summary>
+        /// Gets or sets the text encoding used to turn text into bytes and bytes into text.
+        /// </summary>
         public Encoding TextEncoding { get; set; } = Encoding.ASCII;
         
         // IProtocolModule Properties
+        /// <inheritdoc/>
         public string Name { get; set; } = "TAD Server";
+        /// <inheritdoc/>
         public string Description { get; } = "X.3/X.28/X.29 TAD Server providing terminal services for PAD connections";
+        /// <inheritdoc/>
         public string Version { get; } = "1.0.0";
 
         // Events
+        /// <summary>
+        /// Raised when a session starts.
+        /// </summary>
         public event EventHandler<TadSessionEventArgs>? SessionStarted;
+        /// <summary>
+        /// Raised when a session ends.
+        /// </summary>
         public event EventHandler<TadSessionEventArgs>? SessionEnded;
+        /// <summary>
+        /// Raised when text is received on a session.
+        /// </summary>
         public event EventHandler<TadDataEventArgs>? DataReceived;
+        /// <summary>
+        /// Raised when text is sent on a session.
+        /// </summary>
         public event EventHandler<TadDataEventArgs>? DataSent;
 
+        /// <summary>
+        /// Creates the TAD server.
+        /// </summary>
+        /// <param name="logger">
+        /// Diagnostics logger.
+        /// </param>
+        /// <param name="runtime">
+        /// The protocol runtime that carries the calls.
+        /// </param>
         public TadServer(ILogger logger, IProtocolRuntime runtime)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -53,11 +89,13 @@ namespace RetroIO.Protocols.X25.Modules
 
         #region IProtocolModule Implementation
 
+        /// <inheritdoc/>
         public void OnBound(ushort lcn)
         {
             _logger.LogDebug("TAD Server bound to LCN {LCN}", lcn);
         }
 
+        /// <inheritdoc/>
         public void OnUnbound(ushort lcn)
         {
             lock (_sessionsLock)
@@ -73,6 +111,7 @@ namespace RetroIO.Protocols.X25.Modules
             }
         }
 
+        /// <inheritdoc/>
         public void OnX25Event(X25PacketEventArgs args)
         {
             try
@@ -1056,6 +1095,9 @@ namespace RetroIO.Protocols.X25.Modules
 
         #region IDisposable
 
+        /// <summary>
+        /// Disposes all sessions and clears the session table.
+        /// </summary>
         public void Dispose()
         {
             lock (_sessionsLock)
@@ -1100,9 +1142,21 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public enum TadServiceType
     {
+        /// <summary>
+        /// Loopback echo service.
+        /// </summary>
         LoopbackEcho,
+        /// <summary>
+        /// General terminal service.
+        /// </summary>
         GeneralTerminal,
+        /// <summary>
+        /// File transfer service.
+        /// </summary>
         FileTransfer,
+        /// <summary>
+        /// Remote login service.
+        /// </summary>
         RemoteLogin
     }
 
@@ -1111,12 +1165,33 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public class TadSessionInfo
     {
+        /// <summary>
+        /// Gets or sets the session identifier.
+        /// </summary>
         public string SessionId { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the logical channel number of the session.
+        /// </summary>
         public ushort LCN { get; set; }
+        /// <summary>
+        /// Gets or sets the address of the caller.
+        /// </summary>
         public string CallingAddress { get; set; } = "";
+        /// <summary>
+        /// Gets or sets the time the session started.
+        /// </summary>
         public DateTime StartTime { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes received on the session.
+        /// </summary>
         public long BytesReceived { get; set; }
+        /// <summary>
+        /// Gets or sets the number of bytes sent on the session.
+        /// </summary>
         public long BytesSent { get; set; }
+        /// <summary>
+        /// Gets or sets the service type of the session.
+        /// </summary>
         public TadServiceType ServiceType { get; set; }
     }
 
@@ -1125,7 +1200,13 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public enum TadSessionEvent
     {
+        /// <summary>
+        /// The session started.
+        /// </summary>
         Started,
+        /// <summary>
+        /// The session ended.
+        /// </summary>
         Ended
     }
 
@@ -1134,7 +1215,13 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public enum TadDataDirection
     {
+        /// <summary>
+        /// Text sent by the server.
+        /// </summary>
         Sent,
+        /// <summary>
+        /// Text received by the server.
+        /// </summary>
         Received
     }
 
@@ -1143,9 +1230,24 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public class TadSessionEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the session identifier.
+        /// </summary>
         public string SessionId { get; }
+        /// <summary>
+        /// Gets the session event.
+        /// </summary>
         public TadSessionEvent Event { get; }
 
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="sessionId">
+        /// The session identifier.
+        /// </param>
+        /// <param name="sessionEvent">
+        /// The session event.
+        /// </param>
         public TadSessionEventArgs(string sessionId, TadSessionEvent sessionEvent)
         {
             SessionId = sessionId;
@@ -1158,10 +1260,31 @@ namespace RetroIO.Protocols.X25.Modules
     /// </summary>
     public class TadDataEventArgs : EventArgs
     {
+        /// <summary>
+        /// Gets the session identifier.
+        /// </summary>
         public string SessionId { get; }
+        /// <summary>
+        /// Gets the text that was sent or received.
+        /// </summary>
         public string Data { get; }
+        /// <summary>
+        /// Gets whether the text was sent or received.
+        /// </summary>
         public TadDataDirection Direction { get; }
 
+        /// <summary>
+        /// Creates the event arguments.
+        /// </summary>
+        /// <param name="sessionId">
+        /// The session identifier.
+        /// </param>
+        /// <param name="data">
+        /// The text that was sent or received.
+        /// </param>
+        /// <param name="direction">
+        /// Whether the text was sent or received.
+        /// </param>
         public TadDataEventArgs(string sessionId, string data, TadDataDirection direction)
         {
             SessionId = sessionId;
