@@ -2,6 +2,8 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Ship the XML documentation with every package, so callers get IntelliSense text. With TreatWarningsAsErrors on, a public member without a comment (CS1591) fails the build. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\nuget-icon.png" Pack="true" PackagePath="nuget-icon.png" Visible="false" />
