@@ -35,6 +35,18 @@ public class TnfsController : ControllerBase
     private readonly TnfsServerStatistics? _statistics;
     private readonly ILogger<TnfsController> _logger;
 
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
+    /// <param name="sessionManager">
+    /// The TNFS session manager, or null when no TNFS server runs in this process.
+    /// </param>
+    /// <param name="statistics">
+    /// The TNFS server statistics, or null when no TNFS server runs in this process.
+    /// </param>
     public TnfsController(
         ILogger<TnfsController> logger,
         SessionManager? sessionManager = null,

@@ -12,6 +12,9 @@ using RetroIO.Protocols.Econet.Server;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller that reports Econet file server statistics and sessions.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class EconetController : ControllerBase
@@ -24,6 +27,18 @@ public class EconetController : ControllerBase
     private readonly IEconetActivityLog? _activityLog;
     private readonly ILogger<EconetController> _logger;
 
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
+    /// <param name="sessionManager">
+    /// The Econet file server session manager, or null when this process does not run the Econet server.
+    /// </param>
+    /// <param name="activityLog">
+    /// The Econet activity log, or null when this process does not run the Econet server.
+    /// </param>
     public EconetController(ILogger<EconetController> logger,
                             FileServerSessionManager? sessionManager = null,
                             IEconetActivityLog? activityLog = null)
@@ -33,6 +48,15 @@ public class EconetController : ControllerBase
         _activityLog = activityLog;
     }
 
+    /// <summary>
+    /// Returns Econet statistics.
+    /// </summary>
+    /// <remarks>
+    /// Only the active session count is read from the session manager, and it is 0 when there is no session manager. The request count, the byte count and the uptime are fixed at 0, 0 and the text 0s.
+    /// </remarks>
+    /// <returns>
+    /// A response with the statistics, or status 500 with an error response when an exception occurs.
+    /// </returns>
     [HttpGet("statistics")]
     public ActionResult<ApiResponse<EconetStatisticsResponse>> GetStatistics()
     {
@@ -55,6 +79,12 @@ public class EconetController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Returns the active Econet file server sessions.
+    /// </summary>
+    /// <returns>
+    /// A response with one entry per active session, or status 500 with an error response when an exception occurs.
+    /// </returns>
     [HttpGet("sessions")]
     public ActionResult<ApiResponse<EconetSessionsResponse>> GetSessions()
     {

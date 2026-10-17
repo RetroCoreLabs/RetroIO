@@ -11,6 +11,9 @@ using RetroIO.Management.Contracts;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller for the in-memory log entries.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class LogsController : ControllerBase
@@ -18,6 +21,15 @@ public class LogsController : ControllerBase
     private readonly InMemoryLogProvider _logProvider;
     private readonly ILogger<LogsController> _logger;
 
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="logProvider">
+    /// The in-memory log provider that holds the entries.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
     public LogsController(InMemoryLogProvider logProvider, ILogger<LogsController> logger)
     {
         _logProvider = logProvider;

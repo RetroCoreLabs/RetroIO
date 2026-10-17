@@ -11,6 +11,9 @@ using RetroIO.Management.Contracts;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller for groups.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class GroupsController : ControllerBase
@@ -18,6 +21,15 @@ public class GroupsController : ControllerBase
     private readonly IRetroIDP _idp;
     private readonly ILogger<GroupsController> _logger;
 
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="idp">
+    /// The identity provider that holds the groups and users.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
     public GroupsController(IRetroIDP idp, ILogger<GroupsController> logger)
     {
         _idp = idp;

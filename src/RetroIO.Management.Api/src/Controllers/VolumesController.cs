@@ -11,6 +11,9 @@ using RetroIO.Server.Core.FileSystem;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller for the volume files (disk images) in the volumes directory.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class VolumesController : ControllerBase
@@ -19,6 +22,15 @@ public class VolumesController : ControllerBase
     private readonly ILogger<VolumesController> _logger;
     private readonly string _volumesPath;
 
+    /// <summary>
+    /// Creates the controller and works out the volumes directory.
+    /// </summary>
+    /// <param name="fileSystem">
+    /// The file system backend used to list and read the volume files.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
     public VolumesController(IFileSystemBackend fileSystem, ILogger<VolumesController> logger)
     {
         _fileSystem = fileSystem;

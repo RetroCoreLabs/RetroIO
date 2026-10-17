@@ -26,17 +26,38 @@ public class ServerHub : Hub<IServerHubClient>
 {
     private readonly ILogger<ServerHub> _logger;
 
+    /// <summary>
+    /// Creates the hub.
+    /// </summary>
+    /// <param name="logger">
+    /// The logger for connect and disconnect messages.
+    /// </param>
     public ServerHub(ILogger<ServerHub> logger)
     {
         _logger = logger;
     }
 
+    /// <summary>
+    /// Logs the connection id of a client that connected, then runs the base behavior.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the base method completes.
+    /// </returns>
     public override async Task OnConnectedAsync()
     {
         _logger.LogInformation("Client connected: {ConnectionId}", Context.ConnectionId);
         await base.OnConnectedAsync();
     }
 
+    /// <summary>
+    /// Logs the connection id of a client that disconnected, then runs the base behavior.
+    /// </summary>
+    /// <param name="exception">
+    /// The exception that ended the connection, or null.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the base method completes.
+    /// </returns>
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         _logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);

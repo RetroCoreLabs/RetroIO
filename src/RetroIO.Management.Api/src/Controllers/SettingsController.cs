@@ -14,6 +14,9 @@ using RetroIO.Storage.Utilities;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller for the server settings.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class SettingsController : ControllerBase

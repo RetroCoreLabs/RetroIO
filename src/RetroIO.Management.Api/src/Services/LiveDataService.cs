@@ -22,6 +22,21 @@ public class LiveDataService : BackgroundService
     private readonly ILogger<LiveDataService> _logger;
     private int _lastLogIndex = 0;
 
+    /// <summary>
+    /// Creates the service.
+    /// </summary>
+    /// <param name="hubContext">
+    /// The hub context used to send to all clients.
+    /// </param>
+    /// <param name="logProvider">
+    /// The provider whose entries are pushed.
+    /// </param>
+    /// <param name="serverManager">
+    /// The server manager that supplies the status.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for service messages.
+    /// </param>
     public LiveDataService(
         IHubContext<ServerHub, IServerHubClient> hubContext,
         InMemoryLogProvider logProvider,
@@ -34,6 +49,18 @@ public class LiveDataService : BackgroundService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Once a second, pushes the server status, new log entries and TNFS statistics to all clients until the token is cancelled.
+    /// </summary>
+    /// <remarks>
+    /// An exception in one round is logged and the loop continues. The TNFS statistics sent are fixed at 0.
+    /// </remarks>
+    /// <param name="stoppingToken">
+    /// A token that stops the loop.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the loop ends.
+    /// </returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Live data service started");

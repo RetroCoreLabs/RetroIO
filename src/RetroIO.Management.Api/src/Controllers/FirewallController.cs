@@ -11,6 +11,9 @@ using RetroIO.Security.Firewall;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller for the firewall configuration and rules.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class FirewallController : ControllerBase
@@ -18,6 +21,15 @@ public class FirewallController : ControllerBase
     private readonly FirewallEngine _firewall;
     private readonly ILogger<FirewallController> _logger;
 
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="firewall">
+    /// The firewall engine to read and change.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
     public FirewallController(FirewallEngine firewall, ILogger<FirewallController> logger)
     {
         _firewall = firewall;

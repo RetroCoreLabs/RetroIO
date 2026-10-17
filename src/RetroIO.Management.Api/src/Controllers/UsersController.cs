@@ -11,6 +11,9 @@ using RetroIO.Management.Contracts;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller for users.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class UsersController : ControllerBase
@@ -18,6 +21,15 @@ public class UsersController : ControllerBase
     private readonly IRetroIDP _idp;
     private readonly ILogger<UsersController> _logger;
 
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="idp">
+    /// The identity provider that holds the users and groups.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
     public UsersController(IRetroIDP idp, ILogger<UsersController> logger)
     {
         _idp = idp;

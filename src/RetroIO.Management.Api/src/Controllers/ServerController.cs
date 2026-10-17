@@ -11,6 +11,9 @@ using RetroIO.Management.Contracts;
 
 namespace RetroIO.Management.Api.Controllers;
 
+/// <summary>
+/// Management API controller that reports the server status and starts, stops and restarts the server.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class ServerController : ControllerBase
@@ -18,6 +21,15 @@ public class ServerController : ControllerBase
     private readonly IServerManager _serverManager;
     private readonly ILogger<ServerController> _logger;
 
+    /// <summary>
+    /// Creates the controller.
+    /// </summary>
+    /// <param name="serverManager">
+    /// The server manager that does the work.
+    /// </param>
+    /// <param name="logger">
+    /// The logger for error messages.
+    /// </param>
     public ServerController(IServerManager serverManager, ILogger<ServerController> logger)
     {
         _serverManager = serverManager;
