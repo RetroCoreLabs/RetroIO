@@ -118,6 +118,12 @@ public struct TnfsHeader
     /// </summary>
     public bool IsFileCommand() => GetCommandClass() == TnfsConstants.CLASS_FILE;
 
+    /// <summary>
+    /// Returns the header as text.
+    /// </summary>
+    /// <returns>
+    /// Text with the session ID in hex, the sequence number, the command in hex with its name, and the status in hex.
+    /// </returns>
     public override string ToString()
     {
         return $"TNFS Header: SID=0x{SessionId:X4}, Seq={SequenceNumber}, Cmd=0x{Command:X2} ({TnfsConstants.GetCommandName(Command)}), Status=0x{Status:X2}";

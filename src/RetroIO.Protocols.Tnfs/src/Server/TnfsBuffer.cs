@@ -43,6 +43,9 @@ public sealed class TnfsBuffer : IDisposable
         return new TnfsBuffer(owner);
     }
 
+    /// <summary>
+    /// Returns the rented buffer to the pool. Calling it again does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

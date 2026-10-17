@@ -151,6 +151,9 @@ public sealed class TnfsMessage : IDisposable
         return bytesWritten;
     }
 
+    /// <summary>
+    /// Releases the message buffer. Calling it again does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -161,6 +164,12 @@ public sealed class TnfsMessage : IDisposable
         _disposed = true;
     }
 
+    /// <summary>
+    /// Returns the message as text.
+    /// </summary>
+    /// <returns>
+    /// Text with the header, the data length and the total length in bytes.
+    /// </returns>
     public override string ToString()
     {
         return $"TNFS Message: {Header}, DataLen={Data.Length}, Total={Length} bytes";

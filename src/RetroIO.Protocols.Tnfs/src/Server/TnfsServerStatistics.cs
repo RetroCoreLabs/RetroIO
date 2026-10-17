@@ -42,9 +42,21 @@ public sealed class TnfsServerStatistics
         Interlocked.Increment(ref _filesTransferred);
     }
 
+    /// <summary>
+    /// Gets the number of requests recorded.
+    /// </summary>
     public long TotalRequests => Interlocked.Read(ref _totalRequests);
+    /// <summary>
+    /// Gets the total bytes recorded for all requests.
+    /// </summary>
     public long BytesTransferred => Interlocked.Read(ref _bytesTransferred);
+    /// <summary>
+    /// Gets the number of files recorded as opened for transfer.
+    /// </summary>
     public long FilesTransferred => Interlocked.Read(ref _filesTransferred);
+    /// <summary>
+    /// Gets the time since the statistics object was created.
+    /// </summary>
     public TimeSpan Uptime => DateTime.UtcNow - _startedAt;
 
     /// <summary>

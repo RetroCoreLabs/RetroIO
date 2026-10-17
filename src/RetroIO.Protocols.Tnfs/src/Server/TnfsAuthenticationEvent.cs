@@ -65,6 +65,21 @@ public sealed class TnfsAuthenticationResponse
     /// </summary>
     public string? ErrorMessage { get; set; }
 
+    /// <summary>
+    /// Creates a response that reports a successful authentication.
+    /// </summary>
+    /// <param name="userId">
+    /// The authenticated user ID.
+    /// </param>
+    /// <param name="username">
+    /// The authenticated user name.
+    /// </param>
+    /// <param name="isAdmin">
+    /// True when the user is an administrator.
+    /// </param>
+    /// <returns>
+    /// A response with IsAuthenticated set to true.
+    /// </returns>
     public static TnfsAuthenticationResponse Success(Guid userId, string username, bool isAdmin = false)
     {
         return new TnfsAuthenticationResponse
@@ -76,6 +91,15 @@ public sealed class TnfsAuthenticationResponse
         };
     }
 
+    /// <summary>
+    /// Creates a response that reports a failed authentication.
+    /// </summary>
+    /// <param name="errorMessage">
+    /// The reason for the failure.
+    /// </param>
+    /// <returns>
+    /// A response with IsAuthenticated set to false and an empty user ID.
+    /// </returns>
     public static TnfsAuthenticationResponse Failed(string errorMessage)
     {
         return new TnfsAuthenticationResponse

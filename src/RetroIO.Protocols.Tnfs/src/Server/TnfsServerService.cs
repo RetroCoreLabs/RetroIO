@@ -31,6 +31,36 @@ public sealed class TnfsServerService : BackgroundService
     private readonly SecurityEventEmitter? _securityEvents;
     private readonly TnfsServerStatistics? _statistics;
 
+    /// <summary>
+    /// Creates the service.
+    /// </summary>
+    /// <param name="transports">
+    /// The transports to run.
+    /// </param>
+    /// <param name="sessionHandler">
+    /// The handler for session commands.
+    /// </param>
+    /// <param name="directoryHandler">
+    /// The handler for directory commands.
+    /// </param>
+    /// <param name="fileHandler">
+    /// The handler for file commands.
+    /// </param>
+    /// <param name="sessionManager">
+    /// The session manager.
+    /// </param>
+    /// <param name="logger">
+    /// The logger to write to.
+    /// </param>
+    /// <param name="rateLimiter">
+    /// The rate limiter, or null for none.
+    /// </param>
+    /// <param name="securityEvents">
+    /// The emitter for security events, or null for none.
+    /// </param>
+    /// <param name="statistics">
+    /// The statistics collector, or null for none.
+    /// </param>
     public TnfsServerService(
         IEnumerable<ITransport> transports,
         SessionCommandHandler sessionHandler,
@@ -53,6 +83,15 @@ public sealed class TnfsServerService : BackgroundService
         _statistics = statistics;
     }
 
+    /// <summary>
+    /// Hooks the message handler to every transport and runs all transports at the same time.
+    /// </summary>
+    /// <param name="stoppingToken">
+    /// Signals that the service is stopping.
+    /// </param>
+    /// <returns>
+    /// A task that completes when all transports have ended. It completes at once, after logging an error, when there are no transports.
+    /// </returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var transportList = _transports.ToList();

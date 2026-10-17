@@ -23,6 +23,18 @@ public sealed class DirectoryCommandHandler
     private readonly ILogger<DirectoryCommandHandler> _logger;
     private readonly IFileSystemBackend _fileSystem;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="sessionManager">
+    /// The session manager used to find and validate sessions.
+    /// </param>
+    /// <param name="logger">
+    /// The logger to write to.
+    /// </param>
+    /// <param name="fileSystem">
+    /// The file system backend that directory operations run against.
+    /// </param>
     public DirectoryCommandHandler(
         SessionManager sessionManager,
         ILogger<DirectoryCommandHandler> logger,

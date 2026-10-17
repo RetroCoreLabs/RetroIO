@@ -36,6 +36,21 @@ public class FileCommandHandler
     private const ushort S_IFCHR = 0x2000;  // Character device
     private const ushort S_IFIFO = 0x1000;  // FIFO
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="sessionManager">
+    /// The session manager used to find and validate sessions.
+    /// </param>
+    /// <param name="logger">
+    /// The logger to write to.
+    /// </param>
+    /// <param name="fileSystem">
+    /// The file system backend that file operations run against.
+    /// </param>
+    /// <param name="securityEvents">
+    /// The emitter for security events, or null for none.
+    /// </param>
     public FileCommandHandler(
         SessionManager sessionManager,
         ILogger<FileCommandHandler> logger,

@@ -40,8 +40,10 @@ public sealed class UdpTransport : ITransport
     private readonly SecurityEventEmitter? _securityEvents;
     private bool _disposed;
 
+    /// <inheritdoc/>
     public string TransportType => "UDP";
 
+    /// <inheritdoc/>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -50,8 +52,24 @@ public sealed class UdpTransport : ITransport
         IsReliable = false
     };
 
+    /// <inheritdoc/>
     public event Func<TnfsMessage, ValueTask>? OnMessageReceived;
 
+    /// <summary>
+    /// Creates the transport. The socket is created and bound later, when it runs.
+    /// </summary>
+    /// <param name="port">
+    /// The port to bind.
+    /// </param>
+    /// <param name="logger">
+    /// The logger to write to.
+    /// </param>
+    /// <param name="firewall">
+    /// The firewall engine, or null for none.
+    /// </param>
+    /// <param name="securityEvents">
+    /// The emitter for security events, or null for none.
+    /// </param>
     public UdpTransport(
         int port,
         ILogger<UdpTransport> logger,
@@ -222,6 +240,9 @@ public sealed class UdpTransport : ITransport
         }
     }
 
+    /// <summary>
+    /// Disposes the socket if there is one.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

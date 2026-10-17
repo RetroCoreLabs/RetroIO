@@ -26,6 +26,18 @@ public sealed class SessionManager : IDisposable
     private readonly Timer _cleanupTimer;
     private bool _disposed;
 
+    /// <summary>
+    /// Creates the manager and starts a timer that runs the session cleanup every minute.
+    /// </summary>
+    /// <param name="logger">
+    /// The logger to write to.
+    /// </param>
+    /// <param name="sessionTimeout">
+    /// How long a session may be idle before it expires. Null uses the SESSION_TIMEOUT constant (600 seconds).
+    /// </param>
+    /// <param name="maxSessionsPerIP">
+    /// Limit on the number of sessions from one IP address.
+    /// </param>
     public SessionManager(ILogger<SessionManager> logger, TimeSpan? sessionTimeout = null, int maxSessionsPerIP = 8)
     {
         _logger = logger;
@@ -255,6 +267,9 @@ public sealed class SessionManager : IDisposable
         };
     }
 
+    /// <summary>
+    /// Stops the cleanup timer and removes all sessions.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -277,9 +292,24 @@ public sealed class SessionManager : IDisposable
 /// </summary>
 public record SessionStatistics
 {
+    /// <summary>
+    /// Gets the number of sessions.
+    /// </summary>
     public int TotalSessions { get; init; }
+    /// <summary>
+    /// Gets the number of sessions without a TCP connection ID.
+    /// </summary>
     public int UdpSessions { get; init; }
+    /// <summary>
+    /// Gets the number of sessions with a TCP connection ID.
+    /// </summary>
     public int TcpSessions { get; init; }
+    /// <summary>
+    /// Gets the number of distinct client IP addresses.
+    /// </summary>
     public int UniqueIPs { get; init; }
+    /// <summary>
+    /// Gets the time since the oldest last contact of any session, or zero when there are no sessions.
+    /// </summary>
     public TimeSpan OldestSessionAge { get; init; }
 }

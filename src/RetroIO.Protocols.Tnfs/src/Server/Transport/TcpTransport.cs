@@ -33,8 +33,10 @@ public sealed class TcpTransport : ITransport
     private int _nextConnectionId = 0;
     private bool _disposed;
 
+    /// <inheritdoc/>
     public string TransportType => "TCP";
 
+    /// <inheritdoc/>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -43,8 +45,24 @@ public sealed class TcpTransport : ITransport
         IsReliable = true
     };
 
+    /// <inheritdoc/>
     public event Func<TnfsMessage, ValueTask>? OnMessageReceived;
 
+    /// <summary>
+    /// Creates the transport with a TCP listener on all addresses.
+    /// </summary>
+    /// <param name="port">
+    /// The port to listen on.
+    /// </param>
+    /// <param name="logger">
+    /// The logger to write to.
+    /// </param>
+    /// <param name="firewall">
+    /// The firewall engine, or null for none.
+    /// </param>
+    /// <param name="securityEvents">
+    /// The emitter for security events, or null for none.
+    /// </param>
     public TcpTransport(
         int port,
         ILogger<TcpTransport> logger,
@@ -275,6 +293,9 @@ public sealed class TcpTransport : ITransport
         }
     }
 
+    /// <summary>
+    /// Stops the listener and disposes all connections.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

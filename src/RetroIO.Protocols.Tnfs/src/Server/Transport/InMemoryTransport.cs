@@ -23,8 +23,10 @@ public sealed class InMemoryTransport : ITransport
     private readonly IPAddress _virtualClientIP;
     private readonly int _virtualClientPort;
 
+    /// <inheritdoc/>
     public string TransportType => "InMemory";
 
+    /// <inheritdoc/>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -33,8 +35,18 @@ public sealed class InMemoryTransport : ITransport
         IsReliable = true
     };
 
+    /// <inheritdoc/>
     public event Func<TnfsMessage, ValueTask>? OnMessageReceived;
 
+    /// <summary>
+    /// Creates the transport.
+    /// </summary>
+    /// <param name="virtualClientIP">
+    /// The IP address given to test messages that have none. Null uses the loopback address.
+    /// </param>
+    /// <param name="virtualClientPort">
+    /// The port given to test messages that have none.
+    /// </param>
     public InMemoryTransport(IPAddress? virtualClientIP = null, int virtualClientPort = 50000)
     {
         _serverInbound = Channel.CreateUnbounded<TnfsMessage>();
@@ -113,6 +125,9 @@ public sealed class InMemoryTransport : ITransport
         return _serverOutbound.Reader.TryRead(out message);
     }
 
+    /// <summary>
+    /// Completes the inbound and outbound channels.
+    /// </summary>
     public void Dispose()
     {
         _serverInbound.Writer.Complete();

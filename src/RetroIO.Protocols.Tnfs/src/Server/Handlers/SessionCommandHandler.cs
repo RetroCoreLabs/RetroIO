@@ -29,6 +29,21 @@ public sealed class SessionCommandHandler
     /// </summary>
     public event TnfsAuthenticateEventHandler? OnAuthenticationRequest;
 
+    /// <summary>
+    /// Creates the handler.
+    /// </summary>
+    /// <param name="sessionManager">
+    /// The session manager that creates and removes sessions.
+    /// </param>
+    /// <param name="logger">
+    /// The logger to write to.
+    /// </param>
+    /// <param name="rootDirectory">
+    /// The root directory given to new sessions.
+    /// </param>
+    /// <param name="fileSystem">
+    /// The file system backend used by the handler.
+    /// </param>
     public SessionCommandHandler(
         SessionManager sessionManager,
         ILogger<SessionCommandHandler> logger,

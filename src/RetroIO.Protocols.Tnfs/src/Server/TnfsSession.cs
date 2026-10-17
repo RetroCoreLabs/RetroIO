@@ -168,6 +168,12 @@ public sealed class TnfsSession
         return DateTime.UtcNow - LastContact > timeout;
     }
 
+    /// <summary>
+    /// Returns the session as text.
+    /// </summary>
+    /// <returns>
+    /// Text with the session ID in hex, the client IP, the root path and the last contact time.
+    /// </returns>
     public override string ToString()
     {
         return $"Session 0x{SessionId:X4}: IP={ClientIP}, Root={RootPath}, LastContact={LastContact:HH:mm:ss}";
@@ -248,13 +254,37 @@ public struct DirectoryHandle
 /// </summary>
 public struct DirectoryEntry
 {
+    /// <summary>
+    /// Gets or sets the entry name.
+    /// </summary>
     public string Name { get; set; }
+    /// <summary>
+    /// Gets or sets the entry size.
+    /// </summary>
     public uint Size { get; set; }
+    /// <summary>
+    /// Gets or sets the modified time.
+    /// </summary>
     public uint ModifiedTime { get; set; }
+    /// <summary>
+    /// Gets or sets the created time.
+    /// </summary>
     public uint CreatedTime { get; set; }
+    /// <summary>
+    /// Gets or sets the entry flags, made of the TNFS_DIRENTRY constants.
+    /// </summary>
     public byte Flags { get; set; }
 
+    /// <summary>
+    /// Gets whether the directory flag is set.
+    /// </summary>
     public bool IsDirectory => (Flags & TnfsConstants.TNFS_DIRENTRY_DIR) != 0;
+    /// <summary>
+    /// Gets whether the hidden flag is set.
+    /// </summary>
     public bool IsHidden => (Flags & TnfsConstants.TNFS_DIRENTRY_HIDDEN) != 0;
+    /// <summary>
+    /// Gets whether the special flag is set.
+    /// </summary>
     public bool IsSpecial => (Flags & TnfsConstants.TNFS_DIRENTRY_SPECIAL) != 0;
 }
