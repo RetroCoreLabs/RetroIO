@@ -55,7 +55,13 @@ namespace RetroIO.Storage.Providers
         public string Type => "tnfs";
 
         // VFS Properties
+        /// <summary>
+        /// Gets the URI schemes this provider handles, tnfs.
+        /// </summary>
         public string[] SupportedSchemes => new[] { "tnfs" };
+        /// <summary>
+        /// Gets whether the volumes are remote, which is true.
+        /// </summary>
         public bool IsRemote => true;
 
         /// <summary>
@@ -538,6 +544,30 @@ namespace RetroIO.Storage.Providers
 
         // ==================== VFS Async Methods ====================
 
+        /// <summary>
+        /// Opens a file on the TNFS server for reading and returns a stream over the open file.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that is not used.
+        /// </param>
+        /// <returns>
+        /// A task with the stream.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when the server reports that the file does not exist.
+        /// </exception>
+        /// <exception cref="System.IO.IOException">
+        /// Thrown when the server cannot open the file for another reason.
+        /// </exception>
         public async Task<Stream> OpenReadAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             TnfsMount mount = GetMount(context.VolumeId);
@@ -555,6 +585,27 @@ namespace RetroIO.Storage.Providers
             return await Task.FromResult<Stream>(new TnfsReadStream(mount.Client, openResult.Data));
         }
 
+        /// <summary>
+        /// Writes a stream to a file on the TNFS server on a thread pool thread.
+        /// </summary>
+        /// <remarks>
+        /// The read-only check is done inside the task, so a read-only error comes out through the returned task.
+        /// </remarks>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file.
+        /// </param>
+        /// <param name="data">
+        /// The stream with the content to write.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task that completes when the file is written.
+        /// </returns>
         public Task WriteAsync(UrnContext context, string path, Stream data, CancellationToken cancellationToken)
         {
             // The TNFS client is synchronous; wrap the write on a worker (same pattern as
@@ -606,12 +657,42 @@ namespace RetroIO.Storage.Providers
             }
         }
 
+        /// <summary>
+        /// Lists a directory by running ListDirectory on a thread pool thread.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the directory.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the directory entries.
+        /// </returns>
         public Task<DirectoryEntry[]> ListDirectoryAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             // Wrap synchronous method (TNFS client is sync-based)
             return Task.Run(() => ListDirectory(context, path), cancellationToken);
         }
 
+        /// <summary>
+        /// Gets metadata by running GetMetadata on a thread pool thread.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file or directory.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the metadata, or null.
+        /// </returns>
         public Task<FileMetadata?> GetMetadataAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             // Wrap synchronous method

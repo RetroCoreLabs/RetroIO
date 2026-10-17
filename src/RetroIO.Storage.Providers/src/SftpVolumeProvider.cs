@@ -35,16 +35,40 @@ namespace RetroIO.Storage.Providers
         private readonly Dictionary<string, SftpMount> _mounts;
         private bool _disposed;
 
+        /// <summary>
+        /// Creates the provider with no mounted volumes.
+        /// </summary>
         public SftpVolumeProvider()
         {
             _mounts = new Dictionary<string, SftpMount>(StringComparer.OrdinalIgnoreCase);
         }
 
         // IVolumeProvider properties
+        /// <summary>
+        /// Gets the volume type, which is sftp.
+        /// </summary>
         public string Type => "sftp";
+        /// <summary>
+        /// Gets the URI schemes this provider handles, sftp.
+        /// </summary>
         public string[] SupportedSchemes => new[] { "sftp" };
+        /// <summary>
+        /// Gets whether the volumes are remote, which is true.
+        /// </summary>
         public bool IsRemote => true;
 
+        /// <summary>
+        /// Checks that a mount entry has the sftp provider type.
+        /// </summary>
+        /// <param name="entry">
+        /// The mount entry to check.
+        /// </param>
+        /// <param name="errorMessage">
+        /// The reason when the check fails, otherwise null.
+        /// </param>
+        /// <returns>
+        /// True when the provider type matches. False otherwise.
+        /// </returns>
         public bool CanRestore(UnifiedMountEntry entry, out string? errorMessage)
         {
             if (entry.ProviderType != Type)
@@ -57,11 +81,44 @@ namespace RetroIO.Storage.Providers
             return true;
         }
 
+        /// <summary>
+        /// Mounts a volume from a mount entry, using its source URI, volume identifier and read-only flag.
+        /// </summary>
+        /// <param name="entry">
+        /// The mount entry.
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the URI or the volume identifier is empty, the volume identifier is already mounted, or no password or key is available.
+        /// </exception>
         public MountInfo MountFromConfig(UnifiedMountEntry entry)
         {
             return Mount(entry.SourceUri, entry.VolumeId, entry.IsReadOnly);
         }
 
+        /// <summary>
+        /// Mounts an SFTP server path as a volume.
+        /// </summary>
+        /// <remarks>
+        /// The URI has the form sftp, then ://, then optional user name and password followed by an at sign, then host, optional port and path. The default port is 22 and the default user name is the current operating system user. With a password in the URI, password login is used. Without one, the key file from the query value keyFile is used, with the optional query value keyPassphrase, or else the first default key found under the .ssh folder of the user. The connection is not opened until the first operation, with a connection timeout of 30 seconds.
+        /// </remarks>
+        /// <param name="uri">
+        /// The URI of the SFTP server and path.
+        /// </param>
+        /// <param name="volumeId">
+        /// The identifier for the new volume.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to refuse writes.
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="uri"/> or <paramref name="volumeId"/> is empty, the volume identifier is already mounted, or the URI has no password and no key file is found.
+        /// </exception>
         public MountInfo Mount(string uri, string volumeId, bool readOnly)
         {
             if (string.IsNullOrWhiteSpace(uri))
@@ -141,6 +198,15 @@ namespace RetroIO.Storage.Providers
             };
         }
 
+        /// <summary>
+        /// Disconnects and disposes the client of a volume and removes the volume.
+        /// </summary>
+        /// <param name="volumeId">
+        /// The identifier of the volume.
+        /// </param>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
         public void Unmount(string volumeId)
         {
             if (!_mounts.TryGetValue(volumeId, out SftpMount? mount))
@@ -153,6 +219,15 @@ namespace RetroIO.Storage.Providers
             _mounts.Remove(volumeId);
         }
 
+        /// <summary>
+        /// Gets information about a mounted volume.
+        /// </summary>
+        /// <param name="volumeId">
+        /// The identifier of the volume.
+        /// </param>
+        /// <returns>
+        /// The mount information, or null when the volume is not found.
+        /// </returns>
         public MountInfo? GetMountInfo(string volumeId)
         {
             if (!_mounts.TryGetValue(volumeId, out SftpMount? mount))
@@ -168,6 +243,12 @@ namespace RetroIO.Storage.Providers
             };
         }
 
+        /// <summary>
+        /// Lists the mounted volumes.
+        /// </summary>
+        /// <returns>
+        /// An array with the mount information of each volume.
+        /// </returns>
         public MountInfo[] ListMounts()
         {
             MountInfo[] mounts = new MountInfo[_mounts.Count];
@@ -192,6 +273,21 @@ namespace RetroIO.Storage.Providers
         }
 
         // File operations
+        /// <summary>
+        /// Reads a file from the server.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted path.
+        /// </param>
+        /// <returns>
+        /// The content of the file.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
         public byte[] ReadFile(UrnContext context, string path)
         {
             SftpMount mount = GetMount(context.VolumeId);
@@ -201,6 +297,24 @@ namespace RetroIO.Storage.Providers
             return mount.Client.ReadAllBytes(fullPath);
         }
 
+        /// <summary>
+        /// Writes a byte array to a file on the server.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted path.
+        /// </param>
+        /// <param name="data">
+        /// The content to write.
+        /// </param>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the volume or the context is read-only.
+        /// </exception>
         public void WriteFile(UrnContext context, string path, byte[] data)
         {
             SftpMount mount = GetMount(context.VolumeId);
@@ -214,6 +328,21 @@ namespace RetroIO.Storage.Providers
             mount.Client.WriteAllBytes(fullPath, data);
         }
 
+        /// <summary>
+        /// Deletes a file on the server.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted path.
+        /// </param>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the volume or the context is read-only.
+        /// </exception>
         public void DeleteFile(UrnContext context, string path)
         {
             SftpMount mount = GetMount(context.VolumeId);
@@ -227,6 +356,21 @@ namespace RetroIO.Storage.Providers
             mount.Client.DeleteFile(fullPath);
         }
 
+        /// <summary>
+        /// Lists a directory on the server, without the dot and dot-dot entries.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the directory below the mounted path.
+        /// </param>
+        /// <returns>
+        /// An array with the entries of the directory, with name, size, directory flag and last write time.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(UrnContext context, string path)
         {
             SftpMount mount = GetMount(context.VolumeId);
@@ -263,6 +407,21 @@ namespace RetroIO.Storage.Providers
             return entries.ToArray();
         }
 
+        /// <summary>
+        /// Gets information about a file or directory on the server.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path below the mounted path.
+        /// </param>
+        /// <returns>
+        /// The metadata, or null when the path does not exist.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
         public FileMetadata? GetMetadata(UrnContext context, string path)
         {
             SftpMount mount = GetMount(context.VolumeId);
@@ -285,6 +444,24 @@ namespace RetroIO.Storage.Providers
         }
 
         // VFS Async methods
+        /// <summary>
+        /// Opens a file on the server for reading as a stream.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted path.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the stream.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
         public async Task<Stream> OpenReadAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             SftpMount mount = GetMount(context.VolumeId);
@@ -296,6 +473,30 @@ namespace RetroIO.Storage.Providers
             return await Task.Run(() => mount.Client.OpenRead(fullPath), cancellationToken);
         }
 
+        /// <summary>
+        /// Copies a stream into a file on the server.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted path.
+        /// </param>
+        /// <param name="data">
+        /// The stream with the content to write.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task that completes when the copy is done.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the volume or the context is read-only.
+        /// </exception>
         public async Task WriteAsync(UrnContext context, string path, Stream data, CancellationToken cancellationToken)
         {
             SftpMount mount = GetMount(context.VolumeId);
@@ -314,27 +515,99 @@ namespace RetroIO.Storage.Providers
             }, cancellationToken);
         }
 
+        /// <summary>
+        /// Lists a directory by running ListDirectory on a thread pool thread.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the directory below the mounted path.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the directory entries.
+        /// </returns>
         public Task<DirectoryEntry[]> ListDirectoryAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             return Task.Run(() => ListDirectory(context, path), cancellationToken);
         }
 
+        /// <summary>
+        /// Gets metadata by running GetMetadata on a thread pool thread.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path below the mounted path.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the metadata, or null.
+        /// </returns>
         public Task<FileMetadata?> GetMetadataAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             return Task.Run(() => GetMetadata(context, path), cancellationToken);
         }
 
         // Block operations (not supported)
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="address">
+        /// The block address.
+        /// </param>
+        /// <param name="buffer">
+        /// The buffer that would receive the block.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="System.NotSupportedException">
+        /// Always thrown, because SFTP has no block-level access.
+        /// </exception>
         public int ReadBlock(UrnContext context, BlockAddress address, Span<byte> buffer)
         {
             throw new NotSupportedException("SFTP does not support block-level access.");
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="address">
+        /// The block address.
+        /// </param>
+        /// <param name="data">
+        /// The data that would be written.
+        /// </param>
+        /// <exception cref="System.NotSupportedException">
+        /// Always thrown, because SFTP has no block-level access.
+        /// </exception>
         public void WriteBlock(UrnContext context, BlockAddress address, ReadOnlySpan<byte> data)
         {
             throw new NotSupportedException("SFTP does not support block-level access.");
         }
 
+        /// <summary>
+        /// Returns null, because there is no block access.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public BlockDeviceInfo? GetBlockDeviceInfo(UrnContext context)
         {
             return null;
@@ -365,6 +638,9 @@ namespace RetroIO.Storage.Providers
             }
         }
 
+        /// <summary>
+        /// Unmounts every mounted volume. Errors while unmounting are ignored.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)

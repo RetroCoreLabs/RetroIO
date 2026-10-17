@@ -23,17 +23,41 @@ namespace RetroIO.Storage.Providers
         private readonly Dictionary<string, NativeDirectoryMount> _mounts;
         private bool _disposed;
 
+        /// <summary>
+        /// Creates the provider with no mounted volumes.
+        /// </summary>
         public NativeVolumeProvider()
         {
             _mounts = new Dictionary<string, NativeDirectoryMount>(StringComparer.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Gets the volume type, which is native.
+        /// </summary>
         public string Type => "native";
 
         // VFS Properties
+        /// <summary>
+        /// Gets the URI schemes this provider handles, file.
+        /// </summary>
         public string[] SupportedSchemes => new[] { "file" };
+        /// <summary>
+        /// Gets whether the volumes are remote, which is false.
+        /// </summary>
         public bool IsRemote => false;
 
+        /// <summary>
+        /// Checks that the directory named by the source URI of a mount entry exists.
+        /// </summary>
+        /// <param name="entry">
+        /// The mount entry to check.
+        /// </param>
+        /// <param name="errorMessage">
+        /// The reason when the check fails, otherwise null.
+        /// </param>
+        /// <returns>
+        /// True when the directory exists. False otherwise.
+        /// </returns>
         public bool CanRestore(UnifiedMountEntry entry, out string? errorMessage)
         {
             if (!Directory.Exists(entry.SourceUri))
@@ -46,11 +70,47 @@ namespace RetroIO.Storage.Providers
             return true;
         }
 
+        /// <summary>
+        /// Mounts a volume from a mount entry, using its source URI, volume identifier and read-only flag.
+        /// </summary>
+        /// <param name="entry">
+        /// The mount entry.
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the URI or the volume identifier is empty, or the volume identifier is already mounted.
+        /// </exception>
+        /// <exception cref="System.IO.DirectoryNotFoundException">
+        /// Thrown when the directory does not exist.
+        /// </exception>
         public MountInfo MountFromConfig(UnifiedMountEntry entry)
         {
             return Mount(entry.SourceUri, entry.VolumeId, entry.IsReadOnly);
         }
 
+        /// <summary>
+        /// Mounts a directory of the local file system as a volume.
+        /// </summary>
+        /// <param name="uri">
+        /// The path of the directory.
+        /// </param>
+        /// <param name="volumeId">
+        /// The identifier for the new volume.
+        /// </param>
+        /// <param name="readOnly">
+        /// True to refuse writes.
+        /// </param>
+        /// <returns>
+        /// Information about the mounted volume. The label is the name of the directory.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="uri"/> or <paramref name="volumeId"/> is empty, or the volume identifier is already mounted.
+        /// </exception>
+        /// <exception cref="System.IO.DirectoryNotFoundException">
+        /// Thrown when the directory does not exist.
+        /// </exception>
         public MountInfo Mount(string uri, string volumeId, bool readOnly)
         {
             if (string.IsNullOrEmpty(uri))
@@ -83,12 +143,30 @@ namespace RetroIO.Storage.Providers
             };
         }
 
+        /// <summary>
+        /// Removes a volume from the provider. The directory is not changed.
+        /// </summary>
+        /// <param name="volumeId">
+        /// The identifier of the volume.
+        /// </param>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
         public void Unmount(string volumeId)
         {
             if (!_mounts.Remove(volumeId))
                 throw new ArgumentException($"Volume ID '{volumeId}' not found.");
         }
 
+        /// <summary>
+        /// Gets information about a mounted volume.
+        /// </summary>
+        /// <param name="volumeId">
+        /// The identifier of the volume.
+        /// </param>
+        /// <returns>
+        /// The mount information, or null when the volume is not found.
+        /// </returns>
         public MountInfo? GetMountInfo(string volumeId)
         {
             if (!_mounts.TryGetValue(volumeId, out NativeDirectoryMount? mount))
@@ -106,6 +184,12 @@ namespace RetroIO.Storage.Providers
             };
         }
 
+        /// <summary>
+        /// Lists the mounted volumes.
+        /// </summary>
+        /// <returns>
+        /// An array with the mount information of each volume.
+        /// </returns>
         public MountInfo[] ListMounts()
         {
             int count = _mounts.Count;
@@ -132,6 +216,24 @@ namespace RetroIO.Storage.Providers
             return result;
         }
 
+        /// <summary>
+        /// Reads a file from the mounted directory.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted directory.
+        /// </param>
+        /// <returns>
+        /// The content of the file.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the path leaves the mounted directory.
+        /// </exception>
         public byte[] ReadFile(UrnContext context, string path)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -139,6 +241,24 @@ namespace RetroIO.Storage.Providers
             return File.ReadAllBytes(fullPath);
         }
 
+        /// <summary>
+        /// Writes a byte array to a file in the mounted directory, replacing an existing file.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted directory.
+        /// </param>
+        /// <param name="data">
+        /// The content to write.
+        /// </param>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the volume is mounted read-only, or the path leaves the mounted directory.
+        /// </exception>
         public void WriteFile(UrnContext context, string path, byte[] data)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -149,6 +269,21 @@ namespace RetroIO.Storage.Providers
             File.WriteAllBytes(fullPath, data);
         }
 
+        /// <summary>
+        /// Deletes a file in the mounted directory.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted directory.
+        /// </param>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the volume is mounted read-only, or the path leaves the mounted directory.
+        /// </exception>
         public void DeleteFile(UrnContext context, string path)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -159,6 +294,30 @@ namespace RetroIO.Storage.Providers
             File.Delete(fullPath);
         }
 
+        /// <summary>
+        /// Lists the subdirectories and files of a directory in the mounted directory.
+        /// </summary>
+        /// <remarks>
+        /// Subdirectories come first, then files. A file entry has the extension as its file type.
+        /// </remarks>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the directory below the mounted directory.
+        /// </param>
+        /// <returns>
+        /// An array with the entries, with size, creation time and last write time.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.IO.DirectoryNotFoundException">
+        /// Thrown when the directory does not exist.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the path leaves the mounted directory.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(UrnContext context, string path)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -209,6 +368,24 @@ namespace RetroIO.Storage.Providers
             return entries.ToArray();
         }
 
+        /// <summary>
+        /// Gets information about a directory or file in the mounted directory.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path below the mounted directory.
+        /// </param>
+        /// <returns>
+        /// The metadata, or null when neither a directory nor a file exists at the path.
+        /// </returns>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when the volume is not found.
+        /// </exception>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the path leaves the mounted directory.
+        /// </exception>
         public FileMetadata? GetMetadata(UrnContext context, string path)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -242,16 +419,58 @@ namespace RetroIO.Storage.Providers
             return null;
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="address">
+        /// The block address.
+        /// </param>
+        /// <param name="buffer">
+        /// The buffer that would receive the block.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="System.NotSupportedException">
+        /// Always thrown, because the provider has no block-level access.
+        /// </exception>
         public int ReadBlock(UrnContext context, BlockAddress address, Span<byte> buffer)
         {
             throw new NotSupportedException("Native volume provider does not support block-level access.");
         }
 
+        /// <summary>
+        /// Not supported. Always throws.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="address">
+        /// The block address.
+        /// </param>
+        /// <param name="data">
+        /// The data that would be written.
+        /// </param>
+        /// <exception cref="System.NotSupportedException">
+        /// Always thrown, because the provider has no block-level access.
+        /// </exception>
         public void WriteBlock(UrnContext context, BlockAddress address, ReadOnlySpan<byte> data)
         {
             throw new NotSupportedException("Native volume provider does not support block-level access.");
         }
 
+        /// <summary>
+        /// Returns null, because there is no block access.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <returns>
+        /// Always null.
+        /// </returns>
         public BlockDeviceInfo? GetBlockDeviceInfo(UrnContext context)
         {
             return null;
@@ -259,6 +478,21 @@ namespace RetroIO.Storage.Providers
 
         // ==================== VFS Async Methods ====================
 
+        /// <summary>
+        /// Opens a file for reading with shared read access.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted directory.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the file stream.
+        /// </returns>
         public async Task<Stream> OpenReadAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -274,6 +508,27 @@ namespace RetroIO.Storage.Providers
                 useAsync: true), cancellationToken);
         }
 
+        /// <summary>
+        /// Copies a stream into a file, replacing an existing file.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the file below the mounted directory.
+        /// </param>
+        /// <param name="data">
+        /// The stream with the content to write.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels the copy.
+        /// </param>
+        /// <returns>
+        /// A task that completes when the copy is done.
+        /// </returns>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the volume is mounted read-only, or the path leaves the mounted directory.
+        /// </exception>
         public async Task WriteAsync(UrnContext context, string path, Stream data, CancellationToken cancellationToken)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -293,6 +548,18 @@ namespace RetroIO.Storage.Providers
             await data.CopyToAsync(fs, bufferSize: 81920, cancellationToken);
         }
 
+        /// <summary>
+        /// Creates a directory, with any missing parent directories, in the mounted directory.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the directory below the mounted directory.
+        /// </param>
+        /// <exception cref="System.UnauthorizedAccessException">
+        /// Thrown when the volume is mounted read-only, or the path leaves the mounted directory.
+        /// </exception>
         public void CreateDirectory(UrnContext context, string path)
         {
             NativeDirectoryMount mount = GetMount(context.VolumeId);
@@ -303,18 +570,51 @@ namespace RetroIO.Storage.Providers
             Directory.CreateDirectory(fullPath);
         }
 
+        /// <summary>
+        /// Lists a directory by running ListDirectory on a thread pool thread.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path of the directory below the mounted directory.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the directory entries.
+        /// </returns>
         public Task<DirectoryEntry[]> ListDirectoryAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             // Wrap synchronous method (Directory class doesn't support true async)
             return Task.Run(() => ListDirectory(context, path), cancellationToken);
         }
 
+        /// <summary>
+        /// Gets metadata by running GetMetadata on a thread pool thread.
+        /// </summary>
+        /// <param name="context">
+        /// The context that names the volume.
+        /// </param>
+        /// <param name="path">
+        /// The path below the mounted directory.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// A token that cancels waiting for the task to start.
+        /// </param>
+        /// <returns>
+        /// A task with the metadata, or null.
+        /// </returns>
         public Task<FileMetadata?> GetMetadataAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             // Wrap synchronous method
             return Task.Run(() => GetMetadata(context, path), cancellationToken);
         }
 
+        /// <summary>
+        /// Removes all mounted volumes. The directories are not changed.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)

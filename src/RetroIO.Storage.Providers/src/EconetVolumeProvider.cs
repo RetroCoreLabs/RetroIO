@@ -24,23 +24,65 @@ namespace RetroIO.Storage.Providers
     private readonly Dictionary<string, EconetMount> _mounts;
     private bool _disposed;
 
+    /// <summary>
+    /// Creates the provider with no mounted volumes.
+    /// </summary>
     public EconetVolumeProvider()
     {
       _mounts = new Dictionary<string, EconetMount>(StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Gets the volume type, which is econet.
+    /// </summary>
     public string Type => "econet";
 
+    /// <summary>
+    /// Gets the URI schemes this provider handles, econet and aun.
+    /// </summary>
     public string[] SupportedSchemes => new[] { "econet", "aun" };
 
+    /// <summary>
+    /// Gets whether the volumes are remote, which is true.
+    /// </summary>
     public bool IsRemote => true;
 
+    /// <summary>
+    /// Always reports that a mount entry can be restored.
+    /// </summary>
+    /// <param name="entry">
+    /// The mount entry, which is not checked.
+    /// </param>
+    /// <param name="errorMessage">
+    /// Always set to null.
+    /// </param>
+    /// <returns>
+    /// Always true.
+    /// </returns>
     public bool CanRestore(UnifiedMountEntry entry, out string? errorMessage)
     {
       errorMessage = null;
       return true;
     }
 
+    /// <summary>
+    /// Mounts a volume from a mount entry.
+    /// </summary>
+    /// <remarks>
+    /// The host, port and optional credentials are taken from the source URI. A user name or password in the URI replaces the one in the entry.
+    /// </remarks>
+    /// <param name="entry">
+    /// The mount entry.
+    /// </param>
+    /// <returns>
+    /// Information about the mounted volume.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the host or the volume identifier is empty, or the volume identifier is already mounted.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when the login fails.
+    /// </exception>
     public MountInfo MountFromConfig(UnifiedMountEntry entry)
     {
       ParseMountUri(
@@ -55,12 +97,69 @@ namespace RetroIO.Storage.Providers
       return Mount(host, port, entry.VolumeId, entry.IsReadOnly, username, password);
     }
 
+    /// <summary>
+    /// Mounts a volume from a URI.
+    /// </summary>
+    /// <remarks>
+    /// The URI has the form econet or aun, then ://, then optional user name and password followed by an at sign, then the host and an optional port. A path after the host is ignored. The port defaults to the default AUN UDP port.
+    /// </remarks>
+    /// <param name="uri">
+    /// The URI of the file server.
+    /// </param>
+    /// <param name="volumeId">
+    /// The identifier for the new volume.
+    /// </param>
+    /// <param name="readOnly">
+    /// True to refuse writes.
+    /// </param>
+    /// <returns>
+    /// Information about the mounted volume.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the host or the volume identifier is empty, or the volume identifier is already mounted.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when the login fails.
+    /// </exception>
     public MountInfo Mount(string uri, string volumeId, bool readOnly)
     {
       ParseMountUri(uri, null, null, out string host, out int port, out string? username, out string? password);
       return Mount(host, port, volumeId, readOnly, username, password);
     }
 
+    /// <summary>
+    /// Mounts an Econet file server volume.
+    /// </summary>
+    /// <remarks>
+    /// A login is done only when a user name is given. When the login fails, the client is disposed.
+    /// </remarks>
+    /// <param name="host">
+    /// The host name or address of the server.
+    /// </param>
+    /// <param name="port">
+    /// The UDP port of the server.
+    /// </param>
+    /// <param name="volumeId">
+    /// The identifier for the new volume.
+    /// </param>
+    /// <param name="readOnly">
+    /// True to refuse writes.
+    /// </param>
+    /// <param name="username">
+    /// The user name for the login, or null for no login.
+    /// </param>
+    /// <param name="password">
+    /// The password for the login, or null.
+    /// </param>
+    /// <returns>
+    /// Information about the mounted volume.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when <paramref name="host"/> or <paramref name="volumeId"/> is empty, or the volume identifier is already mounted.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when the login fails.
+    /// </exception>
     public MountInfo Mount(
       string host,
       int port,
@@ -132,6 +231,15 @@ namespace RetroIO.Storage.Providers
       return CreateMountInfo(mount);
     }
 
+    /// <summary>
+    /// Disposes the client of a volume and removes the volume.
+    /// </summary>
+    /// <param name="volumeId">
+    /// The identifier of the volume.
+    /// </param>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not mounted.
+    /// </exception>
     public void Unmount(string volumeId)
     {
       if (!_mounts.TryGetValue(volumeId, out EconetMount? mount))
@@ -141,6 +249,15 @@ namespace RetroIO.Storage.Providers
       _mounts.Remove(volumeId);
     }
 
+    /// <summary>
+    /// Gets information about a mounted volume.
+    /// </summary>
+    /// <param name="volumeId">
+    /// The identifier of the volume.
+    /// </param>
+    /// <returns>
+    /// The mount information, or null when the volume is not mounted.
+    /// </returns>
     public MountInfo? GetMountInfo(string volumeId)
     {
       if (!_mounts.TryGetValue(volumeId, out EconetMount? mount))
@@ -149,6 +266,12 @@ namespace RetroIO.Storage.Providers
       return CreateMountInfo(mount);
     }
 
+    /// <summary>
+    /// Lists the mounted volumes.
+    /// </summary>
+    /// <returns>
+    /// An array with the mount information of each volume.
+    /// </returns>
     public MountInfo[] ListMounts()
     {
       MountInfo[] mounts = new MountInfo[_mounts.Count];
@@ -164,6 +287,24 @@ namespace RetroIO.Storage.Providers
       return mounts;
     }
 
+    /// <summary>
+    /// Reads a file from the file server.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the file.
+    /// </param>
+    /// <returns>
+    /// The content of the file.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not mounted.
+    /// </exception>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown when the volume is not logged in.
+    /// </exception>
     public byte[] ReadFile(UrnContext context, string path)
     {
       EconetMount mount = GetMount(context.VolumeId);
@@ -171,6 +312,24 @@ namespace RetroIO.Storage.Providers
       return mount.Client.ReadFile(path);
     }
 
+    /// <summary>
+    /// Not implemented. Throws after the read-only check.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the file.
+    /// </param>
+    /// <param name="data">
+    /// The data that would be written.
+    /// </param>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when the volume or the context is read-only.
+    /// </exception>
+    /// <exception cref="System.NotSupportedException">
+    /// Thrown otherwise, because Econet writes are not implemented.
+    /// </exception>
     public void WriteFile(UrnContext context, string path, byte[] data)
     {
       EconetMount mount = GetMount(context.VolumeId);
@@ -180,6 +339,21 @@ namespace RetroIO.Storage.Providers
       throw new NotSupportedException("Econet write operations are not yet implemented.");
     }
 
+    /// <summary>
+    /// Not implemented. Throws after the read-only check.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the file.
+    /// </param>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when the volume or the context is read-only.
+    /// </exception>
+    /// <exception cref="System.NotSupportedException">
+    /// Thrown otherwise, because Econet deletes are not implemented.
+    /// </exception>
     public void DeleteFile(UrnContext context, string path)
     {
       EconetMount mount = GetMount(context.VolumeId);
@@ -189,6 +363,24 @@ namespace RetroIO.Storage.Providers
       throw new NotSupportedException("Econet delete operations are not yet implemented.");
     }
 
+    /// <summary>
+    /// Lists a directory on the file server.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the directory.
+    /// </param>
+    /// <returns>
+    /// An array with the entries of the directory.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not mounted.
+    /// </exception>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown when the volume is not logged in.
+    /// </exception>
     public DirectoryEntry[] ListDirectory(UrnContext context, string path)
     {
       EconetMount mount = GetMount(context.VolumeId);
@@ -215,6 +407,27 @@ namespace RetroIO.Storage.Providers
       return result;
     }
 
+    /// <summary>
+    /// Finds the metadata of a path by listing its parent directory.
+    /// </summary>
+    /// <remarks>
+    /// The name is compared without regard to case.
+    /// </remarks>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the file or directory.
+    /// </param>
+    /// <returns>
+    /// The metadata, or null when the parent listing has no entry with that name.
+    /// </returns>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the volume is not mounted.
+    /// </exception>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown when the volume is not logged in.
+    /// </exception>
     public FileMetadata? GetMetadata(UrnContext context, string path)
     {
       EconetMount mount = GetMount(context.VolumeId);
@@ -238,21 +451,78 @@ namespace RetroIO.Storage.Providers
       return null;
     }
 
+    /// <summary>
+    /// Not supported. Always throws.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="address">
+    /// The block address.
+    /// </param>
+    /// <param name="buffer">
+    /// The buffer that would receive the block.
+    /// </param>
+    /// <returns>
+    /// Never returns.
+    /// </returns>
+    /// <exception cref="System.NotSupportedException">
+    /// Always thrown, because Econet has no block-level access.
+    /// </exception>
     public int ReadBlock(UrnContext context, BlockAddress address, Span<byte> buffer)
     {
       throw new NotSupportedException("Econet does not support block-level access.");
     }
 
+    /// <summary>
+    /// Not supported. Always throws.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="address">
+    /// The block address.
+    /// </param>
+    /// <param name="data">
+    /// The data that would be written.
+    /// </param>
+    /// <exception cref="System.NotSupportedException">
+    /// Always thrown, because Econet has no block-level access.
+    /// </exception>
     public void WriteBlock(UrnContext context, BlockAddress address, ReadOnlySpan<byte> data)
     {
       throw new NotSupportedException("Econet does not support block-level access.");
     }
 
+    /// <summary>
+    /// Returns null, because there is no block access.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <returns>
+    /// Always null.
+    /// </returns>
     public BlockDeviceInfo? GetBlockDeviceInfo(UrnContext context)
     {
       return null;
     }
 
+    /// <summary>
+    /// Reads the whole file on a thread pool thread and returns it as a read-only memory stream.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the file.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels waiting for the task to start.
+    /// </param>
+    /// <returns>
+    /// A task with the stream.
+    /// </returns>
     public Task<Stream> OpenReadAsync(UrnContext context, string path, CancellationToken cancellationToken)
     {
       return Task.Run(() =>
@@ -262,6 +532,30 @@ namespace RetroIO.Storage.Providers
       }, cancellationToken);
     }
 
+    /// <summary>
+    /// Not implemented. Throws after the read-only check.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the file.
+    /// </param>
+    /// <param name="data">
+    /// The stream that would be written.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels the operation.
+    /// </param>
+    /// <returns>
+    /// Never returns a task.
+    /// </returns>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when the volume or the context is read-only.
+    /// </exception>
+    /// <exception cref="System.NotSupportedException">
+    /// Thrown otherwise, because Econet writes are not implemented.
+    /// </exception>
     public Task WriteAsync(UrnContext context, string path, Stream data, CancellationToken cancellationToken)
     {
       if (GetMount(context.VolumeId).ReadOnly || context.ReadOnly)
@@ -270,16 +564,49 @@ namespace RetroIO.Storage.Providers
       throw new NotSupportedException("Econet write operations are not yet implemented.");
     }
 
+    /// <summary>
+    /// Lists a directory by running ListDirectory on a thread pool thread.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the directory.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels waiting for the task to start.
+    /// </param>
+    /// <returns>
+    /// A task with the directory entries.
+    /// </returns>
     public Task<DirectoryEntry[]> ListDirectoryAsync(UrnContext context, string path, CancellationToken cancellationToken)
     {
       return Task.Run(() => ListDirectory(context, path), cancellationToken);
     }
 
+    /// <summary>
+    /// Gets metadata by running GetMetadata on a thread pool thread.
+    /// </summary>
+    /// <param name="context">
+    /// The context that names the volume.
+    /// </param>
+    /// <param name="path">
+    /// The path of the file or directory.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels waiting for the task to start.
+    /// </param>
+    /// <returns>
+    /// A task with the metadata, or null.
+    /// </returns>
     public Task<FileMetadata?> GetMetadataAsync(UrnContext context, string path, CancellationToken cancellationToken)
     {
       return Task.Run(() => GetMetadata(context, path), cancellationToken);
     }
 
+    /// <summary>
+    /// Unmounts every mounted volume.
+    /// </summary>
     public void Dispose()
     {
       if (_disposed)

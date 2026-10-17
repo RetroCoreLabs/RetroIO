@@ -31,9 +31,27 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
     /// </summary>
     public sealed class DiscMount
     {
+        /// <summary>
+        /// Gets the directory name of the disc below the Econet root.
+        /// </summary>
         public string DirName { get; }
+        /// <summary>
+        /// Gets the backend that serves the disc.
+        /// </summary>
         public IFileSystemBackend Backend { get; }
 
+        /// <summary>
+        /// Creates a disc entry.
+        /// </summary>
+        /// <param name="dirName">
+        /// The directory name of the disc below the Econet root.
+        /// </param>
+        /// <param name="backend">
+        /// The backend that serves the disc.
+        /// </param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="dirName"/> or <paramref name="backend"/> is null.
+        /// </exception>
         public DiscMount(string dirName, IFileSystemBackend backend)
         {
             DirName = dirName ?? throw new ArgumentNullException(nameof(dirName));
