@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Downloads the disk-image test corpus that is NOT stored in git and unpacks it where the tests look.
-#   tests/demo/test-images/              the Commodore and NDFS images (BIGDISK0-L.IMG, tor-disk.img, ...)
+#   tests/demo/test-images/              the Commodore and NDFS images (BIGDISK0-L.IMG, tor-disk.img, SMD-ID-100.IMG, WD0.img, ...)
 #   tests/RetroIO.Tests/TestData/        BIGDISK0-K-201users.img.gz
 # The zip is checked against the SHA-256 in eng/test-images.sha256, so a changed or damaged download is refused.
 # Override the download address with RETROIO_TEST_IMAGES_URL. Safe to run again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-URL="${RETROIO_TEST_IMAGES_URL:-https://hackercorp.blob.core.windows.net/upload/retroio-test-images/retroio-test-images.zip}"
+URL="${RETROIO_TEST_IMAGES_URL:-https://hackercorp.blob.core.windows.net/upload/retroio-test-images/retroio-test-images-v2.zip}"
 EXPECTED="$(cut -d' ' -f1 eng/test-images.sha256 | head -n 1)"
 
 TMP="$(mktemp -d)"

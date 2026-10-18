@@ -16,6 +16,11 @@ jobs:
       # working directory.
       - run: dotnet restore
         working-directory: src
+      # The disk images the tests read are not in git. This downloads them (47 MB, SHA-256 checked) into src/tests/demo/test-images.
+      - name: fetch the test disk images
+        shell: pwsh
+        run: ./eng/fetch-test-images.ps1
+        working-directory: src
       - run: dotnet build -c Release --no-restore -warnaserror -nodeReuse:false
         working-directory: src
       - run: dotnet test -c Release --no-build -nodeReuse:false --filter "Category!=Azure&Category!=ExternalTNFSD&Category!=RealNetwork&Category!=Manual&Category!=ProcessSpawn"

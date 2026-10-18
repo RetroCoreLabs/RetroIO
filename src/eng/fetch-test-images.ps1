@@ -1,10 +1,10 @@
 # Downloads the disk-image test corpus that is NOT stored in git and unpacks it where the tests look.
-#   tests\demo\test-images\            the Commodore and NDFS images (BIGDISK0-L.IMG, tor-disk.img, ...)
+#   tests\demo\test-images\            the Commodore and NDFS images (BIGDISK0-L.IMG, tor-disk.img, SMD-ID-100.IMG, WD0.img, ...)
 #   tests\RetroIO.Tests\TestData\      BIGDISK0-K-201users.img.gz
 # The zip is checked against the SHA-256 in src\eng\test-images.sha256, so a changed or damaged download is refused.
 # Override the download address with -Url or the RETROIO_TEST_IMAGES_URL environment variable. Safe to run again.
 param(
-  [string]$Url = $(if ($env:RETROIO_TEST_IMAGES_URL) { $env:RETROIO_TEST_IMAGES_URL } else { 'https://hackercorp.blob.core.windows.net/upload/retroio-test-images/retroio-test-images.zip' })
+  [string]$Url = $(if ($env:RETROIO_TEST_IMAGES_URL) { $env:RETROIO_TEST_IMAGES_URL } else { 'https://hackercorp.blob.core.windows.net/upload/retroio-test-images/retroio-test-images-v2.zip' })
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot

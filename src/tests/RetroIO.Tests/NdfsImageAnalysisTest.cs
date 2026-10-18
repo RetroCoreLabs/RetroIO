@@ -18,7 +18,9 @@ namespace RetroIO.Tests
     [TestFixture]
     public class NdfsImageAnalysisTest
     {
-        private static string ImagePath => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs");
+        // The images are not in git: eng/fetch-test-images downloads them into src/tests/demo/test-images/ndfs.
+        // This walks up from the test binary to the "tests" folder, as the other NDFS tests do.
+        private static string ImagePath => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "demo", "test-images", "ndfs"));
 
         [Test]
         public void AnalyzeAllNdfsImages()
