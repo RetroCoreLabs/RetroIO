@@ -3,3 +3,8 @@
 - name: API Reference
   href: api/
   topicHref: api/index.md
+- name: Packages and guides
+  href: packages/
+  topicHref: packages/index.md
+- name: GitHub
+  href: https://github.com/RetroCoreLabs/RetroIO

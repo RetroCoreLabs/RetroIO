@@ -99,6 +99,19 @@ Every package has its own README. It follows `README-TEMPLATE.md`, beside the re
 sentence at the top that a stranger to the subject understands, a code example early, install
 before build-from-source, licence last.
 
+### The documentation site
+
+The site at <https://retrocorelabs.github.io/RetroIO/> is built by DocFX on every push to `main`: the API reference
+comes from the XML comments, and the READMEs and guides come in as pages. The menu of those pages is generated from the
+files git tracks. After adding a package, a tool or a guide, from the repository root:
+
+```powershell
+python src\docfx\gen_toc.py            # rewrite the menu; commit the result
+cd src; docfx docfx\docfx.json --warningsAsErrors   # must end with 0 warnings and 0 errors
+```
+
+The workflow fails when the menu is out of date or when the build has a warning. `src\docfx\README.md` says more.
+
 ---
 
 ## Submitting a change

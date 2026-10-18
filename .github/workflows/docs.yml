@@ -31,13 +31,17 @@ jobs:
 
       - uses: actions/configure-pages@v6
 
+      # The list of guides in the site menu is generated from the tracked files; fail when it is stale.
+      - name: Check the generated menu
+        run: python3 src/docfx/gen_toc.py --check
+
       - name: Install DocFX
         run: dotnet tool install -g docfx
 
       # DocFX restores and compiles every package itself to read the XML comments.
       - name: Build site
         working-directory: src
-        run: docfx docfx/docfx.json
+        run: docfx docfx/docfx.json --warningsAsErrors
 
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -23,13 +23,29 @@
   "build": {
     "content": [
       { "files": [ "api/**.yml", "api/index.md" ] },
-      { "files": [ "*.md", "toc.yml" ] }
+      { "files": [ "*.md", "toc.yml", "packages/toc.yml", "packages/index.md" ] },
+      {
+        "files": [
+          "RetroIO.*/README.md",
+          "RetroIO.Protocols.Econet/src/README.md",
+          "RetroIO.Protocols.Xmsg.Api/src/README.md",
+          "RetroIO.Management.Api/src/README.md",
+          "tools/*/README.md",
+          "CHANGELOG.md"
+        ],
+        "src": ".."
+      }
+    ],
+    "resource": [
+      { "files": [ "nuget-icon.png" ], "src": "../eng", "dest": "images" }
     ],
     "output": "_site",
     "globalMetadata": {
       "_appName": "RetroIO",
       "_appTitle": "RetroIO API reference",
-      "_appFooter": "Copyright (c) 1985-2026 Ronny Hansen - MIT License - RetroCore Labs",
+      "_appLogoPath": "images/nuget-icon.png",
+      "_appFaviconPath": "images/nuget-icon.png",
+      "_appFooter": "Copyright (c) 1985-2026 Ronny Hansen - MIT License - RetroCore Labs - <a href=\"https://github.com/RetroCoreLabs/RetroIO\">RetroIO on GitHub</a>",
       "_enableSearch": true,
       "_disableContribution": false,
       "_gitContribute": {

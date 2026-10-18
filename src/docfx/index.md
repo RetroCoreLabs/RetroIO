@@ -2,10 +2,11 @@
 
 Storage, filesystems and communications for retro computing: forty-four NuGet packages that read
 and write the disk formats, and speak the network protocols, of machines built between roughly 1975
-and 1995.
-
-The source, the build instructions and the tools are on
+and 1995. The source, the issues and the releases are on
 [GitHub](https://github.com/RetroCoreLabs/RetroIO).
+
+The [API reference](api/index.md) lists every namespace, type and member; [Packages and guides](packages/index.md)
+has the README of each package and the longer guides.
 
 ## Get started
 
