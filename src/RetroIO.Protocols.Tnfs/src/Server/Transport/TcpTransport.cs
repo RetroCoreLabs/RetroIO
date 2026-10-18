@@ -33,10 +33,18 @@ public sealed class TcpTransport : ITransport
     private int _nextConnectionId = 0;
     private bool _disposed;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the transport identifier, which is always <c>TCP</c>.
+    /// </summary>
     public string TransportType => "TCP";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets a new capabilities record on every read.
+    /// </summary>
+    /// <remarks>
+    /// Reports several clients, a connection limit of 1000, connection state, and reliable
+    /// delivery. The limit is only reported; this class does not enforce it.
+    /// </remarks>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -45,7 +53,9 @@ public sealed class TcpTransport : ITransport
         IsReliable = true
     };
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Raised when a message is received from any TCP client. The server subscribes to this event.
+    /// </summary>
     public event Func<TnfsMessage, ValueTask>? OnMessageReceived;
 
     /// <summary>

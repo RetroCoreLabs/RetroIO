@@ -23,10 +23,18 @@ public sealed class InMemoryTransport : ITransport
     private readonly IPAddress _virtualClientIP;
     private readonly int _virtualClientPort;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the transport identifier, which is always <c>InMemory</c>.
+    /// </summary>
     public string TransportType => "InMemory";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets a new capabilities record on every read.
+    /// </summary>
+    /// <remarks>
+    /// Reports several clients, a connection limit of <see cref="int.MaxValue"/>, no connection
+    /// state, and reliable delivery.
+    /// </remarks>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -35,7 +43,10 @@ public sealed class InMemoryTransport : ITransport
         IsReliable = true
     };
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Raised by <see cref="RunAsync"/> for each message a test client sent with
+    /// <see cref="SendTestMessageAsync"/>. The server subscribes to this event.
+    /// </summary>
     public event Func<TnfsMessage, ValueTask>? OnMessageReceived;
 
     /// <summary>

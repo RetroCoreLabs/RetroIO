@@ -40,10 +40,18 @@ public sealed class UdpTransport : ITransport
     private readonly SecurityEventEmitter? _securityEvents;
     private bool _disposed;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the transport identifier, which is always <c>UDP</c>.
+    /// </summary>
     public string TransportType => "UDP";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets a new capabilities record on every read.
+    /// </summary>
+    /// <remarks>
+    /// Reports several clients, a connection limit of <see cref="int.MaxValue"/> (UDP has no
+    /// connections), no connection state, and unreliable delivery.
+    /// </remarks>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -52,7 +60,9 @@ public sealed class UdpTransport : ITransport
         IsReliable = false
     };
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Raised when a message is received from any UDP client. The server subscribes to this event.
+    /// </summary>
     public event Func<TnfsMessage, ValueTask>? OnMessageReceived;
 
     /// <summary>
