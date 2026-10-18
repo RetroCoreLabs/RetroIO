@@ -280,7 +280,13 @@ namespace RetroIO.Protocols.X25.Services
         /// </summary>
         public int TotalAddresses { get; set; }
         
-        /// <inheritdoc/>
+        /// <summary>
+        /// Returns a one-line summary of the registry statistics.
+        /// </summary>
+        /// <returns>
+        /// The number of services, the number of distinct addresses, and the service names
+        /// separated by commas in square brackets.
+        /// </returns>
         public override string ToString()
         {
             return $"Services: {TotalServices}, Addresses: {TotalAddresses}, Names: [{string.Join(", ", ServiceNames)}]";

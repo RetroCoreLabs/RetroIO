@@ -316,7 +316,13 @@ namespace RetroIO.Protocols.X25.Services
                 "No CUD";
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Returns a one-line description of the detection.
+        /// </summary>
+        /// <returns>
+        /// The protocol, the description, the called address and the call user data in hexadecimal
+        /// (from <see cref="GetCUDHex"/>).
+        /// </returns>
         public override string ToString()
         {
             return $"{Protocol} - {Description} for {CalledAddress} (CUD: {GetCUDHex()})";

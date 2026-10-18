@@ -43,7 +43,22 @@ namespace RetroIO.Protocols.X25.Modules
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Places an outgoing X.25 call through the runtime, bound to <see cref="Module"/>.
+        /// </summary>
+        /// <param name="calledAddress">
+        /// Destination X.121 address.
+        /// </param>
+        /// <param name="callingAddress">
+        /// Origin X.121 address.
+        /// </param>
+        /// <param name="callUserData">
+        /// Call user data (PAD protocol identifier), or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// The runtime's answer to <c>PlaceX25CallWithModule</c>; <c>false</c> without calling
+        /// the runtime when <see cref="Module"/> is not set.
+        /// </returns>
         public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
         {
             if (Module == null)
@@ -54,13 +69,51 @@ namespace RetroIO.Protocols.X25.Modules
             return _runtime.PlaceX25CallWithModule(calledAddress, callingAddress, callUserData, Module);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends a data packet on an established circuit through the runtime's
+        /// <c>SendX25Data</c>.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical channel number.
+        /// </param>
+        /// <param name="data">
+        /// Payload bytes.
+        /// </param>
+        /// <param name="mBit">
+        /// More-data bit.
+        /// </param>
+        /// <param name="qBit">
+        /// Qualifier bit.
+        /// </param>
+        /// <param name="dBit">
+        /// Delivery-confirmation bit.
+        /// </param>
+        /// <returns>
+        /// The runtime's answer: <c>true</c> if the data was accepted for transmission.
+        /// </returns>
         public bool SendData(ushort lcn, byte[] data, bool mBit, bool qBit, bool dBit)
         {
             return _runtime.SendX25Data(lcn, data, mBit, qBit, dBit);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Forwards ordinary terminal data assembled by the X.28 layer on an established circuit.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical channel number.
+        /// </param>
+        /// <param name="data">
+        /// Payload bytes.
+        /// </param>
+        /// <param name="length">
+        /// Number of valid bytes in <paramref name="data"/>.
+        /// </param>
+        /// <remarks>
+        /// The data goes first to the runtime's XOT-mapped path. Only when the channel is not
+        /// XOT-mapped at all is it sent through <c>SendX25Data</c> with all three bits clear. A
+        /// flow-control refusal on the mapped path is not retried on the other path. Neither result
+        /// is reported to the caller.
+        /// </remarks>
         public void ForwardData(ushort lcn, byte[] data, int length)
         {
             // Prefer the XOT-mapped path; fall back to the packet layer ONLY when the channel is
@@ -77,7 +130,18 @@ namespace RetroIO.Protocols.X25.Modules
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Clears (tears down) a circuit through the runtime's <c>ClearCallByLocalLcn</c>.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical channel number.
+        /// </param>
+        /// <param name="cause">
+        /// X.25 clear cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// X.25 diagnostic code.
+        /// </param>
         public void ClearCall(ushort lcn, byte cause, byte diagnostic)
         {
             // A channel carried by a connection clears through that connection's engine; one that

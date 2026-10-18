@@ -63,11 +63,18 @@ namespace RetroIO.Protocols.X25.Services
                 string.Join(", ", _localAddresses));
         }
         
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the unique name of this service, <c>TAD</c>.
+        /// </summary>
         public string ServiceName => "TAD";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the local X.121 addresses this service handles, as given to the constructor.
+        /// </summary>
         public string[] LocalAddresses => _localAddresses;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the priority of this service, 100. A higher value is more specific and is checked
+        /// first.
+        /// </summary>
         public int Priority => 100; // High priority for TAD service
         
         /// <summary>

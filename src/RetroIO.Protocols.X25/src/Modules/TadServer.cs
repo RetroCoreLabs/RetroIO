@@ -45,11 +45,17 @@ namespace RetroIO.Protocols.X25.Modules
         public Encoding TextEncoding { get; set; } = Encoding.ASCII;
         
         // IProtocolModule Properties
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets or sets the module name; <c>TAD Server</c> unless changed.
+        /// </summary>
         public string Name { get; set; } = "TAD Server";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module description.
+        /// </summary>
         public string Description { get; } = "X.3/X.28/X.29 TAD Server providing terminal services for PAD connections";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module version, <c>1.0.0</c>.
+        /// </summary>
         public string Version { get; } = "1.0.0";
 
         // Events
@@ -89,13 +95,26 @@ namespace RetroIO.Protocols.X25.Modules
 
         #region IProtocolModule Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the module is bound to a logical channel. The server only logs it; sessions
+        /// are created when a call arrives.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
         public void OnBound(ushort lcn)
         {
             _logger.LogDebug("TAD Server bound to LCN {LCN}", lcn);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the module is unbound from a logical channel. A session on that channel is
+        /// disposed, removed and reported through <see cref="SessionEnded"/>; a channel without a
+        /// session is ignored.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number being unbound.
+        /// </param>
         public void OnUnbound(ushort lcn)
         {
             lock (_sessionsLock)
@@ -111,7 +130,17 @@ namespace RetroIO.Protocols.X25.Modules
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when an X.25 packet arrives for the module.
+        /// </summary>
+        /// <param name="args">
+        /// The packet event.
+        /// </param>
+        /// <remarks>
+        /// Call Request, Data, Clear Request and Interrupt packets are each passed to their own
+        /// handler; other packet types are ignored. An exception thrown while handling a packet is
+        /// logged and not passed on.
+        /// </remarks>
         public void OnX25Event(X25PacketEventArgs args)
         {
             try

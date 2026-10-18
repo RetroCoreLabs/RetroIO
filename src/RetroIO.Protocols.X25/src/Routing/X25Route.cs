@@ -162,7 +162,13 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Returns a one-line description of the route.
+        /// </summary>
+        /// <returns>
+        /// The route name, its X.121 address pattern, its type with the primary destination in
+        /// brackets, and its priority, as in <c>name: pattern -> type(destination) [Pri:priority]</c>.
+        /// </returns>
         public override string ToString()
         {
             return $"{Name}: {X121AddressPattern} -> {Type}({Destination}) [Pri:{Priority}]";

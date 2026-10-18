@@ -58,11 +58,17 @@ namespace RetroIO.Protocols.X25.Modules
         public Encoding TextEncoding { get; set; } = Encoding.ASCII;
         
         // IProtocolModule Properties
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets or sets the module name; <c>PAD Client</c> unless changed.
+        /// </summary>
         public string Name { get; set; } = "PAD Client";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module description.
+        /// </summary>
         public string Description { get; } = "X.3/X.28/X.29 PAD Client for terminal access over X.25";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module version, <c>1.0.0</c>.
+        /// </summary>
         public string Version { get; } = "1.0.0";
 
         // Protocol Access Properties (for GUI display)
@@ -150,14 +156,27 @@ namespace RetroIO.Protocols.X25.Modules
 
         #region IProtocolModule Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the module is bound to a logical channel; makes it the client's current
+        /// channel.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number the client is now bound to.
+        /// </param>
         public void OnBound(ushort lcn)
         {
             _currentLCN = lcn;
             _logger.LogDebug("PAD Client bound to LCN {LCN}", lcn);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the module is unbound from a logical channel.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number being unbound. When it is the client's current channel, the
+        /// client stops its idle timer, goes to the disconnected state, empties its buffers and
+        /// switches X.28 back to command mode; any other channel is ignored.
+        /// </param>
         public void OnUnbound(ushort lcn)
         {
             if (lcn == _currentLCN)
@@ -168,7 +187,22 @@ namespace RetroIO.Protocols.X25.Modules
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when an X.25 packet arrives for the module.
+        /// </summary>
+        /// <param name="args">
+        /// The packet event. Packets on any channel other than the client's current one are
+        /// ignored.
+        /// </param>
+        /// <remarks>
+        /// Handled packet types:
+        ///  - Call Accepted goes to <see cref="NotifyCallAccepted"/>.
+        ///  - Data goes to <see cref="DeliverData"/> with its Q bit.
+        ///  - Clear Request goes to <see cref="DeliverClear"/>.
+        ///  - Interrupt goes to <see cref="DeliverInterrupt"/>.
+        /// Other packet types are only logged. An exception thrown while handling a packet is
+        /// logged and not passed on.
+        /// </remarks>
         public void OnX25Event(X25PacketEventArgs args)
         {
             _logger.LogDebug("PAD Client received X25 event: PacketType={PacketType}, LCN={LCN}, Current LCN={CurrentLCN}", 

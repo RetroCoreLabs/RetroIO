@@ -553,7 +553,14 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public byte ErrorType { get; set; }
         
-        /// <inheritdoc/>
+        /// <summary>
+        /// Returns the name of the X.29 message type.
+        /// </summary>
+        /// <returns>
+        /// The message type in words, such as <c>SET PARAMETERS</c>; for an error message
+        /// <c>ERROR</c> followed by the error type in brackets; for any other type <c>Unknown</c>
+        /// followed by the type number in brackets.
+        /// </returns>
         public override string ToString()
         {
             return Type switch

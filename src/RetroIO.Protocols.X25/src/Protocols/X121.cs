@@ -433,7 +433,16 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public string RegionName { get; set; } = "";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Returns a one-line description of the address.
+        /// </summary>
+        /// <returns>
+        /// One of these:
+        ///  - <c>Invalid:</c> followed by the original address, when the address is not valid.
+        ///  - for an international address, the original address followed by its DNIC, region name
+        ///    and national number in brackets.
+        ///  - otherwise the original address followed by <c>(Local format)</c>.
+        /// </returns>
         public override string ToString()
         {
             if (!IsValid)

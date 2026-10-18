@@ -985,7 +985,17 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public byte[]? ErrorData { get; set; }
         
-        /// <inheritdoc/>
+        /// <summary>
+        /// Returns a one-line description of the X.29 message.
+        /// </summary>
+        /// <returns>
+        /// For an invalid message, <c>Invalid X.29 Message:</c> followed by the error message.
+        /// Otherwise the message type name, followed in brackets by:
+        ///  - the number of parameters, for set, set-and-read and parameter indication messages.
+        ///  - the number of parameters requested, for read messages.
+        ///  - the error type name, for error messages.
+        /// Other message types give the type name alone.
+        /// </returns>
         public override string ToString()
         {
             if (!IsValid)

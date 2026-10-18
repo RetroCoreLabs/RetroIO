@@ -56,11 +56,17 @@ namespace RetroIO.Protocols.X25.Transport
 
         #region ITransportInterface Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the unique name of this transport interface, taken from the configuration.
+        /// </summary>
         public string Name => _config.Name;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the type of transport, always <see cref="TransportType.XOT_Server"/>.
+        /// </summary>
         public TransportType Type => TransportType.XOT_Server;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current status of the transport.
+        /// </summary>
         public TransportStatus Status => _status;
 
         /// <summary>
@@ -249,7 +255,13 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the transport's statistics, with the current status and the number of client
+        /// connections brought up to date first.
+        /// </summary>
+        /// <returns>
+        /// The transport's own statistics object, not a copy.
+        /// </returns>
         public TransportStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
@@ -257,11 +269,20 @@ namespace RetroIO.Protocols.X25.Transport
             return _statistics;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when a client connection reports an incoming call for an X.121 address this
+        /// server accepts.
+        /// </summary>
         public event EventHandler<X25CallRequest>? IncomingCall;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the transport status changes, with the old status, the new status and the
+        /// reason.
+        /// </summary>
         public event EventHandler<TransportStatusEventArgs>? StatusChanged;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised for every X.25 packet received from a client connection, with the transport set
+        /// on the event data. Used for bridge pass-through mode.
+        /// </summary>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
 
         #endregion
