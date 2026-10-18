@@ -158,7 +158,13 @@ namespace RetroIO.Protocols.X25.Nmc
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops discovery: tells the worker thread to finish, disposes the X.25 client, and
+        /// forgets every discovered node, session, visited address and queued dial.
+        /// </summary>
+        /// <remarks>
+        /// It does not wait for the worker thread to end.
+        /// </remarks>
         public void Dispose()
         {
             _running = false;
