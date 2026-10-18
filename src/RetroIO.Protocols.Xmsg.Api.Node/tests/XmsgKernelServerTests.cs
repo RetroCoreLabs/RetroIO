@@ -98,6 +98,41 @@ namespace RetroIO.Protocols.Xmsg.Api.Node.Tests
         }
 
         /// <summary>
+        /// A datagram the kernel queued before a datagram arrived is not lost when the arrival is
+        /// handled: it is still handed out, once.
+        /// </summary>
+        [Fact]
+        public void Handle_DoesNotDropDatagramsQueuedEarlier()
+        {
+            XmsgKernelServer bridge = XmsgKernelServer.Create(102, 0x1111, "*DEMO", 4);
+            XmsgKernel kernel = bridge.Kernel;
+            FakeTransport transport = new FakeTransport();
+            bridge.AttachTransport(transport);
+
+            XmsgPortNumber port;
+            kernel.OpenPort(out port);
+            XmsgMagicNumber mine;
+            kernel.ConvertPortToMagic(port, out mine);
+            bridge.RegisterPort(mine.PortWord);
+            XmsgMagicNumber remote = XmsgMagicNumber.Create(100, 5, 43);
+
+            // Queue one outgoing datagram and do NOT drain it.
+            XmsgMessageIdentifier message;
+            kernel.ReserveBuffer(4, XmsgBufferOptions.None, out message);
+            int written;
+            kernel.Write(message, Encoding.ASCII.GetBytes("KEEP"), 0, false, out written);
+            Assert.False(kernel.Send(remote, port, XmsgSendFlags.None).IsError);
+
+            // A datagram arrives and is handled before the queue was drained.
+            IReadOnlyList<XmsgFrame> fromHandle = bridge.Handle(
+                BuildFrame(remote, mine, Encoding.ASCII.GetBytes("HI")), transport);
+            IReadOnlyList<XmsgFrame> fromDrain = bridge.DrainPending(transport);
+
+            // Exactly one copy of the queued datagram comes out, from one of the two calls.
+            Assert.Equal(1, fromHandle.Count + fromDrain.Count);
+        }
+
+        /// <summary>
         /// Only registered ports are routed here, so the node does not hand this server traffic
         /// belonging to another one.
         /// </summary>

@@ -315,8 +315,10 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         /// The node transport; it is kept and used to build any datagrams the kernel sends.
         /// </param>
         /// <returns>
-        /// The datagrams the kernel queued for sending while the message was delivered, in order;
-        /// empty when there were none or when <paramref name="incoming"/> has no sub-header.
+        /// Every datagram queued for sending, in order: those queued before this call and not yet
+        /// taken by <see cref="DrainPending"/>, followed by those queued while the message was
+        /// delivered. Empty when there were none or when <paramref name="incoming"/> has no
+        /// sub-header (in that case the queue is left as it was).
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="incoming"/> is <c>null</c>.
@@ -325,8 +327,8 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         /// The payload is the raw trailer of the frame, not a decoded view of it. The send options
         /// are taken back out of the sub-header role byte, so a secure message stays secure. The
         /// status the kernel returns for the delivery is not reported. The outgoing queue is
-        /// emptied before delivery, so datagrams queued earlier and not yet taken by
-        /// <see cref="DrainPending"/> are dropped.
+        /// not emptied before delivery, so no queued datagram is lost; the queue is emptied
+        /// after delivery, because everything in it is handed back in the result.
         /// </remarks>
         public IReadOnlyList<XmsgFrame> Handle(XmsgFrame incoming, IXmsgServerTransport transport)
         {
@@ -341,7 +343,6 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             }
 
             _transport = transport;
-            _outbound.Clear();
 
             XmsgMagicNumber destination = XmsgMagicNumber.FromRegisterPair(
                 incoming.SubHeader.DestinationSystem, incoming.SubHeader.DestinationPort);
@@ -442,10 +443,8 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         /// attached yet.
         /// </returns>
         /// <remarks>
-        /// The datagram is queued, not sent. Datagrams queued while <see cref="Handle"/> runs are
-        /// returned by that call; others are returned by <see cref="DrainPending"/>. A call to
-        /// <see cref="Handle"/> first empties the queue, so anything not yet drained is dropped
-        /// then. It is stamped with <see cref="ControlService"/> and
+        /// The datagram is queued, not sent. Whichever of <see cref="Handle"/> or
+        /// <see cref="DrainPending"/> is called next returns it, once. It is stamped with <see cref="ControlService"/> and
         /// <see cref="FrameFlags"/>, and built as a fresh message rather than an answer.
         /// </remarks>
         public XmsgStatus Send(
