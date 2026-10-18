@@ -139,8 +139,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Asks a named server for a connection (RRPCCNRQ).
         /// </summary>
         /// <param name="systemName">
-        /// The system the server runs on, or <c>null</c> for the local system. This implementation
-        /// does not read it: the letter goes to the directory by server name only.
+        /// The system the server runs on, or <c>null</c> (or empty) for the local system. A named
+        /// system is not implemented: the letter goes to the directory by server name only.
         /// </param>
         /// <param name="serverName">
         /// The server's name.
@@ -160,6 +160,10 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="serverName"/> is <c>null</c>.
         /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="systemName"/> names a system: reaching a server on another
+        /// system is not implemented, and nothing is sent.
+        /// </exception>
         /// <remarks>
         /// The connection is not usable until the confirmation event has been received and
         /// processed.
@@ -175,6 +179,12 @@ namespace RetroIO.Protocols.Xmsg.Api
             if (serverName == null)
             {
                 throw new ArgumentNullException(nameof(serverName));
+            }
+
+            if (!string.IsNullOrEmpty(systemName))
+            {
+                throw new NotSupportedException(
+                    "RrClient.RequestConnection to a named system is not implemented: the letter is routed by server name through the local directory only.");
             }
 
             if (!IsInitialised)
@@ -296,8 +306,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Connects to a server in one call (the high-level select).
         /// </summary>
         /// <param name="systemName">
-        /// The system the server runs on, or <c>null</c> for the local system. Passed to
-        /// <see cref="RequestConnection"/>, which does not read it.
+        /// The system the server runs on, or <c>null</c> (or empty) for the local system. A named
+        /// system is refused by <see cref="RequestConnection"/>, because it is not implemented.
         /// </param>
         /// <param name="serverName">
         /// The server's name.
@@ -318,6 +328,10 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="serverName"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="systemName"/> names a system: reaching a server on another
+        /// system is not implemented.
         /// </exception>
         /// <remarks>
         /// Runs a connection request, a wait and a connection confirmation back to back. The wait

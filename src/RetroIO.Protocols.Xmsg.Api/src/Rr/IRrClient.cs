@@ -57,7 +57,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Asks a named server for a connection (RRPCCNRQ).
         /// </summary>
         /// <param name="systemName">
-        /// The system the server runs on, or null for the local system.
+        /// The system the server runs on, or null (or empty) for the local system. The implementation
+        /// <see cref="RrClient"/> does not implement a named system and throws for it.
         /// </param>
         /// <param name="serverName">
         /// The server's name.
@@ -124,7 +125,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Connects to a server in one blocking call (the high-level select).
         /// </summary>
         /// <param name="systemName">
-        /// The system the server runs on, or null for the local system.
+        /// The system the server runs on, or null (or empty) for the local system. The implementation
+        /// <see cref="RrClient"/> does not implement a named system and throws for it.
         /// </param>
         /// <param name="serverName">
         /// The server's name.
