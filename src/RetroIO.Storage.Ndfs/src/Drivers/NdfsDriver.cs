@@ -58,25 +58,38 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// Gets the capability flags of this driver, for runtime capability detection.
         /// </summary>
         /// <value>
-        /// Read, Write, Delete, CreateDirectory, ListDirectory, Subdirectories, FileTypes,
-        /// BlockAllocationMap, VolumeLabel, BlockRead, Permissions and Quotas. Rename is not included.
+        /// Read, ListDirectory, Subdirectories, FileTypes, BlockAllocationMap, VolumeLabel, BlockRead,
+        /// Permissions and Quotas, plus Write, Delete and CreateDirectory when <see cref="CanWrite"/> is
+        /// <c>true</c> (an image mounted read-write). Rename is not included.
         /// </value>
-        public DriverCapabilities Capabilities =>
-            DriverCapabilities.Read |
-            DriverCapabilities.Write |          // WriteFile: real implementation (files <=1MB, Indexed allocation)
-            DriverCapabilities.Delete |         // DeleteFile: real implementation
-            DriverCapabilities.CreateDirectory | // CreateDirectory: real implementation (root path = create User)
-            DriverCapabilities.ListDirectory |
-            DriverCapabilities.Subdirectories |
-            DriverCapabilities.FileTypes |
-            DriverCapabilities.BlockAllocationMap |
-            DriverCapabilities.VolumeLabel |
-            DriverCapabilities.BlockRead |
-            DriverCapabilities.Permissions |    // NDFS-specific: user-based permissions
-            DriverCapabilities.Quotas;          // NDFS-specific: user quotas
-                                                // NOTE: Rename is deliberately NOT included — NdfsDriver doesn't override RenameFile,
-                                                // so it falls through to IFileSystemDriver's default NotSupportedException (user
-                                                // rename is a known, documented gap, not implemented here).
+        public DriverCapabilities Capabilities
+        {
+            get
+            {
+                DriverCapabilities caps =
+                    DriverCapabilities.Read |
+                    DriverCapabilities.ListDirectory |
+                    DriverCapabilities.Subdirectories |
+                    DriverCapabilities.FileTypes |
+                    DriverCapabilities.BlockAllocationMap |
+                    DriverCapabilities.VolumeLabel |
+                    DriverCapabilities.BlockRead |
+                    DriverCapabilities.Permissions |    // NDFS-specific: user-based permissions
+                    DriverCapabilities.Quotas;          // NDFS-specific: user quotas
+
+                if (CanWrite)
+                {
+                    caps |= DriverCapabilities.Write |          // WriteFile: real implementation (files <=1MB, Indexed allocation)
+                            DriverCapabilities.Delete |         // DeleteFile: real implementation
+                            DriverCapabilities.CreateDirectory; // CreateDirectory: real implementation (root path = create User)
+                }
+
+                // NOTE: Rename is deliberately NOT included - NdfsDriver doesn't override RenameFile,
+                // so it falls through to IFileSystemDriver's default NotSupportedException (user
+                // rename is a known, documented gap, not implemented here).
+                return caps;
+            }
+        }
 
         /// <summary>
         /// Gets whether this driver supports read operations.
@@ -89,9 +102,9 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// Gets whether this driver supports write operations.
         /// </summary>
         /// <value>
-        /// Always <c>true</c>, also when the image was mounted read-only.
+        /// <c>true</c> when an image is mounted read-write; <c>false</c> before mount and on a read-only mount.
         /// </value>
-        public bool CanWrite => true; // Write support enabled (files ≤1MB, uses Indexed allocation)
+        public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly; // Write support: files <=1MB, uses Indexed allocation
         /// <summary>
         /// Gets whether this driver supports block-level access.
         /// </summary>

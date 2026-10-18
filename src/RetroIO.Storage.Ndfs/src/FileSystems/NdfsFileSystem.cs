@@ -45,10 +45,10 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// Gets the volume label from the filesystem metadata.
         /// </summary>
         /// <value>
-        /// The directory name from the master block, or <c>"NDFS"</c> when no master block has been
-        /// read yet (not an empty string).
+        /// The directory name from the master block, or an empty string when no master block has been
+        /// read yet.
         /// </value>
-        public string VolumeLabel => _masterBlock?.DirectoryName ?? "NDFS";
+        public string VolumeLabel => _masterBlock?.DirectoryName ?? string.Empty;
         /// <summary>
         /// Gets the separator used between a file name and its type (extension).
         /// </summary>
@@ -1043,8 +1043,8 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// </summary>
         /// <remarks>
         /// The device is flushed after the write so the change reaches the image at once. On a
-        /// read-only device the password of the in-memory user entry is still set to 0, but nothing
-        /// is written and the method returns <c>false</c>.
+        /// read-only device nothing is changed, neither on the device nor in the in-memory user entry,
+        /// and the method returns <c>false</c>.
         /// </remarks>
         /// <param name="userIndex">
         /// The index of the user whose password is cleared.
@@ -1060,16 +1060,12 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         {
             EnsureInitialized();
 
-            if (_device == null || _masterBlock == null || _masterBlock.UserFilePointer == null)
+            // Refuse a read-only device BEFORE touching the in-memory user entry.
+            if (_device == null || _device.IsReadOnly || _masterBlock == null || _masterBlock.UserFilePointer == null)
                 return false;
 
             var user = _userFile.GetUser(userIndex);
             if (user == null)
-                return false;
-
-            // Refuse BEFORE touching the loaded user: a clear that cannot reach the disk must not
-            // leave the in-memory user without its password.
-            if (_device.IsReadOnly)
                 return false;
 
             user.Password = 0;
