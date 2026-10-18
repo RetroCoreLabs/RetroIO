@@ -19,8 +19,6 @@ real specification before anyone touches it, **I** the interface comment is prob
 | Where | What |
 |---|---|
 | `RetroIO.Protocols.Econet` `FileServerSessionManager.AllocateHandle`, `FileIoCommandHandler.HandleOpen` | One server-wide pool of handles 4 to 32, not one per station. Needs a per-station handle table. (Fixed today: `AllocateHandle` skips handles in use, and `HandleOpen` takes the handle before it opens the stream, so a refused handle no longer truncates the file.) |
-| `RetroIO.Protocols.Econet` `FileIoCommandHandler.HandleDelete` | Deletes with `File.Delete`/`Directory.Delete` on the host disk, after asking the backend whether the path exists. `IFileSystemBackend` has no delete method, so with any backend other than the local disk it deletes nothing and still answers success. Needs the interface to grow (a public API change) |
-| `RetroIO.Protocols.Econet` `RenameCommand` | Moves with `File.Move`/`Directory.Move` directly instead of the backend; requires the new name to resolve, which may answer "Not found" for a name that does not exist yet |
 | `RetroIO.Protocols.Econet` `EconetUserBootstrap` | Class comment says it purges legacy orphan keys; the code only adds defaults |
 | `RetroIO.Protocols.Econet` `FileServerReply.DiscFreeSpaceClassic1983` | Existing comment has a `param` and no `returns` |
 | `RetroIO.Protocols.Xmsg.Api` `XmsgKernel` | `WirePort` has no incarnation bits |
@@ -107,3 +105,5 @@ real specification before anyone touches it, **I** the interface comment is prob
 | DECB and DragonDOS `ListDirectory` threw `NotImplementedException`; CBM DOS write, delete and rename threw the wrong exception type on a read-only device | DECB and DragonDOS ListDirectory throw DirectoryNotFoundException; CBM DOS ... throw IOException |
 | FAT12/16/32 directory rename across parents left the `..` entry on the old parent; FAT32 never read its volume label | FAT12/16/32: moving a directory rewrites its dot-dot entry; FAT32 reads the volume label |
 | XOT server, serial transport and `X25ClientPadTransport` reported success for calls they never made, or ignored arguments | each now throws `NotSupportedException` (four commits: XotServerTransport, SerialTransport, X25ClientPadTransport, RrClient) |
+| Econet delete went to the host disk and answered success with any other backend; `*RENAME` ignored the backend and answered "Not found" for a new name | Econet: delete and rename go through the file system backend (new DeleteFile, DeleteDirectory, MoveFile, MoveDirectory) |
+| The Azure and VFS backends do not yet delete directories or move anything (they throw NotImplementedException, by design: fail loudly) | (still open, see the backend classes) |

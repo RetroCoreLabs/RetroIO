@@ -54,6 +54,66 @@ public sealed class MockFileSystemBackend : IFileSystemBackend
         _entries[normalized] = new MockEntry { IsDirectory = true };
     }
 
+    public void DeleteFile(string path)
+    {
+        var normalized = NormalizePath(path);
+        if (!_entries.TryGetValue(normalized, out var entry) || entry.IsDirectory)
+            throw new FileNotFoundException("File not found.", path);
+
+        _entries.Remove(normalized);
+    }
+
+    public void DeleteDirectory(string path)
+    {
+        var normalized = NormalizePath(path);
+        if (!_entries.TryGetValue(normalized, out var entry) || !entry.IsDirectory)
+            throw new DirectoryNotFoundException("Directory not found: " + path);
+
+        foreach (var key in _entries.Keys)
+        {
+            if (key.StartsWith(normalized + "/"))
+                throw new IOException("The directory is not empty: " + path);
+        }
+
+        _entries.Remove(normalized);
+    }
+
+    public void MoveFile(string sourcePath, string destinationPath)
+    {
+        var source = NormalizePath(sourcePath);
+        var destination = NormalizePath(destinationPath);
+        if (!_entries.TryGetValue(source, out var entry) || entry.IsDirectory)
+            throw new FileNotFoundException("File not found.", sourcePath);
+        if (_entries.ContainsKey(destination))
+            throw new IOException("Cannot create a file when that file already exists: " + destinationPath);
+
+        _entries.Remove(source);
+        _entries[destination] = entry;
+    }
+
+    public void MoveDirectory(string sourcePath, string destinationPath)
+    {
+        var source = NormalizePath(sourcePath);
+        var destination = NormalizePath(destinationPath);
+        if (!_entries.TryGetValue(source, out var entry) || !entry.IsDirectory)
+            throw new DirectoryNotFoundException("Directory not found: " + sourcePath);
+        if (_entries.ContainsKey(destination))
+            throw new IOException("Cannot create a directory when that directory already exists: " + destinationPath);
+
+        // The directory and everything under it move together.
+        var moved = new List<KeyValuePair<string, MockEntry>>();
+        foreach (var kvp in _entries)
+        {
+            if (kvp.Key == source || kvp.Key.StartsWith(source + "/"))
+                moved.Add(kvp);
+        }
+
+        foreach (var kvp in moved)
+            _entries.Remove(kvp.Key);
+        foreach (var kvp in moved)
+            _entries[destination + kvp.Key.Substring(source.Length)] = kvp.Value;
+    }
+
     public void AddFile(string path, byte[] content = null!)
     {
         var normalized = NormalizePath(path);

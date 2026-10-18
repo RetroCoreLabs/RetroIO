@@ -128,6 +128,43 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
         }
     }
 
+    /// <inheritdoc/>
+    public void DeleteFile(string path)
+    {
+        var blobClient = _containerClient.GetBlobClient(NormalizePath(path));
+        if (!blobClient.Exists())
+            throw new FileNotFoundException("Blob not found.", path);
+
+        blobClient.Delete();
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotImplementedException">
+    /// Always thrown: a blob container has no real directories, and deleting the marker blob of one is not written yet.
+    /// </exception>
+    public void DeleteDirectory(string path)
+    {
+        throw new NotImplementedException("Deleting a directory in blob storage is not implemented yet.");
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotImplementedException">
+    /// Always thrown: a blob has no rename; copy and delete is not written yet.
+    /// </exception>
+    public void MoveFile(string sourcePath, string destinationPath)
+    {
+        throw new NotImplementedException("Renaming a blob (copy, then delete) is not implemented yet.");
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotImplementedException">
+    /// Always thrown: renaming a directory means renaming every blob under it, which is not written yet.
+    /// </exception>
+    public void MoveDirectory(string sourcePath, string destinationPath)
+    {
+        throw new NotImplementedException("Renaming a directory in blob storage is not implemented yet.");
+    }
+
     /// <summary>
     /// Create a directory by writing a zero-byte marker blob.
     /// </summary>

@@ -35,6 +35,25 @@ public sealed class LocalFileSystemBackend : IFileSystemBackend
     /// </param>
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
+    /// <inheritdoc/>
+    public void DeleteFile(string path)
+    {
+        // File.Delete does nothing for a missing file; the interface promises FileNotFoundException.
+        if (!File.Exists(path))
+            throw new FileNotFoundException("File not found.", path);
+
+        File.Delete(path);
+    }
+
+    /// <inheritdoc/>
+    public void DeleteDirectory(string path) => Directory.Delete(path, recursive: false);
+
+    /// <inheritdoc/>
+    public void MoveFile(string sourcePath, string destinationPath) => File.Move(sourcePath, destinationPath);
+
+    /// <inheritdoc/>
+    public void MoveDirectory(string sourcePath, string destinationPath) => Directory.Move(sourcePath, destinationPath);
+
     /// <summary>
     /// Checks whether a file exists, using <see cref="File.Exists"/>.
     /// </summary>

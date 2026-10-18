@@ -318,6 +318,42 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         return new VfsWriteBackFileStream(temp, _vfs, ToUrn(path), append: mode == FileMode.Append);
     }
 
+    /// <inheritdoc/>
+    public void DeleteFile(string path)
+    {
+        if (_readOnly)
+            throw new UnauthorizedAccessException($"Econet disc is mounted read-only: cannot delete '{path}'.");
+
+        _vfs.DeleteFileAsync(ToUrn(path)).GetAwaiter().GetResult();
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotImplementedException">
+    /// Always thrown: the VFS core has no directory delete yet.
+    /// </exception>
+    public void DeleteDirectory(string path)
+    {
+        throw new NotImplementedException("The VFS core has no directory delete yet, so a VFS-backed Econet disc cannot delete a directory.");
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotImplementedException">
+    /// Always thrown: the VFS core has no move or rename yet.
+    /// </exception>
+    public void MoveFile(string sourcePath, string destinationPath)
+    {
+        throw new NotImplementedException("The VFS core has no move or rename yet, so a VFS-backed Econet disc cannot rename a file.");
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotImplementedException">
+    /// Always thrown: the VFS core has no move or rename yet.
+    /// </exception>
+    public void MoveDirectory(string sourcePath, string destinationPath)
+    {
+        throw new NotImplementedException("The VFS core has no move or rename yet, so a VFS-backed Econet disc cannot rename a directory.");
+    }
+
     /// <summary>
     /// Creates a directory on the mount.
     /// </summary>

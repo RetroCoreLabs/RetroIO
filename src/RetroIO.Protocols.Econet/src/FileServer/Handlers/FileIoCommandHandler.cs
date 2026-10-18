@@ -296,10 +296,11 @@ public sealed class FileIoCommandHandler
         if (!_context.Paths.TryResolve(session, filename, out string unixPath, out _, out _))
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.NotFound, "Not found"));
 
+        // Through the backend: the path belongs to it and need not be a path on the host disk.
         if (_context.FileSystem.FileExists(unixPath))
-            File.Delete(unixPath);
+            _context.FileSystem.DeleteFile(unixPath);
         else if (_context.FileSystem.DirectoryExists(unixPath))
-            Directory.Delete(unixPath, false);
+            _context.FileSystem.DeleteDirectory(unixPath);
         else
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.NotFound, "Not found"));
 

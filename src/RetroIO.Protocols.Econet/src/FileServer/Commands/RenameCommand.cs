@@ -45,15 +45,16 @@ public sealed class RenameCommand : IOsCliCommand
     /// resolved for the caller's session.
     /// </summary>
     /// <remarks>
-    /// The move uses <c>File.Move</c> or <c>Directory.Move</c> on the host paths directly, not the
-    /// filesystem backend.
+    /// The move goes through the filesystem backend, so it works with any backend, not only the
+    /// local disk.
     /// </remarks>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
     /// </param>
     /// <returns>
-    /// Success; 0xFE "Bad command" when fewer than two names are given; or 0xD6 "Not found" when
-    /// either name does not resolve or the old name is neither a file nor a directory.
+    /// Success; 0xFE "Bad command" when fewer than two names are given; 0xD6 "Not found" when
+    /// the old name does not resolve or is neither a file nor a directory; or 0xFE "Already exists"
+    /// when the new name is already taken.
     /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
@@ -62,16 +63,23 @@ public sealed class RenameCommand : IOsCliCommand
         if (parts.Length < 2)
             return FileServerReply.Error(FileServerErrors.BadCommand, "Bad command");
 
-        if (!call.Context.Paths.TryResolve(call.Session!, parts[0], out string fromPath, out _, out _) ||
-            !call.Context.Paths.TryResolve(call.Session!, parts[1], out string toPath, out _, out _))
-        {
+        if (!call.Context.Paths.TryResolve(call.Session!, parts[0], out string fromPath, out _, out _))
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
-        }
 
+        // The new name does not exist yet, so (as with *CDIR) TryResolve returns false but still fills
+        // in the computed host path, which is exactly the path to move to.
+        call.Context.Paths.TryResolve(call.Session!, parts[1], out string toPath, out _, out _);
+        if (string.IsNullOrEmpty(toPath))
+            return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
+
+        if (call.Context.FileSystem.FileExists(toPath) || call.Context.FileSystem.DirectoryExists(toPath))
+            return FileServerReply.Error(FileServerErrors.BadCommand, "Already exists");
+
+        // Through the backend: the paths belong to it and need not be paths on the host disk.
         if (call.Context.FileSystem.FileExists(fromPath))
-            File.Move(fromPath, toPath);
+            call.Context.FileSystem.MoveFile(fromPath, toPath);
         else if (call.Context.FileSystem.DirectoryExists(fromPath))
-            Directory.Move(fromPath, toPath);
+            call.Context.FileSystem.MoveDirectory(fromPath, toPath);
         else
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
 

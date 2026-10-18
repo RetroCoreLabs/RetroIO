@@ -108,6 +108,30 @@ public sealed class RecordingFileSystemBackend : IFileSystemBackend
         _inner.CreateDirectory(path);
     }
 
+    public void DeleteFile(string path)
+    {
+        _calls.Add(new BackendCall(nameof(DeleteFile), path, null, null));
+        _inner.DeleteFile(path);
+    }
+
+    public void DeleteDirectory(string path)
+    {
+        _calls.Add(new BackendCall(nameof(DeleteDirectory), path, null, null));
+        _inner.DeleteDirectory(path);
+    }
+
+    public void MoveFile(string sourcePath, string destinationPath)
+    {
+        _calls.Add(new BackendCall(nameof(MoveFile), sourcePath + " -> " + destinationPath, null, null));
+        _inner.MoveFile(sourcePath, destinationPath);
+    }
+
+    public void MoveDirectory(string sourcePath, string destinationPath)
+    {
+        _calls.Add(new BackendCall(nameof(MoveDirectory), sourcePath + " -> " + destinationPath, null, null));
+        _inner.MoveDirectory(sourcePath, destinationPath);
+    }
+
     public bool FileExists(string path)
     {
         _calls.Add(new BackendCall(nameof(FileExists), path, null, null));

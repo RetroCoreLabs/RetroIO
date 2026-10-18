@@ -213,6 +213,54 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         backend.CreateDirectory(path);
     }
 
+    /// <inheritdoc/>
+    public void DeleteFile(string path)
+    {
+        IFileSystemBackend? backend = Route(path);
+        if (backend == null)
+            throw new UnauthorizedAccessException("Cannot delete a file at the disc-root level.");
+        backend.DeleteFile(path);
+    }
+
+    /// <inheritdoc/>
+    public void DeleteDirectory(string path)
+    {
+        IFileSystemBackend? backend = Route(path);
+        if (backend == null || IsDiscRoot(path))
+            throw new UnauthorizedAccessException("Cannot delete a disc.");
+        backend.DeleteDirectory(path);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the source and the destination are on different discs.
+    /// </exception>
+    public void MoveFile(string sourcePath, string destinationPath)
+    {
+        RouteBoth(sourcePath, destinationPath).MoveFile(sourcePath, destinationPath);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the source and the destination are on different discs.
+    /// </exception>
+    public void MoveDirectory(string sourcePath, string destinationPath)
+    {
+        RouteBoth(sourcePath, destinationPath).MoveDirectory(sourcePath, destinationPath);
+    }
+
+    // A move stays inside one disc: both paths must route to the same backend.
+    private IFileSystemBackend RouteBoth(string sourcePath, string destinationPath)
+    {
+        IFileSystemBackend? source = Route(sourcePath);
+        IFileSystemBackend? destination = Route(destinationPath);
+        if (source == null || destination == null || IsDiscRoot(sourcePath) || IsDiscRoot(destinationPath))
+            throw new UnauthorizedAccessException("Cannot move or rename at the disc-root level.");
+        if (!ReferenceEquals(source, destination))
+            throw new NotSupportedException("Cannot move between discs.");
+        return source;
+    }
+
     /// <summary>
     /// Gets the file name from a path.
     /// </summary>
@@ -276,6 +324,18 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
     // ---- routing ---------------------------------------------------------------------------------
 
     // Returns the backend for the disc a path falls under, or null for the virtual root / unknown.
+    // True when the path is the top folder of a disc itself, not something inside it.
+    private bool IsDiscRoot(string path)
+    {
+        string p = (path ?? string.Empty).Replace('\\', '/').TrimEnd('/');
+        for (int i = 0; i < _discs.Length; i++)
+        {
+            if (string.Equals(p, _root + "/" + _discs[i].DirName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     private IFileSystemBackend? Route(string path)
     {
         string p = (path ?? string.Empty).Replace('\\', '/').TrimEnd('/');
