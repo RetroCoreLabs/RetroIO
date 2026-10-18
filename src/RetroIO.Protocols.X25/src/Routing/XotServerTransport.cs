@@ -87,85 +87,52 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Counts the call as accepted and returns true when the transport is active. It does not send a packet.
+        /// Always throws, because answering a call with a Call Accepted packet is not implemented.
         /// </summary>
+        /// <remarks>
+        /// The transport does not track which TCP connection a call arrived on, so it cannot send a
+        /// Call Accepted packet back to the caller. Earlier code counted the call as accepted and
+        /// returned <c>true</c> without sending anything; that hid the missing mechanism.
+        /// </remarks>
         /// <param name="callRequest">
-        /// The call request to accept.
+        /// The call request that would be accepted.
         /// </param>
         /// <returns>
-        /// True when the transport is active and no error occurred, otherwise false.
+        /// Never returns.
         /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown: accepting an incoming call on the XOT server transport is not implemented.
+        /// </exception>
         public bool AcceptCall(X25CallRequest callRequest)
         {
-            if (_status != TransportStatus.Active)
-            {
-                _logger.LogWarning("XOT server transport {Name} not active, cannot accept call", Name);
-                return false;
-            }
-
-            try
-            {
-                _logger.LogInformation("Accepting X.25 call via XOT server {Name} from {CallingAddress} to {CalledAddress}", 
-                                     Name, callRequest.CallingAddress, callRequest.CalledAddress);
-
-                // Find the client connection that sent this call request
-                // Full implementation would track which connection the call came from
-                _statistics.InboundCallsAccepted++;
-                
-                // Placeholder for call acceptance
-                // Full implementation would:
-                // 1. Send X.25 call accepted packet back to originating XOT client
-                // 2. Establish virtual circuit for data transfer
-                _logger.LogInformation("XOT call accepted successfully via {Name}", Name);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _statistics.ConnectionErrors++;
-                _logger.LogError(ex, "Error accepting XOT call via {Name}", Name);
-                return false;
-            }
+            throw new NotSupportedException(
+                "XotServerTransport.AcceptCall is not implemented: the server transport cannot send a Call Accepted packet to the calling XOT connection.");
         }
 
         /// <summary>
-        /// Counts the call as rejected and returns true when the transport is active. It does not send a clear packet.
+        /// Always throws, because clearing a call with a Clear Request packet is not implemented.
         /// </summary>
+        /// <remarks>
+        /// The transport does not track which TCP connection a call arrived on, so it cannot send a
+        /// Clear Request packet with the cause code back to the caller. Earlier code counted the call
+        /// as rejected and returned <c>true</c> without sending anything; that hid the missing mechanism.
+        /// </remarks>
         /// <param name="callRequest">
-        /// The call request to reject.
+        /// The call request that would be rejected.
         /// </param>
         /// <param name="cause">
-        /// The clear cause code; it is only logged.
+        /// The clear cause code that would be sent.
         /// </param>
         /// <returns>
-        /// True when the transport is active and no error occurred, otherwise false.
+        /// Never returns.
         /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown: rejecting an incoming call on the XOT server transport is not implemented.
+        /// </exception>
         public bool RejectCall(X25CallRequest callRequest, byte cause)
         {
-            if (_status != TransportStatus.Active)
-            {
-                _logger.LogWarning("XOT server transport {Name} not active, cannot reject call", Name);
-                return false;
-            }
-
-            try
-            {
-                _logger.LogInformation("Rejecting X.25 call via XOT server {Name} from {CallingAddress} to {CalledAddress} with cause 0x{Cause:X2}", 
-                                     Name, callRequest.CallingAddress, callRequest.CalledAddress, cause);
-
-                // Find the client connection and send call clear
-                _statistics.InboundCallsRejected++;
-                
-                // Placeholder for call rejection
-                // Full implementation would send X.25 clear request packet with cause code
-                _logger.LogInformation("XOT call rejected successfully via {Name}", Name);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _statistics.ConnectionErrors++;
-                _logger.LogError(ex, "Error rejecting XOT call via {Name}", Name);
-                return false;
-            }
+            throw new NotSupportedException(
+                "XotServerTransport.RejectCall is not implemented: the server transport cannot send a Clear Request packet to the calling XOT connection.");
         }
 
         /// <summary>
@@ -389,8 +356,10 @@ namespace RetroIO.Protocols.X25.Transport
                 _logger.LogWarning("XOT server {Name} rejecting call to unaccepted X.121 address: {CalledAddress}", 
                                  Name, callRequest.CalledAddress);
                 
-                // Reject call with "access barred" cause
-                RejectCall(callRequest, 0x0B);
+                // RejectCall is not implemented, so the clear (access barred, 0x0B) cannot be sent.
+                // Say so in the log and drop the call here instead of throwing on the receive thread.
+                _logger.LogError("XOT server {Name} cannot send a Clear Request (cause 0x0B) for call to {CalledAddress}: not implemented, call dropped",
+                                 Name, callRequest.CalledAddress);
             }
         }
 
