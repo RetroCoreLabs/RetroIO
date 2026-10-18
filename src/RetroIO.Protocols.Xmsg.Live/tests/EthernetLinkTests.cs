@@ -201,6 +201,41 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
         }
 
         /// <summary>
+        /// A datagram sent into a full send window is parked, not refused: <c>SendData</c> still
+        /// answers <c>true</c> (the link took it and will send it as the window opens) and
+        /// <see cref="EthernetLink.DatagramParked"/> is raised. Callers rely on this: a refusal here
+        /// would drop a reply that nothing sends again.
+        /// </summary>
+        [Fact]
+        public void SendDataIntoAFullWindow_ParksTheDatagram_AndStillAnswersTrue()
+        {
+            using EthernetLink link = CreateLink(
+                out InProcessEthernetSegment segment, out IEthernetBackend _);
+
+            link.Start();
+
+            // The peer speaks first, so the link is Active, and then never acknowledges anything.
+            SpyPort peer = new SpyPort(segment, "d100");
+            peer.SendDataFrame(PeerSystem, LocalSystem, sequence: 0x00, SintranDatagram);
+            Assert.Equal(LinkStatus.Active, link.Status);
+
+            int parked = 0;
+            link.DatagramParked += (_, _, _) => parked++;
+
+            bool everRefused = false;
+            for (int i = 0; i < 64 && parked == 0; i++)
+            {
+                if (!link.SendData(SintranDatagram))
+                {
+                    everRefused = true;
+                }
+            }
+
+            Assert.True(parked > 0, "the window never filled, so the test did not reach the parked case");
+            Assert.False(everRefused, "a send into a full window must be taken, not refused");
+        }
+
+        /// <summary>
         /// The peer filter. A third station broadcasting on the shared segment must NOT be adopted
         /// as this link's peer.
         /// </summary>

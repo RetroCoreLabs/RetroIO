@@ -546,7 +546,9 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// </summary>
         /// <remarks>
         /// The bytes are copied into the LAPB body before this returns. The encoded frame is queued
-        /// and written by the pump on its next cycle.
+        /// and written by the pump on its next cycle. When the LAPB send window is full the payload
+        /// waits in the LAPB pending queue and is sent as the window opens, and the method still
+        /// returns <c>true</c>.
         /// </remarks>
         /// <param name="payload">
         /// The payload bytes to send.
