@@ -32,14 +32,16 @@ public static class FileServerBootstrap
         string discPath = fileSystem.CombinePath(rootDirectory, discDirectoryName);
         string userPath = fileSystem.CombinePath(discPath, "USER");
 
+        // Through the backend, never System.IO: the backend may be the VFS, Azure or a test double, and
+        // its paths are not paths on the host disk.
         if (!fileSystem.DirectoryExists(rootDirectory))
-            Directory.CreateDirectory(rootDirectory);
+            fileSystem.CreateDirectory(rootDirectory);
 
         if (!fileSystem.DirectoryExists(discPath))
-            Directory.CreateDirectory(discPath);
+            fileSystem.CreateDirectory(discPath);
 
         if (!fileSystem.DirectoryExists(userPath))
-            Directory.CreateDirectory(userPath);
+            fileSystem.CreateDirectory(userPath);
 
         EconetSampleCatalog.EnsureUserSamples(fileSystem, userPath);
     }
