@@ -134,7 +134,8 @@ namespace RetroIO.Storage.Local.Streams
                 throw new ArgumentNullException(nameof(buffer));
             }
 
-            if (offset < 0 || offset >= buffer.Length)
+            // Stream rules: an offset equal to the buffer length is valid (with a count of 0), and so is an empty buffer at offset 0.
+            if (offset < 0 || offset > buffer.Length)
             {
                 throw new ArgumentOutOfRangeException(nameof(offset));
             }
@@ -235,7 +236,8 @@ namespace RetroIO.Storage.Local.Streams
                 throw new ArgumentNullException(nameof(buffer));
             }
 
-            if (offset < 0 || offset >= buffer.Length)
+            // Stream rules: an offset equal to the buffer length is valid (with a count of 0), and so is an empty buffer at offset 0.
+            if (offset < 0 || offset > buffer.Length)
             {
                 throw new ArgumentOutOfRangeException(nameof(offset));
             }
