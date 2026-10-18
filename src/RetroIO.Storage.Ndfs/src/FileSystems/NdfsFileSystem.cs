@@ -1067,10 +1067,12 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             if (user == null)
                 return false;
 
-            user.Password = 0;
-
+            // Refuse BEFORE touching the loaded user: a clear that cannot reach the disk must not
+            // leave the in-memory user without its password.
             if (_device.IsReadOnly)
                 return false;
+
+            user.Password = 0;
 
             _userFile.WritePageForEntry(_device, _masterBlock.UserFilePointer, userIndex);
 

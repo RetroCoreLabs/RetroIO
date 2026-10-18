@@ -140,6 +140,47 @@ namespace RetroIO.Tests
             Assert.That(still!.PagesReserved, Is.EqualTo(40u), "a refused change must not leave the in-memory user changed");
         }
 
+        [Test]
+        public void ClearUserPassword_OnAReadOnlyDevice_ReturnsFalse_AndLeavesThePasswordAlone()
+        {
+            // Regression: the password was set to 0 in memory BEFORE the read-only check, so a refused
+            // clear still left the loaded user without a password.
+            Assert.That(_fs.AddUser("CAROL", 40), Is.True);
+            int index = FindIndex("CAROL");
+            _device.Flush();
+
+            using GenericBlockDevice readOnlyDevice = Open(_stream, readOnly: true);
+            using NdfsFileSystem readOnlyFs = new NdfsFileSystem();
+            readOnlyFs.Initialize(readOnlyDevice);
+            UserEntry carol = null!;
+            foreach (UserEntry user in readOnlyFs.GetUsers())
+            {
+                if (user.UserIndex == index)
+                    carol = user;
+            }
+            carol.Password = 0x1234;
+
+            Assert.That(readOnlyFs.ClearUserPassword(index), Is.False);
+            Assert.That(carol.Password, Is.EqualTo((ushort)0x1234), "a refused clear must not change the loaded user");
+        }
+
+        [Test]
+        public void ClearUserPassword_OnAWritableDevice_ClearsItOnDisk()
+        {
+            Assert.That(_fs.AddUser("DAVE", 40), Is.True);
+            int index = FindIndex("DAVE");
+            foreach (UserEntry user in _fs.GetUsers())
+            {
+                if (user.UserIndex == index)
+                    user.Password = 0x4321;
+            }
+            Assert.That(_fs.ClearUserPassword(index), Is.True);
+
+            UserEntry? onDisk = ReadBackUser("DAVE");
+            Assert.That(onDisk, Is.Not.Null);
+            Assert.That(onDisk!.Password, Is.EqualTo((ushort)0));
+        }
+
         private int FindIndex(string userName)
         {
             foreach (UserEntry user in _fs.GetUsers())
