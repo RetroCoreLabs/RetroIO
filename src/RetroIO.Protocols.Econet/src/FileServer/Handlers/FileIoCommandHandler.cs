@@ -251,8 +251,13 @@ public sealed class FileIoCommandHandler
 
         FileMode mode = mustExist ? FileMode.Open : FileMode.Create;
         FileAccess access = readOnly ? FileAccess.Read : FileAccess.ReadWrite;
+
+        // PiFS answers 0xC0 "Too many open files" when no handle is free.
+        byte handle = _context.Sessions.AllocateHandle(_context.Handles);
+        if (handle == 0)
+            return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Locked, "Too many open files"));
+
         FileStream stream = _context.FileSystem.OpenFile(unixPath, mode, access);
-        byte handle = _context.Sessions.AllocateHandle();
         if (!_context.Handles.TryOpen(handle, unixPath, stream, readOnly, request.ClientNet, request.ClientStation, out _))
         {
             stream.Dispose();

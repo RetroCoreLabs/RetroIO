@@ -61,7 +61,9 @@ public sealed class SjOpcodeHandler
 
     private EconetMessage HandleReadAccount(EconetMessage request, FileServerRequest fsRequest, FileServerSession session)
     {
-        ushort userIndex = _context.Sessions.GetSessionIndex(session);
+        if (!_context.Sessions.TryGetSessionIndex(session, out ushort userIndex))
+            return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.WhoAreYou, "Who are you ?"));
+
         byte[] payload =
         [
             0, 0,
