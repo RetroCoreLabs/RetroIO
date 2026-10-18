@@ -93,10 +93,15 @@ public sealed class UdpAunTransport : ITransport
         return socket;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the name of the transport type: <c>UDP</c>.
+    /// </summary>
     public string TransportType => "UDP";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets what the transport can do: many clients, no connection state, unreliable delivery, and the
+    /// server acknowledges inbound data itself. A new object is made on every read.
+    /// </summary>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -106,7 +111,10 @@ public sealed class UdpAunTransport : ITransport
         AutoAckInboundData = true,
     };
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Occurs when <see cref="RunAsync"/> has decoded a datagram that passed the size, firewall,
+    /// decode and address checks.
+    /// </summary>
     public event EconetMessageReceivedHandler? OnMessageReceived;
 
     /// <summary>

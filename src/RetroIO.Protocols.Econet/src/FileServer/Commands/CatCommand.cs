@@ -43,19 +43,38 @@ public sealed class CatCommand : IOsCliCommand
         _minimumAbbreviation = minimumAbbreviation;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the name given to the constructor: <c>CAT</c> or <c>.</c>.
+    /// </summary>
     public string Name => _name;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the minimum abbreviation given to the constructor: 2 for <c>CAT</c>, 1 for <c>.</c>.
+    /// </summary>
     public int MinimumAbbreviation => _minimumAbbreviation;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Answers with the Examine return code and the path, so the ROM re-issues the request as an
+    /// Examine. No directory is read here.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The Examine return code followed by the argument, or <c>.</c> when there is no argument, and a CR.
+    /// </returns>
     /// <remarks>
     /// A bare "*CAT" sends a literal "." as the path, meaning "the current directory". This is a
     /// known, DELIBERATE divergence carried over unchanged from the dispatch arm this replaces: the

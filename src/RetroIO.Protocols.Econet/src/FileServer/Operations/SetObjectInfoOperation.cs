@@ -25,16 +25,45 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class SetObjectInfoOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.SetObjectInfo"/> (0x13).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.SetObjectInfo;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Writes load, exec, length and access to the <c>,inf</c> sidecar of the existing file named in
+    /// the request.
+    /// </summary>
+    /// <remarks>
+    /// Only info commands 2, 5 and the canonical form write anything, and only when at least 10
+    /// parameter bytes are present; in every other case the reply is still success. The attribute bytes
+    /// are read from parameter offset 1 onwards, the same bytes the path is read from. The access byte
+    /// takes the configured default file permission when the parameters end before it.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// Success; 0xCC "Bad filename" when there are fewer than 2 parameter bytes; or 0xD6 "Not found"
+    /// when the path does not resolve to an existing file.
+    /// </returns>
+    /// <exception cref="System.IndexOutOfRangeException">
+    /// Thrown for a writing command with exactly 10 or 11 parameter bytes: the length field reads bytes
+    /// 10 and 11, but only 10 bytes are checked for.
+    /// </exception>
     public byte[] Execute(in FsOpCall call)
     {
         FileServerSession session = call.Session!;

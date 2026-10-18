@@ -23,16 +23,40 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class CatHeaderOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.CatHeader"/> (0x04).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.CatHeader;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the catalogue header for the directory named in the parameters, or for the current
+    /// directory when there are no parameters.
+    /// </summary>
+    /// <remarks>
+    /// The leaf name is <c>$</c> for the disc root and the directory's own leaf otherwise. The owner
+    /// marker is always <c>O</c>. The disc name is the current disc's Acorn name, or the context's disc
+    /// name when the disc is not found.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// The catalogue header reply, or 0xD6 "Not found" when the path does not resolve to an existing
+    /// directory.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         FileServerSession session = call.Session!;

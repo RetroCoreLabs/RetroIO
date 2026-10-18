@@ -37,19 +37,46 @@ public sealed class SetDiscMaskCommand : IOsCliCommand
         _name = name;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the spelling given to the constructor: <c>DISCMASK</c> or <c>DISKMASK</c>.
+    /// </summary>
     public string Name => _name;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 5, so <c>*DISCM.</c> or
+    /// <c>*DISKM.</c> selects this command.
+    /// </summary>
     public int MinimumAbbreviation => 5;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: only a system-privileged user may run this command. The dispatcher answers
+    /// everyone else with "Insufficient access".
+    /// </summary>
     public bool RequiresSystem => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Sets which discs a named user can see, from the argument <c>username discs</c>, where
+    /// <c>discs</c> is <c>ALL</c> (0xFFFF), <c>NONE</c> (0x0000) or a hex number.
+    /// </summary>
+    /// <remarks>
+    /// The new mask is stored for the user's next login; the live session is not changed. The result
+    /// of the user store call is not checked.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; or 0xFF with "Bad parameters" when fewer than two words are given, "Unknown user"
+    /// for an unknown user, or "Bad parameter or mask unchanged" when the value does not parse or
+    /// equals the current mask.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         string[] tokens = call.Argument.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);

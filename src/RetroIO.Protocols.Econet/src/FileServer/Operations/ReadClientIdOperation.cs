@@ -21,16 +21,33 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class ReadClientIdOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.ReadClientId"/> (0x20).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.ReadClientId;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the caller's own username.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// The username reply built from the session's username.
+    /// </returns>
     public byte[] Execute(in FsOpCall call) =>
         FileServerReply.ClientUsername(call.Session!.Username);
 }

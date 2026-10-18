@@ -36,22 +36,48 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class SetLibCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>SETLIB</c>.
+    /// </summary>
     public string Name => "SETLIB";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 4, so <c>*SETL.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 4;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
     // Self-service is allowed for any user; the two-argument "set another user" form is System-gated
     // inside Execute (so a non-admin still gets the PiFS "Bad parameters" answer, not "Insufficient
     // access").
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: any logged-in user may set their own library. The two-word form that sets
+    /// another user's library is limited to system users inside <see cref="Execute"/>.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Stores a user's library directory for their next login. The argument is <c>dir</c> for the
+    /// caller or, for a system user only, <c>user dir</c> for another user; <c>%</c> clears it.
+    /// </summary>
+    /// <remarks>
+    /// The directory is resolved against the caller's library path and must be an existing directory.
+    /// The live session is not changed, and the result of the user store call is not checked.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; the error reply from argument parsing; or 0xA8 "Bad library" when the directory does
+    /// not resolve to an existing directory.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         if (!SetDirectoryArguments.TryParse(

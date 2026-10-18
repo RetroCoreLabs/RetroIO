@@ -28,19 +28,41 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class SetPassCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>SETPASS</c>.
+    /// </summary>
     public string Name => "SETPASS";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 4, so <c>*SETP.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 4;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: only a system-privileged user may run this command. The dispatcher answers
+    /// everyone else with "Insufficient access".
+    /// </summary>
     public bool RequiresSystem => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Sets a named user's password without checking the old one. The argument is
+    /// <c>username password</c>; <c>""</c> stands for an empty password.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; or 0xFF with "Bad parameter" when fewer than two words are given, "Unknown user"
+    /// for an unknown user, or the user store's message when it refuses the password.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         string[] tokens = call.Argument.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);

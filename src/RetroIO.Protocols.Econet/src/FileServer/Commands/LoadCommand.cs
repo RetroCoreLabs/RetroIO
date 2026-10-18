@@ -16,19 +16,43 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 public sealed class LoadCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>LOAD</c>.
+    /// </summary>
     public string Name => "LOAD";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 2, so <c>*LO.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 2;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Checks that the file named by the argument exists and returns the load reply for the ROM to fetch
+    /// it.
+    /// </summary>
+    /// <remarks>
+    /// An optional second word that parses as a decimal number is sent back as the load address, with
+    /// the address-supplied flag set.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The load reply, or 0xD6 "Not found" when the file does not resolve or does not exist.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         // Argument is "<filename> [load-address]". The optional load address, when a valid number,

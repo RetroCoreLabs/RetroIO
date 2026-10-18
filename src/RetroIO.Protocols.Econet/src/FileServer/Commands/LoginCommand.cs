@@ -48,19 +48,45 @@ public sealed class LoginCommand : IOsCliCommand
         _minimumAbbreviation = minimumAbbreviation;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the spelling given to the constructor: <c>I AM</c>, <c>IAM</c>, <c>LOGIN</c> or <c>LOGON</c>.
+    /// </summary>
     public string Name => _name;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the minimum abbreviation given to the constructor: 2 for <c>I AM</c>, 3 for <c>IAM</c>, 4 for
+    /// <c>LOGIN</c>, 5 for <c>LOGON</c>.
+    /// </summary>
     public int MinimumAbbreviation => _minimumAbbreviation;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: this command runs without an existing session, so the dispatcher calls
+    /// <see cref="Execute"/> for a caller that is not logged in.
+    /// </summary>
     public bool RequiresLogin => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: no system privilege is needed to log in.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Parses the username and password from the full command text and logs the station in. A station
+    /// that is already logged in is logged out first: its handles are closed and its bulk transfers released.
+    /// </summary>
+    /// <remarks>
+    /// After a successful login the user's stored home and library directories are applied when they
+    /// are set and resolve to existing directories. Both a success and a failure are reported to the
+    /// security audit.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The login-success reply with the URD, CWD and library handles and the boot option; 0xFE
+    /// "Bad command" when the command text does not parse; or the error code and message from the
+    /// session store when the login is refused.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         // Re-parse the full command text so all four spellings and their username/password split are

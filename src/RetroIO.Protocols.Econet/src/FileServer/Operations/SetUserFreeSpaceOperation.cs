@@ -20,15 +20,33 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class SetUserFreeSpaceOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.SetUserFreeSpace"/> (0x1F).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.SetUserFreeSpace;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: only a system-privileged user may run this operation. The dispatcher answers
+    /// everyone else with "Insufficient access".
+    /// </summary>
     public bool RequiresSystem => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Accepts the request and does nothing else: per-user quotas are not enforced.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// Always success.
+    /// </returns>
     public byte[] Execute(in FsOpCall call) => FileServerReply.Success();
 }

@@ -21,16 +21,33 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class ReadTimeOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.ReadTime"/> (0x10).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.ReadTime;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the server clock.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// The time reply built from <c>ServerClock.UtcNow</c> of the server context.
+    /// </returns>
     public byte[] Execute(in FsOpCall call) =>
         FileServerReply.ReadTime(call.Context.ServerClock.UtcNow);
 }

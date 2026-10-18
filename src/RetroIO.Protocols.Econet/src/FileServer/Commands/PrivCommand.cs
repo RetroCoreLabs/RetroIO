@@ -35,19 +35,50 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class PrivCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>PRIV</c>.
+    /// </summary>
     public string Name => "PRIV";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 4, the whole name, so the
+    /// command can only be typed in full.
+    /// </summary>
     public int MinimumAbbreviation => 4;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: only a system-privileged user may run this command. The dispatcher answers
+    /// everyone else with "Insufficient access".
+    /// </summary>
     public bool RequiresSystem => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Sets a named user's privilege from the argument <c>username priv</c>, where <c>priv</c> is a
+    /// letter with an optional <c>+</c> or <c>-</c> in front.
+    /// </summary>
+    /// <remarks>
+    /// The letters:
+    ///  - <c>S</c>: System (admin, unlocked); with <c>-</c>, a Normal user.
+    ///  - <c>U</c>: a Normal, unlocked user.
+    ///  - <c>L</c>: Locked; with <c>-</c>, a Normal user.
+    ///  - any other letter: 0xFF "Unsupported privilege".
+    /// The result of the user store call is not checked: once the user is found, <c>S</c>, <c>U</c> and
+    /// <c>L</c> always reply success.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad command" when fewer than two words are given or the privilege is only a
+    /// sign; 0xBC "User not found" for an unknown user; or 0xFF "Unsupported privilege".
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         string[] tokens = call.Argument.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);

@@ -23,16 +23,37 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class ReadUserInfoOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.ReadUserInfo"/> (0x18).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.ReadUserInfo;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Finds the session where the user named in the parameters is logged on and returns its location.
+    /// </summary>
+    /// <remarks>
+    /// The match ignores case and surrounding spaces; the first matching session is used.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// The user location reply with flag 0x40 for a System user (0 otherwise), the station and the
+    /// net; or 0xBC "No such user or not logged on".
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         // PiFS fs_read_user_info (utilities/fs.c:7622-7664): the request names a user (CR-terminated at

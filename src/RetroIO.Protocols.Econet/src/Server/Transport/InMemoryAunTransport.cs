@@ -49,10 +49,15 @@ public sealed class InMemoryAunTransport : ITransport
         _virtualClientStation = virtualClientStation;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the name of the transport type: <c>InMemory</c>.
+    /// </summary>
     public string TransportType => "InMemory";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets what the transport can do: many clients, no connection state, reliable delivery, and no
+    /// automatic acknowledgement of inbound data. A new object is made on every read.
+    /// </summary>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
@@ -62,10 +67,31 @@ public sealed class InMemoryAunTransport : ITransport
         AutoAckInboundData = false,
     };
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Occurs when <see cref="RunAsync"/> takes a message from the inbound queue.
+    /// </summary>
     public event EconetMessageReceivedHandler? OnMessageReceived;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Takes messages from the inbound queue until the token is cancelled and passes each one to
+    /// <see cref="OnMessageReceived"/>.
+    /// </summary>
+    /// <remarks>
+    /// Each message is copied with the virtual client's net and station, and this transport is set as
+    /// its transport.
+    /// </remarks>
+    /// <param name="cancellationToken">
+    /// A token that stops the transport.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the transport has stopped.
+    /// </returns>
+    /// <exception cref="System.OperationCanceledException">
+    /// Thrown when <paramref name="cancellationToken"/> is cancelled while waiting for a message.
+    /// </exception>
+    /// <exception cref="ChannelClosedException">
+    /// Thrown when the inbound queue was completed by <see cref="Dispose"/> and is empty.
+    /// </exception>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -81,7 +107,18 @@ public sealed class InMemoryAunTransport : ITransport
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Puts a message in the outbound queue, where <see cref="ReceiveResponseAsync"/> reads it.
+    /// </summary>
+    /// <param name="message">
+    /// The message to send.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the message is queued.
+    /// </returns>
+    /// <exception cref="ChannelClosedException">
+    /// Carried by the returned task when the outbound queue was completed by <see cref="Dispose"/>.
+    /// </exception>
     public ValueTask SendAsync(EconetMessage message) => _outbound.Writer.WriteAsync(message);
 
     /// <summary>

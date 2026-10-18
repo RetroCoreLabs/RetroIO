@@ -21,16 +21,35 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class SetRandomAccessInfoOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.SetRandomAccessInfo"/> (0x0D).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.SetRandomAccessInfo;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Sets the cursor of the channel named by the first parameter byte to the 32-bit little-endian
+    /// value in the next four bytes.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad command" when there are fewer than 5 parameter bytes; or 0xDE "Channel ?"
+    /// for an unknown channel.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         ReadOnlySpan<byte> parameters = call.FsRequest.Parameters;

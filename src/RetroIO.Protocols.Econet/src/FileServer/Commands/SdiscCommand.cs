@@ -16,19 +16,40 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 public sealed class SdiscCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>SDISC</c>.
+    /// </summary>
     public string Name => "SDISC";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 2, so <c>*SD.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 2;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Selects the disc named by the argument for the session.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad command" for an empty argument; 0xBF "Who are you ?" when the session's
+    /// user has no profile; or the error code and message from the session store when it refuses the
+    /// change.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         string discReference = call.Argument.Trim();

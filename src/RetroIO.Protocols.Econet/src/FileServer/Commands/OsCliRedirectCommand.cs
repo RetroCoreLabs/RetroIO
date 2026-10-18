@@ -46,19 +46,38 @@ public sealed class OsCliRedirectCommand : IOsCliCommand
         _redirectOpcode = redirectOpcode;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the command name given to the constructor, in upper case.
+    /// </summary>
     public string Name => _name;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the minimum abbreviation given to the constructor, in characters.
+    /// </summary>
     public int MinimumAbbreviation => _minimumAbbreviation;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Answers with the operation byte given to the constructor as the return code, followed by the
+    /// argument, for the ROM to re-issue as that operation.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The redirect return code followed by the argument and a CR.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         return FileServerReply.WithReturnCode(_redirectOpcode, Encoding.ASCII.GetBytes(call.Argument + "\r"));

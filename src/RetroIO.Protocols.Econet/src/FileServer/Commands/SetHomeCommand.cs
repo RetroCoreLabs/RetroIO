@@ -35,19 +35,45 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class SetHomeCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>SETHOME</c>.
+    /// </summary>
     public string Name => "SETHOME";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 4, so <c>*SETH.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 4;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: only a system-privileged user may run this command. The dispatcher answers
+    /// everyone else with "Insufficient access".
+    /// </summary>
     public bool RequiresSystem => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Stores a user's home directory for their next login. The argument is <c>dir</c> for the caller
+    /// or <c>user dir</c> for another user; <c>%</c> clears it.
+    /// </summary>
+    /// <remarks>
+    /// The directory is resolved against the caller's home path and must be an existing directory. The
+    /// live session is not changed, and the result of the user store call is not checked.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; the error reply from argument parsing; or 0xA8 "Bad directory" when the directory
+    /// does not resolve to an existing directory.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         if (!SetDirectoryArguments.TryParse(

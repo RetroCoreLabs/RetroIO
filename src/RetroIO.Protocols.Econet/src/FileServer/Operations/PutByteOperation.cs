@@ -22,16 +22,37 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class PutByteOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.PutByte"/> (0x09).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.PutByte;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Writes the byte carried in the CWD field to the channel named by the URD field.
+    /// </summary>
+    /// <remarks>
+    /// Where the write lands depends on whether the sequence bit of the AUN control byte matches the
+    /// channel's (<c>ChannelSequence.Matches</c>). After the write the channel takes the new sequence bit.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// Success, or 0xDE "Channel ?" for an unknown or read-only channel.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         byte handle = AcornFileHandles.DivHandle(call.FsRequest.Urd);

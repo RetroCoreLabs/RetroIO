@@ -24,19 +24,40 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class PassCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>PASS</c>.
+    /// </summary>
     public string Name => "PASS";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 4, the whole name, so the
+    /// command can only be typed in full.
+    /// </summary>
     public int MinimumAbbreviation => 4;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Changes the caller's own password. The argument is the old password then the new one;
+    /// <c>""</c> stands for an empty password.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad parameters" when fewer than two words are given; 0xBC with the user store's
+    /// message when it is "Wrong password"; or 0xFE with the user store's message for any other refusal.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         // Argument is "<old> <new>", each token possibly the empty marker "".

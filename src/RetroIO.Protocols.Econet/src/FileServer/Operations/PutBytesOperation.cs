@@ -24,16 +24,39 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class PutBytesOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.PutBytes"/> (0x0B).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.PutBytes;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Registers an inbound bulk transfer that writes the client's data into an open, writable channel.
+    /// </summary>
+    /// <remarks>
+    /// The parameters are the handle, an offset flag, a 24-bit byte count and a 24-bit offset. A zero
+    /// offset flag seeks to the given offset; otherwise the write starts at the cursor. The data arrives
+    /// on the URD port, and acknowledgements and the reply go to the reply port.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad server request" when there are fewer than 8 parameter bytes; or 0xDE
+    /// "Channel ?" for an unknown or read-only channel.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         FileServerContext context = call.Context;

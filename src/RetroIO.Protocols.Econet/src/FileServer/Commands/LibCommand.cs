@@ -20,19 +20,40 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class LibCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>LIB</c>.
+    /// </summary>
     public string Name => "LIB";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 3, the whole name, so the
+    /// command can only be typed in full.
+    /// </summary>
     public int MinimumAbbreviation => 3;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Changes the session's library directory, resolved against the current library path. An empty
+    /// or <c>.</c> argument keeps the current library path.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The library-changed reply with the library handle, or 0xD6 "Not found" when the target is not
+    /// an existing directory.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         string argument = AcornPath.StripQuotes(call.Argument);

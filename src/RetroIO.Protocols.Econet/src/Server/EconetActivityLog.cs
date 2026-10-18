@@ -49,10 +49,18 @@ public sealed class EconetActivityLog : IEconetActivityLog
     /// </summary>
     public int Capacity { get; }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Occurs after a command or a file transfer has been recorded. It is raised outside the lock.
+    /// </summary>
     public event EventHandler? ActivityRecorded;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Adds a command to the log, overwriting the oldest one when the log is full, then raises
+    /// <see cref="ActivityRecorded"/>.
+    /// </summary>
+    /// <param name="entry">
+    /// The entry to add.
+    /// </param>
     public void RecordCommand(EconetCommandEntry entry)
     {
         lock (_sync)
@@ -66,7 +74,13 @@ public sealed class EconetActivityLog : IEconetActivityLog
         ActivityRecorded?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Adds a file transfer to the log, overwriting the oldest one when the log is full, then raises
+    /// <see cref="ActivityRecorded"/>.
+    /// </summary>
+    /// <param name="entry">
+    /// The entry to add.
+    /// </param>
     public void RecordFileTransfer(EconetFileTransferEntry entry)
     {
         lock (_sync)
@@ -80,14 +94,36 @@ public sealed class EconetActivityLog : IEconetActivityLog
         ActivityRecorded?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the most recent commands.
+    /// </summary>
+    /// <param name="count">
+    /// The largest number of entries to return.
+    /// </param>
+    /// <returns>
+    /// A new array of at most <paramref name="count"/> entries, newest first.
+    /// </returns>
+    /// <exception cref="System.OverflowException">
+    /// Thrown when <paramref name="count"/> is negative.
+    /// </exception>
     public IReadOnlyList<EconetCommandEntry> GetRecentCommands(int count)
     {
         lock (_sync)
             return CopyRecent(_commands, _commandHead, _commandCount, count);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the most recent file transfers.
+    /// </summary>
+    /// <param name="count">
+    /// The largest number of entries to return.
+    /// </param>
+    /// <returns>
+    /// A new array of at most <paramref name="count"/> entries, newest first.
+    /// </returns>
+    /// <exception cref="System.OverflowException">
+    /// Thrown when <paramref name="count"/> is negative.
+    /// </exception>
     public IReadOnlyList<EconetFileTransferEntry> GetRecentTransfers(int count)
     {
         lock (_sync)

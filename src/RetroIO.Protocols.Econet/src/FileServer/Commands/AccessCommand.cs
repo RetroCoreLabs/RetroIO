@@ -34,19 +34,41 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class AccessCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>ACCESS</c>.
+    /// </summary>
     public string Name => "ACCESS";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 3, so <c>*ACC.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 3;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Sets the access byte of the object named in the argument from the permission string that
+    /// follows it, and writes the byte to the object's <c>,inf</c> sidecar.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFF "Bad parms" when there is no argument or the permission string has more than
+    /// one slash; 0xCF "Bad attribute" for an unknown permission letter; or 0xD6 "Not found" when the
+    /// object does not resolve.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         // Argument is "<object> [<access-string>]"; the access string is optional (empty => clear all).

@@ -17,19 +17,43 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 public sealed class SaveCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>SAVE</c>.
+    /// </summary>
     public string Name => "SAVE";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 2, so <c>*SA.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 2;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Resolves the target file and returns the save reply for the ROM to send the data. The argument
+    /// is the file name, then optional load, exec and length numbers, each parsed as decimal.
+    /// </summary>
+    /// <remarks>
+    /// A missing or bad load address is 0, and a missing or bad exec address takes the load address. A
+    /// missing or zero length takes the size of the existing file when there is one.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The save reply, or 0xD6 "Not found" when the name does not resolve.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         // Argument is "<filename> [load] [exec] [length]". exec defaults to load; a zero/absent

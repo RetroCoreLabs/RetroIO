@@ -26,19 +26,40 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class CdirCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>CDIR</c>.
+    /// </summary>
     public string Name => "CDIR";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 2, so <c>*CD.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 2;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Creates a directory at the path named by the argument, resolved through the session's path
+    /// resolver.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad command" when the name is empty or gives no host path; or 0xFE
+    /// "Already exists" when a file or directory is already there.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         string dirname = AcornPath.StripQuotes(call.Argument);

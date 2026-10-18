@@ -32,19 +32,38 @@ public sealed class FsListCommand : IOsCliCommand
         _context = context;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>FSLIST</c>.
+    /// </summary>
     public string Name => "FSLIST";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 6, the whole name, so the
+    /// command can only be typed in full.
+    /// </summary>
     public int MinimumAbbreviation => 6;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Reports the server version string.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The version reply carrying <c>VersionString</c> from the server context in <paramref name="call"/>.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         return FileServerReply.Version(call.Context.VersionString);

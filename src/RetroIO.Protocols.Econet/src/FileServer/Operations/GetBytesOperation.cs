@@ -27,16 +27,41 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class GetBytesOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.GetBytes"/> (0x0A).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.GetBytes;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Reads up to one bulk chunk from an open channel and queues an outbound transfer: the data packet
+    /// on the URD data port, then the completion reply on the reply port.
+    /// </summary>
+    /// <remarks>
+    /// The parameters are the handle, an offset flag, a 24-bit byte count and a 24-bit offset. A zero
+    /// offset flag seeks to the given offset; otherwise the read starts at the cursor, or at the previous
+    /// cursor when the sequence bit does not match. The count is capped at the bulk chunk size, and a
+    /// short read is padded with zeros.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// Success, with the data and the completion sent through the queued transfer; 0xFE "Bad server
+    /// request" when there are fewer than 8 parameter bytes; or 0xDE "Channel ?" for an unknown channel.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         FileServerContext context = call.Context;

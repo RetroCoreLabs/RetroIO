@@ -47,19 +47,42 @@ public sealed class FlogCommand : IOsCliCommand
         _minimumAbbreviation = minimumAbbreviation;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the spelling given to the constructor: <c>FLOG</c> or <c>LOGOFF</c>.
+    /// </summary>
     public string Name => _name;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the minimum abbreviation given to the constructor: 3 for <c>FLOG</c>, 5 for <c>LOGOFF</c>.
+    /// </summary>
     public int MinimumAbbreviation => _minimumAbbreviation;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: only a system-privileged user may run this command. The dispatcher answers
+    /// everyone else with "Insufficient access".
+    /// </summary>
     public bool RequiresSystem => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Logs off every session that matches the argument: a station (<c>net.stn</c>, or a bare <c>stn</c>
+    /// on net 0) or a username. Each match has its handles closed, its bulk transfers released and its
+    /// session dropped.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad command" for an empty argument; 0xFF "Bad station specification" when an
+    /// argument that starts with a digit does not parse; or 0xFF "Unknown user" when the username does
+    /// not exist.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         string argument = call.Argument.Trim();

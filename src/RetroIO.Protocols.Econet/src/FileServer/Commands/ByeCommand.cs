@@ -29,10 +29,15 @@ public sealed class ByeCommand : IOsCliCommand
         _context = context;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>BYE</c>.
+    /// </summary>
     public string Name => "BYE";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 3, the whole name, so the
+    /// command can only be typed in full.
+    /// </summary>
     /// <remarks>
     /// Must be typed in full. The legacy dispatch arm this replaced accepted only exact "BYE" or
     /// "BYE ", so a minimum equal to the name's length preserves that behaviour exactly rather than
@@ -40,13 +45,28 @@ public sealed class ByeCommand : IOsCliCommand
     /// </remarks>
     public int MinimumAbbreviation => 3;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Logs the calling station out through <c>FileServerLogout.Execute</c>, using the client net and
+    /// station of the request.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// The reply payload built by <c>FileServerLogout.Execute</c>.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         return FileServerLogout.Execute(call.Context, call.Request.ClientNet, call.Request.ClientStation);

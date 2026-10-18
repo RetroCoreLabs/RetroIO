@@ -24,19 +24,41 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </remarks>
 public sealed class CopyCommand : IOsCliCommand
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full command name in upper case: <c>COPY</c>.
+    /// </summary>
     public string Name => "COPY";
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the shortest accepted dot abbreviation, in characters: 2, so <c>*CO.</c> selects
+    /// this command.
+    /// </summary>
     public int MinimumAbbreviation => 2;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the command needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="OsCliCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the command is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Copies one source file to a destination. The argument is the source name then the destination
+    /// name, both resolved for the caller's session.
+    /// </summary>
+    /// <param name="call">
+    /// Everything the command needs, including the already-split argument.
+    /// </param>
+    /// <returns>
+    /// Success; 0xFE "Bad parameters" when fewer than two names are given; 0xD6 "Not found" when the
+    /// source does not resolve or is not a file; or 0xFE "Bad destination" when the destination gives no
+    /// host path.
+    /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
         // Argument is "<source> <destination>".

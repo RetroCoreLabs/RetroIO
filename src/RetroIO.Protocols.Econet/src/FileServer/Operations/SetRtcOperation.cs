@@ -22,16 +22,38 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class SetRtcOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.SetRtc"/> (0x1C).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.SetRtc;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: only a system-privileged user may run this operation. The dispatcher answers
+    /// everyone else with "Insufficient access".
+    /// </summary>
     public bool RequiresSystem => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Sets the server clock from the parameters: minute, hour, day, month, then the year as 1900 plus
+    /// the fifth byte shifted right by one, and an optional second.
+    /// </summary>
+    /// <remarks>
+    /// With fewer than 5 parameter bytes the clock is not changed and the reply is success.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// Success, or 0xFE "Bad time" when the values do not form a valid date and time.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         ReadOnlySpan<byte> parameters = call.FsRequest.Parameters;

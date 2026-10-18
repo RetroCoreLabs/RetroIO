@@ -29,16 +29,45 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class GetObjectInfoOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.GetObjectInfo"/> (0x12).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.GetObjectInfo;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns metadata for the object named in the request, in the form chosen by the info command
+    /// byte.
+    /// </summary>
+    /// <remarks>
+    /// Behaviour by case:
+    ///  - a relative-to handle of 0, a path that does not resolve, or an object that does not exist gives
+    ///    0xD6 "Not found" for command 6 and the object-not-found reply for the other commands.
+    ///  - command 6 on a file gives 0xAF "Types don't match".
+    ///  - the canonical form (<see cref="FileServerOpcodes.GetObjectInfoCanonical"/>) adds the path and a
+    ///    CR after the info reply.
+    ///  - command 6 fills in the 10-byte directory name and the entry count, capped at 255.
+    /// The owner byte always reports the caller as owner, since there is no per-object owner model.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// The info reply for the command, one of the error replies above, or 0xCC "Bad filename" when
+    /// the request does not parse.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         FileServerSession session = call.Session!;

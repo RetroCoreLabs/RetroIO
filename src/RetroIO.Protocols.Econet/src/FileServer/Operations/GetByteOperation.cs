@@ -24,16 +24,39 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// </remarks>
 public sealed class GetByteOperation : IFileServerOperation
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the fsop byte this operation serves: <see cref="FileServerOpcodes.GetByte"/> (0x08).
+    /// The dispatcher uses it directly as the table index.
+    /// </summary>
     public byte Opcode => FileServerOpcodes.GetByte;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>true</c>: the operation needs a logged-in caller. The dispatcher answers an
+    /// unauthenticated caller with "Who are you ?" and never calls <see cref="Execute"/>, so
+    /// <see cref="FsOpCall.Session"/> is non-null inside it.
+    /// </summary>
     public bool RequiresLogin => true;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets <c>false</c>: the operation is not limited to system-privileged users.
+    /// </summary>
     public bool RequiresSystem => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Reads one byte from the channel named by the URD field.
+    /// </summary>
+    /// <remarks>
+    /// Where the read starts depends on whether the sequence bit of the AUN control byte matches the
+    /// channel's (<c>ChannelSequence.Matches</c>). After the read the channel takes the new sequence bit.
+    /// </remarks>
+    /// <param name="call">
+    /// Everything the operation needs: the request, the decoded header, the session, and services.
+    /// </param>
+    /// <returns>
+    /// The get-byte reply with the value and a flags byte (0x80 when the read reached the end); the
+    /// 0xFE, 0xC0 get-byte reply for a directory or a read past the end; 0xDF "EOF" when the channel is
+    /// already past the end; or 0xDE "Channel ?" for an unknown channel.
+    /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
         byte handle = AcornFileHandles.DivHandle(call.FsRequest.Urd);
