@@ -57,8 +57,8 @@ Version `0.1.0`, published to the local folder feed as `0.1.0-local.<timestamp>`
 on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
 
 - **Forty-four packages.** Nothing in `src/` has a `Main` - the library and application split is
-  enforced by the layout, not by convention. The build is **not green on a fresh restore**: see
-  [Known problems](#known-problems).
+  enforced by the layout, not by convention. A clean restore and build give no warnings; the
+  GitHub test step is red for a different reason: see [Known problems](#known-problems).
 - **Thirteen test projects.** The X.25 packet layer and the C emulator `x25emu` read the
   **same** conformance vectors, so a disagreement between the two implementations is a
   failing test rather than an argument.
@@ -69,9 +69,13 @@ on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
 
 Found by a read-only review on 2026-10-15. Each one is a real defect, not a plan.
 
-- **The build is red on a fresh restore.** NuGet reports `NU1902` (a known vulnerability in
-  `Microsoft.Build.Tasks.Git` 8.0.0, advisory GHSA-23fw-v26w-5fgq) and warnings are errors. The
-  package version has to move before `dotnet test` runs on a clean machine.
+- **The GitHub test step is red.** The restore and the build are clean (no warnings, no errors;
+  the `NU1902` advisory this section used to report was fixed by the package bump of 2026-10-16).
+  About 50 tests of the XMSG packages read recordings of real terminal sessions (the
+  `X25Emulator/pcap` folder of a private repository). Those recordings hold login prompts, a user
+  name and an Azure address, so they are not in this repository, and GitHub's runner does not have
+  them. The tests fail on a machine without the recordings, or pass without checking anything when
+  `XMSG_PCAP_OPTIONAL=1` is set. The public part of their data is in `src/DOC`.
 - **XOT is not implemented.** The XOT classes in the X.25 routing code count statistics and report
   success without sending anything. Do not rely on them.
 - **Part of the SINTRAN PVC server guesses.** `SintranPvcServer` chooses a route from the first byte
