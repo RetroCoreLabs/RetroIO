@@ -38,3 +38,20 @@
 .navbar .navbar-nav .nav-link wbr {
   display: none;
 }
+
+/* Dark colour scheme: the template's secondary grey (#6c757d) on its dark background (#212529) is 3.3:1, under the
+   4.5:1 that text needs. It is the footer, the "Namespace" and "Assembly" lines, and every link in the "In this
+   article" outline - 40 to 65 pieces of text on a page. Bootstrap builds those colours from --bs-secondary-rgb. */
+[data-bs-theme="dark"] {
+  --bs-secondary-rgb: 173, 181, 189;
+}
+
+/* Light colour scheme: two colours of the code highlighter are too pale on the code block's grey (#f5f5f5):
+   the cyan of symbols is 2.3:1 and the red of attribute names 3.7:1. Darker shades of the same hues. */
+[data-bs-theme="light"] .hljs-symbol {
+  color: #0b5f87;
+}
+
+[data-bs-theme="light"] .hljs-attr {
+  color: #b3001b;
+}
