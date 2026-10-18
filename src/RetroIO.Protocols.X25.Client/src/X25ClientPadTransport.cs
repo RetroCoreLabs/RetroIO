@@ -44,7 +44,21 @@ namespace RetroIO.Protocols.X25.Client
         /// </summary>
         public X25Vc? Circuit => _vc;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Places an outgoing X.25 call through the client and remembers the circuit it opened.
+        /// </summary>
+        /// <param name="calledAddress">
+        /// Destination X.121 address.
+        /// </param>
+        /// <param name="callingAddress">
+        /// Origin X.121 address. It is not read: the client uses its own configured local address.
+        /// </param>
+        /// <param name="callUserData">
+        /// Call user data (PAD protocol identifier), or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the client returned a circuit for the call.
+        /// </returns>
         public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
         {
             // The client uses its configured local address as the calling address, which matches the PAD's.
@@ -52,7 +66,29 @@ namespace RetroIO.Protocols.X25.Client
             return _vc != null;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends a data packet on the PAD's one circuit.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical channel number. It is not read: the data always goes on the circuit this
+        /// adapter opened.
+        /// </param>
+        /// <param name="data">
+        /// Payload bytes; all of them are sent.
+        /// </param>
+        /// <param name="mBit">
+        /// More-data bit. It is not read.
+        /// </param>
+        /// <param name="qBit">
+        /// Qualifier bit.
+        /// </param>
+        /// <param name="dBit">
+        /// Delivery-confirmation bit. It is not read.
+        /// </param>
+        /// <returns>
+        /// The client's answer, <c>true</c> if the data was accepted for transmission;
+        /// <c>false</c> when no circuit is open.
+        /// </returns>
         public bool SendData(ushort lcn, byte[] data, bool mBit, bool qBit, bool dBit)
         {
             X25Vc? vc = _vc;
@@ -64,7 +100,22 @@ namespace RetroIO.Protocols.X25.Client
             return _client.Send(vc, data, data.Length, qBit);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Forwards ordinary terminal data assembled by the X.28 layer on the PAD's one circuit,
+        /// with the Q bit clear.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical channel number. It is not read.
+        /// </param>
+        /// <param name="data">
+        /// Payload bytes.
+        /// </param>
+        /// <param name="length">
+        /// Number of valid bytes in <paramref name="data"/>.
+        /// </param>
+        /// <remarks>
+        /// Does nothing when no circuit is open. The client's send result is not reported.
+        /// </remarks>
         public void ForwardData(ushort lcn, byte[] data, int length)
         {
             X25Vc? vc = _vc;
@@ -74,7 +125,21 @@ namespace RetroIO.Protocols.X25.Client
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Clears the PAD's one circuit through the client and forgets it.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical channel number. It is not read.
+        /// </param>
+        /// <param name="cause">
+        /// X.25 clear cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// X.25 diagnostic code.
+        /// </param>
+        /// <remarks>
+        /// Does nothing when no circuit is open.
+        /// </remarks>
         public void ClearCall(ushort lcn, byte cause, byte diagnostic)
         {
             X25Vc? vc = _vc;

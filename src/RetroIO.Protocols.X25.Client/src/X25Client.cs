@@ -394,7 +394,11 @@ namespace RetroIO.Protocols.X25.Client
             Dispose();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Releases the client: lets <see cref="Run"/> return, stops the tick timer, closes and
+        /// disposes the transport, and drops the codec and the packet layer. Calling it again does
+        /// nothing.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
@@ -547,7 +551,17 @@ namespace RetroIO.Protocols.X25.Client
                 _codec = codec;
             }
 
-            /// <inheritdoc/>
+            /// <summary>
+            /// Frames a complete X.25 packet with the XOT codec and sends it.
+            /// </summary>
+            /// <param name="packet">
+            /// The packet bytes (GFI + LCN + PTI + body).
+            /// </param>
+            /// <returns>
+            /// <see cref="X25SendResult.Sent"/> when the codec took the packet;
+            /// <see cref="X25SendResult.LinkDown"/> when it threw. This sink never returns
+            /// <see cref="X25SendResult.Refused"/>.
+            /// </returns>
             /// <remarks>
             /// The framing codec and the TCP transport below it report failure by throwing, so a
             /// throw here is "the link is gone", not a bug to surface: it becomes
@@ -585,7 +599,15 @@ namespace RetroIO.Protocols.X25.Client
                 _transport = transport;
             }
 
-            /// <inheritdoc/>
+            /// <summary>
+            /// Writes XOT-framed bytes to the TCP transport.
+            /// </summary>
+            /// <param name="bytes">
+            /// The framed bytes to transmit. The span is only valid for the duration of the call.
+            /// </param>
+            /// <remarks>
+            /// A failure in the transport is not caught here; it reaches the caller.
+            /// </remarks>
             public void Send(ReadOnlySpan<byte> bytes)
             {
                 _transport.Write(bytes);
