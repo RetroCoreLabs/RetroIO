@@ -104,7 +104,17 @@ public class ServerManager : IServerManager
         return _protocolServices;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the server status as this manager last recorded it.
+    /// </summary>
+    /// <remarks>
+    /// The running flag and start time are this manager's own record; the protocol services are
+    /// not asked. The version is always <c>1.0.0</c>.
+    /// </remarks>
+    /// <returns>
+    /// A new status with the running flag, the uptime as text (zero when stopped), the version and
+    /// the start time (<c>null</c> when stopped).
+    /// </returns>
     public ServerStatusResponse GetStatus()
     {
         TimeSpan uptime = _startedAt.HasValue
@@ -120,7 +130,18 @@ public class ServerManager : IServerManager
         };
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Starts the TNFS and Econet protocol services hosted in this process.
+    /// </summary>
+    /// <remarks>
+    /// Only one start or stop runs at a time. An exception from a service is logged and turned
+    /// into a failed response; it is not thrown on.
+    /// </remarks>
+    /// <returns>
+    /// A failed response when this manager already records the server as running, when no protocol
+    /// services are hosted in this process, or when a service throws; otherwise a successful
+    /// response, after which the server is recorded as running from now.
+    /// </returns>
     public async Task<ServerActionResponse> StartAsync()
     {
         await _gate.WaitAsync();
@@ -161,7 +182,20 @@ public class ServerManager : IServerManager
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops the TNFS and Econet protocol services hosted in this process.
+    /// </summary>
+    /// <remarks>
+    /// Only one start or stop runs at a time. The host process and the management API keep
+    /// running. An exception from a service is logged and turned into a failed response; it is not
+    /// thrown on.
+    /// </remarks>
+    /// <returns>
+    /// A failed response when this manager does not record the server as running, or when a
+    /// service throws; otherwise a successful response, after which the server is recorded as
+    /// stopped. When no protocol services are hosted, nothing is stopped and the response is still
+    /// successful.
+    /// </returns>
     public async Task<ServerActionResponse> StopAsync()
     {
         await _gate.WaitAsync();
@@ -197,7 +231,13 @@ public class ServerManager : IServerManager
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restarts the protocol services: stops them, waits 1 second, and starts them again.
+    /// </summary>
+    /// <returns>
+    /// The stop response when the stop failed (the start is then not tried); otherwise the start
+    /// response.
+    /// </returns>
     public async Task<ServerActionResponse> RestartAsync()
     {
         ServerActionResponse stopResult = await StopAsync();
