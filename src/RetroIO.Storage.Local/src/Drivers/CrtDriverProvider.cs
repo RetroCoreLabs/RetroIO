@@ -15,9 +15,13 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class CrtDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>CRT</c>.
+        /// </summary>
         public override string FileSystemType => "CRT";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Commodore CRT cartridge format.
+        /// </summary>
         public override string Description => "Commodore CRT cartridge image";
         /// <summary>
         /// Gets 64, the number of header bytes the detection needs.
@@ -51,7 +55,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted CRT driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="CrtDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver() => new CrtDriver();
     }
 }

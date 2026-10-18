@@ -26,14 +26,22 @@ namespace RetroIO.Storage.Local.Drivers
         private DragonDosFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type of the mounted DragonDOS file system, or <c>DragonDOS</c> when nothing is mounted.
+        /// </summary>
         public string FileSystemType => _filesystem?.FileSystemType ?? "DragonDOS";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the volume label of the mounted DragonDOS file system, or an empty string when nothing is mounted.
+        /// </summary>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>.</c>, the separator between file name and extension in DragonDOS.
+        /// </summary>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ".";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the capability flags of this driver: read, directory listing, file types, volume label and block read.
+        /// </summary>
         public DriverCapabilities Capabilities
         {
             get
@@ -47,13 +55,17 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver reads files.
+        /// </summary>
         public bool CanRead => true;
         /// <summary>
         /// Gets false, because the driver does not write yet.
         /// </summary>
         public bool CanWrite => false; // TODO: Implement write operations
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver can read raw blocks of the image. Block writes are not implemented.
+        /// </summary>
         public bool HasBlockAccess => true;
 
         /// <summary>
@@ -196,7 +208,18 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file from the mounted DragonDOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
@@ -234,14 +257,36 @@ namespace RetroIO.Storage.Local.Drivers
             throw new NotImplementedException("Dragon VDK delete operations not yet implemented");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the directory of the mounted DragonDOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Directory path.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file in the mounted DragonDOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when the file system does not find <paramref name="path"/>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -252,7 +297,21 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads one sector of the image data (after the VDK header) from the block device.
+        /// </summary>
+        /// <param name="address">
+        /// The block to read.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
@@ -276,7 +335,15 @@ namespace RetroIO.Storage.Local.Drivers
             throw new NotImplementedException("Dragon VDK write operations not yet implemented");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the information of the block device the image data is mounted on.
+        /// </summary>
+        /// <returns>
+        /// The block device information; never <c>null</c> once mounted.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();

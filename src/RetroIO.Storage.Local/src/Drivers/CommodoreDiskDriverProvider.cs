@@ -16,10 +16,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class CommodoreDiskDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>Commodore</c>.
+        /// </summary>
         public override string FileSystemType => "Commodore";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Commodore disk image formats.
+        /// </summary>
         public override string Description => "Commodore disk images (D64/D71/D81)";
 
         /// <summary>
@@ -49,7 +53,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted Commodore disk driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="CommodoreDiskDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new CommodoreDiskDriver();

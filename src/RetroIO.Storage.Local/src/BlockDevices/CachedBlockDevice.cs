@@ -67,15 +67,25 @@ namespace RetroIO.Storage.Local.BlockDevices
         public IBlockCache Cache => _cache;
 
         // IBlockDevice passthrough properties
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the block size in bytes of the inner device.
+        /// </summary>
         public int BlockSize => _innerDevice.BlockSize;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the total number of blocks on the inner device.
+        /// </summary>
         public uint TotalBlocks => _innerDevice.TotalBlocks;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether the inner device is mounted read-only.
+        /// </summary>
         public bool IsReadOnly => _innerDevice.IsReadOnly;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether the inner device is mounted and ready for reads and writes.
+        /// </summary>
         public bool IsMounted => _innerDevice.IsMounted;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether the inner device has a different number of sectors on some tracks.
+        /// </summary>
         public bool SupportsVariableGeometry => _innerDevice.SupportsVariableGeometry;
 
         /// <summary>
@@ -125,13 +135,26 @@ namespace RetroIO.Storage.Local.BlockDevices
             _cache.WriteBlock(address, data, _innerDevice.WriteBlock);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the number of blocks on a track, as reported by the inner device.
+        /// </summary>
+        /// <param name="track">
+        /// The track number, numbered the way the inner device numbers them.
+        /// </param>
+        /// <returns>
+        /// The number of blocks (sectors) on <paramref name="track"/>.
+        /// </returns>
         public int GetBlocksPerTrack(int track)
         {
             return _innerDevice.GetBlocksPerTrack(track);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the block device information of the inner device.
+        /// </summary>
+        /// <returns>
+        /// The information the inner device returns; the cache does not change it.
+        /// </returns>
         public BlockDeviceInfo GetBlockDeviceInfo()
         {
             return _innerDevice.GetBlockDeviceInfo();

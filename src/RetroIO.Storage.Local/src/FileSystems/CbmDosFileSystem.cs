@@ -34,11 +34,17 @@ namespace RetroIO.Storage.Local.FileSystems
         // directory sector. Confirmed against VICE (vdrive-dir.c) and MAME (fs_cbmdos.cpp).
         private const int EntriesPerDirectorySectorValue = 8;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier: <c>CBM-DOS</c>.
+        /// </summary>
         public string FileSystemType => "CBM-DOS";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the disk name read from the header sector, or an empty string before initialization.
+        /// </summary>
         public string VolumeLabel => _volumeLabel;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets an empty string, because CBM DOS keeps the file type apart from the file name.
+        /// </summary>
         public string ExtensionSeparator => "";  // CBM DOS uses FileType as separate metadata, not part of filename
 
         /// <summary>
@@ -56,7 +62,15 @@ namespace RetroIO.Storage.Local.FileSystems
             _bamTrack = bamTrack;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Attaches the file system to a block device and reads the disk header.
+        /// </summary>
+        /// <param name="device">
+        /// Block device holding the disk image, addressed by track and sector.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is <c>null</c>.
+        /// </exception>
         public void Initialize(IBlockDevice device)
         {
             if (device == null)
@@ -68,7 +82,19 @@ namespace RetroIO.Storage.Local.FileSystems
             ParseHeader();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Checks whether the device looks like a CBM DOS disk with the directory track this instance expects.
+        /// </summary>
+        /// <remarks>
+        /// Reads sector 0 of the BAM track and checks that its link points to the expected directory track
+        /// and to a sector from 1 to 3. The device is not changed. Any exception while reading gives <c>false</c>.
+        /// </remarks>
+        /// <param name="device">
+        /// Block device to inspect.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the BAM sector link matches; otherwise <c>false</c>.
+        /// </returns>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -96,7 +122,21 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the closed files in the disk directory, following the chain of directory sectors.
+        /// </summary>
+        /// <remarks>
+        /// Scratched, unclosed and empty entries are skipped.
+        /// </remarks>
+        /// <param name="path">
+        /// Not used: CBM DOS has one flat directory, which is always listed.
+        /// </param>
+        /// <returns>
+        /// The directory entries in disk order.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -138,7 +178,21 @@ namespace RetroIO.Storage.Local.FileSystems
             return entries.ToArray();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file by following its chain of data sectors.
+        /// </summary>
+        /// <param name="path">
+        /// File name, with or without a leading <c>/</c>.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when no directory entry has the name in <paramref name="path"/>.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -163,7 +217,32 @@ namespace RetroIO.Storage.Local.FileSystems
         // builds on this and is added in later phases.
         // ==============================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes a file as a PRG file, replacing a file with the same name, and flushes the device.
+        /// </summary>
+        /// <remarks>
+        /// The name is trimmed and upper-cased. Every file takes at least one block of 254 data bytes.
+        /// All blocks are allocated before anything is written; when the disk fills up, the blocks already
+        /// allocated are freed again.
+        /// </remarks>
+        /// <param name="path">
+        /// File name, with or without a leading <c>/</c>; at most 16 characters.
+        /// </param>
+        /// <param name="data">
+        /// The file contents.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the name is empty, longer than 16 characters or holds a character CBM DOS does not allow.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized or the device is read-only.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the disk or the directory is full.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             EnsureInitialized();
@@ -248,7 +327,21 @@ namespace RetroIO.Storage.Local.FileSystems
             _disk!.Flush();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Scratches a file: frees its data blocks, marks its directory entry as scratched and flushes the device.
+        /// </summary>
+        /// <param name="path">
+        /// File name, with or without a leading <c>/</c>.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the name is empty, longer than 16 characters or holds a character CBM DOS does not allow.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized or the device is read-only.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when the file does not exist.
+        /// </exception>
         public void DeleteFile(string path)
         {
             EnsureInitialized();
@@ -1090,7 +1183,22 @@ namespace RetroIO.Storage.Local.FileSystems
             return 0x3F; // '?'
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file from its directory entry.
+        /// </summary>
+        /// <remarks>
+        /// The size is the block count times 254, so it is only close to the real length. The start track,
+        /// start sector, block count and locked flag are also stored as extra properties.
+        /// </remarks>
+        /// <param name="path">
+        /// File name, with or without a leading <c>/</c>.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when no directory entry has that name.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -1125,7 +1233,19 @@ namespace RetroIO.Storage.Local.FileSystems
             return metadata;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Adds up the free-sector counts in the BAM, leaving out the directory track.
+        /// </summary>
+        /// <remarks>
+        /// D64 counts tracks 1 to 35, plus tracks 36 to 70 when the BAM marks the disk double-sided (D71).
+        /// D81 counts tracks 1 to 80 from BAM sectors 1 and 2 of track 40. Blocks are 256-byte sectors.
+        /// </remarks>
+        /// <returns>
+        /// The number of free blocks, as the drive would report it.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public int GetBlocksFree()
         {
             EnsureInitialized();
@@ -1240,7 +1360,30 @@ namespace RetroIO.Storage.Local.FileSystems
             throw new NotSupportedException("CBM DOS does not support subdirectories");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Renames a file by rewriting the name field of its directory entry, then flushes the device.
+        /// </summary>
+        /// <remarks>
+        /// Names are trimmed and upper-cased. When the two names are equal (ignoring case), nothing is done.
+        /// </remarks>
+        /// <param name="oldPath">
+        /// Current file name, with or without a leading <c>/</c>.
+        /// </param>
+        /// <param name="newPath">
+        /// New file name, with or without a leading <c>/</c>; at most 16 characters.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when a name is empty, longer than 16 characters or holds a character CBM DOS does not allow.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized or the device is read-only.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when a file with the new name already exists.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when the file named by <paramref name="oldPath"/> does not exist.
+        /// </exception>
         public void Rename(string oldPath, string newPath)
         {
             EnsureInitialized();

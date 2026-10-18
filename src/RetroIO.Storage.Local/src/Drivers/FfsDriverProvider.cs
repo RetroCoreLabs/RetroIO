@@ -33,10 +33,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class FfsDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>FFS</c>.
+        /// </summary>
         public override string FileSystemType => "FFS";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Berkeley Fast File System format.
+        /// </summary>
         public override string Description => "Berkeley Fast File System (FFS/UFS)";
 
         /// <summary>
@@ -152,7 +156,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted FFS driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="FfsDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new FfsDriver();

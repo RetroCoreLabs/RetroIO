@@ -15,9 +15,13 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class TapDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>TAP</c>.
+        /// </summary>
         public override string FileSystemType => "TAP";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Commodore TAP tape image format.
+        /// </summary>
         public override string Description => "Commodore TAP tape image";
         /// <summary>
         /// Gets 20, the number of header bytes the detection needs.
@@ -51,7 +55,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted TAP driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="TapDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver() => new TapDriver();
     }
 }

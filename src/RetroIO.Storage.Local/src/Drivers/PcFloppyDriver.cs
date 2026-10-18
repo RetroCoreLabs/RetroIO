@@ -40,14 +40,26 @@ namespace RetroIO.Storage.Local.Drivers
         // already substituted _blockDevice for a partition-scoped sub-view.
         private Stream? _rawStream;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the type of the mounted FAT file system (<c>FAT12</c>, <c>FAT16</c> or <c>FAT32</c>), or <c>FAT</c> when nothing is mounted.
+        /// </summary>
         public string FileSystemType => _filesystem?.FileSystemType ?? "FAT";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the volume label of the mounted FAT file system, or an empty string when nothing is mounted.
+        /// </summary>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>.</c>, the separator between file name and extension in FAT.
+        /// </summary>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ".";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the capability flags of this driver.
+        /// </summary>
+        /// <remarks>
+        /// The flags are read, write, delete, rename, directory listing, subdirectories, create directory,
+        /// file types, volume label, block read and block write. The flags do not change with a read-only mount.
+        /// </remarks>
         public DriverCapabilities Capabilities
         {
             get
@@ -71,13 +83,17 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver reads files.
+        /// </summary>
         public bool CanRead => true;
         /// <summary>
         /// Gets true, because the driver writes through the FAT file system.
         /// </summary>
         public bool CanWrite => true;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver can read and write raw blocks of the mounted image or partition.
+        /// </summary>
         public bool HasBlockAccess => true;
 
         /// <summary>
@@ -263,49 +279,120 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file from the mounted FAT file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes a file to the mounted FAT file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <param name="data">
+        /// The file contents.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             EnsureMounted();
             _filesystem!.WriteFile(path, data);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Deletes a file from the mounted FAT file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void DeleteFile(string path)
         {
             EnsureMounted();
             _filesystem!.DeleteFile(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a directory in the mounted FAT file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the directory to create.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void CreateDirectory(string path)
         {
             EnsureMounted();
             _filesystem!.CreateDirectory(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Renames a file or directory in the mounted FAT file system.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Current path.
+        /// </param>
+        /// <param name="newPath">
+        /// New path.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void RenameFile(string oldPath, string newPath)
         {
             EnsureMounted();
             _filesystem!.Rename(oldPath, newPath);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the contents of a directory in the mounted FAT file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the directory.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file or directory in the mounted FAT file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file or directory.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when the file system does not find <paramref name="path"/>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -316,21 +403,60 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads one 512-byte block from the block device.
+        /// </summary>
+        /// <remarks>
+        /// When an MBR partition is mounted, the address counts from the start of that partition.
+        /// </remarks>
+        /// <param name="address">
+        /// The block to read.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes one 512-byte block through the block device.
+        /// </summary>
+        /// <remarks>
+        /// When an MBR partition is mounted, the address counts from the start of that partition.
+        /// </remarks>
+        /// <param name="address">
+        /// The block to write.
+        /// </param>
+        /// <param name="data">
+        /// The block data.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             EnsureMounted();
             _blockDevice!.WriteBlock(address, data);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the information of the block device the image or partition is mounted on.
+        /// </summary>
+        /// <returns>
+        /// The block device information; never <c>null</c> once mounted.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();

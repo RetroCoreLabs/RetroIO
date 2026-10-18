@@ -33,14 +33,36 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int MAX_FILES = 160;
         private const int SECTOR_SIZE = 256;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier: <c>DragonDOS</c>.
+        /// </summary>
         public string FileSystemType => "DragonDOS";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the volume label set by <see cref="Initialize"/>, or an empty string before it.
+        /// </summary>
+        /// <remarks>
+        /// The label is the name stored in the BAM, <c>DRAGON DISK</c> when that name is blank, or
+        /// <c>VDK DISK</c> when the BAM geometry checks fail.
+        /// </remarks>
         public string VolumeLabel => _volumeLabel;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>.</c>, the separator between file name and extension in DragonDOS.
+        /// </summary>
         public string ExtensionSeparator => ".";  // DragonDOS uses name.ext format
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Attaches the file system to a block device and reads the BAM from track 20, sectors 1 and 2.
+        /// </summary>
+        /// <remarks>
+        /// The sectors per track and track count come from the BAM when their complement bytes check out;
+        /// otherwise they come from the device (or 18 sectors and 40 tracks) and the label is set to <c>VDK DISK</c>.
+        /// </remarks>
+        /// <param name="device">
+        /// Block device holding the disk image, addressed by LBA.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is <c>null</c>.
+        /// </exception>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -106,7 +128,20 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Checks whether the device looks like a DragonDOS disk.
+        /// </summary>
+        /// <remarks>
+        /// Reads the BAM sector at LBA 360 (track 20, sector 1 on a single-sided disk) and checks that it gives
+        /// 18 or 36 sectors per track and 40 or 80 tracks, each with a matching complement byte. The device is
+        /// not changed. Any exception while reading gives <c>false</c>.
+        /// </remarks>
+        /// <param name="device">
+        /// Block device to inspect.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the BAM geometry checks pass; otherwise <c>false</c>.
+        /// </returns>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -156,7 +191,21 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the files in the root directory.
+        /// </summary>
+        /// <param name="path">
+        /// Must be <c>null</c>, empty or <c>/</c>, because DragonDOS has only a root directory.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="NotImplementedException">
+        /// Thrown when <paramref name="path"/> names anything other than the root directory.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -170,7 +219,21 @@ namespace RetroIO.Storage.Local.FileSystems
             return ListRootDirectory();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file from its allocation blocks.
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>. The part before the first dot is the name.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when the file is not in the directory.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -238,7 +301,18 @@ namespace RetroIO.Storage.Local.FileSystems
             throw new NotImplementedException("DragonDOS delete operations not yet implemented");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file from its directory entry.
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when the file is not in the directory.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -284,7 +358,19 @@ namespace RetroIO.Storage.Local.FileSystems
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Counts the BAM bytes that hold <c>0xFF</c>.
+        /// </summary>
+        /// <remarks>
+        /// Only the first (track count times sectors per track) bytes of the 512-byte BAM copy are looked at,
+        /// and each byte equal to <c>0xFF</c> is counted as one free sector.
+        /// </remarks>
+        /// <returns>
+        /// The number of BAM bytes equal to <c>0xFF</c>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public int GetBlocksFree()
         {
             EnsureInitialized();

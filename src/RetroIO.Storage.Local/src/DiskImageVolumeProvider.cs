@@ -33,9 +33,16 @@ namespace RetroIO.Storage.Local
         public string Type => "diskimage";
 
         // VFS Properties
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the URI schemes this provider handles: the disk image types it mounts plus <c>diskimage</c>.
+        /// </summary>
+        /// <remarks>
+        /// A new array is returned on every read.
+        /// </remarks>
         public string[] SupportedSchemes => new[] { "d64", "d71", "d81", "ndfs", "ffs", "ufs", "bsd", "img", "vdk", "dmk", "t64", "diskimage" };
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>false</c>, because disk images are local files.
+        /// </summary>
         public bool IsRemote => false;
 
         /// <summary>
@@ -587,7 +594,31 @@ namespace RetroIO.Storage.Local
 
         // ==================== VFS Async Methods ====================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file into memory and returns it as a stream.
+        /// </summary>
+        /// <remarks>
+        /// The path is resolved the same way as in <see cref="ReadFile"/>. The file is read in full on a
+        /// worker thread, so the stream does not read from the image while it is used.
+        /// </remarks>
+        /// <param name="context">
+        /// URN context identifying the volume.
+        /// </param>
+        /// <param name="path">
+        /// File path or identifier.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancels the read before the worker thread starts.
+        /// </param>
+        /// <returns>
+        /// A <see cref="MemoryStream"/> holding the file contents.
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">
+        /// Thrown when this provider has been disposed.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the volume ID of <paramref name="context"/> is not mounted, or <paramref name="path"/> is empty or fails the path security check.
+        /// </exception>
         public async Task<Stream> OpenReadAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -602,7 +633,37 @@ namespace RetroIO.Storage.Local
             return new MemoryStream(data);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Copies a stream into memory and writes it to a file.
+        /// </summary>
+        /// <remarks>
+        /// The path is resolved the same way as in <see cref="ReadFile"/>. The whole stream is copied into
+        /// memory first, then the file is written by the driver on a worker thread.
+        /// </remarks>
+        /// <param name="context">
+        /// URN context identifying the volume.
+        /// </param>
+        /// <param name="path">
+        /// File path or identifier.
+        /// </param>
+        /// <param name="data">
+        /// Stream holding the data to write.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancels the copy of <paramref name="data"/>, or the write before the worker thread starts.
+        /// </param>
+        /// <returns>
+        /// A task that completes when the file is written.
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">
+        /// Thrown when this provider has been disposed.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the volume ID of <paramref name="context"/> is not mounted, or <paramref name="path"/> is empty or fails the path security check.
+        /// </exception>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Thrown when the volume is mounted read-only or <paramref name="context"/> is read-only.
+        /// </exception>
         public async Task WriteAsync(UrnContext context, string path, Stream data, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -623,7 +684,24 @@ namespace RetroIO.Storage.Local
             await Task.Run(() => mount.Driver.WriteFile(resolvedPath, fileData), cancellationToken);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists directory contents by running <see cref="ListDirectory"/> on a worker thread.
+        /// </summary>
+        /// <param name="context">
+        /// URN context identifying the volume.
+        /// </param>
+        /// <param name="path">
+        /// Directory path, passed to the driver as given.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancels the listing before the worker thread starts.
+        /// </param>
+        /// <returns>
+        /// A task whose result is the directory entries.
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">
+        /// Thrown when this provider has been disposed.
+        /// </exception>
         public Task<DirectoryEntry[]> ListDirectoryAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -632,7 +710,24 @@ namespace RetroIO.Storage.Local
             return Task.Run(() => ListDirectory(context, path), cancellationToken);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file or directory by running <see cref="GetMetadata"/> on a worker thread.
+        /// </summary>
+        /// <param name="context">
+        /// URN context identifying the volume.
+        /// </param>
+        /// <param name="path">
+        /// File path or identifier, resolved the same way as in <see cref="ReadFile"/>.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancels the lookup before the worker thread starts.
+        /// </param>
+        /// <returns>
+        /// A task whose result is the metadata, or <c>null</c> when the driver does not find the path.
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">
+        /// Thrown when this provider has been disposed.
+        /// </exception>
         public Task<FileMetadata?> GetMetadataAsync(UrnContext context, string path, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);

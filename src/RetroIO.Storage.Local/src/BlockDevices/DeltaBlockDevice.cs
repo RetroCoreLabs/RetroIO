@@ -58,17 +58,25 @@ namespace RetroIO.Storage.Local.BlockDevices
         }
 
         // IBlockDevice properties
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the block size in bytes of the base device.
+        /// </summary>
         public int BlockSize => _baseDevice.BlockSize;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the total number of blocks on the base device.
+        /// </summary>
         public uint TotalBlocks => _baseDevice.TotalBlocks;
         /// <summary>
         /// Always false, because writes go to the delta file even when the base device is read-only.
         /// </summary>
         public bool IsReadOnly => false; // Delta allows writes even if base is read-only
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether the base device is mounted and ready for reads and writes.
+        /// </summary>
         public bool IsMounted => _baseDevice.IsMounted;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether the base device has a different number of sectors on some tracks.
+        /// </summary>
         public bool SupportsVariableGeometry => _baseDevice.SupportsVariableGeometry;
 
         /// <summary>
@@ -183,13 +191,26 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the number of blocks on a track, as reported by the base device.
+        /// </summary>
+        /// <param name="track">
+        /// The track number, numbered the way the base device numbers them.
+        /// </param>
+        /// <returns>
+        /// The number of blocks (sectors) on <paramref name="track"/>.
+        /// </returns>
         public int GetBlocksPerTrack(int track)
         {
             return _baseDevice.GetBlocksPerTrack(track);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the block device information of the base device.
+        /// </summary>
+        /// <returns>
+        /// The information the base device returns, unchanged.
+        /// </returns>
         public BlockDeviceInfo GetBlockDeviceInfo()
         {
             return _baseDevice.GetBlockDeviceInfo();

@@ -17,10 +17,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonDskDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>DragonDOS-DSK</c>.
+        /// </summary>
         public override string FileSystemType => "DragonDOS-DSK";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Dragon DSK and JVC image formats.
+        /// </summary>
         public override string Description => "Dragon 32/64 DSK/JVC disk images (35/40/80 tracks, DragonDOS)";
 
         /// <summary>
@@ -76,7 +80,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted Dragon DSK driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="DragonDskDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new DragonDskDriver();

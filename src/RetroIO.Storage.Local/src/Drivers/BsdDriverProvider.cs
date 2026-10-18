@@ -31,10 +31,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class V7DriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>V7</c>.
+        /// </summary>
         public override string FileSystemType => "V7";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the UNIX V7 format.
+        /// </summary>
         public override string Description => "UNIX V7 filesystem (1979)";
 
         /// <summary>
@@ -206,7 +210,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted V7 driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="V7Driver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new V7Driver();

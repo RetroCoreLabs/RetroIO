@@ -40,11 +40,15 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public string ExtensionSeparator => "";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the capability flags of this driver: read, directory listing, file types and volume label.
+        /// </summary>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read | DriverCapabilities.ListDirectory | DriverCapabilities.FileTypes | DriverCapabilities.VolumeLabel;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver reads the chip entries of the cartridge.
+        /// </summary>
         public bool CanRead => true;
         /// <summary>
         /// Gets false, because CRT images are read-only.

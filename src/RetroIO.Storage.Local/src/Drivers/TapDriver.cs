@@ -39,11 +39,15 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public string ExtensionSeparator => "";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the capability flags of this driver: read, directory listing and volume label.
+        /// </summary>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read | DriverCapabilities.ListDirectory | DriverCapabilities.VolumeLabel;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver reads the entries of the tape image.
+        /// </summary>
         public bool CanRead => true;
         /// <summary>
         /// Gets false, because TAP images are read-only.

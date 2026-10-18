@@ -36,14 +36,31 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int SECTORS_PER_GRANULE = 9;
         private const int MAX_GRANULES = 68;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier: <c>DECB</c>.
+        /// </summary>
         public string FileSystemType => "DECB";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>COCO DISK</c> after initialization, or an empty string before it. DECB disks have no stored label.
+        /// </summary>
         public string VolumeLabel => _volumeLabel;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>.</c>, the separator between file name and extension in DECB.
+        /// </summary>
         public string ExtensionSeparator => ".";  // DECB uses name.ext format
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Attaches the file system to a block device, takes the geometry from it and reads the FAT from track 17, sector 2.
+        /// </summary>
+        /// <remarks>
+        /// When the device gives no sectors-per-track or cylinder count, 18 sectors and 35 tracks are used.
+        /// </remarks>
+        /// <param name="device">
+        /// Block device holding the disk image, addressed by LBA.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is <c>null</c>.
+        /// </exception>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -84,7 +101,20 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Checks whether the device looks like a DECB disk.
+        /// </summary>
+        /// <remarks>
+        /// The device must report 35 cylinders and 18 sectors per track. The FAT sector (track 17, sector 2)
+        /// is then read and its first 68 bytes must hold at least one free or allocated granule value.
+        /// The device is not changed. Any exception while reading gives <c>false</c>.
+        /// </remarks>
+        /// <param name="device">
+        /// Block device to inspect.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the geometry and the FAT sector fit DECB; otherwise <c>false</c>.
+        /// </returns>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -127,7 +157,21 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the files in the root directory (track 17, sectors 3 to 11).
+        /// </summary>
+        /// <param name="path">
+        /// Must be <c>null</c>, empty or <c>/</c>, because DECB has only a root directory.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="NotImplementedException">
+        /// Thrown when <paramref name="path"/> names anything other than the root directory.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -141,7 +185,21 @@ namespace RetroIO.Storage.Local.FileSystems
             return ListRootDirectory();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file by following its granule chain in the FAT.
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>. The part before the first dot is the name.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when the file is not in the directory.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -209,7 +267,18 @@ namespace RetroIO.Storage.Local.FileSystems
             throw new NotImplementedException("DECB delete operations not yet implemented");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file from its directory entry.
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when the file is not in the directory.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -255,7 +324,15 @@ namespace RetroIO.Storage.Local.FileSystems
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Counts the free granules in the FAT and gives the result in sectors.
+        /// </summary>
+        /// <returns>
+        /// The number of free 256-byte sectors: free granules times 9.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public int GetBlocksFree()
         {
             EnsureInitialized();

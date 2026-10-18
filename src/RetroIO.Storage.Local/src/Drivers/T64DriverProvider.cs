@@ -19,10 +19,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class T64DriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>T64</c>.
+        /// </summary>
         public override string FileSystemType => "T64";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Commodore T64 tape archive format.
+        /// </summary>
         public override string Description => "Commodore T64 tape archive";
 
         /// <summary>
@@ -87,7 +91,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted T64 driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="T64Driver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new T64Driver();

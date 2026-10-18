@@ -60,7 +60,9 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver reads the files in the T64 archive.
+        /// </summary>
         public bool CanRead => true;
         /// <summary>
         /// Gets false, because the driver does not write yet.

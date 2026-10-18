@@ -26,13 +26,21 @@ namespace RetroIO.Storage.Local.BlockDevices
         private readonly CacheStatistics _statistics;
         private readonly object _lock = new object();
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the write strategy given to the constructor.
+        /// </summary>
         public CacheStrategy Strategy => _strategy;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the most blocks the cache keeps before it removes the least recently used one.
+        /// </summary>
         public int MaxBlocks => _maxBlocks;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the number of blocks in the cache now.
+        /// </summary>
         public int CachedBlocks { get { lock (_lock) return _cache.Count; } }
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the hit, miss, write, eviction and flush counters of this cache.
+        /// </summary>
         public CacheStatistics Statistics => _statistics;
 
         /// <summary>
@@ -57,7 +65,27 @@ namespace RetroIO.Storage.Local.BlockDevices
             _statistics = new CacheStatistics();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a block from the cache, or on a miss from the device through <paramref name="readFunc"/>,
+        /// and adds the block read from the device to the cache.
+        /// </summary>
+        /// <remarks>
+        /// Blocks read from the device are cached whatever the <see cref="Strategy"/> is,
+        /// including <see cref="CacheStrategy.None"/>.
+        /// </remarks>
+        /// <param name="address">
+        /// The block to read. Only its LBA is used as the cache key.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data.
+        /// </param>
+        /// <param name="readFunc">
+        /// Reads a block from the underlying device and returns the number of bytes read.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> on a cache hit or when <paramref name="readFunc"/> read more than zero bytes;
+        /// <c>false</c> when <paramref name="readFunc"/> returned zero or less.
+        /// </returns>
         public bool TryReadBlock(BlockAddress address, Span<byte> buffer, Func<BlockAddress, Span<byte>, int> readFunc)
         {
             long key = GetCacheKey(address);
@@ -91,7 +119,24 @@ namespace RetroIO.Storage.Local.BlockDevices
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes a block, following the <see cref="Strategy"/> of this cache.
+        /// </summary>
+        /// <remarks>
+        /// What each strategy does:
+        ///  - <see cref="CacheStrategy.WriteThrough"/>: writes to the device at once and keeps a clean copy in the cache.
+        ///  - <see cref="CacheStrategy.WriteBack"/>: writes to the cache only and marks the block dirty until <see cref="Flush"/>.
+        ///  - <see cref="CacheStrategy.ReadOnly"/> and <see cref="CacheStrategy.None"/>: write to the device only and do not cache the block.
+        /// </remarks>
+        /// <param name="address">
+        /// The block to write. Only its LBA is used as the cache key.
+        /// </param>
+        /// <param name="data">
+        /// The block data.
+        /// </param>
+        /// <param name="writeFunc">
+        /// Writes a block to the underlying device.
+        /// </param>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data, Action<BlockAddress, ReadOnlySpan<byte>> writeFunc)
         {
             long key = GetCacheKey(address);
@@ -152,7 +197,15 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Removes one block from the cache.
+        /// </summary>
+        /// <remarks>
+        /// A dirty block is dropped without being written to the device.
+        /// </remarks>
+        /// <param name="address">
+        /// The block to remove. Only its LBA is used as the cache key.
+        /// </param>
         public void Invalidate(BlockAddress address)
         {
             long key = GetCacheKey(address);
@@ -168,7 +221,12 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Removes every block from the cache.
+        /// </summary>
+        /// <remarks>
+        /// Dirty blocks are dropped without being written to the device.
+        /// </remarks>
         public void InvalidateAll()
         {
             lock (_lock)
@@ -182,7 +240,16 @@ namespace RetroIO.Storage.Local.BlockDevices
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes all dirty blocks to the device and marks them clean.
+        /// </summary>
+        /// <remarks>
+        /// The flush counter in <see cref="Statistics"/> goes up on every call, but blocks are only
+        /// written when the <see cref="Strategy"/> is <see cref="CacheStrategy.WriteBack"/>.
+        /// </remarks>
+        /// <param name="writeFunc">
+        /// Writes a block to the underlying device.
+        /// </param>
         public void Flush(Action<BlockAddress, ReadOnlySpan<byte>> writeFunc)
         {
             lock (_lock)

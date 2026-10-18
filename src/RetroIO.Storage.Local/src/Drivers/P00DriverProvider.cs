@@ -16,9 +16,13 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class P00DriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>P00</c>.
+        /// </summary>
         public override string FileSystemType => "P00";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the PC64 P00 program container format.
+        /// </summary>
         public override string Description => "Commodore PC64 program container (.P00)";
         /// <summary>
         /// Gets 26, the number of header bytes the detection needs.
@@ -55,7 +59,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted program file driver, the same driver the PRG provider creates.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="ProgramFileDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver() => new ProgramFileDriver();
     }
 }

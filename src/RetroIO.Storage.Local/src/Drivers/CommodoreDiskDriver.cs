@@ -24,14 +24,28 @@ namespace RetroIO.Storage.Local.Drivers
         private CbmDosFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type of the mounted CBM DOS file system, or <c>CBM-DOS</c> when nothing is mounted.
+        /// </summary>
         public string FileSystemType => _filesystem?.FileSystemType ?? "CBM-DOS";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the disk name of the mounted image, or an empty string when nothing is mounted.
+        /// </summary>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets an empty string, because CBM DOS keeps the file type apart from the file name.
+        /// </summary>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? "";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the capability flags of this driver.
+        /// </summary>
+        /// <remarks>
+        /// Always set: read, directory listing, file types, PETSCII names, file locking, volume label,
+        /// block read and block allocation map. Write is added when <see cref="CanWrite"/> is <c>true</c>.
+        /// The subdirectory flag is meant for D81 images, but the check compares the descriptor by reference
+        /// against a new D81 descriptor instance, so the flag is never set.
+        /// </remarks>
         public DriverCapabilities Capabilities
         {
             get
@@ -61,7 +75,9 @@ namespace RetroIO.Storage.Local.Drivers
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver reads files.
+        /// </summary>
         public bool CanRead => true;
 
         // Writable when mounted read-write. D64, D71 and D81 write paths are all implemented and
@@ -71,7 +87,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly && _descriptor != null;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver can read and write raw blocks of the image.
+        /// </summary>
         public bool HasBlockAccess => true;
 
         /// <summary>
@@ -164,42 +182,105 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file from the mounted CBM DOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes a file to the mounted CBM DOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <param name="data">
+        /// The file contents.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             EnsureMounted();
             _filesystem!.WriteFile(path, data);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Deletes a file from the mounted CBM DOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void DeleteFile(string path)
         {
             EnsureMounted();
             _filesystem!.DeleteFile(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Renames a file in the mounted CBM DOS file system.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Current name of the file.
+        /// </param>
+        /// <param name="newPath">
+        /// New name of the file.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void RenameFile(string oldPath, string newPath)
         {
             EnsureMounted();
             _filesystem!.Rename(oldPath, newPath);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the directory of the mounted CBM DOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Directory path.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file in the mounted CBM DOS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when the file system does not find <paramref name="path"/>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -210,21 +291,54 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads one block (sector) of the image from the block device.
+        /// </summary>
+        /// <param name="address">
+        /// The block to read.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes one block (sector) of the image through the block device.
+        /// </summary>
+        /// <param name="address">
+        /// The block to write.
+        /// </param>
+        /// <param name="data">
+        /// The block data.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             EnsureMounted();
             _blockDevice!.WriteBlock(address, data);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the information of the block device the image is mounted on.
+        /// </summary>
+        /// <returns>
+        /// The block device information; never <c>null</c> once mounted.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();

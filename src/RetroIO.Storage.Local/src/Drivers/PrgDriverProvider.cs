@@ -17,9 +17,13 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class PrgDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>PRG</c>.
+        /// </summary>
         public override string FileSystemType => "PRG";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Commodore PRG program file format.
+        /// </summary>
         public override string Description => "Commodore PRG program file";
         /// <summary>
         /// Gets 16, the number of header bytes requested for detection.
@@ -55,7 +59,12 @@ namespace RetroIO.Storage.Local.Drivers
             return 0.0f;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted program file driver, the same driver the P00 provider creates.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="ProgramFileDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver() => new ProgramFileDriver();
     }
 }

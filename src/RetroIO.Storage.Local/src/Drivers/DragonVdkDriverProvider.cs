@@ -16,10 +16,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonVdkDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>DragonDOS</c>.
+        /// </summary>
         public override string FileSystemType => "DragonDOS";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the Dragon VDK image format.
+        /// </summary>
         public override string Description => "Dragon 32/64 VDK disk images (40/80 tracks, DragonDOS)";
 
         /// <summary>
@@ -80,7 +84,12 @@ namespace RetroIO.Storage.Local.Drivers
             return Math.Min(confidence, 1.0f);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted Dragon VDK driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="DragonVdkDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new DragonVdkDriver();

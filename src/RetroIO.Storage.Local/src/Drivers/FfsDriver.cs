@@ -43,14 +43,23 @@ namespace RetroIO.Storage.Local.Drivers
                     : baseType;
             }
         }
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the volume label of the mounted FFS file system, or an empty string when nothing is mounted.
+        /// </summary>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
         /// <summary>
         /// Gets an empty string, because FFS names have no separate extension.
         /// </summary>
         public string ExtensionSeparator => "";  // Unix FFS doesn't use DOS-style extensions
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the capability flags of this driver.
+        /// </summary>
+        /// <remarks>
+        /// The flags are read, directory listing, subdirectories, permissions, timestamps, volume label,
+        /// block read, partitions, case-sensitive names, symbolic links, hard links and long file names.
+        /// No write flag is set.
+        /// </remarks>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read |
             DriverCapabilities.ListDirectory |
@@ -65,13 +74,17 @@ namespace RetroIO.Storage.Local.Drivers
             DriverCapabilities.HardLinks |
             DriverCapabilities.LongFilenames;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver reads files.
+        /// </summary>
         public bool CanRead => true;
         /// <summary>
         /// Gets false, because the FFS driver does not write yet.
         /// </summary>
         public bool CanWrite => false;  // Phase 2
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>true</c>, because this driver can read raw blocks of the image. Block writes are not implemented.
+        /// </summary>
         public bool HasBlockAccess => true;
 
         /// <summary>
@@ -190,7 +203,18 @@ namespace RetroIO.Storage.Local.Drivers
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file from the mounted FFS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
@@ -228,14 +252,36 @@ namespace RetroIO.Storage.Local.Drivers
             throw new NotImplementedException("FFS write operations not yet implemented (Phase 2)");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the contents of a directory in the mounted FFS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the directory.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file or directory in the mounted FFS file system.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file or directory.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when the file system does not find <paramref name="path"/>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
@@ -246,7 +292,24 @@ namespace RetroIO.Storage.Local.Drivers
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads one 512-byte block of the image from the block device.
+        /// </summary>
+        /// <remarks>
+        /// The address counts from the start of the image, not from the start of the file system.
+        /// </remarks>
+        /// <param name="address">
+        /// The block to read.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the block data.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
@@ -270,7 +333,15 @@ namespace RetroIO.Storage.Local.Drivers
             throw new NotImplementedException("FFS write operations not yet implemented (Phase 2)");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the information of the block device the image is mounted on.
+        /// </summary>
+        /// <returns>
+        /// The block device information; never <c>null</c> once mounted.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();
@@ -401,7 +472,15 @@ namespace RetroIO.Storage.Local.Drivers
         // PARTITION PROVIDER INTERFACE
         // ===================================================================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Checks whether the mounted image holds a valid BSD disk label.
+        /// </summary>
+        /// <returns>
+        /// <c>true</c> when a valid BSD disk label is found; otherwise <c>false</c>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public bool SupportsPartitions()
         {
             EnsureMounted();
@@ -412,7 +491,20 @@ namespace RetroIO.Storage.Local.Drivers
             return diskLabel != null && diskLabel.IsValid();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the partitions in the BSD disk label of the mounted image.
+        /// </summary>
+        /// <remarks>
+        /// The recommended URN of each entry is built from the geometry description of the block device
+        /// (or <c>unknown</c>), not from the image path.
+        /// </remarks>
+        /// <returns>
+        /// One entry per partition, with the partition letter as its ID; an empty list when the image has
+        /// no valid BSD disk label.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
         public IReadOnlyList<PartitionMetadata> ListPartitions()
         {
             EnsureMounted();
@@ -448,7 +540,19 @@ namespace RetroIO.Storage.Local.Drivers
             return result;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Selects the BSD partition to use at the next mount and turns on disk label mode.
+        /// </summary>
+        /// <remarks>
+        /// The letter is not checked against the disk label, so a letter with no partition behind it is
+        /// still accepted. A file system that is already mounted keeps using its partition.
+        /// </remarks>
+        /// <param name="partitionId">
+        /// A single partition letter, <c>a</c> to <c>h</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> for any single letter from <c>a</c> to <c>h</c>; otherwise <c>false</c>.
+        /// </returns>
         public bool SelectPartition(string partitionId)
         {
             if (string.IsNullOrEmpty(partitionId) || partitionId.Length != 1)
@@ -466,7 +570,9 @@ namespace RetroIO.Storage.Local.Drivers
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the selected partition letter, or <c>null</c> in raw mode or after an explicit file system offset was set.
+        /// </summary>
         public string? CurrentPartition => _useDiskLabel ? _partitionLetter.ToString() : null;
 
         // ===================================================================

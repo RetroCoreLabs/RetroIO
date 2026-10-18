@@ -39,14 +39,33 @@ namespace RetroIO.Storage.Local.FileSystems
         private uint _rootDirSectors;
         private uint _dataStart;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier: <c>FAT12</c>.
+        /// </summary>
         public string FileSystemType => "FAT12";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the volume label read from the root directory, or an empty string when there is none.
+        /// </summary>
         public string VolumeLabel => _volumeLabel;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets <c>.</c>, the separator between file name and extension in FAT.
+        /// </summary>
         public string ExtensionSeparator => ".";  // FAT uses name.ext format
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Attaches the file system to a block device: reads the boot sector and the FAT, works out where the
+        /// root directory and data area start, and reads the volume label.
+        /// </summary>
+        /// <param name="device">
+        /// Block device holding the volume, addressed by LBA.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="device"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the boot sector has bytes per sector other than 512, an invalid sectors-per-cluster value,
+        /// a FAT count other than 1 or 2, or zero sectors per FAT.
+        /// </exception>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -69,7 +88,21 @@ namespace RetroIO.Storage.Local.FileSystems
             ReadVolumeLabel();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Checks whether the device looks like a FAT12 volume.
+        /// </summary>
+        /// <remarks>
+        /// The boot sector must end with <c>0x55 0xAA</c>. It is then accepted when the type field at offset
+        /// <c>0x36</c> starts with <c>FAT12</c>, or when it has 512 bytes per sector and 1 to 8 sectors per
+        /// cluster. That second test does not tell FAT12 apart from FAT16. The device is not changed. Any
+        /// exception while reading gives <c>false</c>.
+        /// </remarks>
+        /// <param name="device">
+        /// Block device to inspect.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the boot sector passes the checks; otherwise <c>false</c>.
+        /// </returns>
         public bool CanHandle(IBlockDevice device)
         {
             try
@@ -221,7 +254,21 @@ namespace RetroIO.Storage.Local.FileSystems
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the entries of a directory.
+        /// </summary>
+        /// <param name="path">
+        /// Directory path; the root when it has no path parts.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when a part of <paramref name="path"/> does not exist or is not a directory.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -229,7 +276,21 @@ namespace RetroIO.Storage.Local.FileSystems
             return ListDirectoryEntries(dir);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a whole file by following its cluster chain.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when the file does not exist or <paramref name="path"/> names a directory.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureInitialized();
@@ -242,7 +303,34 @@ namespace RetroIO.Storage.Local.FileSystems
             return ReadFileData(raw.Entry.StartCluster, raw.Entry.FileSize);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes a file, creating it or replacing the contents of an existing file with the archive attribute set.
+        /// </summary>
+        /// <remarks>
+        /// An existing file keeps its directory slot; its old cluster chain is freed first. An empty file gets
+        /// no cluster. Only 8.3 short names can be written.
+        /// </remarks>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <param name="data">
+        /// The file contents.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="path"/> is the root or its name is not a valid 8.3 short name.
+        /// </exception>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when the parent directory does not exist.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when <paramref name="path"/> names a directory, the disk is full, or the directory is full.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             EnsureInitialized();
@@ -278,7 +366,27 @@ namespace RetroIO.Storage.Local.FileSystems
             WriteNewEntry(slot, name, ArchiveAttribute, startCluster, (uint)data.Length);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Deletes a file: frees its cluster chain and marks its directory entry as deleted.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="path"/> is the root.
+        /// </exception>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when the parent directory does not exist.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when the file does not exist.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when <paramref name="path"/> names a directory.
+        /// </exception>
         public void DeleteFile(string path)
         {
             EnsureInitialized();
@@ -298,7 +406,18 @@ namespace RetroIO.Storage.Local.FileSystems
             MarkSlotDeleted(raw.Lba, raw.Offset);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata of a file or directory from its directory entry.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file or directory.
+        /// </param>
+        /// <returns>
+        /// The metadata, or <c>null</c> when no entry is found for <paramref name="path"/>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureInitialized();
@@ -311,7 +430,15 @@ namespace RetroIO.Storage.Local.FileSystems
             return ToMetadata(raw.Value.Entry);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Counts the free clusters in the FAT and gives the result in sectors.
+        /// </summary>
+        /// <returns>
+        /// The number of free sectors: free clusters times sectors per cluster.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
         public int GetBlocksFree()
         {
             EnsureInitialized();
@@ -331,7 +458,24 @@ namespace RetroIO.Storage.Local.FileSystems
             return freeClusters * _bootSector!.SectorsPerCluster;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a directory with one zeroed cluster holding its dot and dot-dot entries.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the new directory. Its parent must exist.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="path"/> is the root or its name is not a valid 8.3 short name.
+        /// </exception>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when the parent directory does not exist.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the name already exists, the disk is full, or the parent directory is full.
+        /// </exception>
         public void CreateDirectory(string path)
         {
             EnsureInitialized();
@@ -350,7 +494,24 @@ namespace RetroIO.Storage.Local.FileSystems
             WriteNewEntry(slot, name, DirectoryAttribute, newCluster, 0);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Deletes an empty directory: frees its cluster chain and marks its entry as deleted.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the directory.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="path"/> is the root.
+        /// </exception>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when the directory or its parent does not exist.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when <paramref name="path"/> names a file or the directory is not empty.
+        /// </exception>
         public void DeleteDirectory(string path)
         {
             EnsureInitialized();
@@ -372,7 +533,35 @@ namespace RetroIO.Storage.Local.FileSystems
             MarkSlotDeleted(raw.Lba, raw.Offset);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Renames a file or directory, or moves it to another directory.
+        /// </summary>
+        /// <remarks>
+        /// In the same directory only the name bytes are rewritten. A move to another directory deletes the old
+        /// entry and writes a new one with the same attributes, start cluster and size; the data is not copied.
+        /// When a directory is moved this way, its own dot-dot entry is not rewritten.
+        /// </remarks>
+        /// <param name="oldPath">
+        /// Current path.
+        /// </param>
+        /// <param name="newPath">
+        /// New path. Its parent must exist and its name must be a valid 8.3 short name.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when a path is the root or the new name is not a valid 8.3 short name.
+        /// </exception>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when a parent directory does not exist.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when <paramref name="oldPath"/> does not exist.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when <paramref name="newPath"/> already exists or the target directory is full.
+        /// </exception>
         public void Rename(string oldPath, string newPath)
         {
             EnsureInitialized();

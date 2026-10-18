@@ -16,10 +16,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class PcFloppyDriverProvider : FileSystemDriverProviderBase
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the file system type identifier of this provider: <c>PC-Floppy</c>.
+        /// </summary>
         public override string FileSystemType => "PC-Floppy";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the human-readable description of the PC floppy image formats.
+        /// </summary>
         public override string Description => "PC floppy disk images (360KB-2.88MB, FAT12/FAT16)";
 
         /// <summary>
@@ -118,7 +122,12 @@ namespace RetroIO.Storage.Local.Drivers
             return declaredBytes <= actualFileSize && declaredBytes >= actualFileSize / 2;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Creates a new, unmounted PC floppy driver.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="PcFloppyDriver"/>.
+        /// </returns>
         public override IFileSystemDriver CreateDriver()
         {
             return new PcFloppyDriver();
