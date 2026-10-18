@@ -65,14 +65,16 @@ public sealed class SetHomeCommand : IOsCliCommand
     /// </summary>
     /// <remarks>
     /// The directory is resolved against the caller's home path and must be an existing directory. The
-    /// live session is not changed, and the result of the user store call is not checked.
+    /// live session is not changed. When the user store refuses the change (the user was removed after
+    /// it was found) the reply is 0xFF "No such user".
     /// </remarks>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
     /// </param>
     /// <returns>
-    /// Success; the error reply from argument parsing; or 0xA8 "Bad directory" when the directory
-    /// does not resolve to an existing directory.
+    /// Success; the error reply from argument parsing; 0xA8 "Bad directory" when the directory
+    /// does not resolve to an existing directory; or 0xFF "No such user" when the user store refuses
+    /// the change.
     /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
@@ -86,8 +88,7 @@ public sealed class SetHomeCommand : IOsCliCommand
         // "%" clears the home — persist an empty value so the next login falls back to the default.
         if (dir == "%")
         {
-            call.Context.Users.TrySetHome(targetUserId, string.Empty);
-            return FileServerReply.Success();
+            return StoreReply(call.Context.Users.TrySetHome(targetUserId, string.Empty));
         }
 
         // Validate the directory resolves for the acting session, exactly as *DIR does.
@@ -98,7 +99,15 @@ public sealed class SetHomeCommand : IOsCliCommand
             return FileServerReply.Error(FileServerErrors.BadDirectory, "Bad directory");
         }
 
-        call.Context.Users.TrySetHome(targetUserId, acorn);
-        return FileServerReply.Success();
+        return StoreReply(call.Context.Users.TrySetHome(targetUserId, acorn));
+    }
+
+    // Success when the user store took the change, otherwise the same 0xFF "No such user" that
+    // argument parsing gives for a user that cannot be found.
+    private static byte[] StoreReply(bool stored)
+    {
+        return stored
+            ? FileServerReply.Success()
+            : FileServerReply.Error(FileServerErrors.Unsupported, "No such user");
     }
 }

@@ -69,14 +69,16 @@ public sealed class SetLibCommand : IOsCliCommand
     /// </summary>
     /// <remarks>
     /// The directory is resolved against the caller's library path and must be an existing directory.
-    /// The live session is not changed, and the result of the user store call is not checked.
+    /// The live session is not changed. When the user store refuses the change (the user was removed
+    /// after it was found) the reply is 0xFF "No such user".
     /// </remarks>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
     /// </param>
     /// <returns>
-    /// Success; the error reply from argument parsing; or 0xA8 "Bad library" when the directory does
-    /// not resolve to an existing directory.
+    /// Success; the error reply from argument parsing; 0xA8 "Bad library" when the directory does
+    /// not resolve to an existing directory; or 0xFF "No such user" when the user store refuses the
+    /// change.
     /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
@@ -90,8 +92,7 @@ public sealed class SetLibCommand : IOsCliCommand
         // "%" clears the library — persist an empty value so the next login falls back to the default.
         if (dir == "%")
         {
-            call.Context.Users.TrySetLib(targetUserId, string.Empty);
-            return FileServerReply.Success();
+            return StoreReply(call.Context.Users.TrySetLib(targetUserId, string.Empty));
         }
 
         // Validate the directory resolves for the acting session, exactly as *LIB does.
@@ -102,7 +103,15 @@ public sealed class SetLibCommand : IOsCliCommand
             return FileServerReply.Error(FileServerErrors.BadLibrary, "Bad library");
         }
 
-        call.Context.Users.TrySetLib(targetUserId, acorn);
-        return FileServerReply.Success();
+        return StoreReply(call.Context.Users.TrySetLib(targetUserId, acorn));
+    }
+
+    // Success when the user store took the change, otherwise the same 0xFF "No such user" that
+    // argument parsing gives for a user that cannot be found.
+    private static byte[] StoreReply(bool stored)
+    {
+        return stored
+            ? FileServerReply.Success()
+            : FileServerReply.Error(FileServerErrors.Unsupported, "No such user");
     }
 }

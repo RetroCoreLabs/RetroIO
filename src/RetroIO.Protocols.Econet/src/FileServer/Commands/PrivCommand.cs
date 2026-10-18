@@ -69,15 +69,16 @@ public sealed class PrivCommand : IOsCliCommand
     ///  - <c>U</c>: a Normal, unlocked user.
     ///  - <c>L</c>: Locked; with <c>-</c>, a Normal user.
     ///  - any other letter: 0xFF "Unsupported privilege".
-    /// The result of the user store call is not checked: once the user is found, <c>S</c>, <c>U</c> and
-    /// <c>L</c> always reply success.
+    /// When the user store refuses the change (the user was removed after it was found), <c>S</c>,
+    /// <c>U</c> and <c>L</c> reply 0xBC "User not found", as PiFS does for a user it cannot find.
     /// </remarks>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
     /// </param>
     /// <returns>
     /// Success; 0xFE "Bad command" when fewer than two words are given or the privilege is only a
-    /// sign; 0xBC "User not found" for an unknown user; or 0xFF "Unsupported privilege".
+    /// sign; 0xBC "User not found" for an unknown user or when the user store refuses the change; or
+    /// 0xFF "Unsupported privilege".
     /// </returns>
     public byte[] Execute(in OsCliCall call)
     {
@@ -108,23 +109,30 @@ public sealed class PrivCommand : IOsCliCommand
 
         // PiFS privileges are mutually-exclusive states, so each maps to a full (isAdmin, isLocked) pair.
         // A "-" prefix (setPriv false) demotes to the Normal user in every case.
+        bool stored;
         switch (privChar)
         {
             case 'S': // System: +S/S grants (admin, unlocked); -S -> Normal.
-                call.Context.Users.TrySetPrivilege(profile.UserId, isAdmin: setPriv, isLocked: false);
-                return FileServerReply.Success();
+                stored = call.Context.Users.TrySetPrivilege(profile.UserId, isAdmin: setPriv, isLocked: false);
+                break;
 
             case 'U': // Unlocked Normal user.
-                call.Context.Users.TrySetPrivilege(profile.UserId, isAdmin: false, isLocked: false);
-                return FileServerReply.Success();
+                stored = call.Context.Users.TrySetPrivilege(profile.UserId, isAdmin: false, isLocked: false);
+                break;
 
             case 'L': // Locked: +L/L locks (login refused); -L -> Normal.
-                call.Context.Users.TrySetPrivilege(profile.UserId, isAdmin: false, isLocked: setPriv);
-                return FileServerReply.Success();
+                stored = call.Context.Users.TrySetPrivilege(profile.UserId, isAdmin: false, isLocked: setPriv);
+                break;
 
             default: // N (no-password-change) / C (chroot) / D (delete/REMUSER) not modelled yet —
                      // honest error, never a silent no-op. Delete belongs in the management API.
                 return FileServerReply.Error(FileServerErrors.Unsupported, "Unsupported privilege");
         }
+
+        // The user was found a moment ago; a refused store means it has gone since (PiFS 0xBC).
+        if (!stored)
+            return FileServerReply.Error(0xBC, "User not found");
+
+        return FileServerReply.Success();
     }
 }

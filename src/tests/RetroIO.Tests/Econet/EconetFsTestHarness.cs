@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -68,7 +69,18 @@ internal sealed class EconetFsTestHarness
     {
     }
 
-    private EconetFsTestHarness(MockFileSystemBackend mock, IFileSystemBackend? wired, WireProfileResolver? wireProfiles = null)
+    // User-store variant: the server reads and writes users through the wrapper, while IdentityProvider
+    // stays the plain store. Lets a test make a store call fail after the user was found by name.
+    public EconetFsTestHarness(Func<IRetroIDP, IRetroIDP> wrapIdentityProvider)
+        : this(new MockFileSystemBackend(), null, null, wrapIdentityProvider)
+    {
+    }
+
+    private EconetFsTestHarness(
+        MockFileSystemBackend mock,
+        IFileSystemBackend? wired,
+        WireProfileResolver? wireProfiles = null,
+        Func<IRetroIDP, IRetroIDP>? wrapIdentityProvider = null)
     {
         FileSystem = mock;
         IFileSystemBackend backend = wired ?? mock;
@@ -78,8 +90,11 @@ internal sealed class EconetFsTestHarness
         // recorded — tests should see only the calls their opcode makes.
         EconetSampleCatalogFixture.Seed(mock);
 
-        EconetUserDirectory users = EconetTestUsers.CreateDirectory(out IRetroIDP idp);
+        EconetUserDirectory plainUsers = EconetTestUsers.CreateDirectory(out IRetroIDP idp);
         IdentityProvider = idp;
+        EconetUserDirectory users = wrapIdentityProvider == null
+            ? plainUsers
+            : new EconetUserDirectory(wrapIdentityProvider(idp));
 
         DiscCatalog discs = new DiscCatalog(backend, "/econet-root", "RetroFS");
         FileServerSessionManager sessions = new FileServerSessionManager(backend, users, discs, "/econet-root");

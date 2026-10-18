@@ -66,15 +66,16 @@ public sealed class SetDiscMaskCommand : IOsCliCommand
     /// <c>discs</c> is <c>ALL</c> (0xFFFF), <c>NONE</c> (0x0000) or a hex number.
     /// </summary>
     /// <remarks>
-    /// The new mask is stored for the user's next login; the live session is not changed. The result
-    /// of the user store call is not checked.
+    /// The new mask is stored for the user's next login; the live session is not changed. When the
+    /// user store refuses the change (the user was removed after it was found) the reply is 0xFF
+    /// "Unknown user", the PiFS answer for a user that cannot be found.
     /// </remarks>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
     /// </param>
     /// <returns>
     /// Success; or 0xFF with "Bad parameters" when fewer than two words are given, "Unknown user"
-    /// for an unknown user, or "Bad parameter or mask unchanged" when the value does not parse or
+    /// for an unknown user or a refused store call, or "Bad parameter or mask unchanged" when the value does not parse or
     /// equals the current mask.
     /// </returns>
     public byte[] Execute(in OsCliCall call)
@@ -102,7 +103,9 @@ public sealed class SetDiscMaskCommand : IOsCliCommand
         if (mask == current)
             return FileServerReply.Error(FileServerErrors.Unsupported, "Bad parameter or mask unchanged");
 
-        call.Context.Users.TrySetDiscMask(profile.UserId, mask);
+        if (!call.Context.Users.TrySetDiscMask(profile.UserId, mask))
+            return FileServerReply.Error(FileServerErrors.Unsupported, "Unknown user");
+
         return FileServerReply.Success();
     }
 }

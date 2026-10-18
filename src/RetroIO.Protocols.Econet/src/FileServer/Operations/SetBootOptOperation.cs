@@ -46,14 +46,16 @@ public sealed class SetBootOptOperation : IFileServerOperation
     /// stored user record.
     /// </summary>
     /// <remarks>
-    /// With no parameter bytes nothing changes and the reply is success. The result of the user store
-    /// call is not checked.
+    /// With no parameter bytes nothing changes and the reply is success. When the user store refuses
+    /// the change (the user was removed while logged in) the live session is left as it was and the
+    /// reply is 0xBD "Bad user ID", the PiFS answer for a missing user.
     /// </remarks>
     /// <param name="call">
     /// Everything the operation needs: the request, the decoded header, the session, and services.
     /// </param>
     /// <returns>
-    /// Success, or 0xBD "Bad option" for a value above 7.
+    /// Success, 0xBD "Bad option" for a value above 7, or 0xBD "Bad user ID" when the user store
+    /// refuses the change.
     /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
@@ -66,9 +68,12 @@ public sealed class SetBootOptOperation : IFileServerOperation
             if (newBootOpt > 7)
                 return FileServerReply.Error(FileServerErrors.InsufficientAccess, "Bad option");
 
-            session.BootOpt = newBootOpt;
             // Persist to the user record so it is remembered across logins (and reported at login).
-            call.Context.Users.TrySetBootOpt(session.RetroUserId, newBootOpt);
+            // PiFS fs_set_bootopt answers 0xBD "Bad user ID" when the user cannot be found.
+            if (!call.Context.Users.TrySetBootOpt(session.RetroUserId, newBootOpt))
+                return FileServerReply.Error(FileServerErrors.InsufficientAccess, "Bad user ID");
+
+            session.BootOpt = newBootOpt;
         }
 
         return FileServerReply.Success();
