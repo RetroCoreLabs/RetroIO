@@ -56,6 +56,12 @@
   color: #b3001b;
 }
 
+/* Found by tools/check-contrast.js on the X25.Monitor README (a bracketed text read as a selector): the blue of
+   attribute selectors is 3.3:1 on #f5f5f5. Same darker blue as the symbols above. */
+[data-bs-theme="light"] .hljs-selector-attr {
+  color: #0b5f87;
+}
+
 /* The GitHub entry (the last menu entry) goes to the far right of the header, after the search
    box and the theme switch, with the GitHub logo in front of the text. The menu list is
    flattened so its last entry can be ordered after the other header items. */
