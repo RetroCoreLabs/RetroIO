@@ -42,9 +42,13 @@ public sealed class GetRandomAccessInfoOperation : IFileServerOperation
     public bool RequiresSystem => false;
 
     /// <summary>
-    /// Returns the cursor (function 0) or the file length (any other function value) of the channel
-    /// named by the first parameter byte, cut to 24 bits.
+    /// Returns the cursor (function 0) or the file length (function 1 or 2) of the channel named by
+    /// the first parameter byte, cut to 24 bits. Any other function value returns 0.
     /// </summary>
+    /// <remarks>
+    /// PiFS (fs_get_random_access_info) handles only functions 0, 1 and 2 and sends the three data
+    /// bytes unset for any other value; this operation sends zeros for those.
+    /// </remarks>
     /// <param name="call">
     /// Everything the operation needs: the request, the decoded header, the session, and services.
     /// </param>
@@ -60,8 +64,9 @@ public sealed class GetRandomAccessInfoOperation : IFileServerOperation
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 
-        // function 0 = cursor position; 1/2 = extent (file length). Reply is a single 24-bit value.
-        long value = function == 0 ? open.Cursor : open.Stream.Length;
+        // function 0 = cursor position; 1/2 = extent (file length); anything else = 0 (PiFS leaves the
+        // value unset). Reply is a single 24-bit value.
+        long value = function == 0 ? open.Cursor : (function == 1 || function == 2 ? open.Stream.Length : 0);
         return FileServerReply.RandomAccessInfo((int)(value & 0xFFFFFF));
     }
 }
