@@ -61,7 +61,7 @@ public sealed class GetByteOperation : IFileServerOperation
     {
         byte handle = AcornFileHandles.DivHandle(call.FsRequest.Urd);
         byte ctrl = call.Request.Control;
-        OpenFileHandle? open = call.Context.Handles.Get(handle);
+        OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 

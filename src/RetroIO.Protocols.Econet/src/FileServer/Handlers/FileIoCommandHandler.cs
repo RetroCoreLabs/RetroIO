@@ -253,7 +253,7 @@ public sealed class FileIoCommandHandler
         FileAccess access = readOnly ? FileAccess.Read : FileAccess.ReadWrite;
 
         // PiFS answers 0xC0 "Too many open files" when no handle is free.
-        byte handle = _context.Sessions.AllocateHandle(_context.Handles);
+        byte handle = _context.Handles.AllocateHandle(request.ClientNet, request.ClientStation);
         if (handle == 0)
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Locked, "Too many open files"));
 
@@ -277,7 +277,7 @@ public sealed class FileIoCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
         }
 
-        if (!_context.Handles.Close(handle))
+        if (!_context.Handles.Close(request.ClientNet, request.ClientStation, handle))
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?"));
 
         return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());

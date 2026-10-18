@@ -81,15 +81,65 @@ public sealed class OpenFileHandle
 }
 
 /// <summary>
-/// Keeps the table of open files, keyed by handle number.
+/// Keeps the table of open files. Each client station has its own table: handle numbers 4 to 32
+/// are handed out per station, so two stations can both hold a handle 4.
 /// </summary>
 public sealed class FileServerHandleManager
 {
+    private const byte FirstHandle = 4;
+    private const byte LastHandle = 32;
+
     private readonly object _sync = new();
-    private readonly Dictionary<byte, OpenFileHandle> _handles = new();
+    private readonly Dictionary<int, OpenFileHandle> _handles = new();
+    private readonly Dictionary<int, byte> _nextHandle = new();
+
+    // One key per (net, station, handle).
+    private static int Key(byte net, byte station, byte handle) => (net << 16) | (station << 8) | handle;
+
+    private static int StationKey(byte net, byte station) => (net << 8) | station;
 
     /// <summary>
-    /// Registers an open file under a handle number.
+    /// Hands out the next free file handle number of a station, counting up from 4 and starting
+    /// again at 4 after 32. A number that the station still has open is skipped.
+    /// </summary>
+    /// <param name="net">
+    /// The network number of the station.
+    /// </param>
+    /// <param name="station">
+    /// The station number of the station.
+    /// </param>
+    /// <returns>
+    /// The handle number, or 0 when all of 4 to 32 are in use by that station. The number is not
+    /// reserved: it is registered when the caller opens the file with <see cref="TryOpen"/>.
+    /// </returns>
+    public byte AllocateHandle(byte net, byte station)
+    {
+        lock (_sync)
+        {
+            int stationKey = StationKey(net, station);
+            if (!_nextHandle.TryGetValue(stationKey, out byte next))
+                next = FirstHandle;
+
+            for (int tried = 0; tried <= LastHandle - FirstHandle; tried++)
+            {
+                byte handle = next;
+                next++;
+                if (next > LastHandle)
+                    next = FirstHandle;
+
+                if (!_handles.ContainsKey(Key(net, station, handle)))
+                {
+                    _nextHandle[stationKey] = next;
+                    return handle;
+                }
+            }
+
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Registers an open file under a handle number of a station.
     /// </summary>
     /// <param name="userHandle">
     /// The handle number to use.
@@ -110,10 +160,10 @@ public sealed class FileServerHandleManager
     /// The station number of the station that opened the file.
     /// </param>
     /// <param name="handle">
-    /// Receives the new handle entry, or null when the handle number is already in use.
+    /// Receives the new handle entry, or null when the station already uses the handle number.
     /// </param>
     /// <returns>
-    /// True when the entry was added, false when the handle number is already in use.
+    /// True when the entry was added, false when the station already uses the handle number.
     /// </returns>
     public bool TryOpen(
         byte userHandle,
@@ -126,7 +176,8 @@ public sealed class FileServerHandleManager
     {
         lock (_sync)
         {
-            if (_handles.ContainsKey(userHandle))
+            int key = Key(net, station, userHandle);
+            if (_handles.ContainsKey(key))
             {
                 handle = null!;
                 return false;
@@ -141,47 +192,60 @@ public sealed class FileServerHandleManager
                 ClientNet = net,
                 ClientStation = station,
             };
-            _handles[userHandle] = handle;
+            _handles[key] = handle;
             return true;
         }
     }
 
     /// <summary>
-    /// Looks up an open file by handle number.
+    /// Looks up an open file of a station by handle number.
     /// </summary>
+    /// <param name="net">
+    /// The network number of the station.
+    /// </param>
+    /// <param name="station">
+    /// The station number of the station.
+    /// </param>
     /// <param name="userHandle">
     /// The handle number.
     /// </param>
     /// <returns>
-    /// The handle entry, or null when the handle is not open.
+    /// The handle entry, or null when that station has no such handle open.
     /// </returns>
-    public OpenFileHandle? Get(byte userHandle)
+    public OpenFileHandle? Get(byte net, byte station, byte userHandle)
     {
         lock (_sync)
         {
-            _handles.TryGetValue(userHandle, out OpenFileHandle? handle);
+            _handles.TryGetValue(Key(net, station, userHandle), out OpenFileHandle? handle);
             return handle;
         }
     }
 
     /// <summary>
-    /// Closes the stream of an open file and removes the handle.
+    /// Closes the stream of an open file of a station and removes the handle.
     /// </summary>
+    /// <param name="net">
+    /// The network number of the station.
+    /// </param>
+    /// <param name="station">
+    /// The station number of the station.
+    /// </param>
     /// <param name="userHandle">
     /// The handle number.
     /// </param>
     /// <returns>
-    /// True when the handle was open, otherwise false.
+    /// True when the station had the handle open, otherwise false.
     /// </returns>
-    public bool Close(byte userHandle)
+    public bool Close(byte net, byte station, byte userHandle)
     {
         lock (_sync)
         {
-            if (!_handles.TryGetValue(userHandle, out OpenFileHandle? handle))
+            int key = Key(net, station, userHandle);
+            if (!_handles.TryGetValue(key, out OpenFileHandle? handle))
                 return false;
 
             handle.Stream.Dispose();
-            _handles.Remove(userHandle);
+            _handles.Remove(key);
             return true;
         }
     }
@@ -199,17 +263,9 @@ public sealed class FileServerHandleManager
     {
         lock (_sync)
         {
-            List<byte> toClose = new List<byte>();
-            Dictionary<byte, OpenFileHandle>.Enumerator enumerator = _handles.GetEnumerator();
-            while (enumerator.MoveNext())
-            {
-                KeyValuePair<byte, OpenFileHandle> pair = enumerator.Current;
-                if (pair.Value.ClientNet == net && pair.Value.ClientStation == station)
-                    toClose.Add(pair.Key);
-            }
-
-            for (int i = 0; i < toClose.Count; i++)
-                Close(toClose[i]);
+            for (int handle = 0; handle <= 255; handle++)
+                Close(net, station, (byte)handle);
+            _nextHandle.Remove(StationKey(net, station));
         }
     }
 }

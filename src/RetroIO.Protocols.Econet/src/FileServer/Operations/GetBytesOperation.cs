@@ -77,7 +77,7 @@ public sealed class GetBytesOperation : IFileServerOperation
         int offset = parameters[5] | (parameters[6] << 8) | (parameters[7] << 16);
         byte txPort = call.FsRequest.Urd;
 
-        OpenFileHandle? open = context.Handles.Get(handle);
+        OpenFileHandle? open = context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 

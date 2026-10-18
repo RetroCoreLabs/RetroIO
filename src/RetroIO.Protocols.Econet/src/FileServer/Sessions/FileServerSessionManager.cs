@@ -315,40 +315,6 @@ public sealed class FileServerSessionManager
         }
     }
 
-    /// <summary>
-    /// Hands out the next free file handle number, counting up from 4 and starting again at 4 after
-    /// 32. A number that is still open in <paramref name="handles"/> is skipped.
-    /// </summary>
-    /// <param name="handles">
-    /// The open file manager, asked which numbers are in use.
-    /// </param>
-    /// <returns>
-    /// The handle number, or 0 when all of 4 to 32 are in use. The number is not reserved: it is
-    /// registered when the caller opens the file with <see cref="FileServerHandleManager.TryOpen"/>.
-    /// </returns>
-    public byte AllocateHandle(FileServerHandleManager handles)
-    {
-        lock (_sync)
-        {
-            const int First = 4;
-            const int Last = 32;
-            for (int tried = 0; tried <= Last - First; tried++)
-            {
-                byte handle = _nextHandle;
-                _nextHandle++;
-                if (_nextHandle > Last)
-                    _nextHandle = First;
-
-                if (handles.Get(handle) == null)
-                    return handle;
-            }
-
-            return 0;
-        }
-    }
-
-    private byte _nextHandle = 4;
-
     private FileServerSession? FindSession(byte net, byte station)
     {
         for (int i = 0; i < _sessions.Length; i++)

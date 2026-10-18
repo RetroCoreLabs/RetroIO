@@ -57,7 +57,7 @@ public sealed class PutByteOperation : IFileServerOperation
     {
         byte handle = AcornFileHandles.DivHandle(call.FsRequest.Urd);
         byte value = call.FsRequest.Cwd;
-        OpenFileHandle? open = call.Context.Handles.Get(handle);
+        OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null || open.ReadOnly)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 

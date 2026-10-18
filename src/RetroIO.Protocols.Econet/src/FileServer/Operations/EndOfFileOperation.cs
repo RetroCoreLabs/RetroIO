@@ -53,7 +53,7 @@ public sealed class EndOfFileOperation : IFileServerOperation
     public byte[] Execute(in FsOpCall call)
     {
         byte handle = call.FsRequest.Parameters.Length > 0 ? call.FsRequest.Parameters[0] : (byte)0;
-        OpenFileHandle? open = call.Context.Handles.Get(handle);
+        OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 

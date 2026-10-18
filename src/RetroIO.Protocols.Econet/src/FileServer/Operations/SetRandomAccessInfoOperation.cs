@@ -58,7 +58,7 @@ public sealed class SetRandomAccessInfoOperation : IFileServerOperation
 
         byte handle = parameters[0];
         long cursor = (long)(uint)(parameters[1] | (parameters[2] << 8) | (parameters[3] << 16) | (parameters[4] << 24));
-        OpenFileHandle? open = call.Context.Handles.Get(handle);
+        OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 

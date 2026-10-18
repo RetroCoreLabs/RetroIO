@@ -60,7 +60,7 @@ public sealed class GetRandomAccessInfoOperation : IFileServerOperation
         ReadOnlySpan<byte> parameters = call.FsRequest.Parameters;
         byte handle = parameters.Length > 0 ? parameters[0] : (byte)0;
         byte function = parameters.Length > 1 ? parameters[1] : (byte)0;
-        OpenFileHandle? open = call.Context.Handles.Get(handle);
+        OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 

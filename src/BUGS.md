@@ -18,7 +18,6 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 | Where | What |
 |---|---|
-| `RetroIO.Protocols.Econet` `FileServerSessionManager.AllocateHandle`, `FileIoCommandHandler.HandleOpen` | One server-wide pool of handles 4 to 32, not one per station. Needs a per-station handle table. (Fixed today: `AllocateHandle` skips handles in use, and `HandleOpen` takes the handle before it opens the stream, so a refused handle no longer truncates the file.) |
 | `RetroIO.Protocols.Econet` `EconetUserBootstrap` | Class comment says it purges legacy orphan keys; the code only adds defaults |
 | `RetroIO.Protocols.Econet` `FileServerReply.DiscFreeSpaceClassic1983` | Existing comment has a `param` and no `returns` |
 | `RetroIO.Protocols.Xmsg.Api` `XmsgKernel` | `WirePort` has no incarnation bits |
@@ -107,3 +106,4 @@ real specification before anyone touches it, **I** the interface comment is prob
 | XOT server, serial transport and `X25ClientPadTransport` reported success for calls they never made, or ignored arguments | each now throws `NotSupportedException` (four commits: XotServerTransport, SerialTransport, X25ClientPadTransport, RrClient) |
 | Econet delete went to the host disk and answered success with any other backend; `*RENAME` ignored the backend and answered "Not found" for a new name | Econet: delete and rename go through the file system backend (new DeleteFile, DeleteDirectory, MoveFile, MoveDirectory) |
 | The Azure and VFS backends do not yet delete directories or move anything (they throw NotImplementedException, by design: fail loudly) | (still open, see the backend classes) |
+| Econet handles 4 to 32 came from one pool shared by all stations, so a busy station could starve the others and one station could use another's handle number | Econet: each station has its own table of open file handles |
