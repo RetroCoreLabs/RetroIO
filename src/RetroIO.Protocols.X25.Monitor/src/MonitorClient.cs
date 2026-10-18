@@ -213,7 +213,9 @@ namespace RetroIO.Protocols.X25.Monitor
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disconnects from the server, if connected. Same as <see cref="Disconnect"/>.
+        /// </summary>
         public void Dispose()
         {
             Disconnect();

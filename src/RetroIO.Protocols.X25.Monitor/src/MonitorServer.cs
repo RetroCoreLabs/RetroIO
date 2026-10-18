@@ -267,7 +267,9 @@ namespace RetroIO.Protocols.X25.Monitor
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the server and disconnects all clients. Same as <see cref="Stop"/>.
+        /// </summary>
         public void Dispose()
         {
             Stop();
