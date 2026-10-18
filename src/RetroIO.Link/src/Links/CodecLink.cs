@@ -40,10 +40,22 @@ namespace RetroIO.Link
         private LinkStatus _status = LinkStatus.Stopped;
         private bool _disposed;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when LAPB delivers an I-frame payload on this link.
+        /// </summary>
+        /// <remarks>
+        /// The payload is passed up opaque; protocol classification happens above the link. Each
+        /// delivery also adds one to the received frame count in the link statistics.
+        /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the link's operational status is set.
+        /// </summary>
+        /// <remarks>
+        /// This link raises the event on every status set, also when the new status equals the old
+        /// one; it does not filter out repeats.
+        /// </remarks>
         public event LinkStatusChanged? StatusChanged;
 
         /// <summary>
@@ -100,22 +112,42 @@ namespace RetroIO.Link
             _lapb.StateChanged += OnLapbStateChanged;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the unique name of this link, taken from the configuration.
+        /// </summary>
         public string Name => _config.Name;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the type of this link, taken from the underlying transport.
+        /// </summary>
         public LinkType Type => _transport.LinkType;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current operational status of the link.
+        /// </summary>
         public LinkStatus Status => _status;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the remote machine ID used for routing, taken from the configuration.
+        /// </summary>
         public string RemoteMachineId => _config.RemoteMachineId;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the protocol mode configuration for this link, taken from the configuration.
+        /// </summary>
         public ProtocolModeConfig ProtocolMode => _config.ProtocolMode;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the link by opening the underlying transport.
+        /// </summary>
+        /// <remarks>
+        /// Sets the status to Starting first. The status becomes Active only when the transport
+        /// reports that it is open; on the primary side LAPB then connects if auto-connect is set.
+        /// </remarks>
+        /// <returns>
+        /// <c>true</c> if the transport open succeeded or was started; <c>false</c> if it failed at
+        /// once, in which case the status is set to Error.
+        /// </returns>
         public bool Start()
         {
             SetStatus(LinkStatus.Starting, "Starting");
@@ -128,7 +160,13 @@ namespace RetroIO.Link
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the link.
+        /// </summary>
+        /// <remarks>
+        /// Sends a LAPB disconnect if LAPB is in data transfer, closes the transport, resets LAPB and
+        /// the framing codec, and sets the status to Stopped.
+        /// </remarks>
         public void Stop()
         {
             if (_lapb.State == LapbState.DataTransfer)
@@ -142,7 +180,19 @@ namespace RetroIO.Link
             SetStatus(LinkStatus.Stopped, "Stopped");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends one opaque payload over this link as a LAPB I-frame.
+        /// </summary>
+        /// <remarks>
+        /// The link does not classify the payload as X.25 or SINTRAN; that happens above the link.
+        /// </remarks>
+        /// <param name="payload">
+        /// The payload bytes to send.
+        /// </param>
+        /// <returns>
+        /// <c>false</c> with a logged warning when LAPB is not in data transfer; otherwise the result
+        /// of the LAPB station send.
+        /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             if (_lapb.State != LapbState.DataTransfer)
@@ -155,7 +205,12 @@ namespace RetroIO.Link
             return _lapb.SendData(payload);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the link statistics.
+        /// </summary>
+        /// <returns>
+        /// The live statistics object this link updates, not a copy.
+        /// </returns>
         public LinkStatistics GetStatistics()
         {
             return _statistics;

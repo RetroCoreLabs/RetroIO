@@ -73,7 +73,18 @@ namespace RetroIO.Link.Framing
         {
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Feeds raw bytes received from the transport into the XOT length-prefix parser.
+        /// </summary>
+        /// <remarks>
+        /// Every complete frame in the buffer is raised upward. A non-zero version, an illegal length,
+        /// or a full buffer with no complete frame raises <see cref="FrameCodecBase.FramingFailed"/>;
+        /// after that all further bytes are ignored until <see cref="Reset"/> is called.
+        /// </remarks>
+        /// <param name="data">
+        /// Bytes as they arrived from the medium; may contain zero, part of one, or several frames.
+        /// Only valid for the duration of the call.
+        /// </param>
         public override void ProcessBytes(ReadOnlySpan<byte> data)
         {
             int i = 0;
@@ -101,7 +112,19 @@ namespace RetroIO.Link.Framing
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes one outgoing X.25 packet to the transport below behind a 4-byte XOT header.
+        /// </summary>
+        /// <remarks>
+        /// The header is a version of zero and the payload length, both big-endian 16-bit values.
+        /// </remarks>
+        /// <param name="frame">
+        /// The X.25 packet to send. Only valid for the duration of the call.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the length of <paramref name="frame"/> is shorter than
+        /// <see cref="FrameMinPayload"/> or longer than <see cref="FrameMaxPayload"/>.
+        /// </exception>
         public override void SendFrame(ReadOnlySpan<byte> frame)
         {
             if (frame.Length > FrameMaxPayload || frame.Length < FrameMinPayload)
@@ -130,7 +153,9 @@ namespace RetroIO.Link.Framing
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Discards any partially received frame and clears the failed state, so parsing starts again.
+        /// </summary>
         public override void Reset()
         {
             _rxLen = 0;

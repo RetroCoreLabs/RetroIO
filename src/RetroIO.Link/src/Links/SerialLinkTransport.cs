@@ -42,13 +42,26 @@ namespace RetroIO.Link
         private volatile bool _running;
         private bool _disposed;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised on the reader thread when raw bytes arrive from the serial port.
+        /// </summary>
+        /// <remarks>
+        /// The bytes are in a buffer this transport reuses; they are only valid for the duration of
+        /// the callback.
+        /// </remarks>
         public event LinkTransportDataReceived? DataReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when <see cref="Open"/> has opened the serial port and started the reader thread.
+        /// </summary>
         public event LinkTransportOpened? Opened;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised by <see cref="Close"/> when it closes a port, with the reason "closed".
+        /// </summary>
+        /// <remarks>
+        /// It is not raised when the reader thread stops on a read error.
+        /// </remarks>
         public event LinkTransportClosed? Closed;
 
         /// <summary>
@@ -80,16 +93,30 @@ namespace RetroIO.Link
             _rtsCts = config.RtsCtsFlowControl;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name of this transport, taken from the link configuration.
+        /// </summary>
         public string Name => _name;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the link type this transport represents, which is always Serial.
+        /// </summary>
         public LinkType LinkType => LinkType.Serial;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether the serial port exists and is open.
+        /// </summary>
         public bool IsOpen => _port?.IsOpen == true;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Opens the serial port with the configured line settings and starts the reader thread.
+        /// </summary>
+        /// <remarks>
+        /// When the port is already open this returns <c>true</c> at once and does nothing else.
+        /// </remarks>
+        /// <returns>
+        /// <c>true</c> if the port is open; <c>false</c> if opening it failed (the error is logged).
+        /// </returns>
         public bool Open()
         {
             lock (_lock)
@@ -128,7 +155,13 @@ namespace RetroIO.Link
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Closes and releases the serial port, waits up to 2 seconds for the reader thread, and
+        /// raises <see cref="Closed"/>.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing when no port exists. An error while closing is logged at debug level only.
+        /// </remarks>
         public void Close()
         {
             lock (_lock)
@@ -162,7 +195,17 @@ namespace RetroIO.Link
             Closed?.Invoke(_name, "closed");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes raw bytes to the serial port.
+        /// </summary>
+        /// <remarks>
+        /// When the port is not open the bytes are dropped without a message. A write error is logged
+        /// and not thrown.
+        /// </remarks>
+        /// <param name="data">
+        /// The bytes to write. Copied to an array before the write, so only referenced for the
+        /// duration of the call.
+        /// </param>
         public void Write(ReadOnlySpan<byte> data)
         {
             SerialPort? port = _port;
@@ -186,7 +229,9 @@ namespace RetroIO.Link
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Closes the transport. Calling it again does nothing.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)

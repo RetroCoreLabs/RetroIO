@@ -64,18 +64,34 @@ namespace RetroIO.Link
 
         #region ILink Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name given to this test link.
+        /// </summary>
         public string Name => _name;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the type of this link, which is always <see cref="LinkType.TcpLapb"/> for the test link.
+        /// </summary>
         public LinkType Type => LinkType.TcpLapb;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current operational status of the link.
+        /// </summary>
         public LinkStatus Status => _status;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the remote machine ID, which is always an empty string for the test link.
+        /// </summary>
         public string RemoteMachineId => string.Empty;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a new protocol mode configuration set to <see cref="ProtocolDetectionMode.X25Only"/>
+        /// on every read.
+        /// </summary>
         public ProtocolModeConfig ProtocolMode => new ProtocolModeConfig { Mode = ProtocolDetectionMode.X25Only };
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the test link by setting its status to Active; no transport is opened.
+        /// </summary>
+        /// <returns>
+        /// <c>true</c> if the link was Stopped and is now Active; <c>false</c> if it was not Stopped.
+        /// </returns>
         public bool Start()
         {
             if (_status != LinkStatus.Stopped)
@@ -93,7 +109,12 @@ namespace RetroIO.Link
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the test link: sets the status to Stopped and resets the LAPB station.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing if the link is already Stopped. No LAPB disconnect is sent.
+        /// </remarks>
         public void Stop()
         {
             if (_status == LinkStatus.Stopped)
@@ -110,7 +131,19 @@ namespace RetroIO.Link
             _logger.LogInformation("TestLink[{Name}]: Stopped", _name);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends one opaque payload as a LAPB I-frame.
+        /// </summary>
+        /// <remarks>
+        /// The frame goes nowhere; it can only be seen through <see cref="FrameTransmitted"/>.
+        /// </remarks>
+        /// <param name="payload">
+        /// The payload bytes to send.
+        /// </param>
+        /// <returns>
+        /// <c>false</c> when the link is not Active or LAPB is not in data transfer (nothing is
+        /// logged); otherwise the result of the LAPB station send.
+        /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             if (_status != LinkStatus.Active)
@@ -123,67 +156,122 @@ namespace RetroIO.Link
             return _lapbInstance.SendData(payload);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the link statistics, with the current status copied in first.
+        /// </summary>
+        /// <returns>
+        /// The live statistics object this link updates, not a copy.
+        /// </returns>
         public LinkStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
             return _statistics;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when LAPB delivers an I-frame payload on this link.
+        /// </summary>
+        /// <remarks>
+        /// The payload is passed up opaque; protocol classification happens above the link.
+        /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when <see cref="Start"/> or <see cref="Stop"/> changes the link's status.
+        /// </summary>
         public event LinkStatusChanged? StatusChanged;
 
         #endregion
 
         #region ILapbCapable Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current state of this link's LAPB station.
+        /// </summary>
         public LapbState LapbState => _lapbInstance.State;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current LAPB sequence variables.
+        /// </summary>
+        /// <returns>
+        /// V(S), V(R) and V(A) from the LAPB station.
+        /// </returns>
         public (byte VS, byte VR, byte VA) GetSequenceNumbers()
         {
             return _lapbInstance.GetSequenceNumbers();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts LAPB link set-up (sends SABM), whatever the link status is.
+        /// </summary>
         public void Connect()
         {
             _lapbInstance.Connect();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts LAPB link tear-down (sends DISC).
+        /// </summary>
         public void Disconnect()
         {
             _lapbInstance.Disconnect();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the LAPB station's counters and sequence variables.
+        /// </summary>
+        /// <returns>
+        /// The LAPB statistics from the station.
+        /// </returns>
         public LapbStatistics GetLapbStatistics()
         {
             return _lapbInstance.GetStatistics();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the LAPB station's state changes.
+        /// </summary>
         public event EventHandler<LapbStateChangedEventArgs>? LapbStateChanged;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Hands a raw frame to the LAPB station as if it had been received (for testing or simulation).
+        /// </summary>
+        /// <param name="frameData">
+        /// Frame data (address, control and information fields).
+        /// </param>
+        /// <param name="length">
+        /// Number of valid bytes in <paramref name="frameData"/>.
+        /// </param>
         public void InjectFrame(byte[] frameData, int length)
         {
             _lapbInstance.ReceiveFrame(frameData, length);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Hands a raw LAPB frame to the station to transmit as given, without the LAPB state machine
+        /// seeing it.
+        /// </summary>
+        /// <remarks>
+        /// The test link has no transport; the frame can only be seen through
+        /// <see cref="FrameTransmitted"/>.
+        /// </remarks>
+        /// <param name="frame">
+        /// The frame to send.
+        /// </param>
+        /// <param name="length">
+        /// Number of valid bytes in <paramref name="frame"/>.
+        /// </param>
         public void SendFrame(byte[] frame, int length)
         {
             _lapbInstance.SendFrame(frame, length);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised for every frame handed to the LAPB station.
+        /// </summary>
         public event EventHandler<LapbFrameEventArgs>? FrameReceived;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised for every frame the LAPB station puts out. The test link sends it nowhere else.
+        /// </summary>
         public event EventHandler<LapbFrameEventArgs>? FrameTransmitted;
 
         #endregion
@@ -254,7 +342,12 @@ namespace RetroIO.Link
 
         #region IDisposable
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the link and releases its LAPB station.
+        /// </summary>
+        /// <remarks>
+        /// Calling it again does nothing.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)

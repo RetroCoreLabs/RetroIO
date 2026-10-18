@@ -75,18 +75,39 @@ namespace RetroIO.Link
 
         #region ILink Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the unique name of this link, taken from the configuration.
+        /// </summary>
         public string Name => _config.Name;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the type of this link, which is always <see cref="LinkType.Serial"/>.
+        /// </summary>
         public LinkType Type => LinkType.Serial;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current operational status of the link.
+        /// </summary>
         public LinkStatus Status => _status;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the remote machine ID used for routing, taken from the configuration.
+        /// </summary>
         public string RemoteMachineId => _config.RemoteMachineId;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the protocol mode configuration for this link, taken from the configuration.
+        /// </summary>
         public ProtocolModeConfig ProtocolMode => _config.ProtocolMode;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the link by opening the configured serial port.
+        /// </summary>
+        /// <remarks>
+        /// Only works from the Stopped status. On success the status becomes Active and the start time
+        /// is recorded. It does not connect LAPB; call <see cref="Connect"/> for that.
+        /// </remarks>
+        /// <returns>
+        /// <c>true</c> if the serial port was opened; <c>false</c> if the link was not stopped (a
+        /// warning is logged) or the port could not be opened (the error is logged and the status is
+        /// set to Error).
+        /// </returns>
         public bool Start()
         {
             lock (_lock)
@@ -135,7 +156,15 @@ namespace RetroIO.Link
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the link and closes the serial port.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing if the link is already Stopped or Stopping. Otherwise sends a LAPB disconnect
+        /// if LAPB is in data transfer, closes and releases the port, resets LAPB and the HDLC framer,
+        /// and sets the status to Stopped. An exception on the way is logged and sets the status to
+        /// Error; it is not thrown on.
+        /// </remarks>
         public void Stop()
         {
             lock (_lock)
@@ -184,7 +213,19 @@ namespace RetroIO.Link
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends one opaque payload over this link as a LAPB I-frame.
+        /// </summary>
+        /// <remarks>
+        /// The link does not classify the payload as X.25 or SINTRAN; that happens above the link.
+        /// </remarks>
+        /// <param name="payload">
+        /// The payload bytes to send.
+        /// </param>
+        /// <returns>
+        /// <c>false</c> with a logged warning when the link is not Active or LAPB is not in data
+        /// transfer; otherwise the result of the LAPB station send.
+        /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             if (_status != LinkStatus.Active)
@@ -203,32 +244,60 @@ namespace RetroIO.Link
             return _lapbInstance.SendData(payload);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the link statistics, with the current status copied in first.
+        /// </summary>
+        /// <returns>
+        /// The live statistics object this link updates, not a copy.
+        /// </returns>
         public LinkStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
             return _statistics;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when LAPB delivers an I-frame payload on this link.
+        /// </summary>
+        /// <remarks>
+        /// The payload is passed up opaque; protocol classification happens above the link.
+        /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the link's operational status is set.
+        /// </summary>
+        /// <remarks>
+        /// This link raises the event on every status set, also when the new status equals the old
+        /// one; it does not filter out repeats.
+        /// </remarks>
         public event LinkStatusChanged? StatusChanged;
 
         #endregion
 
         #region ILapbCapable Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current state of this link's LAPB station.
+        /// </summary>
         public LapbState LapbState => _lapbInstance.State;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current LAPB sequence variables.
+        /// </summary>
+        /// <returns>
+        /// V(S), V(R) and V(A) from the LAPB station.
+        /// </returns>
         public (byte VS, byte VR, byte VA) GetSequenceNumbers()
         {
             return _lapbInstance.GetSequenceNumbers();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts LAPB link set-up (sends SABM).
+        /// </summary>
+        /// <remarks>
+        /// Does nothing except log a warning when the link is not Active.
+        /// </remarks>
         public void Connect()
         {
             if (_status != LinkStatus.Active)
@@ -240,36 +309,65 @@ namespace RetroIO.Link
             _lapbInstance.Connect();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts LAPB link tear-down (sends DISC).
+        /// </summary>
         public void Disconnect()
         {
             _lapbInstance.Disconnect();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the LAPB station's counters and sequence variables.
+        /// </summary>
+        /// <returns>
+        /// The LAPB statistics from the station.
+        /// </returns>
         public LapbStatistics GetLapbStatistics()
         {
             return _lapbInstance.GetStatistics();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the LAPB station's state changes.
+        /// </summary>
         public event EventHandler<LapbStateChangedEventArgs>? LapbStateChanged;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Hands a raw frame to the LAPB station as if it had been received (for testing or simulation).
+        /// </summary>
+        /// <param name="frameData">
+        /// Frame data (address, control and information fields).
+        /// </param>
+        /// <param name="length">
+        /// Number of valid bytes in <paramref name="frameData"/>.
+        /// </param>
         public void InjectFrame(byte[] frameData, int length)
         {
             _lapbInstance.ReceiveFrame(frameData, length);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends a raw LAPB frame as given, without the LAPB state machine seeing it.
+        /// </summary>
+        /// <param name="frame">
+        /// The frame to send.
+        /// </param>
+        /// <param name="length">
+        /// Number of valid bytes in <paramref name="frame"/>.
+        /// </param>
         public void SendFrame(byte[] frame, int length)
         {
             _lapbInstance.SendFrame(frame, length);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised for every frame handed to the LAPB station.
+        /// </summary>
         public event EventHandler<LapbFrameEventArgs>? FrameReceived;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised for every frame the LAPB station puts on the wire, before it goes to the HDLC framer.
+        /// </summary>
         public event EventHandler<LapbFrameEventArgs>? FrameTransmitted;
 
         #endregion
@@ -400,7 +498,12 @@ namespace RetroIO.Link
 
         #region IDisposable
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the link and releases its LAPB station.
+        /// </summary>
+        /// <remarks>
+        /// Calling it again does nothing.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)

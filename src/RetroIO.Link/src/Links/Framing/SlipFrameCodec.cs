@@ -60,7 +60,17 @@ namespace RetroIO.Link.Framing
         {
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Feeds raw bytes received from the transport into the SLIP de-framer, one byte at a time.
+        /// </summary>
+        /// <remarks>
+        /// An END with nothing buffered is skipped. An unknown byte after ESC is kept as it is. A frame
+        /// longer than <see cref="FrameMaxPayload"/> is dropped and the codec starts over.
+        /// </remarks>
+        /// <param name="data">
+        /// Bytes as they arrived from the medium; may contain zero, part of one, or several frames.
+        /// Only valid for the duration of the call.
+        /// </param>
         public override void ProcessBytes(ReadOnlySpan<byte> data)
         {
             for (int i = 0; i < data.Length; i++)
@@ -115,7 +125,15 @@ namespace RetroIO.Link.Framing
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// SLIP-encodes one outgoing frame and writes it to the transport below.
+        /// </summary>
+        /// <remarks>
+        /// Writes a leading END, the payload with END and ESC escaped, and a trailing END.
+        /// </remarks>
+        /// <param name="frame">
+        /// The raw payload to frame (opaque to the codec). Only valid for the duration of the call.
+        /// </param>
         public override void SendFrame(ReadOnlySpan<byte> frame)
         {
             // Worst case: every byte escaped (2x) plus leading and trailing END.
@@ -153,7 +171,9 @@ namespace RetroIO.Link.Framing
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Discards any partially received frame and clears a pending escape.
+        /// </summary>
         public override void Reset()
         {
             _rxLen = 0;

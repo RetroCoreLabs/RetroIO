@@ -333,7 +333,12 @@ namespace RetroIO.Link.Lapb
             _logger.LogInformation("LAPB[{Link}]: station reset", _linkName);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the station's tick timer.
+        /// </summary>
+        /// <remarks>
+        /// Calling it again does nothing. It does not disconnect the link or tell the peer.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)

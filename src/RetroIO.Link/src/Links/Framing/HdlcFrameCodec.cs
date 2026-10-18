@@ -71,7 +71,17 @@ namespace RetroIO.Link.Framing
         {
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Feeds raw bytes received from the transport into the shared HDLC decoder.
+        /// </summary>
+        /// <remarks>
+        /// Each complete frame is raised upward through <see cref="FrameCodecBase.FrameReceived"/>.
+        /// Runt, overlong and aborted frames are dropped here; the decoder counts each kind.
+        /// </remarks>
+        /// <param name="data">
+        /// Bytes as they arrived from the medium; may contain zero, part of one, or several frames.
+        /// Only valid for the duration of the call.
+        /// </param>
         public override void ProcessBytes(ReadOnlySpan<byte> data)
         {
             int offset = 0;
@@ -96,7 +106,15 @@ namespace RetroIO.Link.Framing
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Encodes one outgoing frame with the shared HDLC encoder and writes it to the transport below.
+        /// </summary>
+        /// <remarks>
+        /// The encoder uses this codec's framing-only policy: RFC 1662 escaping and no FCS.
+        /// </remarks>
+        /// <param name="frame">
+        /// The raw payload to frame (opaque to the codec). Only valid for the duration of the call.
+        /// </param>
         public override void SendFrame(ReadOnlySpan<byte> frame)
         {
             int max = HdlcEncoder.GetMaxEncodedLength(frame.Length);
@@ -112,7 +130,9 @@ namespace RetroIO.Link.Framing
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Discards any partially received frame by resetting the HDLC decoder.
+        /// </summary>
         public override void Reset()
         {
             _decoder.Reset();

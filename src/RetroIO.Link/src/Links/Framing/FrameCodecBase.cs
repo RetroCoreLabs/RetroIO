@@ -107,13 +107,29 @@ namespace RetroIO.Link.Framing
         /// </summary>
         protected IFrameTransport Transport => _transport;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Frames a single outgoing frame and writes it to the transport below.
+        /// </summary>
+        /// <param name="frame">
+        /// The raw payload to frame (opaque to the codec). Only valid for the duration of the call.
+        /// </param>
         public abstract void SendFrame(ReadOnlySpan<byte> frame);
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Feeds raw bytes received from the transport into the codec's incremental de-framer.
+        /// </summary>
+        /// <param name="data">
+        /// Bytes as they arrived from the medium; may contain zero, part of one, or several frames.
+        /// Only valid for the duration of the call.
+        /// </param>
         public abstract void ProcessBytes(ReadOnlySpan<byte> data);
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Discards any partially received frame and resets the receive state machine.
+        /// </summary>
+        /// <remarks>
+        /// The base implementation does nothing; codecs that keep receive state override it.
+        /// </remarks>
         public virtual void Reset()
         {
         }

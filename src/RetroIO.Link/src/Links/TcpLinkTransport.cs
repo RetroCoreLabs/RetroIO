@@ -42,13 +42,31 @@ namespace RetroIO.Link
         private volatile bool _running;
         private bool _disposed;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised on the reader thread when raw bytes arrive from the TCP connection.
+        /// </summary>
+        /// <remarks>
+        /// The bytes are in a buffer this transport reuses; they are only valid for the duration of
+        /// the callback.
+        /// </remarks>
         public event LinkTransportDataReceived? DataReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised each time a TCP connection is set up (connected in client mode or accepted in server
+        /// mode).
+        /// </summary>
+        /// <remarks>
+        /// It is not raised when a server only starts listening.
+        /// </remarks>
         public event LinkTransportOpened? Opened;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the transport closes or the connection drops.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="Close"/> raises it with the reason "closed". The reader thread raises it with
+        /// the cause when the connection drops while the transport is still running.
+        /// </remarks>
         public event LinkTransportClosed? Closed;
 
         /// <summary>
@@ -85,13 +103,22 @@ namespace RetroIO.Link
             _reconnectDelayMs = reconnectDelayMs;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name of this transport.
+        /// </summary>
         public string Name => _name;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the link type this transport represents, which is always TcpLapb.
+        /// </summary>
         public LinkType LinkType => LinkType.TcpLapb;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether a TCP connection is set up and connected.
+        /// </summary>
+        /// <remarks>
+        /// A server that is only listening is not open.
+        /// </remarks>
         public bool IsOpen => _stream != null && _client?.Connected == true;
 
         /// <summary>
@@ -99,7 +126,20 @@ namespace RetroIO.Link
         /// </summary>
         public int Port => _port;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Opens the transport: listens in server mode, or connects in client mode.
+        /// </summary>
+        /// <remarks>
+        /// What happens:
+        ///  - Server mode starts a listener on the host address and port and accepts one connection
+        ///    at a time on a background thread.
+        ///  - Client mode with a reconnect delay dials, and re-dials after a drop, on a background thread.
+        ///  - Client mode without a reconnect delay connects once, on the calling thread.
+        /// </remarks>
+        /// <returns>
+        /// <c>true</c> if the listener or dial thread was started or the connection was made;
+        /// <c>false</c> if it failed at once (a warning is logged).
+        /// </returns>
         public bool Open()
         {
             try
@@ -149,7 +189,14 @@ namespace RetroIO.Link
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Closes the connection and the listener, and raises <see cref="Closed"/> with the reason
+        /// "closed".
+        /// </summary>
+        /// <remarks>
+        /// The event is raised on every call, also when nothing was open. An error while closing is
+        /// logged at debug level only.
+        /// </remarks>
         public void Close()
         {
             _running = false;
@@ -176,7 +223,16 @@ namespace RetroIO.Link
             Closed?.Invoke(_name, "closed");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes raw bytes to the TCP connection.
+        /// </summary>
+        /// <remarks>
+        /// When there is no connection the bytes are dropped without a message. A write error is
+        /// logged and not thrown.
+        /// </remarks>
+        /// <param name="data">
+        /// The bytes to write. Only referenced for the duration of the call.
+        /// </param>
         public void Write(ReadOnlySpan<byte> data)
         {
             NetworkStream? stream = _stream;
@@ -198,7 +254,12 @@ namespace RetroIO.Link
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Closes the transport and waits up to 2 seconds each for the accept, dial and reader threads.
+        /// </summary>
+        /// <remarks>
+        /// Calling it again does nothing.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)
