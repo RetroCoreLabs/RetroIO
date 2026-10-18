@@ -175,7 +175,15 @@ namespace RetroIO.Protocols.Xmsg.Chat
                 year, source[4], source[3], source[2], source[1], source[0]);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Determines whether this time equals another.
+        /// </summary>
+        /// <param name="other">
+        /// The time to compare with.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the year, month, day, hour, minute and second are all equal.
+        /// </returns>
         public bool Equals(NdCalendarTime other)
         {
             return Year == other.Year
@@ -186,13 +194,27 @@ namespace RetroIO.Protocols.Xmsg.Chat
                 && Second == other.Second;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Determines whether an object is an <see cref="NdCalendarTime"/> equal to this one.
+        /// </summary>
+        /// <param name="obj">
+        /// The object to compare with.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when <paramref name="obj"/> is an <see cref="NdCalendarTime"/> with the same
+        /// year, month, day, hour, minute and second.
+        /// </returns>
         public override bool Equals(object? obj)
         {
             return obj is NdCalendarTime other && Equals(other);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Returns a hash code built from the year, month, day, hour, minute and second.
+        /// </summary>
+        /// <returns>
+        /// The hash code.
+        /// </returns>
         public override int GetHashCode()
         {
             return HashCode.Combine(Year, Month, Day, Hour, Minute, Second);
