@@ -69,13 +69,30 @@ namespace RetroIO.Protocols.Xmsg.Codec
             get { return _transport; }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Encodes an outgoing packet and sends it down through the held transport.
+        /// </summary>
+        /// <param name="packet">
+        /// The packet to serialise and send.
+        /// </param>
         public abstract void SendPacket(XmsgPacket packet);
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Processes one complete information field arriving from the link, raising the
+        /// <see cref="PacketReceived"/> up-event when it decodes to a valid XMSG packet.
+        /// </summary>
+        /// <param name="data">
+        /// The information-field bytes (SINTRAN header onward).
+        /// </param>
         public abstract void ProcessBytes(ReadOnlySpan<byte> data);
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Resets any transient decode state (called on a link resync).
+        /// </summary>
+        /// <remarks>
+        /// The base holds no decode state, so this implementation does nothing. A concrete codec
+        /// that buffers data overrides it.
+        /// </remarks>
         public virtual void Reset()
         {
             // No transient decode state in the base; concrete codecs override if they buffer.

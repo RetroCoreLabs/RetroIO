@@ -39,7 +39,17 @@ namespace RetroIO.Protocols.Xmsg.Codec
         {
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Processes one complete information field arriving from the link, raising the
+        /// <see cref="XmsgCodecBase.PacketReceived"/> up-event when it decodes to a valid XMSG packet.
+        /// </summary>
+        /// <remarks>
+        /// The whole span is treated as exactly one packet. A span that does not parse as an XMSG
+        /// packet is dropped without an event and without an error.
+        /// </remarks>
+        /// <param name="data">
+        /// The information-field bytes (SINTRAN header onward).
+        /// </param>
         public override void ProcessBytes(ReadOnlySpan<byte> data)
         {
             // One information field == one packet at this seam. Reject non-XMSG / short spans
@@ -50,7 +60,19 @@ namespace RetroIO.Protocols.Xmsg.Codec
             }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Encodes an outgoing packet and sends it down through the held transport.
+        /// </summary>
+        /// <remarks>
+        /// The packet is serialised once and the resulting information-field bytes are passed to the
+        /// transport as they are.
+        /// </remarks>
+        /// <param name="packet">
+        /// The packet to serialise and send.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="packet"/> is null.
+        /// </exception>
         public override void SendPacket(XmsgPacket packet)
         {
             if (packet == null)
