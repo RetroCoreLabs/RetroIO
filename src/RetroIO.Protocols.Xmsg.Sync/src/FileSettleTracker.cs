@@ -181,8 +181,8 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The file to ask about.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> only while the file is genuinely unsettled. A file never seen,
-        /// or one that has already settled, both answer <see langword="false"/>.
+        /// <c>true</c> only while the file is genuinely unsettled. A file never seen,
+        /// or one that has already settled, both answer <c>false</c>.
         /// </returns>
         /// <remarks>
         /// The distinction a caller needs and could not previously make. "Not in the list this
@@ -254,7 +254,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The path to forget.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the file was being tracked.
+        /// <c>true</c> when the file was being tracked.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="path"/> is null.

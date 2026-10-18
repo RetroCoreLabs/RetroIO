@@ -888,10 +888,10 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// The member's handle.
         /// </param>
         /// <param name="room">
-        /// Their room, when this returns <see langword="true"/>.
+        /// Their room, when this returns <c>true</c>.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when they are in a room on this server.
+        /// <c>true</c> when they are in a room on this server.
         /// </returns>
         private bool TryRoomOf(long id, out ChatRoom? room)
         {
@@ -914,7 +914,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// refusal, and the room is what words it.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when somebody in some room already answers to it.
+        /// <c>true</c> when somebody in some room already answers to it.
         /// </returns>
         /// <remarks>
         /// Server-wide because the PLANC is server-wide - see the remarks on <c>HandleJoin</c>.

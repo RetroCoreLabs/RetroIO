@@ -366,8 +366,8 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// The node to open a link to.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a link now exists - either it already did, or a remembered
-        /// seed was found and used. <see langword="false"/> when this node has never been heard
+        /// <c>true</c> when a link now exists - either it already did, or a remembered
+        /// seed was found and used. <c>false</c> when this node has never been heard
         /// from, in which case it still cannot be addressed.
         /// </returns>
         /// <remarks>
@@ -743,7 +743,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// The node we want to send to.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a link to that node has been seen and its seed learned.
+        /// <c>true</c> when a link to that node has been seen and its seed learned.
         /// </returns>
         /// <remarks>
         /// The same lookup <see cref="BuildDatagram"/> makes, offered as a question instead of as

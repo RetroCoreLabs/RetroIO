@@ -334,7 +334,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The exchange sequence the request carried.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the reply echoes both fields.
+        /// <c>true</c> when the reply echoes both fields.
         /// </returns>
         /// <remarks>
         /// The reply echoes the operation code and the exchange sequence, which is the only way to

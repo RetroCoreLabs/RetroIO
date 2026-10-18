@@ -197,7 +197,7 @@ namespace RetroIO.Link.Hdlc
         /// The register after the final received octet.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when it equals <see cref="Good"/>.
+        /// <c>true</c> when it equals <see cref="Good"/>.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsGoodResidue(ushort fcs)
@@ -212,7 +212,7 @@ namespace RetroIO.Link.Hdlc
         /// Address, control, information and the two FCS octets.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the frame is at least <see cref="MinimumFrameLength"/>
+        /// <c>true</c> when the frame is at least <see cref="MinimumFrameLength"/>
         /// octets and the residue is correct.
         /// </returns>
         /// <remarks>

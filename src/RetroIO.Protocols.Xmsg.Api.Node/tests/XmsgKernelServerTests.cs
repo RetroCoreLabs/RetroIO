@@ -204,7 +204,7 @@ namespace RetroIO.Protocols.Xmsg.Api.Node.Tests
             /// Ignored; these tests are about the kernel server, not about link state.
             /// </param>
             /// <returns>
-            /// Always <see langword="true"/>.
+            /// Always <c>true</c>.
             /// </returns>
             public bool CanReach(ushort remoteNode)
             {

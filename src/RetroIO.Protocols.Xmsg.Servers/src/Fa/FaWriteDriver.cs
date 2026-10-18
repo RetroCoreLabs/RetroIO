@@ -861,8 +861,8 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The message body.
         /// </param>
         /// <param name="originated">
-        /// <see langword="true"/> when this message starts an exchange of its own, so it takes a
-        /// fresh Flags 1; <see langword="false"/> when it answers the server and must echo.
+        /// <c>true</c> when this message starts an exchange of its own, so it takes a
+        /// fresh Flags 1; <c>false</c> when it answers the server and must echo.
         /// </param>
         /// <remarks>
         /// Everything goes through the FRAGMENTED builder, short bodies included. That is not

@@ -96,12 +96,12 @@ namespace RetroIO.Link.Hdlc
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <see langword="true"/> - the encoder computes and appends the FCS, and the decoder
+        /// <c>true</c> - the encoder computes and appends the FCS, and the decoder
         /// verifies the residue and reports <see cref="HdlcDecodeStatus.BadFcs"/>. This is what a
         /// link that terminates HDLC itself wants.
         /// </para>
         /// <para>
-        /// <see langword="false"/> - pure delimiting and transparency, no checksum. One of the
+        /// <c>false</c> - pure delimiting and transparency, no checksum. One of the
         /// engines this class replaces was framing-only by design, with the FCS owned by the layer
         /// above it (<c>CodecLinkBridge</c>), and that separation is worth keeping: it is the
         /// cleaner layering, and a codec that does not know about the FCS can carry anything.
@@ -136,7 +136,7 @@ namespace RetroIO.Link.Hdlc
         public int MaxFrameLength { get; init; } = 4096;
 
         /// <summary>
-        /// When <see langword="true"/>, a frame that fails the FCS check is still handed to the
+        /// When <c>true</c>, a frame that fails the FCS check is still handed to the
         /// caller with <see cref="HdlcDecodeStatus.BadFcs"/> rather than dropped.
         /// </summary>
         /// <remarks>
@@ -218,7 +218,7 @@ namespace RetroIO.Link.Hdlc
         /// The octet.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when it needs a control escape in front of it.
+        /// <c>true</c> when it needs a control escape in front of it.
         /// </returns>
         internal bool MustEscape(byte value)
         {

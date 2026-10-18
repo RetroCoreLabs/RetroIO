@@ -100,7 +100,7 @@ namespace RetroIO.Tests
         /// The property bag produced for a file.
         /// </param>
         /// <returns>
-        /// The hole page indices held in <paramref name="bag"/>, or <see langword="null"/> when the
+        /// The hole page indices held in <paramref name="bag"/>, or <c>null</c> when the
         /// key is absent.
         /// </returns>
         private static int[]? HolesFrom(IDictionary<string, object> bag)

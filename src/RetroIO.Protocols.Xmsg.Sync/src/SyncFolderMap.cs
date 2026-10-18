@@ -116,7 +116,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The full path of the local file.
         /// </param>
         /// <param name="creating">
-        /// <see langword="true"/> when the remote file does not exist yet, which is the ONLY case
+        /// <c>true</c> when the remote file does not exist yet, which is the ONLY case
         /// that takes quotes.
         /// </param>
         /// <param name="fileSpec">
@@ -126,7 +126,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// Set to a sentence saying why not, or an empty string on success.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a filespec was produced.
+        /// <c>true</c> when a filespec was produced.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="localPath"/> is null.
@@ -204,7 +204,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The SINTRAN file type, or an empty string for none.
         /// </param>
         /// <param name="creating">
-        /// <see langword="true"/> to quote the name, which is what creates a new file.
+        /// <c>true</c> to quote the name, which is what creates a new file.
         /// </param>
         /// <returns>
         /// The filespec.
@@ -346,7 +346,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The folder, without a trailing separator.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the path is the folder or below it.
+        /// <c>true</c> when the path is the folder or below it.
         /// </returns>
         /// <remarks>
         /// The separator check matters: without it <c>E:\work\project2\x</c> would count as being

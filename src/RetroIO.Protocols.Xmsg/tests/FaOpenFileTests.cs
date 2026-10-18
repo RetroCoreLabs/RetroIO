@@ -192,7 +192,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The recording to read.
         /// </param>
         /// <returns>
-        /// The request body, or <see langword="null"/> when absent.
+        /// The request body, or <c>null</c> when absent.
         /// </returns>
         private static byte[]? FindOpenRequest(string captureName)
         {
@@ -223,7 +223,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The value that followed it.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the selector was present with a two-byte value.
+        /// <c>true</c> when the selector was present with a two-byte value.
         /// </returns>
         private static bool TryReadSelectorValue(byte[] body, ushort selector, out ushort value)
         {
@@ -256,7 +256,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The value found.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a value with that tag was present.
+        /// <c>true</c> when a value with that tag was present.
         /// </returns>
         private static bool TryReadTaggedValue(byte[] body, byte tag, out ushort value)
         {

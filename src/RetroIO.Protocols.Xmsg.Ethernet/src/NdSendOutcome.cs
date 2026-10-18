@@ -13,7 +13,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// <remarks>
     /// <para><b>Why this is not a bool</b></para>
     /// <para>
-    /// It was one, and it reported <see langword="true"/> both for a frame put on the wire and for a
+    /// It was one, and it reported <c>true</c> both for a frame put on the wire and for a
     /// frame parked in the send queue. Those are opposite outcomes to anybody upstream, and telling
     /// them apart is not a nicety: on 2026-08-17 a live TAD connect from D100 hung because two reply
     /// frames were queued behind a closed window, and every layer above - the transport, the runner's

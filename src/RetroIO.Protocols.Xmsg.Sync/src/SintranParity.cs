@@ -138,7 +138,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The value, with bit 7 clear.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the population count is even, so no parity bit is needed.
+        /// <c>true</c> when the population count is even, so no parity bit is needed.
         /// </returns>
         private static bool HasEvenParity(byte low)
         {

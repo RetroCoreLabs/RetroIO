@@ -533,7 +533,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The directory cursor.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if the body looked like a listing request.
+        /// <c>true</c> if the body looked like a listing request.
         /// </returns>
         public static bool TryReadRequest(ReadOnlySpan<byte> body, out ushort serial, out ushort cursor)
         {
@@ -557,7 +557,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Which of the three things the client is asking for.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if the body looked like a listing request.
+        /// <c>true</c> if the body looked like a listing request.
         /// </returns>
         /// <remarks>
         /// <para><b>The sub-function is the THIRD tagged word</b></para>
@@ -628,7 +628,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Which sub-function the request names.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a sub-function was found.
+        /// <c>true</c> when a sub-function was found.
         /// </returns>
         /// <remarks>
         /// <para><b>Why this is separate from the listing reader</b></para>
@@ -672,7 +672,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The file's true length in bytes.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a four-byte length was found.
+        /// <c>true</c> when a four-byte length was found.
         /// </returns>
         /// <remarks>
         /// <para><b>Found by TAG, never by offset</b></para>
@@ -720,7 +720,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// the whole directory.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a spec block was found and read, whether or not it named a
+        /// <c>true</c> when a spec block was found and read, whether or not it named a
         /// file.
         /// </returns>
         /// <remarks>
@@ -781,7 +781,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The name, without its terminator.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a name was found.
+        /// <c>true</c> when a name was found.
         /// </returns>
         /// <remarks>
         /// <para><b>The whole request</b></para>
@@ -850,7 +850,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// How many pages the client asks to reserve.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when both fields were found.
+        /// <c>true</c> when both fields were found.
         /// </returns>
         /// <remarks>
         /// <para><b>The whole request, captured</b></para>
@@ -961,7 +961,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// with <c>RetroIO.Storage.Ndfs.Elements.ObjectEntry.FromBytes</c>.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if the body carried an entry.
+        /// <c>true</c> if the body carried an entry.
         /// </returns>
         public static bool TryReadReply(ReadOnlySpan<byte> body, out ushort serial, out byte[] entryRecord)
         {

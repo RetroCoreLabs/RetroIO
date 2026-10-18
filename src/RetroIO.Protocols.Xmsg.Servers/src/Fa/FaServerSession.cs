@@ -99,7 +99,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The datagram sequence of the request that has just arrived.
         /// </param>
         /// <returns>
-        /// The bytes to send again, or <see langword="null"/> when this is a new request.
+        /// The bytes to send again, or <c>null</c> when this is a new request.
         /// </returns>
         public byte[]? ReplayFor(ushort requestFlags1)
         {
@@ -344,7 +344,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
 
         /// <summary>
         /// Gets or sets the file bytes a <c>ReadFile</c> has promised but not yet sent, or
-        /// <see langword="null"/> when nothing is outstanding.
+        /// <c>null</c> when nothing is outstanding.
         /// </summary>
         /// <remarks>
         /// <para><b>Why the reply and the content are separate</b></para>

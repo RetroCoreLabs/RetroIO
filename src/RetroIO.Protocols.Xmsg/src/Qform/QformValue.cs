@@ -82,7 +82,7 @@ namespace RetroIO.Protocols.Xmsg.Qform
         /// The field, when one matched.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a matching value was found.
+        /// <c>true</c> when a matching value was found.
         /// </returns>
         /// <remarks>
         /// The class and length are part of the question because the same selector number carries

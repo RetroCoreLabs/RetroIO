@@ -373,7 +373,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The SINTRAN file type, or an empty string.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the file is there.
+        /// <c>true</c> when the file is there.
         /// </returns>
         /// <remarks>
         /// Name AND type, because <c>A:SYMB</c> and <c>A:BPUN</c> are two different files that a
@@ -406,7 +406,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The path to look for.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the file is still there.
+        /// <c>true</c> when the file is still there.
         /// </returns>
         private static bool IsInSnapshot(LocalFileState[] local, string path)
         {

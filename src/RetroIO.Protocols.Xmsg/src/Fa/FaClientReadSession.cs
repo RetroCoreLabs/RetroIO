@@ -589,7 +589,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The sequence the reply echoes.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when this is the server resending the previous step's reply.
+        /// <c>true</c> when this is the server resending the previous step's reply.
         /// </returns>
         private bool IsRepeatOfPreviousStep(FaOperation operation, ushort sequence)
         {

@@ -29,7 +29,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The message type read from the wire.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the message means the client has finished with the
+        /// <c>true</c> when the message means the client has finished with the
         /// conversation and expects a Close.
         /// </returns>
         /// <remarks>

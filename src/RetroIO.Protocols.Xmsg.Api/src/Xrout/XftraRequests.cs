@@ -99,7 +99,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// The file the batch listing is written to, for example <c>ARBOUT:SYMB</c>.
         /// </param>
         /// <param name="password">
-        /// The remote user's password, or <see langword="null"/> when none is given.
+        /// The remote user's password, or <c>null</c> when none is given.
         /// </param>
         /// <returns>
         /// The XSLET letter, ready to be sent to <c>*XFTRA</c>.
@@ -142,7 +142,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// The destination file - parameter 8, whose role is set by the operation.
         /// </param>
         /// <param name="password">
-        /// The remote user's password, or <see langword="null"/> when none is given.
+        /// The remote user's password, or <c>null</c> when none is given.
         /// </param>
         /// <returns>
         /// The XSLET letter.
@@ -182,10 +182,10 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Parameter 8 - the destination file for a transfer, the job input file for a batch.
         /// </param>
         /// <param name="outputFile">
-        /// Parameter 16, the batch output file, or <see langword="null"/> to omit it.
+        /// Parameter 16, the batch output file, or <c>null</c> to omit it.
         /// </param>
         /// <param name="password">
-        /// The password, or <see langword="null"/> for none.
+        /// The password, or <c>null</c> for none.
         /// </param>
         /// <returns>
         /// The XSLET letter.

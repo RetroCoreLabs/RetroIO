@@ -52,10 +52,10 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Receives the SINTRAN III error number, or zero when the reply is not a refusal.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the reply carries a refusal.
+        /// <c>true</c> when the reply carries a refusal.
         /// </returns>
         /// <remarks>
-        /// Returns <see langword="false"/> for anything it cannot make sense of - a short body, a
+        /// Returns <c>false</c> for anything it cannot make sense of - a short body, a
         /// stream that will not parse, a selector 1 with no value behind it. A reply that cannot be
         /// read is not the same as a reply that refuses, and guessing either way here would be worse
         /// than leaving the caller to its own timeout.

@@ -147,7 +147,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The byte count the request asked for, or zero when it named none.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the body parsed as a read request.
+        /// <c>true</c> when the body parsed as a read request.
         /// </returns>
         /// <remarks>
         /// <para><b>The position is not a byte offset</b></para>
@@ -202,7 +202,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The block size in bytes the client is setting.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the body carried a block size.
+        /// <c>true</c> when the body carried a block size.
         /// </returns>
         /// <remarks>
         /// <para><b>The whole request</b></para>

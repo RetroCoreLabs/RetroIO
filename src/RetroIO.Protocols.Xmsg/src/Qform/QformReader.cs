@@ -93,7 +93,7 @@ namespace RetroIO.Protocols.Xmsg.Qform
         /// The fields found, or an empty list on failure.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if the whole body parsed.
+        /// <c>true</c> if the whole body parsed.
         /// </returns>
         public static bool TryRead(ReadOnlySpan<byte> body, out IReadOnlyList<QformField> fields)
         {

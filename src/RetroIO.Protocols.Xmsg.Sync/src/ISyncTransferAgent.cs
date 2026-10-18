@@ -54,8 +54,8 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// What to carry, in which direction, and under what name on the machine.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the transfer was accepted and is now running;
-        /// <see langword="false"/> when it could not be started at all.
+        /// <c>true</c> when the transfer was accepted and is now running;
+        /// <c>false</c> when it could not be started at all.
         /// </returns>
         bool Begin(SyncTransferRequest request);
 
@@ -63,10 +63,10 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// Asks whether the transfer started by <see cref="Begin"/> has finished.
         /// </summary>
         /// <param name="result">
-        /// The outcome when this returns <see langword="true"/>; otherwise null.
+        /// The outcome when this returns <c>true</c>; otherwise null.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the transfer is over, whether it worked or not.
+        /// <c>true</c> when the transfer is over, whether it worked or not.
         /// </returns>
         bool Poll(out SyncTransferResult? result);
     }

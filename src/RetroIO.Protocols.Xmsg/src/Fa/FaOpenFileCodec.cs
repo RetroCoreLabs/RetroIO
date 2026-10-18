@@ -81,7 +81,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Whether the request asked for write access.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the body parsed as an open request.
+        /// <c>true</c> when the body parsed as an open request.
         /// </returns>
         /// <remarks>
         /// <para><b>The name string carries two bytes of tail</b></para>
@@ -189,7 +189,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The file's true length in bytes, from selector 3, or zero when the reply carried none.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the body parsed as an open reply.
+        /// <c>true</c> when the body parsed as an open reply.
         /// </returns>
         /// <remarks>
         /// <para><b>This is how a READER knows where the file ends</b></para>

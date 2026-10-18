@@ -158,7 +158,7 @@ namespace RetroIO.Protocols.Xmsg
         /// The role octet.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when bit 5 is set AND the routed bit is clear, which is the only
+        /// <c>true</c> when bit 5 is set AND the routed bit is clear, which is the only
         /// case in which bit 5 means priority.
         /// </returns>
         public static bool IsHighPriority(this XmsgSendOptions options)
@@ -174,7 +174,7 @@ namespace RetroIO.Protocols.Xmsg
         /// The role octet.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when bit 5 is set AND the routed bit is set, which is the only
+        /// <c>true</c> when bit 5 is set AND the routed bit is set, which is the only
         /// case in which bit 5 means a non-local XROUT request.
         /// </returns>
         /// <remarks>

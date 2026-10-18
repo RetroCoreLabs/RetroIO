@@ -203,7 +203,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The file-content block, as a slice of <paramref name="body"/>.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if the body was a well-formed data message.
+        /// <c>true</c> if the body was a well-formed data message.
         /// </returns>
         public static bool TryReadDataMessage(
             ReadOnlySpan<byte> body,
@@ -231,7 +231,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The message body.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if this is the end-of-transfer marker.
+        /// <c>true</c> if this is the end-of-transfer marker.
         /// </returns>
         public static bool IsEndOfTransfer(ReadOnlySpan<byte> body)
         {

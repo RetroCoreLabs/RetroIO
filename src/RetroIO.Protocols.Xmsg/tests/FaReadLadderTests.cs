@@ -394,7 +394,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The bytes to look for.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when <paramref name="needle"/> appears in
+        /// <c>true</c> when <paramref name="needle"/> appears in
         /// <paramref name="haystack"/>.
         /// </returns>
         private static bool Contains(byte[] haystack, byte[] needle)

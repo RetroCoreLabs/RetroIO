@@ -181,7 +181,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The type reported by the remote, with or without a colon and in any case.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the type was named through <see cref="AddPullType"/>.
+        /// <c>true</c> when the type was named through <see cref="AddPullType"/>.
         /// </returns>
         /// <remarks>
         /// A mapping with no types named pulls NOTHING, which is what stops a first run from

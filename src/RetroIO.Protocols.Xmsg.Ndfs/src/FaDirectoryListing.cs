@@ -46,8 +46,8 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// The decoded object entry.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if the reply carried an entry that decoded. A reply whose record has
-        /// the in-use bit clear yields <see langword="false"/>, matching
+        /// <c>true</c> if the reply carried an entry that decoded. A reply whose record has
+        /// the in-use bit clear yields <c>false</c>, matching
         /// <see cref="ObjectEntry.FromBytes"/>.
         /// </returns>
         public static bool TryReadReply(ReadOnlySpan<byte> body, out ushort serial, out ObjectEntry? entry)
@@ -96,7 +96,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// The object entry as it arrived on the wire.
         /// </param>
         /// <returns>
-        /// The decoded entry, or <see langword="null"/> if the in-use bit is clear.
+        /// The decoded entry, or <c>null</c> if the in-use bit is clear.
         /// </returns>
         /// <exception cref="ArgumentException">
         /// The record is the wrong length.

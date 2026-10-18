@@ -90,10 +90,10 @@ namespace RetroIO.Link.Hdlc
         /// The link's framing policy.
         /// </param>
         /// <param name="written">
-        /// Octets written; zero when this returns <see langword="false"/>.
+        /// Octets written; zero when this returns <c>false</c>.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the frame was written in full.
+        /// <c>true</c> when the frame was written in full.
         /// </returns>
         public static bool TryEncode(
             ReadOnlySpan<byte> body,

@@ -94,7 +94,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// Why they were refused, or an empty string when they were admitted.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the member is now in the room.
+        /// <c>true</c> when the member is now in the room.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="nickname"/> is null.
@@ -142,19 +142,19 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// The name they want.
         /// </param>
         /// <param name="previous">
-        /// The name they had, when this returns <see langword="true"/>.
+        /// The name they had, when this returns <c>true</c>.
         /// </param>
         /// <param name="refusal">
         /// Why it was refused, or empty when it was allowed or was a no-op.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the name changed and the room should be told.
+        /// <c>true</c> when the name changed and the room should be told.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="nickname"/> is null.
         /// </exception>
         /// <remarks>
-        /// Asking for the name you already have returns <see langword="false"/> with NO refusal:
+        /// Asking for the name you already have returns <c>false</c> with NO refusal:
         /// nothing changed, and it is not an error either. The caller can tell the two apart by
         /// whether <paramref name="refusal"/> is empty.
         /// </remarks>
@@ -210,10 +210,10 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// The member leaving.
         /// </param>
         /// <param name="nickname">
-        /// The name they were known by, when this returns <see langword="true"/>.
+        /// The name they were known by, when this returns <c>true</c>.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when somebody actually left and the room should be told.
+        /// <c>true</c> when somebody actually left and the room should be told.
         /// </returns>
         public bool TryLeave(long id, out string nickname)
         {
@@ -257,7 +257,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// Their name, or an empty string when they are not in the room.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when they are in the room.
+        /// <c>true</c> when they are in the room.
         /// </returns>
         public bool TryGetNickname(long id, out string nickname)
         {

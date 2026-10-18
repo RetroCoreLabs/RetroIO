@@ -568,7 +568,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// The sequence the frame carried.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the frame sits BEHIND what we are waiting for.
+        /// <c>true</c> when the frame sits BEHIND what we are waiting for.
         /// </returns>
         /// <remarks>
         /// <para>
@@ -615,7 +615,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// The sequence the peer says it expects from us next.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when it lies between what the peer had already acknowledged and
+        /// <c>true</c> when it lies between what the peer had already acknowledged and
         /// what we have actually sent.
         /// </returns>
         /// <remarks>

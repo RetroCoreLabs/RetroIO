@@ -307,7 +307,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Which block, counting from zero.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> for every second block, starting with the SECOND.
+        /// <c>true</c> for every second block, starting with the SECOND.
         /// </returns>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when <paramref name="blockIndex"/> is negative.

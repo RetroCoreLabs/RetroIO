@@ -71,8 +71,8 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Returns the folder holding the recorded files.
         /// </summary>
         /// <returns>
-        /// The folder path, or <see langword="null"/> only when it is absent AND the caller has set
-        /// <c>XMSG_PCAP_OPTIONAL</c>. A test may return early on <see langword="null"/>.
+        /// The folder path, or <c>null</c> only when it is absent AND the caller has set
+        /// <c>XMSG_PCAP_OPTIONAL</c>. A test may return early on <c>null</c>.
         /// </returns>
         /// <exception cref="InvalidOperationException">
         /// Thrown when the folder cannot be found and <c>XMSG_PCAP_OPTIONAL</c> is not set.
@@ -94,7 +94,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Rejects a folder that was named explicitly and is not there.
         /// </summary>
         /// <param name="named">
-        /// The folder named by the environment variable, or <see langword="null"/> when none was.
+        /// The folder named by the environment variable, or <c>null</c> when none was.
         /// </param>
         /// <param name="exists">
         /// Whether that folder was found.
@@ -127,7 +127,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Applies the missing-file policy to a search result.
         /// </summary>
         /// <param name="found">
-        /// What the search turned up, or <see langword="null"/> when it found nothing.
+        /// What the search turned up, or <c>null</c> when it found nothing.
         /// </param>
         /// <param name="optional">
         /// Whether a missing item should be tolerated. Callers pass <see cref="Optional"/>.
@@ -136,12 +136,12 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Description of what was being looked for, used in the error message.
         /// </param>
         /// <returns>
-        /// <paramref name="found"/> when it is not null; otherwise <see langword="null"/> if
+        /// <paramref name="found"/> when it is not null; otherwise <c>null</c> if
         /// <paramref name="optional"/> is set.
         /// </returns>
         /// <exception cref="InvalidOperationException">
         /// Thrown when <paramref name="found"/> is null and <paramref name="optional"/> is
-        /// <see langword="false"/>.
+        /// <c>false</c>.
         /// </exception>
         /// <remarks>
         /// This is the whole policy, and it is a pure function so it can be tested directly. That
@@ -169,7 +169,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// File name to look for, for example <c>claude-delete-file-102-to-100-2026-07-29.pcapng</c>.
         /// </param>
         /// <returns>
-        /// The full path, or <see langword="null"/> only when it is absent AND the caller has set
+        /// The full path, or <c>null</c> only when it is absent AND the caller has set
         /// <c>XMSG_PCAP_OPTIONAL</c>.
         /// </returns>
         /// <exception cref="ArgumentException">
@@ -200,7 +200,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Locates the folder without applying the missing-file policy.
         /// </summary>
         /// <returns>
-        /// The folder path, or <see langword="null"/> when it cannot be found.
+        /// The folder path, or <c>null</c> when it cannot be found.
         /// </returns>
         private static string? FindDirectory()
         {

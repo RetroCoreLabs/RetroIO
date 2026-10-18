@@ -50,7 +50,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Takes the next session-header byte and advances the counter.
         /// </summary>
         /// <param name="highBit">
-        /// <see langword="true"/> for every message except the FIRST of a two-message content
+        /// <c>true</c> for every message except the FIRST of a two-message content
         /// delivery.
         /// </param>
         /// <returns>

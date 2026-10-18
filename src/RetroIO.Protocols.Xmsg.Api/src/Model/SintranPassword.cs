@@ -43,7 +43,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Encodes a typed password into the 16-bit word SINTRAN stores and puts on the wire.
         /// </summary>
         /// <param name="password">
-        /// The password as typed. <see langword="null"/> or empty encodes to 0, which is how SINTRAN
+        /// The password as typed. <c>null</c> or empty encodes to 0, which is how SINTRAN
         /// represents "no password".
         /// </param>
         /// <returns>
@@ -110,7 +110,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Tests whether a typed password encodes to an expected stored word.
         /// </summary>
         /// <remarks>
-        /// Because the fold is case-insensitive, this returns <see langword="true"/> for any casing
+        /// Because the fold is case-insensitive, this returns <c>true</c> for any casing
         /// of the same string - which is SINTRAN's real behaviour, not a bug in the comparison.
         /// </remarks>
         /// <param name="password">
@@ -120,7 +120,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// The stored or captured 16-bit word.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if the password encodes to that word.
+        /// <c>true</c> if the password encodes to that word.
         /// </returns>
         public static bool Matches(string? password, ushort storedWord)
         {

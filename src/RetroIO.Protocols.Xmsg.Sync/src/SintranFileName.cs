@@ -71,7 +71,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// Set to a sentence describing why the conversion failed, or an empty string on success.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a legal name and type were produced.
+        /// <c>true</c> when a legal name and type were produced.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="windowsFileName"/> is null.
@@ -286,7 +286,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// Set to a sentence describing why the split failed, or an empty string on success.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a legal name and type were produced.
+        /// <c>true</c> when a legal name and type were produced.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="fileSpec"/> is null.
@@ -381,7 +381,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// Set to the first illegal character, or a space when all are legal.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when every character is a letter, a digit or a hyphen.
+        /// <c>true</c> when every character is a letter, a digit or a hyphen.
         /// </returns>
         /// <remarks>
         /// The manual states "alphanumeric characters, including the hyphen" for a directory

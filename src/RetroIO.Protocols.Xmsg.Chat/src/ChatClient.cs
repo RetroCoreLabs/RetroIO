@@ -215,7 +215,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// The wanted name.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the request was sent. NOT whether it was accepted - the
+        /// <c>true</c> when the request was sent. NOT whether it was accepted - the
         /// server decides, and says so with a <see cref="ChatMessageKind.Renamed"/> everybody sees
         /// or a <see cref="ChatMessageKind.Reject"/> to the asker.
         /// </returns>

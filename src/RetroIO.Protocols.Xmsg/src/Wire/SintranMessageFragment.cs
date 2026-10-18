@@ -77,7 +77,7 @@ namespace RetroIO.Protocols.Xmsg
         /// The message body length in bytes.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the body will not fit in one frame.
+        /// <c>true</c> when the body will not fit in one frame.
         /// </returns>
         public static bool NeedsFragmenting(int bodyLength)
         {

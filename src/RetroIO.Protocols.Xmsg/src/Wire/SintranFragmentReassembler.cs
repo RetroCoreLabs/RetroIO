@@ -96,7 +96,7 @@ namespace RetroIO.Protocols.Xmsg
         /// <returns>
         /// The frame to go on handling: <paramref name="incoming"/> unchanged when it is not a
         /// fragment, the joined data frame when a pair has just completed, or
-        /// <see langword="null"/> when the frame was consumed and there is nothing to handle yet.
+        /// <c>null</c> when the frame was consumed and there is nothing to handle yet.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="incoming"/> is null.
@@ -162,7 +162,7 @@ namespace RetroIO.Protocols.Xmsg
         /// The continuation.
         /// </param>
         /// <returns>
-        /// The joined data frame, or <see langword="null"/> when no first fragment is held for it.
+        /// The joined data frame, or <c>null</c> when no first fragment is held for it.
         /// </returns>
         private XmsgFrame? Complete(XmsgFrame continuation)
         {

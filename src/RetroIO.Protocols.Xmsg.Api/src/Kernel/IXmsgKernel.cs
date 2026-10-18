@@ -185,7 +185,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// How many buffers to allocate.
         /// </param>
         /// <param name="exclusive">
-        /// <see langword="true"/> to set XFEXC, reserving the buffers for this task alone.
+        /// <c>true</c> to set XFEXC, reserving the buffers for this task alone.
         /// </param>
         /// <returns>
         /// The result status.
@@ -213,7 +213,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// How many to free.
         /// </param>
         /// <param name="exclusive">
-        /// <see langword="true"/> to free exclusive buffers, <see langword="false"/> to free
+        /// <c>true</c> to free exclusive buffers, <c>false</c> to free
         /// non-exclusive ones. The two pools are separate and this picks between them.
         /// </param>
         /// <param name="freedCount">
@@ -262,7 +262,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// The remote system's number.
         /// </param>
         /// <param name="isFriend">
-        /// <see langword="true"/> to define the friendship, <see langword="false"/> to remove it.
+        /// <c>true</c> to define the friendship, <c>false</c> to remove it.
         /// </param>
         /// <remarks>
         /// This is the state the XROUT service XSDAT maintains, modelled here so

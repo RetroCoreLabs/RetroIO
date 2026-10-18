@@ -253,7 +253,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The 16-bit session token.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the body was long enough to carry an envelope.
+        /// <c>true</c> when the body was long enough to carry an envelope.
         /// </returns>
         public static bool TryReadEnvelope(
             ReadOnlySpan<byte> body,
@@ -289,7 +289,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The exchange number, counting from one.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when both fields were present and correctly tagged.
+        /// <c>true</c> when both fields were present and correctly tagged.
         /// </returns>
         /// <remarks>
         /// Both fields are class-1 two-byte integers, tag <c>0x92</c>. A body whose first two fields
@@ -319,7 +319,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// The message body.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the conversation number is the responder's.
+        /// <c>true</c> when the conversation number is the responder's.
         /// </returns>
         public static bool IsReply(ReadOnlySpan<byte> body)
         {

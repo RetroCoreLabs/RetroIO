@@ -72,7 +72,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// The node we want to send to.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a link to that node has been seen and its seed learned.
+        /// <c>true</c> when a link to that node has been seen and its seed learned.
         /// </returns>
         /// <remarks>
         /// <para><b>For code that ORIGINATES, which is the case that had no way to ask</b></para>

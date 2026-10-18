@@ -234,7 +234,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The length the field declares, however it encoded it.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the field was found.
+        /// <c>true</c> when the field was found.
         /// </returns>
         private static bool TryReadNameField(byte[] body, out string text, out int declaredLength)
         {
@@ -288,7 +288,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The recording to read.
         /// </param>
         /// <returns>
-        /// The request body, or <see langword="null"/> when the recording is absent.
+        /// The request body, or <c>null</c> when the recording is absent.
         /// </returns>
         private static byte[]? FindCreateRequest(string captureName)
         {

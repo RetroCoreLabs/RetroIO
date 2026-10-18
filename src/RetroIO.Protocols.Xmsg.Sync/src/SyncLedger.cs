@@ -130,7 +130,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// Hash of the content that would be sent.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the ledger has no record of this path, or its record holds
+        /// <c>true</c> when the ledger has no record of this path, or its record holds
         /// different content.
         /// </returns>
         /// <exception cref="ArgumentNullException">
@@ -214,7 +214,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// unknown.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the path was found.
+        /// <c>true</c> when the path was found.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="path"/> is null.
@@ -244,7 +244,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The path to ask about.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a transfer of this path has been recorded.
+        /// <c>true</c> when a transfer of this path has been recorded.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="path"/> is null.
@@ -335,7 +335,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The path to ask about.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when we carried it there, or the machine has told us it is there.
+        /// <c>true</c> when we carried it there, or the machine has told us it is there.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="path"/> is null.
@@ -372,7 +372,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The recorded direction, or <see cref="SyncDirection.None"/>.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the path was found.
+        /// <c>true</c> when the path was found.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="path"/> is null.
@@ -444,7 +444,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The path to forget.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the path was known.
+        /// <c>true</c> when the path was known.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="path"/> is null.
@@ -469,7 +469,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// The second hash.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when they are the same length and every byte matches.
+        /// <c>true</c> when they are the same length and every byte matches.
         /// </returns>
         private static bool SameHash(byte[] left, byte[] right)
         {

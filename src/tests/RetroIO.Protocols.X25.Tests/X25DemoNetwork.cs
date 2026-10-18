@@ -131,7 +131,7 @@ namespace RetroIO.Protocols.X25.Tests
         /// Set to the reason the probe failed, or an empty string when it succeeded.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when every port accepted a connection.
+        /// <c>true</c> when every port accepted a connection.
         /// </returns>
         private static bool Probe(out string reason)
         {
@@ -180,7 +180,7 @@ namespace RetroIO.Protocols.X25.Tests
         /// Port to dial.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the connection was accepted inside the timeout.
+        /// <c>true</c> when the connection was accepted inside the timeout.
         /// </returns>
         private static bool CanConnect(string host, int port)
         {

@@ -269,7 +269,7 @@ namespace RetroIO.Protocols.Xmsg.Node
         /// <returns>
         /// The frame to go on handling: <paramref name="incoming"/> unchanged when it is not a
         /// fragment, the joined data frame when a pair has just completed, or
-        /// <see langword="null"/> when it was the first half and there is nothing to handle yet.
+        /// <c>null</c> when it was the first half and there is nothing to handle yet.
         /// </returns>
         /// <remarks>
         /// <para>Why this is public rather than private to <see cref="HandleFrames"/></para>

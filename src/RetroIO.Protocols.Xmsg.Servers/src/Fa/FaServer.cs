@@ -1557,7 +1557,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The request body.
         /// </param>
         /// <returns>
-        /// The reply fields when the request is refused, or <see langword="null"/> when the write
+        /// The reply fields when the request is refused, or <c>null</c> when the write
         /// has been armed and the reply must wait for the data.
         /// </returns>
         /// <remarks>
@@ -1618,7 +1618,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The whole data message: the eight-byte file-access prefix, then raw file bytes.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the write is now complete and its reply should go out.
+        /// <c>true</c> when the write is now complete and its reply should go out.
         /// </returns>
         /// <remarks>
         /// <para><b>A data message carries no QFORM</b></para>
@@ -2090,7 +2090,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The type, or an empty string when the specification gave none.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the specification could be split.
+        /// <c>true</c> when the specification could be split.
         /// </returns>
         /// <remarks>
         /// <para><b>Why both separators</b></para>
@@ -2145,7 +2145,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// The type asked for, or an empty string when the client named none.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the file is the one asked for.
+        /// <c>true</c> when the file is the one asked for.
         /// </returns>
         /// <remarks>
         /// Case is ignored on both parts: SINTRAN names are upper case and a Windows folder's are

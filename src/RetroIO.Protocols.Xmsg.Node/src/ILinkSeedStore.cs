@@ -43,10 +43,10 @@ namespace RetroIO.Protocols.Xmsg.Node
         /// The remote system (node) number, for example 100.
         /// </param>
         /// <param name="seed">
-        /// The stored seed when this returns <see langword="true"/>; otherwise zero.
+        /// The stored seed when this returns <c>true</c>; otherwise zero.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when a seed is known for that node.
+        /// <c>true</c> when a seed is known for that node.
         /// </returns>
         bool TryLoadSeed(ushort remoteNode, out byte seed);
 

@@ -75,7 +75,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Takes the next session-header byte for a message this side is about to send.
         /// </summary>
         /// <param name="highBit">
-        /// <see langword="true"/> to set bit 7, which every message carries EXCEPT the first data
+        /// <c>true</c> to set bit 7, which every message carries EXCEPT the first data
         /// message of a two-message delivery.
         /// </param>
         /// <returns>
@@ -290,7 +290,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// acknowledgement is <c>0x0100</c>, the second <c>0x0200</c>, and so on.
         /// </param>
         /// <param name="fromResponder">
-        /// <see langword="true"/> for the server's form, <see langword="false"/> for the client's.
+        /// <c>true</c> for the server's form, <c>false</c> for the client's.
         /// The two differ only in the trailing constant.
         /// </param>
         /// <returns>
