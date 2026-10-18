@@ -539,7 +539,8 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <remarks>
         /// In the same directory only the name bytes are rewritten. A move to another directory deletes the old
         /// entry and writes a new one with the same attributes, start cluster and size; the data is not copied.
-        /// When a directory is moved this way, its own dot-dot entry is not rewritten.
+        /// When a directory is moved this way, its own dot-dot entry is rewritten to name the new parent
+        /// (cluster 0 when the new parent is the root).
         /// </remarks>
         /// <param name="oldPath">
         /// Current path.
@@ -589,6 +590,12 @@ namespace RetroIO.Storage.Local.FileSystems
             MarkSlotDeleted(raw.Lba, raw.Offset);
             EntrySlot slot = FindFreeSlot(newParent, allowGrow: true);
             WriteNewEntry(slot, newName, raw.Entry.Attributes, raw.Entry.StartCluster, raw.Entry.FileSize);
+
+            // A moved directory still names its old parent in its dot-dot entry: repoint it.
+            if (raw.Entry.IsDirectory)
+            {
+                WriteDotDotCluster(raw.Entry.StartCluster, newParent);
+            }
         }
 
         // ===================================================================
@@ -1098,6 +1105,26 @@ namespace RetroIO.Storage.Local.FileSystems
             }
 
             return (uint)cluster;
+        }
+
+        // Points the dot-dot entry (second entry of the first cluster) of a directory at its new parent.
+        // Cluster 0 stands for the root, as WriteDotEntries writes it.
+        private void WriteDotDotCluster(ushort dirCluster, DirCursor parent)
+        {
+            uint lba = ClusterToLBA(dirCluster);
+            byte[] sector = new byte[_bootSector!.BytesPerSector];
+            _device!.ReadBlock(BlockAddress.FromLBA(lba), sector);
+
+            if (sector[DirEntrySize] != (byte)'.' || sector[DirEntrySize + 1] != (byte)'.')
+            {
+                return;
+            }
+
+            uint parentCluster = parent.IsRoot ? 0u : parent.StartCluster;
+            sector[DirEntrySize + 26] = (byte)(parentCluster & 0xFF);
+            sector[DirEntrySize + 27] = (byte)((parentCluster >> 8) & 0xFF);
+
+            _device.WriteBlock(BlockAddress.FromLBA(lba), sector);
         }
 
         private void WriteDotEntries(ushort newCluster, DirCursor parent)

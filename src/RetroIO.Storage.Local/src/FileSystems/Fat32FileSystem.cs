@@ -45,8 +45,12 @@ namespace RetroIO.Storage.Local.FileSystems
         /// </summary>
         public string FileSystemType => "FAT32";
         /// <summary>
-        /// Gets an empty string: this class does not read the volume label of a FAT32 volume.
+        /// Gets the volume label read at <see cref="Initialize(IBlockDevice)"/>.
         /// </summary>
+        /// <value>
+        /// The label entry of the root directory, else the label field of the boot sector, else <c>NO NAME</c>.
+        /// This is the same fallback FAT12 and FAT16 use. An empty string before <see cref="Initialize(IBlockDevice)"/>.
+        /// </value>
         public string VolumeLabel => _volumeLabel;
         /// <summary>
         /// Gets <c>.</c>, the separator between file name and extension in FAT.
@@ -80,6 +84,8 @@ namespace RetroIO.Storage.Local.FileSystems
 
             _dataStart = _bootSector.ReservedSectors + (_bootSector.NumberOfFATs * _bootSector.SectorsPerFAT32);
             _rootDirCluster = _bootSector.RootCluster;
+
+            ReadVolumeLabel(bootSectorData);
         }
 
         /// <summary>
@@ -541,7 +547,8 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <remarks>
         /// In the same directory only the name bytes are rewritten. A move to another directory deletes the old
         /// entry and writes a new one with the same attributes, start cluster and size; the data is not copied.
-        /// When a directory is moved this way, its own dot-dot entry is not rewritten.
+        /// When a directory is moved this way, its own dot-dot entry is rewritten to name the new parent
+        /// (cluster 0 when the new parent is the root).
         /// </remarks>
         /// <param name="oldPath">
         /// Current path.
@@ -587,6 +594,12 @@ namespace RetroIO.Storage.Local.FileSystems
             MarkSlotDeleted(raw.Lba, raw.Offset);
             EntrySlot slot = FindFreeSlot(newParentCluster);
             WriteNewEntry(slot, newName, raw.Entry.Attributes, raw.Entry.StartCluster, raw.Entry.FileSize);
+
+            // A moved directory still names its old parent in its dot-dot entry: repoint it.
+            if (raw.Entry.IsDirectory)
+            {
+                WriteDotDotCluster(raw.Entry.StartCluster, newParentCluster);
+            }
         }
 
         // ===================================================================
@@ -900,6 +913,64 @@ namespace RetroIO.Storage.Local.FileSystems
         // DIRECTORY SCANNING (root is just a regular cluster chain in FAT32)
         // ===================================================================
 
+        // Reads the volume label. The label entry (attribute 0x08, not a long-name entry) in the root directory
+        // wins, because that is where FAT32 formatters and DOS put a renamed label. When the root has none, the
+        // label field at 0x47 of the boot sector is used if the extended boot signature 0x29 at 0x42 is present.
+        private void ReadVolumeLabel(byte[] bootSectorData)
+        {
+            uint[] lbas = GetDirLbas(_rootDirCluster);
+            byte[] sectorData = new byte[_bootSector!.BytesPerSector];
+            int entriesPerSector = _bootSector.BytesPerSector / DirEntrySize;
+
+            for (int s = 0; s < lbas.Length; s++)
+            {
+                _device!.ReadBlock(BlockAddress.FromLBA(lbas[s]), sectorData);
+
+                for (int j = 0; j < entriesPerSector; j++)
+                {
+                    int offset = j * DirEntrySize;
+                    if (sectorData[offset] == EndOfDirectoryMarker)
+                    {
+                        s = lbas.Length; // end of directory: stop the outer loop too
+                        break;
+                    }
+
+                    if (sectorData[offset] == DeletedEntryMarker)
+                    {
+                        continue;
+                    }
+
+                    byte attributes = sectorData[offset + 11];
+                    if ((attributes & LfnAttributeMask) == LfnAttributeMask)
+                    {
+                        continue;
+                    }
+
+                    if ((attributes & VolumeLabelAttribute) != 0)
+                    {
+                        string rootLabel = Encoding.ASCII.GetString(sectorData, offset, 11).Trim();
+                        if (rootLabel.Length > 0)
+                        {
+                            _volumeLabel = rootLabel;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if (bootSectorData[0x42] == 0x29)
+            {
+                string bootLabel = Encoding.ASCII.GetString(bootSectorData, 0x47, 11).Trim();
+                if (bootLabel.Length > 0)
+                {
+                    _volumeLabel = bootLabel;
+                    return;
+                }
+            }
+
+            _volumeLabel = "NO NAME";
+        }
+
         private uint[] GetDirLbas(uint startCluster)
         {
             List<uint> result = new List<uint>();
@@ -1051,6 +1122,28 @@ namespace RetroIO.Storage.Local.FileSystems
             }
 
             return cluster;
+        }
+
+        // Points the dot-dot entry (second entry of the first cluster) of a directory at its new parent.
+        // Cluster 0 stands for the root, as WriteDotEntries writes it.
+        private void WriteDotDotCluster(uint dirCluster, uint newParentCluster)
+        {
+            uint lba = ClusterToLBA(dirCluster);
+            byte[] sector = new byte[_bootSector!.BytesPerSector];
+            _device!.ReadBlock(BlockAddress.FromLBA(lba), sector);
+
+            if (sector[DirEntrySize] != (byte)'.' || sector[DirEntrySize + 1] != (byte)'.')
+            {
+                return;
+            }
+
+            uint parentCluster = newParentCluster == _rootDirCluster ? 0u : newParentCluster;
+            sector[DirEntrySize + 26] = (byte)(parentCluster & 0xFF);
+            sector[DirEntrySize + 27] = (byte)((parentCluster >> 8) & 0xFF);
+            sector[DirEntrySize + 20] = (byte)((parentCluster >> 16) & 0xFF);
+            sector[DirEntrySize + 21] = (byte)((parentCluster >> 24) & 0xFF);
+
+            _device.WriteBlock(BlockAddress.FromLBA(lba), sector);
         }
 
         private void WriteDotEntries(uint newCluster, uint parentCluster)
