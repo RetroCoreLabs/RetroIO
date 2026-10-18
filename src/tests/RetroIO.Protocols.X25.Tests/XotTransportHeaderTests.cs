@@ -54,6 +54,18 @@ namespace RetroIO.Protocols.X25.Tests
             return port;
         }
 
+        // The bad header and the good frame go out in ONE write. As two writes, the transport could read the bad
+        // header, close, and reset the connection while the test was still about to write the second frame: the
+        // test's own write then threw "connection forcibly closed" on a slow machine. The transport closes after
+        // the first header either way; one write only takes the race out of the test.
+        private static void WriteBadThenGood(NetworkStream stream)
+        {
+            byte[] both = new byte[BadVersionFrame.Length + GoodFrame.Length];
+            Array.Copy(BadVersionFrame, 0, both, 0, BadVersionFrame.Length);
+            Array.Copy(GoodFrame, 0, both, BadVersionFrame.Length, GoodFrame.Length);
+            stream.Write(both, 0, both.Length);
+        }
+
         [Test]
         public void Server_BadVersionHeader_ClosesTheConnection()
         {
@@ -75,8 +87,7 @@ namespace RetroIO.Protocols.X25.Tests
                 client.Connect(IPAddress.Loopback, port);
                 NetworkStream stream = client.GetStream();
 
-                stream.Write(BadVersionFrame, 0, BadVersionFrame.Length);
-                stream.Write(GoodFrame, 0, GoodFrame.Length);
+                WriteBadThenGood(stream);
                 stream.Flush();
                 Thread.Sleep(400);
 
@@ -149,8 +160,7 @@ namespace RetroIO.Protocols.X25.Tests
 
                 using TcpClient peer = listener.AcceptTcpClient();
                 NetworkStream stream = peer.GetStream();
-                stream.Write(BadVersionFrame, 0, BadVersionFrame.Length);
-                stream.Write(GoodFrame, 0, GoodFrame.Length);
+                WriteBadThenGood(stream);
                 stream.Flush();
                 Thread.Sleep(400);
 
