@@ -81,157 +81,74 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         public TransportStatus Status => _status;
 
         /// <summary>
-        /// Places an outbound X.25 call request.
+        /// Always throws, because the serial send path of this transport is not implemented.
         /// </summary>
         /// <remarks>
-        /// The call is always given LCN 1. A Call Request packet is built and reported to the packet
-        /// history of the runtime as transmitted, but it is not sent on the serial link: that send path
-        /// is retired. The method does not wait for the call to be connected or cleared. Any exception
-        /// is logged, counted as a connection error and turned into a <c>false</c> result.
+        /// The old LAPB send over the serial link was retired and nothing replaced it in this class:
+        /// serial output belongs to the links of the newer stack. Earlier code built a Call Request
+        /// packet on a fixed LCN 1, reported it to the packet history as transmitted, sent nothing, and
+        /// returned <c>true</c>. That hid the missing send path, so the call now fails loudly.
         /// </remarks>
         /// <param name="callRequest">
-        /// The X.25 call request to place.
+        /// The X.25 call request that would be placed.
         /// </param>
         /// <returns>
-        /// <c>true</c> when the transport is active and the packet was built; <c>false</c> when the
-        /// transport is not active or building the packet failed.
+        /// Never returns.
         /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown: placing a call on the serial transport is not implemented.
+        /// </exception>
         public bool PlaceCall(X25CallRequest callRequest)
         {
-            if (_status != TransportStatus.Active)
-            {
-                _logger.LogWarning("Serial transport {Name} not active, cannot place call", Name);
-                return false;
-            }
-
-            try
-            {
-                _logger.LogInformation("Placing X.25 call via serial transport {Name} to {CalledAddress}", 
-                                     Name, callRequest.CalledAddress);
-
-                // Use existing ProtocolRuntime to place the call via X.25 layer
-                // Convert X25CallRequest to X25Packet and place call
-                var success = PlaceX25CallViaRuntime(callRequest);
-                
-                _statistics.OutboundCallsAttempted++;
-                
-                if (success)
-                {
-                    _statistics.OutboundCallsSucceeded++;
-                    _logger.LogInformation("Serial call placed successfully via {Name}", Name);
-                }
-                else
-                {
-                    _logger.LogWarning("Serial call failed via {Name}", Name);
-                }
-
-                return success;
-            }
-            catch (Exception ex)
-            {
-                _statistics.ConnectionErrors++;
-                _logger.LogError(ex, "Error placing serial call via {Name}", Name);
-                return false;
-            }
+            throw new NotSupportedException(
+                "SerialTransport.PlaceCall is not implemented: the serial send path was retired and no Call Request is put on the serial link.");
         }
 
         /// <summary>
-        /// Counts an inbound call as accepted and returns true when the transport is active.
+        /// Always throws, because answering a call with a Call Accepted packet is not implemented.
         /// </summary>
         /// <remarks>
-        /// The method only writes log messages and updates the statistics. It does not send anything on the serial link.
+        /// Earlier code logged "Would accept", counted the call as accepted and returned <c>true</c>
+        /// without sending anything on the serial link; that hid the missing mechanism.
         /// </remarks>
         /// <param name="callRequest">
-        /// The call request to accept.
+        /// The call request that would be accepted.
         /// </param>
         /// <returns>
-        /// True when the transport is active. False when it is not active.
+        /// Never returns.
         /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown: accepting an incoming call on the serial transport is not implemented.
+        /// </exception>
         public bool AcceptCall(X25CallRequest callRequest)
         {
-            if (_status != TransportStatus.Active)
-            {
-                _logger.LogWarning("Serial transport {Name} not active, cannot accept call", Name);
-                return false;
-            }
-
-            try
-            {
-                _logger.LogInformation("Accepting X.25 call via serial transport {Name} from {CallingAddress}", 
-                                     Name, callRequest.CallingAddress);
-
-                // Use existing ProtocolRuntime to accept the call
-                // Placeholder - full implementation would use X25Layer
-                _logger.LogInformation("Would accept X.25 call via ProtocolRuntime");
-                var success = true; // Placeholder
-                
-                if (success)
-                {
-                    _statistics.InboundCallsAccepted++;
-                    _logger.LogInformation("Serial call accepted successfully via {Name}", Name);
-                }
-                else
-                {
-                    _logger.LogWarning("Serial call acceptance failed via {Name}", Name);
-                }
-
-                return success;
-            }
-            catch (Exception ex)
-            {
-                _statistics.ConnectionErrors++;
-                _logger.LogError(ex, "Error accepting serial call via {Name}", Name);
-                return false;
-            }
+            throw new NotSupportedException(
+                "SerialTransport.AcceptCall is not implemented: no Call Accepted packet is put on the serial link.");
         }
 
         /// <summary>
-        /// Counts an inbound call as rejected and returns true when the transport is active.
+        /// Always throws, because clearing a call with a Clear Request packet is not implemented.
         /// </summary>
         /// <remarks>
-        /// The method only writes log messages and updates the statistics. It does not send anything on the serial link.
+        /// Earlier code logged "Would reject", counted the call as rejected and returned <c>true</c>
+        /// without sending anything on the serial link; that hid the missing mechanism.
         /// </remarks>
         /// <param name="callRequest">
-        /// The call request to reject.
+        /// The call request that would be rejected.
         /// </param>
         /// <param name="cause">
-        /// The clear cause code, which is only written to the log.
+        /// The clear cause code that would be sent.
         /// </param>
         /// <returns>
-        /// True when the transport is active. False when it is not active.
+        /// Never returns.
         /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown: rejecting an incoming call on the serial transport is not implemented.
+        /// </exception>
         public bool RejectCall(X25CallRequest callRequest, byte cause)
         {
-            if (_status != TransportStatus.Active)
-            {
-                _logger.LogWarning("Serial transport {Name} not active, cannot reject call", Name);
-                return false;
-            }
-
-            try
-            {
-                _logger.LogInformation("Rejecting X.25 call via serial transport {Name} from {CallingAddress} with cause 0x{Cause:X2}", 
-                                     Name, callRequest.CallingAddress, cause);
-
-                // Use existing ProtocolRuntime to reject the call
-                // Placeholder - full implementation would use X25Layer
-                _logger.LogInformation("Would reject X.25 call via ProtocolRuntime");
-                var success = true; // Placeholder
-                
-                if (success)
-                {
-                    _statistics.InboundCallsRejected++;
-                    _logger.LogInformation("Serial call rejected successfully via {Name}", Name);
-                }
-
-                return success;
-            }
-            catch (Exception ex)
-            {
-                _statistics.ConnectionErrors++;
-                _logger.LogError(ex, "Error rejecting serial call via {Name}", Name);
-                return false;
-            }
+            throw new NotSupportedException(
+                "SerialTransport.RejectCall is not implemented: no Clear Request packet is put on the serial link.");
         }
 
         /// <summary>
@@ -378,129 +295,6 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
                 NewStatus = newStatus,
                 Reason = reason
             });
-        }
-
-        /// <summary>
-        /// Place X.25 call via ProtocolRuntime X25Layer
-        /// </summary>
-        private bool PlaceX25CallViaRuntime(X25CallRequest callRequest)
-        {
-            try
-            {
-                // Find an available LCN for outbound call
-                var lcn = FindAvailableLcn();
-                if (lcn == 0)
-                {
-                    _logger.LogWarning("No available LCN for outbound call to {CalledAddress}", callRequest.CalledAddress);
-                    return false;
-                }
-
-                _logger.LogDebug("Placing X.25 call on LCN {LCN} to {CalledAddress}", lcn, callRequest.CalledAddress);
-
-                // Create and send X.25 Call Request packet via the runtime
-                var callPacket = CreateX25CallRequestPacket(callRequest, lcn);
-                if (callPacket == null)
-                {
-                    _logger.LogError("Failed to create X.25 Call Request packet for LCN {LCN}", lcn);
-                    return false;
-                }
-
-                // Fire X.25 packet transmitted event for history tracking
-                var x25Packet = new X25Packet(callPacket)
-                {
-                    Direction = PacketDirection.Transmit,
-                    Timestamp = DateTime.UtcNow,
-                    LCN = lcn
-                };
-                var eventArgs = new X25PacketEventArgs
-                {
-                    Packet = x25Packet,
-                    Direction = PacketDirection.Transmit,
-                    Timestamp = DateTime.UtcNow
-                };
-                _runtime.PacketHistory.FirePacketTransmitted(eventArgs);
-
-                // Stack A serial LAPB send retired; serial output is handled by Stack B links now.
-                _logger.LogWarning("SerialTransport: legacy LAPB call-packet send retired ({Length} bytes)", callPacket.Length);
-                _logger.LogDebug("Sent X.25 call packet via LAPB layer, length: {Length}", callPacket.Length);
-                var success = true; // Assume success when going through protocol stack
-
-                if (success)
-                {
-                    _logger.LogInformation("X.25 call placed successfully on LCN {LCN} via serial transport {Name}", lcn, Name);
-                    
-                    // TODO: Wait for call connected/cleared response
-                    // For now, return success immediately
-                    return true;
-                }
-                else
-                {
-                    _logger.LogWarning("X.25 layer rejected call placement on LCN {LCN}", lcn);
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error placing X.25 call via runtime");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Create X.25 Call Request packet 
-        /// </summary>
-        private byte[]? CreateX25CallRequestPacket(X25CallRequest callRequest, ushort lcn)
-        {
-            try
-            {
-                // Use the existing BuildPacketData method from X25CallRequest, but add GFI and LCN
-                var callData = callRequest.BuildPacketData();
-                
-                // Create full X.25 packet with GFI, LCN, PTI
-                var packet = new byte[callData.Length + 4];
-                int offset = 0;
-                
-                // General Format Identifier and Logical Channel Number
-                packet[offset++] = 0x10; // GFI = Q=0, D=0, M=0, Q=1 (standard modulo 8)
-                packet[offset++] = (byte)((lcn >> 8) & 0x0F); // LCN high nibble
-                packet[offset++] = (byte)(lcn & 0xFF); // LCN low byte
-                
-                // Packet Type Identifier - Call Request  
-                packet[offset++] = 0x0B;
-                
-                // Copy the address and facility data
-                Array.Copy(callData, 0, packet, offset, callData.Length);
-                
-                _logger.LogDebug("Created X.25 Call Request packet: {PacketLength} bytes for LCN {LCN}", 
-                               packet.Length, lcn);
-                
-                return packet;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating X.25 Call Request packet");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Find next available LCN for outbound call
-        /// Uses LCN range for outbound calls (typically 1-2047)
-        /// </summary>
-        private ushort FindAvailableLcn()
-        {
-            // Simple LCN allocation - start from 1 and find first available
-            // TODO: Implement proper LCN management with runtime
-            for (ushort lcn = 1; lcn < 2048; lcn++)
-            {
-                // Check if LCN is available via runtime
-                // For now, return the first LCN as placeholder
-                if (lcn == 1) // Placeholder logic
-                {
-                    return lcn;
-                }
-            }
-            return 0; // No available LCN
         }
 
         private void OnRuntimeIncomingCall(object? sender, X25CallRequest callRequest)
