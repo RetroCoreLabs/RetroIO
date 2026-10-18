@@ -168,7 +168,20 @@ namespace RetroIO.Protocols.Xmsg.Api
             get { return _buffers.Count; }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Opens a port and returns the identifier this kernel assigned to it (XFOPN).
+        /// </summary>
+        /// <param name="port">
+        /// On return, the new port's identifier. The new port is put at the top of the port list,
+        /// which makes it the task's default port.
+        /// </param>
+        /// <returns>
+        /// Always the completed status.
+        /// </returns>
+        /// <remarks>
+        /// Port numbers count up from 1 for the life of the kernel. The port's magic number is
+        /// built from this system's number and a port word minted from the port number.
+        /// </remarks>
         public XmsgStatus OpenPort(out XmsgPortNumber port)
         {
             Port created = new Port(_nextPortNumber, _ports.Next(_nextPortNumber), _systemNumber);
@@ -182,7 +195,22 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Closes a port, or every port owned by the task (XFCLS).
+        /// </summary>
+        /// <param name="port">
+        /// The port to close; <see cref="XmsgPortNumber.Default"/> closes the most recently opened
+        /// port and <see cref="XmsgPortNumber.All"/> (any negative number) closes them all.
+        /// </param>
+        /// <returns>
+        /// The completed status, or XEIPN when the named port is not open.
+        /// </returns>
+        /// <remarks>
+        /// Closing a port releases its queued non-secure messages. Its queued secure messages and
+        /// its port-current message are marked non-secure and returned to the sending port as
+        /// returned messages (reason XEPCL) when that port is open in this kernel; otherwise they
+        /// are released. This kernel keeps no XROUT name table, so no name is cleared.
+        /// </remarks>
         public XmsgStatus ClosePort(XmsgPortNumber port)
         {
             if (port.IsAll)
@@ -205,7 +233,25 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reports what is waiting on one port (XFPST).
+        /// </summary>
+        /// <param name="port">
+        /// The port to check; the default port when unspecified.
+        /// </param>
+        /// <param name="options">
+        /// The options to apply. Only <see cref="XmsgWaitOptions.HighPriority"/> has an effect
+        /// here: it makes the check look at high-priority messages only.
+        /// </param>
+        /// <returns>
+        /// The queue length plus, when a message matches, its type, identifier and sender hash. The
+        /// status is XEIPN when the port is not open, and not-terminated when no message matches;
+        /// the queue length is still reported in that case.
+        /// </returns>
+        /// <remarks>
+        /// The message is not taken off the queue. Waiting and wake-up bits are not modelled by
+        /// this kernel: a wait is treated as a poll and wake-up state is not touched.
+        /// </remarks>
         public XmsgPortStatus GetPortStatus(XmsgPortNumber port, XmsgWaitOptions options)
         {
             Port? target = Resolve(port);
@@ -236,7 +282,29 @@ namespace RetroIO.Protocols.Xmsg.Api
                 target.Queue.Count);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Scans all of the task's ports for a waiting message (XFGST).
+        /// </summary>
+        /// <param name="lastPort">
+        /// The LAST port to be scanned. The search starts at the port after this one in the task's
+        /// port list and wraps; when it is not an open port, the search starts at the top of the
+        /// list.
+        /// </param>
+        /// <param name="options">
+        /// The options to apply. Only <see cref="XmsgWaitOptions.HighPriority"/> has an effect
+        /// here: it makes the scan look for high-priority messages only.
+        /// </param>
+        /// <param name="port">
+        /// On return, the port a message is waiting on, or <see cref="XmsgPortNumber.Default"/>
+        /// when none was found.
+        /// </param>
+        /// <returns>
+        /// The completed status when a port has a matching message; not-terminated when no port
+        /// has one or no port is open.
+        /// </returns>
+        /// <remarks>
+        /// Waiting is not modelled by this kernel: a wait is treated as a poll.
+        /// </remarks>
         public XmsgStatus GetGeneralStatus(XmsgPortNumber lastPort, XmsgWaitOptions options, out XmsgPortNumber port)
         {
             port = XmsgPortNumber.Default;
@@ -263,7 +331,17 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.NotTerminated;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Releases every XMSG resource held by the task (XFDCT).
+        /// </summary>
+        /// <returns>
+        /// Always the completed status.
+        /// </returns>
+        /// <remarks>
+        /// Closes all the task's ports (with the same return-to-sender handling as
+        /// <see cref="ClosePort"/>), drops every message buffer, empties both allocation pools and
+        /// clears the task-current message.
+        /// </remarks>
         public XmsgStatus Disconnect()
         {
             ClosePort(XmsgPortNumber.All);
@@ -280,7 +358,27 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reserves a message buffer (XFGET).
+        /// </summary>
+        /// <param name="byteCount">
+        /// The requested capacity in bytes. Zero reserves an empty buffer.
+        /// </param>
+        /// <param name="options">
+        /// The wait and exclusive options. This kernel does not read them.
+        /// </param>
+        /// <param name="message">
+        /// On return, the identifier of the reserved buffer, or
+        /// <see cref="XmsgMessageIdentifier.None"/> on failure.
+        /// </param>
+        /// <returns>
+        /// The completed status, or XEILM when <paramref name="byteCount"/> is negative.
+        /// </returns>
+        /// <remarks>
+        /// The new buffer becomes task-current. This call does not check the ceiling set with
+        /// <see cref="DefineMaximumMemory"/> and does not take buffers from the
+        /// <see cref="AllocateBuffers"/> pools.
+        /// </remarks>
         public XmsgStatus ReserveBuffer(int byteCount, XmsgBufferOptions options, out XmsgMessageIdentifier message)
         {
             message = XmsgMessageIdentifier.None;
@@ -299,7 +397,19 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Releases a message buffer (XFREL).
+        /// </summary>
+        /// <param name="message">
+        /// The buffer to release, or <see cref="XmsgMessageIdentifier.Current"/> for the
+        /// task-current message.
+        /// </param>
+        /// <returns>
+        /// The completed status, or XEIRM when the buffer is not owned by the task.
+        /// </returns>
+        /// <remarks>
+        /// The buffer also stops being task-current or port-current wherever it was.
+        /// </remarks>
         public XmsgStatus ReleaseBuffer(XmsgMessageIdentifier message)
         {
             Buffer? buffer = ResolveBuffer(message, null);
@@ -313,7 +423,24 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Walks the task's own open ports and message buffers (XFLMP).
+        /// </summary>
+        /// <param name="fromMessageId">
+        /// Start the message search at this identifier; zero starts from the beginning.
+        /// </param>
+        /// <param name="fromPortNumber">
+        /// Start the port search at this number; zero starts from the beginning.
+        /// </param>
+        /// <returns>
+        /// The completed status with the lowest message identifier at or above
+        /// <paramref name="fromMessageId"/> and its reserved size, and the lowest open port number
+        /// at or above <paramref name="fromPortNumber"/>. Each is zero when there is none.
+        /// </returns>
+        /// <remarks>
+        /// The two searches are independent. The size reported is what the buffer was reserved
+        /// with, not how many bytes have been written into it.
+        /// </remarks>
         public XmsgListing ListMessagesAndPorts(int fromMessageId, int fromPortNumber)
         {
             // Two independent searches, each "the first found equal to or greater than" its request.
@@ -356,7 +483,19 @@ namespace RetroIO.Protocols.Xmsg.Api
             return new XmsgListing(XmsgStatus.Completed, foundMessage, foundSize, foundPort);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Takes a snapshot of which of this task's ports have a message waiting - <c>XFGSM</c>.
+        /// </summary>
+        /// <returns>
+        /// Three 16-bit masks over the task's ports, bit 0 being the port opened most recently:
+        ///  - ports with at least one queued message.
+        ///  - ports whose first queued message is a routed message (XMROU).
+        ///  - ports whose first queued message is a returned message (XMTRE).
+        /// </returns>
+        /// <remarks>
+        /// Only the first 16 ports in the list are covered. Only the first queued message on each
+        /// port decides its type bits; any other type leaves both type bits clear.
+        /// </remarks>
         public XmsgQueueSnapshot GetGeneralStatusMultiple()
         {
             ushort queued = 0;
@@ -403,7 +542,20 @@ namespace RetroIO.Protocols.Xmsg.Api
             return new XmsgQueueSnapshot(queued, routerFirst, returnedFirst);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sets the maximum message space this task may own at one time (XFDMM).
+        /// </summary>
+        /// <param name="byteCount">
+        /// The ceiling in bytes. Zero removes the ceiling.
+        /// </param>
+        /// <returns>
+        /// The completed status; XEILM when <paramref name="byteCount"/> is negative, and XEPRV
+        /// when the task has not been made privileged with <see cref="MakePrivileged"/>.
+        /// </returns>
+        /// <remarks>
+        /// The kernel starts with no ceiling. The ceiling is checked only by
+        /// <see cref="AllocateBuffers"/>.
+        /// </remarks>
         public XmsgStatus DefineMaximumMemory(int byteCount)
         {
             if (byteCount < 0)
@@ -422,7 +574,21 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records a remote system as a friend, so its tasks count as coming from a privileged
+        /// system.
+        /// </summary>
+        /// <param name="systemNumber">
+        /// The remote system's number.
+        /// </param>
+        /// <param name="isFriend">
+        /// <c>true</c> to define the friendship, <c>false</c> to remove it.
+        /// </param>
+        /// <remarks>
+        /// This is the state the XROUT service XSDAT maintains, kept here so
+        /// <see cref="CheckSenderPrivileges"/> has something to consult. It is not itself an XMSG
+        /// function.
+        /// </remarks>
         public void DefineFriendSystem(ushort systemNumber, bool isFriend)
         {
             if (isFriend)
@@ -435,7 +601,28 @@ namespace RetroIO.Protocols.Xmsg.Api
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Checks whether the sender of a received message may update this system's routing tables
+        /// (XFCPV).
+        /// </summary>
+        /// <param name="message">
+        /// The message whose sender is being judged, or <see cref="XmsgMessageIdentifier.Current"/>.
+        /// </param>
+        /// <returns>
+        /// XEIRM when the message is not owned by the task. Otherwise the completed status with
+        /// the verdict and the detail behind it:
+        ///  - a returned message (XMTRE) is never authorised and reports a returned message.
+        ///  - when authorised, the detail says where the sender is: a local sender reports neither,
+        ///    a friend system reports system only.
+        ///  - when refused, the detail says which privilege was present.
+        /// </returns>
+        /// <remarks>
+        /// Naming a message other than <see cref="XmsgMessageIdentifier.Current"/> makes it the
+        /// task-current message. A sender inside this system, or one with no sender, counts as a
+        /// privileged system; a remote system counts only after <see cref="DefineFriendSystem"/>.
+        /// The kernel models one task, so a local sender's task privilege is this kernel's own
+        /// privilege flag, and a remote sender's task is always taken as not privileged.
+        /// </remarks>
         public XmsgPrivilegeCheck CheckSenderPrivileges(XmsgMessageIdentifier message)
         {
             Buffer? buffer = ResolveBuffer(message, null);
@@ -497,7 +684,29 @@ namespace RetroIO.Protocols.Xmsg.Api
             return new XmsgPrivilegeCheck(XmsgStatus.Completed, false, reason);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Allocates message buffers to this task for the long term (XFALM).
+        /// </summary>
+        /// <param name="byteCount">
+        /// The size of each buffer.
+        /// </param>
+        /// <param name="messageCount">
+        /// How many buffers to allocate.
+        /// </param>
+        /// <param name="exclusive">
+        /// <c>true</c> to add to the exclusive pool, <c>false</c> for the non-exclusive pool.
+        /// </param>
+        /// <returns>
+        /// The completed status, or one of these failures:
+        ///  - XEILM when either count is negative, or when the pool already holds buffers of a
+        ///    different size.
+        ///  - XETMM when a ceiling is set with <see cref="DefineMaximumMemory"/> and the total
+        ///    held by both pools plus this request would go over it.
+        /// </returns>
+        /// <remarks>
+        /// The pools are counters only; no buffer space is set aside. The call is all or nothing:
+        /// on a failure neither pool changes. Each pool keeps its own buffer size.
+        /// </remarks>
         public XmsgStatus AllocateBuffers(int byteCount, int messageCount, bool exclusive)
         {
             if (byteCount < 0 || messageCount < 0)
@@ -546,7 +755,25 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Frees buffers previously allocated with <see cref="AllocateBuffers"/> (XFFRM).
+        /// </summary>
+        /// <param name="messageCount">
+        /// How many to free.
+        /// </param>
+        /// <param name="exclusive">
+        /// <c>true</c> to free exclusive buffers, <c>false</c> to free non-exclusive ones.
+        /// </param>
+        /// <param name="freedCount">
+        /// On return, how many were actually freed: the smaller of
+        /// <paramref name="messageCount"/> and the number held in that pool.
+        /// </param>
+        /// <returns>
+        /// The completed status, or XEILM when <paramref name="messageCount"/> is negative.
+        /// </returns>
+        /// <remarks>
+        /// Asking to free more than are held is not an error.
+        /// </remarks>
         public XmsgStatus FreeAllocatedBuffers(int messageCount, bool exclusive, out int freedCount)
         {
             freedCount = 0;
@@ -574,7 +801,32 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Copies user data into a message buffer (XFWRI).
+        /// </summary>
+        /// <param name="message">
+        /// The target buffer, or <see cref="XmsgMessageIdentifier.Current"/> for the task-current
+        /// message.
+        /// </param>
+        /// <param name="source">
+        /// The user data to copy in.
+        /// </param>
+        /// <param name="displacement">
+        /// The displacement in bytes, or -1 to append at the buffer's current displacement.
+        /// </param>
+        /// <param name="resetLength">
+        /// The XFRES option: reset the message length to zero before writing.
+        /// </param>
+        /// <param name="bytesWritten">
+        /// On return, the number of bytes actually written.
+        /// </param>
+        /// <returns>
+        /// XEIRM when the buffer is not owned by the task; otherwise the status of the write into
+        /// the buffer.
+        /// </returns>
+        /// <remarks>
+        /// The buffer becomes task-current.
+        /// </remarks>
         public XmsgStatus Write(
             XmsgMessageIdentifier message,
             ReadOnlySpan<byte> source,
@@ -593,7 +845,23 @@ namespace RetroIO.Protocols.Xmsg.Api
             return buffer.Data.Write(source, displacement, resetLength, out bytesWritten);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes the six-byte user header of a message buffer (XFWHD).
+        /// </summary>
+        /// <param name="message">
+        /// The target buffer, or <see cref="XmsgMessageIdentifier.Current"/> for the task-current
+        /// message.
+        /// </param>
+        /// <param name="header">
+        /// The six header bytes, corresponding to the A, D and X registers in that order.
+        /// </param>
+        /// <returns>
+        /// XEIRM when the buffer is not owned by the task; otherwise the status of the header
+        /// write into the buffer.
+        /// </returns>
+        /// <remarks>
+        /// The buffer becomes task-current.
+        /// </remarks>
         public XmsgStatus WriteHeader(XmsgMessageIdentifier message, ReadOnlySpan<byte> header)
         {
             Buffer? buffer = ResolveBuffer(message, null);
@@ -606,7 +874,29 @@ namespace RetroIO.Protocols.Xmsg.Api
             return buffer.Data.WriteHeader(header);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Copies user data out of a message buffer (XFREA).
+        /// </summary>
+        /// <param name="message">
+        /// The source buffer, or <see cref="XmsgMessageIdentifier.Current"/> for the task-current
+        /// message.
+        /// </param>
+        /// <param name="destination">
+        /// The caller's buffer; its length is the requested byte count.
+        /// </param>
+        /// <param name="displacement">
+        /// The displacement in bytes, or -1 to resume from the buffer's current displacement.
+        /// </param>
+        /// <param name="bytesRead">
+        /// On return, the number of bytes actually read.
+        /// </param>
+        /// <returns>
+        /// XEIRM when the buffer is not owned by the task; otherwise the status of the read from
+        /// the buffer.
+        /// </returns>
+        /// <remarks>
+        /// The buffer becomes task-current.
+        /// </remarks>
         public XmsgStatus Read(
             XmsgMessageIdentifier message,
             Span<byte> destination,
@@ -624,7 +914,23 @@ namespace RetroIO.Protocols.Xmsg.Api
             return buffer.Data.Read(destination, displacement, out bytesRead);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads the six-byte user header of a message buffer (XFRHD).
+        /// </summary>
+        /// <param name="message">
+        /// The source buffer, or <see cref="XmsgMessageIdentifier.Current"/> for the task-current
+        /// message.
+        /// </param>
+        /// <param name="header">
+        /// The destination receiving the A, D and X register contents in that order.
+        /// </param>
+        /// <returns>
+        /// XEIRM when the buffer is not owned by the task; otherwise the status of the header read
+        /// from the buffer.
+        /// </returns>
+        /// <remarks>
+        /// The buffer becomes task-current.
+        /// </remarks>
         public XmsgStatus ReadHeader(XmsgMessageIdentifier message, Span<byte> header)
         {
             Buffer? buffer = ResolveBuffer(message, null);
@@ -637,7 +943,34 @@ namespace RetroIO.Protocols.Xmsg.Api
             return buffer.Data.ReadHeader(header);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends the current message buffer to a port (XFSND).
+        /// </summary>
+        /// <param name="destination">
+        /// The magic number of the receiving port. This kernel always delivers to it; it does not
+        /// redirect to XROUT when <see cref="XmsgSendFlags.Route"/> is set.
+        /// </param>
+        /// <param name="fromPort">
+        /// The sending port; the default port when unspecified.
+        /// </param>
+        /// <param name="flags">
+        /// The send options. Forward keeps the original sender and marks the message routed;
+        /// HighPriority (with Route clear) queues it ahead of normal messages; Secure makes an
+        /// undeliverable message come back instead of being dropped.
+        /// </param>
+        /// <returns>
+        /// The completed status; XEIPN when the sending port is not open; XEIRM when there is no
+        /// current message; or, for an undeliverable non-secure message, the reason it could not
+        /// be delivered.
+        /// </returns>
+        /// <remarks>
+        /// There is no message parameter: the port-current message is sent if one exists, otherwise
+        /// the task-current message. The message loses its currency. A destination port in this
+        /// kernel gets the buffer itself, with nothing copied. A different system number goes to
+        /// the attached <see cref="IXmsgDatagramSink"/>. An undeliverable secure message is queued
+        /// back on the sending port as a returned message (XMTRE) and the call completes; a
+        /// non-secure one is released.
+        /// </remarks>
         public XmsgStatus Send(XmsgMagicNumber destination, XmsgPortNumber fromPort, XmsgSendFlags flags)
         {
             Port? source = Resolve(fromPort);
@@ -656,7 +989,32 @@ namespace RetroIO.Protocols.Xmsg.Api
             return Deliver(buffer, destination, source, flags);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes two status bytes into a message and returns it to its sender (XFRTN).
+        /// </summary>
+        /// <param name="message">
+        /// The buffer to return, or <see cref="XmsgMessageIdentifier.Current"/> for the
+        /// port-current message of <paramref name="fromPort"/>, or the task-current one when that
+        /// port has none.
+        /// </param>
+        /// <param name="statusBytes">
+        /// The two bytes written at the start of the user data, high byte first.
+        /// </param>
+        /// <param name="fromPort">
+        /// The sending port; the default port when unspecified.
+        /// </param>
+        /// <param name="flags">
+        /// The send options, applied as in <see cref="Send"/>.
+        /// </param>
+        /// <returns>
+        /// The completed status; XEIPN when the sending port is not open; XEIRM when the buffer is
+        /// not owned by the task; XEIMA when the message has no sender; or the delivery result as
+        /// for <see cref="Send"/>.
+        /// </returns>
+        /// <remarks>
+        /// The destination is the message's recorded sender. The two status bytes are written
+        /// before the sender is checked, so they are in the buffer even when XEIMA is returned.
+        /// </remarks>
         public XmsgStatus ReturnMessage(
             XmsgMessageIdentifier message,
             ushort statusBytes,
@@ -691,7 +1049,27 @@ namespace RetroIO.Protocols.Xmsg.Api
             return Deliver(buffer, buffer.Sender, source, flags);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Receives the next message queued on a port (XFRCV).
+        /// </summary>
+        /// <param name="port">
+        /// The receiving port; the default port when unspecified.
+        /// </param>
+        /// <param name="options">
+        /// The options to apply. Only <see cref="XmsgWaitOptions.HighPriority"/> has an effect
+        /// here: it receives the first high-priority message only.
+        /// </param>
+        /// <returns>
+        /// The message type, sender hash, identifier and an extra value: the message length, or
+        /// for a returned message (XMTRE) the reason it came back. The status is XEIPN when the
+        /// port is not open, and not-terminated when no message matches.
+        /// </returns>
+        /// <remarks>
+        /// A received message is taken off the queue and becomes task-current, and port-current as
+        /// well when it was sent secure. Waiting and wake-up are not modelled: a wait is treated as
+        /// a poll. The sender hash is the low word of the sender's magic number, which is this
+        /// kernel's own choice.
+        /// </remarks>
         public XmsgReceiveResult Receive(XmsgPortNumber port, XmsgWaitOptions options)
         {
             Port? target;
@@ -713,7 +1091,20 @@ namespace RetroIO.Protocols.Xmsg.Api
                 extra);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Receives the next message and its first two user bytes (XFRRH).
+        /// </summary>
+        /// <param name="port">
+        /// The receiving port; the default port when unspecified.
+        /// </param>
+        /// <param name="options">
+        /// The options to apply, as in <see cref="Receive"/>.
+        /// </param>
+        /// <returns>
+        /// The same shape as <see cref="Receive"/>, except that on success the extra value is the
+        /// first two user bytes (first byte high) instead of the length. It is zero when the
+        /// message is shorter than two bytes.
+        /// </returns>
         public XmsgReceiveResult ReceiveAndReadHeader(XmsgPortNumber port, XmsgWaitOptions options)
         {
             XmsgReceiveResult result = Receive(port, options);
@@ -736,7 +1127,26 @@ namespace RetroIO.Protocols.Xmsg.Api
             return new XmsgReceiveResult(result.Status, result.RemotePort, result.Message, firstTwo);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Receives the next message and immediately reads it into a user buffer (XFRRE).
+        /// </summary>
+        /// <param name="port">
+        /// The receiving port; the default port when unspecified.
+        /// </param>
+        /// <param name="destination">
+        /// The caller's buffer; its length is the requested byte count. Reading starts at the first
+        /// byte of the message.
+        /// </param>
+        /// <param name="options">
+        /// The options to apply, as in <see cref="Receive"/>.
+        /// </param>
+        /// <param name="bytesRead">
+        /// On return, the number of bytes copied into <paramref name="destination"/>; zero when no
+        /// message was received.
+        /// </param>
+        /// <returns>
+        /// The result of <see cref="Receive"/>.
+        /// </returns>
         public XmsgReceiveResult ReceiveAndRead(
             XmsgPortNumber port,
             Span<byte> destination,
@@ -755,7 +1165,20 @@ namespace RetroIO.Protocols.Xmsg.Api
             return result;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reports the state of a message buffer, including its sender (XFMST).
+        /// </summary>
+        /// <param name="message">
+        /// The buffer to inspect, or <see cref="XmsgMessageIdentifier.Current"/> for the
+        /// task-current message.
+        /// </param>
+        /// <returns>
+        /// The message type as the status, the magic number of the port it came from, and its
+        /// length; or XEIRM with no sender when the buffer is not owned by the task.
+        /// </returns>
+        /// <remarks>
+        /// The buffer becomes task-current.
+        /// </remarks>
         public XmsgMessageStatus GetMessageStatus(XmsgMessageIdentifier message)
         {
             Buffer? buffer = ResolveBuffer(message, null);
@@ -769,7 +1192,20 @@ namespace RetroIO.Protocols.Xmsg.Api
                 XmsgStatus.Success((int)buffer.Type), buffer.Sender, buffer.Data.Length);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Makes a buffer the task-current message, and optionally port-current too (XFSCM).
+        /// </summary>
+        /// <param name="message">
+        /// The buffer to make current.
+        /// </param>
+        /// <param name="port">
+        /// The port for which the message should additionally become port-current; the default
+        /// port when unspecified. A negative port number sets task currency only. A port that is
+        /// not open is ignored without an error.
+        /// </param>
+        /// <returns>
+        /// The completed status, or XEIRM when the buffer is not owned by the task.
+        /// </returns>
         public XmsgStatus SetCurrentMessage(XmsgMessageIdentifier message, XmsgPortNumber port)
         {
             Buffer? buffer = ResolveBuffer(message, null);
@@ -792,13 +1228,36 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Performs no operation, used to check that XMSG is reachable (XFDUM).
+        /// </summary>
+        /// <returns>
+        /// Always the completed status.
+        /// </returns>
         public XmsgStatus Dummy()
         {
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Converts a magic number into the port and system it identifies (XFM2P).
+        /// </summary>
+        /// <param name="magic">
+        /// The magic number to decode.
+        /// </param>
+        /// <param name="port">
+        /// On return, the port number taken from <paramref name="magic"/>. It is set even when the
+        /// call fails.
+        /// </param>
+        /// <param name="system">
+        /// On return, the system number taken from <paramref name="magic"/>. It is set even when
+        /// the call fails.
+        /// </param>
+        /// <returns>
+        /// XEIMA when <paramref name="magic"/> is the none value. Otherwise a success status that
+        /// classifies the magic number: 2 for a port in this system while this task is
+        /// privileged, 1 for anything else. This kernel never returns 3 (a system).
+        /// </returns>
         public XmsgStatus ConvertMagicToPort(XmsgMagicNumber magic, out XmsgPortNumber port, out int system)
         {
             port = new XmsgPortNumber(magic.PortNumber);
@@ -815,7 +1274,18 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Success(local && _privileged ? 2 : 1);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Converts a local port number into its magic number (XFP2M).
+        /// </summary>
+        /// <param name="port">
+        /// The local port to encode; the default port when unspecified.
+        /// </param>
+        /// <param name="magic">
+        /// On return, the magic number, or <see cref="XmsgMagicNumber.None"/> on failure.
+        /// </param>
+        /// <returns>
+        /// The completed status, or XEIPN when the port is not open in this kernel.
+        /// </returns>
         public XmsgStatus ConvertPortToMagic(XmsgPortNumber port, out XmsgMagicNumber magic)
         {
             magic = XmsgMagicNumber.None;
@@ -830,7 +1300,20 @@ namespace RetroIO.Protocols.Xmsg.Api
             return XmsgStatus.Completed;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Makes the calling task privileged for XMSG (XFPRV).
+        /// </summary>
+        /// <param name="password">
+        /// The version-code password (XPASW). This kernel does not check it.
+        /// </param>
+        /// <returns>
+        /// Always the completed status.
+        /// </returns>
+        /// <remarks>
+        /// This kernel always grants the privilege; it does not check the password or what kind of
+        /// task is calling. Privilege is what <see cref="DefineMaximumMemory"/>,
+        /// <see cref="CheckSenderPrivileges"/> and <see cref="ConvertMagicToPort"/> consult.
+        /// </remarks>
         public XmsgStatus MakePrivileged(ushort password)
         {
             _privileged = true;
