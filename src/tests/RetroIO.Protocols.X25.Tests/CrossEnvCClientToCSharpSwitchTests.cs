@@ -44,12 +44,12 @@ namespace RetroIO.Protocols.X25.Tests
     [Category("CrossEnvLive")]
     public class CrossEnvCClientToCSharpSwitchTests
     {
-        private const string DefaultEmuDir = "/home/ronny/repos/os/x25emu";
+        internal const string DefaultEmuDir = "/home/ronny/repos/os/x25emu";
 
         /// <summary>
         /// The address WSL uses to reach this machine: the default gateway of its own interface.
         /// </summary>
-        private static string HostAddressForWsl()
+        internal static string HostAddressForWsl()
         {
             string? overridden = Environment.GetEnvironmentVariable("CROSSENV_HOST_IP");
             if (!string.IsNullOrWhiteSpace(overridden))
