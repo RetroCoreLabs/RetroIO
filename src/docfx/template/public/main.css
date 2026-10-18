@@ -98,6 +98,18 @@
   border-radius: 4px;
   background: url("RetroCoreLabs.png") center / contain no-repeat;
 }
+
+/* The logo is a black square: on the dark header it is a 1.2:1 outline. A light backing in the dark
+   scheme (the picture sits inside a little padding) makes it show; the light scheme is unchanged. */
+[data-bs-theme="dark"] .navbar .nav-link[href="https://retrocorelabs.github.io/"]::before {
+  box-sizing: content-box;
+  padding: 0.15rem;
+  background-color: #dee2e6;
+  background-origin: content-box;
+  border-radius: 6px;
+  vertical-align: -0.55rem;
+}
+
 /* Between 768 and 1100 px the header has no room for the words as well: the GitHub and RetroCore
    Labs entries show only their logos (the text stays in the page for screen readers). */
 @media (min-width: 768px) and (max-width: 1100px) {
