@@ -1793,6 +1793,55 @@ namespace RetroIO.Protocols.X25.PacketLayer
         }
 
         /// <summary>
+        /// Ends one circuit because the transport that carried it is gone, without sending anything.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel of the circuit.
+        /// </param>
+        /// <param name="cause">
+        /// The clearing cause reported to the application.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The diagnostic reported to the application.
+        /// </param>
+        /// <returns>
+        /// True if the circuit existed and was live; false if there was nothing to end.
+        /// </returns>
+        /// <remarks>
+        /// A restart (<see cref="FreeSwitchedCircuits"/>) ends every circuit on the interface. This ends
+        /// one, for a transport that has a connection for each circuit (RFC 1613 section 5): when one
+        /// connection drops, the other circuits on the interface are still up and must not be touched.
+        /// Nothing is written, because there is nobody to write to. A switched circuit is cleared and
+        /// the application told once; a permanent circuit is reset, as a restart would reset it.
+        /// </remarks>
+        public bool AbortCircuit(ushort lci, byte cause, byte diagnostic)
+        {
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                return false;
+            }
+
+            if (vc.Kind == X25VcKind.Svc)
+            {
+                bool wasLive = vc.State != X25VcState.Ready;
+                ToReady(vc);
+                if (wasLive)
+                {
+                    ReportCleared(vc, cause, diagnostic);
+                }
+
+                return wasLive;
+            }
+
+            vc.State = X25VcState.PvcReady;
+            vc.TimerExpiryMs = 0;
+            vc.OutOfOrder = false;
+            vc.ResetFlow();
+            RaiseReset(vc.Lci, cause, diagnostic);
+            return true;
+        }
+
+        /// <summary>
         /// Applies a restart to every circuit: X.25 4.1 - a restart clears every virtual call and
         /// resets every permanent virtual circuit. The application is told per circuit (a Cleared for
         /// each call that was up or being set up, a Reset for each PVC) and then once for the restart
