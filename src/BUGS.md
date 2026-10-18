@@ -65,10 +65,7 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 ### Tests
 
-| Where | What |
-|---|---|
-| GitHub `build` workflow | 53 XMSG tests read recordings of real terminal sessions that are not in this repository; they fail there |
-| `RetroIO.Protocols.X25.Tests` `CClient_CallsThroughTheCSharpSwitch_AndItsDataArrives` | Fails on this machine and on the commit before today's changes: the C client gets no data back. Cause not found |
+Nothing open. The GitHub `build` workflow and the C client test are both fixed (see below).
 
 ## Fixed
 
@@ -107,3 +104,5 @@ real specification before anyone touches it, **I** the interface comment is prob
 | Econet delete went to the host disk and answered success with any other backend; `*RENAME` ignored the backend and answered "Not found" for a new name | Econet: delete and rename go through the file system backend (new DeleteFile, DeleteDirectory, MoveFile, MoveDirectory) |
 | The Azure and VFS backends do not yet delete directories or move anything (they throw NotImplementedException, by design: fail loudly) | (still open, see the backend classes) |
 | Econet handles 4 to 32 came from one pool shared by all stations, so a busy station could starve the others and one station could use another's handle number | Econet: each station has its own table of open file handles |
+| 53 XMSG tests failed on every GitHub run because the recordings they read were not in the repository | Test data: add the 38 cleaned lab recordings the XMSG tests read (and the public registry data in an earlier commit) |
+| `CClient_CallsThroughTheCSharpSwitch_AndItsDataArrives` failed: the C client got no data back | Merge branch 'x25-switch-port-hooks': one TCP connection for each virtual circuit in `XotSwitchPort`, no Restart before the first call (RFC 1613 6.4), Nagle off |
