@@ -154,7 +154,7 @@ namespace RetroIO.Protocols.X25.Tests
             }
             finally
             {
-                RunInWsl("kill $(cat " + dir + "/pid) 2>/dev/null; sleep 1; echo stopped", 10000);
+                RunInWsl("kill $(cat " + dir + "/pid) 2>/dev/null; sleep 1; rm -rf " + dir + "; echo stopped", 10000);
             }
 
             int got;
