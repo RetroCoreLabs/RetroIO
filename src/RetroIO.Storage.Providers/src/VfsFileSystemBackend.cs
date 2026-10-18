@@ -90,28 +90,65 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         Directory.CreateDirectory(_tempCacheDir);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Checks whether a directory exists on the mount.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style path to check.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> when the VFS reports metadata for the path and it is a directory; <c>false</c>
+    /// when it is a file or is not found.
+    /// </returns>
     public bool DirectoryExists(string path)
     {
         FileMetadata? meta = TryGetMetadata(path);
         return meta != null && meta.IsDirectory;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Checks whether a file exists on the mount.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style path to check.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> when the VFS reports metadata for the path and it is not a directory; <c>false</c>
+    /// when it is a directory or is not found.
+    /// </returns>
     public bool FileExists(string path)
     {
         FileMetadata? meta = TryGetMetadata(path);
         return meta != null && !meta.IsDirectory;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether a path is a directory on the mount.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style path to check.
+    /// </param>
+    /// <returns>
+    /// The same answer as <see cref="DirectoryExists"/>.
+    /// </returns>
     public bool IsDirectory(string path)
     {
         FileMetadata? meta = TryGetMetadata(path);
         return meta != null && meta.IsDirectory;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Enumerates all entries in a directory on the mount.
+    /// </summary>
+    /// <remarks>
+    /// Errors from the VFS pass through to the caller.
+    /// </remarks>
+    /// <param name="path">
+    /// The host-style directory path.
+    /// </param>
+    /// <returns>
+    /// One path per entry, made by combining <paramref name="path"/> with the entry name.
+    /// </returns>
     public IEnumerable<string> EnumerateFileSystemEntries(string path)
     {
         DirectoryEntry[] entries = _vfs.ReadDirectoryAsync(ToUrn(path)).GetAwaiter().GetResult();
@@ -121,7 +158,18 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         return result;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the file name from a path.
+    /// </summary>
+    /// <remarks>
+    /// Backslashes count as slashes and trailing slashes are ignored.
+    /// </remarks>
+    /// <param name="path">
+    /// The path.
+    /// </param>
+    /// <returns>
+    /// The part after the last slash, or the whole path when it has no slash.
+    /// </returns>
     public string GetFileName(string path)
     {
         string p = path.Replace('\\', '/').TrimEnd('/');
@@ -129,7 +177,21 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         return slash < 0 ? p : p.Substring(slash + 1);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets file information for a file on the mount.
+    /// </summary>
+    /// <remarks>
+    /// The VFS has no local file, so this creates a temporary file of the right size in the temp
+    /// cache directory, sets its last write time, reads both values into a <see cref="FileInfo"/> and
+    /// deletes the file again. Only <c>Length</c> and <c>LastWriteTimeUtc</c> of the result are
+    /// meaningful; its path names the deleted temporary file.
+    /// </remarks>
+    /// <param name="path">
+    /// The host-style path of the file.
+    /// </param>
+    /// <returns>
+    /// The file information, or <c>null</c> when the path is not found or is a directory.
+    /// </returns>
     public FileInfo? GetFileInfo(string path)
     {
         FileMetadata? meta = TryGetMetadata(path);
@@ -153,7 +215,43 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         return info;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Opens a file stream for a file on the mount.
+    /// </summary>
+    /// <remarks>
+    /// Only <see cref="FileMode.Open"/> with <see cref="FileAccess.Read"/> counts as a read; every
+    /// other combination is a write.
+    /// <para>
+    /// A read copies the file into a temporary file and returns a read-only stream that deletes the
+    /// temporary file when closed.
+    /// </para>
+    /// <para>
+    /// A write works on a temporary file and writes its whole content back to the mount when the
+    /// stream is closed. For Open, OpenOrCreate and Append the existing file is copied in first;
+    /// Append starts at the end. Other modes start empty.
+    /// </para>
+    /// </remarks>
+    /// <param name="path">
+    /// The host-style path of the file.
+    /// </param>
+    /// <param name="mode">
+    /// How to open or create the file.
+    /// </param>
+    /// <param name="access">
+    /// The access wanted.
+    /// </param>
+    /// <returns>
+    /// A stream over a local temporary copy of the file.
+    /// </returns>
+    /// <exception cref="FileNotFoundException">
+    /// Thrown for a read when the file is not found.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the file that must be copied is larger than the size cap set in the constructor.
+    /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown for a write when the backend was created read-only.
+    /// </exception>
     public FileStream OpenFile(string path, FileMode mode, FileAccess access)
     {
         // A plain read (Open + Read) takes the read-materialize path; anything else is a write.
@@ -220,7 +318,19 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         return new VfsWriteBackFileStream(temp, _vfs, ToUrn(path), append: mode == FileMode.Append);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Creates a directory on the mount.
+    /// </summary>
+    /// <remarks>
+    /// The request is passed to the VFS provider; a provider that cannot create directories throws
+    /// <see cref="NotSupportedException"/>, and that and other provider errors pass through.
+    /// </remarks>
+    /// <param name="path">
+    /// The host-style directory path to create.
+    /// </param>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when the backend was created read-only.
+    /// </exception>
     public void CreateDirectory(string path)
     {
         // Fail fast on a read-only mount (Step 6 hardening) — consistent with OpenForWrite.
@@ -231,10 +341,31 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         _vfs.CreateDirectoryAsync(ToUrn(path)).GetAwaiter().GetResult();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full path. This implementation only turns backslashes into slashes; it does not
+    /// resolve relative parts.
+    /// </summary>
+    /// <param name="path">
+    /// The path.
+    /// </param>
+    /// <returns>
+    /// <paramref name="path"/> with every backslash replaced by a slash.
+    /// </returns>
     public string GetFullPath(string path) => path.Replace('\\', '/');
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Combines path segments with slashes.
+    /// </summary>
+    /// <remarks>
+    /// Backslashes become slashes. Trailing slashes are removed from the first segment, slashes at
+    /// both ends are removed from the others, and empty segments are skipped.
+    /// </remarks>
+    /// <param name="paths">
+    /// The path segments.
+    /// </param>
+    /// <returns>
+    /// The combined path, or an empty string when <paramref name="paths"/> is null or empty.
+    /// </returns>
     public string CombinePath(params string[] paths)
     {
         if (paths == null || paths.Length == 0)

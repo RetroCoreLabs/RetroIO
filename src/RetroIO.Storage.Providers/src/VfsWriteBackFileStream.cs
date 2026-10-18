@@ -41,7 +41,19 @@ internal sealed class VfsWriteBackFileStream : FileStream
             Seek(0, SeekOrigin.End);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Closes the stream and, the first time it is called with <paramref name="disposing"/> set,
+    /// writes the whole temp file back to the VFS mount and deletes the temp file.
+    /// </summary>
+    /// <remarks>
+    /// The stream is flushed and its handle closed before the temp file is read back. If the read or
+    /// the write-back fails, the exception comes out of this call and the temp file is left in place.
+    /// Failure to delete the temp file is ignored. Later calls, and calls with
+    /// <paramref name="disposing"/> set to <c>false</c>, only run the base <see cref="FileStream"/> dispose.
+    /// </remarks>
+    /// <param name="disposing">
+    /// <c>true</c> to release managed resources and write the content back.
+    /// </param>
     protected override void Dispose(bool disposing)
     {
         if (disposing && !_wroteBack)

@@ -71,28 +71,65 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         _discs = discs ?? Array.Empty<DiscMount>();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Checks whether a directory exists.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style path to check.
+    /// </param>
+    /// <returns>
+    /// The answer of the disc backend when <paramref name="path"/> lies on a disc; otherwise
+    /// <c>true</c> only for the virtual root (the Econet root, <c>/</c> or an empty path).
+    /// </returns>
     public bool DirectoryExists(string path)
     {
         IFileSystemBackend? backend = Route(path);
         return backend != null ? backend.DirectoryExists(path) : IsRoot(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether a path is a directory.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style path to check.
+    /// </param>
+    /// <returns>
+    /// The answer of the disc backend when <paramref name="path"/> lies on a disc; otherwise
+    /// <c>true</c> only for the virtual root (the Econet root, <c>/</c> or an empty path).
+    /// </returns>
     public bool IsDirectory(string path)
     {
         IFileSystemBackend? backend = Route(path);
         return backend != null ? backend.IsDirectory(path) : IsRoot(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Checks whether a file exists.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style path to check.
+    /// </param>
+    /// <returns>
+    /// The answer of the disc backend when <paramref name="path"/> lies on a disc; otherwise
+    /// <c>false</c>.
+    /// </returns>
     public bool FileExists(string path)
     {
         IFileSystemBackend? backend = Route(path);
         return backend != null && backend.FileExists(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Enumerates all entries in a directory.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style directory path.
+    /// </param>
+    /// <returns>
+    /// The entries from the disc backend when <paramref name="path"/> lies on a disc; for the
+    /// virtual root, one path per configured disc (the Econet root, a slash and the disc directory
+    /// name); otherwise an empty sequence.
+    /// </returns>
     public IEnumerable<string> EnumerateFileSystemEntries(string path)
     {
         IFileSystemBackend? backend = Route(path);
@@ -111,14 +148,43 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         return Array.Empty<string>();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets file information.
+    /// </summary>
+    /// <param name="path">
+    /// The host-style path of the file.
+    /// </param>
+    /// <returns>
+    /// The answer of the disc backend when <paramref name="path"/> lies on a disc; otherwise
+    /// <c>null</c>.
+    /// </returns>
     public FileInfo? GetFileInfo(string path)
     {
         IFileSystemBackend? backend = Route(path);
         return backend?.GetFileInfo(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Opens a file stream through the backend of the disc the path lies on.
+    /// </summary>
+    /// <remarks>
+    /// Errors from the disc backend pass through to the caller.
+    /// </remarks>
+    /// <param name="path">
+    /// The host-style path of the file.
+    /// </param>
+    /// <param name="mode">
+    /// How to open or create the file.
+    /// </param>
+    /// <param name="access">
+    /// The access wanted.
+    /// </param>
+    /// <returns>
+    /// The stream returned by the disc backend.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when <paramref name="path"/> does not lie on any configured disc.
+    /// </exception>
     public FileStream OpenFile(string path, FileMode mode, FileAccess access)
     {
         IFileSystemBackend? backend = Route(path);
@@ -127,7 +193,18 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         return backend.OpenFile(path, mode, access);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Creates a directory through the backend of the disc the path lies on.
+    /// </summary>
+    /// <remarks>
+    /// Errors from the disc backend pass through to the caller.
+    /// </remarks>
+    /// <param name="path">
+    /// The host-style directory path to create.
+    /// </param>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when <paramref name="path"/> does not lie on any configured disc.
+    /// </exception>
     public void CreateDirectory(string path)
     {
         IFileSystemBackend? backend = Route(path);
@@ -136,7 +213,18 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         backend.CreateDirectory(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the file name from a path.
+    /// </summary>
+    /// <remarks>
+    /// Backslashes count as slashes and trailing slashes are ignored.
+    /// </remarks>
+    /// <param name="path">
+    /// The path.
+    /// </param>
+    /// <returns>
+    /// The part after the last slash, or the whole path when it has no slash.
+    /// </returns>
     public string GetFileName(string path)
     {
         string p = path.Replace('\\', '/').TrimEnd('/');
@@ -144,10 +232,31 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         return slash < 0 ? p : p.Substring(slash + 1);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full path. This implementation only turns backslashes into slashes; it does not
+    /// resolve relative parts.
+    /// </summary>
+    /// <param name="path">
+    /// The path.
+    /// </param>
+    /// <returns>
+    /// <paramref name="path"/> with every backslash replaced by a slash.
+    /// </returns>
     public string GetFullPath(string path) => path.Replace('\\', '/');
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Combines path segments with slashes.
+    /// </summary>
+    /// <remarks>
+    /// Backslashes become slashes. Trailing slashes are removed from the first segment, slashes at
+    /// both ends are removed from the others, and empty segments are skipped.
+    /// </remarks>
+    /// <param name="paths">
+    /// The path segments.
+    /// </param>
+    /// <returns>
+    /// The combined path, or an empty string when <paramref name="paths"/> is null or empty.
+    /// </returns>
     public string CombinePath(params string[] paths)
     {
         if (paths == null || paths.Length == 0)
