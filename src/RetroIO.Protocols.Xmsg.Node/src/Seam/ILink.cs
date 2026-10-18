@@ -115,8 +115,9 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         /// The payload bytes to send.
         /// </param>
         /// <returns>
-        /// True when queued for transmission; false when the link is not Active or the send window is
-        /// full (logged, never thrown).
+        /// True when the link took the payload: it was sent, or it was queued behind a full send
+        /// window and will be sent as the window opens. False when the link is not Active or the
+        /// payload cannot be sent (logged, never thrown).
         /// </returns>
         /// <remarks>
         /// The parameter is a <see cref="ReadOnlySpan{T}"/> deliberately: the compiler forbids storing

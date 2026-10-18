@@ -47,9 +47,9 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         public event LinkPayloadReceived? PayloadReceived;
 
         /// <summary>
-        /// Occurs when <see cref="Stop"/> is called, with the reason <c>stopped</c>. It is raised
-        /// on every call to <see cref="Stop"/>, even when the link was already stopped, and never
-        /// by <see cref="Start"/>.
+        /// Occurs when <see cref="Stop"/> takes the link from another status to Stopped, with the
+        /// reason <c>stopped</c>. It is not raised when the link was already stopped, and never by
+        /// <see cref="Start"/>.
         /// </summary>
         public event LinkStatusChanged? StatusChanged;
 
@@ -83,11 +83,16 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
         /// <summary>
         /// Sets the status to Stopped and raises <see cref="StatusChanged"/> with the previous and
-        /// new status.
+        /// new status. Does nothing when the link is already stopped.
         /// </summary>
         public void Stop()
         {
             LinkStatus previous = Status;
+            if (previous == LinkStatus.Stopped)
+            {
+                return;
+            }
+
             Status = LinkStatus.Stopped;
             StatusChanged?.Invoke(this, previous, Status, "stopped");
         }
