@@ -112,14 +112,20 @@ namespace RetroIO.Storage.Local.Drivers
             {
                 throw new ArgumentNullException(nameof(imageStream));
             }
-            _data = new byte[imageStream.Length];
+            // Read and check into a local first. A stream that is not a cartridge must not replace the
+            // data of the cartridge that is already mounted, and a second Mount must not add its chips
+            // to the first one's.
+            byte[] image = new byte[imageStream.Length];
             imageStream.Position = 0;
-            imageStream.ReadExactly(_data, 0, _data.Length);
+            imageStream.ReadExactly(image, 0, image.Length);
 
-            if (!HasMagic(_data))
+            if (!HasMagic(image))
             {
                 throw new InvalidDataException("Not a CRT cartridge image");
             }
+
+            _data = image;
+            _chips.Clear();
 
             // Cartridge name: 32 bytes at 0x20 (ASCII, null-padded).
             _name = AsciiTrim(_data, 0x20, 32);
