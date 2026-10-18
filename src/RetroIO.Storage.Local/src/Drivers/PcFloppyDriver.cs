@@ -57,25 +57,33 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the capability flags of this driver.
         /// </summary>
         /// <remarks>
-        /// The flags are read, write, delete, rename, directory listing, subdirectories, create directory,
-        /// file types, volume label, block read and block write. The flags do not change with a read-only mount.
+        /// The read-side flags are always set: read, directory listing, subdirectories, file types,
+        /// volume label and block read. The write-side flags (write, delete, rename, create directory
+        /// and block write) are added only when <see cref="CanWrite"/> is <c>true</c>, so they are
+        /// missing before mount and on a read-only mount.
         /// </remarks>
         public DriverCapabilities Capabilities
         {
             get
             {
-                return DriverCapabilities.Read |
-                       DriverCapabilities.Write |
-                       DriverCapabilities.Delete |
-                       DriverCapabilities.Rename |
-                       DriverCapabilities.ListDirectory |
-                       DriverCapabilities.Subdirectories |
-                       DriverCapabilities.CreateDirectory |
-                       DriverCapabilities.FileTypes |
-                       DriverCapabilities.VolumeLabel |
-                       DriverCapabilities.BlockRead |
-                       DriverCapabilities.BlockWrite;
-                // Note: DeleteDirectory is deliberately not advertised — IFileSystemDriver has no
+                DriverCapabilities caps = DriverCapabilities.Read |
+                                          DriverCapabilities.ListDirectory |
+                                          DriverCapabilities.Subdirectories |
+                                          DriverCapabilities.FileTypes |
+                                          DriverCapabilities.VolumeLabel |
+                                          DriverCapabilities.BlockRead;
+
+                if (CanWrite)
+                {
+                    caps |= DriverCapabilities.Write |
+                            DriverCapabilities.Delete |
+                            DriverCapabilities.Rename |
+                            DriverCapabilities.CreateDirectory |
+                            DriverCapabilities.BlockWrite;
+                }
+
+                return caps;
+                // Note: DeleteDirectory is deliberately not advertised - IFileSystemDriver has no
                 // DeleteDirectory member at all (verified via grep; same gap exists for every
                 // other driver in this codebase, e.g. NdfsDriver only exposes DeleteFile). The
                 // underlying Fat12/16/32FileSystem.DeleteDirectory is real and directly testable,
@@ -88,9 +96,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public bool CanRead => true;
         /// <summary>
-        /// Gets true, because the driver writes through the FAT file system.
+        /// Gets <c>true</c> when an image is mounted read-write, and <c>false</c> before mount and on a read-only mount.
         /// </summary>
-        public bool CanWrite => true;
+        public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly;
         /// <summary>
         /// Gets <c>true</c>, because this driver can read and write raw blocks of the mounted image or partition.
         /// </summary>

@@ -43,8 +43,8 @@ namespace RetroIO.Storage.Local.Drivers
         /// <remarks>
         /// Always set: read, directory listing, file types, PETSCII names, file locking, volume label,
         /// block read and block allocation map. Write is added when <see cref="CanWrite"/> is <c>true</c>.
-        /// The subdirectory flag is meant for D81 images, but the check compares the descriptor by reference
-        /// against a new D81 descriptor instance, so the flag is never set.
+        /// The subdirectory flag is set for D81 images. A D81 is recognised by the name of the descriptor
+        /// chosen at mount time, because every read of <see cref="BlockDeviceDescriptor.D81"/> returns a new instance.
         /// </remarks>
         public DriverCapabilities Capabilities
         {
@@ -60,7 +60,7 @@ namespace RetroIO.Storage.Local.Drivers
                                           DriverCapabilities.BlockAllocationMap;
 
                 // D81 supports subdirectories
-                if (_descriptor == BlockDeviceDescriptor.D81)
+                if (_descriptor != null && _descriptor.Name == BlockDeviceDescriptor.D81.Name)
                 {
                     caps |= DriverCapabilities.Subdirectories;
                 }
