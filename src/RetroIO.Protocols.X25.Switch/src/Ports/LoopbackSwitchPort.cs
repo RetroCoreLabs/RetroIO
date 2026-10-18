@@ -65,43 +65,78 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </summary>
         public HashSet<ushort> SendFails { get; } = new HashSet<ushort>();
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the port number, taken from <see cref="PortConfig.Id"/> of the configuration.
+        /// </summary>
         public int Id { get; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the port's configuration.
+        /// </summary>
         public PortConfig Config { get; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether the port is up: <c>true</c> after
+        /// <see cref="Start"/>, <c>false</c> after <see cref="Stop"/>.
+        /// </summary>
         public bool Active => _active;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether a peer is connected over the port. This in-memory port
+        /// has no real peer, so it reports the same as <see cref="Active"/>.
+        /// </summary>
         public bool PeerConnected => _active;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the port's lifetime counters. This port never updates them itself.
+        /// </summary>
         public PortCounters Counters { get; } = new PortCounters();
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when a remote party calls into this port; here only by
+        /// <see cref="InjectIncomingCall"/>.
+        /// </summary>
         public event PortIncomingCall? IncomingCall;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when an outgoing call this port placed is accepted; here only by
+        /// <see cref="InjectConnected"/>.
+        /// </summary>
         public event PortCallConnected? CallConnected;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when data arrives on a circuit; here only by <see cref="InjectData"/>.
+        /// </summary>
         public event PortDataReceived? DataReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when a circuit on this port is reset (X.25 4.4); here only by
+        /// <see cref="InjectReset"/>.
+        /// </summary>
         public event PortReset? CircuitReset;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when an interrupt arrives on a circuit (X.25 4.3.2); here only by
+        /// <see cref="InjectInterrupt"/>.
+        /// </summary>
         public event PortInterrupt? InterruptReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when a circuit that had refused a send can take data again; here only by
+        /// <see cref="OpenWindow"/>.
+        /// </summary>
         public event PortReadyToSend? ReadyToSend;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when a circuit on this port is cleared by the far end; here only by
+        /// <see cref="InjectClear"/>.
+        /// </summary>
         public event PortCallCleared? CallCleared;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the port's up/down state changes: by <see cref="Start"/> with <c>true</c>
+        /// and by <see cref="Stop"/> with <c>false</c>.
+        /// </summary>
         public event PortStateChanged? StateChanged;
 
         /// <summary>
@@ -117,7 +152,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             _nextLci = config.LciBase == 0 ? (ushort)1 : config.LciBase;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Marks the port up and raises <see cref="StateChanged"/>. There is no transport to open.
+        /// </summary>
+        /// <returns>
+        /// Always <c>true</c>.
+        /// </returns>
         public bool Start()
         {
             _active = true;
@@ -125,14 +165,32 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Marks the port down and raises <see cref="StateChanged"/>. There is no transport to
+        /// release.
+        /// </summary>
         public void Stop()
         {
             _active = false;
             StateChanged?.Invoke(this, false);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records an outgoing call in <see cref="PlacedCalls"/> and allocates a logical channel
+        /// for it. Nothing is sent anywhere.
+        /// </summary>
+        /// <param name="calledAddress">
+        /// Destination X.121 address.
+        /// </param>
+        /// <param name="callingAddress">
+        /// Originating X.121 address.
+        /// </param>
+        /// <param name="callUserData">
+        /// Optional call user data. It is not recorded.
+        /// </param>
+        /// <returns>
+        /// The next logical channel number. This port never refuses a call.
+        /// </returns>
         public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
         {
             ushort lci = AllocateLci();
@@ -140,13 +198,41 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             return lci;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records an accepted incoming call in <see cref="AcceptedCalls"/>.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel to accept.
+        /// </param>
         public void AcceptCall(ushort lci)
         {
             AcceptedCalls.Add(lci);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records data the switch sends out of this port in <see cref="SentData"/>.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to send on.
+        /// </param>
+        /// <param name="data">
+        /// Data to send; a copy is recorded.
+        /// </param>
+        /// <param name="qBit">
+        /// Qualifier bit.
+        /// </param>
+        /// <param name="mBit">
+        /// More-data bit.
+        /// </param>
+        /// <param name="dBit">
+        /// Delivery-confirmation bit.
+        /// </param>
+        /// <returns>
+        /// <see cref="PortSendResult.Failed"/> when <paramref name="lci"/> is in
+        /// <see cref="SendFails"/>; <see cref="PortSendResult.WindowFull"/> when it is in
+        /// <see cref="WindowShut"/>; otherwise <see cref="PortSendResult.Sent"/>. Only a sent
+        /// packet is recorded.
+        /// </returns>
         public PortSendResult SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit)
         {
             if (SendFails.Contains(lci))
@@ -163,19 +249,47 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             return PortSendResult.Sent;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records a circuit reset in <see cref="ResetCircuits"/>. No circuit state is changed.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to reset.
+        /// </param>
+        /// <param name="cause">
+        /// Resetting cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
         public void ResetCircuit(ushort lci, byte cause, byte diagnostic)
         {
             ResetCircuits.Add((lci, cause, diagnostic));
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records an interrupt the switch sends out of this port in
+        /// <see cref="SentInterrupts"/>.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to interrupt.
+        /// </param>
+        /// <param name="userData">
+        /// The interrupt user data; recorded as given, without a length check.
+        /// </param>
         public void SendInterrupt(ushort lci, byte[] userData)
         {
             SentInterrupts.Add((lci, userData));
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records a busy or not-busy signal in <see cref="BusySignals"/>.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to signal on.
+        /// </param>
+        /// <param name="busy">
+        /// <c>true</c> for busy (RNR), <c>false</c> for ready (RR).
+        /// </param>
         public void SetLocalBusy(ushort lci, bool busy)
         {
             BusySignals.Add((lci, busy));
@@ -225,7 +339,18 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             InterruptReceived?.Invoke(this, lci, userData);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Records a cleared call in <see cref="ClearedCalls"/>. No event is raised.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to clear.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
         public void ClearCall(ushort lci, byte cause, byte diagnostic)
         {
             ClearedCalls.Add((lci, cause, diagnostic));

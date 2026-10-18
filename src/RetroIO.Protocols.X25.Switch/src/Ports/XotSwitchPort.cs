@@ -112,49 +112,84 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             _ticker = new Timer(OnTick, null, Timeout.Infinite, Timeout.Infinite);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the port number, taken from <see cref="PortConfig.Id"/> of the configuration.
+        /// </summary>
         public int Id { get; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the port's configuration.
+        /// </summary>
         public PortConfig Config => _config;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether the port is up: <c>true</c> once <see cref="Start"/>
+        /// has started the transport, <c>false</c> after <see cref="Stop"/> or a failed start.
+        /// </summary>
         public bool Active
         {
             get { lock (_sync) { return _active; } }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether a TCP connection to a peer is open: for a DCE port an
+        /// accepted caller, for a DTE port a completed dial. It is independent of
+        /// <see cref="Active"/>, which only says the port is running.
+        /// </summary>
         public bool PeerConnected
         {
             get { lock (_sync) { return _peerConnected; } }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the port's lifetime counters: calls in, calls cleared, packets in and packets out.
+        /// </summary>
         public PortCounters Counters { get; } = new PortCounters();
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when a remote party calls into this port. Raised inside the port's lock.
+        /// </summary>
         public event PortIncomingCall? IncomingCall;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when an outgoing call this port placed is accepted. Raised inside the port's
+        /// lock.
+        /// </summary>
         public event PortCallConnected? CallConnected;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when data arrives on an established circuit. Raised inside the port's lock.
+        /// </summary>
         public event PortDataReceived? DataReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the packet layer reports a circuit on this port cleared. Raised inside the
+        /// port's lock.
+        /// </summary>
         public event PortCallCleared? CallCleared;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when a circuit on this port is reset (X.25 4.4). Raised inside the port's lock.
+        /// </summary>
         public event PortReset? CircuitReset;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when an interrupt arrives on a circuit (X.25 4.3.2). Raised inside the port's
+        /// lock.
+        /// </summary>
         public event PortInterrupt? InterruptReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the packet layer reports that a circuit's window opened, so a refused send
+        /// may be tried again. Raised inside the port's lock.
+        /// </summary>
         public event PortReadyToSend? ReadyToSend;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the port's state changes: when <see cref="Active"/> changes, and when the
+        /// TCP connection to the peer is lost, in which case it is raised with <c>false</c> and
+        /// then again with the current value of <see cref="Active"/>.
+        /// </summary>
         public event PortStateChanged? StateChanged;
 
         /// <summary>
@@ -166,7 +201,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </remarks>
         public ushort BoundPort { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the port: a DCE port opens a TCP listener on the configured port; both modes then
+        /// start the transport thread (which accepts or dials) and the packet layer's tick timer.
+        /// </summary>
+        /// <returns>
+        /// <c>true</c> if the port started. When it is already running, the current value of
+        /// <see cref="Active"/>. <c>false</c> when starting threw, for example when the listener
+        /// could not bind.
+        /// </returns>
         public bool Start()
         {
             lock (_sync)
@@ -204,7 +247,10 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the port: halts the tick timer, closes the listener and the connection, waits up
+        /// to one second for the transport thread to finish, and marks the port down.
+        /// </summary>
         public void Stop()
         {
             _running = false;
@@ -228,7 +274,26 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             SetActive(false);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Places an outgoing call through the packet layer, allocating a logical channel for it.
+        /// </summary>
+        /// <param name="calledAddress">
+        /// Destination X.121 address.
+        /// </param>
+        /// <param name="callingAddress">
+        /// Originating X.121 address.
+        /// </param>
+        /// <param name="callUserData">
+        /// Optional call user data.
+        /// </param>
+        /// <returns>
+        /// The logical channel the packet layer allocated, or 0 if the call could not be placed;
+        /// always 0 when no peer is connected.
+        /// </returns>
+        /// <remarks>
+        /// The first call on a new connection first sends a Restart (X.25 4.1); the packet layer
+        /// holds the Call Request until the Restart Confirmation comes back.
+        /// </remarks>
         public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
         {
             lock (_sync)
@@ -250,7 +315,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Accepts an incoming call on a logical channel through the packet layer.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel to accept.
+        /// </param>
         public void AcceptCall(ushort lci)
         {
             lock (_sync)
@@ -259,7 +329,32 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends data on an established circuit through the packet layer.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to send on.
+        /// </param>
+        /// <param name="data">
+        /// Data to send; it is copied before being handed to the packet layer.
+        /// </param>
+        /// <param name="qBit">
+        /// Qualifier bit.
+        /// </param>
+        /// <param name="mBit">
+        /// More-data bit.
+        /// </param>
+        /// <param name="dBit">
+        /// Delivery-confirmation bit.
+        /// </param>
+        /// <returns>
+        /// <see cref="PortSendResult.Sent"/> when the packet layer took the data;
+        /// <see cref="PortSendResult.WindowFull"/> when it refused only because of flow control
+        /// (window shut, peer busy, or segments still waiting); <see cref="PortSendResult.Failed"/>
+        /// when no peer is connected, the circuit is not in data transfer, the data is longer than
+        /// the negotiated packet size, or the circuit does not exist. The caller has to read this:
+        /// dropping a refused packet leaves a gap in P(S) that resets the circuit.
+        /// </returns>
         public PortSendResult SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit)
         {
             lock (_sync)
@@ -278,7 +373,18 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Clears a circuit on a logical channel through the packet layer.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to clear.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
         public void ClearCall(ushort lci, byte cause, byte diagnostic)
         {
             lock (_sync)
@@ -287,7 +393,18 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Resets a circuit (X.25 4.4) through the packet layer.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to reset.
+        /// </param>
+        /// <param name="cause">
+        /// Resetting cause code (Table 5-8).
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code (Annex E).
+        /// </param>
         public void ResetCircuit(ushort lci, byte cause, byte diagnostic)
         {
             lock (_sync)
@@ -296,7 +413,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends an interrupt on a circuit (X.25 4.3.2) through the packet layer.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to interrupt.
+        /// </param>
+        /// <param name="userData">
+        /// The interrupt user data.
+        /// </param>
         public void SendInterrupt(ushort lci, byte[] userData)
         {
             lock (_sync)
@@ -305,7 +430,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Tells the far end on this circuit, through the packet layer, whether we can take data.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to signal on.
+        /// </param>
+        /// <param name="busy">
+        /// <c>true</c> when we cannot take data (RNR), <c>false</c> when we can (RR).
+        /// </param>
         public void SetLocalBusy(ushort lci, bool busy)
         {
             lock (_sync)
@@ -314,7 +447,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the port and disposes its tick timer. Calling it again does nothing.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
@@ -616,7 +751,17 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _owner = owner;
             }
 
-            /// <inheritdoc/>
+            /// <summary>
+            /// Frames a complete X.25 packet with the XOT codec and writes it to the socket.
+            /// </summary>
+            /// <param name="packet">
+            /// The packet bytes (GFI + LCN + PTI + body).
+            /// </param>
+            /// <returns>
+            /// <see cref="X25SendResult.Sent"/> when the packet was written and counted as a packet
+            /// out; <see cref="X25SendResult.LinkDown"/> when there is no connection or the write
+            /// threw. This sink never returns <see cref="X25SendResult.Refused"/>.
+            /// </returns>
             public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
             {
                 if (_owner._stream == null)
@@ -655,7 +800,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _owner = owner;
             }
 
-            /// <inheritdoc/>
+            /// <summary>
+            /// Writes XOT-framed bytes to the port's socket. Does nothing when there is no
+            /// connection.
+            /// </summary>
+            /// <param name="bytes">
+            /// The framed bytes to transmit. The span is only valid for the duration of the call.
+            /// </param>
             public void Send(ReadOnlySpan<byte> bytes)
             {
                 _owner.WriteToSocket(bytes);
