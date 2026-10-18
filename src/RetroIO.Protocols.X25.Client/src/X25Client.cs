@@ -65,6 +65,14 @@ namespace RetroIO.Protocols.X25.Client
         public bool IsOpen => _transport != null && _transport.IsOpen;
 
         /// <summary>
+        /// The X.121 address this client uses as the calling address on every call it places.
+        /// </summary>
+        /// <value>
+        /// The local address from the configuration given to <see cref="Open"/>; empty before the client is opened.
+        /// </value>
+        public string LocalAddress => _config.LocalAddress;
+
+        /// <summary>
         /// Opens the client: connects an XOT transport to the configured switch, wires the framing codec
         /// and packet layer, and starts servicing the link.
         /// </summary>

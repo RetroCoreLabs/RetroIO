@@ -51,7 +51,8 @@ namespace RetroIO.Protocols.X25.Client
         /// Destination X.121 address.
         /// </param>
         /// <param name="callingAddress">
-        /// Origin X.121 address. It is not read: the client uses its own configured local address.
+        /// Origin X.121 address. The client always uses its own configured local address, so this must be
+        /// empty or equal to <see cref="X25Client.LocalAddress"/>.
         /// </param>
         /// <param name="callUserData">
         /// Call user data (PAD protocol identifier), or <c>null</c>.
@@ -59,9 +60,18 @@ namespace RetroIO.Protocols.X25.Client
         /// <returns>
         /// <c>true</c> when the client returned a circuit for the call.
         /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="callingAddress"/> is not empty and differs from the client's own address:
+        /// placing a call with another calling address is not implemented, and no call is placed.
+        /// </exception>
         public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
         {
-            // The client uses its configured local address as the calling address, which matches the PAD's.
+            if (!string.IsNullOrEmpty(callingAddress) && !string.Equals(callingAddress, _client.LocalAddress, StringComparison.Ordinal))
+            {
+                throw new NotSupportedException(
+                    "X25ClientPadTransport.PlaceCall with a calling address other than the client's own is not implemented: the client always calls with its configured local address.");
+            }
+
             _vc = _client.Call(calledAddress, callUserData);
             return _vc != null;
         }
@@ -70,33 +80,47 @@ namespace RetroIO.Protocols.X25.Client
         /// Sends a data packet on the PAD's one circuit.
         /// </summary>
         /// <param name="lcn">
-        /// Logical channel number. It is not read: the data always goes on the circuit this
-        /// adapter opened.
+        /// Logical channel number. When a circuit is open it must be that circuit's number.
         /// </param>
         /// <param name="data">
         /// Payload bytes; all of them are sent.
         /// </param>
         /// <param name="mBit">
-        /// More-data bit. It is not read.
+        /// More-data bit. It must be <c>false</c>: sending a packet with the M bit set is not implemented.
         /// </param>
         /// <param name="qBit">
         /// Qualifier bit.
         /// </param>
         /// <param name="dBit">
-        /// Delivery-confirmation bit. It is not read.
+        /// Delivery-confirmation bit. It must be <c>false</c>: sending a packet with the D bit set is not implemented.
         /// </param>
         /// <returns>
         /// The client's answer, <c>true</c> if the data was accepted for transmission;
         /// <c>false</c> when no circuit is open.
         /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="mBit"/> or <paramref name="dBit"/> is <c>true</c>, or when
+        /// <paramref name="lcn"/> names a channel other than the open circuit. Nothing is sent.
+        /// </exception>
         public bool SendData(ushort lcn, byte[] data, bool mBit, bool qBit, bool dBit)
         {
+            if (mBit)
+            {
+                throw new NotSupportedException("X25ClientPadTransport.SendData with the M bit set is not implemented.");
+            }
+
+            if (dBit)
+            {
+                throw new NotSupportedException("X25ClientPadTransport.SendData with the D bit set is not implemented.");
+            }
+
             X25Vc? vc = _vc;
             if (vc == null)
             {
                 return false;
             }
 
+            RequireOwnChannel(vc, lcn, "SendData");
             return _client.Send(vc, data, data.Length, qBit);
         }
 
@@ -105,7 +129,7 @@ namespace RetroIO.Protocols.X25.Client
         /// with the Q bit clear.
         /// </summary>
         /// <param name="lcn">
-        /// Logical channel number. It is not read.
+        /// Logical channel number. When a circuit is open it must be that circuit's number.
         /// </param>
         /// <param name="data">
         /// Payload bytes.
@@ -116,11 +140,15 @@ namespace RetroIO.Protocols.X25.Client
         /// <remarks>
         /// Does nothing when no circuit is open. The client's send result is not reported.
         /// </remarks>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="lcn"/> names a channel other than the open circuit. Nothing is sent.
+        /// </exception>
         public void ForwardData(ushort lcn, byte[] data, int length)
         {
             X25Vc? vc = _vc;
             if (vc != null)
             {
+                RequireOwnChannel(vc, lcn, "ForwardData");
                 _client.Send(vc, data, length, false);
             }
         }
@@ -129,7 +157,7 @@ namespace RetroIO.Protocols.X25.Client
         /// Clears the PAD's one circuit through the client and forgets it.
         /// </summary>
         /// <param name="lcn">
-        /// Logical channel number. It is not read.
+        /// Logical channel number. When a circuit is open it must be that circuit's number.
         /// </param>
         /// <param name="cause">
         /// X.25 clear cause code.
@@ -140,13 +168,41 @@ namespace RetroIO.Protocols.X25.Client
         /// <remarks>
         /// Does nothing when no circuit is open.
         /// </remarks>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="lcn"/> names a channel other than the open circuit. Nothing is cleared.
+        /// </exception>
         public void ClearCall(ushort lcn, byte cause, byte diagnostic)
         {
             X25Vc? vc = _vc;
             if (vc != null)
             {
+                RequireOwnChannel(vc, lcn, "ClearCall");
                 _client.Clear(vc, cause, diagnostic);
                 _vc = null;
+            }
+        }
+
+        /// <summary>
+        /// Refuses a request that names a channel other than the one circuit this adapter carries.
+        /// </summary>
+        /// <param name="vc">
+        /// The open circuit.
+        /// </param>
+        /// <param name="lcn">
+        /// The channel number the caller asked for.
+        /// </param>
+        /// <param name="operation">
+        /// The operation name, used in the message.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="lcn"/> differs from the number of <paramref name="vc"/>.
+        /// </exception>
+        private static void RequireOwnChannel(X25Vc vc, ushort lcn, string operation)
+        {
+            if (lcn != vc.Lcn)
+            {
+                throw new NotSupportedException(
+                    "X25ClientPadTransport." + operation + " on a channel other than the open circuit is not implemented: the adapter carries one circuit only.");
             }
         }
     }
