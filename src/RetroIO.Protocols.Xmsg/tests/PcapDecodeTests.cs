@@ -197,8 +197,8 @@ namespace RetroIO.Protocols.Xmsg.Tests
             DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
-                string slnx = Path.Combine(dir.FullName, "RetroIO.sln");
-                if (File.Exists(slnx))
+                // The solution file is RetroIO.slnx (RetroIO.sln on an older SDK); either marks the folder.
+                if (File.Exists(Path.Combine(dir.FullName, "RetroIO.slnx")) || File.Exists(Path.Combine(dir.FullName, "RetroIO.sln")))
                 {
                     return Path.Combine(dir.FullName, "pcap-decode-report.txt");
                 }
