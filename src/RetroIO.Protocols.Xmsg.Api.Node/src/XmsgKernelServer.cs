@@ -148,22 +148,35 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             return server;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the name this server registers under in the node's registry, as given to the
+        /// constructor.
+        /// </summary>
         public string Name { get; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the logical port the name resolves to, as given to the constructor.
+        /// </summary>
         public int LogicalPort { get; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the wire port: <see cref="LogicalPort"/> shifted left 7, with no incarnation bits
+        /// added.
+        /// </summary>
         public ushort WirePort { get; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the number of kernel ports currently registered with <see cref="RegisterPort"/>.
+        /// </summary>
         public int SessionCount
         {
             get { return _ownedPorts.Count; }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the maximum number of concurrent sessions, which is unlimited here:
+        /// <see cref="int.MaxValue"/>.
+        /// </summary>
         public int SessionCapacity
         {
             get { return int.MaxValue; }
@@ -276,13 +289,45 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             _ownedPorts.Remove(portWord);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Returns whether a wire port was registered with <see cref="RegisterPort"/>, so the node
+        /// routes datagrams for it here.
+        /// </summary>
+        /// <param name="port">
+        /// The destination wire port of an incoming datagram.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the port is registered.
+        /// </returns>
         public bool OwnsPort(ushort port)
         {
             return _ownedPorts.Contains(port);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Delivers a datagram routed to this server into the kernel, as a message from the sending
+        /// port to the destination port named in its sub-header.
+        /// </summary>
+        /// <param name="incoming">
+        /// The received datagram.
+        /// </param>
+        /// <param name="transport">
+        /// The node transport; it is kept and used to build any datagrams the kernel sends.
+        /// </param>
+        /// <returns>
+        /// The datagrams the kernel queued for sending while the message was delivered, in order;
+        /// empty when there were none or when <paramref name="incoming"/> has no sub-header.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="incoming"/> is <c>null</c>.
+        /// </exception>
+        /// <remarks>
+        /// The payload is the raw trailer of the frame, not a decoded view of it. The send options
+        /// are taken back out of the sub-header role byte, so a secure message stays secure. The
+        /// status the kernel returns for the delivery is not reported. The outgoing queue is
+        /// emptied before delivery, so datagrams queued earlier and not yet taken by
+        /// <see cref="DrainPending"/> are dropped.
+        /// </remarks>
         public IReadOnlyList<XmsgFrame> Handle(XmsgFrame incoming, IXmsgServerTransport transport)
         {
             if (incoming == null)
@@ -321,7 +366,15 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             return result;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Hands over every datagram the kernel has queued for sending since the last drain.
+        /// </summary>
+        /// <param name="transport">
+        /// The node transport; it is kept and used to build any datagrams the kernel sends later.
+        /// </param>
+        /// <returns>
+        /// The queued datagrams, in order; empty when nothing is pending.
+        /// </returns>
         public IReadOnlyList<XmsgFrame> DrainPending(IXmsgServerTransport transport)
         {
             _transport = transport;
@@ -335,7 +388,16 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             return result;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when a remote node acknowledged one of our frames. This server does nothing with
+        /// it.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The node that acknowledged. It is not read.
+        /// </param>
+        /// <param name="ackedFlags1">
+        /// The Flags 1 the acknowledgement echoes. It is not read.
+        /// </param>
         /// <remarks>
         /// The request-response layer paces itself on its own messages, not on the transport's
         /// acknowledgements, so there is nothing to release here.
@@ -344,7 +406,10 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         {
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether this server's output advances on the remote's acknowledgement. Always
+        /// <c>false</c>.
+        /// </summary>
         /// <remarks>
         /// False: this server queues an outgoing datagram the moment the kernel sends it, so an
         /// incoming acknowledgement never releases anything that was being held back.
@@ -354,7 +419,35 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             get { return false; }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Builds a datagram for a message the kernel cannot deliver locally and queues it for the
+        /// node to transmit.
+        /// </summary>
+        /// <param name="destination">
+        /// The magic number of the receiving port. Its system number is used as both the
+        /// destination node and the destination system.
+        /// </param>
+        /// <param name="sender">
+        /// The magic number of the sending port, so the receiver can answer.
+        /// </param>
+        /// <param name="userData">
+        /// The message buffer's user data; it is copied into the datagram.
+        /// </param>
+        /// <param name="flags">
+        /// The send options, carried in the sub-header role byte. When they give an empty role
+        /// byte, <see cref="Role"/> is used instead.
+        /// </param>
+        /// <returns>
+        /// The completed status when the datagram was queued, or XENRU when no transport is
+        /// attached yet.
+        /// </returns>
+        /// <remarks>
+        /// The datagram is queued, not sent. Datagrams queued while <see cref="Handle"/> runs are
+        /// returned by that call; others are returned by <see cref="DrainPending"/>. A call to
+        /// <see cref="Handle"/> first empties the queue, so anything not yet drained is dropped
+        /// then. It is stamped with <see cref="ControlService"/> and
+        /// <see cref="FrameFlags"/>, and built as a fresh message rather than an answer.
+        /// </remarks>
         public XmsgStatus Send(
             XmsgMagicNumber destination,
             XmsgMagicNumber sender,
