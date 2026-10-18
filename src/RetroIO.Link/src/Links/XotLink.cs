@@ -260,8 +260,8 @@ namespace RetroIO.Link
         /// <remarks>
         /// With LAPB framing (Cisco mode) the payload goes out as a LAPB I-frame. Without it (RFC 1613
         /// mode) the payload is copied and sent at once in an XOT frame. In RFC 1613 mode a send that
-        /// fails because there is no connection, or because the XOT codec rejects the length, is
-        /// logged only; the method still returns <c>true</c>.
+        /// fails because there is no connection, or because the XOT codec rejects the length or the
+        /// write fails, is logged and the method returns <c>false</c>.
         /// </remarks>
         /// <param name="payload">
         /// The payload bytes to send.
@@ -269,7 +269,8 @@ namespace RetroIO.Link
         /// <returns>
         /// <c>false</c> with a logged warning when the link is not Active, or in Cisco mode when LAPB
         /// is not in data transfer; in Cisco mode otherwise the result of the LAPB station send; in
-        /// RFC 1613 mode otherwise always <c>true</c>.
+        /// RFC 1613 mode <c>true</c> when the XOT frame was handed to the connection and
+        /// <c>false</c> when there is no connection or the frame could not be sent.
         /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
@@ -295,7 +296,11 @@ namespace RetroIO.Link
             {
                 // RFC 1613 mode: Send raw payload in XOT frame (copy — the caller's buffer may be reused)
                 byte[] payloadCopy = payload.ToArray();
-                SendXotFrame(payloadCopy, payloadCopy.Length);
+                if (!SendXotFrame(payloadCopy, payloadCopy.Length))
+                {
+                    return false;
+                }
+
                 _statistics.FramesTransmitted++;
                 return true;
             }
@@ -323,11 +328,11 @@ namespace RetroIO.Link
         /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
         /// <summary>
-        /// Raised when the link's operational status is set.
+        /// Raised when the link's operational status changes.
         /// </summary>
         /// <remarks>
-        /// This link raises the event on every status set, also when the new status equals the old
-        /// one; it does not filter out repeats.
+        /// The event is raised only on a real transition. Setting the status the link already has
+        /// does not raise it.
         /// </remarks>
         public event LinkStatusChanged? StatusChanged;
 
@@ -874,12 +879,17 @@ namespace RetroIO.Link
         /// <summary>
         /// Send data wrapped in XOT header
         /// </summary>
-        private void SendXotFrame(byte[] data, int length)
+        /// <returns>
+        /// <c>true</c> when the frame was handed to the connection; <c>false</c> when there is no
+        /// connection or the codec or the write failed (logged; a failed send is also counted as an
+        /// error).
+        /// </returns>
+        private bool SendXotFrame(byte[] data, int length)
         {
             if (_networkStream == null || _tcpClient == null || !_tcpClient.Connected)
             {
                 _logger.LogWarning("XotLink[{Name}]: Cannot send - not connected", _config.Name);
-                return;
+                return false;
             }
 
             try
@@ -891,11 +901,13 @@ namespace RetroIO.Link
 
                 _logger.LogDebug("XotLink[{Name}]: Sent XOT frame ({Length} bytes payload)",
                     _config.Name, length);
+                return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "XotLink[{Name}]: Error sending XOT frame", _config.Name);
                 _statistics.Errors++;
+                return false;
             }
         }
 
@@ -1002,6 +1014,12 @@ namespace RetroIO.Link
             var oldStatus = _status;
             _status = newStatus;
             _statistics.CurrentStatus = newStatus;
+
+            // ILink promises events on real transitions only: a repeated status is not one.
+            if (oldStatus == newStatus)
+            {
+                return;
+            }
 
             StatusChanged?.Invoke(this, oldStatus, newStatus, reason);
         }

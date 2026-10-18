@@ -187,8 +187,9 @@ namespace RetroIO.Link
         /// The payload bytes to send.
         /// </param>
         /// <returns>
-        /// True when queued for transmission; false when the link is not Active or the send window
-        /// is full (logged, never thrown).
+        /// True when the link took the payload: it was sent, or it was queued behind a full send
+        /// window and will be sent as the window opens. False when the link is not Active or the
+        /// payload cannot be sent, for example when there is no connection (logged, never thrown).
         /// </returns>
         bool SendData(ReadOnlySpan<byte> payload);
 

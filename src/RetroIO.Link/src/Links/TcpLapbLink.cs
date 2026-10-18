@@ -273,11 +273,11 @@ namespace RetroIO.Link
         /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
         /// <summary>
-        /// Raised when the link's operational status is set.
+        /// Raised when the link's operational status changes.
         /// </summary>
         /// <remarks>
-        /// This link raises the event on every status set, also when the new status equals the old
-        /// one; it does not filter out repeats.
+        /// The event is raised only on a real transition. Setting the status the link already has
+        /// does not raise it.
         /// </remarks>
         public event LinkStatusChanged? StatusChanged;
 
@@ -698,6 +698,12 @@ namespace RetroIO.Link
             var oldStatus = _status;
             _status = newStatus;
             _statistics.CurrentStatus = newStatus;
+
+            // ILink promises events on real transitions only: a repeated status is not one.
+            if (oldStatus == newStatus)
+            {
+                return;
+            }
 
             StatusChanged?.Invoke(this, oldStatus, newStatus, reason);
         }
