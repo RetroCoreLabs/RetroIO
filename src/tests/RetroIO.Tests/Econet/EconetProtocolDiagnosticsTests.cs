@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System.Collections.Generic;
 using System.Text;
 using NUnit.Framework;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
@@ -68,5 +69,28 @@ public sealed class EconetProtocolDiagnosticsTests
 
         Assert.That(EconetProtocolDiagnostics.EvaluateReplySuccess(request, reply), Is.False);
         Assert.That(EconetProtocolDiagnostics.FormatReplyTrace(request, reply, false), Does.Contain("soft-not-found"));
+    }
+
+    [Test]
+    public void DescribeCmd6Fields_NamesTheReplyBytesForWhatTheyAre()
+    {
+        // Regression: bytes 0 and 1 were reported as loadLo and loadHi. In a real command-6 reply they are
+        // the return code and the result byte, always 0 on success; the load address is not in this form.
+        byte[] name = Encoding.ASCII.GetBytes("USER      ");
+        byte[] reply = FileServerReply.ObjectInfoForCommand(
+            command: 6, fileType: 2, load: 0xFFFF1900, exec: 0, length: 0, access: 0,
+            day: 0, monthYear: 0, isOwner: true, directoryName10: name, directoryEntryCount: 7);
+
+        IReadOnlyDictionary<string, object?> fields = EconetProtocolDiagnostics.DescribeCmd6Fields(reply);
+
+        Assert.That(fields["returnCode"], Is.EqualTo((byte)0));
+        Assert.That(fields["resultCode"], Is.EqualTo((byte)0));
+        Assert.That(fields["fileType"], Is.EqualTo((byte)2));
+        Assert.That(fields["nameLength"], Is.EqualTo((byte)10));
+        Assert.That(fields["name"], Is.EqualTo("USER"));
+        Assert.That(fields["ownerFlag"], Is.EqualTo((byte)0x00));
+        Assert.That(fields["entryCount"], Is.EqualTo((byte)7));
+        Assert.That(fields.ContainsKey("loadLo"), Is.False, "the old, wrong label must be gone");
+        Assert.That(fields.ContainsKey("loadHi"), Is.False);
     }
 }

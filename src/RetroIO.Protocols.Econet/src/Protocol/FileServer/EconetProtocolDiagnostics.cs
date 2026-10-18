@@ -145,8 +145,10 @@ public static class EconetProtocolDiagnostics
         string name = Encoding.ASCII.GetString(payload.Slice(5, 10));
         return new Dictionary<string, object?>
         {
-            ["loadLo"] = payload[0],
-            ["loadHi"] = payload[1],
+            // Bytes 0 and 1 are the return code and the result code of any reply (0 and 0 on success).
+            // They used to be reported as the low and high byte of a load address, which this form does not carry.
+            ["returnCode"] = payload[0],
+            ["resultCode"] = payload[1],
             ["fileType"] = payload[2],
             ["reserved"] = payload[3],
             ["nameLength"] = payload[4],
@@ -398,7 +400,7 @@ public static class EconetProtocolDiagnostics
             payload.Length >= 17)
         {
             IReadOnlyDictionary<string, object?> fields = DescribeCmd6Fields(payload);
-            return $"cmd6 dir=\"{fields["name"]}\" entries={fields["entryCount"]} owner=&{payload[15]:X2} fields=[0-1]=&{payload[0]:X2}{payload[1]:X2} [2]=&{payload[2]:X2} [3]=&{payload[3]:X2} [4]={payload[4]} [5-14]=name [15]=&{payload[15]:X2} [16]={payload[16]}";
+            return $"cmd6 dir=\"{fields["name"]}\" entries={fields["entryCount"]} owner=&{payload[15]:X2} fields=[0]=rc &{payload[0]:X2} [1]=result &{payload[1]:X2} [2]=type &{payload[2]:X2} [3]=&{payload[3]:X2} [4]={payload[4]} [5-14]=name [15]=&{payload[15]:X2} [16]={payload[16]}";
         }
 
         if (request.Opcode == FileServerOpcodes.GetObjectInfo &&
