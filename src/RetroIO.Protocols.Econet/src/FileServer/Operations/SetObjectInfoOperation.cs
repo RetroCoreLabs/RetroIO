@@ -48,8 +48,9 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
     /// the request.
     /// </summary>
     /// <remarks>
-    /// Only info commands 2, 5 and the canonical form write anything, and only when at least 10
-    /// parameter bytes are present; in every other case the reply is still success. The attribute bytes
+    /// Only info commands 2, 5 and the canonical form write anything, and only when at least 12
+    /// parameter bytes are present (the length field ends at byte 11); with fewer the reply is still
+    /// success and nothing is written, and the same holds for every other command. The attribute bytes
     /// are read from parameter offset 1 onwards, the same bytes the path is read from. The access byte
     /// takes the configured default file permission when the parameters end before it.
     /// </remarks>
@@ -60,10 +61,6 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
     /// Success; 0xCC "Bad filename" when there are fewer than 2 parameter bytes; or 0xD6 "Not found"
     /// when the path does not resolve to an existing file.
     /// </returns>
-    /// <exception cref="System.IndexOutOfRangeException">
-    /// Thrown for a writing command with exactly 10 or 11 parameter bytes: the length field reads bytes
-    /// 10 and 11, but only 10 bytes are checked for.
-    /// </exception>
     public byte[] Execute(in FsOpCall call)
     {
         FileServerSession session = call.Session!;
@@ -83,7 +80,7 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
 
         if (command == 2 || command == 5 || command == FileServerOpcodes.GetObjectInfoCanonical)
         {
-            if (parameters.Length >= 10)
+            if (parameters.Length >= 12)
             {
                 uint load = (uint)(parameters[1] | (parameters[2] << 8) | (parameters[3] << 16) | (parameters[4] << 24));
                 uint exec = (uint)(parameters[5] | (parameters[6] << 8) | (parameters[7] << 16) | (parameters[8] << 24));
