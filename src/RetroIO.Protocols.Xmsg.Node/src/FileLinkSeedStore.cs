@@ -43,13 +43,38 @@ namespace RetroIO.Protocols.Xmsg.Node
             Load();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Looks up the seed learned for a remote node, from what the file held when the store was
+        /// opened plus every seed saved since.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The remote system (node) number, for example 100.
+        /// </param>
+        /// <param name="seed">
+        /// The stored seed when this returns <c>true</c>; otherwise zero.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when a seed is known for that node.
+        /// </returns>
         public bool TryLoadSeed(ushort remoteNode, out byte seed)
         {
             return _seeds.TryGetValue(remoteNode, out seed);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Records the seed learned for a remote node and rewrites the whole file.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The remote system (node) number.
+        /// </param>
+        /// <param name="seed">
+        /// The seed just learned from an inbound datagram.
+        /// </param>
+        /// <remarks>
+        /// Nothing is written when the same seed is already stored for that node. The parent
+        /// folder is created when it is missing. An <see cref="IOException"/> from writing the file
+        /// is caught and ignored, so the seed is then kept in memory only.
+        /// </remarks>
         public void SaveSeed(ushort remoteNode, byte seed)
         {
             byte existing;

@@ -44,7 +44,16 @@ namespace RetroIO.Protocols.Xmsg.Node
             Load();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the next outgoing <c>Flags1</c> to use for a remote node, from what the file held
+        /// when the store was opened plus every value saved since.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The remote system (node) number, for example 100.
+        /// </param>
+        /// <returns>
+        /// The next Flags1 value; 0x0000 when none is stored for that node.
+        /// </returns>
         public ushort LoadNextFlags1(ushort remoteNode)
         {
             if (_next.TryGetValue(remoteNode, out ushort value))
@@ -89,7 +98,21 @@ namespace RetroIO.Protocols.Xmsg.Node
         /// </remarks>
         public const ushort LookaheadFrames = 0;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stores the next outgoing <c>Flags1</c> for a remote node and rewrites the whole file
+        /// with the exact value.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The remote system (node) number.
+        /// </param>
+        /// <param name="nextFlags1">
+        /// The next Flags1 value to use for the following frame.
+        /// </param>
+        /// <remarks>
+        /// The file is rewritten on every call, even when the value has not changed. The parent
+        /// folder is created when it is missing. An <see cref="IOException"/> from writing the file
+        /// is caught and ignored, so the value is then kept in memory only.
+        /// </remarks>
         public void SaveNextFlags1(ushort remoteNode, ushort nextFlags1)
         {
             // The dictionary is the live value and is always exact.

@@ -14,13 +14,30 @@ namespace RetroIO.Protocols.Xmsg.Node
     /// </summary>
     public sealed class NullResponderSequenceStore : IResponderSequenceStore
     {
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the next outgoing <c>Flags1</c> for a remote node, which in this store is always
+        /// the first-contact value.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The remote system (node) number. It is not read.
+        /// </param>
+        /// <returns>
+        /// Always 0x0000.
+        /// </returns>
         public ushort LoadNextFlags1(ushort remoteNode)
         {
             return 0x0000;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Does nothing: this store keeps no sequence values.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The remote system (node) number. It is not read.
+        /// </param>
+        /// <param name="nextFlags1">
+        /// The next Flags1 value. It is discarded.
+        /// </param>
         public void SaveNextFlags1(ushort remoteNode, ushort nextFlags1)
         {
             // Intentionally does nothing - no persistence.

@@ -67,7 +67,16 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
             _link = link ?? throw new ArgumentNullException(nameof(link));
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Sends one encoded frame as one <see cref="ILink.SendData"/> on the link.
+        /// </summary>
+        /// <param name="bytes">
+        /// The frame bytes. The link copies them, so nothing is kept after the call.
+        /// </param>
+        /// <remarks>
+        /// When the link refuses the frame, <see cref="RefusedFrames"/> goes up by one and
+        /// <see cref="SendRefused"/> is raised with the frame size. The frame is not sent again.
+        /// </remarks>
         public void Send(ReadOnlySpan<byte> bytes)
         {
             // ILink.SendData takes the span directly and copies it into the LAPB body it enqueues, so

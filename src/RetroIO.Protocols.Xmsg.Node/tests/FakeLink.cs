@@ -41,16 +41,27 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             Status = LinkStatus.Active;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Occurs when a payload is pushed up with <see cref="RaisePayload"/>.
+        /// </summary>
         public event LinkPayloadReceived? PayloadReceived;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Occurs when <see cref="Stop"/> is called, with the reason <c>stopped</c>. It is raised
+        /// on every call to <see cref="Stop"/>, even when the link was already stopped, and never
+        /// by <see cref="Start"/>.
+        /// </summary>
         public event LinkStatusChanged? StatusChanged;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the link name given to the constructor.
+        /// </summary>
         public string Name { get; }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the current operational status: Active from construction or <see cref="Start"/>,
+        /// Stopped after <see cref="Stop"/>.
+        /// </summary>
         public LinkStatus Status { get; private set; }
 
         /// <summary>
@@ -58,14 +69,22 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </summary>
         public List<byte[]> Sent { get; } = new List<byte[]>();
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Sets the status to Active without raising <see cref="StatusChanged"/>.
+        /// </summary>
+        /// <returns>
+        /// Always <c>true</c>.
+        /// </returns>
         public bool Start()
         {
             Status = LinkStatus.Active;
             return true;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Sets the status to Stopped and raises <see cref="StatusChanged"/> with the previous and
+        /// new status.
+        /// </summary>
         public void Stop()
         {
             LinkStatus previous = Status;
@@ -73,13 +92,23 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             StatusChanged?.Invoke(this, previous, Status, "stopped");
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stops the link by calling <see cref="Stop"/>.
+        /// </summary>
         public void Dispose()
         {
             Stop();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Records a copy of the payload in <see cref="Sent"/> when the link is Active.
+        /// </summary>
+        /// <param name="payload">
+        /// The payload bytes to send.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the payload was recorded; <c>false</c> when the link is not Active.
+        /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             if (Status != LinkStatus.Active)

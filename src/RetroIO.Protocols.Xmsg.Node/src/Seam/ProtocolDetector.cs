@@ -81,7 +81,18 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
             _binding = binding;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Returns the binding this detector was constructed with.
+        /// </summary>
+        /// <param name="linkId">
+        /// The link the payload arrived on. It is not read.
+        /// </param>
+        /// <param name="payload">
+        /// The payload bytes. They are not read.
+        /// </param>
+        /// <returns>
+        /// The fixed L3 binding given to the constructor, for every payload.
+        /// </returns>
         public LinkBinding Classify(string linkId, ReadOnlySpan<byte> payload)
         {
             // Per-link binding: the configured L3 protocol, regardless of payload bytes. No sniffing.
