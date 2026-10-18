@@ -69,6 +69,7 @@ namespace RetroIO.Protocols.X25.Tests
             private readonly TcpClient _client;
             private readonly XotFrameCodec _codec;
             private readonly Thread _reader;
+            private volatile bool _closedFlag;
             private readonly List<byte[]> _received = new List<byte[]>();
 
             public RawPeer(ushort port)
@@ -114,7 +115,7 @@ namespace RetroIO.Protocols.X25.Tests
                         int n = stream.Read(buffer, 0, buffer.Length);
                         if (n <= 0)
                         {
-                            return;
+                            break;
                         }
 
                         _codec.ProcessBytes(new ReadOnlySpan<byte>(buffer, 0, n));
@@ -124,6 +125,8 @@ namespace RetroIO.Protocols.X25.Tests
                 {
                     // Closed by the test or by the port.
                 }
+
+                _closedFlag = true;
             }
 
             public void Send(byte[] packet)
@@ -153,6 +156,22 @@ namespace RetroIO.Protocols.X25.Tests
 
                 packet = found ?? Array.Empty<byte>();
                 return ok;
+            }
+
+            public bool IsClosed => _closedFlag;
+
+            public string Dump()
+            {
+                lock (_received)
+                {
+                    List<string> lines = new List<string>();
+                    for (int i = 0; i < _received.Count; i++)
+                    {
+                        lines.Add(BitConverter.ToString(_received[i]));
+                    }
+
+                    return string.Join(" | ", lines);
+                }
             }
 
             public int DataCount
@@ -388,6 +407,56 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(WaitFor(() => dce.ConnectionCount == 1 && dte.ConnectionCount == 1), Is.True,
                 "the connections dialled for the calls close with the calls; the spare stays (dce=" + dce.ConnectionCount + ", dte=" + dte.ConnectionCount + ")");
             Assert.That(dte.PeerConnected, Is.True);
+        }
+
+        /// <summary>
+        /// A port has no use for more connections than it has channels, and says so by closing the
+        /// extra one, as the C emulator's switch does by not accepting it.
+        /// </summary>
+        [Test]
+        public void AConnectionBeyondThePortsChannels_IsClosed_AndTheOthersStayUp()
+        {
+            using XotSwitchPort dce = NewDce(channels: 2);
+            dce.IncomingCall += (port, lci, called, calling, cud) => port.AcceptCall(lci);
+
+            using RawPeer one = new RawPeer(dce.BoundPort);
+            using RawPeer two = new RawPeer(dce.BoundPort);
+            one.Send(X25PacketBuilder.CreateCallRequest(7, Called, Calling));
+            Assert.That(one.WaitForPacket(0x0F, out _), Is.True);
+            two.Send(X25PacketBuilder.CreateCallRequest(7, Called, Calling));
+            Assert.That(two.WaitForPacket(0x0F, out _), Is.True);
+
+            using RawPeer three = new RawPeer(dce.BoundPort);
+            Assert.That(WaitFor(() => three.IsClosed), Is.True, "the third connection should be closed by the port");
+            Assert.That(dce.ConnectionCount, Is.EqualTo(2));
+            Assert.That(one.IsClosed, Is.False);
+            Assert.That(two.IsClosed, Is.False);
+        }
+
+        /// <summary>
+        /// A peer that puts several circuits on one connection is served while the port has channels;
+        /// a call beyond the port's channels is refused with a Diagnostic, and the others stay up.
+        /// </summary>
+        [Test]
+        public void ACallOnOneConnection_WithNoChannelLeft_GetsADiagnostic()
+        {
+            using XotSwitchPort dce = NewDce(channels: 2);
+            int incoming = 0;
+            dce.IncomingCall += (port, lci, called, calling, cud) =>
+            {
+                Interlocked.Increment(ref incoming);
+                port.AcceptCall(lci);
+            };
+
+            using RawPeer peer = new RawPeer(dce.BoundPort);
+            peer.Send(X25PacketBuilder.CreateCallRequest(7, Called, Calling));
+            peer.Send(X25PacketBuilder.CreateCallRequest(8, Called, Calling));
+            Assert.That(WaitFor(() => Volatile.Read(ref incoming) == 2), Is.True, "two circuits fit in a port of two channels");
+
+            peer.Send(X25PacketBuilder.CreateCallRequest(9, Called, Calling));
+            Assert.That(peer.WaitForPacket(0xF1, out _), Is.True, "the third call should be refused with a Diagnostic; received: " + peer.Dump());
+            Assert.That(Volatile.Read(ref incoming), Is.EqualTo(2), "the third call never reached the switch");
+            Assert.That(dce.ConnectionCount, Is.EqualTo(1));
         }
 
         /// <summary>

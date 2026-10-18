@@ -115,13 +115,13 @@ namespace RetroIO.Protocols.X25.Tests
 
             SwitchNode node = new SwitchNode(cfg);
 
-            // The two ends of a link have to agree on the logical channels. x25traffic declares 2048
-            // of them (cfg.num_vcs in its source) and, as a DTE, starts from the highest, so its first
-            // call arrives on channel 2048. A port that owned only 1..16 was right to answer that with
-            // a diagnostic, "packet on unassigned logical channel" (36), and this test failed on it
-            // for as long as it has existed; the cause was the range configured here, and the note
-            // that it needed WSL to reach a Windows socket was not the cause (the connection works).
-            const ushort CChannelCount = 2048;
+            // x25traffic declares 2048 channels and, as a DTE, starts from the highest, so its first
+            // call arrives on channel 2048. This port owns only 1..16 on purpose. RFC 1613 section 5
+            // says the channel number on the wire "has no significance and has arbitrary values", so
+            // the port renumbers it into its own range and the call must still go through. Until the
+            // port did that, a range of 16 answered the call with a diagnostic ("packet on unassigned
+            // logical channel", 36) and this test needed 2048 here to pass.
+            const ushort CChannelCount = 16;
             using XotSwitchPort access = new XotSwitchPort(new PortConfig { Id = 0, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = CChannelCount });
             using XotSwitchPort service = new XotSwitchPort(new PortConfig { Id = 1, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = 16 });
 

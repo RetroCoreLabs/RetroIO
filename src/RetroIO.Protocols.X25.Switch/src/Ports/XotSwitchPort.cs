@@ -54,6 +54,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// which is how a peer that multiplexes (RetroIO's own client) works with this port.
     /// </para>
     /// <para>
+    /// The range is a limit on how many circuits the port carries at once, not a list of numbers the
+    /// peer must use. A connection beyond the number of channels is closed, as the C emulator's switch
+    /// does by not accepting it. A call on a connection that already carries circuits, when every
+    /// channel is taken, is refused by the packet layer with a Diagnostic.
+    /// </para>
+    /// <para>
     /// <see cref="ISwitchPort.PeerConnected"/> is true while at least one connection is up. When one
     /// connection is lost only the circuits on it end; the others are not touched.
     /// </para>
