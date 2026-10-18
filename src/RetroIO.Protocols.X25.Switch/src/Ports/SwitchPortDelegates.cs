@@ -149,4 +149,30 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// The logical channel that can send again.
     /// </param>
     public delegate void PortReadyToSend(ISwitchPort port, ushort lci);
+
+    /// <summary>
+    /// Raised for every X.25 packet that crosses a port, in either direction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the tap a monitor uses to show traffic: the packet is handed over as it is on the
+    /// wire, so a viewer decodes it and the switch needs no decoder of its own.
+    /// </para>
+    /// <para>
+    /// It is raised on the port's own thread while the port holds its lock, so a handler must not
+    /// block or call back into the same port. It is only raised for a packet the port actually
+    /// received or actually wrote.
+    /// </para>
+    /// </remarks>
+    /// <param name="portId">
+    /// The identifier of the port the packet crossed.
+    /// </param>
+    /// <param name="inbound">
+    /// True when the port received the packet, false when it sent it.
+    /// </param>
+    /// <param name="packet">
+    /// A copy of the X.25 packet, from the general format identifier on, with no XOT or HDLC
+    /// framing. The handler may keep it.
+    /// </param>
+    public delegate void PortPacketCaptured(int portId, bool inbound, byte[] packet);
 }

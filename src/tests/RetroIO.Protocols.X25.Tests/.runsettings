@@ -5,7 +5,12 @@
     Legacy Stack A processing was removed; any test that waited on a retired path now times out
     rather than hanging the test host indefinitely.
   -->
+  <!--
+    This project names its own run settings, which replaces the shared eng/build/test.runsettings, so
+    ConsoleOut 0 is repeated here: it makes a test's output show once instead of twice (see that file).
+  -->
   <NUnit>
     <DefaultTimeout>120000</DefaultTimeout>
+    <ConsoleOut>0</ConsoleOut>
   </NUnit>
 </RunSettings>

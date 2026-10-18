@@ -457,6 +457,13 @@ namespace RetroIO.Protocols.X25.Switch
                     continue;
                 }
 
+                // Claim the stitch first, as OnCallCleared does: the far leg's clear confirmation
+                // raises a clear event that must find no stitch to act on.
+                if (!_node.DestroyStitch(stitch))
+                {
+                    continue;
+                }
+
                 // Only the leg that is still up is told; sending to the port that just went down
                 // would go nowhere.
                 stitch.ForwardQueue.Clear();
@@ -469,7 +476,6 @@ namespace RetroIO.Protocols.X25.Switch
 
                 WriteCdr(stitch, CauseOutOfOrder, 0);
                 AccountForCallClear(stitch);
-                _node.DestroyStitch(stitch);
 
                 CallClear?.Invoke(port.Id, isIngress ? stitch.InLci : stitch.OutLci, CauseOutOfOrder, 0);
             }
@@ -569,6 +575,14 @@ namespace RetroIO.Protocols.X25.Switch
         /// </param>
         private void ClearStitchBothWays(VcStitch stitch, byte cause, byte diagnostic)
         {
+            // Take the stitch out of service first. A clear confirmation coming back from either leg
+            // raises a clear event, and OnCallCleared must find no stitch then, or it would clear the
+            // other leg a second time.
+            if (!_node.DestroyStitch(stitch))
+            {
+                return;
+            }
+
             DiscardQueues(stitch);
             stitch.InPort.ClearCall(stitch.InLci, cause, diagnostic);
             stitch.InPort.Counters.IncrementCallsCleared();
@@ -577,7 +591,6 @@ namespace RetroIO.Protocols.X25.Switch
 
             WriteCdr(stitch, cause, diagnostic);
             AccountForCallClear(stitch);
-            _node.DestroyStitch(stitch);
 
             CallClear?.Invoke(stitch.InPort.Id, stitch.InLci, cause, diagnostic);
         }
@@ -599,6 +612,16 @@ namespace RetroIO.Protocols.X25.Switch
                 return; // no stitch (e.g. already torn down)
             }
 
+            // Claim the stitch before clearing the other leg. That leg's clear confirmation raises a
+            // clear event of its own, on the other port's thread, and while the stitch was still
+            // registered it found it and cleared this leg again: the C emulator saw a second clear
+            // request on a channel that had already been confirmed free. Whoever removes the stitch
+            // does the work; anyone who finds it gone has nothing left to do.
+            if (!_node.DestroyStitch(stitch))
+            {
+                return;
+            }
+
             if (clearedFromIngress)
             {
                 stitch.OutPort.ClearCall(stitch.OutLci, cause, diagnostic);
@@ -610,7 +633,6 @@ namespace RetroIO.Protocols.X25.Switch
 
             WriteCdr(stitch, cause, diagnostic);
             AccountForCallClear(stitch);
-            _node.DestroyStitch(stitch);
 
             CallClear?.Invoke(port.Id, lci, cause, diagnostic);
         }

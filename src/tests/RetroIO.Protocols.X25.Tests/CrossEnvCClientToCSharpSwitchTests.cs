@@ -44,12 +44,12 @@ namespace RetroIO.Protocols.X25.Tests
     [Category("CrossEnvLive")]
     public class CrossEnvCClientToCSharpSwitchTests
     {
-        private const string DefaultEmuDir = "/home/ronny/repos/os/x25emu";
+        internal const string DefaultEmuDir = "/home/ronny/repos/os/x25emu";
 
         /// <summary>
         /// The address WSL uses to reach this machine: the default gateway of its own interface.
         /// </summary>
-        private static string HostAddressForWsl()
+        internal static string HostAddressForWsl()
         {
             string? overridden = Environment.GetEnvironmentVariable("CROSSENV_HOST_IP");
             if (!string.IsNullOrWhiteSpace(overridden))
@@ -114,11 +114,34 @@ namespace RetroIO.Protocols.X25.Tests
             });
 
             SwitchNode node = new SwitchNode(cfg);
-            using XotSwitchPort access = new XotSwitchPort(new PortConfig { Id = 0, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = 16 });
+
+            // x25traffic declares 2048 channels and, as a DTE, starts from the highest, so its first
+            // call arrives on channel 2048. This port owns only 1..16 on purpose. RFC 1613 section 5
+            // says the channel number on the wire "has no significance and has arbitrary values", so
+            // the port renumbers it into its own range and the call must still go through. Until the
+            // port did that, a range of 16 answered the call with a diagnostic ("packet on unassigned
+            // logical channel", 36) and this test needed 2048 here to pass.
+            const ushort CChannelCount = 16;
+            using XotSwitchPort access = new XotSwitchPort(new PortConfig { Id = 0, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = CChannelCount });
             using XotSwitchPort service = new XotSwitchPort(new PortConfig { Id = 1, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = 16 });
 
             Assert.That(access.Start(), Is.True);
             Assert.That(service.Start(), Is.True);
+
+            // Every packet that crosses either port, with its direction, so a failure shows what the
+            // two implementations actually said to each other instead of only that the call failed.
+            System.Text.StringBuilder wire = new System.Text.StringBuilder();
+            PortPacketCaptured record = (portId, inbound, packet) =>
+            {
+                lock (wire)
+                {
+                    wire.Append("port ").Append(portId).Append(inbound ? " IN  " : " OUT ")
+                        .AppendLine(BitConverter.ToString(packet).Replace("-", " "));
+                }
+            };
+            access.PacketCaptured += record;
+            service.PacketCaptured += record;
+
             node.AddPort(access);
             node.AddPort(service);
             SwitchCore core = new SwitchCore(node);
@@ -180,9 +203,17 @@ namespace RetroIO.Protocols.X25.Tests
             TestContext.Out.WriteLine(stdout);
             TestContext.Out.WriteLine(stderr);
             TestContext.Out.WriteLine($"switch stitches: {node.ActiveStitchCount}");
+            string packetsSeen;
+            lock (wire)
+            {
+                packetsSeen = wire.ToString();
+            }
+
+            TestContext.Out.WriteLine("packets seen by the C# switch's ports:");
+            TestContext.Out.WriteLine(packetsSeen);
 
             Assert.That(got, Is.EqualTo(5),
-                $"the C client's data should have crossed the C# switch (stdout: {stdout.Trim()}; stderr: {stderr.Trim()})");
+                $"the C client's data should have crossed the C# switch (stdout: {stdout.Trim()}; stderr: {stderr.Trim()}; packets: {packetsSeen})");
             Assert.That(gotBytes, Is.EqualTo(5 * 64));
         }
     }

@@ -121,15 +121,27 @@ namespace RetroIO.Protocols.X25.Switch.Model
         /// <summary>
         /// Removes a stitch from the switch.
         /// </summary>
+        /// <remarks>
+        /// The removal is atomic, and the return value says whether this call did it. That is what
+        /// lets the clear handlers claim a stitch: when both legs are being cleared, the confirmation
+        /// of the first clear raises a clear event on the other thread, and only the call that took
+        /// the stitch out of service may go on to clear the legs and write the call record.
+        /// </remarks>
         /// <param name="stitch">
         /// The stitch to remove.
         /// </param>
-        public void DestroyStitch(VcStitch stitch)
+        /// <returns>
+        /// <see langword="true"/> when this call removed the stitch; <see langword="false"/> when it
+        /// had already been removed.
+        /// </returns>
+        public bool DestroyStitch(VcStitch stitch)
         {
             lock (_stitchLock)
             {
+                bool wasActive = stitch.Active;
                 stitch.Active = false;
                 _stitches.Remove(stitch);
+                return wasActive;
             }
         }
 

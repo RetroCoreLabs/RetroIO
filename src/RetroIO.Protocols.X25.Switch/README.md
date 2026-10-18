@@ -108,13 +108,13 @@ flowchart TB
 | `SwitchNode` | The runtime state — config, ports, stitches, accounts, uptime |
 | `VcStitch` | The mapping that ties an ingress circuit to an egress one |
 | `ISwitchPort` | A port, independent of its transport |
-| `XotSwitchPort`, `LoopbackSwitchPort` | A real one and a test one |
+| `XotSwitchPort`, `LoopbackSwitchPort` | A real one and a test one. `XotSwitchPort` also shows a monitor what crosses it: `PacketCaptured` (every packet, both directions), the byte totals in `PortCounters`, and `ConnectAttempts`, `LastConnectedMs` and `LastDisconnectedMs`, counted as the C emulator counts them. It takes an optional `ILogger`, and a listening port binds the address in `PortConfig.Host` |
 | `SwitchConfig`, `SwitchConfigLoader` | The parsed configuration, and the INI loader with its defaults |
 | `PortConfig`, `PortType`, `PortTransport`, `PortMode` | One port's configuration. `PortMode`: `1 = DTE`, `0 = DCE` |
 | `SwitchAccount`, `AccountConfig` | Per-subscriber accounting, configuration and lifetime counters |
 | `Cdr` | A Call Detail Record for one completed circuit |
 | `QueuedPacket` | A packet held because the egress leg would not take it |
-| `PortCounters` | Per-port lifetime counters, safe to read from another thread |
+| `PortCounters` | Per-port lifetime counters (calls, packets and X.25 packet bytes), safe to read from another thread |
 
 ## Defaults worth knowing
 
