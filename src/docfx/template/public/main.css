@@ -1,0 +1,12 @@
+/* RetroIO documentation site: the small additions to DocFX's "modern" template.
+   This layer is listed after "modern" in docfx.json, so a file here replaces the template's file of the same name
+   (the template's own main.css is empty, kept as a hook for exactly this). */
+
+/* The header logo. The template's own logo is an SVG that carries its size, and it sets none. The repository icon
+   is a 128 px PNG, which rendered at 128 px: it spilled out of the 59 px header and covered the name. Size it
+   to the line of the menu instead. */
+#logo {
+  height: 2rem;
+  width: 2rem;
+  margin-right: 0.6rem;
+}
