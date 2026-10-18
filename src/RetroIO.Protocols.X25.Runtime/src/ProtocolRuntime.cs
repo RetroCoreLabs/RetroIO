@@ -51,7 +51,13 @@ namespace RetroIO.Protocols.X25.Runtime
         /// and the packet history took over its other job of being the bus the views listen on.
         /// </summary>
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the packet history bus: received and transmitted packets are announced here for the
+        /// history and display code.
+        /// </summary>
+        /// <value>
+        /// One history object, created with the runtime and never replaced.
+        /// </value>
         public Services.X25PacketHistory PacketHistory { get; } = new Services.X25PacketHistory();
         /// <summary>
         /// Gets the routing layer.

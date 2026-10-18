@@ -274,7 +274,13 @@ namespace RetroIO.Protocols.X25.Runtime
             OpenWindowGate();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disposes the endpoint: marks it disposed and the link down, and wakes every sender that
+        /// is waiting for a window so it gives up instead of waiting out its timeout.
+        /// </summary>
+        /// <remarks>
+        /// A second call does nothing. The engine itself is not disposed or detached here.
+        /// </remarks>
         public void Dispose()
         {
             lock (Sync)

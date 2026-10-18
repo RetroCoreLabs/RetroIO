@@ -61,14 +61,41 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
 
         #region ITransportInterface Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the unique name of this transport interface.
+        /// </summary>
+        /// <value>
+        /// The name from the configuration.
+        /// </value>
         public string Name => _config.Name;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the type of transport.
+        /// </summary>
+        /// <value>
+        /// Always <see cref="TransportType.Serial"/>.
+        /// </value>
         public TransportType Type => TransportType.Serial;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the current status of the transport.
+        /// </summary>
         public TransportStatus Status => _status;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Places an outbound X.25 call request.
+        /// </summary>
+        /// <remarks>
+        /// The call is always given LCN 1. A Call Request packet is built and reported to the packet
+        /// history of the runtime as transmitted, but it is not sent on the serial link: that send path
+        /// is retired. The method does not wait for the call to be connected or cleared. Any exception
+        /// is logged, counted as a connection error and turned into a <c>false</c> result.
+        /// </remarks>
+        /// <param name="callRequest">
+        /// The X.25 call request to place.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the transport is active and the packet was built; <c>false</c> when the
+        /// transport is not active or building the packet failed.
+        /// </returns>
         public bool PlaceCall(X25CallRequest callRequest)
         {
             if (_status != TransportStatus.Active)
@@ -207,7 +234,18 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the transport interface.
+        /// </summary>
+        /// <remarks>
+        /// The transport becomes active only when the physical layer of the runtime reports the serial
+        /// interface with the configured name as active; otherwise the status becomes Error. When the
+        /// transport is not stopped, nothing is changed. Any exception is logged and sets the status
+        /// to Error.
+        /// </remarks>
+        /// <returns>
+        /// <c>true</c> when the transport is active after the call; otherwise <c>false</c>.
+        /// </returns>
         public bool Start()
         {
             if (_status != TransportStatus.Stopped)
@@ -248,7 +286,14 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the transport interface.
+        /// </summary>
+        /// <remarks>
+        /// Only changes the status to Stopping and then Stopped, raising <see cref="StatusChanged"/>
+        /// for each; the runtime and the physical layer are not touched. Does nothing when the
+        /// transport is already stopped or stopping.
+        /// </remarks>
         public void Stop()
         {
             if (_status == TransportStatus.Stopped || _status == TransportStatus.Stopping)
@@ -276,7 +321,15 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the statistics of this transport.
+        /// </summary>
+        /// <remarks>
+        /// The counters are kept by this class; they are not read from the physical layer.
+        /// </remarks>
+        /// <returns>
+        /// The statistics object itself, not a copy, with its current status updated.
+        /// </returns>
         public TransportStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
@@ -287,12 +340,22 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             return _statistics;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when an incoming call is received.
+        /// </summary>
+        /// <remarks>
+        /// The handler that raises it is not subscribed to anything in this class, so the event is not
+        /// raised at present.
+        /// </remarks>
         public event EventHandler<X25CallRequest>? IncomingCall;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised each time the transport status changes.
+        /// </summary>
         public event EventHandler<TransportStatusEventArgs>? StatusChanged;
 #pragma warning disable CS0067 // Event required by interface, uses HDLC layer events instead
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when raw data is received from the transport. This class never raises it.
+        /// </summary>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
 #pragma warning restore CS0067
 
