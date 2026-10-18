@@ -56,11 +56,26 @@ namespace RetroIO.Protocols.X25.Sintran
         public TadSessionState ConnectionState => _session.State;
 
         // IProtocolModule Properties
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets or sets the module name.
+        /// </summary>
+        /// <value>
+        /// Set to the client ID by the constructor; it can be changed later.
+        /// </value>
         public string Name { get; set; }
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module description.
+        /// </summary>
+        /// <value>
+        /// Always <c>"SINTRAN TAD Client for connecting to remote TAD servers"</c>.
+        /// </value>
         public string Description { get; } = "SINTRAN TAD Client for connecting to remote TAD servers";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module version.
+        /// </summary>
+        /// <value>
+        /// Always <c>"1.0.0"</c>.
+        /// </value>
         public string Version { get; } = "1.0.0";
 
         /// <summary>
@@ -97,14 +112,28 @@ namespace RetroIO.Protocols.X25.Sintran
 
         #region IProtocolModule Implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the module is bound to a logical channel; records the channel as the current one.
+        /// </summary>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
         public void OnBound(ushort lcn)
         {
             _currentLCN = lcn;
             _logger.LogDebug("SintranTadClient: Bound to LCN {LCN}", lcn);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the module is unbound from a logical channel.
+        /// </summary>
+        /// <remarks>
+        /// When <paramref name="lcn"/> is the current channel, the current channel is cleared and the
+        /// session is marked closed. Any other channel number is ignored.
+        /// </remarks>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
         public void OnUnbound(ushort lcn)
         {
             if (lcn == _currentLCN)
@@ -115,7 +144,17 @@ namespace RetroIO.Protocols.X25.Sintran
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when an X.25 event occurs; dispatches the packet by its type.
+        /// </summary>
+        /// <remarks>
+        /// Packets for any channel other than the current one are ignored. Call Accepted, Data and
+        /// Clear Request packets are handled; other packet types are logged and ignored. An exception
+        /// while handling is logged, not thrown.
+        /// </remarks>
+        /// <param name="args">
+        /// The event data, holding the received packet.
+        /// </param>
         public void OnX25Event(X25PacketEventArgs args)
         {
             _logger.LogDebug("SintranTadClient: Received X25 event: PacketType={PacketType}, LCN={LCN}",
@@ -151,20 +190,30 @@ namespace RetroIO.Protocols.X25.Sintran
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Initializes the module. This implementation only writes a log line.
+        /// </summary>
         public void Initialize()
         {
             _logger.LogInformation("SintranTadClient: Module initialized");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Shuts down the module by calling <see cref="Disconnect"/>.
+        /// </summary>
         public void Shutdown()
         {
             Disconnect();
             _logger.LogInformation("SintranTadClient: Module shutdown");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module status.
+        /// </summary>
+        /// <returns>
+        /// A new status object. The module counts as active when the session is neither Created nor
+        /// Closed, it reports one connection while a channel is bound, and the error count is always 0.
+        /// </returns>
         public ModuleStatus GetStatus()
         {
             return new ModuleStatus
@@ -802,7 +851,12 @@ namespace RetroIO.Protocols.X25.Sintran
 
         #endregion
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disposes the client, calling <see cref="Disconnect"/> first when it is connected.
+        /// </summary>
+        /// <remarks>
+        /// A second call does nothing.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed) return;

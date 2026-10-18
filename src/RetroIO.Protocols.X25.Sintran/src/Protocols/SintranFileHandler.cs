@@ -26,14 +26,31 @@ namespace RetroIO.Protocols.X25.Sintran
         private bool _inTransferMode = false;
         private string _transferFileName = "";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the protocol name of this handler.
+        /// </summary>
+        /// <value>
+        /// Always <c>"FILE"</c>.
+        /// </value>
         public string Protocol => "FILE";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a short description of the protocol, for monitoring and debugging.
+        /// </summary>
+        /// <value>
+        /// Always <c>"SINTRAN file transfer protocol"</c>.
+        /// </value>
         public string Description => "SINTRAN file transfer protocol";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the logical channel number this handler is bound to.
+        /// </summary>
+        /// <value>
+        /// The LCN passed to the last call of <see cref="OnChannelEstablished"/>, or 0 before the first call.
+        /// </value>
         public ushort LCN { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the handler has response data to send back on its channel.
+        /// </summary>
         public event EventHandler<SintranResponseEventArgs>? ResponseReady;
 
         /// <summary>
@@ -55,7 +72,12 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Initializes the handler and marks it active and ready.
+        /// </summary>
+        /// <remarks>
+        /// A second call does nothing until <see cref="Dispose"/> has run.
+        /// </remarks>
         public void Initialize()
         {
             if (_initialized) return;
@@ -66,7 +88,16 @@ namespace RetroIO.Protocols.X25.Sintran
             _initialized = true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the PVC channel is established; binds the handler to the channel.
+        /// </summary>
+        /// <remarks>
+        /// Records the channel number, marks the handler connected, and sends two text lines back:
+        /// a service-ready line and the current directory.
+        /// </remarks>
+        /// <param name="lcn">
+        /// The logical channel number of the established channel.
+        /// </param>
         public void OnChannelEstablished(ushort lcn)
         {
             LCN = lcn;
@@ -82,7 +113,12 @@ namespace RetroIO.Protocols.X25.Sintran
             SendFileResponse($"Current directory: {_currentDirectory}");
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the PVC channel is closed.
+        /// </summary>
+        /// <remarks>
+        /// Marks the handler disconnected and drops any file transfer in progress.
+        /// </remarks>
         public void OnChannelClosed()
         {
             _stats.IsActive = false;
@@ -92,7 +128,17 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogInformation("SintranFileHandler: File transfer channel closed on LCN {LCN}", LCN);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles incoming data from the SINTRAN system.
+        /// </summary>
+        /// <remarks>
+        /// Empty data is ignored. During a file transfer the bytes are treated as transfer data;
+        /// otherwise they are read as an ASCII <c>FILE</c> command. An exception while processing
+        /// is logged and written into the handler status, not thrown.
+        /// </remarks>
+        /// <param name="data">
+        /// The received bytes.
+        /// </param>
         public void HandleData(byte[] data)
         {
             if (data.Length == 0) return;
@@ -488,7 +534,12 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogWarning("SintranFileHandler: Sent file error: {ErrorMessage}", errorMessage);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the handler statistics.
+        /// </summary>
+        /// <returns>
+        /// A new copy of the current statistics; later changes in the handler do not affect it.
+        /// </returns>
         public SintranHandlerStats GetStats()
         {
             return new SintranHandlerStats
@@ -505,7 +556,12 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Cleans up the handler: marks it inactive and disposed and drops any file transfer in progress.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing if the handler was never initialized or is already disposed.
+        /// </remarks>
         public void Dispose()
         {
             if (!_initialized) return;

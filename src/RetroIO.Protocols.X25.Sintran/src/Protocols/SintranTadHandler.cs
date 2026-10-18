@@ -25,14 +25,31 @@ namespace RetroIO.Protocols.X25.Sintran
         private SintranTadSession _session;
         private bool _initialized = false;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the protocol name of this handler.
+        /// </summary>
+        /// <value>
+        /// Always <c>"TAD"</c>.
+        /// </value>
         public string Protocol => "TAD";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a short description of the protocol, for monitoring and debugging.
+        /// </summary>
+        /// <value>
+        /// Always <c>"SINTRAN Terminal Access and Data protocol"</c>.
+        /// </value>
         public string Description => "SINTRAN Terminal Access and Data protocol";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the logical channel number this handler is bound to.
+        /// </summary>
+        /// <value>
+        /// The LCN passed to the last call of <see cref="OnChannelEstablished"/>, or 0 before the first call.
+        /// </value>
         public ushort LCN { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the handler has response data to send back on its channel.
+        /// </summary>
         public event EventHandler<SintranResponseEventArgs>? ResponseReady;
 
         /// <summary>
@@ -59,7 +76,12 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Initializes the handler and marks it active and ready.
+        /// </summary>
+        /// <remarks>
+        /// A second call does nothing until <see cref="Dispose"/> has run.
+        /// </remarks>
         public void Initialize()
         {
             if (_initialized) return;
@@ -70,7 +92,16 @@ namespace RetroIO.Protocols.X25.Sintran
             _initialized = true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the PVC channel is established; binds the handler to the channel.
+        /// </summary>
+        /// <remarks>
+        /// Records the channel number, marks the handler connected, and starts the TAD connection
+        /// handshake (the INIBDR phase).
+        /// </remarks>
+        /// <param name="lcn">
+        /// The logical channel number of the established channel.
+        /// </param>
         public void OnChannelEstablished(ushort lcn)
         {
             LCN = lcn;
@@ -85,7 +116,9 @@ namespace RetroIO.Protocols.X25.Sintran
             StartConnectionHandshake();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the PVC channel is closed; marks the handler disconnected and the TAD session closed.
+        /// </summary>
         public void OnChannelClosed()
         {
             _stats.IsActive = false;
@@ -94,7 +127,17 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogInformation("SintranTadHandler: TAD channel closed on LCN {LCN}", LCN);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles incoming data from the SINTRAN system.
+        /// </summary>
+        /// <remarks>
+        /// Empty data is ignored. Otherwise the bytes are parsed as one TAD message and processed by
+        /// message type. A parse failure, or an exception while processing, sends a TAD error message
+        /// back; the exception is logged and written into the handler status, not thrown.
+        /// </remarks>
+        /// <param name="data">
+        /// The received bytes.
+        /// </param>
         public void HandleData(byte[] data)
         {
             if (data.Length == 0) return;
@@ -719,7 +762,12 @@ namespace RetroIO.Protocols.X25.Sintran
             SendTadMessage(errorMsg);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the handler statistics.
+        /// </summary>
+        /// <returns>
+        /// A new copy of the current statistics; later changes in the handler do not affect it.
+        /// </returns>
         public SintranHandlerStats GetStats()
         {
             return new SintranHandlerStats
@@ -736,7 +784,12 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Cleans up the handler: marks it inactive and disposed and the TAD session closed.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing if the handler was never initialized or is already disposed.
+        /// </remarks>
         public void Dispose()
         {
             if (!_initialized) return;

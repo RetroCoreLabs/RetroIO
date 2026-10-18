@@ -33,11 +33,26 @@ namespace RetroIO.Protocols.X25.Sintran
         private readonly Dictionary<ushort, int> _lcnToTerminalId = new Dictionary<ushort, int>();
         private readonly int _maxTerminals = 8; // Default: 8 terminals (IDs 1-8)
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module name.
+        /// </summary>
+        /// <value>
+        /// Always <c>"SINTRAN PVC Server"</c>.
+        /// </value>
         public string Name => "SINTRAN PVC Server";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module description.
+        /// </summary>
+        /// <value>
+        /// Always <c>"Manages SINTRAN permanent virtual circuits for system protocols"</c>.
+        /// </value>
         public string Description => "Manages SINTRAN permanent virtual circuits for system protocols";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the module version.
+        /// </summary>
+        /// <value>
+        /// Always <c>"1.0.0"</c>.
+        /// </value>
         public string Version => "1.0.0";
 
         /// <summary>
@@ -158,7 +173,20 @@ namespace RetroIO.Protocols.X25.Sintran
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when an X.25 event occurs; dispatches the packet by its type.
+        /// </summary>
+        /// <remarks>
+        /// Handles these packet types:
+        ///  - Call Request: picks a protocol from the Call User Data and creates a handler for the channel.
+        ///  - Data: passes the data to the handler of the channel.
+        ///  - Clear Request and Reset Request: handled for the channel.
+        /// Other packet types are logged and ignored, and an event without a packet does nothing.
+        /// An exception while handling is logged, not thrown.
+        /// </remarks>
+        /// <param name="args">
+        /// The event data, holding the received packet.
+        /// </param>
         public void OnX25Event(X25PacketEventArgs args)
         {
             if (args.Packet == null) return;

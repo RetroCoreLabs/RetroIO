@@ -25,14 +25,31 @@ namespace RetroIO.Protocols.X25.Sintran
         private SintranTadHandler? _tadHandler = null;
         private SintranTadHandler? _padHandler = null; // For future PAD implementation
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the protocol name of this handler.
+        /// </summary>
+        /// <value>
+        /// Always <c>"ROUTING"</c>.
+        /// </value>
         public string Protocol => "ROUTING";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a short description of the protocol, for monitoring and debugging.
+        /// </summary>
+        /// <value>
+        /// Always <c>"SINTRAN routing information protocol"</c>.
+        /// </value>
         public string Description => "SINTRAN routing information protocol";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the logical channel number this handler is bound to.
+        /// </summary>
+        /// <value>
+        /// The LCN passed to the last call of <see cref="OnChannelEstablished"/>, or 0 before the first call.
+        /// </value>
         public ushort LCN { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Raised when the handler has response data to send back on its channel.
+        /// </summary>
         public event EventHandler<SintranResponseEventArgs>? ResponseReady;
 
         /// <summary>
@@ -107,7 +124,12 @@ namespace RetroIO.Protocols.X25.Sintran
             return frame;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Initializes the handler and marks it active and ready.
+        /// </summary>
+        /// <remarks>
+        /// A second call does nothing until <see cref="Dispose"/> has run.
+        /// </remarks>
         public void Initialize()
         {
             if (_initialized) return;
@@ -118,7 +140,16 @@ namespace RetroIO.Protocols.X25.Sintran
             _initialized = true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the PVC channel is established; binds the handler to the channel.
+        /// </summary>
+        /// <remarks>
+        /// Records the channel number, marks the handler connected, and sends the initial routing
+        /// announcement.
+        /// </remarks>
+        /// <param name="lcn">
+        /// The logical channel number of the established channel.
+        /// </param>
         public void OnChannelEstablished(ushort lcn)
         {
             LCN = lcn;
@@ -133,7 +164,9 @@ namespace RetroIO.Protocols.X25.Sintran
             SendRoutingAnnouncement();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Called when the PVC channel is closed; marks the handler disconnected.
+        /// </summary>
         public void OnChannelClosed()
         {
             _stats.IsActive = false;
@@ -141,7 +174,17 @@ namespace RetroIO.Protocols.X25.Sintran
             _logger.LogInformation("SintranRoutingHandler: Routing channel closed on LCN {LCN}", LCN);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles incoming data from the SINTRAN system.
+        /// </summary>
+        /// <remarks>
+        /// Empty data is ignored. Data that starts as a routing protocol frame (<c>0x21 0x13</c>) is
+        /// processed as one; anything else goes to the older X.25 payload parser. An exception while
+        /// processing is logged and written into the handler status, not thrown.
+        /// </remarks>
+        /// <param name="data">
+        /// The received bytes.
+        /// </param>
         public void HandleData(byte[] data)
         {
             if (data.Length == 0) return;
@@ -497,7 +540,12 @@ namespace RetroIO.Protocols.X25.Sintran
             return new byte[] { 0xD8, 0xDE, 0x40 };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the handler statistics.
+        /// </summary>
+        /// <returns>
+        /// A new copy of the current statistics; later changes in the handler do not affect it.
+        /// </returns>
         public SintranHandlerStats GetStats()
         {
             return new SintranHandlerStats
@@ -514,7 +562,13 @@ namespace RetroIO.Protocols.X25.Sintran
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Cleans up the handler: marks it inactive and disposed.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing if the handler was never initialized or is already disposed. The registered
+        /// TAD and PAD handlers are not disposed here.
+        /// </remarks>
         public void Dispose()
         {
             if (!_initialized) return;

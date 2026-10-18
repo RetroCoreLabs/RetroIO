@@ -64,11 +64,26 @@ namespace RetroIO.Protocols.X25.Sintran.Services
                 string.Join(", ", _localAddresses));
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the unique name of this service.
+        /// </summary>
+        /// <value>
+        /// Always <c>"SINTRAN_TAD"</c>.
+        /// </value>
         public string ServiceName => "SINTRAN_TAD";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the local X.121 addresses this service handles.
+        /// </summary>
+        /// <value>
+        /// The array passed to the constructor; it is returned as is, not copied.
+        /// </value>
         public string[] LocalAddresses => _localAddresses;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the priority of this service; a higher value is more specific and is checked first.
+        /// </summary>
+        /// <value>
+        /// Always 90.
+        /// </value>
         public int Priority => 90; // Slightly lower than standard TAD (100) but higher than generic services
 
         /// <summary>
