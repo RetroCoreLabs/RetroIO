@@ -61,7 +61,20 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Frames a complete X.25 packet with the XOT codec and writes it to the peer's transport.
+        /// </summary>
+        /// <remarks>
+        /// Never returns <see cref="X25SendResult.Refused"/>; any exception from the codec or the
+        /// transport is caught and reported as <see cref="X25SendResult.LinkDown"/>.
+        /// </remarks>
+        /// <param name="packet">
+        /// The packet bytes (GFI + LCN + PTI + body).
+        /// </param>
+        /// <returns>
+        /// <see cref="X25SendResult.Sent"/> when the frame was written; <see cref="X25SendResult.LinkDown"/>
+        /// when writing threw.
+        /// </returns>
         public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
         {
             try
@@ -75,7 +88,9 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Closes and disposes the listening transport.
+        /// </summary>
         public void Dispose()
         {
             _transport.Close();
@@ -100,7 +115,12 @@ namespace RetroIO.Protocols.X25.Tests
                 _transport = transport;
             }
 
-            /// <inheritdoc/>
+            /// <summary>
+            /// Writes fully framed bytes to the transport.
+            /// </summary>
+            /// <param name="bytes">
+            /// The framed bytes to transmit.
+            /// </param>
             public void Send(ReadOnlySpan<byte> bytes)
             {
                 _transport.Write(bytes);
