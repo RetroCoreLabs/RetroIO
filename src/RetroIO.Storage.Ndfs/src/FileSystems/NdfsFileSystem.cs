@@ -34,11 +34,27 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         // Random access file handles
         private Dictionary<int, NdfsFileHandle> _openHandles = new Dictionary<int, NdfsFileHandle>();
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the filesystem type identifier.
+        /// </summary>
+        /// <value>
+        /// Always <c>"NDFS"</c>.
+        /// </value>
         public string FileSystemType => "NDFS";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the volume label from the filesystem metadata.
+        /// </summary>
+        /// <value>
+        /// The directory name from the master block, or <c>"NDFS"</c> when no master block has been
+        /// read yet (not an empty string).
+        /// </value>
         public string VolumeLabel => _masterBlock?.DirectoryName ?? "NDFS";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the separator used between a file name and its type (extension).
+        /// </summary>
+        /// <value>
+        /// Always <c>":"</c>.
+        /// </value>
         public string ExtensionSeparator => ":";
 
         /// <summary>
@@ -110,7 +126,20 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             _device.WriteBlock(BlockAddress.FromLBA(0), pageBuffer);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Determines whether the given block device holds an NDFS volume, for auto-detection.
+        /// </summary>
+        /// <remarks>
+        /// Reads page 0, parses it as a master block and checks it with <see cref="MasterBlock.IsValid"/>.
+        /// The device is not changed.
+        /// </remarks>
+        /// <param name="device">
+        /// The block device to inspect.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the master block is valid; <c>false</c> when it is not, when
+        /// <paramref name="device"/> is null or not mounted, or when reading or parsing throws.
+        /// </returns>
         public bool CanHandle(IBlockDevice device)
         {
             if (device == null || !device.IsMounted)
@@ -779,14 +808,33 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
         // ==================== INdfsFileSystem Implementation ====================
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets all users defined in the filesystem.
+        /// </summary>
+        /// <returns>
+        /// A new list of the user entries loaded from the user file.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public IReadOnlyList<UserEntry> GetUsers()
         {
             EnsureInitialized();
             return _userFile.GetUsers();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a specific user by index.
+        /// </summary>
+        /// <param name="userIndex">
+        /// The index of the user.
+        /// </param>
+        /// <returns>
+        /// The user entry, or <c>null</c> when no user has that index.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public UserEntry? GetUser(int userIndex)
         {
             EnsureInitialized();
@@ -990,7 +1038,24 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Clears (sets to 0) the password of a user and writes the user entry to the device.
+        /// </summary>
+        /// <remarks>
+        /// The device is flushed after the write so the change reaches the image at once. On a
+        /// read-only device the password of the in-memory user entry is still set to 0, but nothing
+        /// is written and the method returns <c>false</c>.
+        /// </remarks>
+        /// <param name="userIndex">
+        /// The index of the user whose password is cleared.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the password was cleared and written; <c>false</c> when the user does not
+        /// exist, the user file is not available, or the device is read-only.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public bool ClearUserPassword(int userIndex)
         {
             EnsureInitialized();
@@ -1019,7 +1084,24 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Clears (sets to 0) the password of a user found by name.
+        /// </summary>
+        /// <remarks>
+        /// The name is matched without regard to case, and the work is done by
+        /// <see cref="ClearUserPassword(int)"/>.
+        /// </remarks>
+        /// <param name="userName">
+        /// The name of the user whose password is cleared.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the user was found and the password cleared and written; <c>false</c> when
+        /// <paramref name="userName"/> is null or empty, no user has that name, or
+        /// <see cref="ClearUserPassword(int)"/> returns <c>false</c>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public bool ClearUserPassword(string userName)
         {
             EnsureInitialized();
@@ -1034,7 +1116,24 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return ClearUserPassword(user.UserIndex);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the manual instructions for clearing the password of a user with FILE-SYSTEM-INVESTIGATOR.
+        /// </summary>
+        /// <remarks>
+        /// The text gives the page and word numbers of the password word in octal for
+        /// FILE-SYSTEM-INVESTIGATOR, followed by technical details and the byte offset of the
+        /// password word in the image file for a hex editor. The device is only read, never written.
+        /// </remarks>
+        /// <param name="userIndex">
+        /// The index of the user.
+        /// </param>
+        /// <returns>
+        /// The instruction text, or <c>null</c> when the user does not exist, the user file is not
+        /// available or not indexed, or the data block of the user cannot be found.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public string? GetPasswordClearInstructions(int userIndex)
         {
             EnsureInitialized();
@@ -1141,7 +1240,24 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return sb.ToString();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the manual instructions for clearing the password of a user, found by name, with
+        /// FILE-SYSTEM-INVESTIGATOR.
+        /// </summary>
+        /// <remarks>
+        /// The name is matched without regard to case, and the text is built by
+        /// <see cref="GetPasswordClearInstructions(int)"/>.
+        /// </remarks>
+        /// <param name="userName">
+        /// The name of the user.
+        /// </param>
+        /// <returns>
+        /// The instruction text, or <c>null</c> when <paramref name="userName"/> is null or empty, no
+        /// user has that name, or <see cref="GetPasswordClearInstructions(int)"/> returns <c>null</c>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public string? GetPasswordClearInstructions(string userName)
         {
             EnsureInitialized();
@@ -1156,14 +1272,34 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return GetPasswordClearInstructions(user.UserIndex);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the bit file that holds the allocation bitmap.
+        /// </summary>
+        /// <returns>
+        /// The loaded bit file itself, not a copy.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public BitFile GetBitFile()
         {
             EnsureInitialized();
             return _bitFile;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Checks whether a block (page) is marked used in the allocation bitmap.
+        /// </summary>
+        /// <param name="blockId">
+        /// The block number to check.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the block is marked used; <c>false</c> when it is free, or when the bitmap
+        /// is not loaded or <paramref name="blockId"/> is past its last page.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public bool IsBlockUsed(uint blockId)
         {
             EnsureInitialized();
@@ -1194,35 +1330,84 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return _bitFile.GetFreePages();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets all object (file) entries in the filesystem.
+        /// </summary>
+        /// <returns>
+        /// A new list of the object entries loaded from the object file.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public IReadOnlyList<ObjectEntry> GetObjectEntries()
         {
             EnsureInitialized();
             return _objectFile.GetObjects();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the object (file) entry with the given name that belongs to the given user.
+        /// </summary>
+        /// <remarks>
+        /// Both names are matched without regard to case.
+        /// </remarks>
+        /// <param name="objectName">
+        /// The object name.
+        /// </param>
+        /// <param name="userName">
+        /// The name of the owning user.
+        /// </param>
+        /// <returns>
+        /// The object entry, or <c>null</c> when none matches.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public ObjectEntry? GetObjectEntry(string objectName, string userName)
         {
             EnsureInitialized();
             return _objectFile.FindObject(objectName, userName);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the object file structure.
+        /// </summary>
+        /// <returns>
+        /// The loaded object file itself, not a copy.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public ObjectFile GetObjectFile()
         {
             EnsureInitialized();
             return _objectFile;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the master block information.
+        /// </summary>
+        /// <returns>
+        /// The loaded master block itself, not a copy.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public MasterBlock GetMasterBlock()
         {
             EnsureInitialized();
             return _masterBlock!;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the directory name from the master block.
+        /// </summary>
+        /// <returns>
+        /// The directory name, or an empty string when there is no master block.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public string GetDirectoryName()
         {
             EnsureInitialized();
@@ -1313,7 +1498,21 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Generates a bitmap consistency report.
+        /// </summary>
+        /// <remarks>
+        /// The report lists the total, used and free page counts of the bitmap, one error line for
+        /// each block a file uses (index blocks included) that is not marked used in the bitmap, and
+        /// the sum of the page counts of all files. It does not report pages marked used that no file
+        /// uses.
+        /// </remarks>
+        /// <returns>
+        /// The report text.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public string GenerateBitmapReport()
         {
             EnsureInitialized();
@@ -1347,7 +1546,20 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return sb.ToString();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Dumps filesystem information as text, for debugging.
+        /// </summary>
+        /// <remarks>
+        /// The text holds the directory name, image size and unreserved pages from the master block,
+        /// one line per user (index, name, pages used and reserved), and one line per file (index,
+        /// user, name, type, file type, pages and bytes).
+        /// </remarks>
+        /// <returns>
+        /// The information text.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public string DumpFileSystemInfo()
         {
             EnsureInitialized();
@@ -1375,7 +1587,19 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             return sb.ToString();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Verifies filesystem integrity.
+        /// </summary>
+        /// <remarks>
+        /// Checks that the master block is valid and that every block each file uses (index blocks
+        /// included) is marked used in the bitmap. Any exception during the check counts as a failure.
+        /// </remarks>
+        /// <returns>
+        /// <c>true</c> when both checks pass; otherwise <c>false</c>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the filesystem is not initialized.
+        /// </exception>
         public bool VerifyFileSystemIntegrity()
         {
             EnsureInitialized();

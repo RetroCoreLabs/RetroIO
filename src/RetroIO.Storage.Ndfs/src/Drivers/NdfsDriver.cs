@@ -32,14 +32,35 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// </summary>
         public INdfsFileSystem? GetFileSystem() => _filesystem;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the filesystem type identifier.
+        /// </summary>
+        /// <value>
+        /// The type reported by the mounted filesystem, or <c>"NDFS"</c> when nothing is mounted.
+        /// </value>
         public string FileSystemType => _filesystem?.FileSystemType ?? "NDFS";
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the volume label of the mounted filesystem.
+        /// </summary>
+        /// <value>
+        /// The label reported by the mounted filesystem, or an empty string when nothing is mounted.
+        /// </value>
         public string VolumeLabel => _filesystem?.VolumeLabel ?? string.Empty;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the separator used between a file name and its type (extension).
+        /// </summary>
+        /// <value>
+        /// The separator reported by the mounted filesystem, or <c>":"</c> when nothing is mounted.
+        /// </value>
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ":";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the capability flags of this driver, for runtime capability detection.
+        /// </summary>
+        /// <value>
+        /// Read, Write, Delete, CreateDirectory, ListDirectory, Subdirectories, FileTypes,
+        /// BlockAllocationMap, VolumeLabel, BlockRead, Permissions and Quotas. Rename is not included.
+        /// </value>
         public DriverCapabilities Capabilities =>
             DriverCapabilities.Read |
             DriverCapabilities.Write |          // WriteFile: real implementation (files <=1MB, Indexed allocation)
@@ -57,11 +78,26 @@ namespace RetroIO.Storage.Ndfs.Drivers
                                                 // so it falls through to IFileSystemDriver's default NotSupportedException (user
                                                 // rename is a known, documented gap, not implemented here).
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether this driver supports read operations.
+        /// </summary>
+        /// <value>
+        /// Always <c>true</c>.
+        /// </value>
         public bool CanRead => true;
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether this driver supports write operations.
+        /// </summary>
+        /// <value>
+        /// Always <c>true</c>, also when the image was mounted read-only.
+        /// </value>
         public bool CanWrite => true; // Write support enabled (files ≤1MB, uses Indexed allocation)
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets whether this driver supports block-level access.
+        /// </summary>
+        /// <value>
+        /// Always <c>true</c>.
+        /// </value>
         public bool HasBlockAccess => true;
 
         /// <summary>
@@ -76,7 +112,23 @@ namespace RetroIO.Storage.Ndfs.Drivers
             return null;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Mounts an NDFS filesystem from the provided stream.
+        /// </summary>
+        /// <remarks>
+        /// Builds an NDFS block device descriptor from the stream length, mounts a block device on the
+        /// stream, and initializes an <see cref="NdfsFileSystem"/> on that block device. Errors from the
+        /// block device or the filesystem pass through to the caller.
+        /// </remarks>
+        /// <param name="imageStream">
+        /// The stream containing the filesystem image.
+        /// </param>
+        /// <param name="readOnly">
+        /// <c>true</c> to mount the block device read-only.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
             if (imageStream == null)
@@ -94,21 +146,60 @@ namespace RetroIO.Storage.Ndfs.Drivers
             _filesystem.Initialize(_blockDevice);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads an entire file from the mounted filesystem.
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the mounted filesystem; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="path">
+        /// The filesystem path of the file.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public byte[] ReadFile(string path)
         {
             EnsureMounted();
             return _filesystem!.ReadFile(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes data to a file in the mounted filesystem.
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the mounted filesystem; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="path">
+        /// The filesystem path of the file.
+        /// </param>
+        /// <param name="data">
+        /// The data to write.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             EnsureMounted();
             _filesystem!.WriteFile(path, data);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Deletes a file from the mounted filesystem.
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the mounted filesystem; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="path">
+        /// The filesystem path of the file.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public void DeleteFile(string path)
         {
             EnsureMounted();
@@ -129,42 +220,115 @@ namespace RetroIO.Storage.Ndfs.Drivers
             _filesystem!.CreateDirectory(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Lists the contents of a directory in the mounted filesystem.
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the mounted filesystem; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="path">
+        /// The directory path.
+        /// </param>
+        /// <returns>
+        /// The directory entries.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureMounted();
             return _filesystem!.ListDirectory(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets metadata about a file or directory in the mounted filesystem.
+        /// </summary>
+        /// <param name="path">
+        /// The path of the file or directory.
+        /// </param>
+        /// <returns>
+        /// The metadata returned by the mounted filesystem, or <c>null</c> when it returns none.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
             EnsureMounted();
             return _filesystem!.GetMetadata(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a block of data at the specified address from the mounted block device.
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the block device; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="address">
+        /// The block address.
+        /// </param>
+        /// <param name="buffer">
+        /// The buffer that receives the block data.
+        /// </param>
+        /// <returns>
+        /// The number of bytes read, as returned by the block device.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public int ReadBlock(BlockAddress address, Span<byte> buffer)
         {
             EnsureMounted();
             return _blockDevice!.ReadBlock(address, buffer);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes a block of data at the specified address on the mounted block device.
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the block device; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="address">
+        /// The block address.
+        /// </param>
+        /// <param name="data">
+        /// The data to write.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             EnsureMounted();
             _blockDevice!.WriteBlock(address, data);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets information about the mounted block device.
+        /// </summary>
+        /// <returns>
+        /// The information returned by the block device.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public BlockDeviceInfo? GetBlockDeviceInfo()
         {
             EnsureMounted();
             return _blockDevice!.GetBlockDeviceInfo();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the filesystem capabilities: extended attribute support and the property keys.
+        /// </summary>
+        /// <remarks>
+        /// Does not need a mounted image; the answer is fixed.
+        /// </remarks>
+        /// <returns>
+        /// A new capabilities object with extended attributes supported and the 23 <c>ndfs:</c>
+        /// property keys.
+        /// </returns>
         public FileSystemCapabilities GetCapabilities()
         {
             // NDFS supports full extended attributes (23 metadata fields)
@@ -185,21 +349,66 @@ namespace RetroIO.Storage.Ndfs.Drivers
             };
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the properties (metadata) of a file without reading its contents.
+        /// </summary>
+        /// <param name="path">
+        /// The filesystem path of the file.
+        /// </param>
+        /// <returns>
+        /// The property bag returned by the mounted filesystem, or <c>null</c> when it returns none.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public System.Collections.Generic.IDictionary<string, object>? GetFileProperties(string path)
         {
             EnsureMounted();
             return _filesystem!.GetFileProperties(path);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Writes a file together with its extended properties (metadata).
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the mounted filesystem; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="path">
+        /// The filesystem path of the file.
+        /// </param>
+        /// <param name="data">
+        /// The file data.
+        /// </param>
+        /// <param name="propertyBag">
+        /// The extended properties to apply.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public void WriteFileWithProperties(string path, byte[] data, System.Collections.Generic.IDictionary<string, object> propertyBag)
         {
             EnsureMounted();
             _filesystem!.WriteFileWithProperties(path, data, propertyBag);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Reads a file together with its extended properties (metadata).
+        /// </summary>
+        /// <remarks>
+        /// The call is passed to the mounted filesystem; its errors pass through to the caller.
+        /// </remarks>
+        /// <param name="path">
+        /// The filesystem path of the file.
+        /// </param>
+        /// <param name="propertyBag">
+        /// The dictionary that receives the file properties.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the driver is not mounted.
+        /// </exception>
         public byte[] ReadFileWithProperties(string path, System.Collections.Generic.IDictionary<string, object> propertyBag)
         {
             EnsureMounted();
@@ -348,7 +557,9 @@ namespace RetroIO.Storage.Ndfs.Drivers
             return info;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disposes the mounted filesystem and block device, if any.
+        /// </summary>
         public void Dispose()
         {
             _filesystem?.Dispose();

@@ -19,10 +19,20 @@ namespace RetroIO.Storage.Ndfs.Drivers
     {
         private static readonly string[] SupportedExtensions = { ".nd", ".ndfs", ".nord", ".ndf" };
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the filesystem type identifier this provider handles.
+        /// </summary>
+        /// <value>
+        /// Always <c>"NDFS"</c>.
+        /// </value>
         public override string FileSystemType => "NDFS";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a human-readable description of the filesystem.
+        /// </summary>
+        /// <value>
+        /// Always <c>"Nord Disk File System"</c>.
+        /// </value>
         public override string Description => "Nord Disk File System";
 
         /// <summary>
