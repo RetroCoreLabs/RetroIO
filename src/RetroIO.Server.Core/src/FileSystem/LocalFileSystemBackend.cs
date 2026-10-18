@@ -12,26 +12,92 @@ namespace RetroIO.Server.Core.FileSystem;
 /// </summary>
 public sealed class LocalFileSystemBackend : IFileSystemBackend
 {
-    /// <inheritdoc/>
+    /// <summary>
+    /// Checks whether a directory exists, using <see cref="Directory.Exists"/>.
+    /// </summary>
+    /// <param name="path">
+    /// The directory path to check.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> when the directory exists; otherwise <c>false</c>.
+    /// </returns>
     public bool DirectoryExists(string path) => Directory.Exists(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Creates a directory, including any missing parent directories, using
+    /// <see cref="Directory.CreateDirectory(string)"/>. Does nothing if it already exists.
+    /// </summary>
+    /// <remarks>
+    /// Errors from <see cref="Directory.CreateDirectory(string)"/> pass through to the caller.
+    /// </remarks>
+    /// <param name="path">
+    /// The directory path to create.
+    /// </param>
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Checks whether a file exists, using <see cref="File.Exists"/>.
+    /// </summary>
+    /// <param name="path">
+    /// The file path to check.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> when the file exists; otherwise <c>false</c>.
+    /// </returns>
     public bool FileExists(string path) => File.Exists(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Enumerates all files and directories in a directory, using
+    /// <see cref="Directory.EnumerateFileSystemEntries(string)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Errors from <see cref="Directory.EnumerateFileSystemEntries(string)"/> pass through to the caller.
+    /// </remarks>
+    /// <param name="path">
+    /// The directory path.
+    /// </param>
+    /// <returns>
+    /// The full paths of the entries.
+    /// </returns>
     public IEnumerable<string> EnumerateFileSystemEntries(string path)
         => Directory.EnumerateFileSystemEntries(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the file name from a path, using <see cref="Path.GetFileName(string)"/>.
+    /// </summary>
+    /// <param name="path">
+    /// The path.
+    /// </param>
+    /// <returns>
+    /// The part after the last directory separator.
+    /// </returns>
     public string GetFileName(string path) => Path.GetFileName(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether a path is an existing directory, using <see cref="Directory.Exists"/>.
+    /// </summary>
+    /// <param name="path">
+    /// The path to check.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> when the path is an existing directory; otherwise <c>false</c>.
+    /// </returns>
     public bool IsDirectory(string path) => Directory.Exists(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets file information for a path.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="FileInfo"/> is created whether or not the file exists; check its
+    /// <c>Exists</c> property.
+    /// </remarks>
+    /// <param name="path">
+    /// The file path.
+    /// </param>
+    /// <returns>
+    /// A new <see cref="FileInfo"/> for <paramref name="path"/>, or <c>null</c> when creating it
+    /// throws, for example for a null or empty path.
+    /// </returns>
     public FileInfo? GetFileInfo(string path)
     {
         try
@@ -44,13 +110,46 @@ public sealed class LocalFileSystemBackend : IFileSystemBackend
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Opens a file stream, using <see cref="File.Open(string, FileMode, FileAccess)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Errors from <see cref="File.Open(string, FileMode, FileAccess)"/> pass through to the caller.
+    /// </remarks>
+    /// <param name="path">
+    /// The file path.
+    /// </param>
+    /// <param name="mode">
+    /// How to open or create the file.
+    /// </param>
+    /// <param name="access">
+    /// The access wanted.
+    /// </param>
+    /// <returns>
+    /// The opened stream.
+    /// </returns>
     public FileStream OpenFile(string path, FileMode mode, FileAccess access)
         => File.Open(path, mode, access);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the full, absolute path, using <see cref="Path.GetFullPath(string)"/>.
+    /// </summary>
+    /// <param name="path">
+    /// The path to resolve.
+    /// </param>
+    /// <returns>
+    /// The absolute path.
+    /// </returns>
     public string GetFullPath(string path) => Path.GetFullPath(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Combines path segments, using <see cref="Path.Combine(string[])"/>.
+    /// </summary>
+    /// <param name="paths">
+    /// The path segments.
+    /// </param>
+    /// <returns>
+    /// The combined path.
+    /// </returns>
     public string CombinePath(params string[] paths) => Path.Combine(paths);
 }
