@@ -272,7 +272,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// The block, zero filled to its full length.
         /// </returns>
         /// <remarks>
-        /// From <c>claude-file-stat-102-to-100-2026-07-29.pcapng</c>, whose block reads
+        /// From <c>2026-07-29-2015-fa-file-statistics-d102-to-d100.pcapng</c>, whose block reads
         /// <c>(SYSTEM)SINTRAN:DATA'SINTRAN:DATA'</c> and then zeros. The filespec appears TWICE, each
         /// copy ended by the SINTRAN terminator; why is UNKNOWN, and it is reproduced rather than
         /// explained. A whole-directory listing puts the terminator straight after the bracket.

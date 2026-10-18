@@ -60,14 +60,14 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The capture to dump.
         /// </param>
         [Theory]
-        [InlineData("claude-file-stat-102-to-100-2026-07-29.pcapng")]
-        [InlineData("claude-delete-file-102-to-100-2026-07-29.pcapng")]
-        [InlineData("claude-create-file-102-to-100-2026-07-30.pcapng")]
-        [InlineData("claude-create-file-DIRSPEC-102-to-100-2026-07-30.pcapng")]
-        [InlineData("claude-open-close-file-102-to-100-2026-07-30.pcapng")]
-        [InlineData("claude-open-W-close-102-to-100-2026-07-30.pcapng")]
-        [InlineData("claude-OPENONLY-102-to-100-2026-07-30.pcapng")]
-        [InlineData("claude-CLOSEONLY-102-to-100-2026-07-30.pcapng")]
+        [InlineData("2026-07-29-2015-fa-file-statistics-d102-to-d100.pcapng")]
+        [InlineData("2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng")]
+        [InlineData("2026-07-30-0957-fa-create-file-d102-to-d100.pcapng")]
+        [InlineData("2026-07-30-1041-fa-create-file-dir-in-spec-d102-to-d100.pcapng")]
+        [InlineData("2026-07-30-1433-fa-open-close-file-d102-to-d100.pcapng")]
+        [InlineData("2026-07-30-1449-fa-open-write-close-d102-to-d100.pcapng")]
+        [InlineData("2026-07-30-1503-fa-open-only-d102-to-d100.pcapng")]
+        [InlineData("2026-07-30-1504-fa-close-only-d102-to-d100.pcapng")]
         public void DumpEveryMessageBody(string captureName)
         {
             string? path = PcapFiles.File(captureName);

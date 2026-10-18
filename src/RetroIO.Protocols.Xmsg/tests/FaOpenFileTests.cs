@@ -50,12 +50,12 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// <summary>
         /// The recording of the open and its close.
         /// </summary>
-        private const string CaptureName = "claude-open-close-file-102-to-100-2026-07-30.pcapng";
+        private const string CaptureName = "2026-07-30-1433-fa-open-close-file-d102-to-d100.pcapng";
 
         /// <summary>
         /// The same open run again with write access instead of read.
         /// </summary>
-        private const string WriteCaptureName = "claude-open-W-close-102-to-100-2026-07-30.pcapng";
+        private const string WriteCaptureName = "2026-07-30-1449-fa-open-write-close-d102-to-d100.pcapng";
 
         /// <summary>
         /// Frame offset at which the message body begins.

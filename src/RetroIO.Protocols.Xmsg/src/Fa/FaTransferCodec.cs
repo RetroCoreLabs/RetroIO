@@ -16,7 +16,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// <remarks>
     /// <para>
     /// Captured from node 102 to node 100 in
-    /// <c>claude-transfer-file-COMPLETE-102-to-100-2026-07-29.pcapng</c>, the first transfer ever
+    /// <c>2026-07-29-1946-xftra-send-file-complete-d102-to-d100.pcapng</c>, the first transfer ever
     /// captured carrying real file content:
     /// </para>
     /// <code>

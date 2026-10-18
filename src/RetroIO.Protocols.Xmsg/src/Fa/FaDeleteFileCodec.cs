@@ -26,7 +26,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// <para><b>Measured, not guessed</b></para>
     /// <para>
     /// Every byte below comes from real traffic between two real machines:
-    /// <c>DOC/captures/ARCHIVE-2026-07/claude-delete-file-102-to-100-2026-07-29.pcapng</c>, where
+    /// <c>DOC/captures/ARCHIVE-2026-07/2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng</c>, where
     /// D102 deletes <c>XFERTEST:DATA</c> on D100, plus the two requests D100 sent us on 2026-08-06
     /// that <see cref="FaListFilesCodec.TryReadDeleteFileName"/> records.
     /// </para>

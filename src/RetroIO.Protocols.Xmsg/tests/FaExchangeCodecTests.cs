@@ -34,13 +34,13 @@ namespace RetroIO.Protocols.Xmsg.Tests
             _output = output;
         }
 
-        private const string FileStatCapture = "claude-file-stat-102-to-100-2026-07-29.pcapng";
-        private const string DeleteCapture = "claude-delete-file-102-to-100-2026-07-29.pcapng";
+        private const string FileStatCapture = "2026-07-29-2015-fa-file-statistics-d102-to-d100.pcapng";
+        private const string DeleteCapture = "2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng";
 
         /// <summary>
         /// The CREATE-FILE recording, taken a day later than the other two.
         /// </summary>
-        private const string CreateCapture = "claude-create-file-102-to-100-2026-07-30.pcapng";
+        private const string CreateCapture = "2026-07-30-0957-fa-create-file-d102-to-d100.pcapng";
 
         /// <summary>
         /// Frame offset at which the message body begins.

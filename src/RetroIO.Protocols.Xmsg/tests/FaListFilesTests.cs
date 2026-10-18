@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// <remarks>
     /// <para>
     /// Every vector here comes from
-    /// <c>E:\Dev\Ronny\X25Emulator\pcap\claude-list-files-d100-system-2026-07-29.pcapng</c>, a
+    /// <c>E:\Dev\Ronny\X25Emulator\pcap\2026-07-29-1716-fa-list-files-system-d102-to-d100.pcapng</c>, a
     /// <c>LIST-FILES d100(system).</c> issued on node 102 against node 100, which returned ten
     /// entries in ten consecutive round trips.
     /// </para>

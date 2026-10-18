@@ -23,8 +23,8 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
     /// <para><b>Provenance - read this first</b></para>
     /// This layer is the most inference-heavy in the stack: it is reconstructed almost
     /// entirely from ONE captured connect-to scenario
-    /// (<c>new-conn-to-102-from-100.pcapng</c>, cross-checked with
-    /// <c>conn-to-102-from103-via100.pcapng</c>). The phase model is INFERRED; every value the
+    /// (<c>2026-04-09-1242-tad-connect-to-d102-from-d100.pcapng</c>, cross-checked with
+    /// <c>2026-04-09-0100-tad-connect-to-d102-from-d103-via-d100.pcapng</c>). The phase model is INFERRED; every value the
     /// builders emit that was seen exactly once is OBSERVED (single capture), not VERIFIED.
     /// The opcode meanings are VERIFIED against <c>TAD/TAD-Message-Formats.md</c>, but the
     /// concrete envelope bytes (counters, flags, ports) come only from capture and are supplied

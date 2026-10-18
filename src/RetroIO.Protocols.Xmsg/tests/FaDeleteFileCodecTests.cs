@@ -33,7 +33,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// The QFORM body of a real delete, from the operation word onwards.
         /// </summary>
         /// <remarks>
-        /// <c>DOC/captures/ARCHIVE-2026-07/claude-delete-file-102-to-100-2026-07-29.pcapng</c>. The
+        /// <c>DOC/captures/ARCHIVE-2026-07/2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng</c>. The
         /// trailing <c>46</c> after the terminator is the byte whose meaning is unknown; ours writes
         /// a space there, so the comparison below stops short of it and the next test covers the
         /// rest.

@@ -21,7 +21,7 @@ using Xunit.Abstractions;
 namespace RetroIO.Protocols.Xmsg.Live.Tests
 {
     /// <summary>
-    /// Replays the captured connect-to (<c>new-conn-to-102-from-100.pcapng</c>) through the TAD
+    /// Replays the captured connect-to (<c>2026-04-09-1242-tad-connect-to-d102-from-d100.pcapng</c>) through the TAD
     /// session state machine and asserts the OBSERVED phase order and negotiated parameters.
     /// </summary>
     /// <remarks>
@@ -31,7 +31,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
     /// </remarks>
     public sealed class TadReplayPcapTests
     {
-        private const string ConnectCapture = "new-conn-to-102-from-100.pcapng";
+        private const string ConnectCapture = "2026-04-09-1242-tad-connect-to-d102-from-d100.pcapng";
         private const ushort ClientNode = 100;
 
         private readonly ITestOutputHelper _output;

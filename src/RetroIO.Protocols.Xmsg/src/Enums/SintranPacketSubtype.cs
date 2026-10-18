@@ -47,7 +47,7 @@ namespace RetroIO.Protocols.Xmsg
         /// </para>
         /// <para>
         /// Observed on every COSMOS file-transfer data message, which is 1030 bytes and splits
-        /// 594 + 436. Capture: <c>claude-transfer-file-COMPLETE-102-to-100-2026-07-29.pcapng</c>.
+        /// 594 + 436. Capture: <c>2026-07-29-1946-xftra-send-file-complete-d102-to-d100.pcapng</c>.
         /// </para>
         /// </remarks>
         MessageFirstFragment = 0x0A,

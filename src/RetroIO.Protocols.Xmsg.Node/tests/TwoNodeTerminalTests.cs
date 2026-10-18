@@ -782,7 +782,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// truncated to <c>0x1F</c>, telling the peer the session lived on system 31.
         /// </para>
         /// <para>
-        /// MEASURED against a real server in <c>conn-to-d102-from-100.pcapng</c>, whose answer to the
+        /// MEASURED against a real server in <c>2026-04-09-0025-tad-connect-to-d102-from-d100.pcapng</c>, whose answer to the
         /// same session-setup reads <c>07 05 00 00 66 04 c2</c>.
         /// </para>
         /// <para>
@@ -894,7 +894,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </para>
         /// <para><b>Why the rule is right</b></para>
         /// <para>
-        /// <c>conn-to-d102-from-100.pcapng</c> has a real ND answering these rungs while the two sides'
+        /// <c>2026-04-09-0025-tad-connect-to-d102-from-d100.pcapng</c> has a real ND answering these rungs while the two sides'
         /// counters are 0x37 apart, which is what separates an echo from an own counter that happens to
         /// line up:
         /// </para>

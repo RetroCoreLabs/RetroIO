@@ -22,7 +22,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Capture: <c>claude-transfer-file-COMPLETE-102-to-100-2026-07-29.pcapng</c>. Produced on node
+    /// Capture: <c>2026-07-29-1946-xftra-send-file-complete-d102-to-d100.pcapng</c>. Produced on node
     /// 102 inside <c>COS-FILE-TRA-E02</c> with <c>DEBUGPRINT-ON</c>:
     /// </para>
     /// <code>
@@ -56,7 +56,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             _output = output;
         }
 
-        private const string CaptureName = "claude-transfer-file-COMPLETE-102-to-100-2026-07-29.pcapng";
+        private const string CaptureName = "2026-07-29-1946-xftra-send-file-complete-d102-to-d100.pcapng";
 
         /// <summary>
         /// Reassembles the transfer capture and reports the frame-level shape of the stream.
@@ -224,9 +224,9 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </remarks>
         [Theory]
         [InlineData(CaptureName)]
-        [InlineData("claude-file-stat-102-to-100-2026-07-29.pcapng")]
-        [InlineData("claude-list-files-d100-system-2026-07-29.pcapng")]
-        [InlineData("claude-delete-file-102-to-100-2026-07-29.pcapng")]
+        [InlineData("2026-07-29-2015-fa-file-statistics-d102-to-d100.pcapng")]
+        [InlineData("2026-07-29-1716-fa-list-files-system-d102-to-d100.pcapng")]
+        [InlineData("2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng")]
         public void TransferStream_DumpInformationFieldHeads(string captureName)
         {
             string? path = PcapFiles.File(captureName);

@@ -62,8 +62,8 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// four times between the open and the close. Both counts come from the captures.
         /// </param>
         [Theory]
-        [InlineData("claude-delete-file-102-to-100-2026-07-29.pcapng", (ushort)0x0048, 3)]
-        [InlineData("claude-file-stat-102-to-100-2026-07-29.pcapng", (ushort)0x0046, 6)]
+        [InlineData("2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng", (ushort)0x0048, 3)]
+        [InlineData("2026-07-29-2015-fa-file-statistics-d102-to-d100.pcapng", (ushort)0x0046, 6)]
         public void ReplayedConversation_RebuildsEveryRequestByteForByte(
             string captureName,
             ushort conversation,
@@ -113,7 +113,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         [Fact]
         public void Replies_AreMatchedByOperationAndSequence()
         {
-            List<byte[]> bodies = ReadBodies("claude-delete-file-102-to-100-2026-07-29.pcapng");
+            List<byte[]> bodies = ReadBodies("2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng");
             if (bodies.Count == 0)
             {
                 _output.WriteLine("recorded .pcapng files absent and XMSG_PCAP_OPTIONAL is set; skipping.");

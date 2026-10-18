@@ -21,7 +21,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
     /// <remarks>
     /// <para>
     /// Source capture:
-    /// <c>E:\Dev\Ronny\X25Emulator\pcap\claude-list-files-d100-system-2026-07-29.pcapng</c> -
+    /// <c>E:\Dev\Ronny\X25Emulator\pcap\2026-07-29-1716-fa-list-files-system-d102-to-d100.pcapng</c> -
     /// <c>LIST-FILES d100(system).</c> issued on node 102 against node 100. SINTRAN printed the
     /// listing to the terminal at the same time, so the expected names and types below are what the
     /// machine itself said, not what this code decided.

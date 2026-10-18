@@ -633,8 +633,9 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Captured in <c>E:\Dev\Ronny\X25Emulator\pcap\li-syst-tad-103.pcapng</c>, frame 529. Frame
-        /// 541 is byte-identical except that parameter 2 reads <c>"D102"</c>, so the command walks the
+        /// Captured in <c>2026-04-09-0058-list-systems-on-d103.pcapng</c>, packet 1 (packet 529 before the unrelated
+        /// local traffic was removed from the file). Packet 7 (541 before) is byte-identical except that parameter 2
+        /// reads <c>"D102"</c>, so the command walks the
         /// systems it knows about and sends one of these per system.
         /// </para>
         /// <para>
@@ -645,7 +646,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </para>
         /// <para>
         /// It also distinguishes LIST-SYSTEMS from LIST-ROUTING: the routing captures
-        /// (<c>li-rout-103-tree.pcapng</c>, <c>li-rout-102-tree.pcapng</c>) carry no server name at
+        /// (<c>2026-04-09-0055-list-routing-on-d103.pcapng</c>, <c>2026-04-09-0052-list-routing-on-d102.pcapng</c>) carry no server name at
         /// all, so they never open a conversation like this one.
         /// </para>
         /// </remarks>

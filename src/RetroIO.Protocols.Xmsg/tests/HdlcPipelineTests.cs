@@ -89,19 +89,19 @@ namespace RetroIO.Protocols.Xmsg.Tests
             // Expected FCS-valid frame counts, verified against the reference pipeline.
             string[] names =
             {
-                "conn-to-102-from103-via100.pcapng",
-                "conn-to-d102-from-100.pcapng",
-                "device-online-100-102-103.pcapng",
-                "li-rout-102-tree.pcapng",
-                "li-rout-103-tree.pcapng",
-                "li-route-d103-tree-x.pcapng",
-                "li-route-d103-tree.pcapng",
-                "li-routing-100-proxy-102.pcapng",
-                "li-syst-tad-103.pcapng",
-                "list-routing-info-100-102-then-102-100.pcapng",
-                "new-conn-to-102-from-100.pcapng",
-                "start-li-li-1err.pcapng",
-                "test1.pcapng",
+                "2026-04-09-0100-tad-connect-to-d102-from-d103-via-d100.pcapng",
+                "2026-04-09-0025-tad-connect-to-d102-from-d100.pcapng",
+                "2026-04-09-0047-devices-online-d100-d102-d103.pcapng",
+                "2026-04-09-0052-list-routing-on-d102.pcapng",
+                "2026-04-09-0055-list-routing-on-d103.pcapng",
+                "2026-04-09-1920-list-routing-on-d103-longer-take.pcapng",
+                "2026-04-09-1916-list-routing-on-d103.pcapng",
+                "2026-04-09-0107-list-routing-on-d100-proxy-d102.pcapng",
+                "2026-04-09-0058-list-systems-on-d103.pcapng",
+                "2026-04-09-0020-list-routing-d100-d102-then-d102-d100.pcapng",
+                "2026-04-09-1242-tad-connect-to-d102-from-d100.pcapng",
+                "2026-04-19-1147-xrout-route-query-d102-to-d100-sent-twice.pcapng",
+                "2026-04-08-2339-tad-session-d100-to-d102-31-minutes.pcapng",
             };
             int[] counts = { 307, 147, 150, 42, 64, 372, 144, 108, 36, 24, 174, 37, 342 };
 
@@ -126,7 +126,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         }
 
         /// <summary>
-        /// Sanity check that test1.pcapng yields more than 4000 raw TCP payload bytes worth
+        /// Sanity check that 2026-04-08-2339-tad-session-d100-to-d102-31-minutes.pcapng yields more than 4000 raw TCP payload bytes worth
         /// of frames - that is, the pcapng/Ethernet/IP/TCP parse actually produced packets.
         /// </summary>
         [Fact]
@@ -139,15 +139,15 @@ namespace RetroIO.Protocols.Xmsg.Tests
                 return;
             }
 
-            string path = Path.Combine(pcapDir, "test1.pcapng");
+            string path = Path.Combine(pcapDir, "2026-04-08-2339-tad-session-d100-to-d102-31-minutes.pcapng");
             if (!File.Exists(path))
             {
-                _output.WriteLine("test1.pcapng not present; skipping.");
+                _output.WriteLine("2026-04-08-2339-tad-session-d100-to-d102-31-minutes.pcapng not present; skipping.");
                 return;
             }
 
             IReadOnlyList<LapbFrame> frames = HdlcPcap.ReadFrames(path);
-            _output.WriteLine("test1.pcapng FCS-valid frames: " + frames.Count);
+            _output.WriteLine("2026-04-08-2339-tad-session-d100-to-d102-31-minutes.pcapng FCS-valid frames: " + frames.Count);
             Assert.True(frames.Count > 0);
         }
 

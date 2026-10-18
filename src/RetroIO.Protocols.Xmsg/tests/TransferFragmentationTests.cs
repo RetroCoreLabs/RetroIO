@@ -61,7 +61,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             _output = output;
         }
 
-        private const string CaptureName = "claude-transfer-file-COMPLETE-102-to-100-2026-07-29.pcapng";
+        private const string CaptureName = "2026-07-29-1946-xftra-send-file-complete-d102-to-d100.pcapng";
 
         /// <summary>
         /// Packet subtype of the first fragment of a segmented message.
@@ -125,7 +125,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Recorded 2026-07-30 to test whether the fragment split tracks the amount of real data. It
         /// does not - see <see cref="TransferMessage_IsAlwaysAWholeBlockNoMatterHowSmallTheFileIs"/>.
         /// </remarks>
-        private const string SmallFileCapture = "claude-transfer-SMALL-167bytes-102-to-100-2026-07-30.pcapng";
+        private const string SmallFileCapture = "2026-07-30-1104-xftra-send-file-small-167-bytes-d102-to-d100.pcapng";
 
         /// <summary>
         /// Requires every transfer data message to be a whole 1030 bytes, split at the same point,
@@ -317,9 +317,9 @@ namespace RetroIO.Protocols.Xmsg.Tests
         ///    reads 1030 - while their own body is six zero bytes.
         /// </remarks>
         [Theory]
-        [InlineData("claude-file-stat-102-to-100-2026-07-29.pcapng")]
-        [InlineData("claude-list-files-d100-system-2026-07-29.pcapng")]
-        [InlineData("claude-delete-file-102-to-100-2026-07-29.pcapng")]
+        [InlineData("2026-07-29-2015-fa-file-statistics-d102-to-d100.pcapng")]
+        [InlineData("2026-07-29-1716-fa-list-files-system-d102-to-d100.pcapng")]
+        [InlineData("2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng")]
         public void DataFrame_FlagsTwoIsExactlyTheBodyLength(string captureName)
         {
             string? path = PcapFiles.File(captureName);

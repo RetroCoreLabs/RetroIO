@@ -19,7 +19,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
     /// <summary>
     /// Verifies the TAD connect-accept our responder builds for the exact live connect request
     /// captured from machine 100, byte-comparing it to the structure of the known-good responder
-    /// accept from the conn-to-102-from103-via100 capture (the DA connect matching our role).
+    /// accept from the 2026-04-09-0100-tad-connect-to-d102-from-d103-via-d100 capture (the DA connect matching our role).
     /// </summary>
     /// <remarks>
     /// <para><b>Read this before treating a failure here as "the protocol changed"</b></para>

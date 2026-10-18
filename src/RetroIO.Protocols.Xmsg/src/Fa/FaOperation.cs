@@ -211,7 +211,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// <para><b>What the wire shows - VERIFIED</b></para>
         /// The request carries the file name under selector 2 and a 32-bit page count under selector
         /// 4, and nothing else. Captured in
-        /// <c>claude-create-file-102-to-100-2026-07-30.pcapng</c> and pinned by
+        /// <c>2026-07-30-0957-fa-create-file-d102-to-d100.pcapng</c> and pinned by
         /// <c>FaLiveRequestRegressionTests</c>. The reply returns no value at all.
         /// <para><b>CORRECTION 2026-08-06 - "contiguity is implied" was NOT sourced</b></para>
         /// This remark used to end "The file it produces is a continuous file, so contiguity is

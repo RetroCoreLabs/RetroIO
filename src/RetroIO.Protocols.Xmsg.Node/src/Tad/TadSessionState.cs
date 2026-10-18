@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
     /// <para><b>Provenance</b></para>
     /// INFERRED phase model. The wire has no explicit "phase" field; these phases are a
     /// convenience abstraction over the observed message order in
-    /// <c>new-conn-to-102-from-100.pcapng</c> and <c>conn-to-102-from103-via100.pcapng</c>:
+    /// <c>2026-04-09-1242-tad-connect-to-d102-from-d100.pcapng</c> and <c>2026-04-09-0100-tad-connect-to-d102-from-d103-via-d100.pcapng</c>:
     ///  - the XROUT XSLET setup letter to the directory service opens the exchange.
     ///  - a run of config messages (TMOD / TTYP / DESC / OPSV / ECKM / BMMX) negotiates
     ///    the terminal parameters.

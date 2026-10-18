@@ -52,12 +52,12 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// <summary>
         /// A listing of user SYSTEM's directory on node 100.
         /// </summary>
-        private const string SystemCapture = "claude-list-files-d100-system-2026-07-29.pcapng";
+        private const string SystemCapture = "2026-07-29-1716-fa-list-files-system-d102-to-d100.pcapng";
 
         /// <summary>
         /// A listing of user SECRET's directory on node 100.
         /// </summary>
-        private const string SecretCapture = "fa-access-secret-102-to-100-2026-07-29.pcapng";
+        private const string SecretCapture = "2026-07-29-1426-fa-access-secret-d102-to-d100.pcapng";
 
         /// <summary>
         /// Frame offset at which the message body begins.
@@ -199,7 +199,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// <summary>
         /// A listing that names ONE file: <c>FILE-STATISTICS</c> rather than <c>LIST-FILES</c>.
         /// </summary>
-        private const string FileStatCapture = "claude-file-stat-102-to-100-2026-07-29.pcapng";
+        private const string FileStatCapture = "2026-07-29-2015-fa-file-statistics-d102-to-d100.pcapng";
 
         /// <summary>
         /// Locates the FILE name inside the spec block, by comparing a listing that names one file

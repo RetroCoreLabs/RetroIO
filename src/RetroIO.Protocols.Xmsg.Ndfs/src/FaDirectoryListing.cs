@@ -23,7 +23,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
     /// </para>
     /// <para>
     /// That was established by decoding a captured listing
-    /// (<c>claude-list-files-d100-system-2026-07-29.pcapng</c>, <c>LIST-FILES d100(system).</c> from
+    /// (<c>2026-07-29-1716-fa-list-files-system-d102-to-d100.pcapng</c>, <c>LIST-FILES d100(system).</c> from
     /// node 102 against node 100) field by field against
     /// <c>RetroIO.Storage.Ndfs.Elements.ObjectEntry</c>. Every offset agreed, and the three packed date words
     /// decoded through <see cref="NdDateTime"/> to times that match the machine: the system files all

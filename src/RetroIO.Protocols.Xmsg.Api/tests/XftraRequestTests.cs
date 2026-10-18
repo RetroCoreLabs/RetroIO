@@ -19,7 +19,7 @@ namespace RetroIO.Protocols.Xmsg.Api.Tests
     /// <remarks>
     /// <para>
     /// The expected bytes are the parameter area of frame 1 of
-    /// <c>append-remote-batch-102-to-100-2026-07-31.pcapng</c>, node 102 to node 100, both
+    /// <c>2026-07-31-0126-xftra-append-remote-batch-d102-to-d100.pcapng</c>, node 102 to node 100, both
     /// SINTRAN K, written up in <c>DOC/XMSG-APPEND-REMOTE-BATCH-CAPTURED-2026-07-31.md</c>. They
     /// are a RECORDING, not our own output - which is the only kind of expected value that can
     /// catch a builder that is confidently wrong.

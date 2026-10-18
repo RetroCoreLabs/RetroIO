@@ -124,9 +124,9 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
         // "0x00 was NEVER observed" was carried here for a long time and is WRONG - corrected
         // 2026-08-17 by sweeping every capture for the trailer pattern. Five values are observed:
         //
-        //   0x00  conn-to-102-from103-via100          0x01  ethernet-conn-to-D100-from-102-WORKING
+        //   0x00  2026-04-09-0100-tad-connect-to-d102-from-d103-via-d100          0x01  ethernet-conn-to-D100-from-102-WORKING
         //   0x02  new-conn                            0x03  ALLTEST-fa-connectto-102-100-103
-        //   0x04  conn-to-d102-from-100
+        //   0x04  2026-04-09-0025-tad-connect-to-d102-from-d100
         //
         // and D102 is the server in BOTH the 0x00 and the 0x04 capture. The same machine hands out
         // different indices to different sessions, so this is free-slot state on that machine - not
@@ -744,7 +744,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
             // ANSWERING the connect letter: echo its Flags 1. CHECKED against a real SINTRAN on
             // 2026-08-09, after an audit claimed this was the same defect as the FA connection
             // confirm (which must NOT echo). It is not. From
-            // DOC/captures/ARCHIVE-2026-07/ethernet-conn-to-D100-from-102-WORKING-2026-08-01.pcapng,
+            // DOC/captures/ARCHIVE-2026-07/2026-08-01-1054-hub-tad-connect-to-d100-from-d102-working.pcapng,
             // node 102 asking node 100:
             //
             //   f1   102->100  F1=0021  connect letter to *TADADM
@@ -765,7 +765,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
                 (byte)XmsgFrameFlags.Setup, (byte)XmsgSendOptions.WakeOnStatus,
                 BuildAcceptTrailer(_sessions.Count),
                 // The connect-accept ORIGINATES too, for the same reason as the port assignment
-                // below: in conn-to-d102-from-100 the real server answers a connect letter numbered
+                // below: in 2026-04-09-0025-tad-connect-to-d102-from-d100 the real server answers a connect letter numbered
                 // 00f8 with an accept numbered 012f. All three of its setup frames are its own
                 // consecutive numbers - 012f, 0130, 0131 - and none of them is the asker's.
                 XmsgAnsweredFlags1.None));
@@ -798,7 +798,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
             // 0x0066 and fits - and silently wrong for ours: 19999 is 0x4E1F and truncates to 0x1F,
             // so we told the peer the session lived on system 31.
             //
-            // CARVED from conn-to-d102-from-100.pcapng, where a REAL server answers the same
+            // CARVED from 2026-04-09-0025-tad-connect-to-d102-from-d100.pcapng, where a REAL server answers the same
             // session-setup. Its parameter block reads 07 05 | 00 | 00 66 | 04 c2 - tag, length
             // five, a zero, the system as TWO bytes, then the port. Ours read 00 | 00 1F | 02 11.
             //
@@ -829,7 +829,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
             // MEASURED against a real SINTRAN 2026-08-09: f33 setup F1=0022 -> f49 assignment
             // F1=0022 -> f57 priming DUMM F1=0023. Exactly this split. See the fuller note and its
             // limit on the connect-accept above, and
-            // DOC/captures/ARCHIVE-2026-07/ethernet-conn-to-D100-from-102-WORKING-2026-08-01.pcapng.
+            // DOC/captures/ARCHIVE-2026-07/2026-08-01-1054-hub-tad-connect-to-d100-from-d102-working.pcapng.
             // RESOLVED 2026-08-17: THE PORT ASSIGNMENT DOES NOT ECHO. It takes our own next number,
             // like every other frame we originate.
             //
@@ -837,7 +837,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Tad
             // that happens to line up", because the server's frames ran 0021/0022/0023 and an own
             // counter starting at 0x21 produces the same bytes. It asks for a capture where the two
             // sides' counters have diverged. That capture is already in the archive -
-            // conn-to-d102-from-100.pcapng, where a REAL ND answers this same rung:
+            // 2026-04-09-0025-tad-connect-to-d102-from-d100.pcapng, where a REAL ND answers this same rung:
             //
             //   client 100:   connect 00f8   session-setup 00f9   reply 00fa
             //   server 102:   accept  012f   port-assign   0130   DUMM  0131

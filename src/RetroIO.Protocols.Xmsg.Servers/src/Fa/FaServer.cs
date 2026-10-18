@@ -1122,7 +1122,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// </returns>
         /// <remarks>
         /// <para><b>Both halves are captured</b></para>
-        /// <c>claude-create-file-102-to-100-2026-07-30.pcapng</c> carries the request AND its reply.
+        /// <c>2026-07-30-0957-fa-create-file-d102-to-d100.pcapng</c> carries the request AND its reply.
         /// The reply is the plain accepted form with no value returned - not even the file number,
         /// which <c>OpenFile</c> does report. See <c>FaListFilesCodec.TryReadCreateFile</c>.
         /// <para><b>The page count is read and then deliberately ignored</b></para>

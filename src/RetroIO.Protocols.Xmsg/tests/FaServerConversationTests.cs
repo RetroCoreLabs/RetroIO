@@ -40,7 +40,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             _output = output;
         }
 
-        private const string DeleteCapture = "claude-delete-file-102-to-100-2026-07-29.pcapng";
+        private const string DeleteCapture = "2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng";
 
         /// <summary>
         /// The conversation number the client used in the DELETE-FILE capture.

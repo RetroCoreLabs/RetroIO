@@ -20,7 +20,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
     /// <para>
     /// A remote directory listing is not one bulk reply. It is one request/reply round trip per
     /// entry, driven by a cursor. Captured from node 102 to node 100 in
-    /// <c>claude-list-files-d100-system-2026-07-29.pcapng</c>, ten entries in a row:
+    /// <c>2026-07-29-1716-fa-list-files-system-d102-to-d100.pcapng</c>, ten entries in a row:
     /// </para>
     /// <code>
     /// request  92 000C  92 serial  F2 0001 92 0078  F2 0002 8C 80 46 block  F2 00FF
@@ -120,7 +120,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// </para>
         /// <para>
         /// But it is NOT a property of operation 0x000C. Corrected 2026-07-30: the
-        /// <c>claude-open-W-close-102-to-100-2026-07-30.pcapng</c> recording carries an 0x000C request
+        /// <c>2026-07-30-1449-fa-open-write-close-d102-to-d100.pcapng</c> recording carries an 0x000C request
         /// with <c>92 003B</c> under selector 1, and a five-byte payload of
         /// <c>A4 FFFFFFFF</c> instead of the 62-byte directory and user block:
         /// </para>
@@ -854,7 +854,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// </returns>
         /// <remarks>
         /// <para><b>The whole request, captured</b></para>
-        /// From <c>claude-create-file-102-to-100-2026-07-30.pcapng</c>, node 102 creating
+        /// From <c>2026-07-30-0957-fa-create-file-d102-to-d100.pcapng</c>, node 102 creating
         /// <c>RONNY-R2:TXT</c> on node 100:
         /// <code>
         /// 92 000A  92 0002  F2 0002 BE "RONNY-R2:TXT'R"  F2 0004 A4 00000001  F2 00FF

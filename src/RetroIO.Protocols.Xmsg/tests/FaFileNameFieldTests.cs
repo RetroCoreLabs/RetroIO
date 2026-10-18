@@ -56,12 +56,12 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// <summary>
         /// CREATE-FILE with a bare file name.
         /// </summary>
-        private const string PlainCapture = "claude-create-file-102-to-100-2026-07-30.pcapng";
+        private const string PlainCapture = "2026-07-30-0957-fa-create-file-d102-to-d100.pcapng";
 
         /// <summary>
         /// CREATE-FILE with the directory named in the file specification.
         /// </summary>
-        private const string DirectoryCapture = "claude-create-file-DIRSPEC-102-to-100-2026-07-30.pcapng";
+        private const string DirectoryCapture = "2026-07-30-1041-fa-create-file-dir-in-spec-d102-to-d100.pcapng";
 
         /// <summary>
         /// Frame offset at which the message body begins.
@@ -180,7 +180,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             {
                 PlainCapture,
                 DirectoryCapture,
-                "claude-create-file-NAMELEN-102-to-100-2026-07-30.pcapng",
+                "2026-07-30-1049-fa-create-file-name-lengths-d102-to-d100.pcapng",
             };
 
             int checkedFields = 0;

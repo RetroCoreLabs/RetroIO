@@ -99,7 +99,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// A <c>CreateFile</c> request body, taken off the wire.
         /// </summary>
         /// <remarks>
-        /// From <c>claude-create-file-102-to-100-2026-07-30.pcapng</c> - node 102 creating
+        /// From <c>2026-07-30-0957-fa-create-file-d102-to-d100.pcapng</c> - node 102 creating
         /// <c>RONNY-R2:TXT</c> on node 100. Body only.
         /// </remarks>
         private const string CapturedCreateFileRequestHex =

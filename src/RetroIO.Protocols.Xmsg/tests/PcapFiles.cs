@@ -166,7 +166,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// Returns the full path of one recorded file.
         /// </summary>
         /// <param name="fileName">
-        /// File name to look for, for example <c>claude-delete-file-102-to-100-2026-07-29.pcapng</c>.
+        /// File name to look for, for example <c>2026-07-29-2047-fa-delete-file-d102-to-d100.pcapng</c>.
         /// </param>
         /// <returns>
         /// The full path, or <c>null</c> only when it is absent AND the caller has set

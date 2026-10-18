@@ -16,7 +16,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
 {
     /// <summary>
     /// Verifies the universal envelope channel derivation (<see cref="XmsgEnvelope.DeriveChannel"/>)
-    /// against the captured <c>conn-to-d102-from-100</c> responder frames and our own live-accepted
+    /// against the captured <c>2026-04-09-0025-tad-connect-to-d102-from-d100</c> responder frames and our own live-accepted
     /// accept. The channel is DERIVED from Flags1 + Counter + XMCSM, not allocated - this is the
     /// primitive that lets the responder build session-data frames on the correct channel.
     /// </summary>
@@ -25,7 +25,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         // Each row: Flags1, Counter, XMCSM, expected Protocol ID - taken directly from the capture
         // (102 -> 100 responder frames) and from our live accept.
         [Theory]
-        // Capture conn-to-d102-from-100, 102's responder side:
+        // Capture 2026-04-09-0025-tad-connect-to-d102-from-d100, 102's responder side:
         [InlineData(0x012F, 0xE5, 0x04000041u, (byte)SintranProtocolId.D8)]    // frame 51 connect-accept
         [InlineData(0x0130, 0xE4, 0x04000000u, (byte)SintranProtocolId.D8)]    // frame 53 port-assign
         [InlineData(0x0131, 0xDB, 0x01080000u, (byte)SintranProtocolId.Db)]    // frame 54 DUMM

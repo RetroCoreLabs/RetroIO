@@ -167,7 +167,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// were both <c>SYSTEM</c>, so the two fields looked like duplicates.
         /// </para>
         /// <para>
-        /// The capture <c>fa-access-secret-102-to-100-2026-07-29.pcapng</c> in
+        /// The capture <c>2026-07-29-1426-fa-access-secret-d102-to-d100.pcapng</c> in
         /// <c>DOC/captures/ARCHIVE-2026-07</c> separates them. Node 102 reads user <c>SECRET</c>
         /// on node 100, and field 4 carries <c>SECRET</c> while field 3 still carries
         /// <c>BAK03  SYSTEM</c>. So field 3 is WHO IS ASKING and field 4 is WHOSE DIRECTORY, and

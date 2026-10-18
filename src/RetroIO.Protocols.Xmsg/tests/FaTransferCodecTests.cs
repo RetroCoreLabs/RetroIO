@@ -41,7 +41,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
             _output = output;
         }
 
-        private const string CaptureName = "claude-transfer-file-COMPLETE-102-to-100-2026-07-29.pcapng";
+        private const string CaptureName = "2026-07-29-1946-xftra-send-file-complete-d102-to-d100.pcapng";
 
         /// <summary>
         /// Frame offset at which the body begins on a fully addressed frame.

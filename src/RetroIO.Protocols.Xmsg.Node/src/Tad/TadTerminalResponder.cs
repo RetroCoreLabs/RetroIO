@@ -23,7 +23,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
     /// <remarks>
     /// <para><b>Provenance - what is VERIFIED vs INFERRED.</b></para>
     /// The frame shapes are modelled on the captured <c>102 -> 100</c> responder side of
-    /// <c>conn-to-d102-from-100.pcapng</c> (connect-accept: proto <c>0xD8</c>, role <c>0x40</c>,
+    /// <c>2026-04-09-0025-tad-connect-to-d102-from-d100.pcapng</c> (connect-accept: proto <c>0xD8</c>, role <c>0x40</c>,
     /// <c>XMCSM 0x04000041</c>, param trailer <c>01 02 0000 02 02 000A</c>, replying from the
     /// TADADM well-known port 2 = wire <c>0x0156</c>). Those field VALUES are VERIFIED from the
     /// capture. What is INFERRED (and may need live tuning) is the transport SEQUENCING for OUR
@@ -405,7 +405,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         /// </summary>
         /// <remarks>
         /// The frame ECHOES the session-setup's proto / Flags1 / counter (the same reply pattern
-        /// the accept uses - VERIFIED from conn-to-102-from103-via100, where the responder's
+        /// the accept uses - VERIFIED from 2026-04-09-0100-tad-connect-to-d102-from-d103-via-d100, where the responder's
         /// port-assign echoed the asker's session-setup transport fields). The 24-byte trailer is
         /// the captured 102 trailer with the system byte and session-port bytes substituted for
         /// ours; the remaining option bytes are copied verbatim (not yet decoded).
@@ -1139,7 +1139,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             //     01 02 0001  02 02 0009     (p1=1,  p2=9)
             //
             // The first guess - that it identifies the responding machine - is REFUTED: D100 sends
-            // BOTH. It answers 0/10 in test1, li-syst-tad-103 and li-rout-102-tree, and 1/9 in
+            // BOTH. It answers 0/10 in 2026-04-08-2339-tad-session-d100-to-d102-31-minutes, 2026-04-09-0058-list-systems-on-d103 and 2026-04-09-0052-list-routing-on-d102, and 1/9 in
             // ethernet-conn-to-D100-from-102-WORKING and ALLTEST-fa-connectto. So it tracks live
             // state, not identity.
             //

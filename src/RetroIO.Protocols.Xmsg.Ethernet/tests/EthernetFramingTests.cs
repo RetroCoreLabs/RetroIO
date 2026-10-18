@@ -22,7 +22,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet.Tests
     /// <para>
     /// Every vector here is a real frame taken off the wire, not a constructed example. Source
     /// capture:
-    /// <c>E:\Dev\Ronny\X25Emulator\pcap\ethernet-conn-to-D100-from-102-WORKING-2026-08-01.pcapng</c>,
+    /// <c>E:\Dev\Ronny\X25Emulator\pcap\2026-08-01-1054-hub-tad-connect-to-d100-from-d102-working.pcapng</c>,
     /// the first working COSMOS Ethernet link we captured (<c>CONNECT-TO D100</c> from node 102).
     /// </para>
     /// <para>

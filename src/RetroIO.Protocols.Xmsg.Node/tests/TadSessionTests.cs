@@ -16,7 +16,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 {
     /// <summary>
     /// Byte-identical builder proofs for the TAD session state machine. Each expected value is
-    /// a frame lifted verbatim from <c>new-conn-to-102-from-100.pcapng</c> (OBSERVED, single
+    /// a frame lifted verbatim from <c>2026-04-09-1242-tad-connect-to-d102-from-d100.pcapng</c> (OBSERVED, single
     /// capture), so these tests do not depend on the capture being present at run time.
     /// </summary>
     /// <remarks>
