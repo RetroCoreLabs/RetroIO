@@ -49,7 +49,7 @@ namespace RetroIO.Protocols.Xmsg.Qform
         /// Marks a length byte as an ESCAPE: the real length is the byte that follows.
         /// </summary>
         /// <remarks>
-        /// Resolved from the capture <c>2026-07-29-1426-fa-access-secret-d102-to-d100.pcapng</c>, frame 23,
+        /// Resolved from the capture <c>2026-07-29-1426-fa-list-files-user-secret-password-check-d102-to-d100.pcapng</c>, frame 23,
         /// which carries <c>8C 80 46</c>. Reading 0x80 as a marker gives a declared length of 0x46 =
         /// 70, and the constructed value's contents total exactly 70 bytes: a <c>B0 3E</c> string
         /// (2 + 62) plus <c>A2 0000</c> (3) plus <c>A2 FFFF</c> (3). The length is therefore

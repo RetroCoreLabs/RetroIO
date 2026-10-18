@@ -57,7 +57,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// <summary>
         /// A listing of user SECRET's directory on node 100.
         /// </summary>
-        private const string SecretCapture = "2026-07-29-1426-fa-access-secret-d102-to-d100.pcapng";
+        private const string SecretCapture = "2026-07-29-1426-fa-list-files-user-secret-password-check-d102-to-d100.pcapng";
 
         /// <summary>
         /// Frame offset at which the message body begins.

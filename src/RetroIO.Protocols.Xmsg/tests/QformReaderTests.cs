@@ -166,7 +166,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         /// </summary>
         /// <remarks>
         /// Previously this case was refused as undecoded. Frame 23 of
-        /// <c>2026-07-29-1426-fa-access-secret-d102-to-d100.pcapng</c> resolved it.
+        /// <c>2026-07-29-1426-fa-list-files-user-secret-password-check-d102-to-d100.pcapng</c> resolved it.
         /// </remarks>
         [Fact]
         public void EscapeMarker_TakesTheLengthFromTheByteAfterIt()

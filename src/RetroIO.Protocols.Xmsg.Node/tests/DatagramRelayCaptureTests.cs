@@ -25,7 +25,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
     /// defects survive a fully green suite in this project. The expected values here are not ours:
     /// they are what a real D100 actually emitted.
     /// <para><b>The capture</b></para>
-    /// <c>E:\Dev\Ronny\X25Emulator\pcap\2026-08-01-1105-hub-tad-route-through-d100-d102-to-d103-working.pcapng</c>
+    /// <c>E:\Dev\Ronny\X25Emulator\pcap\2026-08-01-1105-hub-hdlc-route-through-d102-via-d100-to-d103-working.pcapng</c>
     /// holds BOTH links of a live route-through: D102 and D103 talking through D100, one on the
     /// Ethernet segment and one on an HDLC line. So the same datagram appears twice - once arriving
     /// at the relay and once leaving it - and the pair is a complete oracle for the relay rule.

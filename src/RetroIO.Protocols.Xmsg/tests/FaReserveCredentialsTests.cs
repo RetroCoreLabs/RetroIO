@@ -25,7 +25,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// session's own user, whatever the caller asked for.
     /// </para>
     /// <para>
-    /// <c>DOC/captures/ARCHIVE-2026-07/2026-07-29-1426-fa-access-secret-d102-to-d100.pcapng</c> separates
+    /// <c>DOC/captures/ARCHIVE-2026-07/2026-07-29-1426-fa-list-files-user-secret-password-check-d102-to-d100.pcapng</c> separates
     /// them: node 102 reads user <c>SECRET</c>, password <c>secret</c>, on node 100. Its request
     /// carries <c>SECRET</c> in field 4 while field 3 still says <c>BAK03  SYSTEM</c>, and the slot
     /// that used to be NUL carries <c>6D 2A</c>.
