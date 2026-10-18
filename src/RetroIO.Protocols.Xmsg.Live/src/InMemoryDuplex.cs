@@ -58,7 +58,28 @@ namespace RetroIO.Protocols.Xmsg.Live
             return _outbound.ToArray();
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Copies the next pre-loaded inbound bytes into a buffer. Never blocks.
+        /// </summary>
+        /// <param name="buffer">
+        /// The destination buffer to fill.
+        /// </param>
+        /// <param name="offset">
+        /// The zero-based offset in <paramref name="buffer"/> at which to start writing.
+        /// </param>
+        /// <param name="count">
+        /// The maximum number of bytes to read.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Not used: the read finishes at once.
+        /// </param>
+        /// <returns>
+        /// A completed task yielding the number of bytes copied, or 0 once all pre-loaded bytes have
+        /// been read.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="buffer"/> is null.
+        /// </exception>
         public Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             if (buffer == null)
@@ -78,7 +99,18 @@ namespace RetroIO.Protocols.Xmsg.Live
             return Task.FromResult(n);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Appends a block of bytes to the captured outbound buffer.
+        /// </summary>
+        /// <param name="data">
+        /// The bytes to capture.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Not used: the write finishes at once.
+        /// </param>
+        /// <returns>
+        /// A completed task.
+        /// </returns>
         public Task WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
         {
             ReadOnlySpan<byte> span = data.Span;

@@ -88,10 +88,17 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         private LinkStatus _status;
         private bool _stopRequested;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Occurs when the ND link layer delivers a complete SINTRAN datagram from the bound peer.
+        /// </summary>
+        /// <remarks>
+        /// A subscriber that keeps the payload must copy it inside the callback.
+        /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Occurs when the link status changes (actual transitions only).
+        /// </summary>
         public event LinkStatusChanged? StatusChanged;
 
         /// <summary>
@@ -204,13 +211,17 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             _status = LinkStatus.Stopped;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the name given to this link at construction (stamped on log lines).
+        /// </summary>
         public string Name
         {
             get { return _name; }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the current operational status.
+        /// </summary>
         public LinkStatus Status
         {
             get { return _status; }
@@ -274,7 +285,16 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// </summary>
         public long FramesFromOtherStations { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Starts the link: subscribes to the backend and, when this link owns it, starts the backend.
+        /// </summary>
+        /// <remarks>
+        /// There is no LAPB here. The status becomes <see cref="LinkStatus.Starting"/>, and only turns
+        /// <see cref="LinkStatus.Active"/> when the first frame from the peer is received.
+        /// </remarks>
+        /// <returns>
+        /// The backend's active state after the start.
+        /// </returns>
         public bool Start()
         {
             _stopRequested = false;
@@ -308,7 +328,14 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             return _linkLayer.SendConnectionRequest(_peerMac);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stops the link. Idempotent.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing if the link is already Stopped or Stopping. Otherwise moves through Stopping
+        /// to Stopped, unsubscribes from the backend, and stops the backend when this link owns it.
+        /// Frames that arrive after this are ignored.
+        /// </remarks>
         public void Stop()
         {
             // Idempotent: a second Stop (or a Stop after Dispose) is a no-op.
@@ -333,7 +360,9 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             ForceStatus(LinkStatus.Stopped, "stopped");
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stops the link and, when this link owns the backend, disposes the backend.
+        /// </summary>
         public void Dispose()
         {
             Stop();
@@ -405,7 +434,21 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// </remarks>
         public event NdDatagramParked? DatagramParked;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Sends one opaque SINTRAN datagram to the peer as an ND data frame.
+        /// </summary>
+        /// <remarks>
+        /// The bytes are copied into the link layer's own frame buffer before this returns. When the
+        /// send window is full the datagram is parked instead of sent, <see cref="DatagramParked"/>
+        /// is raised, and the method still returns <c>true</c>.
+        /// </remarks>
+        /// <param name="payload">
+        /// The payload bytes to send.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the datagram was sent or parked; <c>false</c> when the link is not Active,
+        /// the payload is empty (both written to the console), or the link layer refused it.
+        /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             // Contract: a not-Active link (or an empty payload) is a logged false, NEVER a throw.

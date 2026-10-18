@@ -101,10 +101,17 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             get { return _clock.ElapsedMilliseconds; }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Occurs when the LAPB link delivers an in-order information field.
+        /// </summary>
+        /// <remarks>
+        /// A subscriber that keeps the payload must copy it inside the callback.
+        /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Occurs when the link status changes (actual transitions only).
+        /// </summary>
         public event LinkStatusChanged? StatusChanged;
 
         /// <summary>
@@ -226,13 +233,17 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             SetStatus(LinkStatus.Stopped, reason);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the link identity given at construction (stamped on every up-event).
+        /// </summary>
         public string Name
         {
             get { return _linkId; }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the current operational status.
+        /// </summary>
         public LinkStatus Status
         {
             get { return _status; }
@@ -247,7 +258,17 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             get { return _pump; }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Starts the link: sets the status to Starting, queues our SABM, and starts the receive pump
+        /// with a 1-second timer tick.
+        /// </summary>
+        /// <remarks>
+        /// The pump runs in the background; see <see cref="Completion"/>. The status turns Active when
+        /// LAPB reports the link up.
+        /// </remarks>
+        /// <returns>
+        /// Always <c>true</c>.
+        /// </returns>
         public bool Start()
         {
             // Live start: initiate LAPB establishment, then pump forever with an RR keepalive so the
@@ -259,7 +280,13 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             return true;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stops the link. Idempotent.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing if the link is already Stopped or Stopping. Otherwise moves through Stopping to
+        /// Stopped and cancels the pump without waiting for it. No LAPB disconnect is sent here.
+        /// </remarks>
         public void Stop()
         {
             // Idempotent: a second Stop (or a Stop after Dispose) is a no-op.
@@ -274,7 +301,9 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             SetStatus(LinkStatus.Stopped, "stopped");
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stops the link and releases the pump's cancellation source. Never waits for the pump.
+        /// </summary>
         public void Dispose()
         {
             // Dispose implies Stop. We only CANCEL the pump (cooperative) and never await it here, so
@@ -512,7 +541,20 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Hands one opaque payload to the LAPB link to send as an I-frame.
+        /// </summary>
+        /// <remarks>
+        /// The bytes are copied into the LAPB body before this returns. The encoded frame is queued
+        /// and written by the pump on its next cycle.
+        /// </remarks>
+        /// <param name="payload">
+        /// The payload bytes to send.
+        /// </param>
+        /// <returns>
+        /// <c>false</c> when the link is not Active or the payload is empty (both written to the
+        /// console); otherwise <c>true</c>.
+        /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             // Contract: a not-Active link (or an empty payload) is a logged false, NEVER a throw.
