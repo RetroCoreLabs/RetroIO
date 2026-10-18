@@ -11,6 +11,7 @@ using System.IO;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.BlockDevices;
 using RetroIO.Storage.Local.BSD.Partitions;
+using RetroIO.Storage.Local.BSD.Structures;
 using RetroIO.Storage.Local.FFS.FileSystems;
 using RetroIO.Storage.Local.FFS.Structures;
 
@@ -544,14 +545,16 @@ namespace RetroIO.Storage.Local.Drivers
         /// Selects the BSD partition to use at the next mount and turns on disk label mode.
         /// </summary>
         /// <remarks>
-        /// The letter is not checked against the disk label, so a letter with no partition behind it is
-        /// still accepted. A file system that is already mounted keeps using its partition.
+        /// When an image is already mounted, the partition must exist in its disk label. Before mount there
+        /// is no disk to check, so any letter from <c>a</c> to <c>h</c> is accepted. The new letter is only
+        /// stored: a file system that is already mounted keeps using its partition until the next mount.
         /// </remarks>
         /// <param name="partitionId">
         /// A single partition letter, <c>a</c> to <c>h</c>.
         /// </param>
         /// <returns>
-        /// <c>true</c> for any single letter from <c>a</c> to <c>h</c>; otherwise <c>false</c>.
+        /// <c>true</c> when the partition was selected; <c>false</c> when <paramref name="partitionId"/> is not a
+        /// single letter from <c>a</c> to <c>h</c>, or the mounted image has no such partition.
         /// </returns>
         public bool SelectPartition(string partitionId)
         {
@@ -564,6 +567,17 @@ namespace RetroIO.Storage.Local.Drivers
             if (letter < 'a' || letter > 'h')
             {
                 return false;
+            }
+
+            // Verify the partition exists if an image is mounted
+            if (_blockDevice != null)
+            {
+                BsdPartitionManager partMgr = new BsdPartitionManager(_blockDevice);
+                BsdPartition? existing = partMgr.GetPartition(letter);
+                if (existing == null || existing.Value.IsUnused)
+                {
+                    return false;
+                }
             }
 
             SetPartition(letter);

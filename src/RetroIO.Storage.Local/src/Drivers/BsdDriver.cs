@@ -428,7 +428,7 @@ namespace RetroIO.Storage.Local.Drivers
             {
                 var partMgr = new BsdPartitionManager(_blockDevice);
                 var partition = partMgr.GetPartition(letter);
-                if (partition == null)
+                if (partition == null || partition.Value.IsUnused)
                 {
                     return false;
                 }
