@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using RetroIO.Storage.Core;
 
@@ -169,7 +170,7 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <exception cref="InvalidOperationException">
         /// Thrown when the file system is not initialized.
         /// </exception>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="DirectoryNotFoundException">
         /// Thrown when <paramref name="path"/> names anything other than the root directory.
         /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
@@ -179,7 +180,7 @@ namespace RetroIO.Storage.Local.FileSystems
             // DECB only supports root directory
             if (!string.IsNullOrEmpty(path) && path != "/")
             {
-                throw new NotImplementedException("DECB does not support subdirectories");
+                throw new DirectoryNotFoundException($"DECB has only a root directory: {path}");
             }
 
             return ListRootDirectory();

@@ -238,10 +238,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the name is empty, longer than 16 characters or holds a character CBM DOS does not allow.
         /// </exception>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when the file system is not initialized or the device is read-only.
+        /// Thrown when the file system is not initialized.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the disk or the directory is full.
+        /// Thrown when the device is read-only, or the disk or the directory is full.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
@@ -252,7 +252,7 @@ namespace RetroIO.Storage.Local.FileSystems
             }
             if (_disk!.IsReadOnly)
             {
-                throw new InvalidOperationException("Filesystem is mounted read-only");
+                throw new IOException("Filesystem is mounted read-only");
             }
             EnsureWritableFormat();
 
@@ -337,7 +337,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the name is empty, longer than 16 characters or holds a character CBM DOS does not allow.
         /// </exception>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when the file system is not initialized or the device is read-only.
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the device is read-only.
         /// </exception>
         /// <exception cref="FileNotFoundException">
         /// Thrown when the file does not exist.
@@ -347,7 +350,7 @@ namespace RetroIO.Storage.Local.FileSystems
             EnsureInitialized();
             if (_disk!.IsReadOnly)
             {
-                throw new InvalidOperationException("Filesystem is mounted read-only");
+                throw new IOException("Filesystem is mounted read-only");
             }
             EnsureWritableFormat();
 
@@ -1376,10 +1379,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when a name is empty, longer than 16 characters or holds a character CBM DOS does not allow.
         /// </exception>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when the file system is not initialized or the device is read-only.
+        /// Thrown when the file system is not initialized.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when a file with the new name already exists.
+        /// Thrown when the device is read-only, or a file with the new name already exists.
         /// </exception>
         /// <exception cref="FileNotFoundException">
         /// Thrown when the file named by <paramref name="oldPath"/> does not exist.
@@ -1389,7 +1392,7 @@ namespace RetroIO.Storage.Local.FileSystems
             EnsureInitialized();
             if (_disk!.IsReadOnly)
             {
-                throw new InvalidOperationException("Filesystem is mounted read-only");
+                throw new IOException("Filesystem is mounted read-only");
             }
             EnsureWritableFormat();
 
