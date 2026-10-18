@@ -128,7 +128,15 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Deletes a blob.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the blob to delete.
+    /// </param>
+    /// <exception cref="System.IO.FileNotFoundException">
+    /// Thrown when there is no blob at <paramref name="path"/>.
+    /// </exception>
     public void DeleteFile(string path)
     {
         var blobClient = _containerClient.GetBlobClient(NormalizePath(path));
@@ -138,7 +146,12 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
         blobClient.Delete();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported: deleting a directory in blob storage is not written yet.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the directory. Ignored.
+    /// </param>
     /// <exception cref="NotImplementedException">
     /// Always thrown: a blob container has no real directories, and deleting the marker blob of one is not written yet.
     /// </exception>
@@ -147,7 +160,15 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
         throw new NotImplementedException("Deleting a directory in blob storage is not implemented yet.");
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported: renaming a blob (copy, then delete) is not written yet.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the file or directory to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path.
+    /// </param>
     /// <exception cref="NotImplementedException">
     /// Always thrown: a blob has no rename; copy and delete is not written yet.
     /// </exception>
@@ -156,7 +177,15 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
         throw new NotImplementedException("Renaming a blob (copy, then delete) is not implemented yet.");
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported: renaming a directory in blob storage is not written yet.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the file or directory to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path.
+    /// </param>
     /// <exception cref="NotImplementedException">
     /// Always thrown: renaming a directory means renaming every blob under it, which is not written yet.
     /// </exception>

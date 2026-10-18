@@ -35,7 +35,15 @@ public sealed class LocalFileSystemBackend : IFileSystemBackend
     /// </param>
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Deletes a file from the local disk.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the file to delete.
+    /// </param>
+    /// <exception cref="System.IO.FileNotFoundException">
+    /// Thrown when there is no file at <paramref name="path"/>. <c>File.Delete</c> does nothing for a missing file, so the check is made first.
+    /// </exception>
     public void DeleteFile(string path)
     {
         // File.Delete does nothing for a missing file; the interface promises FileNotFoundException.
@@ -45,13 +53,52 @@ public sealed class LocalFileSystemBackend : IFileSystemBackend
         File.Delete(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Deletes an empty directory from the local disk. The directory is not deleted recursively.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the directory to delete.
+    /// </param>
+    /// <exception cref="System.IO.DirectoryNotFoundException">
+    /// Thrown when there is no directory at <paramref name="path"/>.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when the directory is not empty.
+    /// </exception>
     public void DeleteDirectory(string path) => Directory.Delete(path, recursive: false);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Moves or renames a file on the local disk, with <c>File.Move</c>.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the file to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path. The directory it is in must exist.
+    /// </param>
+    /// <exception cref="System.IO.FileNotFoundException">
+    /// Thrown when there is no file at <paramref name="sourcePath"/>.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when something already exists at <paramref name="destinationPath"/>.
+    /// </exception>
     public void MoveFile(string sourcePath, string destinationPath) => File.Move(sourcePath, destinationPath);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Moves or renames a directory together with everything in it, on the local disk, with <c>Directory.Move</c>.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the directory to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path. The directory it is in must exist.
+    /// </param>
+    /// <exception cref="System.IO.DirectoryNotFoundException">
+    /// Thrown when there is no directory at <paramref name="sourcePath"/>.
+    /// </exception>
+    /// <exception cref="System.IO.IOException">
+    /// Thrown when something already exists at <paramref name="destinationPath"/>.
+    /// </exception>
     public void MoveDirectory(string sourcePath, string destinationPath) => Directory.Move(sourcePath, destinationPath);
 
     /// <summary>

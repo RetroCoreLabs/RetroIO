@@ -213,7 +213,15 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         backend.CreateDirectory(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Deletes a file on the disc that <paramref name="path"/> belongs to.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the file to delete.
+    /// </param>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when <paramref name="path"/> is at the disc-root level and so belongs to no disc.
+    /// </exception>
     public void DeleteFile(string path)
     {
         IFileSystemBackend? backend = Route(path);
@@ -222,7 +230,15 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         backend.DeleteFile(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Deletes a directory on the disc that <paramref name="path"/> belongs to.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the directory to delete.
+    /// </param>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when <paramref name="path"/> is a disc itself, or belongs to no disc. A disc cannot be deleted.
+    /// </exception>
     public void DeleteDirectory(string path)
     {
         IFileSystemBackend? backend = Route(path);
@@ -231,7 +247,15 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         backend.DeleteDirectory(path);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Moves or renames a file inside one disc.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the file or directory to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path.
+    /// </param>
     /// <exception cref="NotSupportedException">
     /// Thrown when the source and the destination are on different discs.
     /// </exception>
@@ -240,7 +264,15 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
         RouteBoth(sourcePath, destinationPath).MoveFile(sourcePath, destinationPath);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Moves or renames a directory inside one disc.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the file or directory to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path.
+    /// </param>
     /// <exception cref="NotSupportedException">
     /// Thrown when the source and the destination are on different discs.
     /// </exception>

@@ -318,7 +318,15 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         return new VfsWriteBackFileStream(temp, _vfs, ToUrn(path), append: mode == FileMode.Append);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Deletes a file through the VFS and waits for it to finish.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the file to delete.
+    /// </param>
+    /// <exception cref="System.UnauthorizedAccessException">
+    /// Thrown when the disc is mounted read-only.
+    /// </exception>
     public void DeleteFile(string path)
     {
         if (_readOnly)
@@ -327,7 +335,12 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         _vfs.DeleteFileAsync(ToUrn(path)).GetAwaiter().GetResult();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported: the VFS core cannot delete a directory yet.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the directory. Ignored.
+    /// </param>
     /// <exception cref="NotImplementedException">
     /// Always thrown: the VFS core has no directory delete yet.
     /// </exception>
@@ -336,7 +349,15 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         throw new NotImplementedException("The VFS core has no directory delete yet, so a VFS-backed Econet disc cannot delete a directory.");
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported: the VFS core cannot move or rename yet.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the file or directory to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path.
+    /// </param>
     /// <exception cref="NotImplementedException">
     /// Always thrown: the VFS core has no move or rename yet.
     /// </exception>
@@ -345,7 +366,15 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
         throw new NotImplementedException("The VFS core has no move or rename yet, so a VFS-backed Econet disc cannot rename a file.");
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported: the VFS core cannot move or rename yet.
+    /// </summary>
+    /// <param name="sourcePath">
+    /// The path of the file or directory to move.
+    /// </param>
+    /// <param name="destinationPath">
+    /// The new path.
+    /// </param>
     /// <exception cref="NotImplementedException">
     /// Always thrown: the VFS core has no move or rename yet.
     /// </exception>
