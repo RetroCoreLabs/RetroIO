@@ -48,6 +48,64 @@ public sealed class ProtocolConfigurationLoaderTests
     }
 
     [Test]
+    public void LoadTnfsConfiguration_ExistingFile_IsLeftAloneAndNotReportedAsCreated()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            string configPath = Path.Combine(tempPath, "tnfs-config.json");
+            const string original = "{ \"UdpPort\": 12345 }";
+            File.WriteAllText(configPath, original);
+
+            StringWriter captured = new StringWriter();
+            Console.SetOut(captured);
+            TnfsServerConfiguration result = ProtocolConfigurationLoader.LoadTnfsConfiguration(
+                tempPath, new ConfigurationBuilder().Build());
+            Console.SetOut(originalOut);
+
+            Assert.That(result.UdpPort, Is.EqualTo(12345));
+            Assert.That(File.ReadAllText(configPath), Is.EqualTo(original), "an existing file was rewritten");
+            Assert.That(captured.ToString(), Does.Not.Contain("Created default"));
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
+    public void LoadEconetConfiguration_MissingFile_IsCreatedAndReported()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            string configPath = Path.Combine(tempPath, "econet-config.json");
+
+            StringWriter captured = new StringWriter();
+            Console.SetOut(captured);
+            ProtocolConfigurationLoader.LoadEconetConfiguration(tempPath, new ConfigurationBuilder().Build());
+            Console.SetOut(originalOut);
+
+            Assert.That(File.Exists(configPath), Is.True);
+            Assert.That(captured.ToString(), Does.Contain("Created default Econet configuration"));
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
     public void LoadEconetConfiguration_AppliesOverrides()
     {
         string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));

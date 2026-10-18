@@ -17,10 +17,10 @@ namespace RetroIO.Server.Hosting;
 public static class ProtocolConfigurationLoader
 {
     /// <summary>
-    /// Loads the TNFS settings from tnfs-config.json, applies overrides from the application configuration, and writes the file back.
+    /// Loads the TNFS settings from tnfs-config.json, applies overrides from the application configuration, and writes the file only when it did not exist.
     /// </summary>
     /// <remarks>
-    /// When the file is missing or cannot be read, the defaults are used. The keys Tnfs:RootDirectory, Tnfs:UdpPort and Tnfs:TcpPort override the loaded values when they are set. The result is always written to the file, and a failed write is only reported on the console.
+    /// When the file is missing or cannot be read, the defaults are used. The keys Tnfs:RootDirectory, Tnfs:UdpPort and Tnfs:TcpPort override the loaded values when they are set. The file is written only when it was missing (with the overrides included), and then "Created default" is printed. An existing file, even one that could not be read, is never overwritten. A failed write is only reported on the console.
     /// </remarks>
     /// <param name="retroFsPath">
     /// The folder that holds the JSON file.
@@ -34,9 +34,10 @@ public static class ProtocolConfigurationLoader
     public static TnfsServerConfiguration LoadTnfsConfiguration(string retroFsPath, IConfiguration configuration)
     {
         string configPath = Path.Combine(retroFsPath, "tnfs-config.json");
+        bool existed = File.Exists(configPath);
         TnfsServerConfiguration config;
 
-        if (File.Exists(configPath))
+        if (existed)
         {
             try
             {
@@ -57,15 +58,19 @@ public static class ProtocolConfigurationLoader
         }
 
         ApplyTnfsOverrides(configuration, config);
-        SaveConfiguration(configPath, config, "TNFS");
+        if (!existed)
+        {
+            SaveConfiguration(configPath, config, "TNFS");
+        }
+
         return config;
     }
 
     /// <summary>
-    /// Loads the Econet settings from econet-config.json, applies overrides from the application configuration, and writes the file back.
+    /// Loads the Econet settings from econet-config.json, applies overrides from the application configuration, and writes the file only when it did not exist.
     /// </summary>
     /// <remarks>
-    /// When the file is missing or cannot be read, the defaults are used. The keys Econet:RootDirectory and Econet:UdpPort override the loaded values when they are set. The result is always written to the file, and a failed write is only reported on the console.
+    /// When the file is missing or cannot be read, the defaults are used. The keys Econet:RootDirectory and Econet:UdpPort override the loaded values when they are set. The file is written only when it was missing (with the overrides included), and then "Created default" is printed. An existing file, even one that could not be read, is never overwritten. A failed write is only reported on the console.
     /// </remarks>
     /// <param name="retroFsPath">
     /// The folder that holds the JSON file.
@@ -79,9 +84,10 @@ public static class ProtocolConfigurationLoader
     public static EconetServerConfiguration LoadEconetConfiguration(string retroFsPath, IConfiguration configuration)
     {
         string configPath = Path.Combine(retroFsPath, "econet-config.json");
+        bool existed = File.Exists(configPath);
         EconetServerConfiguration config;
 
-        if (File.Exists(configPath))
+        if (existed)
         {
             try
             {
@@ -101,7 +107,11 @@ public static class ProtocolConfigurationLoader
         }
 
         ApplyEconetOverrides(configuration, config);
-        SaveConfiguration(configPath, config, "Econet");
+        if (!existed)
+        {
+            SaveConfiguration(configPath, config, "Econet");
+        }
+
         return config;
     }
 
