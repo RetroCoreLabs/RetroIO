@@ -19,28 +19,55 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
     /// </remarks>
     public sealed class NullEthernetBackend : IEthernetBackend
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Occurs when a complete Ethernet frame arrives. This backend never raises it.
+        /// </summary>
         public event EthernetPacketReceived? OnPacketReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether the backend has been started and not stopped.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> after <see cref="Start"/>, <c>false</c> after <see cref="Stop"/> or before the first start.
+        /// </value>
         public bool IsActive { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a short human-readable description of the transport, for logs.
+        /// </summary>
+        /// <value>
+        /// Always <c>"null"</c>.
+        /// </value>
         public string Description => "null";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the backend. This only sets <see cref="IsActive"/>; calling it again does nothing more.
+        /// </summary>
         public void Start()
         {
             IsActive = true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the backend. This only clears <see cref="IsActive"/>; calling it again does nothing more.
+        /// </summary>
         public void Stop()
         {
             IsActive = false;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Discards the frame. Nothing is sent and nothing is checked.
+        /// </summary>
+        /// <param name="data">
+        /// The buffer holding the frame; ignored.
+        /// </param>
+        /// <param name="offset">
+        /// The offset of the first frame byte; ignored.
+        /// </param>
+        /// <param name="length">
+        /// The number of bytes to send; ignored.
+        /// </param>
         public void SendPacket(byte[] data, int offset, int length)
         {
             // Deliberately empty - the whole point of this backend.
@@ -48,7 +75,9 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             _ = OnPacketReceived;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disposes the backend by calling <see cref="Stop"/>.
+        /// </summary>
         public void Dispose()
         {
             Stop();
@@ -162,28 +191,68 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             _name = name;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Occurs when a frame sent by another active port on the same segment arrives.
+        /// </summary>
+        /// <remarks>
+        /// Raised synchronously on the sending thread. The buffer is a copy made by the segment and
+        /// shared by all receiving ports.
+        /// </remarks>
         public event EthernetPacketReceived? OnPacketReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether the port has been started and not stopped.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> after <see cref="Start"/>, <c>false</c> after <see cref="Stop"/> or before the
+        /// first start. An inactive port neither sends nor receives frames.
+        /// </value>
         public bool IsActive { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a short human-readable description of the transport, for logs.
+        /// </summary>
+        /// <value>
+        /// <c>in-process:</c> followed by the port name.
+        /// </value>
         public string Description => $"in-process:{_name}";
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the port. This only sets <see cref="IsActive"/>; calling it again does nothing more.
+        /// </summary>
         public void Start()
         {
             IsActive = true;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the port. This only clears <see cref="IsActive"/>; the port stays attached to the segment.
+        /// </summary>
         public void Stop()
         {
             IsActive = false;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends one raw Ethernet frame to every other active port on the segment.
+        /// </summary>
+        /// <remarks>
+        /// Does nothing when the port is not active, <paramref name="data"/> is null, or
+        /// <paramref name="length"/> is 0 or less. Delivery is synchronous on the calling thread.
+        /// </remarks>
+        /// <param name="data">
+        /// The buffer holding the frame.
+        /// </param>
+        /// <param name="offset">
+        /// The offset of the first frame byte within <paramref name="data"/>.
+        /// </param>
+        /// <param name="length">
+        /// The number of bytes to send.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="offset"/> and <paramref name="length"/> do not lie inside
+        /// <paramref name="data"/>.
+        /// </exception>
         public void SendPacket(byte[] data, int offset, int length)
         {
             if (!IsActive || data == null || length <= 0)
@@ -208,7 +277,9 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             OnPacketReceived?.Invoke(data, length);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disposes the port by calling <see cref="Stop"/>. The port is not removed from the segment.
+        /// </summary>
         public void Dispose()
         {
             Stop();

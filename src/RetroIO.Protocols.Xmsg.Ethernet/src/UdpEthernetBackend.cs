@@ -77,13 +77,29 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             _port = port;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Occurs when a non-empty datagram arrives from the multicast group.
+        /// </summary>
+        /// <remarks>
+        /// Raised on the receive thread, with a new buffer for each datagram. Frames this node sent
+        /// itself also come back here, because multicast loopback is on.
+        /// </remarks>
         public event EthernetPacketReceived? OnPacketReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether the backend is started and able to carry frames.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> after a successful <see cref="Start"/>, until <see cref="Stop"/>.
+        /// </value>
         public bool IsActive { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a short human-readable description of the transport, for logs.
+        /// </summary>
+        /// <value>
+        /// <c>udp:mcast:</c> followed by the group, a colon and the port.
+        /// </value>
         public string Description => $"udp:mcast:{_group}:{_port}";
 
         /// <summary>
@@ -165,7 +181,17 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             return new UdpEthernetBackend(group ?? DefaultGroup, port);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the backend: binds the UDP port with address reuse, joins the multicast group with
+        /// loopback on, and starts the background receive thread.
+        /// </summary>
+        /// <remarks>
+        /// Calling it while started does nothing. When the setup fails, the socket is closed, the
+        /// backend stays inactive and the exception is passed on.
+        /// </remarks>
+        /// <exception cref="SocketException">
+        /// Thrown when binding the port or joining the group fails.
+        /// </exception>
         public void Start()
         {
             lock (_stateLock)
@@ -214,7 +240,14 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the backend: leaves the multicast group, closes the socket and waits up to 2 seconds
+        /// for the receive thread to end.
+        /// </summary>
+        /// <remarks>
+        /// Calling it when the backend is not started does nothing. Errors while leaving the group or
+        /// closing the socket are ignored.
+        /// </remarks>
         public void Stop()
         {
             Thread? thread;
@@ -254,7 +287,24 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             thread?.Join(2000);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends one raw Ethernet frame as a single datagram to the multicast group.
+        /// </summary>
+        /// <remarks>
+        /// The frame is dropped without notice when the backend is not active, <paramref name="data"/>
+        /// is null, or <paramref name="length"/> is 0 or less. Any exception during the send, including
+        /// an <paramref name="offset"/> or <paramref name="length"/> outside the buffer, is caught and
+        /// the frame is lost.
+        /// </remarks>
+        /// <param name="data">
+        /// The buffer holding the frame.
+        /// </param>
+        /// <param name="offset">
+        /// The offset of the first frame byte within <paramref name="data"/>.
+        /// </param>
+        /// <param name="length">
+        /// The number of bytes to send.
+        /// </param>
         public void SendPacket(byte[] data, int offset, int length)
         {
             UdpClient? udp = _udp;
@@ -321,7 +371,9 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disposes the backend by calling <see cref="Stop"/>.
+        /// </summary>
         public void Dispose()
         {
             Stop();

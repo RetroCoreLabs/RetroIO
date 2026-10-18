@@ -97,13 +97,31 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             _port = port;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Occurs when a complete Ethernet frame arrives from the connected peer.
+        /// </summary>
+        /// <remarks>
+        /// Raised on the worker thread. The buffer is reused for the next frame of the same
+        /// connection, so a handler that keeps the frame must copy it.
+        /// </remarks>
         public event EthernetPacketReceived? OnPacketReceived;
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a value indicating whether the backend has been started and not stopped.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> from <see cref="Start"/> until <see cref="Stop"/>, also while no peer is
+        /// connected; see <see cref="IsConnected"/> for the connection itself.
+        /// </value>
         public bool IsActive { get; private set; }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets a short human-readable description of the transport, for logs.
+        /// </summary>
+        /// <value>
+        /// <c>tcp-listen:</c> and the port when listening, or <c>tcp:</c>, the host, a colon and the
+        /// port when dialing out.
+        /// </value>
         public string Description => _listen ? $"tcp-listen:{_port}" : $"tcp:{_host}:{_port}";
 
         /// <summary>
@@ -179,7 +197,14 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             return new TcpEthernetBackend(false, hostPart, dialPort);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Starts the backend: a background worker thread either listens for one peer at a time or
+        /// dials the peer, retrying until stopped.
+        /// </summary>
+        /// <remarks>
+        /// Returns at once; the connection is made on the worker thread. Calling it while the worker
+        /// is running does nothing.
+        /// </remarks>
         public void Start()
         {
             lock (_stateLock)
@@ -200,7 +225,13 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             }
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Stops the backend: closes the connection and the listener and waits up to 2 seconds for
+        /// the worker thread to end.
+        /// </summary>
+        /// <remarks>
+        /// Calling it when the backend is not started does nothing.
+        /// </remarks>
         public void Stop()
         {
             Thread? worker;
@@ -232,7 +263,24 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             worker?.Join(2000);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Sends one raw Ethernet frame to the connected peer, as a 2-byte big-endian length followed
+        /// by the frame.
+        /// </summary>
+        /// <remarks>
+        /// The frame is dropped without notice when no peer is connected, <paramref name="data"/> is
+        /// null, or <paramref name="length"/> is 0 or less or larger than 2048. Any exception during
+        /// the write is caught and the frame is lost; the reader side notices a dropped peer.
+        /// </remarks>
+        /// <param name="data">
+        /// The buffer holding the frame.
+        /// </param>
+        /// <param name="offset">
+        /// The offset of the first frame byte within <paramref name="data"/>.
+        /// </param>
+        /// <param name="length">
+        /// The number of bytes to send.
+        /// </param>
         public void SendPacket(byte[] data, int offset, int length)
         {
             NetworkStream? stream = _stream;
@@ -532,7 +580,9 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             _client = null;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Disposes the backend by calling <see cref="Stop"/>.
+        /// </summary>
         public void Dispose()
         {
             Stop();
