@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer.Bulk;
 using RetroIO.Protocols.Econet.FileServer.Metadata;
 using RetroIO.Protocols.Econet.Protocol.Aun;
@@ -79,7 +80,7 @@ public sealed class BulkTransferHandler
                     status: "OK");
             }
 
-            EncodeAcornDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
+            AcornPath.EncodeFileDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
             string acornName = completed?.AcornFilename ?? string.Empty;
             if (_context.Configuration.SaveCloseDelayMs > 0)
                 Thread.Sleep(_context.Configuration.SaveCloseDelayMs);
@@ -163,13 +164,6 @@ public sealed class BulkTransferHandler
         }
 
         _context.BulkTransfers.AbortLoad(request.ClientNet, request.ClientStation);
-    }
-
-    private static void EncodeAcornDate(DateTime utc, out byte day, out byte monthYear)
-    {
-        day = (byte)utc.Day;
-        int yearOffset = utc.Year - 1981;
-        monthYear = (byte)(((yearOffset & 0x0F) << 4) | (utc.Month & 0x0F));
     }
 
     private static EconetMessage BuildReply(EconetMessage request, byte replyPort, byte[] payload)

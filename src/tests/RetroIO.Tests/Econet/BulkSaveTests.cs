@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
 using System.Text;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -85,6 +86,26 @@ public sealed class BulkSaveReplyTests
         Assert.That(reply, Has.Length.EqualTo(5), "PiFS create/zero-length close is 5 bytes");
         Assert.That(reply[0], Is.EqualTo(0), "return code 0 (not the FS3 code 3)");
         Assert.That(reply[1], Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Save_ZeroLength_ReplyCarriesTodaysDate_NotOneFromThe1990s()
+    {
+        // Regression: the save-complete reply packed the year into 4 bits, so any year from 1997 on came out
+        // wrong (2026 read back as 1994). The date is 7 bits of year after 1981, split over both bytes.
+        _harness.Clock.SetUtc(new DateTime(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc));
+        _harness.HandleOsCli("I AM SYST \r");
+
+        byte[] reply = SaveRequest("EMPTY", load: 0, exec: 0, length: 0);
+
+        byte day = reply[3];
+        byte monthYear = reply[4];
+        int dayOfMonth = day & 0x1F;
+        int month = monthYear & 0x0F;
+        int year = 1981 + (((day & 0xE0) >> 1) | (monthYear >> 4));
+        Assert.That(year, Is.EqualTo(2026));
+        Assert.That(month, Is.EqualTo(10));
+        Assert.That(dayOfMonth, Is.EqualTo(18));
     }
 
     [Test]

@@ -40,6 +40,10 @@ internal sealed class EconetFsTestHarness
     public IFileSystemBackend Backend { get; }
 
     public FileServerCommandHandler Handler { get; }
+
+    // The clock the server uses, so a test can fix the date.
+    public FileServerClock Clock { get; } = new FileServerClock();
+
     public IRetroIDP IdentityProvider { get; }
     public EconetActivityLog ActivityLog { get; }
     public EconetTestMonitor Monitor { get; }
@@ -95,7 +99,7 @@ internal sealed class EconetFsTestHarness
             paths,
             bulk,
             new FileServerConfiguration(),
-            new FileServerClock(),
+            Clock,
             "/econet-root",
             "RetroFS",
             FileServerCommandHandler.DefaultVersionString,

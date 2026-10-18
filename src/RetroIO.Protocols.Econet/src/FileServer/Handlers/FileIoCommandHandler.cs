@@ -199,7 +199,7 @@ public sealed class FileIoCommandHandler
             }
 
             AcornInfStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, 0, defaultAccess);
-            EncodeAcornDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
+            AcornPath.EncodeFileDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
             // PiFS create_only / length==0 path sends the short 5-byte completion (return code 0),
             // not the 21-byte FS3 data-transfer close packet.
             return Reply(
@@ -230,13 +230,6 @@ public sealed class FileIoCommandHandler
         });
 
         return Reply(request, fsRequest.ReplyPort, FileServerReply.SaveSetup(bulkPort));
-    }
-
-    private static void EncodeAcornDate(DateTime utc, out byte day, out byte monthYear)
-    {
-        day = (byte)utc.Day;
-        int yearOffset = utc.Year - 1981;
-        monthYear = (byte)(((yearOffset & 0x0F) << 4) | (utc.Month & 0x0F));
     }
 
     private EconetMessage HandleOpen(EconetMessage request, FileServerRequest fsRequest)
