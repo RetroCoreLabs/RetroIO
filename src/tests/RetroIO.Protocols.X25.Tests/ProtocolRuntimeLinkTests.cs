@@ -307,7 +307,7 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Act
             bool started = runtime.StartLink("TcpLapb0");
-            Thread.Sleep(100); // Allow time to start
+            WaitFor(() => runtime.GetLink("TcpLapb0")?.Status == LinkStatus.Active);
 
             // Assert
             Assert.That(started, Is.True);
@@ -337,15 +337,28 @@ namespace RetroIO.Protocols.X25.Tests
             using var runtime = new ProtocolRuntime(_logger, config);
             runtime.InitializeLinksFromConfig();
             runtime.StartLink("TcpLapb0");
-            Thread.Sleep(100);
+            WaitFor(() => runtime.GetLink("TcpLapb0")?.Status == LinkStatus.Active);
 
             // Act
             runtime.StopLink("TcpLapb0");
-            Thread.Sleep(100);
+            WaitFor(() => runtime.GetLink("TcpLapb0")?.Status == LinkStatus.Stopped);
 
             // Assert
             var link = runtime.GetLink("TcpLapb0");
             Assert.That(link!.Status, Is.EqualTo(LinkStatus.Stopped));
+        }
+
+        // Waits until the condition holds or the deadline passes. A link starts on its own thread, so the test has to
+        // wait for the state it asserts, not for a fixed time: 300 ms was enough on a fast machine and not on a busy
+        // runner. The assertion that follows still fails if the state is never reached.
+        private static bool WaitFor(Func<bool> condition, int timeoutMs = 5000)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (!condition() && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(10);
+            }
+            return condition();
         }
 
         [Test]
@@ -381,7 +394,16 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Act
             runtime.StartAllLinks();
-            Thread.Sleep(300);
+            WaitFor(() =>
+            {
+                var all = runtime.GetAllLinks();
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (all[i].Status != LinkStatus.Active)
+                        return false;
+                }
+                return all.Length == 2;
+            });
 
             // Assert
             var links = runtime.GetAllLinks();
@@ -494,7 +516,7 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Start one link
             runtime.StartLink("TcpLapb0");
-            Thread.Sleep(100);
+            WaitFor(() => runtime.GetLinkManagerStatistics().ActiveLinks == 1);
 
             // Act
             var stats = runtime.GetLinkManagerStatistics();
