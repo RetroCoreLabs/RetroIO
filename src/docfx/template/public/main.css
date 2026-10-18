@@ -1,12 +1,29 @@
-/* RetroIO documentation site: the small additions to DocFX's "modern" template.
-   This layer is listed after "modern" in docfx.json, so a file here replaces the template's file of the same name
-   (the template's own main.css is empty, kept as a hook for exactly this). */
-
-/* The header logo. The template's own logo is an SVG that carries its size, and it sets none. The repository icon
-   is a 128 px PNG, which rendered at 128 px: it spilled out of the 59 px header and covered the name. Size it
-   to the line of the menu instead. */
-#logo {
+/* Header brand: the modern template does not size #logo. A PNG, ICO or an SVG that has only a
+   viewBox is drawn at its own size (90 to 157 px measured) and spills out of the 3.5 rem
+   header, pushing the site name over the menu. Sizing it here works for any icon file.
+   Found by measuring the live pages in a browser, 18 October 2026. */
+.navbar .navbar-brand #logo {
   height: 2rem;
-  width: 2rem;
-  margin-right: 0.6rem;
+  width: auto;
+  margin-right: 0.5rem;
+}
+
+/* Keep the site name from being squeezed, and a menu entry from breaking over two lines. */
+.navbar .navbar-brand {
+  flex-shrink: 0;
+}
+
+.navbar .nav-link {
+  white-space: nowrap;
+}
+
+/* Between 768 and 992 px the menu and the search box compete for the bar. Keep the menu at its
+   natural width and let the search box give way. */
+.navbar .navbar-nav {
+  flex-shrink: 0;
+}
+
+.navbar form#search {
+  min-width: 0;
+  flex: 1 1 8rem;
 }
