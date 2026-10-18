@@ -20,7 +20,9 @@ public class LiveDataService : BackgroundService
     private readonly InMemoryLogProvider _logProvider;
     private readonly IServerManager _serverManager;
     private readonly ILogger<LiveDataService> _logger;
-    private int _lastLogIndex = 0;
+    // How many log entries have been pushed so far. This is a running total, not a position in the
+    // buffer: the buffer drops its oldest entries once it is full, so a position would stop moving.
+    private long _logsPushed = 0;
 
     /// <summary>
     /// Creates the service.
@@ -104,15 +106,15 @@ public class LiveDataService : BackgroundService
 
     private async Task PushNewLogsAsync()
     {
-        var logs = _logProvider.GetLogEntries();
-        if (logs.Count <= _lastLogIndex) return;
+        var logs = _logProvider.GetLogEntriesSince(_logsPushed, out long totalAdded);
+        if (logs.Count == 0) return;
 
-        int newCount = logs.Count - _lastLogIndex;
+        int newCount = logs.Count;
         LogEntryDto[] newLogs = new LogEntryDto[newCount];
 
         for (int i = 0; i < newCount; i++)
         {
-            var entry = logs[_lastLogIndex + i];
+            var entry = logs[i];
             newLogs[i] = new LogEntryDto
             {
                 Timestamp = entry.Timestamp,
@@ -123,7 +125,7 @@ public class LiveDataService : BackgroundService
             };
         }
 
-        _lastLogIndex = logs.Count;
+        _logsPushed = totalAdded;
 
         await _hubContext.Clients.All.NewLogs(newLogs);
     }

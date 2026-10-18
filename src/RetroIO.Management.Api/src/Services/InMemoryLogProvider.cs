@@ -22,6 +22,11 @@ public class InMemoryLogProvider : ILoggerProvider
     private readonly ConcurrentQueue<LogEntryDto> _logEntries = new();
     private readonly int _maxEntries;
 
+    // Guards the pair "queue contents" and "how many entries were ever added", so a reader
+    // always sees the two agree.
+    private readonly object _sync = new();
+    private long _totalAdded;
+
     /// <summary>
     /// Creates a provider that keeps a limited number of log entries.
     /// </summary>
@@ -57,12 +62,58 @@ public class InMemoryLogProvider : ILoggerProvider
 
     internal void AddLogEntry(LogEntryDto entry)
     {
-        _logEntries.Enqueue(entry);
-
-        // Trim old entries if needed
-        while (_logEntries.Count > _maxEntries)
+        lock (_sync)
         {
-            _logEntries.TryDequeue(out _);
+            _logEntries.Enqueue(entry);
+            _totalAdded++;
+
+            // Trim old entries if needed
+            while (_logEntries.Count > _maxEntries)
+            {
+                _logEntries.TryDequeue(out _);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the entries added since a reader last looked, as far as the buffer still holds them.
+    /// </summary>
+    /// <remarks>
+    /// A reader cannot track its place as a position in <see cref="GetLogEntries"/>: once the buffer is
+    /// full it holds the same number of entries after every addition, so the position stops moving.
+    /// The count of entries ever added keeps growing, so the difference is always the number of new ones.
+    /// If more entries were added than the buffer holds, the oldest of them are gone and only the ones
+    /// still in the buffer are returned.
+    /// </remarks>
+    /// <param name="alreadySeen">
+    /// The value of <paramref name="totalAdded"/> returned by the previous call, or 0 on the first call.
+    /// </param>
+    /// <param name="totalAdded">
+    /// Receives the number of entries ever added. Pass it back as <paramref name="alreadySeen"/> next time.
+    /// </param>
+    /// <returns>
+    /// The new entries, oldest first. Empty when there are none.
+    /// </returns>
+    public IReadOnlyList<LogEntryDto> GetLogEntriesSince(long alreadySeen, out long totalAdded)
+    {
+        lock (_sync)
+        {
+            totalAdded = _totalAdded;
+            long fresh = _totalAdded - alreadySeen;
+            if (fresh <= 0)
+            {
+                return Array.Empty<LogEntryDto>();
+            }
+
+            LogEntryDto[] all = _logEntries.ToArray();
+            if (fresh >= all.Length)
+            {
+                return all;
+            }
+
+            LogEntryDto[] tail = new LogEntryDto[fresh];
+            Array.Copy(all, all.Length - (int)fresh, tail, 0, (int)fresh);
+            return tail;
         }
     }
 
