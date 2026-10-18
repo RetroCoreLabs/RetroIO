@@ -101,11 +101,9 @@ public sealed class EconetActivityLog : IEconetActivityLog
     /// The largest number of entries to return.
     /// </param>
     /// <returns>
-    /// A new array of at most <paramref name="count"/> entries, newest first.
+    /// A new array of at most <paramref name="count"/> entries, newest first. A <paramref name="count"/>
+    /// of 0 or less gives an empty array.
     /// </returns>
-    /// <exception cref="System.OverflowException">
-    /// Thrown when <paramref name="count"/> is negative.
-    /// </exception>
     public IReadOnlyList<EconetCommandEntry> GetRecentCommands(int count)
     {
         lock (_sync)
@@ -119,11 +117,9 @@ public sealed class EconetActivityLog : IEconetActivityLog
     /// The largest number of entries to return.
     /// </param>
     /// <returns>
-    /// A new array of at most <paramref name="count"/> entries, newest first.
+    /// A new array of at most <paramref name="count"/> entries, newest first. A <paramref name="count"/>
+    /// of 0 or less gives an empty array.
     /// </returns>
-    /// <exception cref="System.OverflowException">
-    /// Thrown when <paramref name="count"/> is negative.
-    /// </exception>
     public IReadOnlyList<EconetFileTransferEntry> GetRecentTransfers(int count)
     {
         lock (_sync)
@@ -132,7 +128,8 @@ public sealed class EconetActivityLog : IEconetActivityLog
 
     private static T[] CopyRecent<T>(T[] buffer, int head, int count, int requested)
     {
-        int take = Math.Min(requested, count);
+        // A negative request would make the array size negative (OverflowException); treat it as 0.
+        int take = Math.Max(0, Math.Min(requested, count));
         T[] result = new T[take];
         if (take == 0)
             return result;
