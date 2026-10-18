@@ -22,13 +22,11 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `RetroIO.Protocols.Econet` `SetObjectInfoOperation` | Checks for at least 10 parameter bytes, then reads bytes 10 and 11: `IndexOutOfRangeException` on a short block. Load and exec bytes are also read from the offset the path is read from |
 | `RetroIO.Protocols.Econet` `EconetActivityLog` | A negative `count` throws `OverflowException` |
 | `RetroIO.Protocols.Econet` `GetRandomAccessInfoOperation` | Any function value other than 0 returns the file length, not only 1 or 2 |
-| `RetroIO.Protocols.Econet` `FileServerSessionManager.AllocateHandle` | Counts 4 to 32 and wraps without checking the number is free |
+| `RetroIO.Protocols.Econet` `FileServerSessionManager.AllocateHandle`, `FileIoCommandHandler.HandleOpen` | One server-wide pool of handles 4 to 32, not one per station. `HandleOpen` opens the stream first (`FileMode.Create` when the file need not exist, which truncates it) and asks for a handle afterwards; if the handle is refused the file is already truncated and the client is told "Already open". Needs a per-station handle table |
 | `RetroIO.Protocols.Econet` `FileServerSessionManager.GetSessionIndex` | Returns 0 both for "not found" and for the session in slot 0 |
-| `RetroIO.Protocols.Econet` `BulkTransferHandler`, `FileIoCommandHandler` | Private `EncodeAcornDate` copies pack the date differently from `AcornPath.EncodeFileDate` |
-| `RetroIO.Protocols.Econet` `FileServerBootstrap.EnsureLayout`, `FileIoCommandHandler.HandleDelete` | Use `Directory.CreateDirectory`, `File.Delete`, `Directory.Delete` directly instead of the file system backend they are given |
+| `RetroIO.Protocols.Econet` `FileIoCommandHandler.HandleDelete` | Deletes with `File.Delete`/`Directory.Delete` on the host disk, after asking the backend whether the path exists. `IFileSystemBackend` has no delete method, so with any backend other than the local disk it deletes nothing and still answers success. Needs the interface to grow (a public API change) |
 | `RetroIO.Protocols.Econet` `RenameCommand` | Moves with `File.Move`/`Directory.Move` directly instead of the backend; requires the new name to resolve, which may answer "Not found" for a name that does not exist yet |
 | `RetroIO.Protocols.Econet` `EconetUserBootstrap` | Class comment says it purges legacy orphan keys; the code only adds defaults |
-| `RetroIO.Protocols.Econet` `EconetProtocolDiagnostics.DescribeCmd6Fields` | Labels payload bytes 0 and 1 as `loadLo`/`loadHi`; in the reply they are the return code and the status byte |
 | `RetroIO.Protocols.Econet` `FileServerReply.DiscFreeSpaceClassic1983` | Existing comment has a `param` and no `returns` |
 | `RetroIO.Protocols.Xmsg.Api` `XmsgKernel` | `WirePort` has no incarnation bits |
 | `RetroIO.Link` `ILapbCapable` counters | `Retransmissions`, `RejectionsSent`, `RejectionsReceived`, `T1Timeouts`, `T2Timeouts` are never set anywhere |
@@ -42,16 +40,13 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `RetroIO.Storage.Local` `CbmDosFileSystem` | `WriteFile`/`DeleteFile`/`Rename` throw `InvalidOperationException` on a read-only device, not `IOException`; `ListDirectory` ignores its path |
 | `RetroIO.Storage.Local` `Fat32FileSystem.VolumeLabel` | Never read; always an empty string |
 | `RetroIO.Storage.Local` `Fat12/16/32FileSystem.Rename` | Moving a directory to another parent does not rewrite its `..` entry |
-| `RetroIO.Storage.Local` `CrtDriver.Mount` | `_chips` is never cleared, so mounting twice on one instance duplicates entries |
-| `RetroIO.Storage.Local` `SubStream.Read/Write` | `offset >= buffer.Length` throws for an empty buffer with offset 0 |
 | `RetroIO.Storage.Local` `DeltaBlockDevice` constructor | `applyDeltaOnMount` is stored and never used |
-| `RetroIO.Storage.Ndfs` `NdfsFileSystem.ClearUserPassword(int)` | Sets the in-memory password to 0, then returns false on a read-only device; the change stays in memory |
 | `RetroIO.Storage.Ndfs` `NdfsFileSystem.VolumeLabel` | Returns `"NDFS"` before a master block is read; the contract says an empty string |
 | `RetroIO.Storage.Ndfs` `NdfsDriver.CanWrite` | Always true, also for a read-only mount. **Confirmed by reading the code** |
 | `RetroIO.Storage.Providers` `VfsFileSystemBackend.GetFileInfo` | Returns a `FileInfo` for a temp file that is already deleted; only the length and write time are real |
 | `RetroIO.Storage.Providers`, both backends `GetFullPath` | Only turns backslashes into slashes; the contract says normalized and resolved |
 | `RetroIO.Server.Hosting` `ProtocolConfigurationLoader` | Always rewrites the config file but says "Created default ... configuration" |
-| `RetroIO.Server.Hosting` `LiveDataService` | `_lastLogIndex` is compared with a log buffer capped at 1000: once full, no new logs are pushed. TNFS and Econet statistics are pushed as fixed zeros |
+| `RetroIO.Management.Api` `LiveDataService` | TNFS and Econet statistics are pushed as fixed zeros (the log-line half of this entry is fixed) |
 | `RetroIO.Protocols.Tnfs` `TnfsConstants` | `MaxPathLength` is 256 but `MAX_FILEPATH`/`MAX_TNFSPATH` are 1024; `TnfsHeader` exists twice in two namespaces |
 | `RetroIO.Protocols.X25` `X3Parameters` against `X3` | Disagree on parameter 12 (`FLOW_CONTROL_X_ON_X_OFF` or `FORWARD_ON_N_CHARACTERS`) and on the `DATA_FORWARDING` default (2 or 13) |
 | `RetroIO.Protocols.X25` `PadClient`, `TadServer` | `IdleTimeoutMs`, `AutoConnect`, `EnableLoopbackTest` are never read; `XMSGSessionState.DataTransfer` is never assigned |
@@ -112,3 +107,10 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `NdfsFileSystem.UpdateUserQuota` was not written to disk; `DeleteFile` and `Initialize` threw the wrong exception types | NDFS: write quota changes to disk, throw the exceptions the interface documents |
 | `*SDISC` left the Acorn paths on the old disc; `GetOsCliDisplayName` mislabelled `*CA.` and `*CATALOGUE` | Econet: move the Acorn paths with *SDISC, and label *CAT the way the server runs it |
 | `SftpVolumeProvider` trusted every SFTP host key | SFTP: check the server's host key, and refuse one that is unknown or changed |
+| `NdfsFileSystem.ClearUserPassword(int)` changed the loaded user before noticing the device was read-only | NDFS: ClearUserPassword leaves the loaded user alone when the device is read-only |
+| `LiveDataService` stopped pushing log lines once the 1000-entry buffer was full | Management API: keep pushing new log lines after the log buffer has filled up |
+| `SubStream.Read/Write` rejected an empty buffer at offset 0 | SubStream: accept an empty buffer, and an offset equal to the buffer length with a count of zero |
+| `FileServerBootstrap.EnsureLayout` created the disc folders on the host disk, not in the backend | Econet: build the disc folders through the file system backend, not on the host disk |
+| The save-complete reply carried a wrong year for every date from 1997 on (two private `EncodeAcornDate` copies) | Econet: the save-complete reply carried a wrong year for every date from 1997 on |
+| `DescribeCmd6Fields` called the return code and result code `loadLo`/`loadHi` | Econet diagnostics: name the first two bytes of a command-6 reply for what they are |
+| `CrtDriver.Mount` doubled the chips on a second mount and let a failed mount damage the first cartridge | CrtDriver: a second Mount no longer doubles the chips, and a failed Mount keeps the old cartridge |
