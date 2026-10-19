@@ -332,9 +332,9 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
     }
 
     /// <summary>
-    /// Get file information from blob properties
+    /// Get the length and times of a file from the blob properties
     /// </summary>
-    public FileInfo? GetFileInfo(string path)
+    public BackendFileInfo? GetFileInfo(string path)
     {
         var blobName = NormalizePath(path);
 
@@ -350,24 +350,15 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
 
             var properties = blobClient.GetProperties();
 
-            // Create a temporary file to return FileInfo
-            // This is a workaround since we can't create FileInfo without a real file
-            var tempFile = Path.Combine(_options.TempCacheDirectory, $"info_{Guid.NewGuid()}.tmp");
-            File.WriteAllText(tempFile, "");
-
-            var fileInfo = new FileInfo(tempFile)
-            {
-                // Note: FileInfo is immutable for most properties, so we return a temp file
-                // The caller should use the Length property from this workaround
-            };
-
-            // Clean up temp file
-            File.Delete(tempFile);
-
             _logger.LogDebug("GetFileInfo('{Path}'): Size={Size}, LastModified={Modified}",
                 path, properties.Value.ContentLength, properties.Value.LastModified);
 
-            return fileInfo;
+            // The blob properties carry the real length and times. A blob has no access time.
+            return new BackendFileInfo(
+                properties.Value.ContentLength,
+                properties.Value.CreatedOn.UtcDateTime,
+                properties.Value.LastModified.UtcDateTime,
+                null);
         }
         catch (Exception ex)
         {

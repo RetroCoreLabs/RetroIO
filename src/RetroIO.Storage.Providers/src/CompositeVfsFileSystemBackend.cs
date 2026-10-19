@@ -158,7 +158,7 @@ public sealed class CompositeVfsFileSystemBackend : IFileSystemBackend
     /// The answer of the disc backend when <paramref name="path"/> lies on a disc; otherwise
     /// <c>null</c>.
     /// </returns>
-    public FileInfo? GetFileInfo(string path)
+    public BackendFileInfo? GetFileInfo(string path)
     {
         IFileSystemBackend? backend = Route(path);
         return backend?.GetFileInfo(path);

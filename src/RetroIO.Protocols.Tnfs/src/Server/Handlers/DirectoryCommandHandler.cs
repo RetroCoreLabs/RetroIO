@@ -251,7 +251,7 @@ public sealed class DirectoryCommandHandler
         {
             // Get file/directory attributes
             bool isDirectory = _fileSystem.IsDirectory(entryPath);
-            FileInfo? fileInfo = isDirectory ? null : _fileSystem.GetFileInfo(entryPath);
+            BackendFileInfo? fileInfo = isDirectory ? null : _fileSystem.GetFileInfo(entryPath);
 
             // Build response: flags(1) + size(4) + mtime(4) + ctime(4) + name + 0x00
             using var buffer = TnfsBuffer.Rent(256);

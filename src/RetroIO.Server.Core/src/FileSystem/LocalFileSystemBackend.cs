@@ -151,27 +151,28 @@ public sealed class LocalFileSystemBackend : IFileSystemBackend
     public bool IsDirectory(string path) => Directory.Exists(path);
 
     /// <summary>
-    /// Gets file information for a path.
+    /// Gets the length and times of a file.
     /// </summary>
-    /// <remarks>
-    /// The <see cref="FileInfo"/> is created whether or not the file exists; check its
-    /// <c>Exists</c> property.
-    /// </remarks>
     /// <param name="path">
     /// The file path.
     /// </param>
     /// <returns>
-    /// A new <see cref="FileInfo"/> for <paramref name="path"/>, or <c>null</c> when creating it
-    /// throws, for example for a null or empty path.
+    /// The length and times of the file, or <c>null</c> when there is no file at <paramref name="path"/>:
+    /// the path is a directory, does not exist, or is not a valid path (for example null or empty).
     /// </returns>
-    public FileInfo? GetFileInfo(string path)
+    public BackendFileInfo? GetFileInfo(string path)
     {
         try
         {
-            return new FileInfo(path);
+            FileInfo info = new FileInfo(path);
+            if (!info.Exists)
+                return null;
+
+            return new BackendFileInfo(info.Length, info.CreationTimeUtc, info.LastWriteTimeUtc, info.LastAccessTimeUtc);
         }
-        catch
+        catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
         {
+            // Not a valid path, so there is no file there.
             return null;
         }
     }

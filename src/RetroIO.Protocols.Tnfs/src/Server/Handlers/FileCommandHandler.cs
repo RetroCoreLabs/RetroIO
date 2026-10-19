@@ -134,7 +134,7 @@ public class FileCommandHandler
             writeOffset += 2;
 
             // Get file info for size and timestamps
-            FileInfo? fileInfo = isDirectory ? null : _fileSystem.GetFileInfo(fullPath);
+            BackendFileInfo? fileInfo = isDirectory ? null : _fileSystem.GetFileInfo(fullPath);
             DateTime creationTime = DateTime.UtcNow;
             DateTime lastWriteTime = DateTime.UtcNow;
             DateTime lastAccessTime = DateTime.UtcNow;
@@ -155,9 +155,9 @@ public class FileCommandHandler
             }
             else if (fileInfo != null)
             {
-                creationTime = fileInfo.CreationTimeUtc;
-                lastWriteTime = fileInfo.LastWriteTimeUtc;
-                lastAccessTime = fileInfo.LastAccessTimeUtc;
+                creationTime = fileInfo.CreationTimeUtc ?? creationTime;
+                lastWriteTime = fileInfo.LastWriteTimeUtc ?? lastWriteTime;
+                lastAccessTime = fileInfo.LastAccessTimeUtc ?? lastAccessTime;
                 fileSize = fileInfo.Length;
             }
 

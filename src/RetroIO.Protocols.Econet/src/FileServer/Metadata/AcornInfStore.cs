@@ -49,7 +49,7 @@ public static class AcornInfStore
 
         if (fileSystem.FileExists(unixPath))
         {
-            System.IO.FileInfo? info = fileSystem.GetFileInfo(unixPath);
+            RetroIO.Server.Core.FileSystem.BackendFileInfo? info = fileSystem.GetFileInfo(unixPath);
             length = (int)(info?.Length ?? 0);
         }
 

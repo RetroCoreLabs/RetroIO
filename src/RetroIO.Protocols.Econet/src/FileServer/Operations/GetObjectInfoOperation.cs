@@ -140,16 +140,16 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
             AcornInfStore.TryReadAttributes(context.FileSystem, unixPath, out load, out exec, out length, out access);
             if (length == 0)
             {
-                System.IO.FileInfo? info = context.FileSystem.GetFileInfo(unixPath);
+                RetroIO.Server.Core.FileSystem.BackendFileInfo? info = context.FileSystem.GetFileInfo(unixPath);
                 length = (int)(info?.Length ?? 0);
-                if (info != null)
-                    AcornPath.EncodeFileDate(info.LastWriteTimeUtc, out day, out monthYear);
+                if (info?.LastWriteTimeUtc != null)
+                    AcornPath.EncodeFileDate(info.LastWriteTimeUtc.Value, out day, out monthYear);
             }
             else
             {
-                System.IO.FileInfo? info = context.FileSystem.GetFileInfo(unixPath);
-                if (info != null)
-                    AcornPath.EncodeFileDate(info.LastWriteTimeUtc, out day, out monthYear);
+                RetroIO.Server.Core.FileSystem.BackendFileInfo? info = context.FileSystem.GetFileInfo(unixPath);
+                if (info?.LastWriteTimeUtc != null)
+                    AcornPath.EncodeFileDate(info.LastWriteTimeUtc.Value, out day, out monthYear);
             }
         }
 

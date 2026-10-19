@@ -74,7 +74,7 @@ public sealed class RecordingFileSystemBackend : IFileSystemBackend
     public Func<string, bool>? FileExistsHandler { get; set; }
     public Func<string, bool>? DirectoryExistsHandler { get; set; }
     public Func<string, FileMode, FileAccess, FileStream>? OpenFileHandler { get; set; }
-    public Func<string, FileInfo?>? GetFileInfoHandler { get; set; }
+    public Func<string, BackendFileInfo?>? GetFileInfoHandler { get; set; }
     public Func<string, IEnumerable<string>>? EnumerateHandler { get; set; }
 
     /// <summary>
@@ -156,7 +156,7 @@ public sealed class RecordingFileSystemBackend : IFileSystemBackend
         return _inner.IsDirectory(path);
     }
 
-    public FileInfo? GetFileInfo(string path)
+    public BackendFileInfo? GetFileInfo(string path)
     {
         _calls.Add(new BackendCall(nameof(GetFileInfo), path, null, null));
         return GetFileInfoHandler?.Invoke(path) ?? _inner.GetFileInfo(path);

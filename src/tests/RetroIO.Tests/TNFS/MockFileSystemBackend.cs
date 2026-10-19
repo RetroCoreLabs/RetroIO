@@ -182,16 +182,15 @@ public sealed class MockFileSystemBackend : IFileSystemBackend
         return _entries.TryGetValue(normalized, out var entry) && entry.IsDirectory;
     }
 
-    public FileInfo? GetFileInfo(string path)
+    public BackendFileInfo? GetFileInfo(string path)
     {
         string normalized = NormalizePath(path);
         if (!_entries.TryGetValue(normalized, out MockEntry? entry) || entry.IsDirectory)
             return null;
 
-        string tempPath = GetTempPath(normalized);
-        Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
-        File.WriteAllBytes(tempPath, entry.Content);
-        return new FileInfo(tempPath);
+        // Same values the temp file written here used to give: the length, and the time of writing it.
+        DateTime now = DateTime.UtcNow;
+        return new BackendFileInfo(entry.Content.Length, now, now, now);
     }
 
     public FileStream OpenFile(string path, FileMode mode, FileAccess access)

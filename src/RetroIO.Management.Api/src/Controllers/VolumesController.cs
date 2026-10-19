@@ -79,7 +79,7 @@ public class VolumesController : ControllerBase
                     Type = fileType,
                     Size = fileInfo.Length,
                     SizeFormatted = FormatBytes(fileInfo.Length),
-                    LastModified = fileInfo.LastWriteTime,
+                    LastModified = fileInfo.LastWriteTimeUtc?.ToLocalTime(),
                     IsDirectory = false
                 });
             }
@@ -137,7 +137,7 @@ public class VolumesController : ControllerBase
                     IsDirectory = isDirectory,
                     Size = fileInfo?.Length ?? 0,
                     SizeFormatted = FormatBytes(fileInfo?.Length ?? 0),
-                    LastModified = fileInfo?.LastWriteTime
+                    LastModified = fileInfo?.LastWriteTimeUtc?.ToLocalTime()
                 });
             }
 
@@ -192,7 +192,7 @@ public class VolumesController : ControllerBase
                 Type = GetFileType(fileName),
                 Size = fileInfo.Length,
                 SizeFormatted = FormatBytes(fileInfo.Length),
-                LastModified = fileInfo.LastWriteTime,
+                LastModified = fileInfo.LastWriteTimeUtc?.ToLocalTime(),
                 IsDirectory = false
             };
 

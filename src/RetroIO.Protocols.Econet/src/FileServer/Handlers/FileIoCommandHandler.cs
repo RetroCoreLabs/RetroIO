@@ -111,7 +111,7 @@ public sealed class FileIoCommandHandler
             _context.SecurityEvents, session, SecurityEventType.FileRead, unixPath,
             request.ClientAddress?.ToString() ?? "UNKNOWN", true).AsTask().GetAwaiter().GetResult();
 
-        System.IO.FileInfo? info = _context.FileSystem.GetFileInfo(unixPath);
+        RetroIO.Server.Core.FileSystem.BackendFileInfo? info = _context.FileSystem.GetFileInfo(unixPath);
         int length = (int)(info?.Length ?? 0);
         byte[] fileBytes = new byte[length];
         using (FileStream stream = _context.FileSystem.OpenFile(unixPath, FileMode.Open, FileAccess.Read))
@@ -164,8 +164,8 @@ public sealed class FileIoCommandHandler
         AcornInfStore.TryReadAttributes(_context.FileSystem, unixPath, out uint load, out uint exec, out _, out byte access);
         byte day = 0;
         byte monthYear = 0;
-        if (info != null)
-            AcornPath.EncodeFileDate(info.LastWriteTimeUtc, out day, out monthYear);
+        if (info?.LastWriteTimeUtc != null)
+            AcornPath.EncodeFileDate(info.LastWriteTimeUtc.Value, out day, out monthYear);
 
         byte[] metadata = FileServerReply.LoadMetadata(load, exec, length, access, day, monthYear);
         return Reply(request, fsRequest.ReplyPort, metadata);
