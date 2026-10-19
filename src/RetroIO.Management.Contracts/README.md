@@ -66,7 +66,7 @@ There is **no arrow** from the contracts to the implementations. That missing ar
 | Envelope | `ApiResponse<T>`, `ApiError` |
 | Authentication | `LoginRequest`, `LoginResponse`, `ManagementAuth` |
 | Server | `ServerStatusResponse`, `ServerActionResponse`, `ServerSettingsDto`, `UpdateServerSettingsRequest` |
-| Live push | `IServerHubClient`, `ServerHubMethods`, `ServerStatusUpdate`, `TnfsStatsUpdate` |
+| Live push | `IServerHubClient`, `ServerHubMethods`, `ServerStatusUpdate`, `TnfsStatsUpdate`, `EconetStatsUpdate` |
 | TNFS | `TnfsSettingsDto`, `UpdateTnfsSettingsRequest`, `TnfsStatisticsResponse`, `TnfsSessionsResponse`, `TnfsSessionInfo`, `TnfsHistoryResponse`, `TnfsDataPoint` |
 | Econet | `EconetSettingsDto`, `UpdateEconetSettingsRequest`, `EconetStatisticsResponse`, `EconetSessionsResponse`, `EconetSessionInfo`, `EconetActivityResponse`, `EconetCommandEntryDto`, `EconetFileTransferEntryDto` |
 | Users and groups | `UserListResponse`, `UserDto`, `CreateUserRequest`, `UpdateUserRequest`, `ChangePasswordRequest`, `GroupListResponse`, `GroupDto`, `CreateGroupRequest` |

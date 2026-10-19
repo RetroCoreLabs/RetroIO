@@ -25,6 +25,22 @@ public class EconetStatisticsResponse
     /// </summary>
     public long BytesTransferred { get; set; }
     /// <summary>
+    /// Gets or sets the number of payload bytes received in requests.
+    /// </summary>
+    public long BytesReceived { get; set; }
+    /// <summary>
+    /// Gets or sets the number of payload bytes sent in replies.
+    /// </summary>
+    public long BytesSent { get; set; }
+    /// <summary>
+    /// Gets or sets the number of requests that were file operations.
+    /// </summary>
+    public long FileOperations { get; set; }
+    /// <summary>
+    /// Gets or sets the number of failures: requests that threw and replies that could not be sent.
+    /// </summary>
+    public long Errors { get; set; }
+    /// <summary>
     /// Gets or sets the server uptime as text.
     /// </summary>
     public string Uptime { get; set; } = string.Empty;

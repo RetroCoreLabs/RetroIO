@@ -8,6 +8,8 @@
 using Microsoft.AspNetCore.SignalR;
 using RetroIO.Management.Api.Hubs;
 using RetroIO.Management.Contracts;
+using RetroIO.Protocols.Econet.FileServer.Sessions;
+using RetroIO.Protocols.Econet.Server;
 using RetroIO.Protocols.Tnfs.Server;
 
 namespace RetroIO.Management.Api.Services;
@@ -24,6 +26,9 @@ public class LiveDataService : BackgroundService
     // Both are null when no TNFS server runs in this process (the same rule TnfsController follows).
     private readonly SessionManager? _tnfsSessions;
     private readonly TnfsServerStatistics? _tnfsStatistics;
+    // Both are null when no Econet server runs in this process (the same rule EconetController follows).
+    private readonly FileServerSessionManager? _econetSessions;
+    private readonly EconetServerStatistics? _econetStatistics;
     // How many log entries have been pushed so far. This is a running total, not a position in the
     // buffer: the buffer drops its oldest entries once it is full, so a position would stop moving.
     private long _logsPushed = 0;
@@ -49,13 +54,21 @@ public class LiveDataService : BackgroundService
     /// <param name="tnfsStatistics">
     /// The TNFS server statistics, or null when no TNFS server runs in this process.
     /// </param>
+    /// <param name="econetSessions">
+    /// The Econet session manager, or null when no Econet server runs in this process.
+    /// </param>
+    /// <param name="econetStatistics">
+    /// The Econet server statistics, or null when no Econet server runs in this process.
+    /// </param>
     public LiveDataService(
         IHubContext<ServerHub, IServerHubClient> hubContext,
         InMemoryLogProvider logProvider,
         IServerManager serverManager,
         ILogger<LiveDataService> logger,
         SessionManager? tnfsSessions = null,
-        TnfsServerStatistics? tnfsStatistics = null)
+        TnfsServerStatistics? tnfsStatistics = null,
+        FileServerSessionManager? econetSessions = null,
+        EconetServerStatistics? econetStatistics = null)
     {
         _hubContext = hubContext;
         _logProvider = logProvider;
@@ -63,10 +76,12 @@ public class LiveDataService : BackgroundService
         _logger = logger;
         _tnfsSessions = tnfsSessions;
         _tnfsStatistics = tnfsStatistics;
+        _econetSessions = econetSessions;
+        _econetStatistics = econetStatistics;
     }
 
     /// <summary>
-    /// Once a second, pushes the server status, new log entries and TNFS statistics to all clients until the token is cancelled.
+    /// Once a second, pushes the server status, new log entries, TNFS statistics and Econet statistics to all clients until the token is cancelled.
     /// </summary>
     /// <remarks>
     /// An exception in one round is logged and the loop continues. The TNFS statistics are the live counters of the TNFS server in this process, and 0 when there is none.
@@ -88,6 +103,7 @@ public class LiveDataService : BackgroundService
                 await PushServerStatusAsync();
                 await PushNewLogsAsync();
                 await PushTnfsStatsAsync();
+                await PushEconetStatsAsync();
 
                 await Task.Delay(1000, stoppingToken);
             }
@@ -156,5 +172,18 @@ public class LiveDataService : BackgroundService
         };
 
         await _hubContext.Clients.All.TnfsStats(stats);
+    }
+
+    private async Task PushEconetStatsAsync()
+    {
+        // Same sources and same zero-when-absent rule as EconetController.GetStatistics.
+        EconetStatsUpdate stats = new EconetStatsUpdate
+        {
+            ActiveSessions = _econetSessions?.GetActiveSessionCount() ?? 0,
+            TotalRequests = _econetStatistics?.TotalRequests ?? 0L,
+            TotalBytesTransferred = _econetStatistics?.BytesTransferred ?? 0L
+        };
+
+        await _hubContext.Clients.All.EconetStats(stats);
     }
 }
