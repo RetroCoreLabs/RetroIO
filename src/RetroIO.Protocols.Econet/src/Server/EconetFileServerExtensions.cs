@@ -185,10 +185,6 @@ public sealed class EconetFileServerOptions
     /// </summary>
     public byte Net { get; set; } = 1;
     /// <summary>
-    /// Gets or sets the station number of the server. The default is 254.
-    /// </summary>
-    public byte Station { get; set; } = 254;
-    /// <summary>
     /// Gets or sets the index, 0 to 3, of the IPv4 address byte that holds the station number of a client. The default is 3.
     /// </summary>
     public byte AunStationOctetIndex { get; set; } = 3;
