@@ -8,6 +8,7 @@
 using Microsoft.AspNetCore.SignalR;
 using RetroIO.Management.Api.Hubs;
 using RetroIO.Management.Contracts;
+using RetroIO.Protocols.Tnfs.Server;
 
 namespace RetroIO.Management.Api.Services;
 
@@ -20,6 +21,9 @@ public class LiveDataService : BackgroundService
     private readonly InMemoryLogProvider _logProvider;
     private readonly IServerManager _serverManager;
     private readonly ILogger<LiveDataService> _logger;
+    // Both are null when no TNFS server runs in this process (the same rule TnfsController follows).
+    private readonly SessionManager? _tnfsSessions;
+    private readonly TnfsServerStatistics? _tnfsStatistics;
     // How many log entries have been pushed so far. This is a running total, not a position in the
     // buffer: the buffer drops its oldest entries once it is full, so a position would stop moving.
     private long _logsPushed = 0;
@@ -39,23 +43,33 @@ public class LiveDataService : BackgroundService
     /// <param name="logger">
     /// The logger for service messages.
     /// </param>
+    /// <param name="tnfsSessions">
+    /// The TNFS session manager, or null when no TNFS server runs in this process.
+    /// </param>
+    /// <param name="tnfsStatistics">
+    /// The TNFS server statistics, or null when no TNFS server runs in this process.
+    /// </param>
     public LiveDataService(
         IHubContext<ServerHub, IServerHubClient> hubContext,
         InMemoryLogProvider logProvider,
         IServerManager serverManager,
-        ILogger<LiveDataService> logger)
+        ILogger<LiveDataService> logger,
+        SessionManager? tnfsSessions = null,
+        TnfsServerStatistics? tnfsStatistics = null)
     {
         _hubContext = hubContext;
         _logProvider = logProvider;
         _serverManager = serverManager;
         _logger = logger;
+        _tnfsSessions = tnfsSessions;
+        _tnfsStatistics = tnfsStatistics;
     }
 
     /// <summary>
     /// Once a second, pushes the server status, new log entries and TNFS statistics to all clients until the token is cancelled.
     /// </summary>
     /// <remarks>
-    /// An exception in one round is logged and the loop continues. The TNFS statistics sent are fixed at 0.
+    /// An exception in one round is logged and the loop continues. The TNFS statistics are the live counters of the TNFS server in this process, and 0 when there is none.
     /// </remarks>
     /// <param name="stoppingToken">
     /// A token that stops the loop.
@@ -132,12 +146,13 @@ public class LiveDataService : BackgroundService
 
     private async Task PushTnfsStatsAsync()
     {
-        // Counters are not wired to the TNFS server yet; the shape is what the UI binds to.
+        // Same sources and same zero-when-absent rule as TnfsController.GetStatistics.
+        SessionStatistics? sessionStats = _tnfsSessions?.GetStatistics();
         TnfsStatsUpdate stats = new TnfsStatsUpdate
         {
-            ActiveConnections = 0,
-            TotalRequests = 0L,
-            TotalBytesTransferred = 0L
+            ActiveConnections = sessionStats?.TotalSessions ?? 0,
+            TotalRequests = _tnfsStatistics?.TotalRequests ?? 0L,
+            TotalBytesTransferred = _tnfsStatistics?.BytesTransferred ?? 0L
         };
 
         await _hubContext.Clients.All.TnfsStats(stats);
