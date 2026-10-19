@@ -96,6 +96,24 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// </summary>
         public bool IsDte { get; }
 
+        /// <summary>
+        /// T2, the acknowledgement delay (X.25 2.4.9.2), in the injected-clock unit: the longest an
+        /// acknowledgement of a received I frame may be held back, waiting for an outgoing I frame
+        /// to carry it, before an RR must be sent.
+        /// </summary>
+        /// <remarks>
+        /// <para>Zero means no delay: every I frame is acknowledged at once, which is how this layer
+        /// always behaved. The default is zero because X.25 gives no number for T2 (it says only that
+        /// T2 is a system parameter agreed between the two ends, 2.4.9.2) and because holding
+        /// acknowledgements back changes what goes on the wire, which a live ND peer must not see
+        /// unasked. The value zero itself is this library's way of saying "off"; X.25 does not define it.</para>
+        /// <para>A value above zero must be less than <see cref="T1"/>: T2 is the time available
+        /// before the acknowledgement must be started so that it reaches the peer before the
+        /// peer's T1 runs out (2.4.9.2, where the text reads parameter T2 less than Timer T1). The constructor refuses a value
+        /// that is not.</para>
+        /// </remarks>
+        public long T2 { get; }
+
        /// <summary>
         /// Initialises LAPB options, validating each value and falling back to the spec default.
         /// </summary>
@@ -129,8 +147,22 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// <param name="maxInformationLength">
         /// N1, the largest information field accepted; the ND default when not given.
         /// </param>
-        public LapbOptions(long t1 = 3000, long t3 = 30000, int n2 = 10, int windowSize = 7, bool reestablishOnLinkFailure = false, LapbVariant variant = LapbVariant.Nd, bool isDte = true, int maxInformationLength = LapbLayer.MaxInformationLength)
+        /// <param name="t2">
+        /// The T2 acknowledgement delay; zero (the default) acknowledges at once, otherwise it must
+        /// be less than <paramref name="t1"/> (X.25 2.4.9.2).
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Also thrown when <paramref name="t2"/> is negative or is not less than <paramref name="t1"/>.
+        /// </exception>
+        public LapbOptions(long t1 = 3000, long t3 = 30000, int n2 = 10, int windowSize = 7, bool reestablishOnLinkFailure = false, LapbVariant variant = LapbVariant.Nd, bool isDte = true, int maxInformationLength = LapbLayer.MaxInformationLength, long t2 = 0)
         {
+            // X.25 2.4.9.2: parameter T2 < Timer T1. Zero is "no delay" and always allowed.
+            if (t2 < 0 || (t2 > 0 && t2 >= t1))
+            {
+                throw new ArgumentOutOfRangeException(nameof(t2), t2, "T2 must be 0 (no delay) or less than T1 (X.25 2.4.9.2).");
+            }
+
+            T2 = t2;
             if (t1 <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(t1), t1, "T1 must be positive.");
