@@ -18,8 +18,6 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 | Where | What |
 |---|---|
-| `RetroIO.Protocols.Econet` `EconetUserBootstrap` | Class comment says it purges legacy orphan keys; the code only adds defaults |
-| `RetroIO.Protocols.Econet` `FileServerReply.DiscFreeSpaceClassic1983` | Existing comment has a `param` and no `returns` |
 | `RetroIO.Protocols.Xmsg.Api` `XmsgKernel` | `WirePort` has no incarnation bits |
 | `RetroIO.Link` `ILapbCapable` counters | `Retransmissions`, `RejectionsSent`, `RejectionsReceived`, `T1Timeouts`, `T2Timeouts` are never set anywhere |
 | `RetroIO.Storage.Local` `BsdDriver`, `FfsDriver` partition select after mount | Stores the letter only; the mounted file system keeps the old partition |
@@ -27,8 +25,9 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `RetroIO.Storage.Local` `DeltaBlockDevice` constructor | `applyDeltaOnMount` is stored and never used |
 | `RetroIO.Storage.Providers` `VfsFileSystemBackend.GetFileInfo` | Returns a `FileInfo` for a temp file that is already deleted; only the length and write time are real |
 | `RetroIO.Storage.Providers`, both backends `GetFullPath` | Only turns backslashes into slashes; the contract says normalized and resolved |
-| `RetroIO.Management.Api` `LiveDataService` | TNFS and Econet statistics are pushed as fixed zeros (the log-line half of this entry is fixed) |
-| `RetroIO.Protocols.Tnfs` `TnfsConstants` | `MaxPathLength` is 256 but `MAX_FILEPATH`/`MAX_TNFSPATH` are 1024; `TnfsHeader` exists twice in two namespaces |
+| `RetroIO.Management.Api` `EconetController.GetStatistics` | Request count, byte count and uptime are fixed at 0. No source exists: `EconetActivityLog` is a capped ring of recent entries, not a running total, and no Econet server class counts requests or bytes. `LiveDataService` pushes no Econet statistics at all (`IServerHubClient` has no Econet method). Needs a real counter object in the Econet file server first |
+| `RetroIO.Protocols.Tnfs` `TnfsConstants` | `MaxPathLength` is 256 but `MAX_FILEPATH`/`MAX_TNFSPATH` are 1024. Nothing reads `MaxPathLength`. The TNFS specification is not in this repository (nothing under `DOC` covers TNFS), so the right value could not be checked; needs the TNFS spec or the reference `tnfsd` source first |
+| `RetroIO.Protocols.Tnfs` `TnfsHeader` | Exists in `Protocol` (uses `TnfsEndian`) and in `Server` (uses `EndianHelper`). Only `Server.TnfsHeader` is used, by `TnfsMessage`; `Protocol.TnfsHeader` has no user in this repository. Both are public types of a package, so deleting one can break outside code; the owner decides whether that is allowed |
 | `RetroIO.Protocols.X25` `X3Parameters` against `X3` | Disagree on parameter 12 (`FLOW_CONTROL_X_ON_X_OFF` or `FORWARD_ON_N_CHARACTERS`) and on the `DATA_FORWARDING` default (2 or 13) |
 | `RetroIO.Protocols.X25` `PadClient`, `TadServer` | `IdleTimeoutMs`, `AutoConnect`, `EnableLoopbackTest` are never read; `XMSGSessionState.DataTransfer` is never assigned |
 
@@ -71,6 +70,9 @@ Nothing open. The GitHub `build` workflow and the C client test are both fixed (
 
 | What | Commit subject |
 |---|---|
+| `LiveDataService` pushed TNFS statistics as fixed zeros; it now reads `SessionManager` and `TnfsServerStatistics` like `TnfsController` (zero when no TNFS server runs in the process) | LiveDataService: push the real TNFS counters |
+| `FileServerReply.DiscFreeSpaceClassic1983` comment had a `param` and no `returns` | FileServerReply.DiscFreeSpaceClassic1983: add the returns comment |
+| `EconetUserBootstrap` comment said it purges legacy orphan keys: the comment was the wrong part (nothing in the repo defines an orphan key, nothing calls it but its test, and the code only adds defaults) | EconetUserBootstrap: the comment says it only adds defaults |
 | `ZipFsPlugin` stayed latched after `Unmount`; `CanHandleAsync` returned false for a non-seekable stream | ZipFsPlugin: stay reusable after Unmount, honour the CanHandleAsync contract |
 | `TCPServer.SendByte` returned false after a successful send | Fix TCPServer.SendByte and the NativeVolumeProvider mount-root check |
 | `NativeVolumeProvider` accepted a sibling folder whose name starts with the mount root's name | same commit |

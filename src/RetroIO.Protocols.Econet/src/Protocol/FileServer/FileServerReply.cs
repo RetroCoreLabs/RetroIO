@@ -81,6 +81,9 @@ public static class FileServerReply
     /// <param name="free">
     /// Free space, in the disc's allocation units.
     /// </param>
+    /// <returns>
+    /// The 5-byte reply body: two zero bytes, then the low 24 bits of <paramref name="free"/>, least significant byte first.
+    /// </returns>
     public static byte[] DiscFreeSpaceClassic1983(uint free)
     {
         return

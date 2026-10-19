@@ -10,7 +10,7 @@ using RetroIO.Identity;
 namespace RetroIO.Protocols.Econet.FileServer.Users;
 
 /// <summary>
-/// Ensures RetroIDP users have default Econet profile metadata, and purges legacy orphan keys.
+/// Ensures RetroIDP users have default Econet profile metadata. It only adds missing defaults and never removes a key.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -61,7 +61,7 @@ public static class EconetUserBootstrap
             }
         }
 
-        // UpdateUserAsync only mutates the in-memory store; without this SaveAsync the purge/defaults
+        // UpdateUserAsync only mutates the in-memory store; without this SaveAsync the defaults
         // would be lost on restart (and re-appear from disk). Persist once, only if something changed.
         if (anyChanged)
             await idp.SaveAsync(ct);
