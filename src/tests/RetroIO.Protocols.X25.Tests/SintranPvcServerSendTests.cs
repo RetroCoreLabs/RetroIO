@@ -176,5 +176,175 @@ namespace RetroIO.Protocols.X25.Tests
             _server.SendX25Interrupt(Lcn, new byte[] { 3 });
             Assert.That(LastSent().Packet.Data, Is.EqualTo(new byte[] { 3 }), "a new circuit starts with no interrupt outstanding");
         }
+
+        /// <summary>
+        /// The Data packet has the header the builder gives for P(S) 0 and P(R) 0, and its time stamp
+        /// is the one in the event.
+        /// </summary>
+        [Test]
+        public void SendX25Data_PutsTheBytesOfADataPacketWithSequenceNumbersZero()
+        {
+            EstablishCircuit(Lcn);
+            byte[] payload = new byte[] { 0x01, 0x02, 0x03 };
+
+            _server.SendX25Data(Lcn, payload);
+
+            X25PacketEventArgs sent = LastSent();
+            Assert.That(sent.Packet.FullPacket, Is.EqualTo(X25PacketBuilder.CreateDataPacket(Lcn, 0, 0, payload)));
+            Assert.That(sent.Packet.Timestamp, Is.EqualTo(sent.Timestamp));
+        }
+
+        /// <summary>
+        /// Without a listener on PacketGenerated both send methods still work: the data call returns
+        /// and the interrupt call counts the interrupt as waiting for its confirmation.
+        /// </summary>
+        [Test]
+        public void SendX25Data_And_SendX25Interrupt_WorkWithoutAListener()
+        {
+            SintranPvcServer quiet = new SintranPvcServer(Logger);
+            quiet.Initialize();
+            try
+            {
+                byte[] call = X25PacketBuilder.CreateCallRequest(Lcn, "500", "100", null, new byte[] { 0x01 });
+                quiet.OnX25Event(new X25PacketEventArgs
+                {
+                    Packet = new X25Packet(call) { LCN = Lcn },
+                    Direction = PacketDirection.Receive,
+                    Timestamp = DateTime.UtcNow
+                });
+
+                Assert.DoesNotThrow(() => quiet.SendX25Data(Lcn, new byte[] { 1 }));
+                Assert.DoesNotThrow(() => quiet.SendX25Interrupt(Lcn, new byte[] { 1 }));
+                Assert.Throws<InvalidOperationException>(() => quiet.SendX25Interrupt(Lcn, new byte[] { 2 }));
+            }
+            finally
+            {
+                quiet.Shutdown();
+            }
+        }
+
+        private void ReceiveInterruptConfirmation(ushort lcn)
+        {
+            _server.OnX25Event(new X25PacketEventArgs
+            {
+                Packet = new X25Packet(X25PacketBuilder.CreateInterruptConfirmation(lcn)) { LCN = lcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow
+            });
+        }
+
+        /// <summary>
+        /// The one-interrupt rule is per circuit: an interrupt outstanding on one circuit does not
+        /// block another, and a confirmation frees only the circuit it came on.
+        /// </summary>
+        [Test]
+        public void SendX25Interrupt_TracksTheUnconfirmedInterruptPerCircuit()
+        {
+            EstablishCircuit(Lcn);
+            EstablishCircuit(8);
+            _server.SendX25Interrupt(Lcn, new byte[] { 1 });
+
+            _server.SendX25Interrupt(8, new byte[] { 2 });
+            Assert.That(LastSent().Packet.LCN, Is.EqualTo((ushort)8), "circuit 8 has its own allowance");
+
+            ReceiveInterruptConfirmation(8);
+            Assert.Throws<InvalidOperationException>(() => _server.SendX25Interrupt(Lcn, new byte[] { 3 }),
+                "the confirmation on circuit 8 must not free circuit 7");
+
+            ReceiveInterruptConfirmation(Lcn);
+            _server.SendX25Interrupt(Lcn, new byte[] { 3 });
+            Assert.That(LastSent().Packet.Data, Is.EqualTo(new byte[] { 3 }));
+        }
+
+        /// <summary>
+        /// A confirmation that matches no interrupt is ignored, and an outstanding interrupt does not
+        /// stop data from being sent on the same circuit.
+        /// </summary>
+        [Test]
+        public void InterruptConfirmation_WithNothingOutstanding_IsHarmless_AndDataIsNotBlockedByAnInterrupt()
+        {
+            EstablishCircuit(Lcn);
+
+            Assert.DoesNotThrow(() => ReceiveInterruptConfirmation(Lcn));
+            _server.SendX25Interrupt(Lcn, new byte[] { 1 });
+
+            _server.SendX25Data(Lcn, new byte[] { 0x41 });
+            Assert.That(LastSent().Packet.PacketType, Is.EqualTo(X25PacketType.Data));
+        }
+
+        /// <summary>
+        /// A Clear Request that arrives from the peer clears the circuit, and with it the interrupt
+        /// that was waiting for a confirmation.
+        /// </summary>
+        [Test]
+        public void SendX25Interrupt_ForgetsTheUnconfirmedInterrupt_WhenThePeerClearsTheCircuit()
+        {
+            EstablishCircuit(Lcn);
+            _server.SendX25Interrupt(Lcn, new byte[] { 1 });
+
+            _server.OnX25Event(new X25PacketEventArgs
+            {
+                Packet = new X25Packet(X25PacketBuilder.CreateClearRequest(Lcn, 0, 0)) { LCN = Lcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow
+            });
+            Assert.That(_server.GetActiveHandlers().ContainsKey(Lcn), Is.False);
+
+            EstablishCircuit(Lcn);
+            _server.SendX25Interrupt(Lcn, new byte[] { 4 });
+            Assert.That(LastSent().Packet.Data, Is.EqualTo(new byte[] { 4 }));
+        }
+
+        /// <summary>
+        /// A shutdown forgets every outstanding interrupt.
+        /// </summary>
+        [Test]
+        public void SendX25Interrupt_ForgetsTheUnconfirmedInterrupt_AfterShutdown()
+        {
+            EstablishCircuit(Lcn);
+            _server.SendX25Interrupt(Lcn, new byte[] { 1 });
+
+            _server.Shutdown();
+            _server.Initialize();
+            EstablishCircuit(Lcn);
+
+            _server.SendX25Interrupt(Lcn, new byte[] { 5 });
+            Assert.That(LastSent().Packet.Data, Is.EqualTo(new byte[] { 5 }), "a restarted server has no interrupt outstanding");
+        }
+
+        /// <summary>
+        /// When a listener of PacketGenerated throws, nothing is known to have gone out, so the
+        /// interrupt is not counted as waiting for a confirmation and the exception reaches the caller.
+        /// </summary>
+        [Test]
+        public void SendX25Interrupt_DoesNotWaitForAConfirmation_WhenAListenerThrows()
+        {
+            EstablishCircuit(Lcn);
+            EventHandler<X25PacketEventArgs> thrower = (s, e) => throw new InvalidOperationException("listener failed");
+            _server.PacketGenerated += thrower;
+
+            InvalidOperationException? ex = Assert.Throws<InvalidOperationException>(() => _server.SendX25Interrupt(Lcn, new byte[] { 1 }));
+            Assert.That(ex!.Message, Is.EqualTo("listener failed"));
+
+            _server.PacketGenerated -= thrower;
+            lock (_sent) { _sent.Clear(); }
+            _server.SendX25Interrupt(Lcn, new byte[] { 2 });
+            Assert.That(LastSent().Packet.Data, Is.EqualTo(new byte[] { 2 }), "the failed send must not leave the circuit blocked");
+        }
+
+        /// <summary>
+        /// A refused interrupt (second one before the confirmation) puts no packet on the circuit.
+        /// </summary>
+        [Test]
+        public void SendX25Interrupt_PutsNothingOnTheCircuit_WhenTheSecondOneIsRefused()
+        {
+            EstablishCircuit(Lcn);
+            _server.SendX25Interrupt(Lcn, new byte[] { 1 });
+            lock (_sent) { _sent.Clear(); }
+
+            Assert.Throws<InvalidOperationException>(() => _server.SendX25Interrupt(Lcn, new byte[] { 2 }));
+
+            Assert.That(_sent.Count, Is.EqualTo(0));
+        }
     }
 }

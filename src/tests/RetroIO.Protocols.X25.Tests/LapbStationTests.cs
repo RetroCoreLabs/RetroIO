@@ -338,6 +338,31 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(station.GetStatistics().T2Timeouts, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// A held acknowledgement rides on the next outgoing I frame: the frame carries N(R)=1, no RR
+        /// is sent for the received frame, and the station counts no T2 expiry. T2 is long here so it
+        /// cannot run out during the test.
+        /// </summary>
+        [Test]
+        public void T2_HeldAcknowledgement_RidesOnTheNextOutgoingIFrame()
+        {
+            using LapbStation station = NewStation(t1Ms: 60_000, t2Ms: 30_000);
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+            lock (_lock) { _sent.Clear(); }
+
+            station.ReceiveFrame(new byte[] { AddressA, IControl(ns: 0, nr: 0), 0xAA }, 3);
+            Assert.That(CountControl(IsRr), Is.EqualTo(0), "the acknowledgement is held");
+
+            Assert.That(station.SendData(new byte[] { 1, 2, 3 }), Is.True);
+
+            List<byte[]> sent = Sent();
+            Assert.That(sent.Count, Is.EqualTo(1), "only the I frame went out");
+            Assert.That(sent[0][1], Is.EqualTo(IControl(ns: 0, nr: 1)), "the I frame acknowledges the received frame through N(R)");
+            Assert.That(CountControl(IsRr), Is.EqualTo(0));
+            Assert.That(station.GetStatistics().T2Timeouts, Is.EqualTo(0));
+        }
+
         [Test]
         public void T2Zero_AcknowledgesAtOnce_AndNeverCounts()
         {

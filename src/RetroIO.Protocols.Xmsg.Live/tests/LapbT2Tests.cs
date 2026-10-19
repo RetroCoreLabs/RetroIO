@@ -176,5 +176,178 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             Assert.Equal(0, new LapbOptions().T2);
             Assert.Equal(0, LapbOptions.Default.T2);
         }
+
+        /// <summary>
+        /// A REJ sent for a gap carries the current V(R), so it settles a held acknowledgement: when
+        /// the deadline passes no extra RR goes out and nothing is counted.
+        /// </summary>
+        [Fact]
+        public void RejSentForAGap_SettlesTheHeldAcknowledgement()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // I N(S)=0, P=0: acknowledgement held
+            Assert.Empty(sent);
+
+            DeliverAt(link, 1100, 0x09, 0x04, 0x21, 0x13, 0xBB);   // I N(S)=2: gap, N(S)=1 is missing
+            Assert.Single(sent);
+            Assert.Equal(0x29, sent[0][1]);                         // REJ N(R)=1
+
+            sent.Clear();
+            Assert.False(link.Tick(1200));                          // the deadline of the first frame
+            Assert.Empty(sent);
+            Assert.Equal(0, link.T2Timeouts);
+        }
+
+        /// <summary>
+        /// An RR sent because a duplicate I frame arrived carries the current V(R), so it settles a
+        /// held acknowledgement.
+        /// </summary>
+        [Fact]
+        public void RrSentForADuplicate_SettlesTheHeldAcknowledgement()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // I N(S)=0: held
+            DeliverAt(link, 1050, 0x09, 0x00, 0x21, 0x13, 0xAA);   // the same frame again: a duplicate
+            Assert.Single(sent);
+            Assert.Equal(0x21, sent[0][1]);                         // RR N(R)=1 sent at once
+
+            sent.Clear();
+            Assert.False(link.Tick(1200));
+            Assert.Empty(sent);
+            Assert.Equal(0, link.T2Timeouts);
+        }
+
+        /// <summary>
+        /// The F=1 response to a polled RR carries the current V(R), so it settles a held
+        /// acknowledgement.
+        /// </summary>
+        [Fact]
+        public void ResponseToAPolledRr_SettlesTheHeldAcknowledgement()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // I N(S)=0: held
+            DeliverAt(link, 1060, 0x09, 0x11, Node100Hi, Node100Lo);   // RR command, N(R)=0, P=1
+            Assert.Single(sent);
+            Assert.Equal(0x31, sent[0][1]);                         // RR F=1 N(R)=1
+
+            sent.Clear();
+            Assert.False(link.Tick(1200));
+            Assert.Empty(sent);
+            Assert.Equal(0, link.T2Timeouts);
+        }
+
+        /// <summary>
+        /// T2 only runs while the link is connected: a frame reject puts the layer in the FRMR state
+        /// and the held acknowledgement is not sent when its deadline passes.
+        /// </summary>
+        [Fact]
+        public void HeldAcknowledgement_IsNotSentAfterAFrameReject()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // I N(S)=0: held
+            DeliverAt(link, 1100, 0x09, 0xA2, 0x21, 0x13, 0xBB);   // I N(S)=1 with N(R)=5: nothing is outstanding
+            Assert.Equal(LapbLayerState.FrmrSent, link.State);
+
+            sent.Clear();
+            link.Tick(1200);                                        // T2 of the first frame, T1 of the FRMR not yet
+            Assert.Empty(sent);
+            Assert.Equal(0, link.T2Timeouts);
+        }
+
+        /// <summary>
+        /// A disconnect drops the held acknowledgement: after the link comes up again the old frame
+        /// is not acknowledged and no T2 expiry is counted.
+        /// </summary>
+        [Fact]
+        public void ReceivedDisc_DropsTheHeldAcknowledgement()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // I N(S)=0: held
+            DeliverAt(link, 1100, 0x01, 0x53, Node100Hi, Node100Lo);   // DISC
+            Assert.Equal(LapbLayerState.Disconnected, link.State);
+
+            sent.Clear();
+            DeliverAt(link, 1150, 0x01, 0x3F, Node100Hi, Node100Lo);   // SABM: the link is up again, V(R)=0
+            sent.Clear();
+            Assert.False(link.Tick(5000));
+            Assert.Empty(sent);
+            Assert.Equal(0, link.T2Timeouts);
+            Assert.Equal(0, link.ReceiveVariable);
+        }
+
+        /// <summary>
+        /// A reset of the link by a new SABM drops the held acknowledgement.
+        /// </summary>
+        [Fact]
+        public void ReceivedSabm_DropsTheHeldAcknowledgement()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // I N(S)=0: held
+            DeliverAt(link, 1100, 0x01, 0x3F, Node100Hi, Node100Lo);   // SABM while connected: reset
+            Assert.Equal(0, link.ReceiveVariable);
+
+            sent.Clear();
+            Assert.False(link.Tick(5000));
+            Assert.Empty(sent);
+            Assert.Equal(0, link.T2Timeouts);
+        }
+
+        /// <summary>
+        /// A forced disconnect drops the held acknowledgement.
+        /// </summary>
+        [Fact]
+        public void ForceDisconnected_DropsTheHeldAcknowledgement()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // I N(S)=0: held
+            link.ForceDisconnected();
+
+            sent.Clear();
+            Assert.False(link.Tick(5000));
+            Assert.Empty(sent);
+            Assert.Equal(0, link.T2Timeouts);
+        }
+
+        /// <summary>
+        /// The T2 deadline is counted from the first held frame, so a link that keeps receiving
+        /// frames still acknowledges once T2 has run out for the first of them.
+        /// </summary>
+        [Fact]
+        public void T2_IsCountedFromTheFirstHeldFrame_NotFromTheLast()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewConnected(102, sent, null, WithT2());
+            sent.Clear();
+
+            DeliverAt(link, 1000, 0x09, 0x00, 0x21, 0x13, 0xAA);   // N(S)=0, deadline 1200
+            DeliverAt(link, 1199, 0x09, 0x02, 0x21, 0x13, 0xBB);   // N(S)=1, one tick before the deadline
+            Assert.Empty(sent);
+
+            Assert.True(link.Tick(1200));
+            Assert.Single(sent);
+            Assert.Equal(0x41, sent[0][1]);                         // RR N(R)=2
+            Assert.Equal(1, link.T2Timeouts);
+        }
     }
 }
