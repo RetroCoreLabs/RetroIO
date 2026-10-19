@@ -21,7 +21,6 @@ namespace RetroIO.Storage.Local.BlockDevices
         private readonly IBlockDevice _baseDevice;
         private readonly DeltaFileWriter _deltaWriter;
         private readonly DeltaCompressionMode _compressionMode;
-        private readonly bool _applyDeltaOnMount;
 
         /// <summary>
         /// Creates a device that keeps all changes in a delta file and leaves the base device unchanged.
@@ -36,7 +35,9 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// How changed blocks are stored in the delta file.
         /// </param>
         /// <param name="applyDeltaOnMount">
-        /// Stored by the constructor. The value is not used anywhere else in this class.
+        /// True to load the blocks of a delta file that already exists at <paramref name="deltaFilePath"/>, so reads
+        /// see the earlier changes. False to ignore the existing delta file: the device starts with no changes and the
+        /// existing file is replaced by an empty one, so its blocks are lost.
         /// </param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="baseDevice"/> is null.
@@ -49,12 +50,12 @@ namespace RetroIO.Storage.Local.BlockDevices
         {
             _baseDevice = baseDevice ?? throw new ArgumentNullException(nameof(baseDevice));
             _compressionMode = compressionMode;
-            _applyDeltaOnMount = applyDeltaOnMount;
 
             _deltaWriter = new DeltaFileWriter(
                 deltaFilePath,
                 baseDevice.BlockSize,
-                compressionMode);
+                compressionMode,
+                applyDeltaOnMount);
         }
 
         // IBlockDevice properties

@@ -107,9 +107,16 @@ public interface IFileSystemBackend
     bool IsDirectory(string path);
 
     /// <summary>
-    /// Get file information.
+    /// Get information about a file: its length and its times.
     /// </summary>
-    FileInfo? GetFileInfo(string path);
+    /// <param name="path">
+    /// The path of the file.
+    /// </param>
+    /// <returns>
+    /// The length and times of the file, or <c>null</c> when there is no file at <paramref name="path"/>.
+    /// A directory is not a file, so it also gives <c>null</c>.
+    /// </returns>
+    BackendFileInfo? GetFileInfo(string path);
 
     /// <summary>
     /// Open a file stream.

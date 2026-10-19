@@ -69,7 +69,7 @@ public sealed class SaveCommand : IOsCliCommand
 
         if (length == 0 && call.Context.FileSystem.FileExists(unixPath))
         {
-            System.IO.FileInfo? info = call.Context.FileSystem.GetFileInfo(unixPath);
+            RetroIO.Server.Core.FileSystem.BackendFileInfo? info = call.Context.FileSystem.GetFileInfo(unixPath);
             length = (int)(info?.Length ?? 0);
         }
 

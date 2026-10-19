@@ -129,7 +129,8 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Scratched, unclosed and empty entries are skipped.
         /// </remarks>
         /// <param name="path">
-        /// Not used: CBM DOS has one flat directory, which is always listed.
+        /// Must be <c>null</c>, empty or <c>/</c>, because a 1541 disk has one flat directory. Entries of type
+        /// CBM on a 1581 disk are listed as directories, but this class does not open them.
         /// </param>
         /// <returns>
         /// The directory entries in disk order.
@@ -137,9 +138,18 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <exception cref="InvalidOperationException">
         /// Thrown when the file system is not initialized.
         /// </exception>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when <paramref name="path"/> names anything other than the root directory.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
+
+            // Only the root exists here; a listing of the root for any other path would be a wrong answer.
+            if (!string.IsNullOrEmpty(path) && path != "/")
+            {
+                throw new DirectoryNotFoundException($"CBM DOS has only a root directory: {path}");
+            }
 
             List<DirectoryEntry> entries = new List<DirectoryEntry>();
 

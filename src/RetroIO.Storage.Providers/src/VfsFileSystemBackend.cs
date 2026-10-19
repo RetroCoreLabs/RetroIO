@@ -178,41 +178,26 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
     }
 
     /// <summary>
-    /// Gets file information for a file on the mount.
+    /// Gets the length and times of a file on the mount.
     /// </summary>
     /// <remarks>
-    /// The VFS has no local file, so this creates a temporary file of the right size in the temp
-    /// cache directory, sets its last write time, reads both values into a <see cref="FileInfo"/> and
-    /// deletes the file again. Only <c>Length</c> and <c>LastWriteTimeUtc</c> of the result are
-    /// meaningful; its path names the deleted temporary file.
+    /// The VFS reports a size and a modified time. Creation time and access time are not known and
+    /// are <c>null</c> in the result, and so is the write time when the VFS has none.
     /// </remarks>
     /// <param name="path">
     /// The host-style path of the file.
     /// </param>
     /// <returns>
-    /// The file information, or <c>null</c> when the path is not found or is a directory.
+    /// The length and times, or <c>null</c> when the path is not found or is a directory.
     /// </returns>
-    public FileInfo? GetFileInfo(string path)
+    public BackendFileInfo? GetFileInfo(string path)
     {
         FileMetadata? meta = TryGetMetadata(path);
         if (meta == null || meta.IsDirectory)
             return null;
 
-        // Synthesize a FileInfo carrying the real Length + LastWriteTimeUtc (all the Econet layer reads).
-        // SetLength makes a sparse temp of the right size cheaply; force the FileInfo to cache its values,
-        // then delete the temp so nothing leaks.
-        string temp = Path.Combine(_tempCacheDir, "vfsinfo_" + Guid.NewGuid().ToString("N") + ".tmp");
-        using (FileStream fs = new FileStream(temp, FileMode.Create, FileAccess.Write))
-            fs.SetLength(meta.Size);
-        if (meta.ModifiedTime.HasValue)
-            File.SetLastWriteTimeUtc(temp, meta.ModifiedTime.Value.ToUniversalTime());
-
-        FileInfo info = new FileInfo(temp);
-        info.Refresh();
-        _ = info.Length;             // force the cache
-        _ = info.LastWriteTimeUtc;   // force the cache
-        try { File.Delete(temp); } catch { /* best effort */ }
-        return info;
+        DateTime? lastWriteUtc = meta.ModifiedTime.HasValue ? meta.ModifiedTime.Value.ToUniversalTime() : null;
+        return new BackendFileInfo(meta.Size, null, lastWriteUtc, null);
     }
 
     /// <summary>
@@ -407,16 +392,22 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
     }
 
     /// <summary>
-    /// Gets the full path. This implementation only turns backslashes into slashes; it does not
-    /// resolve relative parts.
+    /// Gets the full path: backslashes become slashes, repeated slashes are merged, <c>.</c> parts are dropped,
+    /// <c>..</c> parts are resolved and a trailing slash is removed.
     /// </summary>
     /// <param name="path">
     /// The path.
     /// </param>
     /// <returns>
-    /// <paramref name="path"/> with every backslash replaced by a slash.
+    /// The resolved path. A rooted path stays rooted and a relative path stays relative.
     /// </returns>
-    public string GetFullPath(string path) => path.Replace('\\', '/');
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="path"/> is null.
+    /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when a <c>..</c> part climbs above the start of the path, or out of the mount root.
+    /// </exception>
+    public string GetFullPath(string path) => HostPathResolver.Resolve(path, _hostRoot);
 
     /// <summary>
     /// Combines path segments with slashes.

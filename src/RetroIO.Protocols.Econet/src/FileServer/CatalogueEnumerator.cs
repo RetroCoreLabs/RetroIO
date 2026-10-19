@@ -127,7 +127,7 @@ internal static class CatalogueEnumerator
 
         if (!isDirectory)
         {
-            System.IO.FileInfo? info = fileSystem.GetFileInfo(fullPath);
+            RetroIO.Server.Core.FileSystem.BackendFileInfo? info = fileSystem.GetFileInfo(fullPath);
             length = info?.Length ?? 0;
             if (AcornInfStore.TryReadAttributes(fileSystem, fullPath, out load, out exec, out int infLength, out perm))
             {

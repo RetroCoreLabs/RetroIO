@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using NUnit.Framework;
+using RetroIO.Server.Core.FileSystem;
 using RetroIO.Storage.Core.VFS;
 using RetroIO.Storage.Providers;
 
@@ -92,11 +93,36 @@ public sealed class VfsFileSystemBackendTests
     [Test]
     public void GetFileInfo_CarriesRealLengthAndDate()
     {
-        FileInfo? info = _backend.GetFileInfo(P("HELLO.TXT"));
+        BackendFileInfo? info = _backend.GetFileInfo(P("HELLO.TXT"));
 
         Assert.That(info, Is.Not.Null);
         Assert.That(info!.Length, Is.EqualTo(8));
+        Assert.That(info.LastWriteTimeUtc, Is.Not.Null);
+        Assert.That(info.LastWriteTimeUtc!.Value, Is.EqualTo(File.GetLastWriteTimeUtc(P("HELLO.TXT"))).Within(TimeSpan.FromSeconds(2)));
         Assert.That(_backend.GetFileInfo(P("NOPE.TXT")), Is.Null, "missing file -> null");
+    }
+
+    [Test]
+    public void GetFileInfo_Directory_ReturnsNull()
+    {
+        Assert.That(_backend.GetFileInfo(P("SUB")), Is.Null, "a directory is not a file");
+    }
+
+    [Test]
+    public void GetFileInfo_DoesNotLeaveFilesInTheTempCache()
+    {
+        _backend.GetFileInfo(P("HELLO.TXT"));
+
+        Assert.That(Directory.GetFiles(_cacheDir), Is.Empty);
+    }
+
+    [Test]
+    public void GetFileInfo_TimesThatTheVfsDoesNotKnow_AreNull()
+    {
+        BackendFileInfo? info = _backend.GetFileInfo(P("HELLO.TXT"));
+
+        Assert.That(info!.CreationTimeUtc, Is.Null);
+        Assert.That(info.LastAccessTimeUtc, Is.Null);
     }
 
     [Test]
