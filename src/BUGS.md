@@ -18,27 +18,21 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 | Where | What |
 |---|---|
-| `RetroIO.Protocols.X25` `X3` validity limits | Parameter 1 accepts only 0 and 1 (X.3 also allows 32 to 126), parameter 5 only 0 and 1 (X.3 allows 2), parameter 7 up to 127 (flag sums reach 31), parameters 9 and 14 up to 7 (X.3 allows 0 to 255). Found while fixing parameters 3 and 12; not changed |
-| `RetroIO.Protocols.X25` password mode | Sets parameter 3 to 1 and calls it character by character, and a test pins it. In X.3 value 1 means forward on alphanumerics only |
-| `RetroIO.Protocols.X25` `X3` defaults | The default profile is neither the transparent nor the simple standard profile of Table 1/X.28 (parameter 7 defaults to 21, parameter 8 to 1; both profiles use 0 for 8). The two named profiles are now correct; what the default should be needs a decision |
 
 ### S - stubs that report success while doing nothing
 
 | Where | What |
 |---|---|
-| `RetroIO.Protocols.X25.Runtime` `SerialTransport`, `PhysicalLayer`, `XotClientTransport` | `IncomingCall` and `DataReceived` are never raised |
-| `RetroIO.Protocols.X25` `X28` | `CharacterProcessed` and `StatusUpdate` events are never raised |
-| `RetroIO.Protocols.X25.Sintran` `SintranPvcServer.SendX25Data/SendX25Interrupt` | Always throw `NotImplementedException` (documented that way) |
-| `RetroIO.Protocols.Xmsg.Api` `RrClient.RequestConnection` | `connection` is always 0 (documented, and the tests rely on it). A named remote system is now refused |
-| `RetroIO.Protocols.Econet` `EconetFileServerOptions.Station` | Not read anywhere |
-| `RetroIO.Protocols.Econet` `FileServerConfiguration` flag bits | Stored and echoed, change no behaviour; PiFS default is 0x82, here 0x30; PiFS sends the flags as four bytes |
-| `RetroIO.Protocols.Tnfs` `TcpTransport.Capabilities` | Reports a 1000-connection limit nothing enforces |
+| `RetroIO.Protocols.X25.Runtime` `SerialTransport.IncomingCall`, `XotClientTransport.IncomingCall` | Never raised, on purpose for now. A serial Call Request sits inside a LAPB I frame and this class has no deframing, FCS or LAPB state; the XOT client packets already go to a per-connection X.25 engine in `ProtocolRuntime`, and raising the event too would route each call twice. Needs a decision on where the incoming call is raised first |
+| `RetroIO.Protocols.X25` `X28.StatusUpdate` | Never raised, and nothing says what it should carry or when (no subscribers; `STAT` uses `CommandResponse`, mode changes use `ModeChanged`) |
+| `RetroIO.Protocols.Xmsg.Api` `RrClient.RequestConnection` | `connection` is always 0 (documented, and the tests rely on it). A named remote system is refused. The COSMOS Programmer Guide (RRPCcnrq, section 4.3) says the number comes back in `remoteID` but not who picks it or how; needs that document or a capture of a real RR client against a real server |
+| `RetroIO.Protocols.Econet` `FileServerConfiguration` flag bits | Default (0x82), permissions and wire layout now follow PiFS and `BigChunks` (0x04) works. The other flags (AcornHome 0x01, MdfsFunctions 0x02, InfColon 0x08, ManyHandle 0x10, MdfsInfo 0x20, PifsPerms 0x40, AcornDir 0x80) are stored and echoed but change no behaviour; several need changes in path handling, handle numbering and `*INFO` |
 
 ### Q - needs the real specification first
 
 | Where | What |
 |---|---|
-| `RetroIO.Protocols.Tnfs` `TnfsConstants` | The TNFS text on disk (tnfs-protocol.md, TNFS Spec.md, the fujinet-lib flow) gives no number for `MAXMSGSZ`, path or file path length, I/O size, directory handles or timeouts. The values differ from the reference tnfsd `config.h` (`MAXMSGSZ` 1024 against 532, `MAX_DHND_PER_CONN` 16 against 8, `MAX_FILEPATH` and `MAX_TNFSPATH` 1024 against 384 and 256, `CONN_TIMEOUT` 300 against 600, TCP keepalive, session and connection limits, default timeout 5 s against 1 s). Left as they are because the spec is silent. The server UDP buffer is 1024 bytes, which may be more than a real client sends |
+| `RetroIO.Protocols.Tnfs` limits | The limits now match the reference tnfsd `config.h` by decision, because the spec text gives no numbers. `MAX_SESSIONS` (256) and `MAX_SESSIONS_PER_IP` (8) still differ from config.h (4096) and nothing reads the constants (`SessionManager` has its own default). The `TCP_KA_*` constants are not applied to any socket. `TNFS_O_RDONLY` (0x0001) disagrees with `FileCommandHandler.ConvertToFileAccess`, which treats low bits 1 as write only, so a read on a handle opened with the constant fails with EIO. `HandleReadDir` rents 256 bytes for a name plus terminator: a 256 character name overflows it |
 | `XmsgKernel.Send` | Ignores the Route flag; always delivers to the destination. The interface says XROUT when Route is set |
 | `XmsgKernel.MakePrivileged` | Always succeeds; never checks the password or the kind of task |
 | `XmsgKernel.ReserveBuffer` | Ignores `options` and the XFDMM ceiling |
@@ -62,6 +56,13 @@ Nothing open. The GitHub `build` workflow and the C client test are both fixed (
 
 | What | Commit subject |
 |---|---|
+| `X3` defaults were neither standard profile; they are now the simple standard profile of Table 1/X.28 (parameters 3, 5, 7, 8, 12, 15, 19 changed), validity limits follow X.3 sections 3.1 to 3.21 for 11 parameters, and password mode now sets parameter 3 to 127 and the idle timer to 1 (X.3 value 1 meant alphanumerics only), restoring both on exit | X.3: simple profile default, validity limits to the spec, password mode forwards every character |
+| `X28.CharacterProcessed` was never raised; it is now raised once per processed character | X28: raise CharacterProcessed |
+| `PhysicalLayer.IncomingCall` and `SerialTransport.DataReceived` were never raised; the TCP handler now cuts RFC 1613 XOT frames and raises IncomingCall for each Call Request, and the serial transport forwards bytes for its own interface | X25 transports: raise IncomingCall and DataReceived |
+| `SintranPvcServer.SendX25Data` and `SendX25Interrupt` threw NotImplementedException; they now emit X.25 Data and Interrupt packets (X.25 4.3.7, 5.3.2) with simplified P(S)/P(R) = 0; the SINTRAN peer behaviour is not known | SintranPvcServer: send data and interrupt packets |
+| `EconetFileServerOptions.Station` was never read; removed, an AUN datagram has no station field | Econet: remove the unused Station option |
+| `FileServerConfiguration` default flags, permissions and the config call layout now follow PiFS (0x82, file 0x03, directory 0x13, flags/0/file/dir/length) and `BigChunks` changes the SAVE window | Econet: file server configuration follows PiFS |
+| `TcpTransport` reported 1000 connections and enforced none; it now enforces `MaxConnections` (default 4096) and reports the same number; TNFS message, path, directory handle, timeout and keepalive limits set to the reference tnfsd values; a ninth open directory is refused with EMFILE and READ is cut at 512 bytes | TNFS: limits match the reference daemon, TCP connection limit enforced |
 | `LapbStation` ignored its `t2TimeoutMs` argument, so `T2Timeouts` stayed 0 on every link; it now passes T2 to the engine. A link config with T1 at or below T2 (default 1500 ms) now throws ArgumentOutOfRangeException, as X.25 2.4.9.2 says T2 is less than T1; default links now acknowledge up to 1.5 s late | LapbStation: pass T2 to the engine |
 | `XmsgKernelServer.WirePort` had no random low 7 bits; it is now (logical port << 7) with a part drawn once from `XmsgRandomGenerator`, as the XMSG wire-port note says | XmsgKernelServer: the wire port now carries a random low part drawn from the XMSG generator |
 | `ILapbCapable.T2Timeouts` was never set; the LAPB engine now has the X.25 T2 acknowledgement delay timer (off at 0, T2 below T1 enforced, ack piggybacked on an outgoing I frame, count on expiry) | LAPB: add the T2 acknowledgement delay timer so T2Timeouts counts something real |
