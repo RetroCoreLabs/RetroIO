@@ -395,9 +395,13 @@ public class FileCommandHandler
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            // Read from file
-            byte[] buffer = new byte[length];
-            int bytesRead = fs.Read(buffer, 0, length);
+            // Read from file. The protocol says the server replies with only as much data as fits in
+            // one message, and a short read is normal (the client asks again). A reply of 2 + length
+            // bytes would not fit in the message buffers (MAXMSGSZ) when length is large, so the size
+            // is cut to the I/O limit, as the reference daemon does (tnfsd config.h MAX_IOSZ).
+            int readLength = Math.Min((int)length, TnfsConstants.MaxIOSize);
+            byte[] buffer = new byte[readLength];
+            int bytesRead = fs.Read(buffer, 0, readLength);
 
             stopwatch.Stop();
 

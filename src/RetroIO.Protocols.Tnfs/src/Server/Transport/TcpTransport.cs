@@ -30,8 +30,15 @@ public sealed class TcpTransport : ITransport
     private readonly int _port;
     private readonly FirewallEngine? _firewall;
     private readonly SecurityEventEmitter? _securityEvents;
+    private readonly int _maxConnections;
     private int _nextConnectionId = 0;
     private bool _disposed;
+
+    /// <summary>
+    /// Gets the most connections this transport keeps open at one time. A new connection that
+    /// arrives while this many are open is closed at once.
+    /// </summary>
+    public int MaxConnections => _maxConnections;
 
     /// <summary>
     /// Gets the transport identifier, which is always <c>TCP</c>.
@@ -42,13 +49,13 @@ public sealed class TcpTransport : ITransport
     /// Gets a new capabilities record on every read.
     /// </summary>
     /// <remarks>
-    /// Reports several clients, a connection limit of 1000, connection state, and reliable
-    /// delivery. The limit is only reported; this class does not enforce it.
+    /// Reports several clients, connection state, reliable delivery, and the connection limit.
+    /// The reported limit is <see cref="MaxConnections"/>, the same number the accept loop enforces.
     /// </remarks>
     public TransportCapabilities Capabilities => new()
     {
         SupportsMultipleClients = true,
-        MaxConcurrentConnections = 1000,  // Configurable limit
+        MaxConcurrentConnections = _maxConnections,  // The limit RunAsync enforces
         RequiresConnectionState = true,
         IsReliable = true
     };
@@ -73,12 +80,19 @@ public sealed class TcpTransport : ITransport
     /// <param name="securityEvents">
     /// The emitter for security events, or null for none.
     /// </param>
+    /// <param name="maxConnections">
+    /// The most connections open at one time. The default is the reference daemon's MAX_TCP_CONN
+    /// (tnfsd config.h, 4096). It must be 1 or more.
+    /// </param>
     public TcpTransport(
         int port,
         ILogger<TcpTransport> logger,
         FirewallEngine? firewall = null,
-        SecurityEventEmitter? securityEvents = null)
+        SecurityEventEmitter? securityEvents = null,
+        int maxConnections = TnfsConstants.MAX_TCP_CONN)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxConnections, 1);
+        _maxConnections = maxConnections;
         _port = port;
         _logger = logger;
         _firewall = firewall;
@@ -132,6 +146,16 @@ public sealed class TcpTransport : ITransport
                             tcpClient.Close();
                             continue;
                         }
+                    }
+
+                    // CONNECTION LIMIT: this loop is the only place that adds to _connections, and other
+                    // threads only remove, so the count can only fall between this check and the add.
+                    if (_connections.Count >= _maxConnections)
+                    {
+                        _logger.LogWarning("TCP connection from {Remote} refused: {Max} connections are open",
+                            tcpClient.Client.RemoteEndPoint, _maxConnections);
+                        tcpClient.Close();
+                        continue;
                     }
 
                     var connectionId = Interlocked.Increment(ref _nextConnectionId);

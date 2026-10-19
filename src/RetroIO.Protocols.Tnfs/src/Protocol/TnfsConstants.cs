@@ -35,17 +35,26 @@ public static class TnfsConstants
     /// </summary>
     public const int TNFS_HEADERSZ = 4;      // Session(2) + Seq(1) + Cmd(1)
     /// <summary>
-    /// Maximum message size in bytes, 1024.
+    /// Maximum message size in bytes, 532.
     /// </summary>
-    public const int MAXMSGSZ = 1024;         // Maximum message size
+    /// <remarks>
+    /// Taken from the reference daemon tnfsd (config.h MAXMSGSZ, 532). The TNFS specification text gives no number.
+    /// </remarks>
+    public const int MAXMSGSZ = 532;          // Maximum message size (tnfsd config.h MAXMSGSZ; the TNFS spec text is silent)
     /// <summary>
-    /// Maximum payload size in bytes: the maximum message size minus the header and one status byte.
+    /// Maximum payload size in bytes: the maximum message size minus the header and one status byte (527).
     /// </summary>
+    /// <remarks>
+    /// Derived from MAXMSGSZ the same way tnfsd config.h TNFS_MAX_PAYLOAD is. The TNFS specification text gives no number.
+    /// </remarks>
     public const int TNFS_MAX_PAYLOAD = MAXMSGSZ - TNFS_HEADERSZ - 1;  // Header + status
     /// <summary>
     /// Maximum number of bytes for one I/O operation, 512.
     /// </summary>
-    public const int MaxIOSize = 512;         // Maximum I/O per operation (the only I/O size limit; tnfsd config.h MAX_IOSZ is also 512)
+    /// <remarks>
+    /// Taken from tnfsd config.h MAX_IOSZ (512). The TNFS specification text gives no number. A READ that asks for more is cut to this size.
+    /// </remarks>
+    public const int MaxIOSize = 512;         // Maximum I/O per operation (tnfsd config.h MAX_IOSZ; the TNFS spec text is silent)
     /// <summary>
     /// Default read buffer size in bytes, 512.
     /// </summary>
@@ -165,29 +174,41 @@ public static class TnfsConstants
     /// </summary>
     public const int MAX_SESSIONS_PER_IP = 8;
     /// <summary>
-    /// Limit on the number of TCP connections, 64.
+    /// Limit on the number of TCP connections, 4096.
     /// </summary>
-    public const int MAX_TCP_CONN = 64;
+    /// <remarks>
+    /// Taken from tnfsd config.h MAX_TCP_CONN (4096). The TNFS specification text gives no number. The TCP transport enforces it by default and reports it.
+    /// </remarks>
+    public const int MAX_TCP_CONN = 4096;
     /// <summary>
     /// Limit on the number of open file descriptors per connection, 16.
     /// </summary>
     public const int MAX_FD_PER_CONN = 16;
     /// <summary>
-    /// Limit on the number of open directory handles per connection, 16.
+    /// Limit on the number of open directory handles per connection, 8.
     /// </summary>
-    public const int MAX_DHND_PER_CONN = 16;
+    /// <remarks>
+    /// Taken from tnfsd config.h MAX_DHND_PER_CONN (8). The TNFS specification text gives no number. The ninth OPENDIR on one session is refused with EMFILE.
+    /// </remarks>
+    public const int MAX_DHND_PER_CONN = 8;
     /// <summary>
     /// Limit on the length of a file name, 256.
     /// </summary>
     public const int MAX_FILENAME_LEN = 256;
     /// <summary>
-    /// Limit on the length of a file path, 1024.
+    /// Limit on the length of a file path, 384.
     /// </summary>
-    public const int MAX_FILEPATH = 1024;
+    /// <remarks>
+    /// Taken from tnfsd config.h MAX_FILEPATH (384, path plus file name). The TNFS specification text gives no number.
+    /// </remarks>
+    public const int MAX_FILEPATH = 384;
     /// <summary>
-    /// Limit on the length of a TNFS path, 1024.
+    /// Limit on the length of a TNFS path, 256.
     /// </summary>
-    public const int MAX_TNFSPATH = 1024;
+    /// <remarks>
+    /// Taken from tnfsd config.h MAX_TNFSPATH (256). The TNFS specification text gives no number.
+    /// </remarks>
+    public const int MAX_TNFSPATH = 256;
 
     // Timeouts (seconds)
     /// <summary>
@@ -195,9 +216,12 @@ public static class TnfsConstants
     /// </summary>
     public const int SESSION_TIMEOUT = 600;       // 10 minutes
     /// <summary>
-    /// Connection timeout in seconds, 300 (5 minutes).
+    /// Connection timeout in seconds, 600 (10 minutes).
     /// </summary>
-    public const int CONN_TIMEOUT = 300;          // 5 minutes
+    /// <remarks>
+    /// Taken from tnfsd config.h CONN_TIMEOUT (600). The TNFS specification text gives no number.
+    /// </remarks>
+    public const int CONN_TIMEOUT = 600;          // 10 minutes (tnfsd config.h CONN_TIMEOUT)
     /// <summary>
     /// Directory handle timeout in seconds, 300 (5 minutes).
     /// </summary>
@@ -213,17 +237,26 @@ public static class TnfsConstants
 
     // TCP Keepalive (seconds)
     /// <summary>
-    /// TCP keepalive idle time in seconds, 60.
+    /// TCP keepalive idle time in seconds, 30.
     /// </summary>
-    public const int TCP_KA_IDLE = 60;
+    /// <remarks>
+    /// Taken from tnfsd config.h TCP_KA_IDLE (30). The TNFS specification text gives no number.
+    /// </remarks>
+    public const int TCP_KA_IDLE = 30;
     /// <summary>
-    /// TCP keepalive probe interval in seconds, 10.
+    /// TCP keepalive probe interval in seconds, 1.
     /// </summary>
-    public const int TCP_KA_INTVL = 10;
+    /// <remarks>
+    /// Taken from tnfsd config.h TCP_KA_INTVL (1). The TNFS specification text gives no number.
+    /// </remarks>
+    public const int TCP_KA_INTVL = 1;
     /// <summary>
-    /// TCP keepalive probe count, 6.
+    /// TCP keepalive probe count, 60.
     /// </summary>
-    public const int TCP_KA_COUNT = 6;
+    /// <remarks>
+    /// Taken from tnfsd config.h TCP_KA_COUNT (60). The TNFS specification text gives no number.
+    /// </remarks>
+    public const int TCP_KA_COUNT = 60;
 
     // Directory Options (OPENDIRX)
     /// <summary>
@@ -377,13 +410,19 @@ public static class TnfsConstants
 
     // Timeout Values (milliseconds)
     /// <summary>
-    /// Low byte of the timeout value, 0x05 (5 seconds).
+    /// Low byte of the timeout value sent in the MOUNT reply, 0xE8 (with the high byte 0x03 this is 1000 ms, 1 second).
     /// </summary>
-    public const ushort TIMEOUT_LSB = 0x05;  // 5 seconds
+    /// <remarks>
+    /// Taken from tnfsd config.h TIMEOUT_LSB (0xE8). The TNFS specification text gives no number.
+    /// </remarks>
+    public const ushort TIMEOUT_LSB = 0xE8;  // 1 second together with the high byte (tnfsd config.h TIMEOUT_LSB)
     /// <summary>
-    /// High byte of the timeout value, 0x00.
+    /// High byte of the timeout value sent in the MOUNT reply, 0x03.
     /// </summary>
-    public const ushort TIMEOUT_MSB = 0x00;
+    /// <remarks>
+    /// Taken from tnfsd config.h TIMEOUT_MSB (0x03). The TNFS specification text gives no number.
+    /// </remarks>
+    public const ushort TIMEOUT_MSB = 0x03;
 
     /// <summary>
     /// Get human-readable command name from command code.
