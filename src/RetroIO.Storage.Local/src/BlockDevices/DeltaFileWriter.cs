@@ -84,24 +84,29 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <param name="compressionMode">
         /// How changed blocks are stored.
         /// </param>
+        /// <param name="loadExisting">
+        /// True to load the blocks of a delta file that already exists at the path. False to start with an empty
+        /// delta: an existing file is then replaced by an empty one, and its blocks are lost.
+        /// </param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="deltaPath"/> is null.
         /// </exception>
-        public DeltaFileWriter(string deltaPath, int blockSize, DeltaCompressionMode compressionMode = DeltaCompressionMode.FullBlock)
+        public DeltaFileWriter(string deltaPath, int blockSize, DeltaCompressionMode compressionMode = DeltaCompressionMode.FullBlock, bool loadExisting = true)
         {
             _deltaPath = deltaPath ?? throw new ArgumentNullException(nameof(deltaPath));
             _blockSize = blockSize;
             _compressionMode = compressionMode;
             _blockIndex = new Dictionary<uint, DeltaBlockEntry>();
 
-            OpenOrCreateDeltaFile();
+            OpenOrCreateDeltaFile(loadExisting);
         }
 
-        private void OpenOrCreateDeltaFile()
+        private void OpenOrCreateDeltaFile(bool loadExisting)
         {
-            // Check if file exists AND has content (is a valid delta file)
+            // Check if file exists AND has content (is a valid delta file). When the caller does not want
+            // the existing blocks, the file counts as absent and is created again below.
             bool isExistingDelta = false;
-            if (File.Exists(_deltaPath))
+            if (loadExisting && File.Exists(_deltaPath))
             {
                 var fileInfo = new FileInfo(_deltaPath);
                 // A valid delta file must have at least the header (15 bytes)

@@ -22,7 +22,6 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `RetroIO.Protocols.Econet` `FileServerReply.DiscFreeSpaceClassic1983` | Existing comment has a `param` and no `returns` |
 | `RetroIO.Protocols.Xmsg.Api` `XmsgKernel` | `WirePort` has no incarnation bits |
 | `RetroIO.Link` `ILapbCapable` counters | `Retransmissions`, `RejectionsSent`, `RejectionsReceived`, `T1Timeouts`, `T2Timeouts` are never set anywhere |
-| `RetroIO.Storage.Local` `DeltaBlockDevice` constructor | `applyDeltaOnMount` is stored and never used |
 | `RetroIO.Storage.Providers` `VfsFileSystemBackend.GetFileInfo` | Returns a `FileInfo` for a temp file that is already deleted; only the length and write time are real |
 | `RetroIO.Storage.Providers`, both backends `GetFullPath` | Only turns backslashes into slashes; the contract says normalized and resolved |
 | `RetroIO.Management.Api` `LiveDataService` | TNFS and Econet statistics are pushed as fixed zeros (the log-line half of this entry is fixed) |
@@ -108,3 +107,4 @@ Nothing open. The GitHub `build` workflow and the C client test are both fixed (
 | `Server_` and `Client_BadVersionHeader_ClosesTheConnection` could fail on a slow machine: the test wrote the good frame after the transport had already closed the connection | XOT header tests: send the bad header and the good frame in one write |
 | `V7Driver`/`FfsDriver.SelectPartition` after mount stored the letter only | V7Driver, FfsDriver: selecting a partition after mount opens the file system again on it; a failed mount leaves no half-built file system |
 | `CbmDosFileSystem.ListDirectory` ignored its `path` argument | CbmDosFileSystem: ListDirectory throws DirectoryNotFoundException for any path but the root |
+| `DeltaBlockDevice` stored `applyDeltaOnMount` and never used it | DeltaBlockDevice: applyDeltaOnMount false starts with an empty delta instead of loading the existing delta file |

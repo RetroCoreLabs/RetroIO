@@ -370,6 +370,75 @@ namespace RetroIO.Tests
             }
         }
 
+        // Opens a blank (all zero) in-memory base device and puts a delta device on it.
+        private static DeltaBlockDevice OpenDeltaOnBlankDisk(string deltaPath, bool applyDeltaOnMount)
+        {
+            var descriptor = new BlockDeviceDescriptor
+            {
+                Name = "TestDevice",
+                BlockSize = BLOCK_SIZE,
+                AddressMode = BlockAddressMode.LBA,
+                TotalBlocks = TOTAL_BLOCKS
+            };
+            var baseDevice = new GenericBlockDevice(descriptor);
+            baseDevice.Mount(new MemoryStream(new byte[BLOCK_SIZE * TOTAL_BLOCKS]), readOnly: true);
+            return new DeltaBlockDevice(baseDevice, deltaPath, DeltaCompressionMode.FullBlock, applyDeltaOnMount);
+        }
+
+        [Test]
+        public void DeltaBlockDevice_ApplyDeltaOnMountTrue_ReadsBlocksFromTheExistingDeltaFile()
+        {
+            string deltaPath = Path.GetTempFileName();
+
+            try
+            {
+                using (var first = OpenDeltaOnBlankDisk(deltaPath, applyDeltaOnMount: true))
+                {
+                    first.WriteBlock(BlockAddress.FromLBA(5), CreateTestData(BLOCK_SIZE, 0xAA));
+                }
+
+                using (var second = OpenDeltaOnBlankDisk(deltaPath, applyDeltaOnMount: true))
+                {
+                    byte[] readData = new byte[BLOCK_SIZE];
+                    second.ReadBlock(BlockAddress.FromLBA(5), readData);
+
+                    Assert.That(second.ModifiedBlockCount, Is.EqualTo(1));
+                    Assert.That(readData, Is.EqualTo(CreateTestData(BLOCK_SIZE, 0xAA)));
+                }
+            }
+            finally
+            {
+                SafeDeleteFile(deltaPath);
+            }
+        }
+
+        [Test]
+        public void DeltaBlockDevice_ApplyDeltaOnMountFalse_IgnoresTheExistingDeltaFile()
+        {
+            string deltaPath = Path.GetTempFileName();
+
+            try
+            {
+                using (var first = OpenDeltaOnBlankDisk(deltaPath, applyDeltaOnMount: true))
+                {
+                    first.WriteBlock(BlockAddress.FromLBA(5), CreateTestData(BLOCK_SIZE, 0xAA));
+                }
+
+                using (var second = OpenDeltaOnBlankDisk(deltaPath, applyDeltaOnMount: false))
+                {
+                    byte[] readData = new byte[BLOCK_SIZE];
+                    second.ReadBlock(BlockAddress.FromLBA(5), readData);
+
+                    Assert.That(second.ModifiedBlockCount, Is.EqualTo(0));
+                    Assert.That(readData, Is.EqualTo(CreateTestData(BLOCK_SIZE, 0x00)));
+                }
+            }
+            finally
+            {
+                SafeDeleteFile(deltaPath);
+            }
+        }
+
         // Helper methods
 
         private void CreateTestDiskImage(string path, uint totalBlocks, int blockSize, byte fillValue)
