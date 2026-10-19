@@ -113,6 +113,11 @@ public static class EconetFileServerExtensions
         services.AddSingleton<FileServerCommandHandler>();
         services.AddSingleton<BulkTransferHandler>();
 
+        // One counter object, shared by EconetFileServerService (writer) and the Management API's
+        // EconetController and LiveDataService (readers). Both service types resolve to the same instance.
+        services.AddSingleton<EconetServerStatistics>();
+        services.AddSingleton<IEconetStatisticsTracker>(sp => sp.GetRequiredService<EconetServerStatistics>());
+
         services.AddSingleton(sp =>
             new AunAddressMapper(options.Net, options.AunStationOctetIndex));
 

@@ -45,6 +45,14 @@ public interface IServerHubClient
     /// Current TNFS counters.
     /// </param>
     Task TnfsStats(TnfsStatsUpdate stats);
+
+    /// <summary>
+    /// Pushed on a timer with Econet traffic counters.
+    /// </summary>
+    /// <param name="stats">
+    /// Current Econet counters.
+    /// </param>
+    Task EconetStats(EconetStatsUpdate stats);
 }
 
 /// <summary>
@@ -71,6 +79,11 @@ public static class ServerHubMethods
     /// Wire name of <see cref="IServerHubClient.TnfsStats"/>.
     /// </summary>
     public const string TnfsStats = "TnfsStats";
+
+    /// <summary>
+    /// Wire name of <see cref="IServerHubClient.EconetStats"/>.
+    /// </summary>
+    public const string EconetStats = "EconetStats";
 
     /// <summary>
     /// Path the hub is mapped at, relative to the API base address.
@@ -111,6 +124,27 @@ public class TnfsStatsUpdate
 
     /// <summary>
     /// Bytes read and written since the server started.
+    /// </summary>
+    public long TotalBytesTransferred { get; set; }
+}
+
+/// <summary>
+/// Econet traffic counters, pushed over <see cref="IServerHubClient.EconetStats"/>.
+/// </summary>
+public class EconetStatsUpdate
+{
+    /// <summary>
+    /// Sessions currently logged in.
+    /// </summary>
+    public int ActiveSessions { get; set; }
+
+    /// <summary>
+    /// Requests handled since the server started.
+    /// </summary>
+    public long TotalRequests { get; set; }
+
+    /// <summary>
+    /// Payload bytes received and sent since the server started.
     /// </summary>
     public long TotalBytesTransferred { get; set; }
 }

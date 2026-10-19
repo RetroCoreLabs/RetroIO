@@ -57,6 +57,11 @@ public sealed class ManagementHubClient : IAsyncDisposable
     public event Action<TnfsStatsUpdate>? TnfsStatsUpdated;
 
     /// <summary>
+    /// Raised when the server pushes Econet counters.
+    /// </summary>
+    public event Action<EconetStatsUpdate>? EconetStatsUpdated;
+
+    /// <summary>
     /// Raised on reconnect attempts, reconnection and close, for the host to log.
     /// </summary>
     /// <remarks>
@@ -144,6 +149,9 @@ public sealed class ManagementHubClient : IAsyncDisposable
 
         _connection.On<TnfsStatsUpdate>(ServerHubMethods.TnfsStats,
             stats => TnfsStatsUpdated?.Invoke(stats));
+
+        _connection.On<EconetStatsUpdate>(ServerHubMethods.EconetStats,
+            stats => EconetStatsUpdated?.Invoke(stats));
 
         _connection.Reconnecting += error =>
         {

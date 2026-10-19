@@ -28,6 +28,11 @@ public class EconetController : ControllerBase
     private readonly ILogger<EconetController> _logger;
 
     /// <summary>
+    /// Running totals, absent when this process does not run the Econet server.
+    /// </summary>
+    private readonly EconetServerStatistics? _statistics;
+
+    /// <summary>
     /// Creates the controller.
     /// </summary>
     /// <param name="logger">
@@ -39,20 +44,25 @@ public class EconetController : ControllerBase
     /// <param name="activityLog">
     /// The Econet activity log, or null when this process does not run the Econet server.
     /// </param>
+    /// <param name="statistics">
+    /// The Econet server counters, or null when this process does not run the Econet server.
+    /// </param>
     public EconetController(ILogger<EconetController> logger,
                             FileServerSessionManager? sessionManager = null,
-                            IEconetActivityLog? activityLog = null)
+                            IEconetActivityLog? activityLog = null,
+                            EconetServerStatistics? statistics = null)
     {
         _logger = logger;
         _sessionManager = sessionManager;
         _activityLog = activityLog;
+        _statistics = statistics;
     }
 
     /// <summary>
     /// Returns Econet statistics.
     /// </summary>
     /// <remarks>
-    /// Only the active session count is read from the session manager, and it is 0 when there is no session manager. The request count, the byte count and the uptime are fixed at 0, 0 and the text 0s.
+    /// The session count comes from the session manager and the other numbers from the live counters of the Econet server in this process. When there is no session manager or no counter object, which means no Econet server runs in this process, those values are 0 and the uptime is the text 0s.
     /// </remarks>
     /// <returns>
     /// A response with the statistics, or status 500 with an error response when an exception occurs.
@@ -65,9 +75,13 @@ public class EconetController : ControllerBase
             EconetStatisticsResponse response = new EconetStatisticsResponse
             {
                 ActiveSessions = _sessionManager?.GetActiveSessionCount() ?? 0,
-                TotalRequests = 0,
-                BytesTransferred = 0,
-                Uptime = "0s"
+                TotalRequests = _statistics?.TotalRequests ?? 0L,
+                BytesTransferred = _statistics?.BytesTransferred ?? 0L,
+                BytesReceived = _statistics?.BytesReceived ?? 0L,
+                BytesSent = _statistics?.BytesSent ?? 0L,
+                FileOperations = _statistics?.FileOperations ?? 0L,
+                Errors = _statistics?.Errors ?? 0L,
+                Uptime = _statistics != null ? FormatUptime(_statistics.Uptime) : "0s"
             };
 
             return Ok(ApiResponse<EconetStatisticsResponse>.Ok(response));
@@ -190,5 +204,17 @@ public class EconetController : ControllerBase
         }
 
         return Ok(ApiResponse<EconetActivityResponse>.Ok(response));
+    }
+
+    // Same text format as TnfsController, so the two statistics pages read alike.
+    private static string FormatUptime(TimeSpan uptime)
+    {
+        if (uptime.TotalDays >= 1)
+            return $"{(int)uptime.TotalDays}d {uptime.Hours}h {uptime.Minutes}m";
+        if (uptime.TotalHours >= 1)
+            return $"{(int)uptime.TotalHours}h {uptime.Minutes}m {uptime.Seconds}s";
+        if (uptime.TotalMinutes >= 1)
+            return $"{(int)uptime.TotalMinutes}m {uptime.Seconds}s";
+        return $"{uptime.Seconds}s";
     }
 }

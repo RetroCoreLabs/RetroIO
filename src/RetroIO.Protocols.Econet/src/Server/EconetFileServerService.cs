@@ -193,6 +193,8 @@ public sealed class EconetFileServerService : BackgroundService
 
             EconetMessage? response = null;
             bool trackReplyForRetransmit = false;
+            // True only when the transport really took the reply. A reply queued for retry is not counted as sent.
+            bool replySent = false;
 
             if (request.PacketType == AunPacketType.Ack)
             {
@@ -232,6 +234,7 @@ public sealed class EconetFileServerService : BackgroundService
                 {
                     EconetServerJsonLog.WriteOutboundAun(response);
                     await response.Transport!.SendAsync(response);
+                    replySent = true;
 
                     // Retransmit the reply (≤ AunMaxTransmits, ~AunRetransmitIntervalMs apart) until the
                     // client ACKs it by the server seq, then Acknowledge() cancels it (see the Ack branch
@@ -242,17 +245,19 @@ public sealed class EconetFileServerService : BackgroundService
                 catch (Exception sendEx)
                 {
                     _logger.LogWarning(sendEx, "Outbound AUN send failed; queued for retry");
+                    _statistics?.RecordError();
                     _retryQueue.Enqueue(response);
                 }
             }
 
             await _retryQueue.FlushAsync(CancellationToken.None);
 
-            RecordStatistics(request, response);
+            RecordStatistics(request, replySent ? response : null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to handle Econet message from {Client}", request.ClientAddress);
+            _statistics?.RecordError();
         }
     }
 
@@ -264,12 +269,12 @@ public sealed class EconetFileServerService : BackgroundService
         if (request.PacketType == AunPacketType.Ack)
             return;
 
-        int bytesTransferred = request.Payload.Length;
-        if (response != null)
-            bytesTransferred += response.Payload.Length;
+        // response is null when no reply was sent, so bytesSent is only ever bytes the transport took.
+        int bytesReceived = request.Payload.Length;
+        int bytesSent = response != null ? response.Payload.Length : 0;
 
         bool isFileOperation = IsFileOperation(request);
-        _statistics.RecordRequest(bytesTransferred, isFileOperation);
+        _statistics.RecordRequest(bytesReceived, bytesSent, isFileOperation);
     }
 
     private static bool IsFileOperation(EconetMessage request)
