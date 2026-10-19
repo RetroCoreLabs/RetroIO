@@ -207,6 +207,13 @@ namespace RetroIO.Protocols.Xmsg.Live
         private bool _peerBusy;         // set by RNR, cleared by RR/REJ
         private bool _rejectCondition;  // one REJ per detected gap (spec 4.5)
 
+        // Event counters for the link statistics. They count real events only and are never reset
+        // by a re-connect: they describe the life of this layer object.
+        private long _retransmissions;
+        private long _rejectionsSent;
+        private long _rejectionsReceived;
+        private long _t1Timeouts;
+
         // The physical neighbour id learned from the peer's SABM/UA/RR info (spec 3.3), read-only and
         // NEVER a routing key. -1 until learned.
         private int _peerNode = -1;
@@ -391,6 +398,40 @@ namespace RetroIO.Protocols.Xmsg.Live
         public bool RejectCondition
         {
             get { return _rejectCondition; }
+        }
+
+        /// <summary>
+        /// Gets the number of I-frames sent again after a REJ from the peer (go-back-N). Each resent
+        /// frame counts once.
+        /// </summary>
+        public long Retransmissions
+        {
+            get { return _retransmissions; }
+        }
+
+        /// <summary>
+        /// Gets the number of REJ frames this layer sent. One is sent per gap, not per frame (spec 4.5).
+        /// </summary>
+        public long RejectionsSent
+        {
+            get { return _rejectionsSent; }
+        }
+
+        /// <summary>
+        /// Gets the number of REJ frames received from the peer while connected.
+        /// </summary>
+        public long RejectionsReceived
+        {
+            get { return _rejectionsReceived; }
+        }
+
+        /// <summary>
+        /// Gets the number of times T1 ran out. This layer has no T2 timer (it acknowledges as it
+        /// receives), so there is no T2 count.
+        /// </summary>
+        public long T1Timeouts
+        {
+            get { return _t1Timeouts; }
         }
 
         /// <summary>
@@ -751,6 +792,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                     break;
 
                 case LapbSupervisoryKind.Reject:
+                    _rejectionsReceived++;
                     _peerBusy = false;
                     GoBackN(frame.ReceiveSequence, currentTicks);
                     break;
@@ -824,6 +866,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                 if (!_rejectCondition)
                 {
                     EmitSupervisory(RejNibble, pollFinal: frame.PollFinal, isCommand: false);
+                    _rejectionsSent++;
                     _rejectCondition = true;
                 }
             }
@@ -905,6 +948,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                 if (payload != null)
                 {
                     EmitInformation(_sendVariable, payload);
+                    _retransmissions++;
                 }
 
                 _sendVariable = (_sendVariable + 1) & 0x07;
@@ -1004,6 +1048,7 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// </returns>
         private bool OnT1Expiry(long currentTicks)
         {
+            _t1Timeouts++;
             _retry++;
             if (_retry > _options.N2)
             {
