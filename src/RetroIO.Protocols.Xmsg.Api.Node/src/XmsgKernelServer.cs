@@ -64,6 +64,31 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         /// Thrown when <paramref name="kernel"/> or <paramref name="name"/> is null.
         /// </exception>
         public XmsgKernelServer(XmsgKernel kernel, string name, int logicalPort)
+            : this(kernel, name, logicalPort, DefaultWirePortSeed)
+        {
+        }
+
+        /// <summary>
+        /// Initialises a bridge around a kernel, with an explicit seed for the random part of the
+        /// wire port.
+        /// </summary>
+        /// <param name="kernel">
+        /// The kernel whose ports this server exposes to the node.
+        /// </param>
+        /// <param name="name">
+        /// The name this server registers under in the node's registry.
+        /// </param>
+        /// <param name="logicalPort">
+        /// The logical port the name resolves to.
+        /// </param>
+        /// <param name="wirePortSeed">
+        /// The seed of the <see cref="XmsgRandomGenerator"/> that supplies the low seven bits of
+        /// <see cref="WirePort"/>. It is drawn from once, here.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="kernel"/> or <paramref name="name"/> is null.
+        /// </exception>
+        public XmsgKernelServer(XmsgKernel kernel, string name, int logicalPort, ushort wirePortSeed)
         {
             if (kernel == null)
             {
@@ -81,12 +106,24 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
 
             Name = name;
             LogicalPort = logicalPort;
-            WirePort = (ushort)(logicalPort << 7);
+            // The wire port is the low word of an XMSG magic number: the logical port in the high
+            // nine bits and the kernel's random part (RNMAG, one ZRAND draw) in the low seven.
+            // It is drawn once per registration, so it stays the same for the life of this object.
+            WirePort = new XmsgPortWordAllocator(wirePortSeed).Next(logicalPort);
 
             ControlService = DefaultControlService;
             FrameFlags = DefaultFrameFlags;
             Role = DefaultRole;
         }
+
+        /// <summary>
+        /// The generator seed used for the wire port's random part when the caller gives none.
+        /// </summary>
+        /// <remarks>
+        /// The real kernel seeds from a SINTRAN cell whose content is unknown, so no value is the
+        /// correct one; any seed is as faithful as any other.
+        /// </remarks>
+        public const ushort DefaultWirePortSeed = 0x2B67;
 
         /// <summary>
         /// The XMCSM control word used for application traffic by default.
@@ -143,7 +180,7 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         public static XmsgKernelServer Create(ushort systemNumber, ushort portSeed, string name, int logicalPort)
         {
             XmsgKernel kernel = new XmsgKernel(systemNumber, portSeed, null);
-            XmsgKernelServer server = new XmsgKernelServer(kernel, name, logicalPort);
+            XmsgKernelServer server = new XmsgKernelServer(kernel, name, logicalPort, portSeed);
             kernel.AttachSink(server);
             return server;
         }
@@ -160,9 +197,12 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         public int LogicalPort { get; }
 
         /// <summary>
-        /// Gets the wire port: <see cref="LogicalPort"/> shifted left 7, with no incarnation bits
-        /// added.
+        /// Gets the wire port: the low word of this server's magic number.
         /// </summary>
+        /// <remarks>
+        /// The high nine bits are <see cref="LogicalPort"/>; the low seven bits are one draw from
+        /// <see cref="XmsgRandomGenerator"/>, taken when the server is built and kept.
+        /// </remarks>
         public ushort WirePort { get; }
 
         /// <summary>

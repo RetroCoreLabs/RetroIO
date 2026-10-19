@@ -182,8 +182,57 @@ namespace RetroIO.Protocols.Xmsg.Api.Node.Tests
 
             Assert.Equal("*DEMO", bridge.Name);
             Assert.Equal(4, bridge.LogicalPort);
-            Assert.Equal(4 << 7, bridge.WirePort);
+            // The wire port is the low word of a magic number: the high nine bits are the logical
+            // port, the low seven bits are the random part. Spec: XMSG-WIRE-PORT-IS-MAGIC-LOW-WORD.
+            Assert.Equal(4, bridge.WirePort >> 7);
+            Assert.True(XmsgRandomGenerator.IsMintable(bridge.WirePort & 0x7F));
             Assert.False(bridge.AdvancesOutputOnAck);
+        }
+
+        /// <summary>
+        /// The low seven bits of the wire port are the first draw of the generator the server was
+        /// seeded with, and the high nine bits are the logical port.
+        /// </summary>
+        [Fact]
+        public void WirePort_HasLogicalPortHighAndGeneratorDrawLow()
+        {
+            XmsgKernelServer bridge = new XmsgKernelServer(
+                new XmsgKernel(102, 0x1111, null), "*DEMO", 4, 0x4321);
+
+            int expectedRandom = new XmsgRandomGenerator(0x4321).Next();
+
+            Assert.Equal(4, bridge.WirePort >> 7);
+            Assert.Equal(expectedRandom, bridge.WirePort & 0x7F);
+        }
+
+        /// <summary>
+        /// The wire port is drawn once, so it does not change while the server lives.
+        /// </summary>
+        [Fact]
+        public void WirePort_IsFixedForTheLifeOfTheServer()
+        {
+            XmsgKernelServer bridge = new XmsgKernelServer(
+                new XmsgKernel(102, 0x1111, null), "*DEMO", 4, 0x4321);
+
+            ushort first = bridge.WirePort;
+            Assert.Equal(first, bridge.WirePort);
+            Assert.Equal(first, bridge.WirePort);
+        }
+
+        /// <summary>
+        /// Different generator seeds give different random parts, so the part really comes from
+        /// the generator and is not a constant.
+        /// </summary>
+        [Fact]
+        public void WirePort_DiffersBetweenSeeds()
+        {
+            XmsgKernelServer a = new XmsgKernelServer(
+                new XmsgKernel(102, 0x1111, null), "*DEMO", 4, 0x0001);
+            XmsgKernelServer b = new XmsgKernelServer(
+                new XmsgKernel(102, 0x1111, null), "*DEMO", 4, 0x0002);
+
+            Assert.NotEqual(a.WirePort, b.WirePort);
+            Assert.Equal(a.WirePort >> 7, b.WirePort >> 7);
         }
 
         private static XmsgFrame BuildFrame(XmsgMagicNumber from, XmsgMagicNumber to, byte[] payload)
