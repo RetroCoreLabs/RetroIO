@@ -21,7 +21,6 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `RetroIO.Protocols.X25` `X3` validity limits | Parameter 1 accepts only 0 and 1 (X.3 also allows 32 to 126), parameter 5 only 0 and 1 (X.3 allows 2), parameter 7 up to 127 (flag sums reach 31), parameters 9 and 14 up to 7 (X.3 allows 0 to 255). Found while fixing parameters 3 and 12; not changed |
 | `RetroIO.Protocols.X25` password mode | Sets parameter 3 to 1 and calls it character by character, and a test pins it. In X.3 value 1 means forward on alphanumerics only |
 | `RetroIO.Protocols.X25` `X3` defaults | The default profile is neither the transparent nor the simple standard profile of Table 1/X.28 (parameter 7 defaults to 21, parameter 8 to 1; both profiles use 0 for 8). The two named profiles are now correct; what the default should be needs a decision |
-| `RetroIO.Link` `LapbStation` | Builds its engine with T2 = 0 and ignores its `t2TimeoutMs` argument (every link config defaults it to 1500 ms). Passing it on would hold every acknowledgement up to 1.5 s on live links, so `T2Timeouts` stays 0 there until that is decided |
 
 ### S - stubs that report success while doing nothing
 
@@ -63,6 +62,7 @@ Nothing open. The GitHub `build` workflow and the C client test are both fixed (
 
 | What | Commit subject |
 |---|---|
+| `LapbStation` ignored its `t2TimeoutMs` argument, so `T2Timeouts` stayed 0 on every link; it now passes T2 to the engine. A link config with T1 at or below T2 (default 1500 ms) now throws ArgumentOutOfRangeException, as X.25 2.4.9.2 says T2 is less than T1; default links now acknowledge up to 1.5 s late | LapbStation: pass T2 to the engine |
 | `XmsgKernelServer.WirePort` had no random low 7 bits; it is now (logical port << 7) with a part drawn once from `XmsgRandomGenerator`, as the XMSG wire-port note says | XmsgKernelServer: the wire port now carries a random low part drawn from the XMSG generator |
 | `ILapbCapable.T2Timeouts` was never set; the LAPB engine now has the X.25 T2 acknowledgement delay timer (off at 0, T2 below T1 enforced, ack piggybacked on an outgoing I frame, count on expiry) | LAPB: add the T2 acknowledgement delay timer so T2Timeouts counts something real |
 | `TnfsConstants` had four unused second names for limits that already had one (`MaxMessageSize`, `MaxPathLength`, `MaxFilenameLength`, `MAX_IOSZ`); removed. No value changed: the spec is silent | TNFS constants: remove four unused second names for limits that already have one |

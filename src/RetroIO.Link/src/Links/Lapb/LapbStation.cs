@@ -84,10 +84,11 @@ namespace RetroIO.Link.Lapb
         /// T1, the retransmission timer.
         /// </param>
         /// <param name="t2TimeoutMs">
-        /// Not passed to the engine yet: the station still acknowledges as it receives (engine T2 = 0),
-        /// because the links' default of 1500 ms would delay every acknowledgement on live links.
-        /// The engine itself supports T2 (see the T2 option of LapbOptions); the station reports its
-        /// T2 expiry count, which stays zero while T2 is off.
+        /// T2, the acknowledgement delay, in milliseconds (X.25 2.4.9.2). It is passed to the engine
+        /// (see the T2 option of LapbOptions): a received I frame with P=0 is acknowledged by the next
+        /// outgoing I frame or, when T2 runs out, by an RR, and each expiry is counted in
+        /// <see cref="LapbStatistics.T2Timeouts"/>. Zero acknowledges at once. It must be less than
+        /// <paramref name="t1TimeoutMs"/>, otherwise the constructor throws ArgumentOutOfRangeException.
         /// </param>
         /// <param name="t3TimeoutMs">
         /// T3, the idle keepalive; zero disables it.
@@ -111,6 +112,7 @@ namespace RetroIO.Link.Lapb
             LapbOptions options = new LapbOptions(
                 t1: t1TimeoutMs,
                 t3: t3TimeoutMs > 0 ? t3TimeoutMs : int.MaxValue,
+                t2: t2TimeoutMs,
                 n2: maxRetries,
                 windowSize: windowSize,
                 reestablishOnLinkFailure: true,

@@ -36,9 +36,9 @@ namespace RetroIO.Protocols.X25.Tests
             _sent = new List<byte[]>();
         }
 
-        private LapbStation NewStation(int t1Ms = 60_000)
+        private LapbStation NewStation(int t1Ms = 60_000, int t2Ms = 0)
         {
-            LapbStation station = new LapbStation(NullLogger.Instance, "test", windowSize: 7, maxRetries: 10, t1TimeoutMs: t1Ms);
+            LapbStation station = new LapbStation(NullLogger.Instance, "test", windowSize: 7, maxRetries: 10, t1TimeoutMs: t1Ms, t2TimeoutMs: t2Ms);
             station.FrameToTransmit += (s, e) =>
             {
                 lock (_lock)
@@ -309,6 +309,55 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             Assert.That(station.GetStatistics().T1Timeouts, Is.GreaterThanOrEqualTo(2));
+        }
+
+        [Test]
+        public void T2_HoldsTheAcknowledgement_ThenSendsItAndCountsIt()
+        {
+            // X.25 2.4.9.2 and 2.4.6.2 a) ii): with P=0 the acknowledgement of a received I frame may be
+            // held up to T2. The station used to ignore its T2 argument and acknowledge at once, so
+            // T2Timeouts could never move.
+            using LapbStation station = NewStation(t1Ms: 60_000, t2Ms: 300);
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+            lock (_lock) { _sent.Clear(); }
+
+            station.ReceiveFrame(new byte[] { AddressA, IControl(ns: 0, nr: 0), 0xAA }, 3);
+
+            Assert.That(CountControl(IsRr), Is.EqualTo(0), "the acknowledgement is held, not sent at once");
+            Assert.That(station.GetStatistics().T2Timeouts, Is.EqualTo(0));
+
+            // Poll with a deadline, not a fixed sleep: T2 fires on the station's own timer.
+            DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+            while (CountControl(IsRr) == 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(20);
+            }
+
+            Assert.That(CountControl(IsRr), Is.EqualTo(1), "one RR when T2 runs out");
+            Assert.That(station.GetStatistics().T2Timeouts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void T2Zero_AcknowledgesAtOnce_AndNeverCounts()
+        {
+            using LapbStation station = NewStation(t1Ms: 60_000, t2Ms: 0);
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+            lock (_lock) { _sent.Clear(); }
+
+            station.ReceiveFrame(new byte[] { AddressA, IControl(ns: 0, nr: 0), 0xAA }, 3);
+
+            Assert.That(CountControl(IsRr), Is.EqualTo(1));
+            Assert.That(station.GetStatistics().T2Timeouts, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void T2NotLessThanT1_IsRefused()
+        {
+            // X.25 2.4.9.2: T2 is less than T1. The engine refuses it and the station passes that on.
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new LapbStation(NullLogger.Instance, "test", t1TimeoutMs: 1000, t2TimeoutMs: 1000));
         }
 
         [Test]

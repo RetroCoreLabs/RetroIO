@@ -242,7 +242,8 @@ namespace RetroIO.Protocols.X25.Tests
                 Mode = TcpMode.Server,
                 Port = 54325,
                 RemoteMachineId = "SERVER",
-                T1TimeoutMs = 1000
+                T1TimeoutMs = 1000,
+                T2TimeoutMs = 0
             };
 
             var clientConfig = new TcpLapbLinkConfig
@@ -253,7 +254,8 @@ namespace RetroIO.Protocols.X25.Tests
                 Port = 54325,
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
-                T1TimeoutMs = 1000
+                T1TimeoutMs = 1000,
+                T2TimeoutMs = 0
             };
 
             using var server = new TcpLapbLink(_logger, serverConfig);
