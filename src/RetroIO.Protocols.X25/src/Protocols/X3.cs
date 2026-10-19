@@ -137,33 +137,35 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte ECHO = 1;                     // Enabled
             /// <summary>
-            /// Default value of the data forwarding parameter: 2 (carriage return, CR).
-            /// Parameter 3 is a sum of flags (X.3 section 3.3), so 2 is exactly CR.
-            /// The value 13 is 1 + 4 + 8 (alphanumerics, ESC BEL ENQ ACK, DEL CAN DC2) and does not mean CR.
-            /// X.3 does not name a default for parameter 3, only the two X.28 standard profiles set it;
-            /// CR is kept because this code has always forwarded a line on CR.
+            /// Default value of the data forwarding parameter: 126 (all characters in columns 0 and 1 of
+            /// International Alphabet No. 5 and DEL, the flags 2 + 4 + 8 + 16 + 32 + 64).
+            /// X.3 does not name defaults. Every default here is the simple standard profile of
+            /// Table 1/X.28 (ITU-T X.28, 12/97, page 9), which sets parameter 3 to 126.
             /// </summary>
-            public const byte DATA_FORWARDING = 2;          // Carriage return (CR) flag
+            public const byte DATA_FORWARDING = 126;        // Simple standard profile, Table 1/X.28
             /// <summary>
             /// Default value of the idle timer parameter: 0 (Disabled).
             /// </summary>
             public const byte IDLE_TIMER = 0;               // Disabled
             /// <summary>
-            /// Default value of the ancillary device control parameter: 0 (Disabled).
+            /// Default value of the ancillary device control parameter: 1 (use of X-ON and X-OFF).
+            /// Simple standard profile, Table 1/X.28.
             /// </summary>
-            public const byte ANCILLARY_DEVICE_CONTROL = 0; // Disabled
+            public const byte ANCILLARY_DEVICE_CONTROL = 1; // Use of X-ON and X-OFF
             /// <summary>
             /// Default value of the control pad service signals parameter: 1 (Enabled).
             /// </summary>
             public const byte CONTROL_PAD_SERVICE_SIGNALS = 1; // Enabled
             /// <summary>
-            /// Default value of the operation breakout procedure parameter: 21 (BREAK forwarded).
+            /// Default value of the operation breakout procedure parameter: 2 (reset).
+            /// Simple standard profile, Table 1/X.28.
             /// </summary>
-            public const byte OPERATION_BREAKOUT_PROCEDURE = 21; // BREAK forwarded
+            public const byte OPERATION_BREAKOUT_PROCEDURE = 2; // Reset
             /// <summary>
-            /// Default value of the discard output parameter: 1 (Enabled on receipt of normal data).
+            /// Default value of the discard output parameter: 0 (normal data delivery).
+            /// Simple standard profile, Table 1/X.28.
             /// </summary>
-            public const byte DISCARD_OUTPUT = 1;           // Enabled on receipt of normal data
+            public const byte DISCARD_OUTPUT = 0;           // Normal data delivery
             /// <summary>
             /// Default value of the padding after cr parameter: 0 (No padding).
             /// </summary>
@@ -173,13 +175,17 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte LINE_FOLDING = 0;             // Disabled
             /// <summary>
-            /// Default value of the binary speed parameter: 0 (Not used).
+            /// Default value of the binary speed parameter: 0.
+            /// Parameter 11 is read only (the speed of the terminal, known to the PAD) and Table 1/X.28
+            /// says only "indicate speed of DTE", with no number. The PAD that owns the line has to set the
+            /// real speed; 0 is kept as the table-less starting value (X.3 3.11 reads 0 as 110 bit/s).
             /// </summary>
             public const byte BINARY_SPEED = 0;             // Not used
             /// <summary>
-            /// Default value of the flow control parameter: 0 (no use of X-ON and X-OFF).
+            /// Default value of the flow control parameter: 1 (use of X-ON and X-OFF).
+            /// Simple standard profile, Table 1/X.28.
             /// </summary>
-            public const byte FLOW_CONTROL_X_ON_X_OFF = 0;  // No use of X-ON and X-OFF
+            public const byte FLOW_CONTROL_X_ON_X_OFF = 1;  // Use of X-ON and X-OFF
             /// <summary>
             /// Default value of the line feed insertion parameter: 0 (Disabled).
             /// </summary>
@@ -189,9 +195,10 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte PADDING_AFTER_LINE_FEED = 0;  // No padding
             /// <summary>
-            /// Default value of the editing parameter: 1 (Enabled).
+            /// Default value of the editing parameter: 0 (no editing in the data transfer state).
+            /// Simple standard profile, Table 1/X.28.
             /// </summary>
-            public const byte EDITING = 1;                  // Enabled
+            public const byte EDITING = 0;                  // No editing in data transfer state
             /// <summary>
             /// Default value of the character delete parameter: 127 (DEL character).
             /// </summary>
@@ -205,9 +212,10 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte LINE_DISPLAY = 18;            // DC2 character
             /// <summary>
-            /// Default value of the editing pad service signals parameter: 0 (Disabled).
+            /// Default value of the editing pad service signals parameter: 1 (printing terminals).
+            /// Simple standard profile, Table 1/X.28.
             /// </summary>
-            public const byte EDITING_PAD_SERVICE_SIGNALS = 0; // Disabled
+            public const byte EDITING_PAD_SERVICE_SIGNALS = 1; // Printing terminals
             /// <summary>
             /// Default value of the echo mask parameter: 0 (All characters echoed).
             /// </summary>
@@ -261,6 +269,11 @@ namespace RetroIO.Protocols.X25.Protocols
             /// This is the value the simple standard profile of Table 1/X.28 sets.
             /// </summary>
             public const byte ALL_CONTROL = 126;
+            /// <summary>
+            /// Every flag: alphanumerics (1) and all of 2 to 64, the sum 127.
+            /// Space and the symbols of columns 2 to 7 of International Alphabet No. 5 are still in no flag.
+            /// </summary>
+            public const byte ALL_FLAGS = 127;
         }
 
         /// <summary>
@@ -549,28 +562,32 @@ namespace RetroIO.Protocols.X25.Protocols
         {
             return parameterNumber switch
             {
-                ParameterNumber.ESCAPE => value <= 1,
-                ParameterNumber.ECHO => value <= 1,
-                ParameterNumber.DATA_FORWARDING => value <= 127, // sum of the seven flags of X.3 reference 3
-                ParameterNumber.IDLE_TIMER => true, // All values 0-255 valid
-                ParameterNumber.ANCILLARY_DEVICE_CONTROL => value <= 1,
-                ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS => value <= 1,
-                ParameterNumber.OPERATION_BREAKOUT_PROCEDURE => value <= 127,
-                ParameterNumber.DISCARD_OUTPUT => value <= 1,
-                ParameterNumber.PADDING_AFTER_CR => value <= 7,
-                ParameterNumber.LINE_FOLDING => true, // All values 0-255 valid
-                ParameterNumber.BINARY_SPEED => true, // Not used, all values accepted
-                ParameterNumber.FLOW_CONTROL_X_ON_X_OFF => value <= 1, // X.3 reference 12: 0 or 1
-                ParameterNumber.LINE_FEED_INSERTION => value <= 7,
-                ParameterNumber.PADDING_AFTER_LINE_FEED => value <= 7,
-                ParameterNumber.EDITING => value <= 1,
-                ParameterNumber.CHARACTER_DELETE => value <= 127,
-                ParameterNumber.LINE_DELETE => value <= 127,
-                ParameterNumber.LINE_DISPLAY => value <= 127,
-                ParameterNumber.EDITING_PAD_SERVICE_SIGNALS => value <= 1,
-                ParameterNumber.ECHO_MASK => true, // All values valid
-                ParameterNumber.PARITY_TREATMENT => value <= 3,
-                ParameterNumber.PAGE_WAIT => true, // All values 0-255 valid
+                // 3.1: 0 not possible, 1 DLE, 32 to 126 a graphic character
+                ParameterNumber.ESCAPE => value <= 1 || (value >= 32 && value <= 126),
+                // 3.2: 0 no echo, 1 echo, 2 echo all except the forwarding sequence, 32 to 126 scrambled echo character
+                ParameterNumber.ECHO => value <= 2 || (value >= 32 && value <= 126),
+                ParameterNumber.DATA_FORWARDING => value <= 127, // 3.3: sum of the seven flags
+                ParameterNumber.IDLE_TIMER => true, // 3.4: any number 0 to 255
+                ParameterNumber.ANCILLARY_DEVICE_CONTROL => value <= 2, // 3.5: 0, 1 or 2
+                // 3.6: flags 1, 2, 4, network values 8 to 15, and 16 to 240 in steps of 16 combined with them: 0 to 255
+                ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS => true,
+                ParameterNumber.OPERATION_BREAKOUT_PROCEDURE => value <= 31, // 3.7: sum of the flags 1, 2, 4, 8, 16
+                ParameterNumber.DISCARD_OUTPUT => value <= 1, // 3.8: 0 or 1
+                ParameterNumber.PADDING_AFTER_CR => true, // 3.9: any number 0 to 255
+                ParameterNumber.LINE_FOLDING => true, // 3.10: 0 to 255
+                ParameterNumber.BINARY_SPEED => value <= 19, // 3.11: speed values 0 to 19 (read only for the DTEs)
+                ParameterNumber.FLOW_CONTROL_X_ON_X_OFF => value <= 1, // 3.12: 0 or 1
+                ParameterNumber.LINE_FEED_INSERTION => value <= 7, // 3.13: sum of the flags 1, 2, 4
+                ParameterNumber.PADDING_AFTER_LINE_FEED => true, // 3.14: any number 0 to 255
+                ParameterNumber.EDITING => value <= 1, // 3.15: 0 or 1
+                ParameterNumber.CHARACTER_DELETE => value <= 130, // 3.16: a character 0 to 127, or 128 to 130 for sequences
+                ParameterNumber.LINE_DELETE => value <= 127, // 3.17
+                ParameterNumber.LINE_DISPLAY => value <= 127, // 3.18
+                // 3.19: 0, 1, 2, 8, or a character 32 to 126
+                ParameterNumber.EDITING_PAD_SERVICE_SIGNALS => value <= 2 || value == 8 || (value >= 32 && value <= 126),
+                ParameterNumber.ECHO_MASK => true, // 3.20: sum of eight flags, 0 to 255
+                ParameterNumber.PARITY_TREATMENT => value <= 7, // 3.21: sum of the flags 1, 2, 4
+                ParameterNumber.PAGE_WAIT => true, // 3.22: 0 to 255
                 _ => false
             };
         }

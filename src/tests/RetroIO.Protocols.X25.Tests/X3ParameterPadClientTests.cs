@@ -46,9 +46,10 @@ namespace RetroIO.Protocols.X25.Tests
             // Verify key default values according to ITU-T X.3
             Assert.That(parameters[1], Is.EqualTo(1), "Parameter 1 (ESCAPE) should default to 1");
             Assert.That(parameters[2], Is.EqualTo(1), "Parameter 2 (ECHO) should default to 1");
-            Assert.That(parameters[3], Is.EqualTo(2), "Parameter 3 (DATA_FORWARDING) should default to 2 (the CR flag of X.3 reference 3)");
+            // The defaults are the simple standard profile of Table 1/X.28
+            Assert.That(parameters[3], Is.EqualTo(126), "Parameter 3 (DATA_FORWARDING) should default to 126 (Table 1/X.28 simple profile)");
             Assert.That(parameters[4], Is.EqualTo(0), "Parameter 4 (IDLE_TIMER) should default to 0 (disabled)");
-            Assert.That(parameters[15], Is.EqualTo(1), "Parameter 15 (EDITING) should default to 1");
+            Assert.That(parameters[15], Is.EqualTo(0), "Parameter 15 (EDITING) should default to 0 (Table 1/X.28 simple profile)");
             
             // Cleanup
             Runtime.DisposePadClient(padId);
@@ -100,7 +101,7 @@ namespace RetroIO.Protocols.X25.Tests
             
             // Verify other parameters remain unchanged
             Assert.That(parameters[1], Is.EqualTo(1), "ESCAPE should remain default");
-            Assert.That(parameters[3], Is.EqualTo(2), "DATA_FORWARDING should remain default");
+            Assert.That(parameters[3], Is.EqualTo(126), "DATA_FORWARDING should remain default (Table 1/X.28 simple profile)");
             
             // Cleanup
             Runtime.DisposePadClient(padId);
@@ -200,8 +201,8 @@ namespace RetroIO.Protocols.X25.Tests
             var x3Protocol = padClient.X3Protocol;
             var x28Protocol = padClient.X28Protocol;
             
-            // Test 1: Default editing behavior (parameter 15 = 1, enabled)
-            Assert.That(x3Protocol.GetParameter(15), Is.EqualTo(1), "Editing should be enabled by default");
+            // Test 1: Default editing behavior (parameter 15 = 0, Table 1/X.28 simple profile: no editing in data transfer state)
+            Assert.That(x3Protocol.GetParameter(15), Is.EqualTo(0), "Editing should be off by default");
             Assert.That(x3Protocol.GetParameter(16), Is.EqualTo(127), "Character delete should default to DEL (127)");
             Assert.That(x3Protocol.GetParameter(17), Is.EqualTo(24), "Line delete should default to CAN (24)");
             
@@ -267,7 +268,7 @@ namespace RetroIO.Protocols.X25.Tests
             allParams = x3Protocol.GetAllParameters();
             Assert.That(allParams[1], Is.EqualTo(1), "ESCAPE should be restored to default");
             Assert.That(allParams[2], Is.EqualTo(1), "ECHO should be restored to default");
-            Assert.That(allParams[3], Is.EqualTo(2), "DATA_FORWARDING should be restored to default");
+            Assert.That(allParams[3], Is.EqualTo(126), "DATA_FORWARDING should be restored to default (Table 1/X.28 simple profile)");
             
             // Cleanup
             Runtime.DisposePadClient(padId);
@@ -285,14 +286,14 @@ namespace RetroIO.Protocols.X25.Tests
             var boundaryTests = new Dictionary<byte, (byte min, byte max)>
             {
                 [1] = (0, 1),     // ESCAPE: 0-1
-                [2] = (0, 1),     // ECHO: 0-1  
+                [2] = (0, 2),     // ECHO: 0, 1, 2 (X.3 3.2; 32-126 are also allowed)
                 [3] = (0, 127),   // DATA_FORWARDING: sum of the flags of X.3 reference 3, 0-127
                 [4] = (0, 255),   // IDLE_TIMER: 0-255
-                [9] = (0, 7),     // PADDING_AFTER_CR: 0-7
+                [9] = (0, 255),   // PADDING_AFTER_CR: 0-255 (X.3 3.9)
                 [10] = (0, 255),  // LINE_FOLDING: 0-255
                 [12] = (0, 1),     // FLOW_CONTROL_X_ON_X_OFF: 0-1 (X.3 reference 12)
-                [16] = (0, 127),  // CHARACTER_DELETE: 0-127
-                [21] = (0, 3),    // PARITY_TREATMENT: 0-3
+                [16] = (0, 130),  // CHARACTER_DELETE: 0-127, and 128-130 for the sequences (X.3 3.16)
+                [21] = (0, 7),    // PARITY_TREATMENT: sum of the flags 1, 2, 4 (X.3 3.21)
                 [22] = (0, 255)   // PAGE_WAIT: 0-255
             };
             

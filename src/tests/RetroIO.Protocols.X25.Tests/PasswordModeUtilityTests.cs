@@ -55,7 +55,12 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(tadProtocol.IsInPasswordMode(sessionId), Is.True, "Should be in password mode");
             var parameters = tadProtocol.GetSessionX3Parameters(sessionId)!;
             Assert.That(parameters[2], Is.EqualTo(0), "ECHO should be disabled");
-            Assert.That(parameters[3], Is.EqualTo(1), "DATA_FORWARDING should be character-by-character");
+            // X.3 3.3: value 1 is alphanumerics only, so a password with a symbol would not forward.
+            // 127 is every flag (alphanumerics, CR, and all of columns 0 and 1 and DEL). Space and the
+            // symbols in columns 2 to 7 are in no flag, so the idle timer (X.3 3.4, 1 = one twentieth of a
+            // second) forwards them.
+            Assert.That(parameters[3], Is.EqualTo(127), "DATA_FORWARDING should be every flag (X.3 3.3)");
+            Assert.That(parameters[4], Is.EqualTo(1), "IDLE_TIMER should be one twentieth of a second (X.3 3.4)");
             Assert.That(parameters[15], Is.EqualTo(0), "EDITING should be disabled");
             
             // Act - Exit password mode
@@ -64,9 +69,11 @@ namespace RetroIO.Protocols.X25.Tests
             // Assert - Verify parameters restored
             Assert.That(tadProtocol.IsInPasswordMode(sessionId), Is.False, "Should not be in password mode after exit");
             parameters = tadProtocol.GetSessionX3Parameters(sessionId)!;
+            // The session starts on the simple standard profile (Table 1/X.28): echo 1, forwarding 126, idle timer 0, editing 0
             Assert.That(parameters[2], Is.EqualTo(1), "ECHO should be restored");
-            Assert.That(parameters[3], Is.EqualTo(2), "DATA_FORWARDING should be restored to original value");
-            Assert.That(parameters[15], Is.EqualTo(1), "EDITING should be restored");
+            Assert.That(parameters[3], Is.EqualTo(126), "DATA_FORWARDING should be restored to original value");
+            Assert.That(parameters[4], Is.EqualTo(0), "IDLE_TIMER should be restored to original value");
+            Assert.That(parameters[15], Is.EqualTo(0), "EDITING should be restored");
             
             // Cleanup
             padClient.Disconnect();
@@ -156,8 +163,9 @@ namespace RetroIO.Protocols.X25.Tests
             // Set custom parameters before entering password mode
             Assert.That(tadProtocol.SetSessionX3Parameter(sessionId, 2, 1), Is.True, "Should set custom ECHO");
             Assert.That(tadProtocol.SetSessionX3Parameter(sessionId, 3, 10), Is.True, "Should set custom DATA_FORWARDING");
+            Assert.That(tadProtocol.SetSessionX3Parameter(sessionId, 4, 7), Is.True, "Should set custom IDLE_TIMER");
             Assert.That(tadProtocol.SetSessionX3Parameter(sessionId, 15, 1), Is.True, "Should set custom EDITING");
-            
+
             Thread.Sleep(50); // Allow parameters to be applied
             
             // Enter password mode
@@ -166,7 +174,8 @@ namespace RetroIO.Protocols.X25.Tests
             // Verify password mode parameters
             var passwordParams = tadProtocol.GetSessionX3Parameters(sessionId)!;
             Assert.That(passwordParams[2], Is.EqualTo(0), "ECHO should be disabled in password mode");
-            Assert.That(passwordParams[3], Is.EqualTo(1), "DATA_FORWARDING should be character mode");
+            Assert.That(passwordParams[3], Is.EqualTo(127), "DATA_FORWARDING should be every flag (X.3 3.3)");
+            Assert.That(passwordParams[4], Is.EqualTo(1), "IDLE_TIMER should be one twentieth of a second (X.3 3.4)");
             Assert.That(passwordParams[15], Is.EqualTo(0), "EDITING should be disabled in password mode");
             
             // Exit password mode
@@ -176,6 +185,7 @@ namespace RetroIO.Protocols.X25.Tests
             var restoredParams = tadProtocol.GetSessionX3Parameters(sessionId)!;
             Assert.That(restoredParams[2], Is.EqualTo(1), "ECHO should be restored to custom value");
             Assert.That(restoredParams[3], Is.EqualTo(10), "DATA_FORWARDING should be restored to custom value");
+            Assert.That(restoredParams[4], Is.EqualTo(7), "IDLE_TIMER should be restored to custom value");
             Assert.That(restoredParams[15], Is.EqualTo(1), "EDITING should be restored to custom value");
             
             // Cleanup

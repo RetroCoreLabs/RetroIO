@@ -127,13 +127,46 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
-        /// The default forwarding value is 2 (CR) in both classes. X.3 value 2 is CR; 13 is 1+4+8, a different set.
+        /// The default of every parameter is the simple standard profile of Table 1/X.28 (parameter 11 is
+        /// read only and the table gives no number, so it stays 0). Replaces the old test that pinned
+        /// parameter 3 at 2: the simple profile sets parameter 3 to 126.
         /// </summary>
         [Test]
-        public void DataForwarding_DefaultIsCarriageReturnFlag_InBothClasses()
+        public void Defaults_AreTheSimpleStandardProfile_InBothClasses()
         {
-            Assert.That(new X3().GetParameter(3), Is.EqualTo(2));
-            Assert.That(new X3Parameters().GetParameter(3), Is.EqualTo(2));
+            AssertProfile(new X3().GetAllParameters(), SimpleProfile, "X3 default");
+            AssertProfile(new X3Parameters().GetAllParameters(), SimpleProfile, "X3Parameters default");
+        }
+
+        /// <summary>
+        /// The DefaultValue constants of both classes are the simple standard profile too.
+        /// </summary>
+        [Test]
+        public void DefaultValueConstants_AreTheSimpleStandardProfile()
+        {
+            var table = new Dictionary<byte, byte>();
+            X3.FillDefaultValues(table);
+            AssertProfile(table, SimpleProfile, "FillDefaultValues");
+            Assert.That(X3.DefaultValue.DATA_FORWARDING, Is.EqualTo(126));
+            Assert.That(X3Parameters.DefaultValue.DATA_FORWARDING, Is.EqualTo(126));
+            Assert.That(X3.DefaultValue.OPERATION_BREAKOUT_PROCEDURE, Is.EqualTo(2));
+            Assert.That(X3.DefaultValue.DISCARD_OUTPUT, Is.EqualTo(0));
+            Assert.That(X3.DefaultValue.ANCILLARY_DEVICE_CONTROL, Is.EqualTo(1));
+            Assert.That(X3.DefaultValue.FLOW_CONTROL_X_ON_X_OFF, Is.EqualTo(1));
+            Assert.That(X3.DefaultValue.EDITING, Is.EqualTo(0));
+            Assert.That(X3.DefaultValue.EDITING_PAD_SERVICE_SIGNALS, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// ResetParameters goes back to the default, which is the simple profile.
+        /// </summary>
+        [Test]
+        public void ResetParameters_RestoresTheSimpleProfileValue()
+        {
+            var x3 = new X3();
+            x3.SetParameter(3, 1);
+            x3.ResetParameters(new byte[] { 3 });
+            Assert.That(x3.GetParameter(3), Is.EqualTo(126));
         }
 
         /// <summary>

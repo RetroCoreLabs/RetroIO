@@ -25,6 +25,12 @@ namespace RetroIO.Protocols.X25.Protocols
         private readonly ILogger _logger;
         private readonly Dictionary<ushort, LocalTadSession> _sessions = new Dictionary<ushort, LocalTadSession>();
         private readonly object _sessionsLock = new object();
+
+        /// <summary>
+        /// Idle timer value of password mode: 1, one twentieth of a second (X.3 section 3.4).
+        /// It forwards the characters that no flag of parameter 3 covers.
+        /// </summary>
+        private const byte PasswordIdleTimer = 1;
         private readonly string _localMachineId;
 
         /// <summary>
@@ -79,6 +85,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 // Initialize original parameter values from current X.3 defaults
                 session.OriginalEcho = session.X3Parameters.GetParameter(2);
                 session.OriginalForwarding = session.X3Parameters.GetParameter(3);
+                session.OriginalIdleTimer = session.X3Parameters.GetParameter(4);
                 session.OriginalEditing = session.X3Parameters.GetParameter(15);
 
                 lock (_sessionsLock)
@@ -763,12 +770,21 @@ namespace RetroIO.Protocols.X25.Protocols
                 // Store original parameters for restoration
                 session.OriginalEcho = session.X3Parameters.GetParameter(2);
                 session.OriginalForwarding = session.X3Parameters.GetParameter(3);
+                session.OriginalIdleTimer = session.X3Parameters.GetParameter(4);
                 session.OriginalEditing = session.X3Parameters.GetParameter(15);
 
-                // Apply password mode parameters
+                // Apply password mode parameters. X.3 has no value that means "every character", so two
+                // parameters together give character-by-character forwarding:
+                //  - Parameter 3 = 127 is every flag of X.3 3.3: alphanumerics (1), CR (2) and all of
+                //    columns 0 and 1 and DEL (4 to 64). The old value 1 was alphanumerics only, so a
+                //    password with a symbol was not forwarded until CR.
+                //  - Space and the symbols of columns 2 to 7 are in no flag of parameter 3. Parameter 4 = 1
+                //    (X.3 3.4: one twentieth of a second) forwards them on the idle timer.
+                //    The timer works because editing (parameter 15) is 0; X.3 3.15 says editing suspends it.
                 bool success = true;
                 success &= SetSessionX3Parameter(sessionId, 2, 0);  // Disable echo
-                success &= SetSessionX3Parameter(sessionId, 3, 1);  // Character-by-character forwarding
+                success &= SetSessionX3Parameter(sessionId, 3, X3.DataForwardingFlag.ALL_FLAGS);
+                success &= SetSessionX3Parameter(sessionId, 4, PasswordIdleTimer);
                 success &= SetSessionX3Parameter(sessionId, 15, 0); // Disable editing
 
                 if (success)
@@ -798,6 +814,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 bool success = true;
                 success &= SetSessionX3Parameter(sessionId, 2, session.OriginalEcho);
                 success &= SetSessionX3Parameter(sessionId, 3, session.OriginalForwarding);
+                success &= SetSessionX3Parameter(sessionId, 4, session.OriginalIdleTimer);
                 success &= SetSessionX3Parameter(sessionId, 15, session.OriginalEditing);
 
                 if (success)
@@ -821,8 +838,9 @@ namespace RetroIO.Protocols.X25.Protocols
             var parameters = GetSessionX3Parameters(sessionId);
             if (parameters == null) return false;
 
-            // Password mode: echo disabled, character forwarding enabled, editing disabled
-            return parameters[2] == 0 && parameters[3] == 1 && parameters[15] == 0;
+            // Password mode: echo disabled, every forwarding flag, idle timer of one twentieth of a second, editing disabled
+            return parameters[2] == 0 && parameters[3] == X3.DataForwardingFlag.ALL_FLAGS
+                && parameters[4] == PasswordIdleTimer && parameters[15] == 0;
         }
 
         /// <summary>
@@ -915,7 +933,8 @@ namespace RetroIO.Protocols.X25.Protocols
         // Original parameter values for password mode restoration
         public byte OriginalEcho { get; set; } = 1;      // Default echo enabled
         public byte OriginalForwarding { get; set; } = X3Parameters.DefaultValue.DATA_FORWARDING; // Default: forward on CR (flag 2)
-        public byte OriginalEditing { get; set; } = 1;   // Default editing enabled
+        public byte OriginalIdleTimer { get; set; } = X3Parameters.DefaultValue.IDLE_TIMER; // Default idle timer
+        public byte OriginalEditing { get; set; } = X3Parameters.DefaultValue.EDITING; // Default editing (simple profile: off)
 
         public void Dispose()
         {

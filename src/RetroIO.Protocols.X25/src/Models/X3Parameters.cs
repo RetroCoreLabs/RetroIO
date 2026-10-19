@@ -132,7 +132,7 @@ namespace RetroIO.Protocols.X25.Models
             /// </summary>
             public const byte ECHO = X3.DefaultValue.ECHO;
             /// <summary>
-            /// Default value of the data forwarding parameter: 2 (carriage return, CR). The value comes from X3.DefaultValue.
+            /// Default value of the data forwarding parameter: 126 (columns 0 and 1 and DEL, Table 1/X.28 simple profile). The value comes from X3.DefaultValue.
             /// </summary>
             public const byte DATA_FORWARDING = X3.DefaultValue.DATA_FORWARDING;
             /// <summary>
@@ -140,7 +140,7 @@ namespace RetroIO.Protocols.X25.Models
             /// </summary>
             public const byte IDLE_TIMER = X3.DefaultValue.IDLE_TIMER;
             /// <summary>
-            /// Default value of the ancillary device control parameter: 0 (Disabled).
+            /// Default value of the ancillary device control parameter: 1 (use of X-ON and X-OFF).
             /// </summary>
             public const byte ANCILLARY_DEVICE_CONTROL = X3.DefaultValue.ANCILLARY_DEVICE_CONTROL;
             /// <summary>
@@ -148,11 +148,11 @@ namespace RetroIO.Protocols.X25.Models
             /// </summary>
             public const byte CONTROL_PAD_SERVICE_SIGNALS = X3.DefaultValue.CONTROL_PAD_SERVICE_SIGNALS;
             /// <summary>
-            /// Default value of the operation breakout procedure parameter: 21 (BREAK forwarded).
+            /// Default value of the operation breakout procedure parameter: 2 (reset).
             /// </summary>
             public const byte OPERATION_BREAKOUT_PROCEDURE = X3.DefaultValue.OPERATION_BREAKOUT_PROCEDURE;
             /// <summary>
-            /// Default value of the discard output parameter: 1 (Enabled on receipt of normal data).
+            /// Default value of the discard output parameter: 0 (normal data delivery).
             /// </summary>
             public const byte DISCARD_OUTPUT = X3.DefaultValue.DISCARD_OUTPUT;
             /// <summary>
@@ -168,7 +168,7 @@ namespace RetroIO.Protocols.X25.Models
             /// </summary>
             public const byte BINARY_SPEED = X3.DefaultValue.BINARY_SPEED;
             /// <summary>
-            /// Default value of the flow control parameter: 0 (no use of X-ON and X-OFF).
+            /// Default value of the flow control parameter: 1 (use of X-ON and X-OFF).
             /// </summary>
             public const byte FLOW_CONTROL_X_ON_X_OFF = X3.DefaultValue.FLOW_CONTROL_X_ON_X_OFF;
             /// <summary>
@@ -180,7 +180,7 @@ namespace RetroIO.Protocols.X25.Models
             /// </summary>
             public const byte PADDING_AFTER_LINE_FEED = X3.DefaultValue.PADDING_AFTER_LINE_FEED;
             /// <summary>
-            /// Default value of the editing parameter: 1 (Enabled).
+            /// Default value of the editing parameter: 0 (no editing).
             /// </summary>
             public const byte EDITING = X3.DefaultValue.EDITING;
             /// <summary>
@@ -196,7 +196,7 @@ namespace RetroIO.Protocols.X25.Models
             /// </summary>
             public const byte LINE_DISPLAY = X3.DefaultValue.LINE_DISPLAY;
             /// <summary>
-            /// Default value of the editing pad service signals parameter: 0 (Disabled).
+            /// Default value of the editing pad service signals parameter: 1 (printing terminals).
             /// </summary>
             public const byte EDITING_PAD_SERVICE_SIGNALS = X3.DefaultValue.EDITING_PAD_SERVICE_SIGNALS;
             /// <summary>

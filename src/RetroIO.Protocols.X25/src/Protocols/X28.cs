@@ -144,12 +144,13 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Raised when the PAD mode changes.
         /// </summary>
         public event EventHandler<X28ModeChangedEventArgs>? ModeChanged;
-#pragma warning disable CS0067 // Event for future character-level processing hooks
         /// <summary>
-        /// Raised for character-level processing; nothing in this class raises it.
+        /// Raised once for each character that ProcessCharacter processed successfully, after the work
+        /// of that character (echo, data forwarding, command handling) is done.
+        /// Not raised for a character that was not processed.
+        /// The Response of the event arguments is always null: single characters have no response text of their own.
         /// </summary>
         public event EventHandler<X28CharacterEventArgs>? CharacterProcessed;
-#pragma warning restore CS0067
         
         // NEW PROPER EVENTS - Replace string returns
         /// <summary>
@@ -232,13 +233,23 @@ namespace RetroIO.Protocols.X25.Protocols
             
             try
             {
-                return _currentMode switch
+                bool processed = _currentMode switch
                 {
                     PadMode.Command => ProcessCommandModeCharacter(character),
                     PadMode.DataTransfer => ProcessDataTransferCharacter(character),
                     PadMode.Escape => ProcessEscapeModeCharacter(character),
                     _ => false
                 };
+
+                // Tell the listeners after the work of the character is done (echo, forwarding, command).
+                // A character the PAD did not process raises nothing. The PAD has no response text of its
+                // own for a single character (echo and command replies have their own events), so Response is null.
+                if (processed)
+                {
+                    CharacterProcessed?.Invoke(this, new X28CharacterEventArgs(character, null));
+                }
+
+                return processed;
             }
             catch (Exception ex)
             {
