@@ -3,6 +3,8 @@ on:
   push:
     branches: [ main ]
   pull_request:
+  # The release workflow (publish.yml) calls this one, so a package is only pushed after the same build and tests are green.
+  workflow_call:
 jobs:
   build:
     runs-on: windows-latest

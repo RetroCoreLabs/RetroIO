@@ -1,19 +1,35 @@
 name: publish
+# Runs only when a tag that starts with v is pushed (for example v0.1.0 or v0.2.0-beta.1). A normal push never publishes.
 on:
   push:
     tags: [ 'v*' ]
 jobs:
+  # Same build and tests as every pull request. The publish job below waits for this to pass.
+  verify:
+    uses: ./.github/workflows/build.yml
   publish:
+    needs: verify
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: src/global.json
+      # v1.2.3 gives version 1.2.3; v1.2.3-beta.1 gives 1.2.3-beta.1. Version (not VersionPrefix) is set so a suffix is accepted.
       - name: version from tag
         shell: pwsh
         run: echo "VERSION=$($env:GITHUB_REF_NAME.TrimStart('v'))" >> $env:GITHUB_ENV
-      - run: dotnet pack -c Release -nodeReuse:false -o packages -p:VersionPrefix=${{ env.VERSION }}
+      - run: dotnet pack -c Release -nodeReuse:false -o packages -p:Version=${{ env.VERSION }}
         working-directory: src
-      - run: dotnet nuget push packages\*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      - name: check the package count
+        shell: pwsh
+        run: |
+          $n = (Get-ChildItem packages -Filter *.nupkg).Count
+          $s = (Get-ChildItem packages -Filter *.snupkg).Count
+          Write-Host "nupkg=$n snupkg=$s"
+          if ($n -eq 0 -or $n -ne $s) { throw "expected one .snupkg per .nupkg and at least one package" }
+        working-directory: src
+      - run: dotnet nuget push "packages\*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+        working-directory: src
+      - run: dotnet nuget push "packages\*.snupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
         working-directory: src
