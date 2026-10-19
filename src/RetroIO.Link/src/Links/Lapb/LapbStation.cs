@@ -84,8 +84,10 @@ namespace RetroIO.Link.Lapb
         /// T1, the retransmission timer.
         /// </param>
         /// <param name="t2TimeoutMs">
-        /// Unused: the shared engine acknowledges as it receives rather than running a T2 delay.
-        /// Kept so the four links did not have to change their constructor calls.
+        /// Not passed to the engine yet: the station still acknowledges as it receives (engine T2 = 0),
+        /// because the links' default of 1500 ms would delay every acknowledgement on live links.
+        /// The engine itself supports T2 (see the T2 option of LapbOptions); the station reports its
+        /// T2 expiry count, which stays zero while T2 is off.
         /// </param>
         /// <param name="t3TimeoutMs">
         /// T3, the idle keepalive; zero disables it.
@@ -307,6 +309,7 @@ namespace RetroIO.Link.Lapb
                 _statistics.RejectionsSent = _lapb.RejectionsSent;
                 _statistics.RejectionsReceived = _lapb.RejectionsReceived;
                 _statistics.T1Timeouts = _lapb.T1Timeouts;
+                _statistics.T2Timeouts = _lapb.T2Timeouts;
                 return _statistics;
             }
         }

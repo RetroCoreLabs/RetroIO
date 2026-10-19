@@ -213,6 +213,14 @@ namespace RetroIO.Protocols.Xmsg.Live
         private long _rejectionsSent;
         private long _rejectionsReceived;
         private long _t1Timeouts;
+        private long _t2Timeouts;
+
+        // T2 (X.25 2.4.9.2): true while the acknowledgement of a received I frame is being held back.
+        // The held acknowledgement is simply the current V(R), so one RR (or the N(R) of an outgoing
+        // I frame) covers every frame received while it was held. The deadline is set when the FIRST
+        // frame is held and is not pushed out by later ones: T2 bounds how long any frame waits.
+        private bool _ackPending;
+        private long _t2Deadline;
 
         // The physical neighbour id learned from the peer's SABM/UA/RR info (spec 3.3), read-only and
         // NEVER a routing key. -1 until learned.
@@ -426,8 +434,18 @@ namespace RetroIO.Protocols.Xmsg.Live
         }
 
         /// <summary>
-        /// Gets the number of times T1 ran out. This layer has no T2 timer (it acknowledges as it
-        /// receives), so there is no T2 count.
+        /// Gets the number of times T2 ran out: the acknowledgement of a received I frame had been
+        /// held for the whole of T2 (X.25 2.4.9.2) with no outgoing I frame to carry it, so this
+        /// layer had to send the RR itself. Stays zero when <see cref="LapbOptions.T2"/> is zero,
+        /// and an acknowledgement that went out inside an I frame is not counted.
+        /// </summary>
+        public long T2Timeouts
+        {
+            get { return _t2Timeouts; }
+        }
+
+        /// <summary>
+        /// Gets the number of times T1 ran out.
         /// </summary>
         public long T1Timeouts
         {
@@ -591,6 +609,15 @@ namespace RetroIO.Protocols.Xmsg.Live
         public bool Tick(long currentTicks)
         {
             bool acted = false;
+
+            // T2 (X.25 2.4.9.2): the acknowledgement has been held for the whole of T2 and no I frame
+            // went out to carry it, so send the RR now. EmitSupervisory clears the pending flag.
+            if (_ackPending && currentTicks >= _t2Deadline && _state == LapbLayerState.Connected)
+            {
+                _t2Timeouts++;
+                EmitSupervisory(RrNibble, pollFinal: false, isCommand: false);
+                acted = true;
+            }
 
             if (_t1Running && currentTicks >= _t1Deadline)
             {
@@ -853,7 +880,22 @@ namespace RetroIO.Protocols.Xmsg.Live
                 _receiveVariable = (_receiveVariable + 1) & 0x07;
                 _rejectCondition = false;
                 OnInformation?.Invoke(frame.Info);
-                EmitSupervisory(RrNibble, pollFinal: frame.PollFinal, isCommand: false);
+
+                if (_options.T2 > 0 && !frame.PollFinal)
+                {
+                    // X.25 2.4.6.2 a) ii): with P=0 the acknowledgement may wait for the next outgoing
+                    // I frame (its N(R) acknowledges) or go in an RR. Hold it for at most T2 (2.4.9.2).
+                    // A frame with P=1 is never held: 2.4.6.2 a) i) requires the F=1 response at once.
+                    if (!_ackPending)
+                    {
+                        _ackPending = true;
+                        _t2Deadline = currentTicks + _options.T2;
+                    }
+                }
+                else
+                {
+                    EmitSupervisory(RrNibble, pollFinal: frame.PollFinal, isCommand: false);
+                }
             }
             else if (IsDuplicate(ns))
             {
@@ -1278,6 +1320,10 @@ namespace RetroIO.Protocols.Xmsg.Live
         {
             // I-frame control (spec 2.2.1): N(R) in bits 5..7, P=0, N(S) in bits 1..3, bit 0 = 0.
             byte control = (byte)((_receiveVariable << 5) | (sendSequence << 1));
+
+            // N(R) = V(R) in this frame acknowledges everything received so far, so a held
+            // acknowledgement is delivered and T2 is cancelled without counting (X.25 2.4.6.2 a) ii)).
+            _ackPending = false;
             byte[] body = new byte[2 + payload.Length];
             // ND odd-info-length address marker (capture-VERIFIED): 0x89 for an odd-length info field,
             // 0x09 for even. 100 silently discards an I-frame whose address parity disagrees with its
@@ -1305,6 +1351,9 @@ namespace RetroIO.Protocols.Xmsg.Live
         {
             // S-frame control (spec 2.2.2): N(R) in bits 5..7, P/F, then the subtype low nibble.
             byte control = (byte)((_receiveVariable << 5) | (pollFinal ? PollFinalBit : 0) | subtypeNibble);
+
+            // Any RR, RNR or REJ also carries the current V(R), so it settles a held acknowledgement.
+            _ackPending = false;
 
             // ITU 2.3.4: a supervisory frame has no information field. The ND dialect puts the
             // sender's node number there, which is how a neighbour is identified on that network.
@@ -1386,6 +1435,7 @@ namespace RetroIO.Protocols.Xmsg.Live
             _pending.Clear();
             _peerBusy = false;
             _rejectCondition = false;
+            _ackPending = false;   // V(R) is zero again: nothing received is waiting to be acknowledged
         }
 
         /// <summary>
@@ -1446,6 +1496,7 @@ namespace RetroIO.Protocols.Xmsg.Live
         {
             _t1Running = false;
             _t3Running = false;
+            _ackPending = false;   // T2 stops with the link
         }
     }
 }
