@@ -62,6 +62,14 @@
   color: #0b5f87;
 }
 
+/* Dark scheme: Mermaid draws the text on an arrow (for example "not supported", "ACK") as #ccc on a grey
+   box, 4.4:1 and just under the 4.5:1 target (found by tools/check-contrast.js on the Econet README).
+   Mermaid writes its own colours into each SVG with an id selector, so only !important wins here. */
+[data-bs-theme="dark"] pre.mermaid .edgeLabel,
+[data-bs-theme="dark"] pre.mermaid .edgeLabel p {
+  color: #f1f3f5 !important;
+}
+
 /* The GitHub entry (the last menu entry) goes to the far right of the header, after the search
    box and the theme switch, with the GitHub logo in front of the text. The menu list is
    flattened so its last entry can be ordered after the other header items. */
