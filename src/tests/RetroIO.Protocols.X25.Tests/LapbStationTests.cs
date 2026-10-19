@@ -237,6 +237,81 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
+        public void Statistics_StartAtZero_AndCountNothingOnAQuietLink()
+        {
+            // The five error counters count real events only: a link that connected and moved one
+            // frame each way has had no REJ, no timeout and no retransmission.
+            using LapbStation station = NewStation();
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+            station.SendData(new byte[] { 1 });
+            station.ReceiveFrame(new byte[] { AddressA, IControl(ns: 0, nr: 1), 0xAA }, 3);
+
+            LapbStatistics stats = station.GetStatistics();
+            Assert.That(stats.Retransmissions, Is.EqualTo(0));
+            Assert.That(stats.RejectionsSent, Is.EqualTo(0));
+            Assert.That(stats.RejectionsReceived, Is.EqualTo(0));
+            Assert.That(stats.T1Timeouts, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Statistics_ARejFromThePeer_CountsOneRejectionAndEachResentIFrame()
+        {
+            using LapbStation station = NewStation();
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+            station.SendData(new byte[] { 1 });
+            station.SendData(new byte[] { 2 });
+            station.SendData(new byte[] { 3 });
+            lock (_lock) { _sent.Clear(); }
+
+            // REJ with N(R)=1: the peer got frame 0 and wants 1 and 2 again (go-back-N).
+            station.ReceiveFrame(new byte[] { AddressA, (byte)(0x09 | (1 << 5)) }, 2);
+
+            LapbStatistics stats = station.GetStatistics();
+            Assert.That(CountControl(IsIFrame), Is.EqualTo(2), "frames 1 and 2 went out again");
+            Assert.That(stats.RejectionsReceived, Is.EqualTo(1));
+            Assert.That(stats.Retransmissions, Is.EqualTo(2));
+            Assert.That(stats.RejectionsSent, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Statistics_AGapInTheReceivedFrames_CountsOneRejectionSentNotOnePerFrame()
+        {
+            using LapbStation station = NewStation();
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+
+            // N(S)=1 arrives while V(R)=0: frame 0 was lost. One REJ goes out (X.25 2.4.6.1); the
+            // second out-of-sequence frame must not draw another one.
+            station.ReceiveFrame(new byte[] { AddressA, IControl(ns: 1, nr: 0), 0xAA }, 3);
+            station.ReceiveFrame(new byte[] { AddressA, IControl(ns: 2, nr: 0), 0xBB }, 3);
+
+            LapbStatistics stats = station.GetStatistics();
+            Assert.That(stats.RejectionsSent, Is.EqualTo(1));
+            Assert.That(stats.RejectionsReceived, Is.EqualTo(0));
+            Assert.That(stats.Retransmissions, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Statistics_AnUnansweredIFrame_CountsT1Timeouts()
+        {
+            using LapbStation station = NewStation(t1Ms: 100);
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+            station.SendData(new byte[] { 1 });
+
+            // Poll with a deadline, not a fixed sleep: T1 fires on the station's own timer.
+            DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+            while (station.GetStatistics().T1Timeouts < 2 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(20);
+            }
+
+            Assert.That(station.GetStatistics().T1Timeouts, Is.GreaterThanOrEqualTo(2));
+        }
+
+        [Test]
         public void AnUndecodableFrame_IsDiscardedWithoutThrowing()
         {
             using LapbStation station = NewStation();

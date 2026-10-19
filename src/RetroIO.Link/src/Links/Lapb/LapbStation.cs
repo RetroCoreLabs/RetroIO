@@ -303,6 +303,10 @@ namespace RetroIO.Link.Lapb
                 _statistics.VR = (byte)_lapb.ReceiveVariable;
                 _statistics.VA = (byte)_lapb.AcknowledgeVariable;
                 _statistics.UnackedFrameCount = _lapb.Outstanding;
+                _statistics.Retransmissions = _lapb.Retransmissions;
+                _statistics.RejectionsSent = _lapb.RejectionsSent;
+                _statistics.RejectionsReceived = _lapb.RejectionsReceived;
+                _statistics.T1Timeouts = _lapb.T1Timeouts;
                 return _statistics;
             }
         }
