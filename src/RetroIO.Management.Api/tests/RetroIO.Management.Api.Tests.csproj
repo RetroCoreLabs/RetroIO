@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\src\RetroIO.Management.Api.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Management.Client\src\RetroIO.Management.Client.csproj" />
   </ItemGroup>
 
 </Project>
