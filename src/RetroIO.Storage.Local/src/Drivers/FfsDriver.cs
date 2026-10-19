@@ -189,15 +189,24 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice = new GenericBlockDevice(descriptor);
             _blockDevice.Mount(imageStream, readOnly);
 
-            // Mount FFS filesystem with partition support
-            _filesystem = new FfsFileSystem
+            // Mount FFS filesystem with partition support. The field is set only after Initialize
+            // succeeded, so a failed mount does not leave a half-built file system behind.
+            _filesystem = OpenFileSystem(_blockDevice, _partitionLetter, _useDiskLabel);
+        }
+
+        // Builds an FFS file system on the device for the given partition. Throws what Initialize throws.
+        private FfsFileSystem OpenFileSystem(GenericBlockDevice device, char partitionLetter, bool useDiskLabel)
+        {
+            FfsFileSystem filesystem = new FfsFileSystem
             {
-                PartitionLetter = _partitionLetter,
-                UseDiskLabel = _useDiskLabel,
+                PartitionLetter = partitionLetter,
+                UseDiskLabel = useDiskLabel,
                 ImagePath = _imagePath,
                 FilesystemOffsetBytes = _filesystemOffsetBytes
             };
-            _filesystem.Initialize(_blockDevice);
+
+            filesystem.Initialize(device);
+            return filesystem;
         }
 
         // ===================================================================
@@ -545,16 +554,17 @@ namespace RetroIO.Storage.Local.Drivers
         /// Selects the BSD partition to use at the next mount and turns on disk label mode.
         /// </summary>
         /// <remarks>
-        /// When an image is already mounted, the partition must exist in its disk label. Before mount there
-        /// is no disk to check, so any letter from <c>a</c> to <c>h</c> is accepted. The new letter is only
-        /// stored: a file system that is already mounted keeps using its partition until the next mount.
+        /// When an image is already mounted, the partition must exist in its disk label and the file system is
+        /// opened again on the new partition. If that fails, the old partition and file system stay in place.
+        /// Before mount there is no disk to check, so any letter from <c>a</c> to <c>h</c> is accepted and
+        /// only stored.
         /// </remarks>
         /// <param name="partitionId">
         /// A single partition letter, <c>a</c> to <c>h</c>.
         /// </param>
         /// <returns>
         /// <c>true</c> when the partition was selected; <c>false</c> when <paramref name="partitionId"/> is not a
-        /// single letter from <c>a</c> to <c>h</c>, or the mounted image has no such partition.
+        /// single letter from <c>a</c> to <c>h</c>, or the mounted image has no such partition or cannot mount it.
         /// </returns>
         public bool SelectPartition(string partitionId)
         {
@@ -576,6 +586,21 @@ namespace RetroIO.Storage.Local.Drivers
                 BsdPartition? existing = partMgr.GetPartition(letter);
                 if (existing == null || existing.Value.IsUnused)
                 {
+                    return false;
+                }
+            }
+
+            // A file system is mounted: open it again on the new partition before the letter is stored.
+            // The old file system is replaced only when the new one opened.
+            if (_blockDevice != null && _filesystem != null)
+            {
+                try
+                {
+                    _filesystem = OpenFileSystem(_blockDevice, letter, true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // The partition is in the label but is not a usable FFS file system.
                     return false;
                 }
             }

@@ -146,14 +146,22 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice = new GenericBlockDevice(descriptor);
             _blockDevice.Mount(imageStream, readOnly);
 
-            // Mount BSD filesystem with selected partition
-            _filesystem = new V7FileSystem
+            // Mount BSD filesystem with selected partition. The field is set only after Initialize
+            // succeeded, so a failed mount does not leave a half-built file system behind.
+            _filesystem = OpenFileSystem(_blockDevice, _partitionLetter, _useDiskLabel);
+        }
+
+        // Builds a V7 file system on the device for the given partition. Throws what Initialize throws.
+        private static V7FileSystem OpenFileSystem(GenericBlockDevice device, char partitionLetter, bool useDiskLabel)
+        {
+            V7FileSystem filesystem = new V7FileSystem
             {
-                PartitionLetter = _partitionLetter,
-                UseDiskLabel = _useDiskLabel
+                PartitionLetter = partitionLetter,
+                UseDiskLabel = useDiskLabel
             };
 
-            _filesystem.Initialize(_blockDevice);
+            filesystem.Initialize(device);
+            return filesystem;
         }
 
         // ===================================================================
@@ -400,15 +408,16 @@ namespace RetroIO.Storage.Local.Drivers
         /// Selects the BSD partition to use and turns on disk label mode.
         /// </summary>
         /// <remarks>
-        /// When an image is already mounted, the partition must exist in its disk label. The new letter is
-        /// only stored: a file system that is already mounted keeps using its partition until the next mount.
+        /// When an image is already mounted, the partition must exist in its disk label and the file system is
+        /// opened again on the new partition. If that fails, the old partition and file system stay in place.
+        /// Before mount the letter is only stored and used by the next mount.
         /// </remarks>
         /// <param name="partitionId">
         /// A single partition letter, <c>a</c> to <c>h</c>.
         /// </param>
         /// <returns>
         /// <c>true</c> when the partition was selected; <c>false</c> when <paramref name="partitionId"/> is not a
-        /// single letter from <c>a</c> to <c>h</c>, or the mounted image has no such partition.
+        /// single letter from <c>a</c> to <c>h</c>, or the mounted image has no such partition or cannot mount it.
         /// </returns>
         public bool SelectPartition(string partitionId)
         {
@@ -430,6 +439,21 @@ namespace RetroIO.Storage.Local.Drivers
                 var partition = partMgr.GetPartition(letter);
                 if (partition == null || partition.Value.IsUnused)
                 {
+                    return false;
+                }
+            }
+
+            // A file system is mounted: open it again on the new partition before the letter is stored.
+            // The old file system is replaced only when the new one opened.
+            if (_blockDevice != null && _filesystem != null)
+            {
+                try
+                {
+                    _filesystem = OpenFileSystem(_blockDevice, letter, true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // The partition is in the label but is not a usable V7 file system.
                     return false;
                 }
             }

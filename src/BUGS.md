@@ -22,7 +22,6 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `RetroIO.Protocols.Econet` `FileServerReply.DiscFreeSpaceClassic1983` | Existing comment has a `param` and no `returns` |
 | `RetroIO.Protocols.Xmsg.Api` `XmsgKernel` | `WirePort` has no incarnation bits |
 | `RetroIO.Link` `ILapbCapable` counters | `Retransmissions`, `RejectionsSent`, `RejectionsReceived`, `T1Timeouts`, `T2Timeouts` are never set anywhere |
-| `RetroIO.Storage.Local` `BsdDriver`, `FfsDriver` partition select after mount | Stores the letter only; the mounted file system keeps the old partition |
 | `RetroIO.Storage.Local` `CbmDosFileSystem.ListDirectory` | Ignores its `path` argument |
 | `RetroIO.Storage.Local` `DeltaBlockDevice` constructor | `applyDeltaOnMount` is stored and never used |
 | `RetroIO.Storage.Providers` `VfsFileSystemBackend.GetFileInfo` | Returns a `FileInfo` for a temp file that is already deleted; only the length and write time are real |
@@ -108,3 +107,4 @@ Nothing open. The GitHub `build` workflow and the C client test are both fixed (
 | `CClient_CallsThroughTheCSharpSwitch_AndItsDataArrives` failed: the C client got no data back | Merge branch 'x25-switch-port-hooks': one TCP connection for each virtual circuit in `XotSwitchPort`, no Restart before the first call (RFC 1613 6.4), Nagle off |
 | `AnalyzeAllNdfsImages` looked for five disk images in a folder on the author's OneDrive, so it failed on GitHub | Test images: add the five NDFS images to the download, fetch them in CI, and read them from the fetched folder |
 | `Server_` and `Client_BadVersionHeader_ClosesTheConnection` could fail on a slow machine: the test wrote the good frame after the transport had already closed the connection | XOT header tests: send the bad header and the good frame in one write |
+| `V7Driver`/`FfsDriver.SelectPartition` after mount stored the letter only | V7Driver, FfsDriver: selecting a partition after mount opens the file system again on it; a failed mount leaves no half-built file system |
