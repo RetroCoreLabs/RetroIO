@@ -296,8 +296,16 @@ namespace RetroIO.Protocols.X25.Transport
 
 #pragma warning disable CS0067 // Event required by interface, not used in this implementation
         /// <summary>
-        /// Required by the interface for incoming calls. A client transport never raises it.
+        /// Required by the interface for incoming calls. A client transport never raises it, on purpose.
         /// </summary>
+        /// <remarks>
+        /// Every packet from a dialled connection, a Call Request included, is raised through
+        /// <see cref="DataReceived"/> and decoded by the X.25 engine the runtime keeps for that
+        /// connection; the engine raises the incoming call and answers it. Raising this event as well
+        /// would put a second protocol handler on the same connection, which is what the 2026-09-06
+        /// migration removed from the XOT server: the router would route the call a second time and
+        /// the runtime would log that the call cannot be answered, while the engine answers it.
+        /// </remarks>
         public event EventHandler<X25CallRequest>? IncomingCall;
 #pragma warning restore CS0067
         /// <summary>

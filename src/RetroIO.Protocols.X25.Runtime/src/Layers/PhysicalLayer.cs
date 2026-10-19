@@ -63,12 +63,18 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         /// Occurs when data arrives from a serial interface or a TCP connection.
         /// </summary>
         public event EventHandler<PhysicalLayerDataEventArgs>? DataReceived;
-#pragma warning disable CS0067 // Event for future incoming call support
         /// <summary>
-        /// Occurs for an incoming call. The layer never raises it in the current code.
+        /// Occurs when an X.25 Call Request packet arrives on the XOT TCP server.
         /// </summary>
+        /// <remarks>
+        /// The layer cuts the TCP byte stream into XOT frames (RFC 1613: version 0x0000, a two byte
+        /// length, then one X.25 packet) and decodes every packet whose type is Call Request (0x0B,
+        /// X.25 clause 7.1). It only reports the call. It sends no Call Accepted or Clear, and the
+        /// raw bytes still go to <see cref="DataReceived"/> as before. Serial bytes never raise
+        /// this event: a Call Request on a serial line is inside a LAPB I frame, and this layer
+        /// does not run LAPB.
+        /// </remarks>
         public event EventHandler<PhysicalLayerCallEventArgs>? IncomingCall;
-#pragma warning restore CS0067
         /// <summary>
         /// Occurs when the status of a transport changes.
         /// </summary>
@@ -444,9 +450,20 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
                 {
                     remoteMachineId = configuredId;
                 }
-                
+
+                // Which configured interface the bytes came in on, so a transport can pick its own.
+                string interfaceName = "";
+                foreach (var kvp in _serialPorts)
+                {
+                    if (ReferenceEquals(kvp.Value, sender))
+                    {
+                        interfaceName = kvp.Key;
+                        break;
+                    }
+                }
+
                 // Notify data received from serial transport
-                NotifyDataReceived(remoteMachineId, PhysicalTransportType.Serial, e.Data);
+                NotifyDataReceived(remoteMachineId, PhysicalTransportType.Serial, e.Data, interfaceName);
                 
                 _logger.LogDebug("PhysicalLayer: Received {ByteCount} bytes from serial transport", e.Data.Length);
             }
@@ -622,7 +639,14 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         private void TcpClientHandler(TcpClient tcpClient)
         {
             var buffer = new byte[4096];
-            
+
+            // Bytes read but not yet a whole XOT frame. One frame is at most 4 header octets plus
+            // MaxXotPacketLength; a chunk of up to 4096 octets is added to what is left of the
+            // frame before it, so twice that is always enough.
+            var frameBuffer = new byte[2 * (XotHeaderLength + MaxXotPacketLength)];
+            var frameLength = 0;
+            var framesUsable = true;
+
             try
             {
                 var stream = tcpClient.GetStream();
@@ -646,6 +670,12 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
                         
                         // Notify data received from TCP transport
                         NotifyDataReceived(remoteMachineId, PhysicalTransportType.XOT_Client, data);
+
+                        // Cut the same bytes into XOT frames and report the Call Requests among them.
+                        if (framesUsable)
+                        {
+                            framesUsable = ScanXotFrames(frameBuffer, ref frameLength, data, remoteMachineId);
+                        }
                     }
                     else
                     {
@@ -677,15 +707,137 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         }
         
         /// <summary>
+        /// Length of the XOT header in octets: 2 for the version, 2 for the packet length (RFC 1613).
+        /// </summary>
+        private const int XotHeaderLength = 4;
+
+        /// <summary>
+        /// Longest X.25 packet a XOT frame may carry. The same limit the XOT client and server
+        /// transports apply.
+        /// </summary>
+        private const int MaxXotPacketLength = 4096;
+
+        /// <summary>
+        /// Adds freshly read TCP bytes to the pending XOT bytes, cuts out every whole frame, and
+        /// raises <see cref="IncomingCall"/> for each frame that holds a Call Request.
+        /// </summary>
+        /// <remarks>
+        /// TCP has no message boundaries, so a frame can arrive in pieces and one read can hold
+        /// several frames. RFC 1613 has no marker to find the next frame with, so a bad header ends
+        /// the decoding for that connection: once the four octets are not a header, nothing after
+        /// them is at a known offset. The raw bytes keep going to <see cref="DataReceived"/>.
+        /// </remarks>
+        /// <param name="pending">
+        /// The buffer of bytes that are not yet a whole frame.
+        /// </param>
+        /// <param name="pendingLength">
+        /// How many octets of <paramref name="pending"/> are in use; updated.
+        /// </param>
+        /// <param name="chunk">
+        /// The bytes just read from the connection.
+        /// </param>
+        /// <param name="remoteMachineId">
+        /// The machine id of the peer, for the log.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when decoding can go on; <c>false</c> after a bad header.
+        /// </returns>
+        private bool ScanXotFrames(byte[] pending, ref int pendingLength, byte[] chunk, string remoteMachineId)
+        {
+            Buffer.BlockCopy(chunk, 0, pending, pendingLength, chunk.Length);
+            pendingLength += chunk.Length;
+
+            int start = 0;
+            while (pendingLength - start >= XotHeaderLength)
+            {
+                int version = (pending[start] << 8) | pending[start + 1];
+                int length = (pending[start + 2] << 8) | pending[start + 3];
+
+                if (version != 0 || length < 3 || length > MaxXotPacketLength)
+                {
+                    _logger.LogError("PhysicalLayer: bad XOT header from {Remote} (version 0x{Version:X4}, length {Length}); no more calls are decoded on this connection",
+                        remoteMachineId, version, length);
+                    pendingLength = 0;
+                    return false;
+                }
+
+                if (pendingLength - start < XotHeaderLength + length)
+                {
+                    break; // The rest of this frame has not arrived yet.
+                }
+
+                byte[] packet = new byte[length];
+                Buffer.BlockCopy(pending, start + XotHeaderLength, packet, 0, length);
+                start += XotHeaderLength + length;
+
+                // PTI 0x0B is Call Request (X.25 clause 7.1, table 14).
+                if (packet[2] == 0x0B)
+                {
+                    NotifyIncomingCall(remoteMachineId, packet);
+                }
+            }
+
+            // Move the unfinished frame, if any, to the front for the next read.
+            if (start > 0)
+            {
+                pendingLength -= start;
+                Buffer.BlockCopy(pending, start, pending, 0, pendingLength);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Decodes one Call Request packet and raises <see cref="IncomingCall"/>.
+        /// </summary>
+        /// <param name="remoteMachineId">
+        /// The machine id of the peer, for the log.
+        /// </param>
+        /// <param name="packet">
+        /// The whole X.25 packet, GFI and logical channel number first.
+        /// </param>
+        private void NotifyIncomingCall(string remoteMachineId, byte[] packet)
+        {
+            X25CallRequest request;
+            try
+            {
+                // The packet layer decode that already exists; nothing is parsed twice by hand here.
+                request = new X25CallRequest(packet);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogError(ex, "PhysicalLayer: undecodable Call Request from {Remote}", remoteMachineId);
+                return;
+            }
+
+            try
+            {
+                IncomingCall?.Invoke(this, new PhysicalLayerCallEventArgs
+                {
+                    CalledAddress = request.CalledAddress,
+                    CallingAddress = request.CallingAddress,
+                    TransportType = PhysicalTransportType.XOT_Client,
+                    CallData = request.CallUserData,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PhysicalLayer: Error in incoming call event handler");
+            }
+        }
+
+        /// <summary>
         /// Notify data received event
         /// </summary>
-        private void NotifyDataReceived(string sourceAddress, PhysicalTransportType transportType, byte[] data)
+        private void NotifyDataReceived(string sourceAddress, PhysicalTransportType transportType, byte[] data, string interfaceName = "")
         {
             try
             {
                 DataReceived?.Invoke(this, new PhysicalLayerDataEventArgs
                 {
                     SourceAddress = sourceAddress,
+                    InterfaceName = interfaceName,
                     TransportType = transportType,
                     Data = data,
                     Timestamp = DateTime.UtcNow
@@ -864,11 +1016,23 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
             {
                 // Forward data to the protocol stack as if it came from a real serial port
                 string interfaceName = $"MOCK{mockPort}";
-                
+
+                // The configured interface that owns this mock port, if there is one.
+                string configuredName = "";
+                foreach (var kvp in _serialPorts)
+                {
+                    if (string.Equals(kvp.Value.Config?.PortName, interfaceName, StringComparison.Ordinal))
+                    {
+                        configuredName = kvp.Key;
+                        break;
+                    }
+                }
+
                 // Create event args for received data
                 var eventArgs = new PhysicalLayerDataEventArgs
                 {
                     SourceAddress = interfaceName,
+                    InterfaceName = configuredName,
                     TransportType = PhysicalTransportType.Serial,
                     Data = data,
                     Timestamp = DateTime.UtcNow
