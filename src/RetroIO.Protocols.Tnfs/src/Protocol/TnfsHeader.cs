@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System.Buffers.Binary;
 using System.Net;
 
 namespace RetroIO.Protocols.Tnfs.Protocol;
@@ -67,7 +68,8 @@ public struct TnfsHeader
 
         return new TnfsHeader
         {
-            SessionId = TnfsEndian.ReadUInt16(buffer.ToArray(), 0),
+            // Read in place: the old code copied the whole buffer to an array for two bytes.
+            SessionId = BinaryPrimitives.ReadUInt16LittleEndian(buffer),
             SequenceNumber = buffer[2],
             Command = buffer[3],
             Status = 0  // Not present in request
@@ -83,12 +85,10 @@ public struct TnfsHeader
         if (buffer.Length < TnfsConstants.TNFS_HEADERSZ + 1)
             throw new ArgumentException($"Buffer too small for TNFS response header (need {TnfsConstants.TNFS_HEADERSZ + 1} bytes)");
 
-        byte[] temp = buffer.ToArray();
-        TnfsEndian.WriteUInt16(temp, 0, SessionId);
-        temp[2] = SequenceNumber;
-        temp[3] = Command;
-        temp[4] = Status;
-        temp.AsSpan().CopyTo(buffer);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer, SessionId);
+        buffer[2] = SequenceNumber;
+        buffer[3] = Command;
+        buffer[4] = Status;
 
         return 5;
     }
