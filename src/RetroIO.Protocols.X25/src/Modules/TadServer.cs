@@ -36,10 +36,6 @@ namespace RetroIO.Protocols.X25.Modules
         /// </summary>
         public bool EnableEchoService { get; set; } = true;
         /// <summary>
-        /// Gets or sets the loopback test flag; nothing in this class reads it.
-        /// </summary>
-        public bool EnableLoopbackTest { get; set; } = true;
-        /// <summary>
         /// Gets or sets the text encoding used to turn text into bytes and bytes into text.
         /// </summary>
         public Encoding TextEncoding { get; set; } = Encoding.ASCII;

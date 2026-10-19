@@ -20,7 +20,7 @@ real specification before anyone touches it, **I** the interface comment is prob
 |---|---|
 | `RetroIO.Protocols.Econet` `EconetUserBootstrap` | Class comment says it purges legacy orphan keys; the code only adds defaults |
 | `RetroIO.Protocols.Econet` `FileServerReply.DiscFreeSpaceClassic1983` | Existing comment has a `param` and no `returns` |
-| `RetroIO.Protocols.Xmsg.Api` `XmsgKernel` | `WirePort` has no incarnation bits |
+| `RetroIO.Protocols.Xmsg.Api.Node` `XmsgKernelServer.WirePort` (not `XmsgKernel`) | Has no incarnation bits. The 7-bit part of a port word is documented (random, drawn by `XmsgRandomGenerator`), but no text in the repository says what value a server's advertised port must carry; `tad-wire.md` lists the rule as UNKNOWN. Needs the XMSG note on the wire port (`XMSG-WIRE-PORT-IS-MAGIC-LOW-WORD`, referenced by a test comment, not in the repository) or a capture of a real server's advertised port |
 | `RetroIO.Link` `ILapbCapable` counters | `T2Timeouts` is never set: the LAPB engine has no T2 timer (it acknowledges as it receives), so there is no event to count. Needs a T2 in the engine first |
 | `RetroIO.Storage.Local` `BsdDriver`, `FfsDriver` partition select after mount | Stores the letter only; the mounted file system keeps the old partition |
 | `RetroIO.Storage.Local` `CbmDosFileSystem.ListDirectory` | Ignores its `path` argument |
@@ -29,8 +29,7 @@ real specification before anyone touches it, **I** the interface comment is prob
 | `RetroIO.Storage.Providers`, both backends `GetFullPath` | Only turns backslashes into slashes; the contract says normalized and resolved |
 | `RetroIO.Management.Api` `LiveDataService` | TNFS and Econet statistics are pushed as fixed zeros (the log-line half of this entry is fixed) |
 | `RetroIO.Protocols.Tnfs` `TnfsConstants` | `MaxPathLength` is 256 but `MAX_FILEPATH`/`MAX_TNFSPATH` are 1024; `TnfsHeader` exists twice in two namespaces |
-| `RetroIO.Protocols.X25` `X3Parameters` against `X3` | Disagree on parameter 12 (`FLOW_CONTROL_X_ON_X_OFF` or `FORWARD_ON_N_CHARACTERS`) and on the `DATA_FORWARDING` default (2 or 13) |
-| `RetroIO.Protocols.X25` `PadClient`, `TadServer` | `IdleTimeoutMs`, `AutoConnect`, `EnableLoopbackTest` are never read; `XMSGSessionState.DataTransfer` is never assigned |
+| `RetroIO.Protocols.X25` `X3Parameters` against `X3` | Disagree on parameter 12 (`FLOW_CONTROL_X_ON_X_OFF` or `FORWARD_ON_N_CHARACTERS`) and on the `DATA_FORWARDING` default (2 or 13). The X.3 text is kept outside the repository (the X25 README says so), so the right side cannot be checked here. Needs the X.3 text |
 
 ### S - stubs that report success while doing nothing
 
@@ -72,6 +71,7 @@ Nothing open. The GitHub `build` workflow and the C client test are both fixed (
 | What | Commit subject |
 |---|---|
 | `LapbStatistics.Retransmissions`, `RejectionsSent`, `RejectionsReceived`, `T1Timeouts` were never set | LAPB: count retransmissions, REJ sent and received, and T1 timeouts |
+| `PadClient.IdleTimeoutMs`, `PadClient.AutoConnect`, `TadServer.EnableLoopbackTest` were never read; `XMSGSessionState.DataTransfer` was never assigned | X25: remove the settings and the state that nothing used (nothing in the repository referenced them and none had a defined behaviour) |
 | `ZipFsPlugin` stayed latched after `Unmount`; `CanHandleAsync` returned false for a non-seekable stream | ZipFsPlugin: stay reusable after Unmount, honour the CanHandleAsync contract |
 | `TCPServer.SendByte` returned false after a successful send | Fix TCPServer.SendByte and the NativeVolumeProvider mount-root check |
 | `NativeVolumeProvider` accepted a sibling folder whose name starts with the mount root's name | same commit |

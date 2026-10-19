@@ -462,10 +462,6 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         Connected,
         /// <summary>
-        /// Data transfer state; nothing in this file assigns it.
-        /// </summary>
-        DataTransfer,
-        /// <summary>
         /// The session was cleared.
         /// </summary>
         Disconnected
