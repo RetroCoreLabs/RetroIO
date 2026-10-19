@@ -18,10 +18,10 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 | Where | What |
 |---|---|
-| `RetroIO.Protocols.Xmsg.Api.Node` `XmsgKernelServer.WirePort` (not `XmsgKernel`) | Has no incarnation bits. The 7-bit part of a port word is documented (random, drawn by `XmsgRandomGenerator`), but no text in the repository says what value a server's advertised port must carry; `tad-wire.md` lists the rule as UNKNOWN. Needs the XMSG note on the wire port (`XMSG-WIRE-PORT-IS-MAGIC-LOW-WORD`, referenced by a test comment, not in the repository) or a capture of a real server's advertised port |
-| `RetroIO.Link` `ILapbCapable` counters | `T2Timeouts` is never set: the LAPB engine has no T2 timer (it acknowledges as it receives), so there is no event to count. Needs a T2 in the engine first |
-| `RetroIO.Protocols.Tnfs` `TnfsConstants` | `MaxPathLength` is 256 but `MAX_FILEPATH`/`MAX_TNFSPATH` are 1024. Nothing reads `MaxPathLength`. The TNFS specification is not in this repository (nothing under `DOC` covers TNFS), so the right value could not be checked; needs the TNFS spec or the reference `tnfsd` source first |
-| `RetroIO.Protocols.X25` `X3Parameters` against `X3` | Disagree on parameter 12 (`FLOW_CONTROL_X_ON_X_OFF` or `FORWARD_ON_N_CHARACTERS`) and on the `DATA_FORWARDING` default (2 or 13). The X.3 text is kept outside the repository (the X25 README says so), so the right side cannot be checked here. Needs the X.3 text |
+| `RetroIO.Protocols.X25` `X3` validity limits | Parameter 1 accepts only 0 and 1 (X.3 also allows 32 to 126), parameter 5 only 0 and 1 (X.3 allows 2), parameter 7 up to 127 (flag sums reach 31), parameters 9 and 14 up to 7 (X.3 allows 0 to 255). Found while fixing parameters 3 and 12; not changed |
+| `RetroIO.Protocols.X25` password mode | Sets parameter 3 to 1 and calls it character by character, and a test pins it. In X.3 value 1 means forward on alphanumerics only |
+| `RetroIO.Protocols.X25` `X3` defaults | The default profile is neither the transparent nor the simple standard profile of Table 1/X.28 (parameter 7 defaults to 21, parameter 8 to 1; both profiles use 0 for 8). The two named profiles are now correct; what the default should be needs a decision |
+| `RetroIO.Link` `LapbStation` | Builds its engine with T2 = 0 and ignores its `t2TimeoutMs` argument (every link config defaults it to 1500 ms). Passing it on would hold every acknowledgement up to 1.5 s on live links, so `T2Timeouts` stays 0 there until that is decided |
 
 ### S - stubs that report success while doing nothing
 
@@ -39,6 +39,7 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 | Where | What |
 |---|---|
+| `RetroIO.Protocols.Tnfs` `TnfsConstants` | The TNFS text on disk (tnfs-protocol.md, TNFS Spec.md, the fujinet-lib flow) gives no number for `MAXMSGSZ`, path or file path length, I/O size, directory handles or timeouts. The values differ from the reference tnfsd `config.h` (`MAXMSGSZ` 1024 against 532, `MAX_DHND_PER_CONN` 16 against 8, `MAX_FILEPATH` and `MAX_TNFSPATH` 1024 against 384 and 256, `CONN_TIMEOUT` 300 against 600, TCP keepalive, session and connection limits, default timeout 5 s against 1 s). Left as they are because the spec is silent. The server UDP buffer is 1024 bytes, which may be more than a real client sends |
 | `XmsgKernel.Send` | Ignores the Route flag; always delivers to the destination. The interface says XROUT when Route is set |
 | `XmsgKernel.MakePrivileged` | Always succeeds; never checks the password or the kind of task |
 | `XmsgKernel.ReserveBuffer` | Ignores `options` and the XFDMM ceiling |
@@ -62,6 +63,10 @@ Nothing open. The GitHub `build` workflow and the C client test are both fixed (
 
 | What | Commit subject |
 |---|---|
+| `XmsgKernelServer.WirePort` had no random low 7 bits; it is now (logical port << 7) with a part drawn once from `XmsgRandomGenerator`, as the XMSG wire-port note says | XmsgKernelServer: the wire port now carries a random low part drawn from the XMSG generator |
+| `ILapbCapable.T2Timeouts` was never set; the LAPB engine now has the X.25 T2 acknowledgement delay timer (off at 0, T2 below T1 enforced, ack piggybacked on an outgoing I frame, count on expiry) | LAPB: add the T2 acknowledgement delay timer so T2Timeouts counts something real |
+| `TnfsConstants` had four unused second names for limits that already had one (`MaxMessageSize`, `MaxPathLength`, `MaxFilenameLength`, `MAX_IOSZ`); removed. No value changed: the spec is silent | TNFS constants: remove four unused second names for limits that already have one |
+| `X3` and `X3Parameters` disagreed and were wrong against X.3: parameter 12 is flow control, parameter 3 is a sum of flags (13 is not CR), both standard profiles now match Table 1/X.28, `X28` reads parameter 3 as flags; `X3Parameters` now takes everything from `X3` | X.3 PAD parameters: one source of truth, values and profiles taken from X.3 and Table 1/X.28 |
 | `TnfsHeader` existed twice in one package (`Protocol` and `Server`), identical but for how the session id was read; kept the protocol layer one, which does not depend on the server core, and it now reads and writes the session id without copying the buffer | TNFS: one TnfsHeader, in the protocol layer |
 | `LiveDataService` pushed TNFS statistics as fixed zeros; it now reads `SessionManager` and `TnfsServerStatistics` like `TnfsController` (zero when no TNFS server runs in the process) | LiveDataService: push the real TNFS counters |
 | `FileServerReply.DiscFreeSpaceClassic1983` comment had a `param` and no `returns` | FileServerReply.DiscFreeSpaceClassic1983: add the returns comment |
