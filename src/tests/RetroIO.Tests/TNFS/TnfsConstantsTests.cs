@@ -14,8 +14,8 @@ namespace RetroIO.Tests.TNFS;
 
 /// <summary>
 /// Each TNFS limit exists once in <see cref="TnfsConstants"/>. The written protocol (tnfs-protocol.md) states no
-/// number for message size, path length, file name length or I/O size, so the values are the package's own choice
-/// (the tnfsd config.h values differ and are not the spec). Two names for one limit with two values drift apart.
+/// number for message size, path length, file name length or I/O size, so the values are a named choice: the user
+/// chose the reference daemon tnfsd (config.h). Two names for one limit with two values drift apart.
 /// </summary>
 [TestFixture]
 [Category("TNFS")]
@@ -44,5 +44,27 @@ public class TnfsConstantsTests
     public void MaxPayload_IsMessageSizeMinusHeaderAndStatusByte()
     {
         Assert.That(TnfsConstants.TNFS_MAX_PAYLOAD, Is.EqualTo(TnfsConstants.MAXMSGSZ - TnfsConstants.TNFS_HEADERSZ - 1));
+    }
+
+    /// <summary>
+    /// Every limit the user chose to take from the reference daemon tnfsd (config.h) is pinned here by its
+    /// config.h name. The written TNFS spec states no number for any of them.
+    /// </summary>
+    [Test]
+    public void Limits_MatchReferenceDaemon_ConfigH()
+    {
+        Assert.That(TnfsConstants.MAXMSGSZ, Is.EqualTo(532), "config.h MAXMSGSZ");
+        Assert.That(TnfsConstants.TNFS_MAX_PAYLOAD, Is.EqualTo(532 - 4 - 1), "config.h TNFS_MAX_PAYLOAD (MAXMSGSZ - TNFS_HEADERSZ - 1)");
+        Assert.That(TnfsConstants.MAX_DHND_PER_CONN, Is.EqualTo(8), "config.h MAX_DHND_PER_CONN");
+        Assert.That(TnfsConstants.MAX_FILEPATH, Is.EqualTo(384), "config.h MAX_FILEPATH");
+        Assert.That(TnfsConstants.MAX_TNFSPATH, Is.EqualTo(256), "config.h MAX_TNFSPATH");
+        Assert.That(TnfsConstants.CONN_TIMEOUT, Is.EqualTo(600), "config.h CONN_TIMEOUT");
+        Assert.That(TnfsConstants.TCP_KA_IDLE, Is.EqualTo(30), "config.h TCP_KA_IDLE");
+        Assert.That(TnfsConstants.TCP_KA_INTVL, Is.EqualTo(1), "config.h TCP_KA_INTVL");
+        Assert.That(TnfsConstants.TCP_KA_COUNT, Is.EqualTo(60), "config.h TCP_KA_COUNT");
+        Assert.That(TnfsConstants.MaxIOSize, Is.EqualTo(512), "config.h MAX_IOSZ");
+        Assert.That(TnfsConstants.MAX_TCP_CONN, Is.EqualTo(4096), "config.h MAX_TCP_CONN");
+        Assert.That(TnfsConstants.TIMEOUT_LSB, Is.EqualTo(0xE8), "config.h TIMEOUT_LSB");
+        Assert.That(TnfsConstants.TIMEOUT_MSB, Is.EqualTo(0x03), "config.h TIMEOUT_MSB");
     }
 }

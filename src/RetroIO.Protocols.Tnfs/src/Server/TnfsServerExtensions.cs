@@ -83,7 +83,8 @@ public static class TnfsServerExtensions
                     options.TcpPort,
                     sp.GetRequiredService<ILogger<TcpTransport>>(),
                     sp.GetService<FirewallEngine>(),
-                    sp.GetService<SecurityEventEmitter>()));
+                    sp.GetService<SecurityEventEmitter>(),
+                    options.MaxTcpConnections));
         }
 
         // Register the TNFS server background service with authentication event wiring
@@ -155,4 +156,9 @@ public class TnfsServerOptions
     /// Enable TCP transport (default: true).
     /// </summary>
     public bool EnableTcp { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the most TCP connections open at one time (default: 4096, the reference daemon's MAX_TCP_CONN).
+    /// </summary>
+    public int MaxTcpConnections { get; set; } = Protocol.TnfsConstants.MAX_TCP_CONN;
 }
