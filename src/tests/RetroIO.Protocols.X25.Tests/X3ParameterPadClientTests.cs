@@ -46,7 +46,7 @@ namespace RetroIO.Protocols.X25.Tests
             // Verify key default values according to ITU-T X.3
             Assert.That(parameters[1], Is.EqualTo(1), "Parameter 1 (ESCAPE) should default to 1");
             Assert.That(parameters[2], Is.EqualTo(1), "Parameter 2 (ECHO) should default to 1");
-            Assert.That(parameters[3], Is.EqualTo(13), "Parameter 3 (DATA_FORWARDING) should default to 13 (CR)");
+            Assert.That(parameters[3], Is.EqualTo(2), "Parameter 3 (DATA_FORWARDING) should default to 2 (the CR flag of X.3 reference 3)");
             Assert.That(parameters[4], Is.EqualTo(0), "Parameter 4 (IDLE_TIMER) should default to 0 (disabled)");
             Assert.That(parameters[15], Is.EqualTo(1), "Parameter 15 (EDITING) should default to 1");
             
@@ -100,7 +100,7 @@ namespace RetroIO.Protocols.X25.Tests
             
             // Verify other parameters remain unchanged
             Assert.That(parameters[1], Is.EqualTo(1), "ESCAPE should remain default");
-            Assert.That(parameters[3], Is.EqualTo(13), "DATA_FORWARDING should remain default");
+            Assert.That(parameters[3], Is.EqualTo(2), "DATA_FORWARDING should remain default");
             
             // Cleanup
             Runtime.DisposePadClient(padId);
@@ -124,7 +124,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Logger.LogDebug("Data forwarded: '{Data}'", args.Data);
             };
             
-            // Test 1: Default behavior - forward on CR (parameter 3 = 13)
+            // Test 1: Default behavior - forward on CR (parameter 3 = 2, the CR flag)
             var processed = x28Protocol.ProcessCharacter('H');
             Assert.That(processed, Is.True, "Should process character successfully");
             
@@ -135,9 +135,11 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(processed, Is.True, "Should process CR character successfully");
             // Note: In actual implementation, forwarding would be triggered here via events
             
-            // Test 2: Change forwarding behavior - forward on specific character count
-            Assert.That(x3Protocol.SetParameter(12, 3), Is.True); // Forward every 3 characters
-            Assert.That(x3Protocol.GetParameter(12), Is.EqualTo(3), "Parameter 12 should be set to 3");
+            // Test 2: Parameter 12 is flow control of the PAD (X.3 reference 12), 0 or 1 only.
+            // It was once treated as "forward every N characters"; X.3 has no such parameter.
+            Assert.That(x3Protocol.SetParameter(12, 1), Is.True); // Use X-ON / X-OFF
+            Assert.That(x3Protocol.GetParameter(12), Is.EqualTo(1), "Parameter 12 should be set to 1");
+            Assert.That(x3Protocol.SetParameter(12, 3), Is.False, "X.3 reference 12 allows only 0 and 1");
             
             // Test 3: Disable forwarding on CR
             Assert.That(x3Protocol.SetParameter(3, 0), Is.True); // Disable CR forwarding
@@ -265,7 +267,7 @@ namespace RetroIO.Protocols.X25.Tests
             allParams = x3Protocol.GetAllParameters();
             Assert.That(allParams[1], Is.EqualTo(1), "ESCAPE should be restored to default");
             Assert.That(allParams[2], Is.EqualTo(1), "ECHO should be restored to default");
-            Assert.That(allParams[3], Is.EqualTo(13), "DATA_FORWARDING should be restored to default");
+            Assert.That(allParams[3], Is.EqualTo(2), "DATA_FORWARDING should be restored to default");
             
             // Cleanup
             Runtime.DisposePadClient(padId);
@@ -284,11 +286,11 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 [1] = (0, 1),     // ESCAPE: 0-1
                 [2] = (0, 1),     // ECHO: 0-1  
-                [3] = (0, 126),   // DATA_FORWARDING: 0-126
+                [3] = (0, 127),   // DATA_FORWARDING: sum of the flags of X.3 reference 3, 0-127
                 [4] = (0, 255),   // IDLE_TIMER: 0-255
                 [9] = (0, 7),     // PADDING_AFTER_CR: 0-7
                 [10] = (0, 255),  // LINE_FOLDING: 0-255
-                [12] = (0, 255),  // FORWARD_ON_N_CHARACTERS: 0-255
+                [12] = (0, 1),     // FLOW_CONTROL_X_ON_X_OFF: 0-1 (X.3 reference 12)
                 [16] = (0, 127),  // CHARACTER_DELETE: 0-127
                 [21] = (0, 3),    // PARITY_TREATMENT: 0-3
                 [22] = (0, 255)   // PAGE_WAIT: 0-255
