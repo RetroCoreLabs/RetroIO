@@ -392,16 +392,22 @@ public sealed class VfsFileSystemBackend : IFileSystemBackend
     }
 
     /// <summary>
-    /// Gets the full path. This implementation only turns backslashes into slashes; it does not
-    /// resolve relative parts.
+    /// Gets the full path: backslashes become slashes, repeated slashes are merged, <c>.</c> parts are dropped,
+    /// <c>..</c> parts are resolved and a trailing slash is removed.
     /// </summary>
     /// <param name="path">
     /// The path.
     /// </param>
     /// <returns>
-    /// <paramref name="path"/> with every backslash replaced by a slash.
+    /// The resolved path. A rooted path stays rooted and a relative path stays relative.
     /// </returns>
-    public string GetFullPath(string path) => path.Replace('\\', '/');
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="path"/> is null.
+    /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when a <c>..</c> part climbs above the start of the path, or out of the mount root.
+    /// </exception>
+    public string GetFullPath(string path) => HostPathResolver.Resolve(path, _hostRoot);
 
     /// <summary>
     /// Combines path segments with slashes.
