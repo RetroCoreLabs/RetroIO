@@ -130,6 +130,34 @@ The workflow fails when the menu is out of date or when the build has a warning.
 
 ---
 
+## Releasing to NuGet
+
+Packages are pushed to nuget.org by `.github/workflows/publish.yml`. It runs **only** when a tag that
+starts with `v` is pushed, and the push step waits for the same build and tests as every pull
+request. A normal push or pull request never publishes.
+
+One-time setup, done by a maintainer who owns the `RetroIO.*` ids on nuget.org:
+
+ 1. On nuget.org open the account menu, then **API Keys**, then **Create**. Set the scope to
+    **Push new packages and package versions**, and the glob pattern to `RetroIO.*`. Set an expiry and
+    copy the key once; nuget.org will not show it again.
+ 2. In the GitHub repository open **Settings**, **Secrets and variables**, **Actions**, **New
+    repository secret**. Name it exactly `NUGET_API_KEY` and paste the key. Never commit the key.
+
+To release, from an up-to-date `main` where the build is green:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The tag decides the version: `v0.1.0` publishes `0.1.0`, `v0.2.0-beta.1` publishes the pre-release
+`0.2.0-beta.1`. The workflow packs every package in `src/` (44 `.nupkg`, each with a `.snupkg` symbol
+package) and pushes them with `--skip-duplicate`, so a re-run does not fail on a version that is
+already there. A published version cannot be replaced; to fix a bad release, tag the next version.
+
+---
+
 ## Licence
 
 By contributing you agree your work is licensed under the MIT licence in [LICENSE](../LICENSE).
