@@ -24,6 +24,12 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public PhysicalTransportType TransportType { get; set; }
         /// <summary>
+        /// Gets or sets the name of the configured serial interface the bytes came in on. It is
+        /// empty for data that did not come from a serial interface (a TCP connection), and for
+        /// a serial port that is not one of the configured interfaces.
+        /// </summary>
+        public string InterfaceName { get; set; } = "";
+        /// <summary>
         /// Gets or sets the received bytes.
         /// </summary>
         public byte[] Data { get; set; } = Array.Empty<byte>();

@@ -183,6 +183,11 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
                 
                 if (_runtime.PhysicalLayer.IsSerialInterfaceActive(_config.Name))
                 {
+                    // Listen for the bytes that arrive on this interface. Subscribed once: a second
+                    // Start after Stop must not deliver every frame twice.
+                    _runtime.PhysicalLayer.DataReceived -= OnPhysicalLayerDataReceived;
+                    _runtime.PhysicalLayer.DataReceived += OnPhysicalLayerDataReceived;
+
                     SetStatus(TransportStatus.Active, "Serial transport started successfully");
                     _statistics.StartTime = DateTime.UtcNow;
                     _logger.LogInformation("Serial transport {Name} started successfully", Name);
@@ -221,6 +226,9 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
             try
             {
                 SetStatus(TransportStatus.Stopping, "Stopping serial transport");
+
+                // A stopped transport delivers nothing.
+                _runtime.PhysicalLayer.DataReceived -= OnPhysicalLayerDataReceived;
 
                 _logger.LogInformation("Stopping serial transport {Name}", Name);
 
@@ -261,24 +269,65 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         /// Raised when an incoming call is received.
         /// </summary>
         /// <remarks>
-        /// The handler that raises it is not subscribed to anything in this class, so the event is not
-        /// raised at present.
+        /// This class never raises it, on purpose. A Call Request on a serial line is carried inside a
+        /// LAPB I frame, so reading it needs HDLC deframing, the frame check sequence and the LAPB
+        /// sequence numbers and acknowledgements, and the answer (Call Accepted or Clear) has to
+        /// go back through the same LAPB link. None of that is in this class: serial links with LAPB
+        /// belong to the links of the newer stack, and the runtime says this transport gets its X.25
+        /// engine later. Decoding frames here without LAPB would report calls that
+        /// could not be answered. The raw bytes are reported through <see cref="DataReceived"/>.
         /// </remarks>
+#pragma warning disable CS0067 // Required by the interface; see the remarks above for why it is not raised.
         public event EventHandler<X25CallRequest>? IncomingCall;
+#pragma warning restore CS0067
         /// <summary>
         /// Raised each time the transport status changes.
         /// </summary>
         public event EventHandler<TransportStatusEventArgs>? StatusChanged;
-#pragma warning disable CS0067 // Event required by interface, uses HDLC layer events instead
         /// <summary>
-        /// Raised when raw data is received from the transport. This class never raises it.
+        /// Raised when bytes arrive on the serial interface of this transport.
         /// </summary>
+        /// <remarks>
+        /// The bytes are what the serial line delivered, unchanged: HDLC flags, escapes and the frame
+        /// check sequence are still in them. One event is one read from the line, which may be part
+        /// of a frame or several frames. It is raised only while the transport is started, and only
+        /// for the interface whose name this transport carries.
+        /// </remarks>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
-#pragma warning restore CS0067
 
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// Turns the bytes the physical layer got on this transport's interface into
+        /// <see cref="DataReceived"/>; bytes from any other interface or from TCP are ignored.
+        /// </summary>
+        private void OnPhysicalLayerDataReceived(object? sender, PhysicalLayerDataEventArgs e)
+        {
+            if (e.TransportType != PhysicalTransportType.Serial ||
+                !string.Equals(e.InterfaceName, Name, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _statistics.BytesReceived += e.Data.Length;
+
+            try
+            {
+                DataReceived?.Invoke(this, new TransportDataEventArgs
+                {
+                    Data = e.Data,
+                    Length = e.Data.Length,
+                    Transport = this
+                });
+            }
+            catch (Exception ex)
+            {
+                // A handler that throws must not stop the read thread of the serial port.
+                _logger.LogError(ex, "Error in a DataReceived handler of serial transport {Name}", Name);
+            }
+        }
 
         private void SetStatus(TransportStatus newStatus, string reason)
         {

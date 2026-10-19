@@ -26,6 +26,10 @@ namespace RetroIO.Protocols.X25.Sintran
         private readonly Dictionary<ushort, ISintranProtocolHandler> _pvcHandlers = new Dictionary<ushort, ISintranProtocolHandler>();
         private readonly Dictionary<string, Func<ISintranProtocolHandler>> _protocolFactories = new Dictionary<string, Func<ISintranProtocolHandler>>();
         private readonly object _handlersLock = new object();
+
+        // Channels with an interrupt sent and not yet confirmed. X.25 allows one at a time per channel.
+        // Guarded by _handlersLock.
+        private readonly HashSet<ushort> _unconfirmedInterrupts = new HashSet<ushort>();
         private bool _initialized = false;
 
         // Terminal ID management for TAD protocol (auto-assignment)
@@ -128,6 +132,7 @@ namespace RetroIO.Protocols.X25.Sintran
                     }
                 }
                 _pvcHandlers.Clear();
+                _unconfirmedInterrupts.Clear();
             }
 
             _initialized = false;
@@ -170,6 +175,9 @@ namespace RetroIO.Protocols.X25.Sintran
                     handler.Dispose();
                     _pvcHandlers.Remove(lcn);
                 }
+
+                // A cleared channel has no interrupt outstanding any more.
+                _unconfirmedInterrupts.Remove(lcn);
             }
         }
 
@@ -209,6 +217,14 @@ namespace RetroIO.Protocols.X25.Sintran
 
                     case X25PacketType.ResetRequest:
                         HandleResetRequest(args);
+                        break;
+
+                    case X25PacketType.InterruptConfirmation:
+                        // The peer confirmed our interrupt; the next one may go (X.25 clause 4).
+                        lock (_handlersLock)
+                        {
+                            _unconfirmedInterrupts.Remove(args.Packet.LCN);
+                        }
                         break;
 
                     default:
@@ -375,28 +391,8 @@ namespace RetroIO.Protocols.X25.Sintran
 
             try
             {
-                // Create X.25 data packet
-                var packetData = X25PacketBuilder.CreateDataPacket(
-                    lcn: responseArgs.LCN,
-                    ps: 0, // Simplified sequencing for PVC
-                    pr: 0,
-                    userData: responseArgs.Data
-                );
+                EmitDataPacket(responseArgs.LCN, responseArgs.Data, responseArgs.Timestamp);
 
-                var packet = new X25Packet(packetData);
-                packet.Direction = PacketDirection.Transmit;
-                packet.Timestamp = responseArgs.Timestamp;
-
-                packet.LCN = responseArgs.LCN;
-                var eventArgs = new X25PacketEventArgs
-                {
-                    Packet = packet,
-                    Direction = PacketDirection.Transmit,
-                    Timestamp = responseArgs.Timestamp
-                };
-
-                PacketGenerated?.Invoke(this, eventArgs);
-                
                 _logger.LogDebug("SintranPvcServer: Sent {Protocol} response on LCN {LCN}, {Bytes} bytes", 
                     responseArgs.Protocol, responseArgs.LCN, responseArgs.Data.Length);
             }
@@ -405,6 +401,46 @@ namespace RetroIO.Protocols.X25.Sintran
                 _logger.LogError(ex, "SintranPvcServer: Error sending response for {Protocol} on LCN {LCN}", 
                     responseArgs.Protocol, responseArgs.LCN);
             }
+        }
+
+        /// <summary>
+        /// Builds one X.25 Data packet for the channel and raises <see cref="PacketGenerated"/> with it.
+        /// Both the protocol handlers' responses and <see cref="SendX25Data"/> go through here.
+        /// </summary>
+        /// <remarks>
+        /// The packet carries P(S) = 0 and P(R) = 0 every time. This server keeps no send window and no
+        /// sequence counters (the "simplified sequencing for PVC" that the handler responses always
+        /// had), so numbering the packets is left to whatever layer puts them on the wire.
+        /// </remarks>
+        /// <param name="lcn">
+        /// The logical channel number.
+        /// </param>
+        /// <param name="userData">
+        /// The user data field of the packet. It must not be empty.
+        /// </param>
+        /// <param name="timestamp">
+        /// The time stamp for the packet and the event.
+        /// </param>
+        private void EmitDataPacket(ushort lcn, byte[] userData, DateTime timestamp)
+        {
+            var packetData = X25PacketBuilder.CreateDataPacket(
+                lcn: lcn,
+                ps: 0, // Simplified sequencing for PVC
+                pr: 0,
+                userData: userData
+            );
+
+            var packet = new X25Packet(packetData);
+            packet.Direction = PacketDirection.Transmit;
+            packet.Timestamp = timestamp;
+            packet.LCN = lcn;
+
+            PacketGenerated?.Invoke(this, new X25PacketEventArgs
+            {
+                Packet = packet,
+                Direction = PacketDirection.Transmit,
+                Timestamp = timestamp
+            });
         }
 
         /// <summary>
@@ -762,21 +798,47 @@ namespace RetroIO.Protocols.X25.Sintran
         }
 
         /// <summary>
-        /// Not supported. Handlers send through their ResponseReady events.
+        /// Sends the bytes as the user data of one X.25 Data packet on an established channel.
         /// </summary>
+        /// <remarks>
+        /// The packet is raised through <see cref="PacketGenerated"/>, the same way the responses of
+        /// the protocol handlers are. The bytes are sent as they are: this method does not know the
+        /// SINTRAN protocol of the channel, so the caller builds any protocol framing. The packet
+        /// has P(S) and P(R) set to 0, and its size is not checked against the size negotiated for
+        /// the circuit, because this server keeps neither a send window nor the negotiated size; see
+        /// <see cref="EmitDataPacket"/>.
+        /// </remarks>
         /// <param name="lcn">
-        /// The logical channel number.
+        /// The logical channel number. A handler must exist for it, which is made when a Call Request
+        /// is accepted.
         /// </param>
         /// <param name="data">
-        /// The data to send.
+        /// The user data field of the packet.
         /// </param>
-        /// <exception cref="NotImplementedException">
-        /// Always thrown.
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="data"/> is empty.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no circuit is established on <paramref name="lcn"/>.
         /// </exception>
         public void SendX25Data(ushort lcn, byte[] data)
         {
-            // Not implemented - handlers send via events
-            throw new NotImplementedException("Use handler ResponseReady events instead");
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if (data.Length == 0) throw new ArgumentException("A data packet needs at least one octet of user data", nameof(data));
+
+            lock (_handlersLock)
+            {
+                if (!_pvcHandlers.ContainsKey(lcn))
+                {
+                    throw new InvalidOperationException($"No circuit is established on LCN {lcn}, so no data packet can be sent on it");
+                }
+            }
+
+            EmitDataPacket(lcn, data, DateTime.UtcNow);
+            _logger.LogDebug("SintranPvcServer: Sent {Bytes} bytes of data on LCN {LCN}", data.Length, lcn);
         }
 
         /// <summary>
@@ -814,21 +876,80 @@ namespace RetroIO.Protocols.X25.Sintran
         }
 
         /// <summary>
-        /// Not supported by the SINTRAN PVC server.
+        /// Sends one X.25 Interrupt packet on an established channel.
         /// </summary>
+        /// <remarks>
+        /// The format and the rules come from ITU-T X.25 (10/96) 4.3.7 and 5.3.2, the Interrupt packet (PTI 0x23) and
+        /// its user data field of 1 to 32 octets. The packet is raised through
+        /// <see cref="PacketGenerated"/>. X.25 allows one unconfirmed interrupt per channel: the next
+        /// one may be sent only after an Interrupt Confirmation (PTI 0x27) arrived, which
+        /// <see cref="OnX25Event"/> records. A clear of the channel forgets the interrupt. Whether the
+        /// SINTRAN peer acts on an interrupt is not documented anywhere that was found; this method
+        /// sends the packet and cannot tell what the peer does with it.
+        /// </remarks>
         /// <param name="lcn">
-        /// The logical channel number.
+        /// The logical channel number. A handler must exist for it.
         /// </param>
         /// <param name="data">
-        /// The interrupt data.
+        /// The interrupt user data, 1 to 32 octets.
         /// </param>
-        /// <exception cref="NotImplementedException">
-        /// Always thrown.
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="data"/> is empty or longer than 32 octets.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no circuit is established on <paramref name="lcn"/>, or when the previous
+        /// interrupt on it has not been confirmed.
         /// </exception>
         public void SendX25Interrupt(ushort lcn, byte[] data)
         {
-            // Not commonly used in SINTRAN protocols
-            throw new NotImplementedException("Interrupt not supported by SINTRAN PVC server");
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if (data.Length < 1 || data.Length > 32)
+            {
+                throw new ArgumentException($"Interrupt user data holds 1 to 32 octets, not {data.Length}", nameof(data));
+            }
+
+            lock (_handlersLock)
+            {
+                if (!_pvcHandlers.ContainsKey(lcn))
+                {
+                    throw new InvalidOperationException($"No circuit is established on LCN {lcn}, so no interrupt can be sent on it");
+                }
+
+                if (!_unconfirmedInterrupts.Add(lcn))
+                {
+                    throw new InvalidOperationException($"The previous interrupt on LCN {lcn} is not confirmed yet; X.25 allows one at a time");
+                }
+            }
+
+            try
+            {
+                DateTime now = DateTime.UtcNow;
+                var packet = new X25Packet(X25PacketBuilder.CreateInterrupt(lcn, data));
+                packet.Direction = PacketDirection.Transmit;
+                packet.Timestamp = now;
+                packet.LCN = lcn;
+
+                PacketGenerated?.Invoke(this, new X25PacketEventArgs
+                {
+                    Packet = packet,
+                    Direction = PacketDirection.Transmit,
+                    Timestamp = now
+                });
+            }
+            catch
+            {
+                // Nothing went out, so nothing is waiting for a confirmation.
+                lock (_handlersLock)
+                {
+                    _unconfirmedInterrupts.Remove(lcn);
+                }
+                throw;
+            }
+
+            _logger.LogDebug("SintranPvcServer: Sent interrupt of {Bytes} bytes on LCN {LCN}", data.Length, lcn);
         }
 
         /// <summary>
