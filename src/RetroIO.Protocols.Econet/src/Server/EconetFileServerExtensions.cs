@@ -107,7 +107,9 @@ public static class EconetFileServerExtensions
                 options.VersionString ?? FileServerCommandHandler.DefaultVersionString,
                 sp.GetService<IEconetActivityLog>(),
                 sp.GetService<SecurityEventEmitter>(),
-                options.BuildWireProfileResolver());
+                options.BuildWireProfileResolver(),
+                options.Net,
+                options.Station);
         });
 
         services.AddSingleton<FileServerCommandHandler>();
@@ -184,6 +186,14 @@ public sealed class EconetFileServerOptions
     /// Gets or sets the network number. The default is 1.
     /// </summary>
     public byte Net { get; set; } = 1;
+    /// <summary>
+    /// Gets or sets the station number of the server. The default is 254.
+    /// The server reports its own address, Net and this station, in the text of the PiBridge shut down reply
+    /// (PiFS utilities/fs.c line 4301). An AUN datagram has no station field (it holds the packet type, the port,
+    /// the control byte, a pad byte and the sequence number), so the station is not written into any UDP datagram;
+    /// the address a client sends to is the IP address of the host, not this number.
+    /// </summary>
+    public byte Station { get; set; } = 254;
     /// <summary>
     /// Gets or sets the index, 0 to 3, of the IPv4 address byte that holds the station number of a client. The default is 3.
     /// </summary>

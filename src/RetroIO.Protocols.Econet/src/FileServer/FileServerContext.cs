@@ -71,6 +71,12 @@ public sealed class FileServerContext
     /// <param name="wireProfiles">
     /// The wire profile resolver. When null, WireProfileResolver.AllLaterFs is used.
     /// </param>
+    /// <param name="serverNet">
+    /// The network number of this server. The default is 1.
+    /// </param>
+    /// <param name="serverStation">
+    /// The station number of this server. The default is 254.
+    /// </param>
     public FileServerContext(
         IFileSystemBackend fileSystem,
         EconetUserDirectory users,
@@ -86,8 +92,12 @@ public sealed class FileServerContext
         string versionString,
         IEconetActivityLog? activityLog = null,
         SecurityEventEmitter? securityEvents = null,
-        WireProfileResolver? wireProfiles = null)
+        WireProfileResolver? wireProfiles = null,
+        byte serverNet = 1,
+        byte serverStation = 254)
     {
+        ServerNet = serverNet;
+        ServerStation = serverStation;
         FileSystem = fileSystem;
         Users = users;
         Discs = discs;
@@ -116,6 +126,14 @@ public sealed class FileServerContext
     /// </summary>
     public IEconetActivityLog? ActivityLog { get; }
 
+    /// <summary>
+    /// Gets the network number of this server.
+    /// </summary>
+    public byte ServerNet { get; }
+    /// <summary>
+    /// Gets the station number of this server.
+    /// </summary>
+    public byte ServerStation { get; }
     /// <summary>
     /// Gets the file system backend.
     /// </summary>

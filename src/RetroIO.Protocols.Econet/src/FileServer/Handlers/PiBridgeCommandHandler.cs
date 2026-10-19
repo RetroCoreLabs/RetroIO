@@ -69,17 +69,29 @@ public sealed class PiBridgeCommandHandler
                     return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Unsupported, "Bad filename length"));
                 return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
             case 19:
-                if (session != null)
-                {
-                    _context.Handles.CloseAllForStation(session.ClientNet, session.ClientStation);
-                    _context.BulkTransfers.ReleaseStation(session.ClientNet, session.ClientStation);
-                    _context.Sessions.Logout(session.ClientNet, session.ClientStation);
-                }
-                return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
+                // PiFS answers with the text "Fileserver at net.stn shutting down" and a carriage return
+                // (utilities/fs.c lines 4296 to 4304), then fs_shutdown logs off every station (lines 3819 to 3840).
+                string shutdownText = "Fileserver at " + _context.ServerNet + "." + _context.ServerStation + " shutting down";
+                EconetMessage shutdownReply = Reply(request, fsRequest.ReplyPort, FileServerReply.Version(shutdownText));
+                LogOffAllStations();
+                return shutdownReply;
             case 20:
                 return HandleForceLogoff(request, fsRequest);
             default:
                 return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
+        }
+    }
+
+    private void LogOffAllStations()
+    {
+        FileServerSession[] active = _context.Sessions.GetActiveSessions();
+        for (int i = 0; i < active.Length; i++)
+        {
+            byte net = active[i].ClientNet;
+            byte station = active[i].ClientStation;
+            _context.Handles.CloseAllForStation(net, station);
+            _context.BulkTransfers.ReleaseStation(net, station);
+            _context.Sessions.Logout(net, station);
         }
     }
 

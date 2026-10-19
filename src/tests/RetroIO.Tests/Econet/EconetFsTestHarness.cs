@@ -42,6 +42,9 @@ internal sealed class EconetFsTestHarness
 
     public FileServerCommandHandler Handler { get; }
 
+    // The session table the server uses, so a test can count who is logged in.
+    public FileServerSessionManager Sessions { get; }
+
     // The clock the server uses, so a test can fix the date.
     public FileServerClock Clock { get; } = new FileServerClock();
 
@@ -79,11 +82,19 @@ internal sealed class EconetFsTestHarness
     {
     }
 
+    // Server-address variant: the server reports this net.station as its own address.
+    public EconetFsTestHarness(byte serverNet, byte serverStation)
+        : this(new MockFileSystemBackend(), null, null, null, serverNet, serverStation)
+    {
+    }
+
     private EconetFsTestHarness(
         MockFileSystemBackend mock,
         IFileSystemBackend? wired,
         WireProfileResolver? wireProfiles = null,
-        Func<IRetroIDP, IRetroIDP>? wrapIdentityProvider = null)
+        Func<IRetroIDP, IRetroIDP>? wrapIdentityProvider = null,
+        byte serverNet = 1,
+        byte serverStation = 254)
     {
         FileSystem = mock;
         IFileSystemBackend backend = wired ?? mock;
@@ -101,6 +112,7 @@ internal sealed class EconetFsTestHarness
 
         DiscCatalog discs = new DiscCatalog(backend, "/econet-root", "RetroFS");
         FileServerSessionManager sessions = new FileServerSessionManager(backend, users, discs, "/econet-root");
+        Sessions = sessions;
         FileServerHandleManager handles = new FileServerHandleManager();
         PathResolver paths = new PathResolver(backend, discs, "/econet-root");
         BulkTransferManager bulk = new BulkTransferManager();
@@ -122,7 +134,9 @@ internal sealed class EconetFsTestHarness
             "RetroFS",
             FileServerCommandHandler.DefaultVersionString,
             ActivityLog,
-            wireProfiles: wireProfiles);
+            wireProfiles: wireProfiles,
+            serverNet: serverNet,
+            serverStation: serverStation);
 
         Handler = new FileServerCommandHandler(context, NullLogger<FileServerCommandHandler>.Instance);
     }

@@ -102,6 +102,7 @@ public static class RetroServerComposition
                 o.VersionString = econetConfig.VersionString;
                 o.UdpPort = econetConfig.UdpPort;
                 o.Net = econetConfig.Net;
+                o.Station = econetConfig.Station;
                 o.AunStationOctetIndex = econetConfig.AunStationOctetIndex;
                 o.EnableUdp = econetConfig.EnableUdp;
                 o.DefaultWireProfile = econetConfig.WireProfile;
