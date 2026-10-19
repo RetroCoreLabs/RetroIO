@@ -540,7 +540,7 @@ Written/read from the RetroFS data directory:
 | `VersionString` | `null` → built-in default | `*FSLIST` / opcode `0x19` |
 | `UdpPort` | `32768` | AUN UDP listen port |
 | `Net` | `1` | Econet network for clients + server identity |
-| `Station` | `254` | File server station (informational in host banner; not enforced on bind) |
+| `Station` | `254` | Read by the host configuration and its banner only; `EconetFileServerOptions` has no such setting. An AUN datagram carries no station number, so the server cannot put one on the wire: its station is the IP address it is reached at |
 | `AunStationOctetIndex` | `3` | Which IPv4 octet maps to client station (0-based) |
 | `EnableUdp` | `true` | Register `UdpAunTransport` |
 

@@ -229,7 +229,7 @@ public sealed class FileIoCommandHandler
             Username = session.Username,
         });
 
-        return Reply(request, fsRequest.ReplyPort, FileServerReply.SaveSetup(bulkPort));
+        return Reply(request, fsRequest.ReplyPort, FileServerReply.SaveSetup(bulkPort, _context.Configuration.SaveWindow));
     }
 
     private EconetMessage HandleOpen(EconetMessage request, FileServerRequest fsRequest)

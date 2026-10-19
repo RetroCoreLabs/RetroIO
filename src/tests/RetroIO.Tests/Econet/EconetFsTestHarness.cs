@@ -49,6 +49,9 @@ internal sealed class EconetFsTestHarness
     public EconetActivityLog ActivityLog { get; }
     public EconetTestMonitor Monitor { get; }
 
+    // The configuration object the server reads, so a test can set or inspect the flag bits.
+    public FileServerConfiguration Configuration { get; } = new FileServerConfiguration();
+
     // Default: a plain in-memory mock is both the store and the wired backend.
     public EconetFsTestHarness()
         : this(new MockFileSystemBackend(), null)
@@ -113,7 +116,7 @@ internal sealed class EconetFsTestHarness
             handles,
             paths,
             bulk,
-            new FileServerConfiguration(),
+            Configuration,
             Clock,
             "/econet-root",
             "RetroFS",

@@ -38,7 +38,7 @@ public sealed class FileServerConfiguration
     /// <remarks>
     /// PiFS name FS_CONFIG_BIGCHUNKS, NETCONF item BIGCHUNKS. The PiFS menu text calls it GBPB Big Chunks. In the reply that starts a bulk write (fs_putbytes) PiFS reports a maximum transfer size of 0x1000 with the bit set and 0x500 with it clear.
     /// The PiFS field comment says the smaller size exists for BeebEm compatibility, because BeebEm appears to overrun its buffer on larger chunks.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_bigchunks; fs.c lines 200 and 9023 to 9024, FS_MAX_BULK_SIZE at line 184). This code does not read the bit.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_bigchunks; fs.c lines 200 and 9023 to 9024, FS_MAX_BULK_SIZE at line 184). The reply that starts a SAVE reads the bit (see SaveWindow).
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagBigChunks = 0x04;
@@ -70,6 +70,16 @@ public sealed class FileServerConfiguration
     /// </remarks>
     public const byte FlagMdfsInfo = 0x20;
     /// <summary>
+    /// Bit mask 0x40 in ConfigBits. When set, directory permissions are more flexible and are enforced.
+    /// </summary>
+    /// <remarks>
+    /// PiFS name FS_CONFIG_PIFSPERMS, NETCONF item PIFSPERMS. The PiFS field comment says it enables more flexible permissions on directories and enforces them.
+    /// With it set, the create check also lets another user create in a directory that has the other-write and owner-write bits.
+    /// Source: PiEconetBridge utilities/fs.c (fs_pifsperms, line 207; FS_PERM_CREATE, line 372) and include/econet-fs-hpbridge-common.h line 16. This code does not read the bit.
+    /// PiFS default for a new configuration is off.
+    /// </remarks>
+    public const byte FlagPifsPerms = 0x40;
+    /// <summary>
     /// Bit mask 0x80 in ConfigBits. When set, directories are shown the Acorn way, with the implied W/R access letters hidden.
     /// </summary>
     /// <remarks>
@@ -80,23 +90,29 @@ public sealed class FileServerConfiguration
     public const byte FlagAcornDir = 0x80;
 
     /// <summary>
-    /// Gets or sets the configuration flag byte. The default has FlagManyHandle and FlagMdfsInfo set.
+    /// Gets or sets the configuration flag byte. The default is FlagMdfsFunctions and FlagAcornDir, the value 0x82.
     /// </summary>
     /// <remarks>
-    /// Bit 0x40 is not defined in this class. PiFS defines it as FS_CONFIG_PIFSPERMS (NETCONF item PIFSPERMS), which enables more flexible directory permissions and enforces them. This code does not read or write that bit.
-    /// PiFS keeps its flags in a 32-bit value and sends them to a client as four bytes, low byte first, followed by the file name length. This class keeps only the low byte.
-    /// A new PiFS configuration starts with FS_CONFIG_SJFUNC and FS_CONFIG_MASKDIRWRR set (value 0x82) and the other flags clear, which differs from the default here.
-    /// Source: PiEconetBridge utilities/fs.c lines 198 to 209, 564 to 571 and 3460 to 3464, and include/econet-fs-hpbridge-common.h lines 10 to 17.
+    /// A new PiFS configuration sets fs_sjfunc and fs_mask_dir_wrr and leaves every other flag clear (fs.c lines 3460 to 3464), which is 0x82.
+    /// PiFS keeps the flags in a 32-bit value (struct fs_config holds one byte per flag, and fs_get_parameters builds the value, fs.c lines 555 to 571) and sends it to a client as four bytes, low byte first, followed by the file name length (fs.c lines 4254 to 4266).
+    /// The flags use bits 0 to 7 of that value, bits 8 to 15 are always 0, the default file permission is bits 16 to 23 and the default directory permission is bits 24 to 31. This class keeps the flag byte and the two permissions as separate properties and builds the four bytes in ToConfigReplyBytes.
+    /// Source: PiEconetBridge utilities/fs.c lines 198 to 209, 555 to 571, 3460 to 3467 and 4240 to 4300, and include/econet-fs-hpbridge-common.h lines 10 to 17.
     /// </remarks>
-    public byte ConfigBits { get; set; } = FlagManyHandle | FlagMdfsInfo;
+    public byte ConfigBits { get; set; } = FlagMdfsFunctions | FlagAcornDir;
     /// <summary>
-    /// Gets or sets the access byte given to files that have no stored access. The default is 0x33.
+    /// Gets or sets the access byte given to files that have no stored access. The default is 0x03.
     /// </summary>
-    public byte DefaultFilePerm { get; set; } = 0x33;
+    /// <remarks>
+    /// PiFS sets FS_PERM_OWN_W | FS_PERM_OWN_R (0x02 | 0x01) for a new configuration (fs.c line 3467).
+    /// </remarks>
+    public byte DefaultFilePerm { get; set; } = 0x03;
     /// <summary>
-    /// Gets or sets the access byte for directories. The default is 0x33.
+    /// Gets or sets the access byte for directories. The default is 0x13.
     /// </summary>
-    public byte DefaultDirPerm { get; set; } = 0x33;
+    /// <remarks>
+    /// PiFS sets FS_PERM_OWN_W | FS_PERM_OWN_R | FS_PERM_OTH_R (0x02 | 0x01 | 0x10) for a new configuration (fs.c line 3466).
+    /// </remarks>
+    public byte DefaultDirPerm { get; set; } = 0x13;
     /// <summary>
     /// Gets or sets the file name length value reported in the configuration reply. The default is 10.
     /// </summary>
@@ -121,6 +137,23 @@ public sealed class FileServerConfiguration
     public int AunMaxTransmits { get; set; } = 5;
 
     /// <summary>
+    /// The smallest file name length PiFS accepts in a set-parameters call.
+    /// </summary>
+    public const byte MinFilenameLength = 10;
+    /// <summary>
+    /// The largest file name length PiFS accepts in a set-parameters call.
+    /// </summary>
+    public const byte MaxFilenameLength = 79;
+
+    /// <summary>
+    /// Gets the largest data size the server announces when it starts a SAVE: 0x1000 with FlagBigChunks set, otherwise 0x500.
+    /// </summary>
+    /// <remarks>
+    /// Source: PiEconetBridge utilities/fs.c lines 184, 9023 and 9024 (FS_MAX_BULK_SIZE is 0x1000).
+    /// </remarks>
+    public int SaveWindow => (ConfigBits & FlagBigChunks) != 0 ? 0x1000 : 0x500;
+
+    /// <summary>
     /// Gets a value indicating whether FlagManyHandle is set in ConfigBits.
     /// </summary>
     public bool ManyHandles => (ConfigBits & FlagManyHandle) != 0;
@@ -129,28 +162,43 @@ public sealed class FileServerConfiguration
     /// Builds the five configuration bytes sent in a configuration reply.
     /// </summary>
     /// <returns>
-    /// The bytes ConfigBits, DefaultFilePerm, DefaultDirPerm, 0 and FilenameLength.
+    /// The four bytes of the 32-bit parameter value, low byte first (ConfigBits, 0, DefaultFilePerm, DefaultDirPerm), then FilenameLength.
     /// </returns>
+    /// <remarks>
+    /// Source: PiEconetBridge utilities/fs.c lines 555 to 571 (fs_get_parameters) and 4254 to 4266 (PiBridge call 0x11).
+    /// </remarks>
     public byte[] ToConfigReplyBytes()
     {
-        return [ConfigBits, DefaultFilePerm, DefaultDirPerm, 0, FilenameLength];
+        return [ConfigBits, 0, DefaultFilePerm, DefaultDirPerm, FilenameLength];
     }
 
     /// <summary>
-    /// Updates the configuration from the bytes of a configuration request. Bytes that are not present are left unchanged.
+    /// Updates the configuration from the bytes of a set-parameters request. Bytes that are not present are left unchanged.
     /// </summary>
     /// <param name="data">
-    /// The configuration bytes. Byte 0 sets ConfigBits, byte 1 DefaultFilePerm, byte 2 DefaultDirPerm and byte 4 FilenameLength. Byte 3 is ignored.
+    /// The configuration bytes in the same layout as ToConfigReplyBytes. Byte 0 sets ConfigBits, byte 1 (bits 8 to 15) is ignored, byte 2 sets DefaultFilePerm, byte 3 sets DefaultDirPerm and byte 4 sets FilenameLength.
     /// </param>
-    public void ApplyConfigBytes(ReadOnlySpan<byte> data)
+    /// <returns>
+    /// False when byte 4 is present and outside MinFilenameLength to MaxFilenameLength; nothing is changed then. Otherwise true.
+    /// </returns>
+    /// <remarks>
+    /// Source: PiEconetBridge utilities/fs.c lines 4272 to 4291 (PiBridge call 0x12) for the layout and the file name length check.
+    /// The reference decodes the permission bytes with masks that cannot match the layout it sends (fs_set_parameters at lines 579 and 580 masks 0x00ff0000 and then shifts by 24, so both come out 0). This code reads them where fs_get_parameters puts them, so a client that reads the parameters and writes them back keeps the permissions.
+    /// </remarks>
+    public bool ApplyConfigBytes(ReadOnlySpan<byte> data)
     {
+        if (data.Length > 4 && (data[4] < MinFilenameLength || data[4] > MaxFilenameLength))
+            return false;
+
         if (data.Length > 0)
             ConfigBits = data[0];
-        if (data.Length > 1)
-            DefaultFilePerm = data[1];
         if (data.Length > 2)
-            DefaultDirPerm = data[2];
+            DefaultFilePerm = data[2];
+        if (data.Length > 3)
+            DefaultDirPerm = data[3];
         if (data.Length > 4)
             FilenameLength = data[4];
+
+        return true;
     }
 }

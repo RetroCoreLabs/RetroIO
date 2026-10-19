@@ -64,8 +64,9 @@ public sealed class PiBridgeCommandHandler
             case 17:
                 return Reply(request, fsRequest.ReplyPort, FileServerReply.WithReturnCode(0, _context.Configuration.ToConfigReplyBytes()));
             case 18:
-                if (fsRequest.Parameters.Length > 1)
-                    _context.Configuration.ApplyConfigBytes(fsRequest.Parameters.Slice(1));
+                // PiFS answers 0xFF "Bad filename length" and changes nothing (utilities/fs.c lines 4281 to 4285).
+                if (fsRequest.Parameters.Length > 1 && !_context.Configuration.ApplyConfigBytes(fsRequest.Parameters.Slice(1)))
+                    return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Unsupported, "Bad filename length"));
                 return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
             case 19:
                 if (session != null)

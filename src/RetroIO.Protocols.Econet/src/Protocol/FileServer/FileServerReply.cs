@@ -362,7 +362,24 @@ public static class FileServerReply
     /// </returns>
     public static byte[] SaveSetup(byte bulkPort)
     {
-        return [0, 0, bulkPort, 0x00, 0x05];
+        return SaveSetup(bulkPort, 0x500);
+    }
+
+    /// <summary>
+    /// Builds the reply that starts a bulk save, with the largest data size the server accepts in one packet.
+    /// </summary>
+    /// <param name="bulkPort">
+    /// The port the client sends the data to.
+    /// </param>
+    /// <param name="maxTransferSize">
+    /// The largest data size in one packet, sent low byte first. PiFS sends 0x1000 with the big chunks flag set and 0x500 otherwise (utilities/fs.c lines 9023 and 9024).
+    /// </param>
+    /// <returns>
+    /// The bytes 0, 0, the port, then the low and high byte of the size.
+    /// </returns>
+    public static byte[] SaveSetup(byte bulkPort, int maxTransferSize)
+    {
+        return [0, 0, bulkPort, (byte)(maxTransferSize & 0xFF), (byte)((maxTransferSize >> 8) & 0xFF)];
     }
 
     /// <summary>
