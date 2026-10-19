@@ -22,3 +22,6 @@ README.template.md
 # Disk images are not in git. src/eng/fetch-test-images downloads them (see src/eng/test-images.sha256).
 src/tests/demo/test-images/
 src/tests/RetroIO.Tests/TestData/*.img.gz
+
+# Working notes for coding agents stay on disk, never in the repository
+CLAUDE.md
