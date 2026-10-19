@@ -4,6 +4,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Ship the XML documentation with every package, so callers get IntelliSense text. With TreatWarningsAsErrors on, a public member without a comment (CS1591) fails the build. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Check each package at pack time (lib layout, target frameworks). No baseline version is set on purpose: nothing has been published yet, so there is nothing to compare against. After the first release, add PackageValidationBaselineVersion to catch breaking API changes. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\nuget-icon.png" Pack="true" PackagePath="nuget-icon.png" Visible="false" />
