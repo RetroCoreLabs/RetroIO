@@ -9,11 +9,15 @@ using System;
 using System.Collections.Generic;
 
 using RetroIO.Link.Models;
+using RetroIO.Protocols.X25.Protocols;
+
 namespace RetroIO.Protocols.X25.Models
 {
     /// <summary>
     /// X.3 PAD Parameters according to ITU-T X.3 standard
     /// Defines all 22 standard PAD parameters for Triple-X (X.3, X.28, X.29) services
+    /// The parameter numbers, default values, valid values, descriptions and the two standard profiles
+    /// all come from the X3 class, so the two classes cannot disagree.
     /// </summary>
     public class X3Parameters
     {
@@ -27,91 +31,91 @@ namespace RetroIO.Protocols.X25.Models
             /// <summary>
             /// X.3 parameter number 1 (PAD escape from data transfer mode).
             /// </summary>
-            public const byte ESCAPE = 1;                    // PAD escape from data transfer mode
+            public const byte ESCAPE = X3.ParameterNumber.ESCAPE;
             /// <summary>
             /// X.3 parameter number 2 (Echo).
             /// </summary>
-            public const byte ECHO = 2;                     // Echo
+            public const byte ECHO = X3.ParameterNumber.ECHO;
             /// <summary>
             /// X.3 parameter number 3 (Data forwarding signal).
             /// </summary>
-            public const byte DATA_FORWARDING = 3;          // Data forwarding signal
+            public const byte DATA_FORWARDING = X3.ParameterNumber.DATA_FORWARDING;
             /// <summary>
             /// X.3 parameter number 4 (Idle timer delay).
             /// </summary>
-            public const byte IDLE_TIMER = 4;               // Idle timer delay
+            public const byte IDLE_TIMER = X3.ParameterNumber.IDLE_TIMER;
             /// <summary>
             /// X.3 parameter number 5 (Ancillary device control).
             /// </summary>
-            public const byte ANCILLARY_DEVICE_CONTROL = 5; // Ancillary device control
+            public const byte ANCILLARY_DEVICE_CONTROL = X3.ParameterNumber.ANCILLARY_DEVICE_CONTROL;
             /// <summary>
             /// X.3 parameter number 6 (Control of PAD service signals).
             /// </summary>
-            public const byte CONTROL_PAD_SERVICE_SIGNALS = 6; // Control of PAD service signals
+            public const byte CONTROL_PAD_SERVICE_SIGNALS = X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS;
             /// <summary>
             /// X.3 parameter number 7 (Operation of the procedure for break).
             /// </summary>
-            public const byte OPERATION_BREAKOUT_PROCEDURE = 7; // Operation of the procedure for break
+            public const byte OPERATION_BREAKOUT_PROCEDURE = X3.ParameterNumber.OPERATION_BREAKOUT_PROCEDURE;
             /// <summary>
             /// X.3 parameter number 8 (Discard output).
             /// </summary>
-            public const byte DISCARD_OUTPUT = 8;           // Discard output
+            public const byte DISCARD_OUTPUT = X3.ParameterNumber.DISCARD_OUTPUT;
             /// <summary>
             /// X.3 parameter number 9 (Padding after carriage return).
             /// </summary>
-            public const byte PADDING_AFTER_CR = 9;         // Padding after carriage return
+            public const byte PADDING_AFTER_CR = X3.ParameterNumber.PADDING_AFTER_CR;
             /// <summary>
             /// X.3 parameter number 10 (Line folding).
             /// </summary>
-            public const byte LINE_FOLDING = 10;            // Line folding
+            public const byte LINE_FOLDING = X3.ParameterNumber.LINE_FOLDING;
             /// <summary>
             /// X.3 parameter number 11 (Binary speed (not used)).
             /// </summary>
-            public const byte BINARY_SPEED = 11;            // Binary speed (not used)
+            public const byte BINARY_SPEED = X3.ParameterNumber.BINARY_SPEED;
             /// <summary>
             /// X.3 parameter number 12 (Flow control of the PAD).
             /// </summary>
-            public const byte FLOW_CONTROL_X_ON_X_OFF = 12; // Flow control of the PAD
+            public const byte FLOW_CONTROL_X_ON_X_OFF = X3.ParameterNumber.FLOW_CONTROL_X_ON_X_OFF;
             /// <summary>
             /// X.3 parameter number 13 (Linefeed insertion after carriage return).
             /// </summary>
-            public const byte LINE_FEED_INSERTION = 13;     // Linefeed insertion after carriage return
+            public const byte LINE_FEED_INSERTION = X3.ParameterNumber.LINE_FEED_INSERTION;
             /// <summary>
             /// X.3 parameter number 14 (Padding after line feed).
             /// </summary>
-            public const byte PADDING_AFTER_LINE_FEED = 14; // Padding after line feed
+            public const byte PADDING_AFTER_LINE_FEED = X3.ParameterNumber.PADDING_AFTER_LINE_FEED;
             /// <summary>
             /// X.3 parameter number 15 (Editing).
             /// </summary>
-            public const byte EDITING = 15;                 // Editing
+            public const byte EDITING = X3.ParameterNumber.EDITING;
             /// <summary>
             /// X.3 parameter number 16 (Character delete).
             /// </summary>
-            public const byte CHARACTER_DELETE = 16;        // Character delete
+            public const byte CHARACTER_DELETE = X3.ParameterNumber.CHARACTER_DELETE;
             /// <summary>
             /// X.3 parameter number 17 (Line delete).
             /// </summary>
-            public const byte LINE_DELETE = 17;             // Line delete
+            public const byte LINE_DELETE = X3.ParameterNumber.LINE_DELETE;
             /// <summary>
             /// X.3 parameter number 18 (Line display).
             /// </summary>
-            public const byte LINE_DISPLAY = 18;            // Line display
+            public const byte LINE_DISPLAY = X3.ParameterNumber.LINE_DISPLAY;
             /// <summary>
             /// X.3 parameter number 19 (Editing PAD service signals).
             /// </summary>
-            public const byte EDITING_PAD_SERVICE_SIGNALS = 19; // Editing PAD service signals
+            public const byte EDITING_PAD_SERVICE_SIGNALS = X3.ParameterNumber.EDITING_PAD_SERVICE_SIGNALS;
             /// <summary>
             /// X.3 parameter number 20 (Echo mask).
             /// </summary>
-            public const byte ECHO_MASK = 20;               // Echo mask
+            public const byte ECHO_MASK = X3.ParameterNumber.ECHO_MASK;
             /// <summary>
             /// X.3 parameter number 21 (Parity treatment).
             /// </summary>
-            public const byte PARITY_TREATMENT = 21;        // Parity treatment
+            public const byte PARITY_TREATMENT = X3.ParameterNumber.PARITY_TREATMENT;
             /// <summary>
             /// X.3 parameter number 22 (Page wait).
             /// </summary>
-            public const byte PAGE_WAIT = 22;               // Page wait
+            public const byte PAGE_WAIT = X3.ParameterNumber.PAGE_WAIT;
         }
 
         /// <summary>
@@ -122,91 +126,91 @@ namespace RetroIO.Protocols.X25.Models
             /// <summary>
             /// Default value of the escape parameter: 1 (Enabled (DLE)).
             /// </summary>
-            public const byte ESCAPE = 1;                    // Enabled (DLE)
+            public const byte ESCAPE = X3.DefaultValue.ESCAPE;
             /// <summary>
             /// Default value of the echo parameter: 1 (Enabled).
             /// </summary>
-            public const byte ECHO = 1;                     // Enabled
+            public const byte ECHO = X3.DefaultValue.ECHO;
             /// <summary>
-            /// Default value of the data forwarding parameter: 2 (Alphanumeric characters).
+            /// Default value of the data forwarding parameter: 2 (carriage return, CR). The value comes from X3.DefaultValue.
             /// </summary>
-            public const byte DATA_FORWARDING = 2;          // Alphanumeric characters
+            public const byte DATA_FORWARDING = X3.DefaultValue.DATA_FORWARDING;
             /// <summary>
             /// Default value of the idle timer parameter: 0 (Disabled).
             /// </summary>
-            public const byte IDLE_TIMER = 0;               // Disabled
+            public const byte IDLE_TIMER = X3.DefaultValue.IDLE_TIMER;
             /// <summary>
             /// Default value of the ancillary device control parameter: 0 (Disabled).
             /// </summary>
-            public const byte ANCILLARY_DEVICE_CONTROL = 0; // Disabled
+            public const byte ANCILLARY_DEVICE_CONTROL = X3.DefaultValue.ANCILLARY_DEVICE_CONTROL;
             /// <summary>
             /// Default value of the control pad service signals parameter: 1 (Enabled).
             /// </summary>
-            public const byte CONTROL_PAD_SERVICE_SIGNALS = 1; // Enabled
+            public const byte CONTROL_PAD_SERVICE_SIGNALS = X3.DefaultValue.CONTROL_PAD_SERVICE_SIGNALS;
             /// <summary>
             /// Default value of the operation breakout procedure parameter: 21 (BREAK forwarded).
             /// </summary>
-            public const byte OPERATION_BREAKOUT_PROCEDURE = 21; // BREAK forwarded
+            public const byte OPERATION_BREAKOUT_PROCEDURE = X3.DefaultValue.OPERATION_BREAKOUT_PROCEDURE;
             /// <summary>
             /// Default value of the discard output parameter: 1 (Enabled on receipt of normal data).
             /// </summary>
-            public const byte DISCARD_OUTPUT = 1;           // Enabled on receipt of normal data
+            public const byte DISCARD_OUTPUT = X3.DefaultValue.DISCARD_OUTPUT;
             /// <summary>
             /// Default value of the padding after cr parameter: 0 (No padding).
             /// </summary>
-            public const byte PADDING_AFTER_CR = 0;         // No padding
+            public const byte PADDING_AFTER_CR = X3.DefaultValue.PADDING_AFTER_CR;
             /// <summary>
             /// Default value of the line folding parameter: 0 (Disabled).
             /// </summary>
-            public const byte LINE_FOLDING = 0;             // Disabled
+            public const byte LINE_FOLDING = X3.DefaultValue.LINE_FOLDING;
             /// <summary>
             /// Default value of the binary speed parameter: 0 (Not used).
             /// </summary>
-            public const byte BINARY_SPEED = 0;             // Not used
+            public const byte BINARY_SPEED = X3.DefaultValue.BINARY_SPEED;
             /// <summary>
-            /// Default value of the flow control x on x off parameter: 0 (Disabled).
+            /// Default value of the flow control parameter: 0 (no use of X-ON and X-OFF).
             /// </summary>
-            public const byte FLOW_CONTROL_X_ON_X_OFF = 0;  // Disabled
+            public const byte FLOW_CONTROL_X_ON_X_OFF = X3.DefaultValue.FLOW_CONTROL_X_ON_X_OFF;
             /// <summary>
             /// Default value of the line feed insertion parameter: 0 (Disabled).
             /// </summary>
-            public const byte LINE_FEED_INSERTION = 0;      // Disabled
+            public const byte LINE_FEED_INSERTION = X3.DefaultValue.LINE_FEED_INSERTION;
             /// <summary>
             /// Default value of the padding after line feed parameter: 0 (No padding).
             /// </summary>
-            public const byte PADDING_AFTER_LINE_FEED = 0;  // No padding
+            public const byte PADDING_AFTER_LINE_FEED = X3.DefaultValue.PADDING_AFTER_LINE_FEED;
             /// <summary>
             /// Default value of the editing parameter: 1 (Enabled).
             /// </summary>
-            public const byte EDITING = 1;                  // Enabled
+            public const byte EDITING = X3.DefaultValue.EDITING;
             /// <summary>
             /// Default value of the character delete parameter: 127 (DEL character).
             /// </summary>
-            public const byte CHARACTER_DELETE = 127;       // DEL character
+            public const byte CHARACTER_DELETE = X3.DefaultValue.CHARACTER_DELETE;
             /// <summary>
             /// Default value of the line delete parameter: 24 (CAN character).
             /// </summary>
-            public const byte LINE_DELETE = 24;             // CAN character
+            public const byte LINE_DELETE = X3.DefaultValue.LINE_DELETE;
             /// <summary>
             /// Default value of the line display parameter: 18 (DC2 character).
             /// </summary>
-            public const byte LINE_DISPLAY = 18;            // DC2 character
+            public const byte LINE_DISPLAY = X3.DefaultValue.LINE_DISPLAY;
             /// <summary>
             /// Default value of the editing pad service signals parameter: 0 (Disabled).
             /// </summary>
-            public const byte EDITING_PAD_SERVICE_SIGNALS = 0; // Disabled
+            public const byte EDITING_PAD_SERVICE_SIGNALS = X3.DefaultValue.EDITING_PAD_SERVICE_SIGNALS;
             /// <summary>
             /// Default value of the echo mask parameter: 0 (All characters echoed).
             /// </summary>
-            public const byte ECHO_MASK = 0;                // All characters echoed
+            public const byte ECHO_MASK = X3.DefaultValue.ECHO_MASK;
             /// <summary>
             /// Default value of the parity treatment parameter: 0 (No parity checking).
             /// </summary>
-            public const byte PARITY_TREATMENT = 0;         // No parity checking
+            public const byte PARITY_TREATMENT = X3.DefaultValue.PARITY_TREATMENT;
             /// <summary>
             /// Default value of the page wait parameter: 0 (Disabled).
             /// </summary>
-            public const byte PAGE_WAIT = 0;                // Disabled
+            public const byte PAGE_WAIT = X3.DefaultValue.PAGE_WAIT;
         }
 
         /// <summary>
@@ -222,29 +226,23 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public void SetDefaultValues()
         {
-            _parameters.Clear();
-            _parameters[ParameterNumber.ESCAPE] = DefaultValue.ESCAPE;
-            _parameters[ParameterNumber.ECHO] = DefaultValue.ECHO;
-            _parameters[ParameterNumber.DATA_FORWARDING] = DefaultValue.DATA_FORWARDING;
-            _parameters[ParameterNumber.IDLE_TIMER] = DefaultValue.IDLE_TIMER;
-            _parameters[ParameterNumber.ANCILLARY_DEVICE_CONTROL] = DefaultValue.ANCILLARY_DEVICE_CONTROL;
-            _parameters[ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS] = DefaultValue.CONTROL_PAD_SERVICE_SIGNALS;
-            _parameters[ParameterNumber.OPERATION_BREAKOUT_PROCEDURE] = DefaultValue.OPERATION_BREAKOUT_PROCEDURE;
-            _parameters[ParameterNumber.DISCARD_OUTPUT] = DefaultValue.DISCARD_OUTPUT;
-            _parameters[ParameterNumber.PADDING_AFTER_CR] = DefaultValue.PADDING_AFTER_CR;
-            _parameters[ParameterNumber.LINE_FOLDING] = DefaultValue.LINE_FOLDING;
-            _parameters[ParameterNumber.BINARY_SPEED] = DefaultValue.BINARY_SPEED;
-            _parameters[ParameterNumber.FLOW_CONTROL_X_ON_X_OFF] = DefaultValue.FLOW_CONTROL_X_ON_X_OFF;
-            _parameters[ParameterNumber.LINE_FEED_INSERTION] = DefaultValue.LINE_FEED_INSERTION;
-            _parameters[ParameterNumber.PADDING_AFTER_LINE_FEED] = DefaultValue.PADDING_AFTER_LINE_FEED;
-            _parameters[ParameterNumber.EDITING] = DefaultValue.EDITING;
-            _parameters[ParameterNumber.CHARACTER_DELETE] = DefaultValue.CHARACTER_DELETE;
-            _parameters[ParameterNumber.LINE_DELETE] = DefaultValue.LINE_DELETE;
-            _parameters[ParameterNumber.LINE_DISPLAY] = DefaultValue.LINE_DISPLAY;
-            _parameters[ParameterNumber.EDITING_PAD_SERVICE_SIGNALS] = DefaultValue.EDITING_PAD_SERVICE_SIGNALS;
-            _parameters[ParameterNumber.ECHO_MASK] = DefaultValue.ECHO_MASK;
-            _parameters[ParameterNumber.PARITY_TREATMENT] = DefaultValue.PARITY_TREATMENT;
-            _parameters[ParameterNumber.PAGE_WAIT] = DefaultValue.PAGE_WAIT;
+            X3.FillDefaultValues(_parameters);
+        }
+
+        /// <summary>
+        /// Set the transparent standard profile of Table 1/X.28 (ITU-T X.28, 12/97, page 9)
+        /// </summary>
+        public void SetTransparentProfile()
+        {
+            X3.FillTransparentProfile(_parameters);
+        }
+
+        /// <summary>
+        /// Set the simple standard profile of Table 1/X.28 (ITU-T X.28, 12/97, page 9)
+        /// </summary>
+        public void SetSimpleProfile()
+        {
+            X3.FillSimpleProfile(_parameters);
         }
 
         /// <summary>
@@ -272,32 +270,7 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public static bool IsValidParameter(byte parameterNumber, byte value)
         {
-            return parameterNumber switch
-            {
-                ParameterNumber.ESCAPE => value <= 1,
-                ParameterNumber.ECHO => value <= 1,
-                ParameterNumber.DATA_FORWARDING => value <= 126,
-                ParameterNumber.IDLE_TIMER => value <= 255,
-                ParameterNumber.ANCILLARY_DEVICE_CONTROL => value <= 1,
-                ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS => value <= 1,
-                ParameterNumber.OPERATION_BREAKOUT_PROCEDURE => value <= 127,
-                ParameterNumber.DISCARD_OUTPUT => value <= 1,
-                ParameterNumber.PADDING_AFTER_CR => value <= 7,
-                ParameterNumber.LINE_FOLDING => value <= 255,
-                ParameterNumber.BINARY_SPEED => true, // Not used
-                ParameterNumber.FLOW_CONTROL_X_ON_X_OFF => value <= 1,
-                ParameterNumber.LINE_FEED_INSERTION => value <= 7,
-                ParameterNumber.PADDING_AFTER_LINE_FEED => value <= 7,
-                ParameterNumber.EDITING => value <= 1,
-                ParameterNumber.CHARACTER_DELETE => value <= 127,
-                ParameterNumber.LINE_DELETE => value <= 127,
-                ParameterNumber.LINE_DISPLAY => value <= 127,
-                ParameterNumber.EDITING_PAD_SERVICE_SIGNALS => value <= 1,
-                ParameterNumber.ECHO_MASK => true, // All values valid
-                ParameterNumber.PARITY_TREATMENT => value <= 3,
-                ParameterNumber.PAGE_WAIT => value <= 255,
-                _ => false
-            };
+            return X3.IsValidParameter(parameterNumber, value);
         }
 
         /// <summary>
@@ -305,32 +278,7 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public static string GetParameterDescription(byte parameterNumber)
         {
-            return parameterNumber switch
-            {
-                ParameterNumber.ESCAPE => "PAD escape from data transfer mode",
-                ParameterNumber.ECHO => "Echo characters back to terminal",
-                ParameterNumber.DATA_FORWARDING => "Data forwarding signal characters",
-                ParameterNumber.IDLE_TIMER => "Idle timer delay (20ms units)",
-                ParameterNumber.ANCILLARY_DEVICE_CONTROL => "Ancillary device control",
-                ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS => "Control of PAD service signals",
-                ParameterNumber.OPERATION_BREAKOUT_PROCEDURE => "Break handling procedure",
-                ParameterNumber.DISCARD_OUTPUT => "Discard output control",
-                ParameterNumber.PADDING_AFTER_CR => "Padding characters after CR",
-                ParameterNumber.LINE_FOLDING => "Line folding column limit",
-                ParameterNumber.BINARY_SPEED => "Binary speed (not used)",
-                ParameterNumber.FLOW_CONTROL_X_ON_X_OFF => "XON/XOFF flow control",
-                ParameterNumber.LINE_FEED_INSERTION => "Auto LF insertion after CR",
-                ParameterNumber.PADDING_AFTER_LINE_FEED => "Padding after LF",
-                ParameterNumber.EDITING => "Command line editing enable",
-                ParameterNumber.CHARACTER_DELETE => "Character delete key",
-                ParameterNumber.LINE_DELETE => "Line delete key", 
-                ParameterNumber.LINE_DISPLAY => "Line display key",
-                ParameterNumber.EDITING_PAD_SERVICE_SIGNALS => "Editing service signals",
-                ParameterNumber.ECHO_MASK => "Character echo mask",
-                ParameterNumber.PARITY_TREATMENT => "Parity checking mode",
-                ParameterNumber.PAGE_WAIT => "Page wait line count",
-                _ => "Unknown parameter"
-            };
+            return X3.GetParameterDescription(parameterNumber);
         }
 
         /// <summary>

@@ -77,9 +77,10 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte BINARY_SPEED = 11;            // Binary speed (not used)
             /// <summary>
-            /// X.3 parameter number 12 (Forward on N characters).
+            /// X.3 parameter number 12 (Flow control of the PAD by the start-stop mode DTE).
+            /// Reference 12 in X.3 section 3.12: 0 means no use of X-ON and X-OFF, 1 means use of X-ON and X-OFF.
             /// </summary>
-            public const byte FORWARD_ON_N_CHARACTERS = 12; // Forward on N characters
+            public const byte FLOW_CONTROL_X_ON_X_OFF = 12; // Flow control of the PAD by the start-stop mode DTE
             /// <summary>
             /// X.3 parameter number 13 (Linefeed insertion after carriage return).
             /// </summary>
@@ -136,9 +137,13 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte ECHO = 1;                     // Enabled
             /// <summary>
-            /// Default value of the data forwarding parameter: 13 (Carriage return (CR)).
+            /// Default value of the data forwarding parameter: 2 (carriage return, CR).
+            /// Parameter 3 is a sum of flags (X.3 section 3.3), so 2 is exactly CR.
+            /// The value 13 is 1 + 4 + 8 (alphanumerics, ESC BEL ENQ ACK, DEL CAN DC2) and does not mean CR.
+            /// X.3 does not name a default for parameter 3, only the two X.28 standard profiles set it;
+            /// CR is kept because this code has always forwarded a line on CR.
             /// </summary>
-            public const byte DATA_FORWARDING = 13;         // Carriage return (CR)
+            public const byte DATA_FORWARDING = 2;          // Carriage return (CR) flag
             /// <summary>
             /// Default value of the idle timer parameter: 0 (Disabled).
             /// </summary>
@@ -172,9 +177,9 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte BINARY_SPEED = 0;             // Not used
             /// <summary>
-            /// Default value of the forward on n characters parameter: 0 (Disabled (line mode)).
+            /// Default value of the flow control parameter: 0 (no use of X-ON and X-OFF).
             /// </summary>
-            public const byte FORWARD_ON_N_CHARACTERS = 0;  // Disabled (line mode)
+            public const byte FLOW_CONTROL_X_ON_X_OFF = 0;  // No use of X-ON and X-OFF
             /// <summary>
             /// Default value of the line feed insertion parameter: 0 (Disabled).
             /// </summary>
@@ -218,6 +223,47 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// The flags that make up the value of parameter 3 (selection of data forwarding character),
+        /// X.3 section 3.3 reference 3. The value is the sum of the flags wanted.
+        /// </summary>
+        public static class DataForwardingFlag
+        {
+            /// <summary>
+            /// Flag 1: alphanumeric characters (A to Z, a to z, 0 to 9).
+            /// </summary>
+            public const byte ALPHANUMERIC = 1;
+            /// <summary>
+            /// Flag 2: the character CR.
+            /// </summary>
+            public const byte CARRIAGE_RETURN = 2;
+            /// <summary>
+            /// Flag 4: the characters ESC, BEL, ENQ and ACK.
+            /// </summary>
+            public const byte ESC_BEL_ENQ_ACK = 4;
+            /// <summary>
+            /// Flag 8: the characters DEL, CAN and DC2.
+            /// </summary>
+            public const byte DEL_CAN_DC2 = 8;
+            /// <summary>
+            /// Flag 16: the characters ETX and EOT.
+            /// </summary>
+            public const byte ETX_EOT = 16;
+            /// <summary>
+            /// Flag 32: the characters HT, LF, VT and FF.
+            /// </summary>
+            public const byte HT_LF_VT_FF = 32;
+            /// <summary>
+            /// Flag 64: all other characters in columns 0 and 1 of International Alphabet No. 5.
+            /// </summary>
+            public const byte OTHER_COLUMNS_0_1 = 64;
+            /// <summary>
+            /// Every flag except alphanumerics: all of columns 0 and 1 and DEL (value 126).
+            /// This is the value the simple standard profile of Table 1/X.28 sets.
+            /// </summary>
+            public const byte ALL_CONTROL = 126;
+        }
+
+        /// <summary>
         /// Standard PAD profiles
         /// </summary>
         public static class Profiles
@@ -253,30 +299,8 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public void SetDefaultProfile()
         {
-            _parameters.Clear();
-            _parameters[ParameterNumber.ESCAPE] = DefaultValue.ESCAPE;
-            _parameters[ParameterNumber.ECHO] = DefaultValue.ECHO;
-            _parameters[ParameterNumber.DATA_FORWARDING] = DefaultValue.DATA_FORWARDING;
-            _parameters[ParameterNumber.IDLE_TIMER] = DefaultValue.IDLE_TIMER;
-            _parameters[ParameterNumber.ANCILLARY_DEVICE_CONTROL] = DefaultValue.ANCILLARY_DEVICE_CONTROL;
-            _parameters[ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS] = DefaultValue.CONTROL_PAD_SERVICE_SIGNALS;
-            _parameters[ParameterNumber.OPERATION_BREAKOUT_PROCEDURE] = DefaultValue.OPERATION_BREAKOUT_PROCEDURE;
-            _parameters[ParameterNumber.DISCARD_OUTPUT] = DefaultValue.DISCARD_OUTPUT;
-            _parameters[ParameterNumber.PADDING_AFTER_CR] = DefaultValue.PADDING_AFTER_CR;
-            _parameters[ParameterNumber.LINE_FOLDING] = DefaultValue.LINE_FOLDING;
-            _parameters[ParameterNumber.BINARY_SPEED] = DefaultValue.BINARY_SPEED;
-            _parameters[ParameterNumber.FORWARD_ON_N_CHARACTERS] = DefaultValue.FORWARD_ON_N_CHARACTERS;
-            _parameters[ParameterNumber.LINE_FEED_INSERTION] = DefaultValue.LINE_FEED_INSERTION;
-            _parameters[ParameterNumber.PADDING_AFTER_LINE_FEED] = DefaultValue.PADDING_AFTER_LINE_FEED;
-            _parameters[ParameterNumber.EDITING] = DefaultValue.EDITING;
-            _parameters[ParameterNumber.CHARACTER_DELETE] = DefaultValue.CHARACTER_DELETE;
-            _parameters[ParameterNumber.LINE_DELETE] = DefaultValue.LINE_DELETE;
-            _parameters[ParameterNumber.LINE_DISPLAY] = DefaultValue.LINE_DISPLAY;
-            _parameters[ParameterNumber.EDITING_PAD_SERVICE_SIGNALS] = DefaultValue.EDITING_PAD_SERVICE_SIGNALS;
-            _parameters[ParameterNumber.ECHO_MASK] = DefaultValue.ECHO_MASK;
-            _parameters[ParameterNumber.PARITY_TREATMENT] = DefaultValue.PARITY_TREATMENT;
-            _parameters[ParameterNumber.PAGE_WAIT] = DefaultValue.PAGE_WAIT;
-            
+            FillDefaultValues(_parameters);
+
             _logger?.LogDebug("X.3: Set default parameter profile");
         }
 
@@ -320,33 +344,115 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Set transparent profile (minimal PAD processing)
+        /// Set the transparent standard profile of Table 1/X.28 (ITU-T X.28, 12/97, page 9).
         /// </summary>
         public void SetTransparentProfile()
         {
-            SetDefaultProfile();
-            _parameters[ParameterNumber.ECHO] = 0;                // No echo
-            _parameters[ParameterNumber.DATA_FORWARDING] = 0;     // No automatic forwarding
-            _parameters[ParameterNumber.EDITING] = 0;             // No editing
-            _parameters[ParameterNumber.LINE_FEED_INSERTION] = 0; // No LF insertion
-            _parameters[ParameterNumber.PADDING_AFTER_CR] = 0;    // No padding
-            _parameters[ParameterNumber.PADDING_AFTER_LINE_FEED] = 0; // No padding
-            
-            _logger?.LogDebug("X.3: Set transparent profile (minimal processing)");
+            FillTransparentProfile(_parameters);
+
+            _logger?.LogDebug("X.3: Set transparent standard profile (Table 1/X.28)");
         }
 
         /// <summary>
-        /// Set simple terminal profile (basic functionality)
+        /// Set the simple standard profile of Table 1/X.28 (ITU-T X.28, 12/97, page 9).
         /// </summary>
         public void SetSimpleProfile()
         {
-            SetDefaultProfile();
-            _parameters[ParameterNumber.ECHO] = 1;                // Echo enabled
-            _parameters[ParameterNumber.DATA_FORWARDING] = 2;     // Forward on CR
-            _parameters[ParameterNumber.EDITING] = 1;             // Basic editing
-            _parameters[ParameterNumber.LINE_FEED_INSERTION] = 1; // Insert LF after CR
-            
-            _logger?.LogDebug("X.3: Set simple profile (basic terminal)");
+            FillSimpleProfile(_parameters);
+
+            _logger?.LogDebug("X.3: Set simple standard profile (Table 1/X.28)");
+        }
+
+        /// <summary>
+        /// Clear the table and fill it with the default values of parameters 1 to 22.
+        /// Both X3 and X3Parameters use this one table, so they cannot disagree.
+        /// </summary>
+        /// <param name="parameters">
+        /// The table to clear and fill.
+        /// </param>
+        public static void FillDefaultValues(Dictionary<byte, byte> parameters)
+        {
+            parameters.Clear();
+            parameters[ParameterNumber.ESCAPE] = DefaultValue.ESCAPE;
+            parameters[ParameterNumber.ECHO] = DefaultValue.ECHO;
+            parameters[ParameterNumber.DATA_FORWARDING] = DefaultValue.DATA_FORWARDING;
+            parameters[ParameterNumber.IDLE_TIMER] = DefaultValue.IDLE_TIMER;
+            parameters[ParameterNumber.ANCILLARY_DEVICE_CONTROL] = DefaultValue.ANCILLARY_DEVICE_CONTROL;
+            parameters[ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS] = DefaultValue.CONTROL_PAD_SERVICE_SIGNALS;
+            parameters[ParameterNumber.OPERATION_BREAKOUT_PROCEDURE] = DefaultValue.OPERATION_BREAKOUT_PROCEDURE;
+            parameters[ParameterNumber.DISCARD_OUTPUT] = DefaultValue.DISCARD_OUTPUT;
+            parameters[ParameterNumber.PADDING_AFTER_CR] = DefaultValue.PADDING_AFTER_CR;
+            parameters[ParameterNumber.LINE_FOLDING] = DefaultValue.LINE_FOLDING;
+            parameters[ParameterNumber.BINARY_SPEED] = DefaultValue.BINARY_SPEED;
+            parameters[ParameterNumber.FLOW_CONTROL_X_ON_X_OFF] = DefaultValue.FLOW_CONTROL_X_ON_X_OFF;
+            parameters[ParameterNumber.LINE_FEED_INSERTION] = DefaultValue.LINE_FEED_INSERTION;
+            parameters[ParameterNumber.PADDING_AFTER_LINE_FEED] = DefaultValue.PADDING_AFTER_LINE_FEED;
+            parameters[ParameterNumber.EDITING] = DefaultValue.EDITING;
+            parameters[ParameterNumber.CHARACTER_DELETE] = DefaultValue.CHARACTER_DELETE;
+            parameters[ParameterNumber.LINE_DELETE] = DefaultValue.LINE_DELETE;
+            parameters[ParameterNumber.LINE_DISPLAY] = DefaultValue.LINE_DISPLAY;
+            parameters[ParameterNumber.EDITING_PAD_SERVICE_SIGNALS] = DefaultValue.EDITING_PAD_SERVICE_SIGNALS;
+            parameters[ParameterNumber.ECHO_MASK] = DefaultValue.ECHO_MASK;
+            parameters[ParameterNumber.PARITY_TREATMENT] = DefaultValue.PARITY_TREATMENT;
+            parameters[ParameterNumber.PAGE_WAIT] = DefaultValue.PAGE_WAIT;
+        }
+
+        /// <summary>
+        /// Clear the table and fill it with the transparent standard profile of Table 1/X.28
+        /// (ITU-T X.28, 12/97, page 9), parameters 1 to 22.
+        /// Parameter 11 is read only (the speed of the terminal, known to the PAD); the table gives no
+        /// number for it, so the default 0 is kept.
+        /// Parameters 23 to 29 are 0 in both profiles; this class does not carry them.
+        /// </summary>
+        /// <param name="parameters">
+        /// The table to clear and fill.
+        /// </param>
+        public static void FillTransparentProfile(Dictionary<byte, byte> parameters)
+        {
+            FillDefaultValues(parameters);
+            parameters[ParameterNumber.ESCAPE] = 0;                       // 1: PAD recall not possible
+            parameters[ParameterNumber.ECHO] = 0;                         // 2: no echo
+            parameters[ParameterNumber.DATA_FORWARDING] = 0;              // 3: no data forwarding signal
+            parameters[ParameterNumber.IDLE_TIMER] = 20;                  // 4: one second (20 twentieths)
+            parameters[ParameterNumber.ANCILLARY_DEVICE_CONTROL] = 0;     // 5: no use of X-ON and X-OFF
+            parameters[ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS] = 0;  // 6: no service signals sent
+            parameters[ParameterNumber.OPERATION_BREAKOUT_PROCEDURE] = 2; // 7: reset
+            parameters[ParameterNumber.DISCARD_OUTPUT] = 0;               // 8: normal data delivery
+            parameters[ParameterNumber.PADDING_AFTER_CR] = 0;             // 9: no padding after CR
+            parameters[ParameterNumber.LINE_FOLDING] = 0;                 // 10: no line folding
+            parameters[ParameterNumber.FLOW_CONTROL_X_ON_X_OFF] = 0;      // 12: no use of X-ON and X-OFF
+            parameters[ParameterNumber.LINE_FEED_INSERTION] = 0;          // 13: no linefeed insertion
+            parameters[ParameterNumber.PADDING_AFTER_LINE_FEED] = 0;      // 14: no linefeed padding
+            parameters[ParameterNumber.EDITING] = 0;                      // 15: no editing
+            parameters[ParameterNumber.CHARACTER_DELETE] = 127;           // 16: DEL
+            parameters[ParameterNumber.LINE_DELETE] = 24;                 // 17: CAN
+            parameters[ParameterNumber.LINE_DISPLAY] = 18;                // 18: DC2
+            parameters[ParameterNumber.EDITING_PAD_SERVICE_SIGNALS] = 1;  // 19: printing terminals
+            parameters[ParameterNumber.ECHO_MASK] = 0;                    // 20: echo all characters
+            parameters[ParameterNumber.PARITY_TREATMENT] = 0;             // 21: no parity detection or generation
+            parameters[ParameterNumber.PAGE_WAIT] = 0;                    // 22: page wait disabled
+        }
+
+        /// <summary>
+        /// Clear the table and fill it with the simple standard profile of Table 1/X.28
+        /// (ITU-T X.28, 12/97, page 9), parameters 1 to 22.
+        /// Parameter 11 is read only (the speed of the terminal, known to the PAD); the table gives no
+        /// number for it, so the default 0 is kept.
+        /// Parameters 23 to 29 are 0 in both profiles; this class does not carry them.
+        /// </summary>
+        /// <param name="parameters">
+        /// The table to clear and fill.
+        /// </param>
+        public static void FillSimpleProfile(Dictionary<byte, byte> parameters)
+        {
+            FillTransparentProfile(parameters); // the two profiles agree on every parameter not set below
+            parameters[ParameterNumber.ESCAPE] = 1;                       // 1: PAD recall possible (DLE)
+            parameters[ParameterNumber.ECHO] = 1;                         // 2: echo
+            parameters[ParameterNumber.DATA_FORWARDING] = DataForwardingFlag.ALL_CONTROL; // 3: columns 0 and 1 and DEL (126)
+            parameters[ParameterNumber.IDLE_TIMER] = 0;                   // 4: no time-out
+            parameters[ParameterNumber.ANCILLARY_DEVICE_CONTROL] = 1;     // 5: use X-ON and X-OFF
+            parameters[ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS] = 1;  // 6: service signals are sent
+            parameters[ParameterNumber.FLOW_CONTROL_X_ON_X_OFF] = 1;      // 12: use X-ON and X-OFF
         }
 
         /// <summary>
@@ -445,7 +551,7 @@ namespace RetroIO.Protocols.X25.Protocols
             {
                 ParameterNumber.ESCAPE => value <= 1,
                 ParameterNumber.ECHO => value <= 1,
-                ParameterNumber.DATA_FORWARDING => value <= 126,
+                ParameterNumber.DATA_FORWARDING => value <= 127, // sum of the seven flags of X.3 reference 3
                 ParameterNumber.IDLE_TIMER => true, // All values 0-255 valid
                 ParameterNumber.ANCILLARY_DEVICE_CONTROL => value <= 1,
                 ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS => value <= 1,
@@ -454,7 +560,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 ParameterNumber.PADDING_AFTER_CR => value <= 7,
                 ParameterNumber.LINE_FOLDING => true, // All values 0-255 valid
                 ParameterNumber.BINARY_SPEED => true, // Not used, all values accepted
-                ParameterNumber.FORWARD_ON_N_CHARACTERS => value <= 255, // 0 = line mode, >0 = forward after N chars
+                ParameterNumber.FLOW_CONTROL_X_ON_X_OFF => value <= 1, // X.3 reference 12: 0 or 1
                 ParameterNumber.LINE_FEED_INSERTION => value <= 7,
                 ParameterNumber.PADDING_AFTER_LINE_FEED => value <= 7,
                 ParameterNumber.EDITING => value <= 1,
@@ -493,7 +599,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 ParameterNumber.PADDING_AFTER_CR => "Padding characters after CR",
                 ParameterNumber.LINE_FOLDING => "Line folding column limit",
                 ParameterNumber.BINARY_SPEED => "Binary speed (not used)",
-                ParameterNumber.FORWARD_ON_N_CHARACTERS => "Forward on N characters",
+                ParameterNumber.FLOW_CONTROL_X_ON_X_OFF => "Flow control of the PAD (X-ON/X-OFF)",
                 ParameterNumber.LINE_FEED_INSERTION => "Auto LF insertion after CR",
                 ParameterNumber.PADDING_AFTER_LINE_FEED => "Padding after LF",
                 ParameterNumber.EDITING => "Command line editing enable",

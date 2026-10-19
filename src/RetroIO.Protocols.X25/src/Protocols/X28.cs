@@ -645,64 +645,48 @@ namespace RetroIO.Protocols.X25.Protocols
 
         /// <summary>
         /// Check if character should trigger data forwarding per ITU-T X.3 specification
-        /// 
-        /// ITU-T X.3 PAD Parameters - Parameter 3 (DATA_FORWARDING):
-        /// CCITT/ITU-T Recommendation X.3 defines forwarding trigger values:
-        /// 
-        /// Value | Meaning
-        /// ------|--------------------------------------------------
-        /// 0     | No automatic forwarding (buffer until explicit signal)
-        /// 1     | Character-by-character forwarding (immediate)
-        /// 2-31  | Forward on specific control characters:
-        ///       |   2 = STX, 13 = CR (Carriage Return), etc.
-        ///       |   Default: 13 (CR, 0x0D) per X.28 Section 4.1.2
-        /// 32-126| Forward on specified printable character
-        /// 127   | Forward on all alphanumeric characters
-        /// 
-        /// IMPORTANT: ITU-T X.28 specifies CR (0x0D) as standard line terminator,
-        /// not LF (0x0A). This maintains compatibility with historical X.25 networks.
+        ///
+        /// ITU-T X.3 (03/00) section 3.3, reference 3: parameter 3 is a sum of flags, not a character code.
+        /// Value 0 means no data forwarding character. Otherwise the characters that forward are the union of:
+        /// 1 = alphanumeric characters (A to Z, a to z, 0 to 9),
+        /// 2 = CR,
+        /// 4 = ESC, BEL, ENQ, ACK,
+        /// 8 = DEL, CAN, DC2,
+        /// 16 = ETX, EOT,
+        /// 32 = HT, LF, VT, FF,
+        /// 64 = all other characters in columns 0 and 1 of International Alphabet No. 5.
+        /// So the value 2 forwards on CR, and the value 13 (1 + 4 + 8) does not.
         /// </summary>
         private ForwardingCondition CheckForwardingCondition(char c)
         {
             byte forwarding = _x3Parameters.GetParameter(X3.ParameterNumber.DATA_FORWARDING);
-            
+
             // No forwarding
             if (forwarding == 0)
                 return ForwardingCondition.None;
-                
-            // Character-by-character forwarding
-            if (forwarding == 1)
+
+            if ((forwarding & X3.DataForwardingFlag.ALPHANUMERIC) != 0 && char.IsAsciiLetterOrDigit(c))
             {
-                return ForwardingCondition.CharacterByCharacter;
+                return ForwardingCondition.AlphanumericCharacter;
             }
-            
-            // Specific character forwarding (2-31 are control characters)
-            if (forwarding >= 2 && forwarding <= 31)
+
+            if ((forwarding & X3.DataForwardingFlag.CARRIAGE_RETURN) != 0 && c == '\r')
             {
-                if ((byte)c == forwarding)
+                return ForwardingCondition.CarriageReturn;
+            }
+
+            // The groups of control characters below are columns 0 and 1 of IA5 plus DEL.
+            // A character that is in a group whose flag is off does not fall into flag 64:
+            // flag 64 is only for the characters that are in none of the groups.
+            if (c < 32 || c == 127)
+            {
+                byte group = GetControlCharacterGroup(c);
+                if ((forwarding & group) != 0)
                 {
-                    return c == '\r' ? ForwardingCondition.CarriageReturn : ForwardingCondition.ControlCharacter;
+                    return ForwardingCondition.ControlCharacter;
                 }
             }
-            
-            // Specific printable character forwarding (32-126)
-            else if (forwarding >= 32 && forwarding <= 126)
-            {
-                if ((byte)c == forwarding)
-                {
-                    return ForwardingCondition.SpecificCharacter;
-                }
-            }
-            
-            // Forward on all alphanumeric (127)
-            else if (forwarding == 127)
-            {
-                if (char.IsLetterOrDigit(c))
-                {
-                    return ForwardingCondition.AlphanumericCharacter;
-                }
-            }
-            
+
             // Check buffer full condition
             if (_inputBuffer.Length >= 128) // Typical PAD buffer limit
             {
@@ -710,6 +694,43 @@ namespace RetroIO.Protocols.X25.Protocols
             }
             
             return ForwardingCondition.None;
+        }
+
+        /// <summary>
+        /// Gives the X.3 reference 3 flag that covers a control character (columns 0 and 1 of IA5, and DEL).
+        /// </summary>
+        /// <param name="c">
+        /// A character below 32, or DEL.
+        /// </param>
+        /// <returns>
+        /// The flag of the group the character belongs to; flag 64 for a character in none of the named groups.
+        /// </returns>
+        private static byte GetControlCharacterGroup(char c)
+        {
+            switch (c)
+            {
+                case (char)27: // ESC
+                case (char)7:  // BEL
+                case (char)5:  // ENQ
+                case (char)6:  // ACK
+                    return X3.DataForwardingFlag.ESC_BEL_ENQ_ACK;
+                case (char)127: // DEL
+                case (char)24:  // CAN
+                case (char)18:  // DC2
+                    return X3.DataForwardingFlag.DEL_CAN_DC2;
+                case (char)3: // ETX
+                case (char)4: // EOT
+                    return X3.DataForwardingFlag.ETX_EOT;
+                case '\t':    // HT
+                case '\n':    // LF
+                case (char)11: // VT
+                case (char)12: // FF
+                    return X3.DataForwardingFlag.HT_LF_VT_FF;
+                case '\r':    // CR has its own flag, handled before this is called
+                    return 0;
+                default:
+                    return X3.DataForwardingFlag.OTHER_COLUMNS_0_1;
+            }
         }
 
         /// <summary>

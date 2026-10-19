@@ -914,7 +914,7 @@ namespace RetroIO.Protocols.X25.Protocols
 
         // Original parameter values for password mode restoration
         public byte OriginalEcho { get; set; } = 1;      // Default echo enabled
-        public byte OriginalForwarding { get; set; } = 13; // Default CR forwarding
+        public byte OriginalForwarding { get; set; } = X3Parameters.DefaultValue.DATA_FORWARDING; // Default: forward on CR (flag 2)
         public byte OriginalEditing { get; set; } = 1;   // Default editing enabled
 
         public void Dispose()
