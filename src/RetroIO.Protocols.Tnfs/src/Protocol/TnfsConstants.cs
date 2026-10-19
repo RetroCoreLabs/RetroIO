@@ -43,13 +43,9 @@ public static class TnfsConstants
     /// </summary>
     public const int TNFS_MAX_PAYLOAD = MAXMSGSZ - TNFS_HEADERSZ - 1;  // Header + status
     /// <summary>
-    /// Alternative maximum message size in bytes, 532.
-    /// </summary>
-    public const int MaxMessageSize = 532;    // Alternative max message size
-    /// <summary>
     /// Maximum number of bytes for one I/O operation, 512.
     /// </summary>
-    public const int MaxIOSize = 512;         // Maximum I/O per operation
+    public const int MaxIOSize = 512;         // Maximum I/O per operation (the only I/O size limit; tnfsd config.h MAX_IOSZ is also 512)
     /// <summary>
     /// Default read buffer size in bytes, 512.
     /// </summary>
@@ -192,18 +188,6 @@ public static class TnfsConstants
     /// Limit on the length of a TNFS path, 1024.
     /// </summary>
     public const int MAX_TNFSPATH = 1024;
-    /// <summary>
-    /// Limit on the size of one I/O operation in bytes, 8192.
-    /// </summary>
-    public const int MAX_IOSZ = 8192;
-    /// <summary>
-    /// Maximum file name length, 256.
-    /// </summary>
-    public const int MaxFilenameLength = 256;
-    /// <summary>
-    /// Maximum path length, 256.
-    /// </summary>
-    public const int MaxPathLength = 256;
 
     // Timeouts (seconds)
     /// <summary>
