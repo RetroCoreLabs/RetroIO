@@ -360,14 +360,14 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Counts the BAM bytes that hold <c>0xFF</c>.
+        /// Counts the free sectors in the BAM.
         /// </summary>
         /// <remarks>
-        /// Only the first (track count times sectors per track) bytes of the 512-byte BAM copy are looked at,
-        /// and each byte equal to <c>0xFF</c> is counted as one free sector.
+        /// The BAM is a bitmap, one bit per sector, 1 = free (DragonDOS 1.2 DOSGetFree). The set bits in the
+        /// first 180 bytes of each of the two BAM sectors are counted.
         /// </remarks>
         /// <returns>
-        /// The number of BAM bytes equal to <c>0xFF</c>.
+        /// The number of set bits in the two BAM sectors.
         /// </returns>
         /// <exception cref="InvalidOperationException">
         /// Thrown when the file system is not initialized.
