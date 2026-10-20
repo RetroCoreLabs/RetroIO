@@ -238,7 +238,7 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DECB file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
@@ -246,26 +246,26 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <param name="data">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new NotImplementedException("DECB write operations not yet implemented");
+            throw new IOException("The DECB file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DECB file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new NotImplementedException("DECB delete operations not yet implemented");
+            throw new IOException("The DECB file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
@@ -379,7 +379,7 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DECB file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="oldPath">
         /// Not used.
@@ -387,12 +387,12 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <param name="newPath">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
-            throw new NotImplementedException("File rename not yet implemented for DECB");
+            throw new IOException("The DECB file system has no write support, so the volume is read-only");
         }
 
         // ===================================================================
