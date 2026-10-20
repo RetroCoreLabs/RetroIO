@@ -92,9 +92,9 @@ public sealed class AccessCommand : IOsCliCommand
         if (!call.Context.Paths.TryResolve(call.Session!, fsp, out string unixPath, out _, out _))
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
 
-        // Read-modify-write the property bag: keep load/exec/length, replace only the access byte.
-        AcornAttributeStore.TryReadAttributes(call.Context.FileSystem, unixPath, out uint load, out uint exec, out int length, out _);
-        AcornAttributeStore.WriteAttributes(call.Context.FileSystem, unixPath, load, exec, length, newAccess);
+        // Read-modify-write the property bag: keep load/exec, replace only the access byte.
+        AcornAttributeStore.TryReadAttributes(call.Context.FileSystem, unixPath, out uint load, out uint exec, out _, out _);
+        AcornAttributeStore.WriteAttributes(call.Context.FileSystem, unixPath, load, exec, newAccess);
 
         // Success is a plain completion (return code 0) — the same payload the stub always returned.
         return FileServerReply.Success();

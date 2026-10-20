@@ -203,7 +203,7 @@ public sealed class FileIoCommandHandler
             }
 
             // fs.c line 5873: the user who saves a file becomes its owner.
-            AcornAttributeStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, 0, defaultAccess, session.UserIndex);
+            AcornAttributeStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, defaultAccess, session.UserIndex);
             AcornPath.EncodeFileDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
             // PiFS create_only / length==0 path sends the short 5-byte completion (return code 0),
             // not the 21-byte FS3 data-transfer close packet.
