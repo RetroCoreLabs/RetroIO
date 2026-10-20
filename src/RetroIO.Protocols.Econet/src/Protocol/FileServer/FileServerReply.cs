@@ -527,6 +527,9 @@ public static class FileServerReply
     /// <summary>
     /// PiFS/MDFS variable-length get-object-info reply (fsop 0x12).
     /// </summary>
+    /// <remarks>
+    /// The owner byte after the access byte (commands 4, 5 and 96) is 0 when isOwner is true and 0xFF otherwise (fs.c line 5694). The owner byte of the directory header (command 6) is 0 when isDirectoryOwner is true and 0xFF otherwise (fs.c line 5735). When isDirectoryOwner is not given, it is the same as isOwner.
+    /// </remarks>
     public static byte[] ObjectInfoForCommand(
         byte command,
         byte fileType,
@@ -538,7 +541,8 @@ public static class FileServerReply
         byte monthYear,
         bool isOwner,
         ReadOnlySpan<byte> directoryName10,
-        byte directoryEntryCount)
+        byte directoryEntryCount,
+        bool? isDirectoryOwner = null)
     {
         int payloadLength = 1; // fileType
         if (command is 2 or 5 or FileServerOpcodes.GetObjectInfoCanonical)
@@ -593,7 +597,7 @@ public static class FileServerReply
             if (directoryName10.Length < 10)
                 reply.AsSpan(offset + directoryName10.Length, 10 - directoryName10.Length).Fill((byte)' ');
             offset += 10;
-            reply[offset++] = isOwner ? (byte)0x00 : (byte)0xFF;
+            reply[offset++] = (isDirectoryOwner ?? isOwner) ? (byte)0x00 : (byte)0xFF;
             reply[offset++] = directoryEntryCount;
         }
 

@@ -42,6 +42,9 @@ internal sealed class EconetFsTestHarness
 
     public FileServerCommandHandler Handler { get; }
 
+    // The shared context the handlers use, so a test can drive the bulk data handler or ask about ownership.
+    public FileServerContext Context { get; }
+
     // The session table the server uses, so a test can count who is logged in.
     public FileServerSessionManager Sessions { get; }
 
@@ -138,6 +141,7 @@ internal sealed class EconetFsTestHarness
             serverNet: serverNet,
             serverStation: serverStation);
 
+        Context = context;
         Handler = new FileServerCommandHandler(context, NullLogger<FileServerCommandHandler>.Instance);
     }
 

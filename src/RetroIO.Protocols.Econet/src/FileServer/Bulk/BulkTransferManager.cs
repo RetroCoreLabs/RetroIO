@@ -134,6 +134,10 @@ public sealed class InboundSaveTransfer
     /// Gets the name of the user who started the save.
     /// </summary>
     public string Username { get; init; } = string.Empty;
+    /// <summary>
+    /// Gets the user number of the user who started the save, who becomes the owner of the file (fs.c line 5873).
+    /// </summary>
+    public ushort OwnerId { get; init; }
 }
 
 /// <summary>
