@@ -767,11 +767,17 @@ namespace RetroIO.Protocols.X25.Protocols
                 var session = FindSessionById(sessionId);
                 if (session == null) return false;
 
-                // Store original parameters for restoration
-                session.OriginalEcho = session.X3Parameters.GetParameter(2);
-                session.OriginalForwarding = session.X3Parameters.GetParameter(3);
-                session.OriginalIdleTimer = session.X3Parameters.GetParameter(4);
-                session.OriginalEditing = session.X3Parameters.GetParameter(15);
+                // Store original parameters for restoration, but only on the first entry. A second call while
+                // password mode is already on would save the password values over the real ones, and the
+                // exit would then restore the password values.
+                if (!session.PasswordModeActive)
+                {
+                    session.OriginalEcho = session.X3Parameters.GetParameter(2);
+                    session.OriginalForwarding = session.X3Parameters.GetParameter(3);
+                    session.OriginalIdleTimer = session.X3Parameters.GetParameter(4);
+                    session.OriginalEditing = session.X3Parameters.GetParameter(15);
+                    session.PasswordModeActive = true;
+                }
 
                 // Apply password mode parameters. X.3 has no value that means "every character", so two
                 // parameters together give character-by-character forwarding:
@@ -816,6 +822,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 success &= SetSessionX3Parameter(sessionId, 3, session.OriginalForwarding);
                 success &= SetSessionX3Parameter(sessionId, 4, session.OriginalIdleTimer);
                 success &= SetSessionX3Parameter(sessionId, 15, session.OriginalEditing);
+                session.PasswordModeActive = false;
 
                 if (success)
                 {
@@ -934,6 +941,11 @@ namespace RetroIO.Protocols.X25.Protocols
         public byte OriginalEcho { get; set; } = 1;      // Default echo enabled
         public byte OriginalForwarding { get; set; } = X3Parameters.DefaultValue.DATA_FORWARDING; // Default: forward on CR (flag 2)
         public byte OriginalIdleTimer { get; set; } = X3Parameters.DefaultValue.IDLE_TIMER; // Default idle timer
+        /// <summary>
+        /// True between EnterPasswordMode and ExitPasswordMode. While it is set, the Original values hold the
+        /// parameters from before the first entry and must not be saved again.
+        /// </summary>
+        public bool PasswordModeActive { get; set; }
         public byte OriginalEditing { get; set; } = X3Parameters.DefaultValue.EDITING; // Default editing (simple profile: off)
 
         public void Dispose()
