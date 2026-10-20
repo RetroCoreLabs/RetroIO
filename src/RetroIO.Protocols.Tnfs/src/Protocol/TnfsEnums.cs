@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -303,25 +303,26 @@ public enum TnfsReturnCode : byte
 
 /// <summary>
 /// TNFS file open flags (specification version 1.2).
-/// These are ushort flags that can be combined.
+/// These are ushort flags that can be combined. The values are the ones in the open flag table of the TNFS
+/// protocol text and in tnfsd (tnfs_file.h); they are the same as the TNFS_O_ constants in TnfsConstants.
 /// </summary>
 [System.Flags]
 public enum TnfsOpenFlags : ushort
 {
     /// <summary>
-    /// Open for reading only (0x0000)
+    /// Open for reading only (0x0001)
     /// </summary>
-    O_RDONLY = 0x0000,
+    O_RDONLY = 0x0001,
 
     /// <summary>
-    /// Open for writing only (0x0001)
+    /// Open for writing only (0x0002)
     /// </summary>
-    O_WRONLY = 0x0001,
+    O_WRONLY = 0x0002,
 
     /// <summary>
-    /// Open for reading and writing (0x0002)
+    /// Open for reading and writing (0x0003)
     /// </summary>
-    O_RDWR = 0x0002,
+    O_RDWR = 0x0003,
 
     /// <summary>
     /// Append mode (0x0008)
@@ -334,14 +335,14 @@ public enum TnfsOpenFlags : ushort
     O_CREAT = 0x0100,
 
     /// <summary>
-    /// Truncate file if it doesn't exist (0x0800)
+    /// Truncate the file on open for writing (0x0200)
     /// </summary>
-    O_TRUNC = 0x0800,
+    O_TRUNC = 0x0200,
 
     /// <summary>
-    /// Exclusive create - fail if file exists (0x0200)
+    /// With O_CREAT, fail if the file exists (0x0400)
     /// </summary>
-    O_EXCL = 0x0200
+    O_EXCL = 0x0400
 }
 
 /// <summary>

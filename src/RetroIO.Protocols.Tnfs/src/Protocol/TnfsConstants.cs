@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -166,13 +166,21 @@ public static class TnfsConstants
 
     // Limits
     /// <summary>
-    /// Limit on the number of sessions, 256.
+    /// Limit on the number of sessions, 4096.
     /// </summary>
-    public const int MAX_SESSIONS = 256;
+    /// <remarks>
+    /// Taken from tnfsd config.h MAX_SESSIONS (4096). The TNFS specification text gives no number.
+    /// SessionManager reads this value as its default and enforces it.
+    /// </remarks>
+    public const int MAX_SESSIONS = 4096;
     /// <summary>
-    /// Limit on the number of sessions from one IP address, 8.
+    /// Limit on the number of sessions from one IP address, 4096.
     /// </summary>
-    public const int MAX_SESSIONS_PER_IP = 8;
+    /// <remarks>
+    /// Taken from tnfsd config.h MAX_SESSIONS_PER_IP (4096). The TNFS specification text gives no number.
+    /// SessionManager reads this value as its default and enforces it.
+    /// </remarks>
+    public const int MAX_SESSIONS_PER_IP = 4096;
     /// <summary>
     /// Limit on the number of TCP connections, 4096.
     /// </summary>

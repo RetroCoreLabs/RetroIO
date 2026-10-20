@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -107,6 +107,72 @@ public sealed class TcpTransport : ITransport
     }
 
     /// <summary>
+    /// Turns TCP keepalive on for a socket with the reference daemon's settings (tnfsd config.h):
+    /// first probe after TCP_KA_IDLE seconds idle, then one probe every TCP_KA_INTVL seconds, and the
+    /// connection is dropped after TCP_KA_COUNT unanswered probes.
+    /// </summary>
+    /// <remarks>
+    /// Like tnfsd, a failure to set an option is logged and the connection is still served.
+    /// </remarks>
+    /// <param name="socket">
+    /// The accepted socket.
+    /// </param>
+    private void ApplyKeepAlive(Socket socket)
+    {
+        try
+        {
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, TnfsConstants.TCP_KA_IDLE);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, TnfsConstants.TCP_KA_INTVL);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, TnfsConstants.TCP_KA_COUNT);
+        }
+        catch (SocketException ex)
+        {
+            _logger.LogWarning(ex, "Could not set TCP keepalive on a new connection");
+        }
+    }
+
+    /// <summary>
+    /// Reads back the keepalive settings of the socket of one open connection.
+    /// </summary>
+    /// <param name="connectionId">
+    /// The connection ID of the connection.
+    /// </param>
+    /// <param name="idleSeconds">
+    /// Receives the idle time before the first probe, in seconds.
+    /// </param>
+    /// <param name="intervalSeconds">
+    /// Receives the time between probes, in seconds.
+    /// </param>
+    /// <param name="probeCount">
+    /// Receives the number of probes before the connection is dropped.
+    /// </param>
+    /// <returns>
+    /// True when the connection is open and the settings were read, false otherwise.
+    /// </returns>
+    public bool TryGetKeepAlive(int connectionId, out int idleSeconds, out int intervalSeconds, out int probeCount)
+    {
+        idleSeconds = 0;
+        intervalSeconds = 0;
+        probeCount = 0;
+        if (!_connections.TryGetValue(connectionId, out TcpConnection? connection))
+            return false;
+
+        try
+        {
+            Socket socket = connection.Client.Client;
+            idleSeconds = (int)socket.GetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime)!;
+            intervalSeconds = (int)socket.GetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval)!;
+            probeCount = (int)socket.GetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount)!;
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Start accepting TCP connections.
     /// Runs until cancellation requested.
     /// </summary>
@@ -157,6 +223,8 @@ public sealed class TcpTransport : ITransport
                         tcpClient.Close();
                         continue;
                     }
+
+                    ApplyKeepAlive(tcpClient.Client);
 
                     var connectionId = Interlocked.Increment(ref _nextConnectionId);
 

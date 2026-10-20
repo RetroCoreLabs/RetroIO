@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -167,7 +167,17 @@ public sealed class SessionCommandHandler
         }
 
         // Create session with user binding
-        var session = _sessionManager.CreateSession(request.ClientIP, sessionRoot, userId, authenticatedUsername, isAdmin);
+        TnfsSession session;
+        try
+        {
+            session = _sessionManager.CreateSession(request.ClientIP, sessionRoot, userId, authenticatedUsername, isAdmin);
+        }
+        catch (TnfsSessionLimitException ex)
+        {
+            // The session table is full: tell the client, with the file table overflow code.
+            _logger.LogWarning("MOUNT: {Message}", ex.Message);
+            return TnfsMessage.CreateResponse(request, TnfsReturnCode.ENFILE);
+        }
 
         // Build response: Protocol Version(2) + Timeout(2)
         Span<byte> responseData = stackalloc byte[4];

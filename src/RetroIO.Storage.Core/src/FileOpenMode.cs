@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -72,7 +72,7 @@ namespace RetroIO.Storage.Core
         /// Read-only access.
         /// POSIX: O_RDONLY (0x0000)
         /// .NET: FileAccess.Read
-        /// TNFS: TNFS_O_RDONLY (0x0000)
+        /// TNFS: TNFS_O_RDONLY (0x0001)
         /// </summary>
         Read = 0,
 
@@ -80,7 +80,7 @@ namespace RetroIO.Storage.Core
         /// Write-only access.
         /// POSIX: O_WRONLY (0x0001)
         /// .NET: FileAccess.Write
-        /// TNFS: TNFS_O_WRONLY (0x0001)
+        /// TNFS: TNFS_O_WRONLY (0x0002)
         /// </summary>
         Write = 1,
 
@@ -88,7 +88,7 @@ namespace RetroIO.Storage.Core
         /// Read and write access.
         /// POSIX: O_RDWR (0x0002)
         /// .NET: FileAccess.ReadWrite
-        /// TNFS: TNFS_O_RDWR (0x0002)
+        /// TNFS: TNFS_O_RDWR (0x0003)
         /// </summary>
         ReadWrite = 2
     }
