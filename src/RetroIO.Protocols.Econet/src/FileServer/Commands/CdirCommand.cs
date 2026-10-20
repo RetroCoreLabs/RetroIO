@@ -7,6 +7,7 @@
 
 using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer.Dispatch;
+using RetroIO.Protocols.Econet.FileServer.Metadata;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 
 namespace RetroIO.Protocols.Econet.FileServer.Commands;
@@ -79,6 +80,9 @@ public sealed class CdirCommand : IOsCliCommand
             return FileServerReply.Error(FileServerErrors.BadCommand, "Already exists");
 
         call.Context.FileSystem.CreateDirectory(unixPath);
+
+        // fs.c line 7131: a new directory is owned by the user who made it.
+        ObjectOwnership.SetOwner(call.Context, call.Session!, unixPath);
         return FileServerReply.Success();
     }
 }

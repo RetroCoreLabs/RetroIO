@@ -28,6 +28,13 @@ public sealed class FileServerSession
     /// </summary>
     public Guid RetroUserId { get; init; }
     /// <summary>
+    /// Gets the user number of the account, the number stored as the owner of the objects the user makes.
+    /// </summary>
+    /// <remarks>
+    /// This is EconetUserProfile.UserIndex, the same number the server already reports for the user in its user information replies. PiFS uses the user number (active userid) as the owner (fs.c lines 242 and 364).
+    /// </remarks>
+    public ushort UserIndex { get; init; }
+    /// <summary>
     /// Gets the user name.
     /// </summary>
     public string Username { get; init; } = string.Empty;

@@ -8,6 +8,8 @@
 using System;
 using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer.Dispatch;
+using RetroIO.Protocols.Econet.FileServer.Metadata;
+using RetroIO.Protocols.Econet.FileServer.Users;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 
 namespace RetroIO.Protocols.Econet.FileServer.Commands;
@@ -85,10 +87,18 @@ public sealed class SetHomeCommand : IOsCliCommand
             return error!;
         }
 
+        // The home the user has now, read before it changes, so the home owner mark can be taken off it.
+        EconetUserProfile? target = call.Context.Users.GetProfile(targetUserId);
+        string? oldHomeUnix = FindStoredHome(call, target);
+
         // "%" clears the home — persist an empty value so the next login falls back to the default.
         if (dir == "%")
         {
-            return StoreReply(call.Context.Users.TrySetHome(targetUserId, string.Empty));
+            bool cleared = call.Context.Users.TrySetHome(targetUserId, string.Empty);
+            if (cleared && oldHomeUnix != null)
+                ObjectOwnership.SetHomeOwner(call.Context, oldHomeUnix, 0);
+
+            return StoreReply(cleared);
         }
 
         // Validate the directory resolves for the acting session, exactly as *DIR does.
@@ -99,7 +109,36 @@ public sealed class SetHomeCommand : IOsCliCommand
             return FileServerReply.Error(FileServerErrors.BadDirectory, "Bad directory");
         }
 
-        return StoreReply(call.Context.Users.TrySetHome(targetUserId, acorn));
+        bool stored = call.Context.Users.TrySetHome(targetUserId, acorn);
+        if (stored && target != null)
+        {
+            // fs.c lines 10715 to 10751: the old home loses its home owner and the new home gets the user,
+            // except a disc root ("Don't set it on root!"). This is done whatever the AcornHome flag says.
+            if (oldHomeUnix != null)
+                ObjectOwnership.SetHomeOwner(call.Context, oldHomeUnix, 0);
+
+            if (!ObjectOwnership.IsDiscRoot(call.Context, unixPath))
+                ObjectOwnership.SetHomeOwner(call.Context, unixPath, target.UserIndex);
+        }
+
+        return StoreReply(stored);
+    }
+
+    // Returns the host path of the home directory the user has stored with *SETHOME, or null when there is none
+    // (the default home is not a stored home) or it no longer resolves to a directory.
+    private static string? FindStoredHome(in OsCliCall call, EconetUserProfile? target)
+    {
+        if (target == null || string.IsNullOrWhiteSpace(target.Home) || target.Home == "$")
+            return null;
+
+        string oldAcorn = AcornDirectoryNavigation.Resolve(call.Session!.AcornHomePath, target.Home);
+        if (call.Context.Paths.TryResolve(call.Session!, oldAcorn, out string oldUnix, out _, out _) &&
+            call.Context.FileSystem.DirectoryExists(oldUnix))
+        {
+            return oldUnix;
+        }
+
+        return null;
     }
 
     // Success when the user store took the change, otherwise the same 0xFF "No such user" that

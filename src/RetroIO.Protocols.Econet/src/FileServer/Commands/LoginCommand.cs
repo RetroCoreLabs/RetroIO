@@ -8,6 +8,7 @@
 using System;
 using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer.Dispatch;
+using RetroIO.Protocols.Econet.FileServer.Metadata;
 using RetroIO.Protocols.Econet.FileServer.Sessions;
 using RetroIO.Protocols.Econet.FileServer.Users;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
@@ -115,6 +116,9 @@ public sealed class LoginCommand : IOsCliCommand
             // option, none of which depend on the home/lib paths) and no client ever sees a transient
             // wrong-home window. Every override is guarded (see ApplyProfileDirectories).
             ApplyProfileDirectories(context, session!);
+
+            // fs.c lines 4677 to 4685: with the AcornHome flag set, the home directory of the user gets the user as its home owner.
+            ObjectOwnership.ClaimHomeOnLogin(context, session!);
 
             EconetSecurityAudit.EmitAuthAsync(context.SecurityEvents, session!.RetroUserId, session.Username, true, clientIp)
                 .AsTask().GetAwaiter().GetResult();

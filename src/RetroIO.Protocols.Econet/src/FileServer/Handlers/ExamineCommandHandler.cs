@@ -71,7 +71,7 @@ public sealed class ExamineCommandHandler
 
         // arg 3 = human-readable "long" text format used by *CAT (PiFS fs_examine: "%-10s %4s/%-2s\0").
         if (arg == 3)
-            return BuildTextExamine(request, fsRequest, unixPath, names, start, count);
+            return BuildTextExamine(request, fsRequest, session, unixPath, names, start, count);
 
         int examined = 0;
         byte[] entryBuffer = new byte[Math.Max(count, (byte)1) * 27];
@@ -85,6 +85,19 @@ public sealed class ExamineCommandHandler
                 unixPath,
                 names[i],
                 defaultPerm);
+
+            // fs.c lines 5089 to 5094: with the MdfsFunctions flag set, the three bytes after the date hold the owner
+            // (main account, then bits 8 to 10 of the number moved down by 3, then 0 for the auxiliary account).
+            // With the flag clear PiFS puts the internal number there, which this server does not have (bytes stay 0).
+            if (_context.Configuration.MdfsFunctions)
+            {
+                ushort owner = ObjectOwnership.GetOwner(_context, _context.FileSystem.CombinePath(unixPath, names[i]));
+                Span<byte> entry = entryBuffer.AsSpan(entryOffset, 27);
+                entry[21] = (byte)(owner & 0xFF);
+                entry[22] = (byte)((owner & 0x700) >> 3);
+                entry[23] = 0;
+            }
+
             entryOffset += 27;
             examined++;
         }
@@ -96,6 +109,7 @@ public sealed class ExamineCommandHandler
     private EconetMessage BuildTextExamine(
         EconetMessage request,
         FileServerRequest fsRequest,
+        FileServerSession session,
         string unixPath,
         List<string> names,
         byte start,
@@ -116,7 +130,9 @@ public sealed class ExamineCommandHandler
             if (!isDirectory && !AcornInfStore.TryReadAttributes(_context.FileSystem, fullPath, out _, out _, out _, out perm))
                 perm = defaultFilePerm;
 
-            entries.AddRange(Encoding.ASCII.GetBytes(FormatTextEntry(name, isDirectory, perm, _context.Configuration)));
+            // fs.c line 5170: is_owner is the effective owner test, so a system user counts as the owner.
+            bool isOwner = ObjectOwnership.IsEffectiveOwner(session, ObjectOwnership.GetOwner(_context, fullPath));
+            entries.AddRange(Encoding.ASCII.GetBytes(FormatTextEntry(name, isDirectory, perm, _context.Configuration, isOwner)));
             entries.Add(0);
             examined++;
         }
@@ -129,9 +145,10 @@ public sealed class ExamineCommandHandler
     // Bit meanings come from the shared EconetAccess flags (the same byte *ACCESS writes).
     // The AcornDir flag changes the letters (fs.c lines 5174 and 5175): a directory whose access is exactly owner write,
     // owner read and other read (other write clear) is shown with none of those letters, because the Acorn clients
-    // take them as implied. The MdfsInfo flag also changes the letters (fs.c lines 5180 to 5187) but only by whether
-    // the viewer owns the object, and this server keeps no owner for each object, so that flag is not implemented.
-    private static string FormatTextEntry(string name, bool isDirectory, byte perm, FileServerConfiguration configuration)
+    // take them as implied. The MdfsInfo flag also changes the letters (fs.c lines 5180 to 5187), by whether the viewer
+    // owns the object: with the flag set the owner letters are lower case for a viewer who is not the owner, and the
+    // other-user letters are lower case for the owner. With the flag clear every letter is upper case.
+    private static string FormatTextEntry(string name, bool isDirectory, byte perm, FileServerConfiguration configuration, bool isOwner)
     {
         const byte implied = (byte)(EconetAccess.OwnerWrite | EconetAccess.OwnerRead | EconetAccess.PublicRead);
         if (isDirectory && configuration.AcornDirectoryDisplay &&
@@ -143,12 +160,12 @@ public sealed class ExamineCommandHandler
         string ownerAccess =
             (isDirectory ? "D" : string.Empty) +
             ((perm & (byte)EconetAccess.Locked) != 0 ? "L" : string.Empty) +
-            ((perm & (byte)EconetAccess.OwnerWrite) != 0 ? "W" : string.Empty) +
-            ((perm & (byte)EconetAccess.OwnerRead) != 0 ? "R" : string.Empty);
+            ((perm & (byte)EconetAccess.OwnerWrite) != 0 ? (isOwner || !configuration.MdfsInfo ? "W" : "w") : string.Empty) +
+            ((perm & (byte)EconetAccess.OwnerRead) != 0 ? (isOwner || !configuration.MdfsInfo ? "R" : "r") : string.Empty);
 
         string publicAccess =
-            ((perm & (byte)EconetAccess.PublicWrite) != 0 ? "W" : string.Empty) +
-            ((perm & (byte)EconetAccess.PublicRead) != 0 ? "R" : string.Empty);
+            ((perm & (byte)EconetAccess.PublicWrite) != 0 ? (configuration.MdfsInfo && isOwner ? "w" : "W") : string.Empty) +
+            ((perm & (byte)EconetAccess.PublicRead) != 0 ? (configuration.MdfsInfo && isOwner ? "r" : "R") : string.Empty);
 
         return $"{name,-10} {ownerAccess,4}/{publicAccess,-2}";
     }

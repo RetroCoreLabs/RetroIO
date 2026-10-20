@@ -66,7 +66,8 @@ public sealed class BulkTransferHandler
                     completed.LoadAddress,
                     completed.ExecAddress,
                     (int)bytes,
-                    defaultAccess);
+                    defaultAccess,
+                    completed.OwnerId);
 
                 EconetActivityRecorder.RecordFileTransfer(
                     _context.ActivityLog,
