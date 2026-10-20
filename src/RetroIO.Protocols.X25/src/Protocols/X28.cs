@@ -161,12 +161,10 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Raised when a command produces response text.
         /// </summary>
         public event EventHandler<CommandResponseEventArgs>? CommandResponse;
-#pragma warning disable CS0067 // Event for future status update hooks
-        /// <summary>
-        /// Raised for status updates; nothing in this class raises it.
-        /// </summary>
-        public event EventHandler<StatusUpdateEventArgs>? StatusUpdate;
-#pragma warning restore CS0067
+        // There is no separate status event. PAD status text (COM, CLR, RESET, INT, CONNECTED and the
+        // like) is sent through CommandResponse, which PadClient forwards to the UI as received data.
+        // A StatusUpdate event was declared in the 2024 move from string returns to events, but it
+        // was never raised and nothing listened to it; it was removed with the owner's agreement.
         /// <summary>
         /// Raised when an error message is produced.
         /// </summary>
@@ -1289,28 +1287,6 @@ namespace RetroIO.Protocols.X25.Protocols
             Response = response;
             Type = type;
             IsImmediate = isImmediate;
-        }
-    }
-
-    /// <summary>
-    /// Event args for status updates - PROPER ARCHITECTURE
-    /// </summary>
-    public class StatusUpdateEventArgs : EventArgs
-    {
-        /// <summary>
-        /// Gets the status text.
-        /// </summary>
-        public string Status { get; }
-        
-        /// <summary>
-        /// Creates the event arguments.
-        /// </summary>
-        /// <param name="status">
-        /// The status text.
-        /// </param>
-        public StatusUpdateEventArgs(string status)
-        {
-            Status = status;
         }
     }
 
