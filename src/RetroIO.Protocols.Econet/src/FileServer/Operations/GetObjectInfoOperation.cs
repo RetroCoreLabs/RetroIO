@@ -77,6 +77,10 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
         if (!GetObjectInfoRequestParser.TryParse(fsRequest, out byte command, out ReadOnlySpan<byte> pathBytes))
             return FileServerReply.Error(FileServerErrors.BadPath, "Bad filename");
 
+        // fs.c lines 5392 to 5396: command 0x40 is an MDFS call and needs the MdfsFunctions flag.
+        if (command == 0x40 && !context.Configuration.MdfsFunctions)
+            return FileServerReply.Error(FileServerErrors.Unsupported, "MDFS Unsupported");
+
         string path = pathBytes.IsEmpty
             ? string.Empty
             : AcornPath.ReadCrTerminatedString(pathBytes);

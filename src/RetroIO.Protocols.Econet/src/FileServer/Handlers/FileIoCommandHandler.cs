@@ -95,7 +95,9 @@ public sealed class FileIoCommandHandler
         relativeTo = AcornFileHandles.DivHandle(relativeTo, _context.Configuration.ManyHandles);
         bool found = _context.Paths.TryResolve(session, filename, relativeTo, out string unixPath, out _, out _) &&
             _context.FileSystem.FileExists(unixPath);
-        if (!found && loadAsCommand)
+        // fs.c lines 8176 to 8178: the library is searched when the file is not in the current directory, for a
+        // *RUN (load as command) and also for every load when the MdfsFunctions flag is set.
+        if (!found && (loadAsCommand || _context.Configuration.MdfsFunctions))
         {
             found = _context.Paths.TryResolve(session, filename, session.LibHandle, out unixPath, out _, out _) &&
                 _context.FileSystem.FileExists(unixPath);
@@ -245,7 +247,20 @@ public sealed class FileIoCommandHandler
         bool readOnly = parameters.Length > 1 && parameters[1] != 0;
         string filename = parameters.Length > 2 ? AcornPath.ReadCrTerminatedString(parameters.Slice(2)) : string.Empty;
 
-        if (!_context.Paths.TryResolve(session, filename, out string unixPath, out _, out _))
+        bool resolved = _context.Paths.TryResolve(session, filename, out string unixPath, out _, out _);
+
+        // fs.c lines 9195 to 9197: with the MdfsFunctions flag set, a file that has to exist and is not in the
+        // current directory is looked for in the library.
+        if (mustExist && _context.Configuration.MdfsFunctions &&
+            (!resolved || !_context.FileSystem.FileExists(unixPath)) &&
+            _context.Paths.TryResolve(session, filename, session.LibHandle, out string libraryPath, out _, out _) &&
+            _context.FileSystem.FileExists(libraryPath))
+        {
+            unixPath = libraryPath;
+            resolved = true;
+        }
+
+        if (!resolved)
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.NotFound, "Not found"));
 
         if (mustExist && !_context.FileSystem.FileExists(unixPath))

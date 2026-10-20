@@ -18,7 +18,7 @@ public sealed class FileServerConfiguration
     /// <remarks>
     /// PiFS name FS_CONFIG_ACORNHOME, NETCONF item ACORNHOME. The PiFS field comment says it means implement Acorn home directory ownership semantics.
     /// PiFS checks it when it resolves paths and at login (fs_login), where it looks up the home owner of a directory. The PiFS menu text calls it Acorn home dir permissions.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (struct fs_config, fs_acorn_home; the checks near lines 2784, 2928, 3061 and 4677). This code does not read the bit.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (struct fs_config, fs_acorn_home; the checks near lines 2784, 2928, 3061 and 4677). This code does not read the bit: it needs an owner and a home directory owner for each object, and this server keeps neither.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagAcornHome = 0x01;
@@ -28,7 +28,9 @@ public sealed class FileServerConfiguration
     /// <remarks>
     /// PiFS name FS_CONFIG_SJFUNC, NETCONF item MDFS. The PiFS field comment says it means turn on SJ MDFS functionality.
     /// With it set, PiFS accepts function codes 64 and above, and the %PASSWORDS file, the hidden or private permission bit, the extra owner bytes in object information, and a library search on load and open. With it clear, function codes 64 and above are refused.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_sjfunc; the checks near lines 1104, 1131, 2203, 5089, 5392, 5744, 8178, 9197 and 9911). This code does not read the bit.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_sjfunc; the checks near lines 1104, 1131, 2203, 5089, 5392, 5744, 8178, 9197 and 9911).
+    /// This code reads the bit for: operations from 64 up refused as Unsupported (line 9911), get object info command 0x40 refused (line 5392), and the library search on load (line 8178) and on open of an existing file (line 9197).
+    /// It does not implement the %PASSWORDS file, the hidden bit conversion or the owner bytes in object information, because this server keeps no owner for each object and has no MDFS password file.
     /// PiFS default for a new configuration is on.
     /// </remarks>
     public const byte FlagMdfsFunctions = 0x02;
@@ -47,7 +49,7 @@ public sealed class FileServerConfiguration
     /// </summary>
     /// <remarks>
     /// PiFS name FS_CONFIG_INFCOLON, NETCONF item COLONMAP. The PiFS field comment says it uses :inf instead of .inf for the attribute side file, and maps Acorn slash to Unix dot instead of Unix colon.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_infcolon; fs.c lines 203, 1605, 1978, 2738, 2894, 2966, 3519 and 5559). This code does not read the bit.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_infcolon; fs.c lines 203, 1605, 1978, 2738, 2894, 2966, 3519 and 5559). This code does not read the bit. The reference uses .inf when the bit is clear, and this server uses a comma-inf side file whatever the bit says, so there is no matching clear state to switch from.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagInfColon = 0x08;
@@ -56,7 +58,7 @@ public sealed class FileServerConfiguration
     /// </summary>
     /// <remarks>
     /// PiFS name FS_CONFIG_MANYHANDLE, NETCONF item BIGHANDLES. The PiFS field comment says it enables user handles above 8 and shows them as plain 8-bit numbers. With it clear, PiFS shows handle n as the value 2 to the power n-1, as Acorn FS 3 does with its limit of 8 handles, and refuses a ninth handle.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_manyhandle; fs.c lines 71 to 72, 204, 1464, 1495 and 9941 to 9946). In this code only the ManyHandles property reads the bit, and nothing else reads that property.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_manyhandle; fs.c lines 71 to 72, 204, 1464, 1495 and 9941 to 9946). This code reads the bit through ManyHandles: it chooses plain or bit mask handle bytes on the wire (AcornFileHandles.DivHandle and MulHandle) and the largest file handle (8 or 32).
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagManyHandle = 0x10;
@@ -65,7 +67,7 @@ public sealed class FileServerConfiguration
     /// </summary>
     /// <remarks>
     /// PiFS name FS_CONFIG_MDFSINFO, NETCONF item MDFSINFO. The PiFS field comment says it enables longer output from *INFO akin to MDFS. The long form adds the creation date and time and the internal number, and it also shows the owner and other access letters in lower case for objects the user does not own.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_mdfsinfo; fs.c lines 205, 5123 to 5128, 5180 to 5187 and 7195 to 7201). This code does not read the bit.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_mdfsinfo; fs.c lines 205, 5123 to 5128, 5180 to 5187 and 7195 to 7201). This code does not read the bit: the letter case depends on whether the viewer owns the object, which this server does not know, and *INFO here is a redirect to get object info, not the text of fs_info.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagMdfsInfo = 0x20;
@@ -75,7 +77,7 @@ public sealed class FileServerConfiguration
     /// <remarks>
     /// PiFS name FS_CONFIG_PIFSPERMS, NETCONF item PIFSPERMS. The PiFS field comment says it enables more flexible permissions on directories and enforces them.
     /// With it set, the create check also lets another user create in a directory that has the other-write and owner-write bits.
-    /// Source: PiEconetBridge utilities/fs.c (fs_pifsperms, line 207; FS_PERM_CREATE, line 372) and include/econet-fs-hpbridge-common.h line 16. This code does not read the bit.
+    /// Source: PiEconetBridge utilities/fs.c (fs_pifsperms, line 207; FS_PERM_CREATE, line 372) and include/econet-fs-hpbridge-common.h line 16. This code does not read the bit: the checks need an owner and the access of the parent directory, which this server does not keep.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagPifsPerms = 0x40;
@@ -84,7 +86,7 @@ public sealed class FileServerConfiguration
     /// </summary>
     /// <remarks>
     /// PiFS name FS_CONFIG_MASKDIRWRR, NETCONF item ACORNDIR. The PiFS field comment says it masks off the owner write, owner read and other read bits of a directory in readable and raw output, because those are implied. It does not mask when the other write bit is set, or when the three bits are not all set, so access set by hand is shown as it is. The PiFS menu text calls it Acorn Directory display.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_mask_dir_wrr; fs.c lines 209, 1110, 5117, 5174 and 7191). This code does not read the bit.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_mask_dir_wrr; fs.c lines 209, 1110, 5117, 5174 and 7191). This code reads the bit in the text catalogue (EXAMINE argument 3). It does not change the binary catalogue entries or the access byte of get object info, because this server sends the PiFS access bits there without converting them to the Acorn layout.
     /// PiFS default for a new configuration is on.
     /// </remarks>
     public const byte FlagAcornDir = 0x80;
@@ -157,6 +159,16 @@ public sealed class FileServerConfiguration
     /// Gets a value indicating whether FlagManyHandle is set in ConfigBits.
     /// </summary>
     public bool ManyHandles => (ConfigBits & FlagManyHandle) != 0;
+
+    /// <summary>
+    /// Gets a value indicating whether FlagMdfsFunctions is set in ConfigBits.
+    /// </summary>
+    public bool MdfsFunctions => (ConfigBits & FlagMdfsFunctions) != 0;
+
+    /// <summary>
+    /// Gets a value indicating whether FlagAcornDir is set in ConfigBits.
+    /// </summary>
+    public bool AcornDirectoryDisplay => (ConfigBits & FlagAcornDir) != 0;
 
     /// <summary>
     /// Builds the five configuration bytes sent in a configuration reply.
