@@ -34,6 +34,13 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int MAX_FILES = 160;
         private const int SECTOR_SIZE = 256;
 
+        // dosdefs.asm DirTracks: offset of the geometry bytes in the first BAM sector. The four bytes are
+        // tracks, sectors per track, complement of tracks, complement of sectors per track.
+        private const int GeometryTracksOffset = 0xFC;
+
+        // DragonDOS has no volume name field; this is the label shown for a disk with a valid BAM.
+        private const string DefaultVolumeLabel = "DRAGON DISK";
+
         /// <summary>
         /// Gets the file system type identifier: <c>DragonDOS</c>.
         /// </summary>
@@ -42,8 +49,8 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Gets the volume label set by <see cref="Initialize"/>, or an empty string before it.
         /// </summary>
         /// <remarks>
-        /// The label is the name stored in the BAM, <c>DRAGON DISK</c> when that name is blank, or
-        /// <c>VDK DISK</c> when the BAM geometry checks fail.
+        /// DragonDOS stores no volume name, so the label is <c>DRAGON DISK</c> when the BAM geometry bytes
+        /// at $FC to $FF check out, or <c>VDK DISK</c> when they fail.
         /// </remarks>
         public string VolumeLabel => _volumeLabel;
         /// <summary>
@@ -55,7 +62,7 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Attaches the file system to a block device and reads the BAM from track 20, sectors 1 and 2.
         /// </summary>
         /// <remarks>
-        /// The sectors per track and track count come from the BAM when their complement bytes check out;
+        /// The track count and sectors per track come from bytes $FC to $FF of the BAM when their complement bytes check out;
         /// otherwise they come from the device (or 18 sectors and 40 tracks) and the label is set to <c>VDK DISK</c>.
         /// </remarks>
         /// <param name="device">
@@ -97,18 +104,10 @@ namespace RetroIO.Storage.Local.FileSystems
             Array.Copy(bamSector1, 0, _bam, 0, SECTOR_SIZE);
             Array.Copy(bamSector2, 0, _bam, SECTOR_SIZE, SECTOR_SIZE);
 
-            // Extract disk geometry from BAM
-            _sectorsPerTrack = bamSector1[0xA2];
-            byte sptCheck = bamSector1[0xA3];
-            _trackCount = bamSector1[0xA4];
-            byte trackCheck = bamSector1[0xA5];
-
-            // Verify complement checks
+            // Extract disk geometry from BAM (dosdefs.asm DirTracks, DirSecPerTrk and their complements,
+            // $FC to $FF of the first BAM sector; DosGetDiskGeometry in ddos12.asm validates them).
             // Note: Some VDK images (especially game images) may not have valid DragonDOS BAM
-            bool validSptComplement = (_sectorsPerTrack == (~sptCheck & 0xFF));
-            bool validTrackComplement = (_trackCount == (~trackCheck & 0xFF));
-
-            if (!validSptComplement || !validTrackComplement)
+            if (!TryReadGeometry(bamSector1, out int bamTracks, out int bamSectorsPerTrack))
             {
                 // This may not be a DragonDOS disk, try to use VDK header geometry instead
                 _sectorsPerTrack = info != null && info.SectorsPerTrack > 0 ? info.SectorsPerTrack : 18;
@@ -118,14 +117,13 @@ namespace RetroIO.Storage.Local.FileSystems
             }
             else
             {
+                _sectorsPerTrack = bamSectorsPerTrack;
+                _trackCount = bamTracks;
                 _doubleSided = (_sectorsPerTrack == 36);
 
-                // Extract volume label (offset 0x90, 18 bytes)
-                _volumeLabel = Encoding.ASCII.GetString(bamSector1, 0x90, 18).Trim('\0', ' ');
-                if (string.IsNullOrWhiteSpace(_volumeLabel))
-                {
-                    _volumeLabel = "DRAGON DISK";
-                }
+                // DragonDOS stores no volume name. Bytes $00 to $FB of the first BAM sector are the
+                // free-sector bitmap (dosdefs.asm BitmapPart1), so nothing there can be read as a label.
+                _volumeLabel = DefaultVolumeLabel;
             }
         }
 
@@ -154,32 +152,19 @@ namespace RetroIO.Storage.Local.FileSystems
                 uint lsn = 20 * 18; // Track 20, Sector 1 (SS)
                 device.ReadBlock(BlockAddress.FromLBA(lsn), bamSector);
 
-                // Check sectors per track (should be 18 or 36)
-                byte spt = bamSector[0xA2];
-                byte sptCheck = bamSector[0xA3];
+                // Both pairs must pass their complement check (see TryReadGeometry) ...
+                if (!TryReadGeometry(bamSector, out int tracks, out int spt))
+                {
+                    return false;
+                }
 
+                // ... and give a size DragonDOS formats: 18 or 36 sectors per track, 40 or 80 tracks.
                 if (spt != 18 && spt != 36)
                 {
                     return false;
                 }
 
-                // Verify complement
-                if (spt != (~sptCheck & 0xFF))
-                {
-                    return false;
-                }
-
-                // Check track count (should be 40 or 80)
-                byte tracks = bamSector[0xA4];
-                byte trackCheck = bamSector[0xA5];
-
                 if (tracks != 40 && tracks != 80)
-                {
-                    return false;
-                }
-
-                // Verify complement
-                if (tracks != (~trackCheck & 0xFF))
                 {
                     return false;
                 }
@@ -453,6 +438,38 @@ namespace RetroIO.Storage.Local.FileSystems
         // ===================================================================
         // PRIVATE METHODS
         // ===================================================================
+
+        /// <summary>
+        /// Reads the geometry bytes of the first BAM sector and checks their complements.
+        /// </summary>
+        /// <remarks>
+        /// dosdefs.asm: DirTracks = $FC, DirSecPerTrk = $FD, DirTracks1s = $FE (complement of the
+        /// tracks byte), DirSecPerTrk1s = $FF (complement of the sectors per track byte). BuildBAM in
+        /// ddos12.asm writes them; DosGetDiskGeometry loads $FE and $FF, complements them and compares
+        /// the pair with $FC and $FD. Confirmed on a real image: 6809TUT1.VDK has 28 12 d7 ed there.
+        /// </remarks>
+        /// <param name="bamSector">
+        /// The first BAM sector, at least 256 bytes.
+        /// </param>
+        /// <param name="tracks">
+        /// The track count from byte $FC.
+        /// </param>
+        /// <param name="sectorsPerTrack">
+        /// The sectors per track from byte $FD.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when both complement bytes match; otherwise <c>false</c>.
+        /// </returns>
+        private static bool TryReadGeometry(byte[] bamSector, out int tracks, out int sectorsPerTrack)
+        {
+            tracks = bamSector[GeometryTracksOffset];
+            sectorsPerTrack = bamSector[GeometryTracksOffset + 1];
+            byte tracksComplement = bamSector[GeometryTracksOffset + 2];
+            byte sectorsComplement = bamSector[GeometryTracksOffset + 3];
+
+            return tracks == (~tracksComplement & 0xFF)
+                && sectorsPerTrack == (~sectorsComplement & 0xFF);
+        }
 
         private DirectoryEntry[] ListRootDirectory()
         {
