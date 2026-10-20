@@ -376,17 +376,20 @@ namespace RetroIO.Storage.Local.FileSystems
         {
             EnsureInitialized();
 
+            // DragonDOS 1.2 DOSGetFree (ddos12.asm, label LD162): the BAM is a bitmap with one bit per
+            // sector, 1 = free and 0 = used (comment at GetBit). It lives in the first two sectors of
+            // the directory track; the free count is the number of SET BITS in the first
+            // BAMEntriesSec = 180 bytes of each sector (dosdefs.asm: MaxLSN/2/SectorsPerBAM, 8 sectors
+            // per byte). _bam holds the two sectors one after the other, 256 bytes each.
+            const int BamEntriesPerSector = 180;
             int freeSectors = 0;
 
-            // Count free sectors in BAM (0xFF = free)
-            int totalSectors = _trackCount * _sectorsPerTrack;
-            int bamBytes = Math.Min(totalSectors, _bam!.Length);
-
-            for (int i = 0; i < bamBytes; i++)
+            for (int sector = 0; sector < 2; sector++)
             {
-                if (_bam[i] == 0xFF)
+                int start = sector * SECTOR_SIZE;
+                for (int i = 0; i < BamEntriesPerSector; i++)
                 {
-                    freeSectors++;
+                    freeSectors += System.Numerics.BitOperations.PopCount(_bam![start + i]);
                 }
             }
 
