@@ -617,10 +617,12 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Makes the calling task privileged for XMSG (XFPRV).
         /// </summary>
         /// <param name="password">
-        /// The version-code password (XPASW) the caller must present.
+        /// The version-code password (XPASW) the caller must present, or zero to give the
+        /// privilege up.
         /// </param>
         /// <returns>
-        /// The completion status.
+        /// The completion status; XEPVR (privilege request refused) when the password is wrong or
+        /// the caller is not a kind of program that may become privileged.
         /// </returns>
         /// <remarks>
         /// Only a driver, a direct task, a foreground program, or a background program logged in as

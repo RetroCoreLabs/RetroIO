@@ -26,6 +26,15 @@ namespace RetroIO.Protocols.Xmsg.Api
         None = 0,
 
         /// <summary>
+        /// RRanyEvent - every event, for the requested set of a wait.
+        /// </summary>
+        /// <remarks>
+        /// RRP-B00 DEFS: "WILD CARD for desired EVENT specification is RRanyEvent", the constant
+        /// -1, which has every bit set.
+        /// </remarks>
+        Any = -1,
+
+        /// <summary>
         /// RREVtime - the wait timed out.
         /// </summary>
         Timeout = 1,

@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Xmsg.Api
     /// <remarks>
     /// <para><b>Two levels, and which to use</b></para>
     /// The manual splits the client calls in two and recommends the HIGH-level pair
-    /// (<see cref="Select"/> and <see cref="Transact"/>) whenever their restrictions are
+    /// (select and transact) whenever their restrictions are
     /// acceptable: each folds a whole low-level sequence into one call and blocks until it
     /// completes. Use the low-level calls when any of the following is true:
     ///  - you need several requests outstanding to different servers at once.
@@ -153,6 +153,61 @@ namespace RetroIO.Protocols.Xmsg.Api
             ReadOnlySpan<byte> clientData,
             out byte[] serverData,
             out int connection);
+
+        /// <summary>
+        /// Connects to a server in one call, waiting up to a time for its answer (RRPCSLCT).
+        /// </summary>
+        /// <param name="systemName">
+        /// The system the server runs on, or null (or empty) for the local system.
+        /// </param>
+        /// <param name="serverName">
+        /// The server's name.
+        /// </param>
+        /// <param name="clientData">
+        /// User data to send with the connection request.
+        /// </param>
+        /// <param name="timeout">
+        /// How long to wait for the server's answer.
+        /// </param>
+        /// <param name="serverData">
+        /// On return, any user data the server returned.
+        /// </param>
+        /// <param name="connection">
+        /// On return, the established connection.
+        /// </param>
+        /// <returns>
+        /// The completion status; RRErnttm when the time ran out, RRErdscn when the server
+        /// disconnected, RRErunev for any other event.
+        /// </returns>
+        RrStatus Select(
+            string? systemName,
+            string serverName,
+            ReadOnlySpan<byte> clientData,
+            TimeSpan timeout,
+            out byte[] serverData,
+            out int connection);
+
+        /// <summary>
+        /// Sends a request and returns its response in one call, waiting up to a time for it
+        /// (RRPCCALL).
+        /// </summary>
+        /// <param name="connection">
+        /// The established connection.
+        /// </param>
+        /// <param name="request">
+        /// The request bytes.
+        /// </param>
+        /// <param name="timeout">
+        /// How long to wait for the response.
+        /// </param>
+        /// <param name="response">
+        /// On return, the response bytes.
+        /// </param>
+        /// <returns>
+        /// The completion status; RRErnttm when the time ran out, RRErdscn when the server
+        /// disconnected, RRErunev for any other event.
+        /// </returns>
+        RrStatus Transact(int connection, ReadOnlySpan<byte> request, TimeSpan timeout, out byte[] response);
 
         /// <summary>
         /// Sends a request and returns its response in one blocking call (the high-level send).
