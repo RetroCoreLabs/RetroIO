@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -538,9 +538,8 @@ public class TnfsIntegrationTests
         byte[] data = Encoding.ASCII.GetBytes("Written via raw WRITE test");
 
         // OPEN for write, create+truncate. Server decodes these via FileCommandHandler's
-        // ConvertToFileAccess/ConvertToFileMode, which use TnfsOpenFlags bit values
-        // (O_WRONLY=0x0001, O_CREAT=0x0100, O_TRUNC=0x0800) — NOT TnfsConstants.TNFS_O_*,
-        // which are unused by the server and would produce the wrong file mode if used here.
+        // ConvertToFileAccess/ConvertToFileMode; TnfsOpenFlags and TnfsConstants.TNFS_O_* now have the same
+        // values (O_WRONLY=0x0002, O_CREAT=0x0100, O_TRUNC=0x0200), the ones in the TNFS protocol flag table.
         ushort flags = (ushort)(TnfsOpenFlags.O_WRONLY | TnfsOpenFlags.O_CREAT | TnfsOpenFlags.O_TRUNC);
         List<byte> openPacket = new List<byte>();
         openPacket.AddRange(BitConverter.GetBytes(_sessionId));

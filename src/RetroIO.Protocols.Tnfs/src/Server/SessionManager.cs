@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -23,6 +23,7 @@ public sealed class SessionManager : IDisposable
     private readonly ILogger<SessionManager> _logger;
     private readonly TimeSpan _sessionTimeout;
     private readonly int _maxSessionsPerIP;
+    private readonly int _maxSessions;
     private readonly Timer _cleanupTimer;
     private bool _disposed;
 
@@ -38,16 +39,30 @@ public sealed class SessionManager : IDisposable
     /// <param name="maxSessionsPerIP">
     /// Limit on the number of sessions from one IP address.
     /// </param>
-    public SessionManager(ILogger<SessionManager> logger, TimeSpan? sessionTimeout = null, int maxSessionsPerIP = 8)
+    /// <param name="maxSessions">
+    /// Limit on the number of sessions open at one time.
+    /// </param>
+    public SessionManager(ILogger<SessionManager> logger, TimeSpan? sessionTimeout = null, int maxSessionsPerIP = TnfsConstants.MAX_SESSIONS_PER_IP, int maxSessions = TnfsConstants.MAX_SESSIONS)
     {
         _logger = logger;
         _sessionTimeout = sessionTimeout ?? TimeSpan.FromSeconds(TnfsConstants.SESSION_TIMEOUT);
         _maxSessionsPerIP = maxSessionsPerIP;
+        _maxSessions = maxSessions;
 
         // Start cleanup timer (runs every minute)
         _cleanupTimer = new Timer(CleanupExpiredSessions, null,
             TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
+
+    /// <summary>
+    /// Gets the most sessions open at one time.
+    /// </summary>
+    public int MaxSessions => _maxSessions;
+
+    /// <summary>
+    /// Gets the most sessions one IP address may hold.
+    /// </summary>
+    public int MaxSessionsPerIP => _maxSessionsPerIP;
 
     /// <summary>
     /// Get current session count.
@@ -56,8 +71,12 @@ public sealed class SessionManager : IDisposable
 
     /// <summary>
     /// Create new session for client with optional user binding.
-    /// Enforces MAX_SESSIONS_PER_IP limit.
+    /// Enforces the per-address limit (the oldest session of that address is recycled, as tnfsd does) and the
+    /// total limit (a new session is refused with <see cref="TnfsSessionLimitException"/>).
     /// </summary>
+    /// <exception cref="TnfsSessionLimitException">
+    /// The session table is full and no expired session could be removed.
+    /// </exception>
     public TnfsSession CreateSession(IPAddress clientIP, string rootPath, Guid userId = default, string username = "UNKNOWN", bool isAdmin = false)
     {
         // Check if we need to recycle a session from this IP
@@ -73,6 +92,19 @@ public sealed class SessionManager : IDisposable
                 oldest.SessionId, clientIP);
 
             RemoveSession(oldest.SessionId);
+        }
+
+        // Total limit (tnfsd MAX_SESSIONS). tnfsd drops expired sessions while it scans for a free slot, so
+        // do the same before refusing. The per-address recycle above frees a slot first when it applies.
+        if (_sessions.Count >= _maxSessions)
+        {
+            CleanupExpiredSessions(null);
+        }
+
+        if (_sessions.Count >= _maxSessions)
+        {
+            _logger.LogWarning("Refusing a new session for IP {IP}: {Max} sessions are open", clientIP, _maxSessions);
+            throw new TnfsSessionLimitException($"The session table is full ({_maxSessions} sessions)");
         }
 
         // Generate unique session ID
@@ -284,6 +316,22 @@ public sealed class SessionManager : IDisposable
         }
 
         _disposed = true;
+    }
+}
+
+/// <summary>
+/// Thrown when no new session can be created because the session table is full.
+/// </summary>
+public sealed class TnfsSessionLimitException : InvalidOperationException
+{
+    /// <summary>
+    /// Creates the exception.
+    /// </summary>
+    /// <param name="message">
+    /// The message.
+    /// </param>
+    public TnfsSessionLimitException(string message) : base(message)
+    {
     }
 }
 

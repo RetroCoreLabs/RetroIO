@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -617,8 +617,9 @@ namespace RetroIO.Storage.Providers
                 throw new UnauthorizedAccessException("Volume is mounted read-only.");
 
             // O_WRONLY|O_CREAT|O_TRUNC -> the server opens FileAccess.Write + FileMode.Create
-            // (create-or-truncate). Flag values from TnfsEnums; verified against the server's
-            // ConvertToFileAccess/ConvertToFileMode (flags & 0x03 == 1 -> Write; 0x0100|0x0800 -> Create).
+            // (create-or-truncate). The flag values are the ones in the TNFS protocol open flag table
+            // (TnfsEnums, same as TnfsConstants.TNFS_O_*); the server's ConvertToFileAccess and
+            // ConvertToFileMode read the same values (access 0x0002 -> Write; 0x0100|0x0200 -> Create).
             TnfsOpenFlags flags = TnfsOpenFlags.O_WRONLY | TnfsOpenFlags.O_CREAT | TnfsOpenFlags.O_TRUNC;
             TnfsResult<ushort> openResult = mount.Client.Open(path, flags);
             if (!openResult.Success)

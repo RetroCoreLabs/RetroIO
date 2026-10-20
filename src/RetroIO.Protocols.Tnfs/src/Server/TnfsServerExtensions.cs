@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -41,8 +41,9 @@ public static class TnfsServerExtensions
         services.AddSingleton<SessionManager>(sp =>
             new SessionManager(
                 sp.GetRequiredService<ILogger<SessionManager>>(),
-                TimeSpan.FromSeconds(600),  // 10 minute session timeout
-                maxSessionsPerIP: 8));
+                TimeSpan.FromSeconds(Protocol.TnfsConstants.SESSION_TIMEOUT),
+                options.MaxSessionsPerIP,
+                options.MaxSessions));
 
         // Register command handlers
         services.AddSingleton<SessionCommandHandler>(sp =>
@@ -161,4 +162,14 @@ public class TnfsServerOptions
     /// Gets or sets the most TCP connections open at one time (default: 4096, the reference daemon's MAX_TCP_CONN).
     /// </summary>
     public int MaxTcpConnections { get; set; } = Protocol.TnfsConstants.MAX_TCP_CONN;
+
+    /// <summary>
+    /// Gets or sets the most sessions open at one time (default: 4096, the reference daemon's MAX_SESSIONS).
+    /// </summary>
+    public int MaxSessions { get; set; } = Protocol.TnfsConstants.MAX_SESSIONS;
+
+    /// <summary>
+    /// Gets or sets the most sessions one IP address may hold (default: 4096, the reference daemon's MAX_SESSIONS_PER_IP).
+    /// </summary>
+    public int MaxSessionsPerIP { get; set; } = Protocol.TnfsConstants.MAX_SESSIONS_PER_IP;
 }

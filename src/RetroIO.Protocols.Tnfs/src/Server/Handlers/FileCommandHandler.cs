@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -890,25 +890,52 @@ public class FileCommandHandler
     }
 
     // Helper methods for OPEN command
-    private FileAccess ConvertToFileAccess(ushort flags)
+
+    /// <summary>
+    /// Turns the access bits of the TNFS open flags into a file access.
+    /// </summary>
+    /// <remarks>
+    /// The low two bits follow the open flag table of the TNFS protocol and tnfsd (tnfs_file.h):
+    /// 1 is read only, 2 is write only, 3 is read and write. Zero (no access bit) is read, because tnfsd passes
+    /// it on to open(2) as O_RDONLY.
+    /// </remarks>
+    /// <param name="flags">
+    /// The open flags from the OPEN request.
+    /// </param>
+    /// <returns>
+    /// The file access to open the file with.
+    /// </returns>
+    public static FileAccess ConvertToFileAccess(ushort flags)
     {
-        // TNFS flags: O_RDONLY=0, O_WRONLY=1, O_RDWR=2
-        int accessMode = flags & 0x03;
+        // TNFS_O_RDONLY=0x0001, TNFS_O_WRONLY=0x0002, TNFS_O_RDWR=0x0003 (low two bits, tnfs_file.h TNFS_O_ACCMODE).
+        int accessMode = flags & TnfsConstants.TNFS_O_RDWR;
         return accessMode switch
         {
-            0 => FileAccess.Read,
-            1 => FileAccess.Write,
-            2 => FileAccess.ReadWrite,
-            _ => FileAccess.Read
+            TnfsConstants.TNFS_O_RDONLY => FileAccess.Read,
+            TnfsConstants.TNFS_O_WRONLY => FileAccess.Write,
+            TnfsConstants.TNFS_O_RDWR => FileAccess.ReadWrite,
+            _ => FileAccess.Read  // no access bit: tnfsd opens with O_RDONLY
         };
     }
 
-    private FileMode ConvertToFileMode(ushort flags)
+    /// <summary>
+    /// Turns the create flags of the TNFS open flags into a file mode.
+    /// </summary>
+    /// <remarks>
+    /// The bits follow the open flag table of the TNFS protocol and tnfsd (tnfs_file.h):
+    /// O_CREAT 0x0100, O_TRUNC 0x0200, O_EXCL 0x0400. The append flag (0x0008) is not mapped here.
+    /// </remarks>
+    /// <param name="flags">
+    /// The open flags from the OPEN request.
+    /// </param>
+    /// <returns>
+    /// The file mode to open the file with.
+    /// </returns>
+    public static FileMode ConvertToFileMode(ushort flags)
     {
-        // TNFS flags: O_CREAT=0x0100, O_EXCL=0x0200, O_APPEND=0x0400, O_TRUNC=0x0800
-        bool create = (flags & 0x0100) != 0;
-        bool excl = (flags & 0x0200) != 0;
-        bool trunc = (flags & 0x0800) != 0;
+        bool create = (flags & TnfsConstants.TNFS_O_CREAT) != 0;
+        bool excl = (flags & TnfsConstants.TNFS_O_EXCL) != 0;
+        bool trunc = (flags & TnfsConstants.TNFS_O_TRUNC) != 0;
 
         if (create && excl)
             return FileMode.CreateNew;

@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -179,7 +179,9 @@ public sealed class DirectoryCommandHandler
         try
         {
             // Build response: name + 0x00 (standard READDIR has NO flags byte per TNFS 1.2 spec)
-            using var buffer = TnfsBuffer.Rent(256);
+            // Size the buffer from the name: ASCII is one byte per character, plus the terminator. A fixed
+            // 256 bytes overflowed for a name of 256 characters or more.
+            using var buffer = TnfsBuffer.Rent(Encoding.ASCII.GetMaxByteCount(entryName.Length) + 1);
             var span = buffer.Span;
 
             // Entry name (null-terminated) - no flags byte in standard READDIR!
@@ -254,7 +256,9 @@ public sealed class DirectoryCommandHandler
             BackendFileInfo? fileInfo = isDirectory ? null : _fileSystem.GetFileInfo(entryPath);
 
             // Build response: flags(1) + size(4) + mtime(4) + ctime(4) + name + 0x00
-            using var buffer = TnfsBuffer.Rent(256);
+            // 13 fixed bytes, the name (one byte per ASCII character) and the terminator. A fixed 256 bytes
+            // overflowed for a name of about 243 characters or more.
+            using var buffer = TnfsBuffer.Rent(13 + Encoding.ASCII.GetMaxByteCount(entryName.Length) + 1);
             var span = buffer.Span;
 
             int offset = 0;
