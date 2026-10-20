@@ -105,6 +105,6 @@ public sealed class DirCommand : IOsCliCommand
 
         call.Session!.AcornCwdPath = newAcorn;
         call.Session!.CurrentDirectoryUnix = unixPath;
-        return FileServerReply.DirectoryChanged(AcornFileHandles.MulHandle(call.Session!.CwdHandle));
+        return FileServerReply.DirectoryChanged(AcornFileHandles.MulHandle(call.Session!.CwdHandle, call.Context.Configuration.ManyHandles));
     }
 }

@@ -8,6 +8,7 @@
 using System.Text;
 using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer;
+using RetroIO.Protocols.Econet.FileServer.Configuration;
 using RetroIO.Protocols.Econet.FileServer.Metadata;
 using RetroIO.Protocols.Econet.FileServer.Sessions;
 using RetroIO.Protocols.Econet.Protocol.Aun;
@@ -56,7 +57,7 @@ public sealed class ExamineCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.BadPath, "Bad filename"));
 
         string path = AcornPath.ReadCrTerminatedString(pathBytes);
-        byte relativeTo = GetObjectInfoRequestParser.ResolveRelativeTo(fsRequest, session);
+        byte relativeTo = GetObjectInfoRequestParser.ResolveRelativeTo(fsRequest, session, _context.Configuration.ManyHandles);
 
         if (!CatalogueEnumerator.TryResolveCatalogueDirectory(_context, session, path, relativeTo, out string unixPath))
         {
@@ -115,7 +116,7 @@ public sealed class ExamineCommandHandler
             if (!isDirectory && !AcornInfStore.TryReadAttributes(_context.FileSystem, fullPath, out _, out _, out _, out perm))
                 perm = defaultFilePerm;
 
-            entries.AddRange(Encoding.ASCII.GetBytes(FormatTextEntry(name, isDirectory, perm)));
+            entries.AddRange(Encoding.ASCII.GetBytes(FormatTextEntry(name, isDirectory, perm, _context.Configuration)));
             entries.Add(0);
             examined++;
         }
@@ -126,8 +127,19 @@ public sealed class ExamineCommandHandler
 
     // Renders one *CAT entry exactly as PiFS fs_examine arg 3: "%-10s %4s/%-2s" (owner left, public right).
     // Bit meanings come from the shared EconetAccess flags (the same byte *ACCESS writes).
-    private static string FormatTextEntry(string name, bool isDirectory, byte perm)
+    // The AcornDir flag changes the letters (fs.c lines 5174 and 5175): a directory whose access is exactly owner write,
+    // owner read and other read (other write clear) is shown with none of those letters, because the Acorn clients
+    // take them as implied. The MdfsInfo flag also changes the letters (fs.c lines 5180 to 5187) but only by whether
+    // the viewer owns the object, and this server keeps no owner for each object, so that flag is not implemented.
+    private static string FormatTextEntry(string name, bool isDirectory, byte perm, FileServerConfiguration configuration)
     {
+        const byte implied = (byte)(EconetAccess.OwnerWrite | EconetAccess.OwnerRead | EconetAccess.PublicRead);
+        if (isDirectory && configuration.AcornDirectoryDisplay &&
+            (perm & (implied | (byte)EconetAccess.PublicWrite)) == implied)
+        {
+            perm = (byte)(perm & ~implied);
+        }
+
         string ownerAccess =
             (isDirectory ? "D" : string.Empty) +
             ((perm & (byte)EconetAccess.Locked) != 0 ? "L" : string.Empty) +

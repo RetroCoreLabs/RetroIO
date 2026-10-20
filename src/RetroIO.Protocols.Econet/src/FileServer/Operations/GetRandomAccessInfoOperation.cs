@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using RetroIO.Protocols.Econet.Common;
 using System;
 using RetroIO.Protocols.Econet.FileServer.Dispatch;
 using RetroIO.Protocols.Econet.FileServer.Handles;
@@ -58,7 +59,8 @@ public sealed class GetRandomAccessInfoOperation : IFileServerOperation
     public byte[] Execute(in FsOpCall call)
     {
         ReadOnlySpan<byte> parameters = call.FsRequest.Parameters;
-        byte handle = parameters.Length > 0 ? parameters[0] : (byte)0;
+        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11385).
+        byte handle = AcornFileHandles.DivHandle(parameters.Length > 0 ? parameters[0] : (byte)0, call.Context.Configuration.ManyHandles);
         byte function = parameters.Length > 1 ? parameters[1] : (byte)0;
         OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)

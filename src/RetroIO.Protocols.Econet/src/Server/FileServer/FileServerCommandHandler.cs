@@ -86,7 +86,11 @@ public sealed class FileServerCommandHandler
 
         EconetMessage? response;
 
-        if (fsRequest.Opcode == FileServerOpcodes.PiBridge)
+        // fs.c line 9911: with the MdfsFunctions flag clear every operation from 64 up, the PiBridge calls
+        // included, is answered with error 0xFF "Unsupported" before anything else is looked at.
+        if (fsRequest.Opcode >= 64 && !_context.Configuration.MdfsFunctions)
+            response = BuildReply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Unsupported, "Unsupported"));
+        else if (fsRequest.Opcode == FileServerOpcodes.PiBridge)
             response = _piBridge.Handle(request, fsRequest);
         else if (fsRequest.Opcode >= 64 &&
                  fsRequest.Opcode != FileServerOpcodes.PiBridge &&
@@ -98,7 +102,7 @@ public sealed class FileServerCommandHandler
         else
         {
             FileServerSession? session = _context.Sessions.GetSession(request.ClientNet, request.ClientStation);
-            session?.ApplyWireHandles(fsRequest);
+            session?.ApplyWireHandles(fsRequest, _context.Configuration.ManyHandles);
             response = DispatchLoggedIn(request, fsRequest);
         }
 
