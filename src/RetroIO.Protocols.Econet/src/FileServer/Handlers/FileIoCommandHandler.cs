@@ -165,7 +165,7 @@ public sealed class FileIoCommandHandler
 
         // PiFS fs_load: metadata reply carries the file's real load/exec/length/access/date so the
         // BBC can place the image and (for CHAIN/*RUN) obtain the execution address.
-        AcornInfStore.TryReadAttributes(_context.FileSystem, unixPath, out uint load, out uint exec, out _, out byte access);
+        AcornAttributeStore.TryReadAttributes(_context.FileSystem, unixPath, out uint load, out uint exec, out _, out byte access);
         byte day = 0;
         byte monthYear = 0;
         if (info?.LastWriteTimeUtc != null)
@@ -203,7 +203,7 @@ public sealed class FileIoCommandHandler
             }
 
             // fs.c line 5873: the user who saves a file becomes its owner.
-            AcornInfStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, 0, defaultAccess, session.UserIndex);
+            AcornAttributeStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, 0, defaultAccess, session.UserIndex);
             AcornPath.EncodeFileDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
             // PiFS create_only / length==0 path sends the short 5-byte completion (return code 0),
             // not the 21-byte FS3 data-transfer close packet.
@@ -326,7 +326,7 @@ public sealed class FileIoCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.NotFound, "Not found"));
 
         // fs.c lines 7087 and 7088: the attribute file goes with the object, so a new object of the same name does not get the old owner.
-        AcornInfStore.DeleteSidecar(_context.FileSystem, unixPath);
+        AcornAttributeStore.DeleteAttributes(_context.FileSystem, unixPath);
 
         return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
     }

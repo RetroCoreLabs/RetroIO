@@ -18,7 +18,7 @@ public sealed class FileServerConfiguration
     /// <remarks>
     /// PiFS name FS_CONFIG_ACORNHOME, NETCONF item ACORNHOME. The PiFS field comment says it means implement Acorn home directory ownership semantics.
     /// PiFS checks it when it resolves paths and at login (fs_login), where it looks up the home owner of a directory. The PiFS menu text calls it Acorn home dir permissions.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (struct fs_config, fs_acorn_home; the checks near lines 2784, 2928, 3061 and 4677). This code reads the bit through AcornHome. With it set, a user directory without a home owner gets the user number of the user who logs in (line 4677), and every object at or below a directory that has a home owner is owned by that user (lines 2784, 2928 and 3061). The owner and the home owner are kept in the sidecar file (see AcornInfStore and ObjectOwnership). *SETHOME writes the home owner whatever the bit says, as in PiFS (lines 10715 to 10751).
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (struct fs_config, fs_acorn_home; the checks near lines 2784, 2928, 3061 and 4677). This code reads the bit through AcornHome. With it set, a user directory without a home owner gets the user number of the user who logs in (line 4677), and every object at or below a directory that has a home owner is owned by that user (lines 2784, 2928 and 3061). The owner and the home owner are kept in the property bag of the object (see AcornAttributeStore and ObjectOwnership). *SETHOME writes the home owner whatever the bit says, as in PiFS (lines 10715 to 10751).
     /// This server gives every user the USER directory of the disc as the home, unless the user has a *SETHOME value, so users who share that directory share one home owner: the first one to log in with the bit set.
     /// PiFS default for a new configuration is off.
     /// </remarks>
@@ -51,7 +51,7 @@ public sealed class FileServerConfiguration
     /// </summary>
     /// <remarks>
     /// PiFS name FS_CONFIG_INFCOLON, NETCONF item COLONMAP. The PiFS field comment says it uses :inf instead of .inf for the attribute side file, and maps Acorn slash to Unix dot instead of Unix colon.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_infcolon; fs.c lines 203, 1605, 1978, 2738, 2894, 2966, 3519 and 5559). This code does not read the bit. The reference uses .inf when the bit is clear, and this server uses a comma-inf side file whatever the bit says, so there is no matching clear state to switch from.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_infcolon; fs.c lines 203, 1605, 1978, 2738, 2894, 2966, 3519 and 5559). This code does not read the bit. The reference uses .inf when the bit is clear, and this server keeps the attributes in the property bag of the object (an extended attribute, or the .xat file) whatever the bit says, so there is no matching clear state to switch from.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagInfColon = 0x08;

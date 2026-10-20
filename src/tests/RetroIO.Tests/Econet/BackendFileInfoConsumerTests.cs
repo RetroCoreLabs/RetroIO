@@ -161,7 +161,7 @@ public sealed class BackendFileInfoConsumerTests
     {
         byte[] content = Encoding.ASCII.GetBytes("machine code image");
         _harness.FileSystem.AddFile(ProgUnix, content);
-        AcornInfStore.WriteAttributes(_harness.FileSystem, ProgUnix, 0x1900, 0x1900, content.Length, 0x33);
+        AcornAttributeStore.WriteAttributes(_harness.FileSystem, ProgUnix, 0x1900, 0x1900, content.Length, 0x33);
         BackendSays(777, KnownWriteTime);
 
         byte[] reply = _harness.HandleOsCli("SAVE PROG 1900 1900\r").Payload;

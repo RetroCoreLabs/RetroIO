@@ -306,7 +306,7 @@ public sealed class OsCliParityTests
     private byte ReadAccessByte(string acornName)
     {
         string path = _harness.FileSystem.CombinePath(EconetSampleCatalogFixture.UserDirectory, acornName);
-        AcornInfStore.TryReadAttributes(_harness.FileSystem, path, out _, out _, out _, out byte access);
+        AcornAttributeStore.TryReadAttributes(_harness.FileSystem, path, out _, out _, out _, out byte access);
         return access;
     }
 

@@ -13,7 +13,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 /// Works out who owns an object and whether a session is that owner, following the PiFS reference (PiEconetBridge utilities/fs.c).
 /// </summary>
 /// <remarks>
-/// The owner of each object is stored in its sidecar file (see AcornInfStore). With the AcornHome flag set, the owner of everything at or below a home directory is the user whose home it is.
+/// The owner of each object is stored in its property bag (see AcornAttributeStore). With the AcornHome flag set, the owner of everything at or below a home directory is the user whose home it is.
 /// </remarks>
 public static class ObjectOwnership
 {
@@ -39,7 +39,7 @@ public static class ObjectOwnership
     /// </remarks>
     public static ushort GetOwner(FileServerContext context, string unixPath)
     {
-        AcornInfStore.ReadOwnership(context.FileSystem, unixPath, out ushort owner, out _);
+        AcornAttributeStore.ReadOwnership(context.FileSystem, unixPath, out ushort owner, out _);
         if (!context.Configuration.AcornHome)
             return owner;
 
@@ -69,7 +69,7 @@ public static class ObjectOwnership
         if (session.UserIndex == owner)
             return true;
 
-        return owner == AcornInfStore.DefaultOwner &&
+        return owner == AcornAttributeStore.DefaultOwner &&
             session.IsAdmin &&
             string.Equals(session.Username, SystemManagerName, StringComparison.OrdinalIgnoreCase);
     }
@@ -108,8 +108,8 @@ public static class ObjectOwnership
     /// </param>
     public static void SetOwner(FileServerContext context, FileServerSession session, string unixPath)
     {
-        AcornInfStore.ReadOwnership(context.FileSystem, unixPath, out _, out ushort homeOf);
-        AcornInfStore.WriteOwnership(context.FileSystem, unixPath, session.UserIndex, homeOf);
+        AcornAttributeStore.ReadOwnership(context.FileSystem, unixPath, out _, out ushort homeOf);
+        AcornAttributeStore.WriteOwnership(context.FileSystem, unixPath, session.UserIndex, homeOf);
     }
 
     /// <summary>
@@ -133,9 +133,9 @@ public static class ObjectOwnership
         if (string.IsNullOrEmpty(home) || !context.FileSystem.DirectoryExists(home))
             return;
 
-        AcornInfStore.ReadOwnership(context.FileSystem, home, out ushort owner, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(context.FileSystem, home, out ushort owner, out ushort homeOf);
         if (homeOf == 0)
-            AcornInfStore.WriteOwnership(context.FileSystem, home, owner, session.UserIndex);
+            AcornAttributeStore.WriteOwnership(context.FileSystem, home, owner, session.UserIndex);
     }
 
     /// <summary>
@@ -155,8 +155,8 @@ public static class ObjectOwnership
     /// </remarks>
     public static void SetHomeOwner(FileServerContext context, string unixPath, ushort homeOf)
     {
-        AcornInfStore.ReadOwnership(context.FileSystem, unixPath, out ushort owner, out _);
-        AcornInfStore.WriteOwnership(context.FileSystem, unixPath, owner, homeOf);
+        AcornAttributeStore.ReadOwnership(context.FileSystem, unixPath, out ushort owner, out _);
+        AcornAttributeStore.WriteOwnership(context.FileSystem, unixPath, owner, homeOf);
     }
 
     /// <summary>
@@ -194,7 +194,7 @@ public static class ObjectOwnership
 
         for (int i = chain.Count - 1; i >= 0; i--)
         {
-            AcornInfStore.ReadOwnership(context.FileSystem, chain[i], out _, out ushort homeOf);
+            AcornAttributeStore.ReadOwnership(context.FileSystem, chain[i], out _, out ushort homeOf);
             if (homeOf != 0)
                 return homeOf;
         }

@@ -16,6 +16,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The shared extended-attribute mechanism: the XAT serializer that NDFS uses (RetroIO.Storage.Ndfs) and the property types (RetroIO.Storage.Core). -->
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Ndfs\src\RetroIO.Storage.Ndfs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

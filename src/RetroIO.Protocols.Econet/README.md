@@ -14,7 +14,7 @@ status byte. Serving that is what lets real hardware — or BeebEm — use files
 
 The implementation aims at being **compatible rather than reasonable**, and that distinction matters. The
 Acorn file server has behaviour nobody would design today: the same command spelled four ways
-(`*I AM`, `*IAM`, `*LOGIN`, `*LOGON`), metadata in `,inf` sidecar files, bulk transfers that repurpose
+(`*I AM`, `*IAM`, `*LOGIN`, `*LOGON`), metadata in the property bag of each object (extended attribute mechanism, `.xat` file as the fallback), bulk transfers that repurpose
 bytes 2–4 of the packet instead of the documented fields, and `*INFO` with several MDFS sub-forms. All of
 that is implemented as it is, with PiFS and the PiEconetBridge sources cited at the decisions, because a
 cleaner version would simply not work with the ROM.
@@ -142,7 +142,7 @@ than a switch that grows, and adding an operation does not edit a giant method.
 | `0x0F` | `ReadLoggedOnUsers` | Who is logged on, from a caller-supplied index |
 | `0x10` / `0x1C` | `ReadTime` / `SetRtc` | The server clock; setting it is System-only |
 | `0x11` | `EndOfFile` | `0x80` at or past EOF |
-| `0x12` / `0x13` | Get/SetObjectInfo | The metadata behind `*INFO`, `*EX` and `*CAT`; writes go to the `,inf` sidecar |
+| `0x12` / `0x13` | Get/SetObjectInfo | The metadata behind `*INFO`, `*EX` and `*CAT`; writes go to the property bag |
 | `0x15` | `ReadUserEnv` | Current disc, directory and library |
 | `0x16` | `SetBootOpt` | The `*OPT 4` value; above 7 is `0xBD Bad option` |
 | `0x18` | `ReadUserInfo` | Where a named user is logged on |
@@ -174,7 +174,7 @@ credentials is a defect rather than a feature.
 | Sessions and handles | `FileServerSession`, `FileServerSessionManager`, `FileServerHandleManager`, `OpenFileHandle`, `AcornFileHandles` |
 | Paths and discs | `AcornPath`, `PathResolver`, `AcornDirectoryNavigation`, `DiscCatalog`, `DiscEntry`, `DiscNameEntry` |
 | Users | `EconetUserDirectory`, `EconetUserProfile`, `EconetUserBootstrap`, `EconetMetadataKeys` |
-| Metadata | `AcornInfStore` (the `,inf` sidecars), `EconetAccess` |
+| Metadata | `AcornAttributeStore` (the property bags, `.xat` fallback), `EconetAccess` |
 | Wire profiles | `WireProfile`, `WireProfileResolver`, `MachineOverride` |
 | Bulk | `BulkTransferManager`, `BulkPacket`, `OutboundLoadTransfer`, `InboundSaveTransfer`, `FileServerBulkPacketLayout` |
 | Errors | `FileServerErrors`, `FileServerErrorNames`, `FileServerOpcode`, `FileServerOpcodeNames` |

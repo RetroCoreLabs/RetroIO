@@ -20,17 +20,18 @@ using RetroIO.Protocols.Econet.Protocol;
 using RetroIO.Protocols.Econet.Protocol.Aun;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 using RetroIO.Protocols.Econet.Server;
+using RetroIO.Server.Core.FileSystem;
 using RetroIO.Tests.TNFS;
 
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// The owner kept for each object in the sidecar file, checked against the PiFS reference (PiEconetBridge utilities/fs.c):
+/// The owner kept for each object in its property bag, checked against the PiFS reference (PiEconetBridge utilities/fs.c):
 /// struct objattr at line 318, fs_read_attr_from_file and fs_write_attr_to_file at lines 1608 to 1648, fs_read_xattr at line 1675.
 /// </summary>
 [TestFixture]
 [Category("Unit")]
-public sealed class AcornInfStoreOwnerTests
+public sealed class AcornAttributeStoreOwnerTests
 {
     private const string FilePath = "/disc/FILE";
 
@@ -44,7 +45,7 @@ public sealed class AcornInfStoreOwnerTests
         _fileSystem.AddFile(FilePath, Encoding.ASCII.GetBytes("0123456789"));
     }
 
-    // Writes the text of a sidecar file as it was before the owner was added.
+    // Writes the text of a helper file of an older version (the object name and a comma and inf). The store converts it on first use.
     private void WriteRawSidecar(string text)
     {
         byte[] bytes = Encoding.ASCII.GetBytes(text);
@@ -53,75 +54,75 @@ public sealed class AcornInfStoreOwnerTests
     }
 
     [Test]
-    public void ReadOwnership_OldSidecarWithoutOwner_ReadsOwnerZeroAndNoHomeOwner()
+    public void ReadOwnership_LegacyFileWithoutOwner_ReadsOwnerZeroAndNoHomeOwner()
     {
         // fs.c 1678 and 1686: owner and homeof start at 0 and stay 0 when nothing is stored.
         WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=10\nACCESS=33\n");
 
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
 
-        Assert.That(owner, Is.EqualTo(AcornInfStore.DefaultOwner));
+        Assert.That(owner, Is.EqualTo(AcornAttributeStore.DefaultOwner));
         Assert.That(owner, Is.EqualTo(0));
         Assert.That(homeOf, Is.EqualTo(0));
     }
 
     [Test]
-    public void ReadOwnership_NoSidecar_ReadsOwnerZero()
+    public void ReadOwnership_NoPropertyBag_ReadsOwnerZero()
     {
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
 
         Assert.That(owner, Is.EqualTo(0));
         Assert.That(homeOf, Is.EqualTo(0));
     }
 
     [Test]
-    public void ReadOwnership_SidecarWithOwnerAndHomeOwner_ReadsBothAsHex()
+    public void ReadOwnership_LegacyFileWithOwnerAndHomeOwner_ReadsBothAsHex()
     {
         WriteRawSidecar("LOAD=0\nOWNER=00A5\nHOMEOF=0107\n");
 
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
 
         Assert.That(owner, Is.EqualTo(0xA5));
         Assert.That(homeOf, Is.EqualTo(0x107));
     }
 
     [Test]
-    public void WriteOwnership_KeepsLoadExecAndAccessOfTheSidecar()
+    public void WriteOwnership_KeepsLoadExecAndAccessOfThePropertyBag()
     {
-        AcornInfStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 10, 0x13);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 10, 0x13);
 
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
 
-        AcornInfStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out int length, out byte access);
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out int length, out byte access);
         Assert.That(load, Is.EqualTo(0x1900u));
         Assert.That(exec, Is.EqualTo(0x8023u));
         Assert.That(length, Is.EqualTo(10));
         Assert.That(access, Is.EqualTo(0x13));
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
         Assert.That(owner, Is.EqualTo(0x42));
     }
 
     [Test]
-    public void WriteOwnership_WithNoSidecar_MakesOneAndTheAttributesStayAtTheirDefaults()
+    public void WriteOwnership_WithNoPropertyBag_MakesOneAndTheAttributesStayAtTheirDefaults()
     {
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 7, 0);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 7, 0);
 
-        AcornInfStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out int length, out byte access);
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out int length, out byte access);
         Assert.That(load, Is.EqualTo(0u));
         Assert.That(exec, Is.EqualTo(0u));
         Assert.That(length, Is.EqualTo(10), "the real file length");
         Assert.That(access, Is.EqualTo(0x33));
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
         Assert.That(owner, Is.EqualTo(7));
     }
 
     [Test]
-    public void WriteOwnership_CalledTwice_KeepsOneOwnerLine()
+    public void WriteOwnership_CalledTwice_KeepsTheLastOwner()
     {
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 1, 0);
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 2, 9);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 1, 0);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 2, 9);
 
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
         Assert.That(owner, Is.EqualTo(2));
         Assert.That(homeOf, Is.EqualTo(9));
     }
@@ -129,11 +130,11 @@ public sealed class AcornInfStoreOwnerTests
     [Test]
     public void WriteAttributes_WithoutOwner_KeepsTheOwnerAndHomeOwnerThatWereStored()
     {
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0x55);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0x55);
 
-        AcornInfStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03);
 
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
         Assert.That(owner, Is.EqualTo(0x42));
         Assert.That(homeOf, Is.EqualTo(0x55));
     }
@@ -141,79 +142,262 @@ public sealed class AcornInfStoreOwnerTests
     [Test]
     public void WriteAttributes_WithOwner_ReplacesTheOwnerAndKeepsTheHomeOwner()
     {
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0x55);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0x55);
 
-        AcornInfStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03, 0x77);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03, 0x77);
 
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
         Assert.That(owner, Is.EqualTo(0x77));
         Assert.That(homeOf, Is.EqualTo(0x55));
     }
 
     [Test]
-    public void WriteAttributes_OldSidecarWithoutOwner_StaysWithoutAnOwnerLine()
+    public void WriteAttributes_BagWithoutOwner_StaysWithoutAnOwnerProperty()
     {
         // A file that never had an owner keeps reading as the default owner, not as an owner somebody wrote.
-        AcornInfStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03);
 
-        string text = ReadSidecar();
-        Assert.That(text, Does.Not.Contain("OWNER"));
+        IDictionary<string, object>? bag = _fileSystem.GetObjectProperties(FilePath);
+        Assert.That(bag, Is.Not.Null);
+        Assert.That(bag!.ContainsKey(AcornProperties.Owner), Is.False);
     }
 
     [Test]
-    public void MoveSidecar_CarriesTheOwnerToTheNewName()
+    public void MoveAttributes_CarriesTheOwnerToTheNewName()
     {
         _fileSystem.AddFile("/disc/NEW", Encoding.ASCII.GetBytes("x"));
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
 
-        AcornInfStore.MoveSidecar(_fileSystem, FilePath, "/disc/NEW");
+        AcornAttributeStore.MoveAttributes(_fileSystem, FilePath, "/disc/NEW");
 
-        AcornInfStore.ReadOwnership(_fileSystem, "/disc/NEW", out ushort owner, out _);
+        AcornAttributeStore.ReadOwnership(_fileSystem, "/disc/NEW", out ushort owner, out _);
+        Assert.That(owner, Is.EqualTo(0x42));
+        Assert.That(_fileSystem.FileExists(XatSidecar.GetXatPath(FilePath)), Is.False);
+        Assert.That(_fileSystem.FileExists(XatSidecar.GetXatPath("/disc/NEW")), Is.True);
+    }
+
+    [Test]
+    public void DeleteAttributes_RemovesTheOwner()
+    {
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
+
+        AcornAttributeStore.DeleteAttributes(_fileSystem, FilePath);
+
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
+        Assert.That(owner, Is.EqualTo(0));
+        Assert.That(_fileSystem.FileExists(XatSidecar.GetXatPath(FilePath)), Is.False);
+    }
+
+    [Test]
+    public void IsStoreName_XatName_IsTheStoreOfAnObject()
+    {
+        Assert.That(AcornAttributeStore.IsStoreName("FILE.xat"), Is.True);
+        Assert.That(AcornAttributeStore.IsStoreName("FILE.XAT"), Is.True);
+    }
+
+    [Test]
+    public void IsStoreName_AcornNameAndLegacySuffixName_AreNotStores()
+    {
+        // An Acorn name has no dot, so it can never end in .xat. The old comma-inf suffix is no longer hidden.
+        Assert.That(AcornAttributeStore.IsStoreName("FILE"), Is.False);
+        Assert.That(AcornAttributeStore.IsStoreName("FILE,inf"), Is.False);
+        Assert.That(AcornAttributeStore.IsStoreName("XAT"), Is.False);
+    }
+
+    [Test]
+    public void WriteOwnership_KeepsThePropertyBagInTheXatFileBesideTheObject()
+    {
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
+
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.True);
+        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False, "the old helper file is not written any more");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Volumes made by an older version keep the attributes in the helper file (object name, comma, inf).
+    // The values are read from it, written to the property bag, and the helper file is removed.
+    // ---------------------------------------------------------------------------------------------
+
+    [Test]
+    public void LegacyConversion_ReadAttributes_GivesTheValuesOfTheHelperFile()
+    {
+        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=7\nACCESS=13\nOWNER=0042\nHOMEOF=0009\n");
+
+        bool found = AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out int length, out byte access);
+
+        Assert.That(found, Is.True);
+        Assert.That(load, Is.EqualTo(0x1900u));
+        Assert.That(exec, Is.EqualTo(0x8023u));
+        Assert.That(length, Is.EqualTo(7));
+        Assert.That(access, Is.EqualTo(0x13));
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+        Assert.That(owner, Is.EqualTo(0x42));
+        Assert.That(homeOf, Is.EqualTo(0x09));
+    }
+
+    [Test]
+    public void LegacyConversion_WritesThePropertyBagAndRemovesTheHelperFile()
+    {
+        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=7\nACCESS=13\nOWNER=0042\nHOMEOF=0009\n");
+
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out _, out _, out _, out _);
+
+        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False, "the helper file is gone");
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.True);
+        IDictionary<string, object>? bag = _fileSystem.GetObjectProperties(FilePath);
+        Assert.That(bag, Is.Not.Null);
+        Assert.That(Convert.ToInt64(bag![AcornProperties.Load]), Is.EqualTo(0x1900));
+        Assert.That(Convert.ToInt64(bag[AcornProperties.Exec]), Is.EqualTo(0x8023));
+        Assert.That(Convert.ToInt64(bag[AcornProperties.Length]), Is.EqualTo(7));
+        Assert.That(Convert.ToInt64(bag[AcornProperties.Access]), Is.EqualTo(0x13));
+        Assert.That(Convert.ToInt64(bag[AcornProperties.Owner]), Is.EqualTo(0x42));
+        Assert.That(Convert.ToInt64(bag[AcornProperties.HomeOf]), Is.EqualTo(0x09));
+    }
+
+    [Test]
+    public void LegacyConversion_AmpersandHexAndLowerCaseKeys_AreUnderstood()
+    {
+        WriteRawSidecar("load=&FFFF1900\nexec=&FFFF8023\naccess=&1B\n");
+
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out _, out byte access);
+
+        Assert.That(load, Is.EqualTo(0xFFFF1900u), "a load address above the signed 32-bit range survives the round trip through the XAT JSON");
+        Assert.That(exec, Is.EqualTo(0xFFFF8023u));
+        Assert.That(access, Is.EqualTo(0x1B));
+    }
+
+    [Test]
+    public void LegacyConversion_WriteOwnership_KeepsTheValuesOfTheHelperFile()
+    {
+        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=10\nACCESS=13\n");
+
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
+
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out _, out _, out byte access);
+        Assert.That(load, Is.EqualTo(0x1900u));
+        Assert.That(access, Is.EqualTo(0x13));
+        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False);
+    }
+
+    [Test]
+    public void LegacyConversion_MoveAttributes_CarriesTheValuesOfTheHelperFileToTheNewName()
+    {
+        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nOWNER=0042\n");
+        _fileSystem.AddFile("/disc/NEW", Encoding.ASCII.GetBytes("x"));
+
+        AcornAttributeStore.MoveAttributes(_fileSystem, FilePath, "/disc/NEW");
+
+        AcornAttributeStore.TryReadAttributes(_fileSystem, "/disc/NEW", out uint load, out _, out _, out _);
+        AcornAttributeStore.ReadOwnership(_fileSystem, "/disc/NEW", out ushort owner, out _);
+        Assert.That(load, Is.EqualTo(0x1900u));
         Assert.That(owner, Is.EqualTo(0x42));
         Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False);
     }
 
     [Test]
-    public void DeleteSidecar_RemovesTheOwner()
+    public void LegacyConversion_DeleteAttributes_RemovesTheHelperFileToo()
     {
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
+        WriteRawSidecar("OWNER=0042\n");
 
-        AcornInfStore.DeleteSidecar(_fileSystem, FilePath);
+        AcornAttributeStore.DeleteAttributes(_fileSystem, FilePath);
 
-        AcornInfStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
-        Assert.That(owner, Is.EqualTo(0));
         Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
+        Assert.That(owner, Is.EqualTo(0));
     }
 
     [Test]
-    public void IsSidecarName_NameOfAnExistingObjectPlusSuffix_IsASidecar()
+    public void LegacyConversion_ExistingPropertyBagWins_AndTheHelperFileIsLeftAlone()
     {
-        AcornInfStore.WriteOwnership(_fileSystem, FilePath, 1, 0);
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x11, 0);
+        WriteRawSidecar("OWNER=0099\n");
 
-        Assert.That(AcornInfStore.IsSidecarName(_fileSystem, "/disc", "FILE,inf"), Is.True);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
+
+        Assert.That(owner, Is.EqualTo(0x11));
+        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.True);
     }
 
     [Test]
-    public void IsSidecarName_NameWithSuffixAndNoObjectBehindIt_IsAnOrdinaryFile()
+    public void LegacyConversion_FileWithNoKnownKey_IsNotConvertedAndNotDeleted()
     {
-        _fileSystem.AddFile("/disc/LONELY,inf", Encoding.ASCII.GetBytes("x"));
+        // A file that merely ends in the suffix, with no Acorn key in it, is somebody's data and must stay.
+        WriteRawSidecar("just some text\n");
 
-        Assert.That(AcornInfStore.IsSidecarName(_fileSystem, "/disc", "LONELY,inf"), Is.False);
+        IDictionary<string, object>? bag = AcornAttributeStore.TryConvertLegacy(_fileSystem, FilePath);
+
+        Assert.That(bag, Is.Null);
+        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.True);
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.False);
     }
 
     [Test]
-    public void IsSidecarName_NameWithoutSuffix_IsNotASidecar()
+    public void LegacyConversion_DirectoryObject_IsConvertedToo()
     {
-        Assert.That(AcornInfStore.IsSidecarName(_fileSystem, "/disc", "FILE"), Is.False);
+        _fileSystem.AddDirectory("/disc/SUB");
+        byte[] bytes = Encoding.ASCII.GetBytes("OWNER=0007\nHOMEOF=0003\n");
+        using (FileStream stream = _fileSystem.OpenFile("/disc/SUB,inf", FileMode.Create, FileAccess.Write))
+            stream.Write(bytes, 0, bytes.Length);
+
+        AcornAttributeStore.ReadOwnership(_fileSystem, "/disc/SUB", out ushort owner, out ushort homeOf);
+
+        Assert.That(owner, Is.EqualTo(7));
+        Assert.That(homeOf, Is.EqualTo(3));
+        Assert.That(_fileSystem.FileExists("/disc/SUB,inf"), Is.False);
+        Assert.That(_fileSystem.FileExists("/disc/SUB.xat"), Is.True);
     }
 
-    // Reads the text of the sidecar file of FilePath.
-    private string ReadSidecar()
+    // ---------------------------------------------------------------------------------------------
+    // The property bag goes through the same serializer and file name rules as NDFS.
+    // ---------------------------------------------------------------------------------------------
+
+    [Test]
+    public void XatFile_HoldsTheJsonOfTheNdfsSerializer()
     {
-        using FileStream stream = _fileSystem.OpenFile(FilePath + ",inf", FileMode.Open, FileAccess.Read);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 10, 0x13, 5);
+
+        using FileStream stream = _fileSystem.OpenFile("/disc/FILE.xat", FileMode.Open, FileAccess.Read);
         byte[] buffer = new byte[stream.Length];
         int read = stream.Read(buffer, 0, buffer.Length);
-        return Encoding.ASCII.GetString(buffer, 0, read);
+        IDictionary<string, object> bag = RetroIO.Storage.Ndfs.PropertyBags.NdfsXatSerializer.DeserializeFromJson(Encoding.UTF8.GetString(buffer, 0, read));
+        Assert.That(Convert.ToInt64(bag["acorn.load"]), Is.EqualTo(0x1900));
+        Assert.That(Convert.ToInt64(bag["acorn.exec"]), Is.EqualTo(0x8023));
+        Assert.That(Convert.ToInt64(bag["acorn.access"]), Is.EqualTo(0x13));
+        Assert.That(Convert.ToInt64(bag["acorn.owner"]), Is.EqualTo(5));
+    }
+
+    [Test]
+    public void XatPath_DotInTheDirectoryPart_DoesNotCutTheNameShort()
+    {
+        // NdfsXatSerializer.GetXatFileName cuts at the last dot of whatever it is given, so the path must not be given to it whole.
+        Assert.That(XatSidecar.GetXatPath("/disc.one/FILE"), Is.EqualTo("/disc.one/FILE.xat"));
+        Assert.That(XatSidecar.GetXatPath("/disc/SUB/"), Is.EqualTo("/disc/SUB.xat"));
+    }
+
+    [Test]
+    public void XatPath_NameWithADot_KeepsItsOwnStore()
+    {
+        Assert.That(XatSidecar.GetXatPath("/disc/A.B"), Is.EqualTo("/disc/A.B.xat"));
+        Assert.That(XatSidecar.GetXatPath("/disc/A.B"), Is.Not.EqualTo(XatSidecar.GetXatPath("/disc/A")));
+    }
+
+    [Test]
+    public void XatRead_DamagedFile_IsReportedNotHidden()
+    {
+        _fileSystem.AddFile("/disc/FILE.xat", Encoding.UTF8.GetBytes("this is not json"));
+
+        Assert.Throws<InvalidDataException>(() => AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out _, out _));
+    }
+
+    [Test]
+    public void Properties_DescriptorsUseFilesystemSafeShortNames()
+    {
+        for (int i = 0; i < AcornProperties.All.Length; i++)
+        {
+            string shortName = AcornProperties.All[i].ShortName;
+            Assert.That(shortName, Does.Match("^[A-Za-z0-9]{1,8}$"), AcornProperties.All[i].Key);
+            Assert.That(AcornProperties.All[i].Key, Does.StartWith("acorn."));
+        }
     }
 }
 
@@ -255,8 +439,8 @@ public sealed class FileServerOwnerTests
     // Makes HELLO a file with the given access byte and owner.
     private void SeedHello(byte access, ushort owner)
     {
-        AcornInfStore.WriteAttributes(_harness.FileSystem, HelloPath, 0, 0, 10, access);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, HelloPath, owner, 0);
+        AcornAttributeStore.WriteAttributes(_harness.FileSystem, HelloPath, 0, 0, 10, access);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, HelloPath, owner, 0);
     }
 
     private static byte[] InfoRequest(byte command, string name)
@@ -324,7 +508,7 @@ public sealed class FileServerOwnerTests
     {
         // fs.c 5735 tests the owner only, a system user is not counted for the directory header.
         _harness.LoginAsSyst();
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory, OtherUser, 0);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, OtherUser, 0);
 
         byte[] reply = _harness.Send(FileServerOpcodes.GetObjectInfo, [6, 13]).Payload;
 
@@ -335,7 +519,7 @@ public sealed class FileServerOwnerTests
     public void GetObjectInfo_Cmd6_DirectoryOwnedByTheCaller_OwnerByteIsZero()
     {
         _harness.LoginAsUser();
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory, LoggedInUserIndex(), 0);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, LoggedInUserIndex(), 0);
 
         byte[] reply = _harness.Send(FileServerOpcodes.GetObjectInfo, [6, 13]).Payload;
 
@@ -364,7 +548,7 @@ public sealed class FileServerOwnerTests
 
     private ushort OwnerOf(string unixPath)
     {
-        AcornInfStore.ReadOwnership(_harness.FileSystem, unixPath, out ushort owner, out _);
+        AcornAttributeStore.ReadOwnership(_harness.FileSystem, unixPath, out ushort owner, out _);
         return owner;
     }
 
@@ -402,7 +586,7 @@ public sealed class FileServerOwnerTests
 
         Assert.That(final, Is.Not.Null);
         Assert.That(OwnerOf(UserDirectory + "/DATA"), Is.EqualTo(LoggedInUserIndex()));
-        AcornInfStore.TryReadAttributes(_harness.FileSystem, UserDirectory + "/DATA", out _, out _, out int length, out _);
+        AcornAttributeStore.TryReadAttributes(_harness.FileSystem, UserDirectory + "/DATA", out _, out _, out int length, out _);
         Assert.That(length, Is.EqualTo(5));
     }
 
@@ -444,7 +628,7 @@ public sealed class FileServerOwnerTests
     {
         _harness.LoginAsUser();
         _harness.FileSystem.AddDirectory(UserDirectory + "/OLD");
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/OLD", OtherUser, 0);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/OLD", OtherUser, 0);
 
         _harness.Send(FileServerOpcodes.CreateDir, [0, (byte)'O', (byte)'L', (byte)'D', 13]);
 
@@ -483,7 +667,7 @@ public sealed class FileServerOwnerTests
         byte[] reply = _harness.Send(FileServerOpcodes.Delete, Encoding.ASCII.GetBytes("HELLO\r")).Payload;
 
         Assert.That(reply[1], Is.EqualTo(0));
-        Assert.That(_harness.FileSystem.FileExists(HelloPath + ",inf"), Is.False);
+        Assert.That(_harness.FileSystem.FileExists(XatSidecar.GetXatPath(HelloPath)), Is.False);
         _harness.FileSystem.AddFile(HelloPath, Encoding.ASCII.GetBytes("new"));
         Assert.That(OwnerOf(HelloPath), Is.EqualTo(0));
     }
@@ -541,12 +725,41 @@ public sealed class FileServerOwnerTests
 
         List<string> entries = ExamineTextEntries();
 
+        Assert.That(_harness.FileSystem.FileExists(XatSidecar.GetXatPath(HelloPath)), Is.True, "the .xat file is there to be hidden");
         for (int i = 0; i < entries.Count; i++)
-            Assert.That(entries[i], Does.Not.Contain(",inf"), entries[i]);
+            Assert.That(entries[i], Does.Not.Contain(".xat"), entries[i]);
         Assert.That(ExamineTextLine("HELLO"), Is.Not.Empty);
         Assert.That(ExamineTextLine("NEWDIR"), Is.Not.Empty);
     }
 
+    [Test]
+    public void Examine_LegacyHelperFile_IsConvertedAndNotListed()
+    {
+        _harness.LoginAsUser();
+        _harness.FileSystem.AddFile(HelloPath, Encoding.ASCII.GetBytes("0123456789"));
+        byte[] legacy = Encoding.ASCII.GetBytes("LOAD=00001900\nEXEC=00008023\nACCESS=13\nOWNER=0042\n");
+        using (FileStream stream = _harness.FileSystem.OpenFile(HelloPath + ",inf", FileMode.Create, FileAccess.Write))
+            stream.Write(legacy, 0, legacy.Length);
+
+        List<string> entries = ExamineTextEntries();
+
+        for (int i = 0; i < entries.Count; i++)
+            Assert.That(entries[i], Does.Not.Contain(",inf"), entries[i]);
+        Assert.That(_harness.FileSystem.FileExists(HelloPath + ",inf"), Is.False, "converted and removed");
+        Assert.That(OwnerOf(HelloPath), Is.EqualTo(0x42));
+        AcornAttributeStore.TryReadAttributes(_harness.FileSystem, HelloPath, out uint load, out _, out _, out byte access);
+        Assert.That(load, Is.EqualTo(0x1900u));
+        Assert.That(access, Is.EqualTo(0x13));
+    }
+
+    [Test]
+    public void Examine_NameEndingInCommaInfWithNoObjectBehindIt_IsAnOrdinaryFile()
+    {
+        _harness.LoginAsUser();
+        _harness.FileSystem.AddFile(UserDirectory + "/LONELY,inf", Encoding.ASCII.GetBytes("x"));
+
+        Assert.That(ExamineTextLine("LONELY,inf"), Is.Not.Empty);
+    }
     // ---------------------------------------------------------------------------------------------
     // MdfsInfo 0x20. fs.c 5170 (is_owner) and 5180 to 5187 (letters of EXAMINE argument 3).
     // ---------------------------------------------------------------------------------------------
@@ -660,7 +873,7 @@ public sealed class FileServerOwnerTests
         SetFlags(FileServerConfiguration.FlagMdfsFunctions);
         _harness.LoginAsUser();
         _harness.FileSystem.AddDirectory(UserDirectory + "/SUB");
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/SUB", 0x0009, 0);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/SUB", 0x0009, 0);
 
         byte[] entry = BinaryEntry("SUB");
 
@@ -688,7 +901,7 @@ public sealed class FileServerOwnerTests
 
     private ushort HomeOwnerOf(string unixPath)
     {
-        AcornInfStore.ReadOwnership(_harness.FileSystem, unixPath, out _, out ushort homeOf);
+        AcornAttributeStore.ReadOwnership(_harness.FileSystem, unixPath, out _, out ushort homeOf);
         return homeOf;
     }
 
@@ -717,7 +930,7 @@ public sealed class FileServerOwnerTests
     public void Login_AcornHomeSet_ExistingHomeOwnerIsKept()
     {
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornHome);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0x0007, OtherUser);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0x0007, OtherUser);
 
         _harness.LoginAsUser();
 
@@ -729,8 +942,8 @@ public sealed class FileServerOwnerTests
     public void GetOwner_AcornHomeSet_ObjectBelowAHomeDirectoryIsOwnedByTheHomeUser()
     {
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornHome);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0, 0x0077);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, HelloPath, 0x1111, 0);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0, 0x0077);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, HelloPath, 0x1111, 0);
 
         Assert.That(ObjectOwnership.GetOwner(_harness.Context, HelloPath), Is.EqualTo(0x0077));
         Assert.That(ObjectOwnership.GetOwner(_harness.Context, UserDirectory), Is.EqualTo(0x0077), "the home directory itself too");
@@ -740,8 +953,8 @@ public sealed class FileServerOwnerTests
     public void GetOwner_AcornHomeClear_TheStoredOwnerStands()
     {
         SetFlags(FileServerConfiguration.FlagMdfsFunctions);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0, 0x0077);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, HelloPath, 0x1111, 0);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0, 0x0077);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, HelloPath, 0x1111, 0);
 
         Assert.That(ObjectOwnership.GetOwner(_harness.Context, HelloPath), Is.EqualTo(0x1111));
     }
@@ -753,8 +966,8 @@ public sealed class FileServerOwnerTests
         _harness.FileSystem.AddDirectory(UserDirectory + "/A");
         _harness.FileSystem.AddDirectory(UserDirectory + "/A/B");
         _harness.FileSystem.AddFile(UserDirectory + "/A/B/DEEP", Encoding.ASCII.GetBytes("x"));
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/A", 0, 0x0055);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/A/B/DEEP", 0x2222, 0);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/A", 0, 0x0055);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory + "/A/B/DEEP", 0x2222, 0);
 
         Assert.That(ObjectOwnership.GetOwner(_harness.Context, UserDirectory + "/A/B/DEEP"), Is.EqualTo(0x0055));
         Assert.That(ObjectOwnership.GetOwner(_harness.Context, HelloPath), Is.EqualTo(0), "HELLO is not below A and USER has no home owner");
@@ -765,8 +978,8 @@ public sealed class FileServerOwnerTests
     {
         // fs.c 2781 and 3061: homeof_found is set by the first directory with a home owner on the way down and is not replaced.
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornHome);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, DiscRoot, 0, 0x0011);
-        AcornInfStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0, 0x0022);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, DiscRoot, 0, 0x0011);
+        AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0, 0x0022);
 
         Assert.That(ObjectOwnership.GetOwner(_harness.Context, HelloPath), Is.EqualTo(0x0011));
     }
@@ -862,6 +1075,6 @@ public sealed class FileServerOwnerTests
         byte[] reply = _harness.HandleOsCli("SETHOME USER NOSUCH\r").Payload;
 
         Assert.That(reply[1], Is.Not.EqualTo(0));
-        Assert.That(_harness.FileSystem.FileExists(UserDirectory + "/NOSUCH,inf"), Is.False);
+        Assert.That(_harness.FileSystem.FileExists(XatSidecar.GetXatPath(UserDirectory + "/NOSUCH")), Is.False);
     }
 }
