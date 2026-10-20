@@ -6,7 +6,6 @@
 //
 
 using System;
-using System.Collections.Generic;
 
 namespace RetroIO.Protocols.Xmsg.Api
 {
@@ -16,15 +15,14 @@ namespace RetroIO.Protocols.Xmsg.Api
     /// <remarks>
     /// Implements the client half of chapter 4 over <see cref="XmsgKernel"/> and
     /// <see cref="XroutDirectory"/>. Both levels the manual describes are here: the low-level calls
-    /// for a program that must keep several requests outstanding, and <see cref="Select"/> and
-    /// <see cref="Transact"/>, which fold a whole sequence into one blocking call and are what the
+    /// for a program that must keep several requests outstanding, and the high-level select and
+    /// transact calls, which fold a whole sequence into one blocking call and are what the
     /// manual recommends when their restrictions are acceptable.
     /// The wire framing is ours, not ND's - see <see cref="RrMessageKind"/>.
     /// </remarks>
     public sealed class RrClient : RrEndpointBase, IRrClient
     {
         private readonly XroutDirectory _directory;
-        private readonly Queue<Pending> _pending;
 
         /// <summary>
         /// Initialises a client on a kernel and a directory.
@@ -47,7 +45,6 @@ namespace RetroIO.Protocols.Xmsg.Api
             }
 
             _directory = directory;
-            _pending = new Queue<Pending>();
         }
 
         /// <summary>
@@ -62,18 +59,19 @@ namespace RetroIO.Protocols.Xmsg.Api
         }
 
         /// <summary>
-        /// Takes the next message off the client's port and reports which event it is (RRPBWAIT).
+        /// Waits for the next event the client asked for (RRPBWAIT).
         /// </summary>
         /// <param name="wanted">
-        /// The set of events to wait for. This implementation does not read it: whatever message
-        /// is next on the port is reported.
+        /// The set of events to wait for, as a bit mask. Only these are reported, apart from an
+        /// unknown-port message, which always is. Events not asked for are kept for a later wait.
         /// </param>
         /// <param name="timeout">
-        /// How long to wait. This implementation does not read it and never blocks.
+        /// How long to wait. Zero polls once. <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>
+        /// waits until an event comes.
         /// </param>
         /// <param name="actual">
         /// On return, the event that occurred:
-        ///  - <see cref="RrEvent.Timeout"/> when no message is waiting.
+        ///  - <see cref="RrEvent.Timeout"/> when the time ran out with nothing to report.
         ///  - <see cref="RrEvent.DisconnectIndication"/> for a message of ours that came back
         ///    undelivered, or a disconnect request from the server.
         ///  - <see cref="RrEvent.ConnectionConfirmation"/> for a connect accept or reject.
@@ -86,53 +84,31 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// </returns>
         /// <remarks>
         /// The message taken is kept so the matching call (for example
-        /// <see cref="GetResponse"/>) can pick it up.
+        /// <see cref="GetResponse"/>) can pick it up. The rules are those of the shared
+        /// implementation, <see cref="RrEndpointBase.WaitForEvent"/>.
         /// </remarks>
         public RrStatus Wait(RrEvent wanted, TimeSpan timeout, out RrEvent actual)
         {
-            actual = RrEvent.None;
+            return WaitForEvent(wanted, timeout, out actual);
+        }
 
-            RrMessageKind kind;
-            int connection;
-            byte[] payload;
-            XmsgMagicNumber sender;
-            bool returned;
-
-            if (!TryReceiveFramed(out kind, out connection, out payload, out sender, out returned))
-            {
-                actual = RrEvent.Timeout;
-                return RrStatus.Ok;
-            }
-
-            if (returned)
-            {
-                _pending.Enqueue(new Pending(RrMessageKind.DisconnectRequest, connection, payload, sender));
-                actual = RrEvent.DisconnectIndication;
-                return RrStatus.Ok;
-            }
-
+        /// <inheritdoc />
+        protected override RrEvent EventFor(RrMessageKind kind)
+        {
             switch (kind)
             {
                 case RrMessageKind.ConnectAccept:
                 case RrMessageKind.ConnectReject:
-                    actual = RrEvent.ConnectionConfirmation;
-                    break;
+                    return RrEvent.ConnectionConfirmation;
                 case RrMessageKind.Response:
-                    actual = RrEvent.ResponseIndication;
-                    break;
+                    return RrEvent.ResponseIndication;
                 case RrMessageKind.DisconnectRequest:
-                    actual = RrEvent.DisconnectIndication;
-                    break;
+                    return RrEvent.DisconnectIndication;
                 case RrMessageKind.DisconnectConfirm:
-                    actual = RrEvent.DisconnectConfirmation;
-                    break;
+                    return RrEvent.DisconnectConfirmation;
                 default:
-                    actual = RrEvent.UnknownPort;
-                    break;
+                    return RrEvent.UnknownPort;
             }
-
-            _pending.Enqueue(new Pending(kind, connection, payload, sender));
-            return RrStatus.Ok;
         }
 
         /// <summary>
@@ -149,8 +125,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// User data to send with the request, typically an identification the server will check.
         /// </param>
         /// <param name="connection">
-        /// On return, always zero. The connection identifier is chosen by the server and is only
-        /// known after <see cref="ConfirmConnection"/>.
+        /// On return, the reference for this connection, to be used in the later calls about it
+        /// (the guide's remoteID). It is never zero.
         /// </param>
         /// <returns>
         /// OK when the letter was forwarded; the error code XENOP when the client is not
@@ -165,8 +141,19 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// system is not implemented, and nothing is sent.
         /// </exception>
         /// <remarks>
+        /// <para>
+        /// Guide, routine RRPCcnrq: remoteID is the "server reference number to be used in
+        /// subsequent calls", written by the call itself. Chapter 4 section 4.3 puts that call at
+        /// step 1, before the server has done anything, so the number cannot come from the server;
+        /// it is handed out here, by the client's own library. The import list of RRP-B00 agrees:
+        /// RRPCcnrq has the identifier as a write parameter, while the server calls read the
+        /// identifier from the event. RRanyRemote is 0, so the reference is never 0.
+        /// </para>
+        /// <para>
         /// The connection is not usable until the confirmation event has been received and
-        /// processed.
+        /// processed. The server numbers its side of the connection itself; both references travel
+        /// in every message, so each side hears events under its own.
+        /// </para>
         /// </remarks>
         public RrStatus RequestConnection(
             string? systemName,
@@ -201,8 +188,11 @@ namespace RetroIO.Protocols.Xmsg.Api
 
             // The letter goes to XROUT BY NAME. We never learn the server's address here - the
             // server learns ours from the arriving letter and answers if it chooses to.
+            // The reference is ours to hand out, and it goes in the letter so the server's answer
+            // can name it. The receiver's reference is 0 because the server has none yet.
+            int reference = AllocateReference();
             byte[] letter = new byte[HeaderSize + clientData.Length];
-            letter[0] = (byte)RrMessageKind.ConnectRequest;
+            WriteFramedHeader(letter, RrMessageKind.ConnectRequest, 0, reference);
             clientData.CopyTo(new Span<byte>(letter, HeaderSize, clientData.Length));
 
             XroutError forwarded = _directory.SendLetter(serverName, mine, letter);
@@ -211,7 +201,9 @@ namespace RetroIO.Protocols.Xmsg.Api
                 return new RrStatus((int)forwarded);
             }
 
-            // The connection is not usable until the confirmation arrives and names it.
+            // The connection is not usable until the confirmation arrives; the reference is
+            // already ours to give back.
+            connection = reference;
             return RrStatus.Ok;
         }
 
@@ -219,8 +211,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// Completes connection establishment after the confirmation event (RRPCCNCF).
         /// </summary>
         /// <param name="connection">
-        /// On return, the connection identifier the server chose, now recorded on this side too;
-        /// zero when the server refused or nothing was waiting.
+        /// On return, the reference <see cref="RequestConnection"/> gave for this connection, now
+        /// open; zero when the server refused or nothing was waiting.
         /// </param>
         /// <param name="serverData">
         /// On return, any user data the server returned with its answer, accept or reject.
@@ -234,7 +226,7 @@ namespace RetroIO.Protocols.Xmsg.Api
             connection = 0;
             serverData = Array.Empty<byte>();
 
-            Pending? item = TakeEither(RrMessageKind.ConnectAccept, RrMessageKind.ConnectReject);
+            Pending? item = TakeTakenEither(RrMessageKind.ConnectAccept, RrMessageKind.ConnectReject);
             if (item == null)
             {
                 return new RrStatus((int)XmsgError.XENIM);
@@ -246,9 +238,10 @@ namespace RetroIO.Protocols.Xmsg.Api
                 return new RrStatus((int)XroutError.XRNSP);
             }
 
-            // Adopt the identifier the server chose, so both sides name the connection the same.
+            // The answer names our reference (the receiver's field) and carries the server's own
+            // number for the connection, which every later message to the server must carry.
             connection = item.Connection;
-            AddConnection(connection, item.Sender);
+            AddConnection(connection, item.Sender, item.PeerReference);
             serverData = item.Payload;
             return RrStatus.Ok;
         }
@@ -291,7 +284,7 @@ namespace RetroIO.Protocols.Xmsg.Api
             connection = 0;
             response = Array.Empty<byte>();
 
-            Pending? item = Take(RrMessageKind.Response);
+            Pending? item = TakeTaken(RrMessageKind.Response);
             if (item == null)
             {
                 return new RrStatus((int)XmsgError.XENIM);
@@ -303,7 +296,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         }
 
         /// <summary>
-        /// Connects to a server in one call (the high-level select).
+        /// Connects to a server in one call and does not wait for it (the high-level select).
         /// </summary>
         /// <param name="systemName">
         /// The system the server runs on, or <c>null</c> (or empty) for the local system. A named
@@ -322,9 +315,52 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// On return, the established connection.
         /// </param>
         /// <returns>
-        /// The status of <see cref="ConfirmConnection"/>; the error from
-        /// <see cref="RequestConnection"/>; or XENIM when the next message on the port is not a
-        /// connection confirmation.
+        /// The same as the version with a timeout, called with a timeout of zero.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="serverName"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when <paramref name="systemName"/> names a system: reaching a server on another
+        /// system is not implemented.
+        /// </exception>
+        public RrStatus Select(
+            string? systemName,
+            string serverName,
+            ReadOnlySpan<byte> clientData,
+            out byte[] serverData,
+            out int connection)
+        {
+            return Select(systemName, serverName, clientData, TimeSpan.Zero, out serverData, out connection);
+        }
+
+        /// <summary>
+        /// Connects to a server in one call, waiting up to a time for its answer (RRPCSLCT).
+        /// </summary>
+        /// <param name="systemName">
+        /// The system the server runs on, or <c>null</c> (or empty) for the local system. A named
+        /// system is refused by <see cref="RequestConnection"/>, because it is not implemented.
+        /// </param>
+        /// <param name="serverName">
+        /// The server's name.
+        /// </param>
+        /// <param name="clientData">
+        /// User data to send with the connection request.
+        /// </param>
+        /// <param name="timeout">
+        /// How long to wait for the server's answer.
+        /// </param>
+        /// <param name="serverData">
+        /// On return, any user data the server returned.
+        /// </param>
+        /// <param name="connection">
+        /// On return, the established connection.
+        /// </param>
+        /// <returns>
+        /// The status of <see cref="ConfirmConnection"/>, or the error from
+        /// <see cref="RequestConnection"/>, or one of the codes the guide's definitions file lists
+        /// for this call: RRErnttm when the time ran out, RRErdscn when the server disconnected,
+        /// RRErunev for any other event.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="serverName"/> is <c>null</c>.
@@ -334,14 +370,17 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// system is not implemented.
         /// </exception>
         /// <remarks>
-        /// Runs a connection request, a wait and a connection confirmation back to back. The wait
-        /// does not block, so this only succeeds when the server's answer is already queued when
-        /// the request call returns.
+        /// RRP-B00 DEFS, "CODES SPECIFIC to RRPCslct/RRPCcall/RRPCdisc": 17296 not terminated
+        /// (timeout), 17297 disconnected, 17298 unexpected event while waiting for the reply. The
+        /// guide says the call is a connection request, a wait and a connection confirmation done
+        /// "synchronously, i.e., the return does not occur until timeout or until a response is
+        /// received from the server".
         /// </remarks>
         public RrStatus Select(
             string? systemName,
             string serverName,
             ReadOnlySpan<byte> clientData,
+            TimeSpan timeout,
             out byte[] serverData,
             out int connection)
         {
@@ -351,26 +390,30 @@ namespace RetroIO.Protocols.Xmsg.Api
             RrStatus requested = RequestConnection(systemName, serverName, clientData, out connection);
             if (!requested.IsOk)
             {
+                connection = 0;
                 return requested;
             }
 
             RrEvent actual;
-            RrStatus waited = Wait(RrEvent.ConnectionConfirmation, TimeSpan.Zero, out actual);
+            RrStatus waited = Wait(RrEvent.ConnectionConfirmation | RrEvent.DisconnectIndication, timeout, out actual);
             if (!waited.IsOk)
             {
+                connection = 0;
                 return waited;
             }
 
             if (actual != RrEvent.ConnectionConfirmation)
             {
-                return new RrStatus((int)XmsgError.XENIM);
+                connection = 0;
+                return new RrStatus((int)EventToCallError(actual));
             }
 
             return ConfirmConnection(out connection, out serverData);
         }
 
         /// <summary>
-        /// Sends a request and returns its response in one call (the high-level send).
+        /// Sends a request and returns its response in one call, without waiting for it (the
+        /// high-level send).
         /// </summary>
         /// <param name="connection">
         /// The established connection.
@@ -382,14 +425,39 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// On return, the response bytes.
         /// </param>
         /// <returns>
-        /// The status of <see cref="GetResponse"/>; the error from <see cref="SendRequest"/>; or
-        /// XENIM when the next message on the port is not a response.
+        /// The same as the version with a timeout, called with a timeout of zero.
+        /// </returns>
+        public RrStatus Transact(int connection, ReadOnlySpan<byte> request, out byte[] response)
+        {
+            return Transact(connection, request, TimeSpan.Zero, out response);
+        }
+
+        /// <summary>
+        /// Sends a request and returns its response in one call, waiting up to a time for it
+        /// (RRPCCALL).
+        /// </summary>
+        /// <param name="connection">
+        /// The established connection.
+        /// </param>
+        /// <param name="request">
+        /// The request bytes.
+        /// </param>
+        /// <param name="timeout">
+        /// How long to wait for the response.
+        /// </param>
+        /// <param name="response">
+        /// On return, the response bytes.
+        /// </param>
+        /// <returns>
+        /// The status of <see cref="GetResponse"/>, or the error from <see cref="SendRequest"/>,
+        /// or one of the codes the guide's definitions file lists for this call: RRErnttm when the
+        /// time ran out, RRErdscn when the server disconnected, RRErunev for any other event.
         /// </returns>
         /// <remarks>
-        /// The wait does not block, so this only succeeds when the response is already queued when
-        /// the send returns.
+        /// The guide: "This call is equivalent to RRPCsnrq+RRPBwait+RRPCgtrs." The codes are
+        /// those of <see cref="Select(string, string, ReadOnlySpan{byte}, TimeSpan, out byte[], out int)"/>.
         /// </remarks>
-        public RrStatus Transact(int connection, ReadOnlySpan<byte> request, out byte[] response)
+        public RrStatus Transact(int connection, ReadOnlySpan<byte> request, TimeSpan timeout, out byte[] response)
         {
             response = Array.Empty<byte>();
 
@@ -400,7 +468,7 @@ namespace RetroIO.Protocols.Xmsg.Api
             }
 
             RrEvent actual;
-            RrStatus waited = Wait(RrEvent.ResponseIndication, TimeSpan.Zero, out actual);
+            RrStatus waited = Wait(RrEvent.ResponseIndication | RrEvent.DisconnectIndication, timeout, out actual);
             if (!waited.IsOk)
             {
                 return waited;
@@ -408,11 +476,25 @@ namespace RetroIO.Protocols.Xmsg.Api
 
             if (actual != RrEvent.ResponseIndication)
             {
-                return new RrStatus((int)XmsgError.XENIM);
+                return new RrStatus((int)EventToCallError(actual));
             }
 
             int answered;
             return GetResponse(out answered, out response);
+        }
+
+        // The status the one-call routines give when the event they waited for did not come.
+        private static RrError EventToCallError(RrEvent actual)
+        {
+            switch (actual)
+            {
+                case RrEvent.Timeout:
+                    return RrError.RRErnttm;
+                case RrEvent.DisconnectIndication:
+                    return RrError.RRErdscn;
+                default:
+                    return RrError.RRErunev;
+            }
         }
 
         /// <summary>
@@ -453,7 +535,7 @@ namespace RetroIO.Protocols.Xmsg.Api
         {
             connection = 0;
 
-            Pending? item = Take(RrMessageKind.DisconnectRequest);
+            Pending? item = TakeTaken(RrMessageKind.DisconnectRequest);
             if (item == null)
             {
                 return new RrStatus((int)XmsgError.XENIM);
@@ -501,53 +583,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// </remarks>
         public RrStatus End()
         {
-            _pending.Clear();
+            ClearPending();
             return CloseOwnPort();
-        }
-
-        private Pending? Take(RrMessageKind kind)
-        {
-            if (_pending.Count == 0 || _pending.Peek().Kind != kind)
-            {
-                return null;
-            }
-
-            return _pending.Dequeue();
-        }
-
-        private Pending? TakeEither(RrMessageKind first, RrMessageKind second)
-        {
-            if (_pending.Count == 0)
-            {
-                return null;
-            }
-
-            RrMessageKind kind = _pending.Peek().Kind;
-            if (kind != first && kind != second)
-            {
-                return null;
-            }
-
-            return _pending.Dequeue();
-        }
-
-        private sealed class Pending
-        {
-            internal Pending(RrMessageKind kind, int connection, byte[] payload, XmsgMagicNumber sender)
-            {
-                Kind = kind;
-                Connection = connection;
-                Payload = payload;
-                Sender = sender;
-            }
-
-            internal RrMessageKind Kind { get; }
-
-            internal int Connection { get; }
-
-            internal byte[] Payload { get; }
-
-            internal XmsgMagicNumber Sender { get; }
         }
     }
 }

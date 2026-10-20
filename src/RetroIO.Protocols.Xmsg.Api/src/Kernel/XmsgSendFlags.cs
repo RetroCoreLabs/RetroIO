@@ -48,7 +48,10 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// </summary>
         /// <remarks>
         /// The destination magic number is ignored and the message body is read as XROUT service
-        /// parameters (appendix B).
+        /// parameters (appendix B). The kernel sends the message to port 0 of its own system,
+        /// where the router attached with <see cref="XmsgKernel.AttachRouter"/> receives it. With
+        /// <see cref="RemoteRoute"/> also set, the destination's system number picks whose port 0
+        /// it goes to.
         /// </remarks>
         Route = XmsgOption.XFROU,
 

@@ -409,7 +409,7 @@ namespace RetroIO.Protocols.Xmsg.Api.Tests
         public void ConvertMagicToPort_ClassifiesTheMagicNumber()
         {
             XmsgKernel kernel = NewKernel();
-            kernel.MakePrivileged(0);
+            MakeTaskPrivileged(kernel);
 
             XmsgPortNumber port;
             kernel.OpenPort(out port);
@@ -432,6 +432,18 @@ namespace RetroIO.Protocols.Xmsg.Api.Tests
         private static XmsgKernel NewKernel()
         {
             return new XmsgKernel(102, 0x1234, null);
+        }
+
+        // Makes the task privileged the way the guide says: be a kind of program that is allowed
+        // to, and present the password XFDUM returns. The version code is the test's own value;
+        // the guide does not give one.
+        private static void MakeTaskPrivileged(XmsgKernel kernel)
+        {
+            kernel.TaskKind = XmsgTaskKind.BackgroundSystemUser;
+            kernel.VersionCode = 0x0A0B;
+            ushort password;
+            kernel.Dummy(out password);
+            Assert.True(kernel.MakePrivileged(password).IsSuccess);
         }
 
         private static XmsgStatus SendBytes(
@@ -768,10 +780,9 @@ namespace RetroIO.Protocols.Xmsg.Api.Tests
         {
             XmsgKernel kernel = NewKernel();
 
-            // XFPRV is what makes the TASK privileged. The real call checks a password obtained
-            // from XFDUM; ours accepts any value, so this passes zero deliberately rather than
-            // pretending to authenticate.
-            Assert.True(kernel.MakePrivileged(0).IsSuccess);
+            // XFPRV is what makes the TASK privileged. It checks the kind of program and the
+            // password XFDUM returns; MakeTaskPrivileged supplies both.
+            MakeTaskPrivileged(kernel);
 
             XmsgPortNumber server;
             XmsgPortNumber client;
