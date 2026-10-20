@@ -235,6 +235,80 @@ namespace RetroIO.Protocols.Xmsg.Api.Node.Tests
             Assert.Equal(a.WirePort >> 7, b.WirePort >> 7);
         }
 
+        /// <summary>
+        /// For every logical port from 1 to 511, the high nine bits of the wire port are that port and the low
+        /// seven bits are a value the generator can mint. No port overflows into another port's bits.
+        /// </summary>
+        [Fact]
+        public void WirePort_EveryLogicalPort_HasPortHighAndMintableRandomLow()
+        {
+            for (int logical = 1; logical <= 511; logical++)
+            {
+                XmsgKernelServer bridge = new XmsgKernelServer(
+                    new XmsgKernel(102, 0x1111, null), "*DEMO", logical, 0x4321);
+
+                Assert.Equal(logical, bridge.WirePort >> 7);
+                Assert.True(XmsgRandomGenerator.IsMintable(bridge.WirePort & 0x7F), "logical port " + logical);
+            }
+        }
+
+        /// <summary>
+        /// The three-argument constructor uses DefaultWirePortSeed: its random part is the first draw of a
+        /// generator started from that seed.
+        /// </summary>
+        [Fact]
+        public void WirePort_ThreeArgumentConstructor_UsesTheDefaultSeed()
+        {
+            XmsgKernelServer bridge = new XmsgKernelServer(
+                new XmsgKernel(102, 0x1111, null), "*DEMO", 9);
+
+            int expectedRandom = new XmsgRandomGenerator(XmsgKernelServer.DefaultWirePortSeed).Next();
+
+            Assert.Equal(9, bridge.WirePort >> 7);
+            Assert.Equal(expectedRandom, bridge.WirePort & 0x7F);
+        }
+
+        /// <summary>
+        /// The same inputs give the same wire port, so a restarted node registers on the same port.
+        /// </summary>
+        [Fact]
+        public void WirePort_SameSeedAndPort_GiveTheSameWirePort()
+        {
+            XmsgKernelServer a = new XmsgKernelServer(
+                new XmsgKernel(102, 0x1111, null), "*DEMO", 4, 0x4321);
+            XmsgKernelServer b = new XmsgKernelServer(
+                new XmsgKernel(103, 0x2222, null), "*OTHER", 4, 0x4321);
+
+            Assert.Equal(a.WirePort, b.WirePort);
+        }
+
+        /// <summary>
+        /// Create hands its port seed to the wire port as well as to the kernel, so the random part comes from
+        /// the seed the caller gave and not from the default.
+        /// </summary>
+        [Fact]
+        public void Create_PassesThePortSeedToTheWirePort()
+        {
+            XmsgKernelServer bridge = XmsgKernelServer.Create(102, 0x4321, "*DEMO", 4);
+
+            int expectedRandom = new XmsgRandomGenerator(0x4321).Next();
+
+            Assert.Equal(4, bridge.WirePort >> 7);
+            Assert.Equal(expectedRandom, bridge.WirePort & 0x7F);
+        }
+
+        /// <summary>
+        /// Two Create calls with different port seeds give different wire ports for the same logical port.
+        /// </summary>
+        [Fact]
+        public void Create_DifferentPortSeeds_GiveDifferentWirePorts()
+        {
+            XmsgKernelServer a = XmsgKernelServer.Create(102, 0x0001, "*DEMO", 4);
+            XmsgKernelServer b = XmsgKernelServer.Create(102, 0x0002, "*DEMO", 4);
+
+            Assert.NotEqual(a.WirePort, b.WirePort);
+        }
+
         private static XmsgFrame BuildFrame(XmsgMagicNumber from, XmsgMagicNumber to, byte[] payload)
         {
             XmsgFrame frame = new XmsgFrameBuilder()

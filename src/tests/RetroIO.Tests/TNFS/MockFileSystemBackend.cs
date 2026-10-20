@@ -22,6 +22,47 @@ public sealed class MockFileSystemBackend : IFileSystemBackend
     private readonly Dictionary<string, MockEntry> _entries = new();
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// What GetFileInfo reports for the three file times.
+    /// </summary>
+    public enum MockFileTimes
+    {
+        /// <summary>
+        /// The time of the call, for all three.
+        /// </summary>
+        Now,
+
+        /// <summary>
+        /// The FixedCreationTime, FixedWriteTime and FixedAccessTime values.
+        /// </summary>
+        Fixed,
+
+        /// <summary>
+        /// Null for all three, as a backend that does not keep file times reports.
+        /// </summary>
+        Unknown
+    }
+
+    /// <summary>
+    /// Gets or sets what GetFileInfo reports for the file times. The default is Now.
+    /// </summary>
+    public MockFileTimes FileTimesMode { get; set; } = MockFileTimes.Now;
+
+    /// <summary>
+    /// Gets or sets the creation time reported when FileTimesMode is Fixed.
+    /// </summary>
+    public DateTime FixedCreationTime { get; set; }
+
+    /// <summary>
+    /// Gets or sets the last write time reported when FileTimesMode is Fixed.
+    /// </summary>
+    public DateTime FixedWriteTime { get; set; }
+
+    /// <summary>
+    /// Gets or sets the last access time reported when FileTimesMode is Fixed.
+    /// </summary>
+    public DateTime FixedAccessTime { get; set; }
+
     public class MockEntry
     {
         public bool IsDirectory { get; set; }
@@ -189,6 +230,12 @@ public sealed class MockFileSystemBackend : IFileSystemBackend
             return null;
 
         // Same values the temp file written here used to give: the length, and the time of writing it.
+        if (FileTimesMode == MockFileTimes.Unknown)
+            return new BackendFileInfo(entry.Content.Length, null, null, null);
+
+        if (FileTimesMode == MockFileTimes.Fixed)
+            return new BackendFileInfo(entry.Content.Length, FixedCreationTime, FixedWriteTime, FixedAccessTime);
+
         DateTime now = DateTime.UtcNow;
         return new BackendFileInfo(entry.Content.Length, now, now, now);
     }
