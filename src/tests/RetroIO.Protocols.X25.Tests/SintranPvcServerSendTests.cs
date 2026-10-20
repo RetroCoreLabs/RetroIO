@@ -44,11 +44,11 @@ namespace RetroIO.Protocols.X25.Tests
 
         /// <summary>
         /// Opens a circuit the way a peer does: a Call Request. Called address 500 is not one of the TAD
-        /// addresses, and the call user data byte 0x01 selects the routing handler.
+        /// addresses, and empty call user data takes the routing default.
         /// </summary>
         private void EstablishCircuit(ushort lcn)
         {
-            byte[] call = X25PacketBuilder.CreateCallRequest(lcn, "500", "100", null, new byte[] { 0x01 });
+            byte[] call = X25PacketBuilder.CreateCallRequest(lcn, "500", "100", null, Array.Empty<byte>());
             _server.OnX25Event(new X25PacketEventArgs
             {
                 Packet = new X25Packet(call) { LCN = lcn },
@@ -205,7 +205,7 @@ namespace RetroIO.Protocols.X25.Tests
             quiet.Initialize();
             try
             {
-                byte[] call = X25PacketBuilder.CreateCallRequest(Lcn, "500", "100", null, new byte[] { 0x01 });
+                byte[] call = X25PacketBuilder.CreateCallRequest(Lcn, "500", "100", null, Array.Empty<byte>());
                 quiet.OnX25Event(new X25PacketEventArgs
                 {
                     Packet = new X25Packet(call) { LCN = Lcn },

@@ -289,14 +289,24 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// Starts the link: subscribes to the backend and, when this link owns it, starts the backend.
         /// </summary>
         /// <remarks>
-        /// There is no LAPB here. The status becomes <see cref="LinkStatus.Starting"/>, and only turns
-        /// <see cref="LinkStatus.Active"/> when the first frame from the peer is received.
+        /// There is no LAPB here, by design: the ND Ethernet link layer has no connection set-up this
+        /// side can start (see the class remarks). The status becomes <see cref="LinkStatus.Starting"/>,
+        /// and only turns <see cref="LinkStatus.Active"/> when the first frame from the peer is
+        /// received. Like the other <see cref="ILink"/> implementations, a link that is not Stopped is
+        /// not started again (a second subscription would deliver every frame twice), and a start whose
+        /// backend is not running sets the status to Error.
         /// </remarks>
         /// <returns>
-        /// The backend's active state after the start.
+        /// <c>true</c> when the link was started and the backend is running; <c>false</c> when the
+        /// link was not Stopped, or the backend is not active after the start (status Error).
         /// </returns>
         public bool Start()
         {
+            if (_status != LinkStatus.Stopped)
+            {
+                return false;
+            }
+
             _stopRequested = false;
             _backend.OnPacketReceived += HandlePacket;
 
@@ -305,10 +315,18 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
                 _backend.Start();
             }
 
+            if (!_backend.IsActive)
+            {
+                // The backend cannot carry frames; do not leave a half-started link listening.
+                _backend.OnPacketReceived -= HandlePacket;
+                SetStatus(LinkStatus.Error, "backend is not active after start");
+                return false;
+            }
+
             // Starting, not Active: the segment is up but we have not heard the peer yet, so we
             // cannot address it. HandlePacket flips us to Active on the peer's first frame.
             SetStatus(LinkStatus.Starting, "backend started, awaiting peer");
-            return _backend.IsActive;
+            return true;
         }
 
         /// <summary>

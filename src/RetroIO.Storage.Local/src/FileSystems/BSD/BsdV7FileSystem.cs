@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.BSD.Structures;
 using RetroIO.Storage.Local.V7.Core;
@@ -358,7 +359,7 @@ namespace RetroIO.Storage.Local.V7.FileSystems
         // =================================================================
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the V7 file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
@@ -366,58 +367,58 @@ namespace RetroIO.Storage.Local.V7.FileSystems
         /// <param name="data">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new NotImplementedException("Write operations not yet implemented");
+            throw new IOException("The V7 file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the V7 file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new NotImplementedException("Write operations not yet implemented");
+            throw new IOException("The V7 file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the V7 file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void CreateDirectory(string path)
         {
-            throw new NotImplementedException("Write operations not yet implemented");
+            throw new IOException("The V7 file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the V7 file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void DeleteDirectory(string path)
         {
-            throw new NotImplementedException("Write operations not yet implemented");
+            throw new IOException("The V7 file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the V7 file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="oldPath">
         /// Not used.
@@ -425,12 +426,12 @@ namespace RetroIO.Storage.Local.V7.FileSystems
         /// <param name="newPath">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
-            throw new NotImplementedException("Write operations not yet implemented");
+            throw new IOException("The V7 file system has no write support, so the volume is read-only");
         }
 
         // =================================================================

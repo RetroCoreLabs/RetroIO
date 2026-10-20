@@ -96,10 +96,14 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         LinkStatus Status { get; }
 
         /// <summary>
-        /// Starts the link: initiates LAPB establishment and begins delivering payloads.
+        /// Starts the link and begins delivering payloads. Over HDLC this initiates LAPB
+        /// establishment; an Ethernet link starts no LAPB, because the ND Ethernet link layer has no
+        /// connection set-up that this side can start.
         /// </summary>
         /// <returns>
-        /// True when the link started; false when it could not start.
+        /// True when the link was started: it is then Starting, and turns Active later, when the
+        /// peer is up. False when the link was not Stopped (it is not started twice) or could not
+        /// start (status Error).
         /// </returns>
         bool Start();
 

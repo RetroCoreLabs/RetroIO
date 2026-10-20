@@ -264,13 +264,21 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// </summary>
         /// <remarks>
         /// The pump runs in the background; see <see cref="Completion"/>. The status turns Active when
-        /// LAPB reports the link up.
+        /// LAPB reports the link up. Like the other <see cref="ILink"/> implementations, a link that is
+        /// not Stopped is not started again: a second pump would run beside the first and use the same
+        /// transport and the same LAPB state.
         /// </remarks>
         /// <returns>
-        /// Always <c>true</c>.
+        /// <c>true</c> when the link was started (it is Starting; Active follows when LAPB is up);
+        /// <c>false</c> when the link was not Stopped.
         /// </returns>
         public bool Start()
         {
+            if (_status != LinkStatus.Stopped)
+            {
+                return false;
+            }
+
             // Live start: initiate LAPB establishment, then pump forever with an RR keepalive so the
             // peer keeps the link in RUN. Deterministic tests use Initiate()+RunAsync directly.
             _cts = new CancellationTokenSource();

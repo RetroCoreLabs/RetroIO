@@ -272,7 +272,7 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
@@ -280,26 +280,26 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <param name="data">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new NotImplementedException("DragonDOS write operations not yet implemented");
+            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new NotImplementedException("DragonDOS delete operations not yet implemented");
+            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
@@ -360,14 +360,14 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Counts the BAM bytes that hold <c>0xFF</c>.
+        /// Counts the free sectors in the BAM.
         /// </summary>
         /// <remarks>
-        /// Only the first (track count times sectors per track) bytes of the 512-byte BAM copy are looked at,
-        /// and each byte equal to <c>0xFF</c> is counted as one free sector.
+        /// The BAM is a bitmap, one bit per sector, 1 = free (DragonDOS 1.2 DOSGetFree). The set bits in the
+        /// first 180 bytes of each of the two BAM sectors are counted.
         /// </remarks>
         /// <returns>
-        /// The number of BAM bytes equal to <c>0xFF</c>.
+        /// The number of set bits in the two BAM sectors.
         /// </returns>
         /// <exception cref="InvalidOperationException">
         /// Thrown when the file system is not initialized.
@@ -376,17 +376,20 @@ namespace RetroIO.Storage.Local.FileSystems
         {
             EnsureInitialized();
 
+            // DragonDOS 1.2 DOSGetFree (ddos12.asm, label LD162): the BAM is a bitmap with one bit per
+            // sector, 1 = free and 0 = used (comment at GetBit). It lives in the first two sectors of
+            // the directory track; the free count is the number of SET BITS in the first
+            // BAMEntriesSec = 180 bytes of each sector (dosdefs.asm: MaxLSN/2/SectorsPerBAM, 8 sectors
+            // per byte). _bam holds the two sectors one after the other, 256 bytes each.
+            const int BamEntriesPerSector = 180;
             int freeSectors = 0;
 
-            // Count free sectors in BAM (0xFF = free)
-            int totalSectors = _trackCount * _sectorsPerTrack;
-            int bamBytes = Math.Min(totalSectors, _bam!.Length);
-
-            for (int i = 0; i < bamBytes; i++)
+            for (int sector = 0; sector < 2; sector++)
             {
-                if (_bam[i] == 0xFF)
+                int start = sector * SECTOR_SIZE;
+                for (int i = 0; i < BamEntriesPerSector; i++)
                 {
-                    freeSectors++;
+                    freeSectors += System.Numerics.BitOperations.PopCount(_bam![start + i]);
                 }
             }
 
@@ -394,35 +397,44 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws NotSupportedException: DragonDOS has no directories other than the root.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="NotSupportedException">
         /// Always thrown.
         /// </exception>
         public void CreateDirectory(string path)
         {
-            throw new NotImplementedException("CreateDirectory not yet implemented");
+            throw new NotSupportedException("DragonDOS has no directories other than the root");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Does not delete anything: a DragonDOS disk has only the root directory.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// The directory to delete.
         /// </param>
-        /// <exception cref="NotImplementedException">
-        /// Always thrown.
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown for any path other than the root, because no other directory exists (the same rule
+        /// as <see cref="ListDirectory"/>).
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown for the root, which cannot be deleted, and because the file system has no write support.
         /// </exception>
         public void DeleteDirectory(string path)
         {
-            throw new NotImplementedException("DeleteDirectory not yet implemented");
+            if (!string.IsNullOrEmpty(path) && path != "/")
+            {
+                throw new DirectoryNotFoundException("DragonDOS has no directory '" + path + "'; only the root exists");
+            }
+
+            throw new IOException("The root directory of a DragonDOS disk cannot be deleted");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="oldPath">
         /// Not used.
@@ -430,12 +442,12 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <param name="newPath">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
-            throw new NotImplementedException("Rename not yet implemented");
+            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
         }
 
         // ===================================================================
