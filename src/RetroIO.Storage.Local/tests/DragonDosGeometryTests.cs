@@ -168,6 +168,63 @@ namespace RetroIO.Storage.Local.Tests
             device.Dispose();
         }
 
+        [Test]
+        public void RealVdk_6809Expr_CanHandle()
+        {
+            // 6809EXPR.VDK has a 12 byte VDK header and 28 12 d7 ed at $FC to $FF of the directory track.
+            string path = RealImage("vdk", "6809EXPR.VDK");
+
+            GenericBlockDevice device = new GenericBlockDevice(BlockDeviceDescriptor.DragonVDK_SS40);
+            using (FileStream stream = File.OpenRead(path))
+            {
+                device.Mount(new SubStream(stream, VdkHeaderSize, stream.Length - VdkHeaderSize), true);
+
+                Assert.That(new DragonDosFileSystem().CanHandle(device), Is.True);
+            }
+
+            device.Dispose();
+        }
+
+        [Test]
+        public void RealVdk_Planetfall_IsNotAccepted()
+        {
+            // PLANETFALL.VDK has a 256 byte VDK header and 5d 52 2a 3e at $FC to $FF of the directory track:
+            // not a valid pair, so it is not a DragonDOS volume.
+            string path = RealImage("vdk", "PLANETFALL.VDK");
+
+            GenericBlockDevice device = new GenericBlockDevice(BlockDeviceDescriptor.DragonVDK_SS40);
+            using (FileStream stream = File.OpenRead(path))
+            {
+                byte[] header = new byte[4];
+                stream.ReadExactly(header, 0, 4);
+                int headerSize = header[2] | (header[3] << 8);
+                device.Mount(new SubStream(stream, headerSize, stream.Length - headerSize), true);
+
+                Assert.That(new DragonDosFileSystem().CanHandle(device), Is.False);
+            }
+
+            device.Dispose();
+        }
+
+        [Test]
+        public void RealOs9Disk_NitrOs9_IsNotAccepted()
+        {
+            // NITR09.DSK is an OS-9 (RBF) disk: its identification sector 0 holds 1440 total sectors, 18 sectors
+            // per track and a 180 byte allocation map. LSN 360 is OS-9 file data (68 61 72 61 at $FC to $FF),
+            // not a DragonDOS BAM, so DragonDOS must not claim it.
+            string path = RealImage("dsk", "NITR09.DSK");
+
+            GenericBlockDevice device = new GenericBlockDevice(BlockDeviceDescriptor.DragonVDK_DS40);
+            using (FileStream stream = File.OpenRead(path))
+            {
+                device.Mount(new SubStream(stream, 0, stream.Length), true);
+
+                Assert.That(new DragonDosFileSystem().CanHandle(device), Is.False);
+            }
+
+            device.Dispose();
+        }
+
         // ---- built images, laid out as the source says ----
 
         [Test]
