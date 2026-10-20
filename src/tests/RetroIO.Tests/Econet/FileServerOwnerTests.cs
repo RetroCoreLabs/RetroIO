@@ -45,27 +45,6 @@ public sealed class AcornAttributeStoreOwnerTests
         _fileSystem.AddFile(FilePath, Encoding.ASCII.GetBytes("0123456789"));
     }
 
-    // Writes the text of a helper file of an older version (the object name and a comma and inf). The store converts it on first use.
-    private void WriteRawSidecar(string text)
-    {
-        byte[] bytes = Encoding.ASCII.GetBytes(text);
-        using FileStream stream = _fileSystem.OpenFile(FilePath + ",inf", FileMode.Create, FileAccess.Write);
-        stream.Write(bytes, 0, bytes.Length);
-    }
-
-    [Test]
-    public void ReadOwnership_LegacyFileWithoutOwner_ReadsOwnerZeroAndNoHomeOwner()
-    {
-        // fs.c 1678 and 1686: owner and homeof start at 0 and stay 0 when nothing is stored.
-        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=10\nACCESS=33\n");
-
-        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
-
-        Assert.That(owner, Is.EqualTo(AcornAttributeStore.DefaultOwner));
-        Assert.That(owner, Is.EqualTo(0));
-        Assert.That(homeOf, Is.EqualTo(0));
-    }
-
     [Test]
     public void ReadOwnership_NoPropertyBag_ReadsOwnerZero()
     {
@@ -76,20 +55,9 @@ public sealed class AcornAttributeStoreOwnerTests
     }
 
     [Test]
-    public void ReadOwnership_LegacyFileWithOwnerAndHomeOwner_ReadsBothAsHex()
-    {
-        WriteRawSidecar("LOAD=0\nOWNER=00A5\nHOMEOF=0107\n");
-
-        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
-
-        Assert.That(owner, Is.EqualTo(0xA5));
-        Assert.That(homeOf, Is.EqualTo(0x107));
-    }
-
-    [Test]
     public void WriteOwnership_KeepsLoadExecAndAccessOfThePropertyBag()
     {
-        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 10, 0x13);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 0x13);
 
         AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
 
@@ -132,7 +100,7 @@ public sealed class AcornAttributeStoreOwnerTests
     {
         AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0x55);
 
-        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 0x03);
 
         AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
         Assert.That(owner, Is.EqualTo(0x42));
@@ -144,7 +112,7 @@ public sealed class AcornAttributeStoreOwnerTests
     {
         AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0x55);
 
-        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03, 0x77);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 0x03, 0x77);
 
         AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
         Assert.That(owner, Is.EqualTo(0x77));
@@ -155,7 +123,7 @@ public sealed class AcornAttributeStoreOwnerTests
     public void WriteAttributes_BagWithoutOwner_StaysWithoutAnOwnerProperty()
     {
         // A file that never had an owner keeps reading as the default owner, not as an owner somebody wrote.
-        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 10, 0x03);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 0x03);
 
         IDictionary<string, object>? bag = _fileSystem.GetObjectProperties(FilePath);
         Assert.That(bag, Is.Not.Null);
@@ -196,9 +164,17 @@ public sealed class AcornAttributeStoreOwnerTests
     }
 
     [Test]
-    public void IsStoreName_AcornNameAndLegacySuffixName_AreNotStores()
+    public void IsStoreName_DamagedXatName_IsHiddenToo()
     {
-        // An Acorn name has no dot, so it can never end in .xat. The old comma-inf suffix is no longer hidden.
+        Assert.That(AcornAttributeStore.IsStoreName("FILE.xat.bad"), Is.True);
+        Assert.That(AcornAttributeStore.IsStoreName("FILE.XAT.BAD"), Is.True);
+        Assert.That(AcornAttributeStore.IsStoreName("FILE.bad"), Is.False);
+    }
+
+    [Test]
+    public void IsStoreName_AcornNameAndCommaInfName_AreNotStores()
+    {
+        // An Acorn name has no dot, so it can never end in .xat. A name with a comma and inf is an ordinary name.
         Assert.That(AcornAttributeStore.IsStoreName("FILE"), Is.False);
         Assert.That(AcornAttributeStore.IsStoreName("FILE,inf"), Is.False);
         Assert.That(AcornAttributeStore.IsStoreName("XAT"), Is.False);
@@ -210,141 +186,7 @@ public sealed class AcornAttributeStoreOwnerTests
         AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
 
         Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.True);
-        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False, "the old helper file is not written any more");
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Volumes made by an older version keep the attributes in the helper file (object name, comma, inf).
-    // The values are read from it, written to the property bag, and the helper file is removed.
-    // ---------------------------------------------------------------------------------------------
-
-    [Test]
-    public void LegacyConversion_ReadAttributes_GivesTheValuesOfTheHelperFile()
-    {
-        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=7\nACCESS=13\nOWNER=0042\nHOMEOF=0009\n");
-
-        bool found = AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out int length, out byte access);
-
-        Assert.That(found, Is.True);
-        Assert.That(load, Is.EqualTo(0x1900u));
-        Assert.That(exec, Is.EqualTo(0x8023u));
-        Assert.That(length, Is.EqualTo(7));
-        Assert.That(access, Is.EqualTo(0x13));
-        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
-        Assert.That(owner, Is.EqualTo(0x42));
-        Assert.That(homeOf, Is.EqualTo(0x09));
-    }
-
-    [Test]
-    public void LegacyConversion_WritesThePropertyBagAndRemovesTheHelperFile()
-    {
-        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=7\nACCESS=13\nOWNER=0042\nHOMEOF=0009\n");
-
-        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out _, out _, out _, out _);
-
-        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False, "the helper file is gone");
-        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.True);
-        IDictionary<string, object>? bag = _fileSystem.GetObjectProperties(FilePath);
-        Assert.That(bag, Is.Not.Null);
-        Assert.That(Convert.ToInt64(bag![AcornProperties.Load]), Is.EqualTo(0x1900));
-        Assert.That(Convert.ToInt64(bag[AcornProperties.Exec]), Is.EqualTo(0x8023));
-        Assert.That(Convert.ToInt64(bag[AcornProperties.Length]), Is.EqualTo(7));
-        Assert.That(Convert.ToInt64(bag[AcornProperties.Access]), Is.EqualTo(0x13));
-        Assert.That(Convert.ToInt64(bag[AcornProperties.Owner]), Is.EqualTo(0x42));
-        Assert.That(Convert.ToInt64(bag[AcornProperties.HomeOf]), Is.EqualTo(0x09));
-    }
-
-    [Test]
-    public void LegacyConversion_AmpersandHexAndLowerCaseKeys_AreUnderstood()
-    {
-        WriteRawSidecar("load=&FFFF1900\nexec=&FFFF8023\naccess=&1B\n");
-
-        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out _, out byte access);
-
-        Assert.That(load, Is.EqualTo(0xFFFF1900u), "a load address above the signed 32-bit range survives the round trip through the XAT JSON");
-        Assert.That(exec, Is.EqualTo(0xFFFF8023u));
-        Assert.That(access, Is.EqualTo(0x1B));
-    }
-
-    [Test]
-    public void LegacyConversion_WriteOwnership_KeepsTheValuesOfTheHelperFile()
-    {
-        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nLENGTH=10\nACCESS=13\n");
-
-        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
-
-        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out _, out _, out byte access);
-        Assert.That(load, Is.EqualTo(0x1900u));
-        Assert.That(access, Is.EqualTo(0x13));
-        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False);
-    }
-
-    [Test]
-    public void LegacyConversion_MoveAttributes_CarriesTheValuesOfTheHelperFileToTheNewName()
-    {
-        WriteRawSidecar("LOAD=00001900\nEXEC=00008023\nOWNER=0042\n");
-        _fileSystem.AddFile("/disc/NEW", Encoding.ASCII.GetBytes("x"));
-
-        AcornAttributeStore.MoveAttributes(_fileSystem, FilePath, "/disc/NEW");
-
-        AcornAttributeStore.TryReadAttributes(_fileSystem, "/disc/NEW", out uint load, out _, out _, out _);
-        AcornAttributeStore.ReadOwnership(_fileSystem, "/disc/NEW", out ushort owner, out _);
-        Assert.That(load, Is.EqualTo(0x1900u));
-        Assert.That(owner, Is.EqualTo(0x42));
-        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False);
-    }
-
-    [Test]
-    public void LegacyConversion_DeleteAttributes_RemovesTheHelperFileToo()
-    {
-        WriteRawSidecar("OWNER=0042\n");
-
-        AcornAttributeStore.DeleteAttributes(_fileSystem, FilePath);
-
-        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False);
-        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
-        Assert.That(owner, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void LegacyConversion_ExistingPropertyBagWins_AndTheHelperFileIsLeftAlone()
-    {
-        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x11, 0);
-        WriteRawSidecar("OWNER=0099\n");
-
-        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
-
-        Assert.That(owner, Is.EqualTo(0x11));
-        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.True);
-    }
-
-    [Test]
-    public void LegacyConversion_FileWithNoKnownKey_IsNotConvertedAndNotDeleted()
-    {
-        // A file that merely ends in the suffix, with no Acorn key in it, is somebody's data and must stay.
-        WriteRawSidecar("just some text\n");
-
-        IDictionary<string, object>? bag = AcornAttributeStore.TryConvertLegacy(_fileSystem, FilePath);
-
-        Assert.That(bag, Is.Null);
-        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.True);
-        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.False);
-    }
-
-    [Test]
-    public void LegacyConversion_DirectoryObject_IsConvertedToo()
-    {
-        _fileSystem.AddDirectory("/disc/SUB");
-        byte[] bytes = Encoding.ASCII.GetBytes("OWNER=0007\nHOMEOF=0003\n");
-        using (FileStream stream = _fileSystem.OpenFile("/disc/SUB,inf", FileMode.Create, FileAccess.Write))
-            stream.Write(bytes, 0, bytes.Length);
-
-        AcornAttributeStore.ReadOwnership(_fileSystem, "/disc/SUB", out ushort owner, out ushort homeOf);
-
-        Assert.That(owner, Is.EqualTo(7));
-        Assert.That(homeOf, Is.EqualTo(3));
-        Assert.That(_fileSystem.FileExists("/disc/SUB,inf"), Is.False);
-        Assert.That(_fileSystem.FileExists("/disc/SUB.xat"), Is.True);
+        Assert.That(_fileSystem.FileExists(FilePath + ",inf"), Is.False, "no ,inf file is written");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -354,7 +196,7 @@ public sealed class AcornAttributeStoreOwnerTests
     [Test]
     public void XatFile_HoldsTheJsonOfTheNdfsSerializer()
     {
-        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 10, 0x13, 5);
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 0x13, 5);
 
         using FileStream stream = _fileSystem.OpenFile("/disc/FILE.xat", FileMode.Open, FileAccess.Read);
         byte[] buffer = new byte[stream.Length];
@@ -382,11 +224,122 @@ public sealed class AcornAttributeStoreOwnerTests
     }
 
     [Test]
-    public void XatRead_DamagedFile_IsReportedNotHidden()
+    public void XatRead_DamagedFile_ReadsAsNoBagAndIsMovedToBad()
     {
         _fileSystem.AddFile("/disc/FILE.xat", Encoding.UTF8.GetBytes("this is not json"));
 
-        Assert.Throws<InvalidDataException>(() => AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out _, out _));
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out ushort homeOf);
+
+        Assert.That(owner, Is.EqualTo(0));
+        Assert.That(homeOf, Is.EqualTo(0));
+        Assert.That(XatSidecar.Read(_fileSystem, FilePath), Is.Null);
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.False, "the damaged file is moved away");
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat.bad"), Is.True, "and kept under the .bad name");
+    }
+
+    [Test]
+    public void XatRead_EmptyFile_ReadsAsNoBagAndIsMovedToBad()
+    {
+        _fileSystem.AddFile("/disc/FILE.xat", new byte[0]);
+
+        IDictionary<string, object>? bag = XatSidecar.Read(_fileSystem, FilePath);
+
+        Assert.That(bag, Is.Null);
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.False);
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat.bad"), Is.True);
+    }
+
+    [Test]
+    public void XatRead_DamagedFile_KeepsTheDamagedBytesInTheBadFile()
+    {
+        _fileSystem.AddFile("/disc/FILE.xat", Encoding.UTF8.GetBytes("this is not json"));
+
+        XatSidecar.Read(_fileSystem, FilePath);
+
+        using FileStream stream = _fileSystem.OpenFile("/disc/FILE.xat.bad", FileMode.Open, FileAccess.Read);
+        byte[] buffer = new byte[stream.Length];
+        int read = stream.Read(buffer, 0, buffer.Length);
+        Assert.That(Encoding.UTF8.GetString(buffer, 0, read), Is.EqualTo("this is not json"));
+    }
+
+    [Test]
+    public void XatRead_DamagedFileAndAnOlderBadFile_ReplacesTheOlderBadFile()
+    {
+        _fileSystem.AddFile("/disc/FILE.xat.bad", Encoding.UTF8.GetBytes("old damage"));
+        _fileSystem.AddFile("/disc/FILE.xat", Encoding.UTF8.GetBytes("new damage"));
+
+        XatSidecar.Read(_fileSystem, FilePath);
+
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.False);
+        using FileStream stream = _fileSystem.OpenFile("/disc/FILE.xat.bad", FileMode.Open, FileAccess.Read);
+        byte[] buffer = new byte[stream.Length];
+        int read = stream.Read(buffer, 0, buffer.Length);
+        Assert.That(Encoding.UTF8.GetString(buffer, 0, read), Is.EqualTo("new damage"));
+    }
+
+    [Test]
+    public void XatRead_GoodFile_IsNotMoved()
+    {
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 5, 0);
+
+        IDictionary<string, object>? bag = XatSidecar.Read(_fileSystem, FilePath);
+
+        Assert.That(bag, Is.Not.Null);
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.True);
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat.bad"), Is.False);
+    }
+
+    [Test]
+    public void XatRead_DamagedFile_ANextWriteMakesAFreshXatFile()
+    {
+        _fileSystem.AddFile("/disc/FILE.xat", Encoding.UTF8.GetBytes("this is not json"));
+
+        AcornAttributeStore.WriteOwnership(_fileSystem, FilePath, 0x42, 0);
+
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat.bad"), Is.True);
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat"), Is.True);
+        AcornAttributeStore.ReadOwnership(_fileSystem, FilePath, out ushort owner, out _);
+        Assert.That(owner, Is.EqualTo(0x42));
+    }
+
+    [Test]
+    public void XatRead_EmptyFile_ANextWriteMakesAFreshXatFile()
+    {
+        _fileSystem.AddFile("/disc/FILE.xat", new byte[0]);
+
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 0x13);
+
+        Assert.That(_fileSystem.FileExists("/disc/FILE.xat.bad"), Is.True);
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out uint load, out uint exec, out _, out byte access);
+        Assert.That(load, Is.EqualTo(0x1900u));
+        Assert.That(exec, Is.EqualTo(0x8023u));
+        Assert.That(access, Is.EqualTo(0x13));
+    }
+
+    [Test]
+    public void TryReadAttributes_LengthFollowsTheFileWhenItGrows()
+    {
+        // fs.c struct objattr has no length: the length is the size of the file, never a stored number.
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 0x13);
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out _, out _, out int before, out _);
+
+        _fileSystem.AddFile(FilePath, Encoding.ASCII.GetBytes("0123456789ABCDEF"));
+        AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out _, out _, out int after, out _);
+
+        Assert.That(before, Is.EqualTo(10));
+        Assert.That(after, Is.EqualTo(16));
+    }
+
+    [Test]
+    public void Properties_HaveNoLengthKey()
+    {
+        for (int i = 0; i < AcornProperties.All.Length; i++)
+            Assert.That(AcornProperties.All[i].Key, Is.Not.EqualTo("acorn.length"));
+
+        AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 1, 2, 0x03);
+        IDictionary<string, object>? bag = _fileSystem.GetObjectProperties(FilePath);
+        Assert.That(bag, Is.Not.Null);
+        Assert.That(bag!.ContainsKey("acorn.length"), Is.False);
     }
 
     [Test]
@@ -439,7 +392,7 @@ public sealed class FileServerOwnerTests
     // Makes HELLO a file with the given access byte and owner.
     private void SeedHello(byte access, ushort owner)
     {
-        AcornAttributeStore.WriteAttributes(_harness.FileSystem, HelloPath, 0, 0, 10, access);
+        AcornAttributeStore.WriteAttributes(_harness.FileSystem, HelloPath, 0, 0, access);
         AcornAttributeStore.WriteOwnership(_harness.FileSystem, HelloPath, owner, 0);
     }
 
@@ -733,26 +686,6 @@ public sealed class FileServerOwnerTests
     }
 
     [Test]
-    public void Examine_LegacyHelperFile_IsConvertedAndNotListed()
-    {
-        _harness.LoginAsUser();
-        _harness.FileSystem.AddFile(HelloPath, Encoding.ASCII.GetBytes("0123456789"));
-        byte[] legacy = Encoding.ASCII.GetBytes("LOAD=00001900\nEXEC=00008023\nACCESS=13\nOWNER=0042\n");
-        using (FileStream stream = _harness.FileSystem.OpenFile(HelloPath + ",inf", FileMode.Create, FileAccess.Write))
-            stream.Write(legacy, 0, legacy.Length);
-
-        List<string> entries = ExamineTextEntries();
-
-        for (int i = 0; i < entries.Count; i++)
-            Assert.That(entries[i], Does.Not.Contain(",inf"), entries[i]);
-        Assert.That(_harness.FileSystem.FileExists(HelloPath + ",inf"), Is.False, "converted and removed");
-        Assert.That(OwnerOf(HelloPath), Is.EqualTo(0x42));
-        AcornAttributeStore.TryReadAttributes(_harness.FileSystem, HelloPath, out uint load, out _, out _, out byte access);
-        Assert.That(load, Is.EqualTo(0x1900u));
-        Assert.That(access, Is.EqualTo(0x13));
-    }
-
-    [Test]
     public void Examine_NameEndingInCommaInfWithNoObjectBehindIt_IsAnOrdinaryFile()
     {
         _harness.LoginAsUser();
@@ -760,6 +693,38 @@ public sealed class FileServerOwnerTests
 
         Assert.That(ExamineTextLine("LONELY,inf"), Is.Not.Empty);
     }
+
+    [Test]
+    public void Examine_CommaInfFileBesideAnObject_IsListedAndNotReadAsAttributes()
+    {
+        _harness.LoginAsUser();
+        _harness.FileSystem.AddFile(HelloPath, Encoding.ASCII.GetBytes("0123456789"));
+        byte[] text = Encoding.ASCII.GetBytes("LOAD=00001900\nEXEC=00008023\nACCESS=13\nOWNER=0042\n");
+        _harness.FileSystem.AddFile(HelloPath + ",inf", text);
+
+        Assert.That(ExamineTextLine("HELLO,inf"), Is.Not.Empty, "an ordinary file, listed");
+        Assert.That(_harness.FileSystem.FileExists(HelloPath + ",inf"), Is.True, "and not removed");
+        AcornAttributeStore.TryReadAttributes(_harness.FileSystem, HelloPath, out uint load, out uint exec, out _, out byte access);
+        Assert.That(load, Is.EqualTo(0u));
+        Assert.That(exec, Is.EqualTo(0u));
+        Assert.That(access, Is.EqualTo(AcornAttributeStore.DefaultAccess));
+        Assert.That(OwnerOf(HelloPath), Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Examine_DamagedXatFileMovedAside_IsNotListed()
+    {
+        _harness.LoginAsUser();
+        _harness.FileSystem.AddFile(HelloPath, Encoding.ASCII.GetBytes("0123456789"));
+        _harness.FileSystem.AddFile(HelloPath + ".xat.bad", Encoding.ASCII.GetBytes("damaged"));
+
+        List<string> entries = ExamineTextEntries();
+
+        for (int i = 0; i < entries.Count; i++)
+            Assert.That(entries[i], Does.Not.Contain(".bad"), entries[i]);
+        Assert.That(ExamineTextLine("HELLO"), Is.Not.Empty);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // MdfsInfo 0x20. fs.c 5170 (is_owner) and 5180 to 5187 (letters of EXAMINE argument 3).
     // ---------------------------------------------------------------------------------------------

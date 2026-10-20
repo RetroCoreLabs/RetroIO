@@ -6,13 +6,12 @@
 //
 
 using System.Globalization;
-using System.Text;
 using RetroIO.Server.Core.FileSystem;
 
 namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 
 /// <summary>
-/// Reads and writes the Acorn attributes of a file or directory: load address, execution address, length, access byte, owner and home owner.
+/// Reads and writes the Acorn attributes of a file or directory: load address, execution address, access byte, owner and home owner.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,9 +25,11 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 /// The access byte defaults to 0x33 here, as it always has in this server.
 /// </para>
 /// <para>
-/// Volumes made by older versions keep the attributes in a file with the object name followed by a comma and inf, one KEY=value pair per line,
-/// with the keys LOAD, EXEC, LENGTH, ACCESS, OWNER and HOMEOF. When an object has no property bag but has such a file, the values are read from it, written
-/// to the property bag, and the old file is removed. See <see cref="TryConvertLegacy"/>.
+/// The length is not an attribute: fs.c struct objattr has none, and PiFS takes the length from the file. It is always the size of the file.
+/// </para>
+/// <para>
+/// A damaged .xat file reads as no property bag (the defaults apply) and is moved aside to a .xat.bad file by XatSidecar.Read, so the next write
+/// starts a fresh .xat file.
 /// </para>
 /// </remarks>
 public static class AcornAttributeStore
@@ -44,12 +45,7 @@ public static class AcornAttributeStore
     public const byte DefaultAccess = 0x33;
 
     /// <summary>
-    /// The suffix of the helper file that older versions kept the attributes in. Only the conversion reads it.
-    /// </summary>
-    public const string LegacySuffix = ",inf";
-
-    /// <summary>
-    /// Reads the load address, execution address, length and access byte of an object.
+    /// Reads the load address, execution address, length and access byte of an object. The length is the size of the file.
     /// </summary>
     /// <param name="fileSystem">
     /// The file system the files are stored on.
@@ -64,7 +60,7 @@ public static class AcornAttributeStore
     /// Receives the execution address, 0 when not stored.
     /// </param>
     /// <param name="length">
-    /// Receives the stored length, or the real file size when none is stored.
+    /// Receives the real file size, 0 when the object is not a file.
     /// </param>
     /// <param name="access">
     /// Receives the access byte, 0x33 when not stored.
@@ -93,8 +89,6 @@ public static class AcornAttributeStore
             load = (uint)storedLoad;
         if (TryGetNumber(bag, AcornProperties.Exec, out long storedExec))
             exec = (uint)storedExec;
-        if (TryGetNumber(bag, AcornProperties.Length, out long storedLength))
-            length = (int)storedLength;
         if (TryGetNumber(bag, AcornProperties.Access, out long storedAccess))
             access = (byte)(storedAccess & 0xFF);
 
@@ -102,7 +96,7 @@ public static class AcornAttributeStore
     }
 
     /// <summary>
-    /// Writes the load address, execution address, length and access byte of an object. The owner and the home owner are kept.
+    /// Writes the load address, execution address and access byte of an object. The owner and the home owner are kept.
     /// </summary>
     /// <param name="fileSystem">
     /// The file system the files are stored on.
@@ -116,16 +110,13 @@ public static class AcornAttributeStore
     /// <param name="exec">
     /// The execution address.
     /// </param>
-    /// <param name="length">
-    /// The file length.
-    /// </param>
     /// <param name="access">
     /// The access byte.
     /// </param>
-    public static void WriteAttributes(IFileSystemBackend fileSystem, string unixPath, uint load, uint exec, int length, byte access)
+    public static void WriteAttributes(IFileSystemBackend fileSystem, string unixPath, uint load, uint exec, byte access)
     {
         IDictionary<string, object> bag = LoadBag(fileSystem, unixPath) ?? new Dictionary<string, object>();
-        SetAttributeKeys(bag, load, exec, length, access);
+        SetAttributeKeys(bag, load, exec, access);
         fileSystem.SetObjectProperties(unixPath, bag);
     }
 
@@ -144,19 +135,16 @@ public static class AcornAttributeStore
     /// <param name="exec">
     /// The execution address.
     /// </param>
-    /// <param name="length">
-    /// The file length.
-    /// </param>
     /// <param name="access">
     /// The access byte.
     /// </param>
     /// <param name="owner">
     /// The user number of the new owner.
     /// </param>
-    public static void WriteAttributes(IFileSystemBackend fileSystem, string unixPath, uint load, uint exec, int length, byte access, ushort owner)
+    public static void WriteAttributes(IFileSystemBackend fileSystem, string unixPath, uint load, uint exec, byte access, ushort owner)
     {
         IDictionary<string, object> bag = LoadBag(fileSystem, unixPath) ?? new Dictionary<string, object>();
-        SetAttributeKeys(bag, load, exec, length, access);
+        SetAttributeKeys(bag, load, exec, access);
         bag[AcornProperties.Owner] = (int)owner;
         fileSystem.SetObjectProperties(unixPath, bag);
     }
@@ -231,11 +219,9 @@ public static class AcornAttributeStore
     /// </param>
     /// <remarks>
     /// Source: fs.c lines 6982 and 6983 (olddot and newdot), which rename the attribute file with the object.
-    /// An older helper file of the object is converted first, so that its values move too.
     /// </remarks>
     public static void MoveAttributes(IFileSystemBackend fileSystem, string fromPath, string toPath)
     {
-        LoadBag(fileSystem, fromPath);
         fileSystem.MoveObjectProperties(fromPath, toPath);
     }
 
@@ -250,15 +236,10 @@ public static class AcornAttributeStore
     /// </param>
     /// <remarks>
     /// Source: fs.c lines 7087 and 7088 (dotfile and unlink), which remove the attribute file with the object.
-    /// An older helper file of the object is removed as well, so a new object of the same name does not inherit it.
     /// </remarks>
     public static void DeleteAttributes(IFileSystemBackend fileSystem, string unixPath)
     {
         fileSystem.DeleteObjectProperties(unixPath);
-
-        string legacyPath = unixPath + LegacySuffix;
-        if (fileSystem.FileExists(legacyPath))
-            fileSystem.DeleteFile(legacyPath);
     }
 
     /// <summary>
@@ -268,7 +249,7 @@ public static class AcornAttributeStore
     /// The name of the directory entry.
     /// </param>
     /// <returns>
-    /// True when the name ends in <c>.xat</c>.
+    /// True when the name ends in <c>.xat</c> or <c>.xat.bad</c> (a damaged .xat file that was moved aside).
     /// </returns>
     /// <remarks>
     /// PiFS keeps its own side file out of sight because an Acorn name cannot hold a dot (fs.c comment at lines 1589 to 1595: the dot is a directory
@@ -276,72 +257,19 @@ public static class AcornAttributeStore
     /// </remarks>
     public static bool IsStoreName(string name)
     {
-        return XatSidecar.IsXatName(name);
+        return XatSidecar.IsXatName(name) || XatSidecar.IsDamagedXatName(name);
     }
 
-    /// <summary>
-    /// Tells whether a directory entry name has the suffix of the helper file that older versions used.
-    /// </summary>
-    /// <param name="name">
-    /// The name of the directory entry.
-    /// </param>
-    /// <returns>
-    /// True when the name is longer than the suffix and ends in it.
-    /// </returns>
-    public static bool IsLegacyName(string name)
-    {
-        return name.Length > LegacySuffix.Length && name.EndsWith(LegacySuffix, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Converts the helper file of an object from an older version into a property bag.
-    /// </summary>
-    /// <param name="fileSystem">
-    /// The file system the files are stored on.
-    /// </param>
-    /// <param name="unixPath">
-    /// The host path of the object the helper file describes.
-    /// </param>
-    /// <returns>
-    /// The property bag that was written, or null when there is nothing to convert: the object has a property bag already, it has no helper file, or the
-    /// helper file holds none of the keys LOAD, EXEC, LENGTH, ACCESS, OWNER and HOMEOF (then it is some other file and is left alone).
-    /// </returns>
-    /// <remarks>
-    /// The bag is written before the helper file is removed, so a failure cannot lose the values.
-    /// </remarks>
-    public static IDictionary<string, object>? TryConvertLegacy(IFileSystemBackend fileSystem, string unixPath)
-    {
-        if (fileSystem.GetObjectProperties(unixPath) != null)
-            return null;
-
-        string legacyPath = unixPath + LegacySuffix;
-        if (!fileSystem.FileExists(legacyPath))
-            return null;
-
-        IDictionary<string, object> bag = ParseLegacy(ReadText(fileSystem, legacyPath));
-        if (bag.Count == 0)
-            return null;
-
-        fileSystem.SetObjectProperties(unixPath, bag);
-        fileSystem.DeleteFile(legacyPath);
-        return bag;
-    }
-
-    // Returns the bag of the object. An object that has none but has an older helper file is converted here, so every read and write goes through it.
+    // Returns the bag of the object, or null when it has none.
     private static IDictionary<string, object>? LoadBag(IFileSystemBackend fileSystem, string unixPath)
     {
-        IDictionary<string, object>? bag = fileSystem.GetObjectProperties(unixPath);
-        if (bag != null)
-            return bag;
-
-        return TryConvertLegacy(fileSystem, unixPath);
+        return fileSystem.GetObjectProperties(unixPath);
     }
 
-    private static void SetAttributeKeys(IDictionary<string, object> bag, uint load, uint exec, int length, byte access)
+    private static void SetAttributeKeys(IDictionary<string, object> bag, uint load, uint exec, byte access)
     {
         bag[AcornProperties.Load] = load;
         bag[AcornProperties.Exec] = exec;
-        bag[AcornProperties.Length] = length;
         bag[AcornProperties.Access] = (int)access;
     }
 
@@ -374,60 +302,5 @@ public static class AcornAttributeStore
             default:
                 return false;
         }
-    }
-
-    // Reads the KEY=value lines of an older helper file. LOAD, EXEC, ACCESS, OWNER and HOMEOF are hex, with an optional leading ampersand; LENGTH is decimal.
-    // A line that is not understood is skipped, as it always was.
-    private static IDictionary<string, object> ParseLegacy(string text)
-    {
-        Dictionary<string, object> bag = new Dictionary<string, object>();
-        string[] lines = text.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            string line = lines[i].Trim();
-            int eq = line.IndexOf('=');
-            if (eq <= 0)
-                continue;
-
-            string key = line.Substring(0, eq).Trim().ToUpperInvariant();
-            string value = line.Substring(eq + 1).Trim();
-
-            if (key == "LOAD" && TryParseHex(value, out uint load))
-                bag[AcornProperties.Load] = load;
-            else if (key == "EXEC" && TryParseHex(value, out uint exec))
-                bag[AcornProperties.Exec] = exec;
-            else if (key == "LENGTH" && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int length))
-                bag[AcornProperties.Length] = length;
-            else if (key == "ACCESS" && TryParseHex(value, out uint access))
-                bag[AcornProperties.Access] = (int)(access & 0xFF);
-            else if (key == "OWNER" && TryParseHex(value, out uint owner) && owner <= ushort.MaxValue)
-                bag[AcornProperties.Owner] = (int)owner;
-            else if (key == "HOMEOF" && TryParseHex(value, out uint homeOf) && homeOf <= ushort.MaxValue)
-                bag[AcornProperties.HomeOf] = (int)homeOf;
-        }
-
-        return bag;
-    }
-
-    private static bool TryParseHex(string value, out uint result)
-    {
-        if (value.StartsWith('&'))
-            value = value.Substring(1);
-
-        return uint.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out result);
-    }
-
-    private static string ReadText(IFileSystemBackend fileSystem, string path)
-    {
-        byte[] buffer;
-        using (FileStream stream = fileSystem.OpenFile(path, FileMode.Open, FileAccess.Read))
-        {
-            buffer = new byte[stream.Length];
-            int read = stream.Read(buffer, 0, buffer.Length);
-            if (read < buffer.Length)
-                Array.Resize(ref buffer, read);
-        }
-
-        return Encoding.ASCII.GetString(buffer);
     }
 }

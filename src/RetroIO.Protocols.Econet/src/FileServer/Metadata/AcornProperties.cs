@@ -19,8 +19,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 /// </para>
 /// <para>
 /// Source for the values: PiEconetBridge utilities/fs.c, struct objattr (line 318), which holds owner, load, exec, perm and homeof. The length is not in
-/// that structure, because PiFS takes the length from the file. It is kept here as well, because this server has always stored a length next to the other
-/// attributes and a client can set it with the set-object-info call.
+/// that structure, because PiFS takes the length from the file. This server does the same: the length is never stored, it is the size of the file.
 /// </para>
 /// </remarks>
 public static class AcornProperties
@@ -36,11 +35,6 @@ public static class AcornProperties
     /// The execution address of the object (an unsigned 32-bit number).
     /// </summary>
     public const string Exec = Prefix + "exec";
-
-    /// <summary>
-    /// The length the attributes record for the object, in bytes.
-    /// </summary>
-    public const string Length = Prefix + "length";
 
     /// <summary>
     /// The access byte of the object (fs.c calls it perm).
@@ -81,15 +75,6 @@ public static class AcornProperties
             Category = PropertyCategory.Attributes,
             DefaultValue = 0u,
             ValidationHint = "0 to 4294967295"
-        },
-        new PropertyDescriptor
-        {
-            Key = Length,
-            ShortName = "LENGTH",
-            ValueType = typeof(int),
-            Description = "Acorn length recorded with the attributes",
-            Category = PropertyCategory.Attributes,
-            ValidationHint = "0 or more bytes"
         },
         new PropertyDescriptor
         {

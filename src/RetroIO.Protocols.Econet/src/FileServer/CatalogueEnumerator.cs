@@ -23,39 +23,21 @@ internal static class CatalogueEnumerator
 
     public static List<string> ListSortedNames(IFileSystemBackend fileSystem, string unixDirectory)
     {
-        // Take the whole listing first: converting an older helper file below deletes a directory entry.
-        List<string> found = new List<string>();
+        List<string> names = new List<string>();
         using (IEnumerator<string> entries = fileSystem.EnumerateFileSystemEntries(unixDirectory).GetEnumerator())
         {
             while (entries.MoveNext())
-                found.Add(fileSystem.GetFileName(entries.Current));
-        }
-
-        List<string> names = new List<string>();
-        for (int i = 0; i < found.Count; i++)
-        {
-            string name = found[i];
-
-            // The .xat file that keeps a property bag is not an object of the Acorn tree. An Acorn name cannot hold a dot, so no Acorn name
-            // can be a .xat name (fs.c hides its own side file for the same reason; see AcornAttributeStore.IsStoreName).
-            if (AcornAttributeStore.IsStoreName(name))
-                continue;
-
-            // Legacy conversion path only: a name with the old comma-inf suffix whose object is in this directory is the helper file of an
-            // older version. It is converted into the property bag of the object, which removes it, and then it is not listed. Any other
-            // name with that suffix is an ordinary file and is listed.
-            if (AcornAttributeStore.IsLegacyName(name))
             {
-                string described = name.Substring(0, name.Length - AcornAttributeStore.LegacySuffix.Length);
-                string describedPath = fileSystem.CombinePath(unixDirectory, described);
-                if ((fileSystem.FileExists(describedPath) || fileSystem.DirectoryExists(describedPath)) &&
-                    AcornAttributeStore.TryConvertLegacy(fileSystem, describedPath) != null)
-                {
-                    continue;
-                }
-            }
+                string name = fileSystem.GetFileName(entries.Current);
 
-            names.Add(name);
+                // The .xat file that keeps a property bag, and a damaged one that was moved aside to .xat.bad, are not objects of the Acorn tree.
+                // An Acorn name cannot hold a dot, so no Acorn name can be such a name (fs.c hides its own side file for the same reason;
+                // see AcornAttributeStore.IsStoreName). A name like FILE,inf is an ordinary file and is listed.
+                if (AcornAttributeStore.IsStoreName(name))
+                    continue;
+
+                names.Add(name);
+            }
         }
 
         names.Sort(StringComparer.OrdinalIgnoreCase);
@@ -158,15 +140,9 @@ internal static class CatalogueEnumerator
         {
             RetroIO.Server.Core.FileSystem.BackendFileInfo? info = fileSystem.GetFileInfo(fullPath);
             length = info?.Length ?? 0;
-            if (AcornAttributeStore.TryReadAttributes(fileSystem, fullPath, out load, out exec, out int infLength, out perm))
-            {
-                if (infLength > 0)
-                    length = infLength;
-            }
-            else
-            {
+            // The length is the size of the file (fs.c has no stored length), so only the attributes are taken here.
+            if (!AcornAttributeStore.TryReadAttributes(fileSystem, fullPath, out load, out exec, out _, out perm))
                 perm = defaultPerm;
-            }
         }
 
         FileServerReply.WriteCatalogEntry(destination, name, isDirectory, length, perm);
