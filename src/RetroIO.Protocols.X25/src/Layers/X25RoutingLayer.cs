@@ -344,7 +344,7 @@ namespace RetroIO.Protocols.X25.Layers
         /// Accepted or the Clear Request, from the return value of this method. The older overload
         /// taking an <see cref="ITransportInterface"/> builds those two packets itself and writes
         /// them straight to the connection, which meant a call accepted through an engine was
-        /// answered twice. It stays only for <c>SerialTransport</c>, which has no engine yet.
+        /// answered twice. That overload has since been removed (see the note below); the serial transport now has an engine too.
         /// </para>
         /// <para>
         /// The steps are the ones the transport overload does: find a local service for the called

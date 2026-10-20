@@ -362,8 +362,16 @@ namespace RetroIO.Protocols.Xmsg.Live
         {
             get
             {
+                // The ND dialect is balanced: each station sends its own SABM and the link is up
+                // only when both exchanges are done (spec 3.1, above). ITU-T X.25 LAPB has one
+                // exchange: 2.4.4.1 says that on receiving the UA to its SABM the station "will
+                // reset its send and receive state variables V(S) and V(R) to zero ... and will
+                // consider that the data link is set up". Waiting for a SABM from the peer as well
+                // would leave a station that started the link down for ever, because the other end
+                // answers with a UA and never sends a SABM of its own.
+                bool peerHalfDone = IsItu || _peerSabmAnswered;
                 return _ourSabmAcked
-                    && _peerSabmAnswered
+                    && peerHalfDone
                     && _state == LapbLayerState.Connected;
             }
         }

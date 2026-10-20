@@ -25,6 +25,15 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         private readonly SerialTransportConfig _config;
         private TransportStatus _status = TransportStatus.Stopped;
         private readonly TransportStatistics _statistics;
+        private readonly Func<long>? _clock;
+        private SerialLapbLink? _link;
+        private System.Threading.Timer? _linkTimer;
+
+        /// <summary>
+        /// How often the LAPB timers are looked at, in milliseconds. The smallest timer is T1, which
+        /// is seconds, so a quarter of a second is far finer than any timer needs.
+        /// </summary>
+        private const int LinkTickMs = 250;
 
         /// <summary>
         /// Creates a serial transport.
@@ -38,11 +47,16 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         /// <param name="config">
         /// The transport configuration.
         /// </param>
+        /// <param name="clock">
+        /// A clock in milliseconds for the LAPB timers, used only when
+        /// <see cref="SerialTransportConfig.X25Link"/> is set. Null uses a stopwatch. Tests pass their own.
+        /// </param>
         /// <exception cref="System.ArgumentNullException">
         /// Thrown when <paramref name="logger"/>, <paramref name="runtime"/> or <paramref name="config"/> is null.
         /// </exception>
-        public SerialTransport(ILogger logger, ProtocolRuntime runtime, SerialTransportConfig config)
+        public SerialTransport(ILogger logger, ProtocolRuntime runtime, SerialTransportConfig config, Func<long>? clock = null)
         {
+            _clock = clock;
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -188,6 +202,8 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
                     _runtime.PhysicalLayer.DataReceived -= OnPhysicalLayerDataReceived;
                     _runtime.PhysicalLayer.DataReceived += OnPhysicalLayerDataReceived;
 
+                    StartLink();
+
                     SetStatus(TransportStatus.Active, "Serial transport started successfully");
                     _statistics.StartTime = DateTime.UtcNow;
                     _logger.LogInformation("Serial transport {Name} started successfully", Name);
@@ -230,6 +246,8 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
                 // A stopped transport delivers nothing.
                 _runtime.PhysicalLayer.DataReceived -= OnPhysicalLayerDataReceived;
 
+                StopLink();
+
                 _logger.LogInformation("Stopping serial transport {Name}", Name);
 
                 // Stop the protocol runtime
@@ -269,13 +287,21 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         /// Raised when an incoming call is received.
         /// </summary>
         /// <remarks>
-        /// This class never raises it, on purpose. A Call Request on a serial line is carried inside a
-        /// LAPB I frame, so reading it needs HDLC deframing, the frame check sequence and the LAPB
-        /// sequence numbers and acknowledgements, and the answer (Call Accepted or Clear) has to
-        /// go back through the same LAPB link. None of that is in this class: serial links with LAPB
-        /// belong to the links of the newer stack, and the runtime says this transport gets its X.25
-        /// engine later. Decoding frames here without LAPB would report calls that
-        /// could not be answered. The raw bytes are reported through <see cref="DataReceived"/>.
+        /// <para>
+        /// This class never raises it, on purpose, the same as <c>XotClientTransport</c>. A Call
+        /// Request on a serial line is carried inside a LAPB I frame. When
+        /// <see cref="SerialTransportConfig.X25Link"/> is set, this transport takes the line apart
+        /// (HDLC framing, frame check sequence, LAPB) and raises <see cref="X25PacketReceived"/> with each
+        /// X.25 packet. The runtime feeds those to the one X.25 engine it keeps for this line; the
+        /// engine decodes the Call Request, raises the incoming call once, the runtime routes it
+        /// once, and the engine puts the Call Accepted or the Clear Request back through
+        /// <see cref="SendPacket"/>.
+        /// </para>
+        /// <para>
+        /// Raising this event as well would hand the same call to the router a second time, and the
+        /// runtime has no way to answer a call that comes in through this event (it has no engine
+        /// to answer with). The raw bytes are still reported through <see cref="DataReceived"/>.
+        /// </para>
         /// </remarks>
 #pragma warning disable CS0067 // Required by the interface; see the remarks above for why it is not raised.
         public event EventHandler<X25CallRequest>? IncomingCall;
@@ -294,6 +320,69 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         /// for the interface whose name this transport carries.
         /// </remarks>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
+
+        /// <summary>
+        /// Raised for each X.25 packet that arrived in an I frame on the data link.
+        /// </summary>
+        /// <remarks>
+        /// Raised only when <see cref="SerialTransportConfig.X25Link"/> is set and the transport is
+        /// started. The data is one whole X.25 packet (GFI and logical channel first), with the HDLC
+        /// flags, the escapes, the frame check sequence and the LAPB address and control already
+        /// removed. The runtime feeds it to this line's X.25 engine, the same way it does for an XOT
+        /// connection.
+        /// </remarks>
+        public event EventHandler<TransportDataEventArgs>? X25PacketReceived;
+
+        /// <summary>
+        /// Raised with true when the LAPB data link is set up in both directions and with false when
+        /// it stops being usable.
+        /// </summary>
+        /// <remarks>
+        /// The runtime drops the line's X.25 engine on false, which reports every call on it cleared;
+        /// the next packet after the link is set up again builds a fresh engine. That is the same as
+        /// it does for a link of the newer stack.
+        /// </remarks>
+        public event EventHandler<bool>? LinkStateChanged;
+
+        /// <summary>
+        /// Gets the role of this side of the line, or null when no complete X.25 data link configuration is set.
+        /// </summary>
+        public SerialX25LinkRole? LinkRole
+        {
+            get { return _config.X25Link != null && _config.X25Link.IsComplete ? _config.X25Link.Role : null; }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the LAPB data link is set up and packets can be sent.
+        /// </summary>
+        public bool IsLinkUp
+        {
+            get { return _link != null && _link.IsUp; }
+        }
+
+        /// <summary>
+        /// Gets the data link of this transport, or null when it is not configured or not started.
+        /// </summary>
+        public SerialLapbLink? Link
+        {
+            get { return _link; }
+        }
+
+        /// <summary>
+        /// Sends one X.25 packet to the peer in a LAPB I frame.
+        /// </summary>
+        /// <param name="packet">
+        /// The whole X.25 packet.
+        /// </param>
+        /// <returns>
+        /// True when LAPB took the packet. False when no X.25 data link is configured or started, or
+        /// when the link is not set up.
+        /// </returns>
+        public bool SendPacket(byte[] packet)
+        {
+            SerialLapbLink? link = _link;
+            return link != null && link.SendPacket(packet);
+        }
 
         #endregion
 
@@ -327,6 +416,126 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
                 // A handler that throws must not stop the read thread of the serial port.
                 _logger.LogError(ex, "Error in a DataReceived handler of serial transport {Name}", Name);
             }
+
+            // The same bytes go to the data link, which takes the frames apart. The raw event above
+            // is raised first and stays what it was.
+            SerialLapbLink? link = _link;
+            if (link != null)
+            {
+                try
+                {
+                    link.Feed(e.Data, e.Data.Length);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in the data link of serial transport {Name}", Name);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Builds and starts the X.25 data link when the configuration asks for one.
+        /// </summary>
+        /// <remarks>
+        /// With no <see cref="SerialTransportConfig.X25Link"/> nothing is built and the transport
+        /// reports raw bytes only, as before. There is no role to fall back on: X.25 does not say
+        /// which end of a serial cable is the DCE, so a transport that was not told does not guess.
+        /// </remarks>
+        private void StartLink()
+        {
+            SerialX25LinkOptions? options = _config.X25Link;
+            if (options == null || !options.IsComplete)
+            {
+                _logger.LogInformation(
+                    "Serial transport {Name} has no complete X25Link options (role and link set-up, no defaults): it reports raw bytes only and runs no LAPB or X.25",
+                    Name);
+                return;
+            }
+
+            if (_link != null)
+            {
+                return;
+            }
+
+            SerialLapbLink link = new SerialLapbLink(_logger, Name, options, WriteToLine, _clock);
+            link.PacketReceived += OnLinkPacketReceived;
+            link.LinkStateChanged += OnLinkStateChanged;
+            _link = link;
+
+            _linkTimer = new System.Threading.Timer(OnLinkTimer, null, LinkTickMs, LinkTickMs);
+            _logger.LogInformation("Serial transport {Name} runs X.25 as the {Role}, link set-up {Setup}",
+                Name, options.Role, options.InitiateLinkSetup == true ? "sent by this side" : "left to the peer");
+            link.Start();
+        }
+
+        private void StopLink()
+        {
+            System.Threading.Timer? timer = _linkTimer;
+            _linkTimer = null;
+            timer?.Dispose();
+
+            SerialLapbLink? link = _link;
+            _link = null;
+            if (link != null)
+            {
+                // Stop() raises LinkStateChanged(false) when the link was up, so the packet layer is
+                // told the link is gone, the same as for any other loss. Packets are no longer wanted.
+                link.PacketReceived -= OnLinkPacketReceived;
+                link.Stop();
+                link.Dispose();
+            }
+        }
+
+        private void OnLinkTimer(object? state)
+        {
+            SerialLapbLink? link = _link;
+            if (link == null)
+            {
+                return;
+            }
+
+            try
+            {
+                link.Tick();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error ticking the data link of serial transport {Name}", Name);
+            }
+        }
+
+        private bool WriteToLine(byte[] bytes)
+        {
+            bool sent = _runtime.PhysicalLayer.SendToSerialInterface(Name, bytes);
+            if (sent)
+            {
+                _statistics.BytesTransmitted += bytes.Length;
+            }
+
+            return sent;
+        }
+
+        private void OnLinkPacketReceived(object? sender, byte[] packet)
+        {
+            try
+            {
+                X25PacketReceived?.Invoke(this, new TransportDataEventArgs
+                {
+                    Data = packet,
+                    Length = packet.Length,
+                    Transport = this
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in an X25PacketReceived handler of serial transport {Name}", Name);
+            }
+        }
+
+        private void OnLinkStateChanged(object? sender, bool up)
+        {
+            _logger.LogInformation("Serial transport {Name}: data link is {State}", Name, up ? "up" : "down");
+            LinkStateChanged?.Invoke(this, up);
         }
 
         private void SetStatus(TransportStatus newStatus, string reason)
@@ -389,6 +598,17 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         /// Station type (DCE or DTE)
         /// </summary>
         public StationType StationType { get; set; } = StationType.DTE_Secondary;
+
+        /// <summary>
+        /// Role and LAPB values for running X.25 on this line, or null for none.
+        /// </summary>
+        /// <remarks>
+        /// Null (the value when nothing is set) means the transport runs no LAPB and no X.25 on the
+        /// line and only reports raw bytes. It is not read as DTE or DCE. <see cref="StationType"/>
+        /// is not read for this: its values mix X.25's DTE and DCE with LAPB's primary and secondary,
+        /// which are not the same thing, and the X.25 text assigns no meaning to "primary".
+        /// </remarks>
+        public SerialX25LinkOptions? X25Link { get; set; }
 
         /// <summary>
         /// Optional description of this interface

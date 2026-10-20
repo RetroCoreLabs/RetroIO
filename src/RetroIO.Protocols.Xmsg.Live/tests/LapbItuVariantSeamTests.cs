@@ -101,6 +101,36 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
         }
 
         [Fact]
+        public void ItuStationThatSentTheSabm_IsUpOnTheUaAlone()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = LapbTestKit.NewLink(0x0066, sent, Itu());
+
+            link.Connect(0);
+            Assert.False(link.IsUp);
+
+            // X.25 2.4.4.1: on the UA to its SABM the station considers the data link set up. The
+            // DCE's UA is a response from the DCE: address B (2.4.2). There is no SABM from the peer.
+            LapbTestKit.Deliver(link, LapbLayer.AddressItuB, 0x73);
+
+            Assert.Equal(LapbLayerState.Connected, link.State);
+            Assert.True(link.IsUp);
+        }
+
+        [Fact]
+        public void NdStationThatSentTheSabm_IsStillNotUpOnTheUaAlone()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = LapbTestKit.NewLink(0x0066, sent);   // ND dialect
+
+            link.Connect(0);
+            LapbTestKit.Deliver(link, LapbLayer.AddressLinkSetup, 0x73, LapbTestKit.Node100Hi, LapbTestKit.Node100Lo);
+
+            // ND spec 3.1: both directions must have completed a SABM -> UA exchange.
+            Assert.False(link.IsUp);
+        }
+
+        [Fact]
         public void NdDialect_IsUnchangedAndStaysTheDefault()
         {
             List<byte[]> sent = new List<byte[]>();
