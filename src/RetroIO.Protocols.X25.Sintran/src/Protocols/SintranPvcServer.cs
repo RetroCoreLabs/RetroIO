@@ -445,16 +445,13 @@ namespace RetroIO.Protocols.X25.Sintran
 
         /// <summary>
         /// Determine protocol based on Call User Data
-        /// SINTRAN systems use Call User Data to specify which service/server they want
-        /// DREAMING UP SHIT, VALUES MAY NOT BE CORRECT - Need real SINTRAN Call User Data format from user
+        /// The called address rule below and the empty-data default to ROUTING still have no written
+        /// source (BUGS.md); a non-empty call user data is only accepted where a source defines it.
         /// </summary>
         private string? DetermineProtocolFromCallUserData(byte[] callUserData, string calledAddress, ushort lcn)
         {
-            _logger.LogDebug("SintranPvcServer: Analyzing Call User Data for service detection: {CallUserData}", 
+            _logger.LogDebug("SintranPvcServer: Analyzing Call User Data for service detection: {CallUserData}",
                 BitConverter.ToString(callUserData));
-
-            // TODO: Need proper SINTRAN Call User Data format specification
-            // This is placeholder logic until the real format is provided
 
             // CRITICAL: Check called address FIRST (before CUD checks)
             // This allows empty CUD calls to be routed based on address pattern
@@ -475,29 +472,24 @@ namespace RetroIO.Protocols.X25.Sintran
                 return "ROUTING";
             }
 
-            // PLACEHOLDER LOGIC - DREAMING UP SHIT, VALUES MAY NOT BE CORRECT
-            // Need real SINTRAN protocol specification for Call User Data format
-            // This might be completely wrong - waiting for user guidance
-
-            // Example placeholder detection (probably incorrect):
-            // First byte might indicate service type?
-            if (callUserData.Length >= 1)
+            // Call user data is present. The only written rule for its first octet is ITU-T X.29
+            // (12/97) clause 4.2.1: the protocol identifier. Octet 1 = 0x01 (bits 8,7 = 00,
+            // bits 6..1 = 000001) with octets 2..4 all zero means PAD messages. That is a PAD
+            // call, not a routing call, and this server has no PAD handler, so it is refused.
+            // The recordings in the X25Emulator pcap folder hold no Call Request at all (every
+            // LAPB I frame starts with the SINTRAN routing marker 0x21 0x13), so no capture gives
+            // a SINTRAN-specific rule. The old values 0x02 (XMSG), 0x03 (FILE) and 0xDD (TAD) came
+            // from no source and are gone. A call we have no rule for is cleared, not guessed at.
+            if (callUserData.Length >= 4 && callUserData[0] == 0x01
+                && callUserData[1] == 0x00 && callUserData[2] == 0x00 && callUserData[3] == 0x00)
             {
-                switch (callUserData[0])
-                {
-                    case 0x01: return "ROUTING"; // Routing service request?
-                    case 0x02: return "XMSG";    // XMSG service request?
-                    case 0x03: return "FILE";    // File service request?
-                    case 0xDD: return "TAD";     // TAD (terminal) service request (0xDD matches routing protocol ID)
-                }
+                _logger.LogWarning("SintranPvcServer: Call User Data is the X.29 PAD protocol identifier, and no PAD handler is registered, clearing call");
+                return null;
             }
 
-            // Log unknown Call User Data for analysis
-            _logger.LogWarning("SintranPvcServer: Unknown Call User Data format: {CallUserData}, defaulting to ROUTING",
+            _logger.LogWarning("SintranPvcServer: No rule for Call User Data {CallUserData} (no standard or capture defines one), clearing call",
                 BitConverter.ToString(callUserData));
-
-            // Default to ROUTING for analysis (most common SINTRAN protocol)
-            return "ROUTING";
+            return null;
         }
 
         /// <summary>
