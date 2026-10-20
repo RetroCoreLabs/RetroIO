@@ -202,7 +202,8 @@ public sealed class FileIoCommandHandler
             {
             }
 
-            AcornInfStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, 0, defaultAccess);
+            // fs.c line 5873: the user who saves a file becomes its owner.
+            AcornInfStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, 0, defaultAccess, session.UserIndex);
             AcornPath.EncodeFileDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
             // PiFS create_only / length==0 path sends the short 5-byte completion (return code 0),
             // not the 21-byte FS3 data-transfer close packet.
@@ -231,6 +232,7 @@ public sealed class FileIoCommandHandler
             LoadAddress = load,
             ExecAddress = exec,
             Username = session.Username,
+            OwnerId = session.UserIndex,
         });
 
         return Reply(request, fsRequest.ReplyPort, FileServerReply.SaveSetup(bulkPort, _context.Configuration.SaveWindow));
@@ -323,6 +325,9 @@ public sealed class FileIoCommandHandler
         else
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.NotFound, "Not found"));
 
+        // fs.c lines 7087 and 7088: the attribute file goes with the object, so a new object of the same name does not get the old owner.
+        AcornInfStore.DeleteSidecar(_context.FileSystem, unixPath);
+
         return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
     }
 
@@ -339,7 +344,13 @@ public sealed class FileIoCommandHandler
         string unixPath = _context.FileSystem.CombinePath(session.CurrentDirectoryUnix, AcornPath.AcornToUnixRelative(dirname));
         // Go through the backend, not raw System.IO — the raw call never worked on non-local
         // backends (e.g. Azure blob storage).
+        bool existed = _context.FileSystem.DirectoryExists(unixPath);
         _context.FileSystem.CreateDirectory(unixPath);
+
+        // fs.c line 7131: a new directory is owned by the user who made it. A directory that was there keeps its owner.
+        if (!existed)
+            ObjectOwnership.SetOwner(_context, session, unixPath);
+
         return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
     }
 

@@ -8,6 +8,7 @@
 using System;
 using System.IO;
 using RetroIO.Protocols.Econet.FileServer.Dispatch;
+using RetroIO.Protocols.Econet.FileServer.Metadata;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 
 namespace RetroIO.Protocols.Econet.FileServer.Commands;
@@ -82,6 +83,9 @@ public sealed class RenameCommand : IOsCliCommand
             call.Context.FileSystem.MoveDirectory(fromPath, toPath);
         else
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
+
+        // fs.c lines 6981 to 6986: the attribute file (here the sidecar with the owner) is renamed with the object.
+        AcornInfStore.MoveSidecar(call.Context.FileSystem, fromPath, toPath);
 
         return FileServerReply.Success();
     }

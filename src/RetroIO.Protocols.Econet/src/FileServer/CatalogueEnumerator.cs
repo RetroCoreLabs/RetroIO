@@ -15,19 +15,22 @@ namespace RetroIO.Protocols.Econet.FileServer;
 
 internal static class CatalogueEnumerator
 {
+    // The sidecar files that hold the owner and attributes are not directory entries of the Acorn tree, so they are not counted or listed.
     public static int CountEntries(IFileSystemBackend fileSystem, string unixDirectory)
     {
-        int count = 0;
-        foreach (string _ in fileSystem.EnumerateFileSystemEntries(unixDirectory))
-            count++;
-        return count;
+        return ListSortedNames(fileSystem, unixDirectory).Count;
     }
 
     public static List<string> ListSortedNames(IFileSystemBackend fileSystem, string unixDirectory)
     {
         List<string> names = new List<string>();
-        foreach (string entry in fileSystem.EnumerateFileSystemEntries(unixDirectory))
-            names.Add(fileSystem.GetFileName(entry));
+        using IEnumerator<string> entries = fileSystem.EnumerateFileSystemEntries(unixDirectory).GetEnumerator();
+        while (entries.MoveNext())
+        {
+            string name = fileSystem.GetFileName(entries.Current);
+            if (!AcornInfStore.IsSidecarName(fileSystem, unixDirectory, name))
+                names.Add(name);
+        }
 
         names.Sort(StringComparer.OrdinalIgnoreCase);
         return names;

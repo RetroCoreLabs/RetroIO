@@ -167,14 +167,17 @@ public sealed class DnfsOsCliFlowTests
     }
 
     [Test]
-    public void Cat_NonAdminUser_Cmd6ReportsOwnerAndSucceeds()
+    public void Cat_NonAdminUser_Cmd6ReportsTheRealOwnerAndSucceeds()
     {
+        // The catalogue works for a user without system privilege. The owner byte of the directory header follows
+        // the owner stored for the directory (fs.c line 5735): the sample home directory has no stored owner, so it
+        // belongs to the system manager and this user is not the owner.
         DnfsReply login = _client.OsCli("I AM USER \r");
         Assert.That(login.IsLoginSuccess, Is.True);
 
         DnfsCatalogueResult cat = _client.Cat();
         Assert.That(cat.Succeeded, Is.True, () => DescribeCatFailure(cat));
-        Assert.That(cat.DirectoryInfo.Payload[15], Is.EqualTo(0x00), "owner byte must not depend on IsAdmin");
+        Assert.That(cat.DirectoryInfo.Payload[15], Is.EqualTo(0xFF), "the home directory is not owned by this user");
     }
 
     [Test]
