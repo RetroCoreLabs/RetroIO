@@ -173,13 +173,13 @@ namespace RetroIO.Tests.VDK
             int bamOffset = headerSize + (20 * (int)sides * 18 * 256);
             if (bamOffset + 512 <= totalSize)
             {
-                image[bamOffset + 0xA2] = (byte)(sides * 18);
-                image[bamOffset + 0xA3] = (byte)(~(sides * 18) & 0xFF);
-                image[bamOffset + 0xA4] = tracks;
-                image[bamOffset + 0xA5] = (byte)(~tracks & 0xFF);
-
-                byte[] volumeLabel = System.Text.Encoding.ASCII.GetBytes("TEST DISK");
-                Array.Copy(volumeLabel, 0, image, bamOffset + 0x90, Math.Min(volumeLabel.Length, 18));
+                // DragonDOS geometry bytes (dosdefs.asm DirTracks): tracks, sectors per track,
+                // complement of tracks, complement of sectors per track, at $FC to $FF.
+                // DragonDOS has no volume name, so none is written.
+                image[bamOffset + 0xFC] = tracks;
+                image[bamOffset + 0xFD] = (byte)(sides * 18);
+                image[bamOffset + 0xFE] = (byte)(~tracks & 0xFF);
+                image[bamOffset + 0xFF] = (byte)(~(sides * 18) & 0xFF);
             }
 
             return image;
