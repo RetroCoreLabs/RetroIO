@@ -374,6 +374,14 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // blocks are filesystem overhead, not charged to the user — see CountRealDataPages.
             uint requiredPages = CountRealDataPages(data);
 
+            // SINTRAN also charges the file's index and sub-index blocks to the user (measured), so the
+            // reservation must cover them too.
+            uint filePagesForQuota = (uint)((data.Length + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - 1) /
+                                           NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
+            if (filePagesForQuota == 0)
+                filePagesForQuota = 1;
+            requiredPages += StructuralPagesFor(filePagesForQuota);
+
             // Check if file already exists
             var existingObj = _objectFile.FindObject(objectName, user.UserName);
 
@@ -395,7 +403,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 if (existingObj.FilePointer != null && existingObj.FilePointer.BlockID > 0)
                 {
                     var existingBlocks = GetAllBlockPointersForFile(existingObj.FilePointer, existingObj.BytesInFile);
-                    existingPages = CountRealDataPages(existingBlocks);
+                    existingPages = CountChargedPages(existingObj.FilePointer, existingBlocks);
                 }
 
                 if (requiredPages > existingPages)
@@ -403,6 +411,11 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 else
                     additionalPagesNeeded = 0;
             }
+
+            // The first file of a user also needs the user's first object data page, which is charged
+            // to the user as well.
+            if (existingObj == null && CountUserObjectPages(user.UserIndex) == 0)
+                additionalPagesNeeded++;
 
             // Check and expand quota if needed
             if (additionalPagesNeeded > 0)
@@ -499,9 +512,14 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
             // Free blocks used by file
             List<BlockPointer>? blocks = null;
+            uint chargedPages = 0;
             if (obj.FilePointer != null && obj.FilePointer.BlockID > 0)
             {
                 blocks = GetAllBlockPointersForFile(obj.FilePointer, obj.BytesInFile);
+
+                // What the owner was charged for this file: data pages plus index blocks. Counted before
+                // the blocks are freed. The user's object data page stays charged: SINTRAN never gives it back.
+                chargedPages = CountChargedPages(obj.FilePointer, blocks);
                 FreeFileBlocks(blocks);
 
                 // Also free the top-level index/sub-index block, plus (for SubIndexed) every
@@ -515,7 +533,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // block itself. See CountRealDataPages.
             if (user != null)
             {
-                uint totalBlocks = blocks != null ? CountRealDataPages(blocks) : 0;
+                uint totalBlocks = chargedPages;
 
                 if (user.PagesUsed >= totalBlocks)
                     user.PagesUsed -= totalBlocks;
@@ -941,7 +959,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 return; // already allocated — WritePageForEntry can write directly
 
             // Allocate a fresh data page from the free-space bitmap.
-            uint? freeBlock = _bitFile.FindFirstFreeBlock();
+            // User pages follow SINTRAN's RSBPG rule: first free page going down from the home word of
+            // the bit file address (BitAddress - 1).
+            uint? freeBlock = _bitFile.FindFreeHint();
             if (freeBlock == null)
                 throw new InvalidOperationException("No free pages available to allocate a user-file page");
             _bitFile.AllocateBlocks(freeBlock.Value, 1);
@@ -1901,6 +1921,26 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             }
         }
 
+        /// <summary>
+        /// Number of pages the bit file occupies on disk: <c>ceil(capacity / 16384)</c>, where the
+        /// capacity is the declared directory size when a valid Extended Info Block gives it and
+        /// otherwise the length of the device.
+        /// </summary>
+        private int BitFileDiskPages()
+        {
+            const int pageSize = NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+            uint basis = _device!.TotalBlocks;
+            if (_masterBlock != null && _masterBlock.ExtValid &&
+                _masterBlock.ExtPagesAvailable > 0 &&
+                _masterBlock.ExtPagesAvailable <= _device.TotalBlocks)
+            {
+                basis = _masterBlock.ExtPagesAvailable;
+            }
+
+            int bytes = (int)(((basis + 7) / 8 + 1) & ~1u);   // whole 16-bit words
+            return (bytes + pageSize - 1) / pageSize;
+        }
+
         private void LoadBitFile(BlockPointer pointer)
         {
             _bitFile.IndexPointer = pointer;
@@ -1911,6 +1951,10 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // Initialize bitmap sized to the physical device geometry (SINTRAN sizes the
             // bitmap to device pages, not to declared capacity).
             _bitFile.Initialize(_device.TotalBlocks);
+
+            // The bit file's own address is the hint SINTRAN's RSBPG and RSPAG rules start from
+            // (docs/NDFS-ALLOCATION-RULES.md in the norskdata-ndfs repository).
+            _bitFile.BitAddress = pointer.BlockID;
 
             // Bound the allocation window by the directory's declared capacity
             // (pages_available, extended-info words 1756B-1757B) when it is valid. SINTRAN's
@@ -1938,7 +1982,15 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // multiple of 16, and the pages living in its high byte are never loaded. A
             // 616-page floppy loses pages 608..615 exactly this way.
             int bitmapBytes = (int)(((_device.TotalBlocks + 7) / 8 + 1) & ~1u);
-            int bitmapPages = (bitmapBytes + pageSize - 1) / pageSize;
+
+            // SINTRAN sizes the bit file from the DECLARED CAPACITY, not from the length of the
+            // device: ceil(capacity / 16384) pages. On a device longer than the capacity (for example
+            // DISC-288MB-F: 153576 pages for a 140391 page directory) the device length would give one
+            // page too many, so we would read the page after the bit file as bitmap and, worse, write
+            // the bitmap over it. The bitmap in memory still covers the whole device; the pages past the
+            // on-disk bit file read as free.
+            int bitmapPages = BitFileDiskPages();
+            _bitFile.DiskPages = (uint)bitmapPages;
 
             if (pointer.Type == BlockPointer.PointerType.Indexed)
             {
@@ -2392,6 +2444,16 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             else
                 throw new InvalidOperationException($"File too large: {data.Length} bytes ({filePages} pages)");
 
+            // Choose the object slot inside the OWNING USER's region (SINTRAN
+            // partitions the object file: user U owns slots U*256..U*256+255;
+            // the object-index high byte is the owner). A flat global slot would
+            // place the file in the wrong user's region.
+            int objIndex = AllocateUserObjectSlot(user);
+            // Make sure that user's directory page is allocated and linked. This comes BEFORE the
+            // file's own blocks so that, as on a real disk, the user's object page takes its place in
+            // the home word of the bit file before the file's index block does.
+            EnsureObjectDirPage(objIndex);
+
             // Allocate blocks for data with sparse support
             var allocatedBlocks = AllocateFileBlocksSparse(data, pointerType);
             if (allocatedBlocks == null || allocatedBlocks.Count == 0)
@@ -2405,14 +2467,6 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             {
                 WriteFileDataSparse(allocatedBlocks, data);
             }
-
-            // Choose the object slot inside the OWNING USER's region (SINTRAN
-            // partitions the object file: user U owns slots U*256..U*256+255;
-            // the object-index high byte is the owner). A flat global slot would
-            // place the file in the wrong user's region.
-            int objIndex = AllocateUserObjectSlot(user);
-            // Make sure that user's directory page is allocated and linked.
-            EnsureObjectDirPage(objIndex);
 
             // Create ObjectEntry
             uint createdNow = NdDateTime.ToNdDateOrUnset(DateTime.Now);
@@ -2462,7 +2516,8 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // Update user's pages used. Quota tracks only REAL disk consumption: sparse holes
             // allocate no block (see IsPageAllZeros) and the index/sub-index structural blocks
             // are filesystem overhead, not charged against the user — see CountRealDataPages.
-            user.PagesUsed += CountRealDataPages(data);
+            // SINTRAN also charges the file's index and sub-index blocks (measured).
+            user.PagesUsed += CountRealDataPages(data) + StructuralPagesFor(filePages);
 
             // Write just the affected pages
             if (_masterBlock.UserFilePointer != null)
@@ -2789,7 +2844,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             if (idxPtr.Type == BlockPointer.PointerType.Indexed && pageIdx < GroupCapacity)
             {
                 // Fits in the existing single-level index — original behavior, unchanged.
-                EnsureObjectDirPageInGroup(idxPtr.BlockID, pageIdx);
+                EnsureObjectDirPageInGroup(idxPtr.BlockID, pageIdx, pageIdx);
                 return;
             }
 
@@ -2800,7 +2855,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 // pointers for pageIdx 0-511 stay exactly where they are.
                 uint oldIndexBlockId = idxPtr.BlockID;
 
-                var subIndexBlock = _bitFile.FindFirstFreeBlock();
+                var subIndexBlock = _bitFile.FindFreeHint();
                 if (subIndexBlock == null)
                     throw new InvalidOperationException("No free block for object-file sub-index conversion");
                 _bitFile.AllocateBlocks(subIndexBlock.Value, 1);
@@ -2828,7 +2883,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             if (groupPointer.BlockID == 0)
             {
                 // Allocate a new group index block and link it into the sub-index block.
-                var newGroupBlock = _bitFile.FindFirstFreeBlock();
+                var newGroupBlock = _bitFile.FindFreeHint();
                 if (newGroupBlock == null)
                     throw new InvalidOperationException("No free block for object-file group index page");
                 _bitFile.AllocateBlocks(newGroupBlock.Value, 1);
@@ -2839,7 +2894,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 _device.WriteBlock(BlockAddress.FromLBA(idxPtr.BlockID), subIndexPage);
             }
 
-            EnsureObjectDirPageInGroup(groupPointer.BlockID, innerIdx);
+            EnsureObjectDirPageInGroup(groupPointer.BlockID, innerIdx, pageIdx);
         }
 
         /// <summary>
@@ -2847,7 +2902,11 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// block (either the object file's top-level block, or one SubIndexed group's own index
         /// block) exists, allocating and linking it on demand.
         /// </summary>
-        private void EnsureObjectDirPageInGroup(uint indexBlockId, int pageIdx)
+        /// <param name="globalPageIdx">
+        /// The page's number in the whole object file (the group's own offset included). It tells which
+        /// user the page belongs to: the object index has 8 slots per user and 64 users per index block.
+        /// </param>
+        private void EnsureObjectDirPageInGroup(uint indexBlockId, int pageIdx, int globalPageIdx)
         {
             const int PAGE_SIZE = NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
 
@@ -2857,10 +2916,19 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             if (existing.BlockID != 0)
                 return; // already allocated and linked
 
-            var blk = _bitFile.FindFirstFreeBlock();
+            // Object pages follow SINTRAN's RSBPG rule (first free page going down from the home word of
+            // the bit file address).
+            var blk = _bitFile.FindFreeHint();
             if (blk == null)
                 throw new InvalidOperationException("No free block for object directory page");
             _bitFile.AllocateBlocks(blk.Value, 1);
+
+            // SINTRAN charges an object data page to the user it belongs to (measured). The caller
+            // writes the user's page after the file is created.
+            int ownerUser = (globalPageIdx / 512) * 64 + (globalPageIdx % 512) / 8;
+            var owner = _userFile.GetUser(ownerUser);
+            if (owner != null)
+                owner.PagesUsed++;
             _device.WriteBlock(BlockAddress.FromLBA(blk.Value), new byte[PAGE_SIZE]);
 
             var newPtr = new BlockPointer(blk.Value, BlockPointer.PointerType.Contiguous);
@@ -2979,7 +3047,11 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // The defining property: one run, no index block. FindFreeBlockRange is the only
             // allocator that can promise consecutive blocks - the sparse allocator picks each
             // page independently and would scatter them.
-            uint? startBlock = _bitFile.FindFreeBlockRange(pages);
+            //
+            // A file of ONE page is the exception: SINTRAN gives it the page its data page allocator
+            // (RSPAG) would give, not the top of the disk (measured, docs/NDFS-ALLOCATION-RULES.md
+            // section 3).
+            uint? startBlock = pages == 1 ? _bitFile.FindFreeDataBlock() : _bitFile.FindFreeBlockRange(pages);
             if (startBlock == null)
                 throw new InvalidOperationException(
                     $"No contiguous run of {pages} free pages is available on this pack");
@@ -3162,7 +3234,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 // sparse holes, same as CreateNewFile/DeleteFile) — see CountRealDataPages.
                 if (user != null)
                 {
-                    uint oldRealPages = CountRealDataPages(existingBlocks);
+                    // Data pages plus index blocks, counted from the old top pointer (the blocks are
+                    // only marked free in the bitmap, their bytes are still readable).
+                    uint oldRealPages = CountChargedPages(existingEntry.FilePointer, existingBlocks);
                     if (user.PagesUsed >= oldRealPages)
                         user.PagesUsed -= oldRealPages;
                     else
@@ -3206,7 +3280,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
             if (user != null)
             {
-                user.PagesUsed += CountRealDataPages(data);
+                user.PagesUsed += CountRealDataPages(data) + StructuralPagesFor(filePages);
                 if (_masterBlock.UserFilePointer != null)
                     _userFile.WritePageForEntry(_device, _masterBlock.UserFilePointer, user.UserIndex);
             }
@@ -3232,8 +3306,8 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
             if (pointerType == BlockPointer.PointerType.Indexed)
             {
-                // Allocate index block
-                var indexBlock = _bitFile.FindFirstFreeBlock();
+                // Allocate index block: SINTRAN's RSBPG rule (home word of the bit file address)
+                var indexBlock = _bitFile.FindFreeHint();
                 if (indexBlock == null)
                     throw new InvalidOperationException("No free blocks available for index");
 
@@ -3243,7 +3317,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 // Allocate data blocks (placeholder - actual allocation done in AllocateFileBlocksSparse)
                 for (uint i = 0; i < filePages; i++)
                 {
-                    var dataBlock = _bitFile.FindFirstFreeBlock();
+                    var dataBlock = _bitFile.FindFreeDataBlock();
                     if (dataBlock == null)
                         throw new InvalidOperationException($"No free blocks available for data page {i}");
 
@@ -3277,8 +3351,8 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
             if (pointerType == BlockPointer.PointerType.Indexed)
             {
-                // Allocate index block
-                var indexBlock = _bitFile.FindFirstFreeBlock();
+                // Allocate index block: SINTRAN's RSBPG rule (home word of the bit file address)
+                var indexBlock = _bitFile.FindFreeHint();
                 if (indexBlock == null)
                     throw new InvalidOperationException("No free blocks available for index");
 
@@ -3301,8 +3375,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                     }
                     else
                     {
-                        // Allocate real block
-                        var dataBlock = _bitFile.FindFirstFreeBlock();
+                        // Allocate real block: SINTRAN's RSPAG rule (lowest free page of a 256 page block,
+                        // then the next block up, down, ...)
+                        var dataBlock = _bitFile.FindFreeDataBlock();
                         if (dataBlock == null)
                             throw new InvalidOperationException($"No free blocks available for data page {i}");
 
@@ -3335,7 +3410,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 {
                     uint pagesThisGroup = Math.Min(pagesRemaining, PagesPerGroup);
 
-                    var groupIndexBlock = _bitFile.FindFirstFreeBlock();
+                    var groupIndexBlock = _bitFile.FindFreeHint();
                     if (groupIndexBlock == null)
                         throw new InvalidOperationException("No free blocks available for sub-index group index block");
                     _bitFile.AllocateBlocks(groupIndexBlock.Value, 1);
@@ -3355,7 +3430,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                         }
                         else
                         {
-                            var dataBlock = _bitFile.FindFirstFreeBlock();
+                            var dataBlock = _bitFile.FindFreeDataBlock();
                             if (dataBlock == null)
                                 throw new InvalidOperationException($"No free blocks available for data page {absolutePage}");
 
@@ -3384,7 +3459,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                     throw new InvalidOperationException(
                         $"File exceeds maximum sub-indexed capacity: {groupIndexPointers.Count} index groups (max 512, i.e. 262144 pages)");
 
-                var subIndexBlock = _bitFile.FindFirstFreeBlock();
+                var subIndexBlock = _bitFile.FindFreeHint();
                 if (subIndexBlock == null)
                     throw new InvalidOperationException("No free blocks available for sub-index block");
                 _bitFile.AllocateBlocks(subIndexBlock.Value, 1);
@@ -3472,6 +3547,119 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             }
 
             _device.WriteBlock(BlockAddress.FromLBA(indexBlockId), indexBuffer);
+        }
+
+        /// <summary>
+        /// Index and sub-index blocks that belong to a file with <paramref name="filePages"/> pages:
+        /// one for an Indexed file (up to 512 pages), and for a SubIndexed file the top block plus one
+        /// group index block for every 512 pages. SINTRAN charges these blocks to the owner's quota like
+        /// data pages (measured in the emulator and checked against a real system pack, see
+        /// docs/NDFS-ALLOCATION-RULES.md section 7).
+        /// </summary>
+        /// <param name="filePages">
+        /// Number of data pages of the file, at least 1.
+        /// </param>
+        /// <returns>
+        /// The number of index and sub-index blocks the file needs.
+        /// </returns>
+        private static uint StructuralPagesFor(uint filePages)
+        {
+            if (filePages <= 512)
+                return 1;
+            return 1 + (filePages + 511) / 512;
+        }
+
+        /// <summary>
+        /// Counts the index and sub-index blocks that exist for a file, read from its top pointer:
+        /// none for a Contiguous file, one for an Indexed file, the top block plus every group index
+        /// block for a SubIndexed file. Must be called BEFORE the blocks are freed.
+        /// </summary>
+        /// <param name="filePointer">
+        /// The file's top pointer from its object entry, or null.
+        /// </param>
+        /// <returns>
+        /// The number of index and sub-index blocks, 0 for a Contiguous file.
+        /// </returns>
+        private uint CountIndexBlocks(BlockPointer? filePointer)
+        {
+            if (_device == null || filePointer == null || filePointer.BlockID == 0)
+                return 0;
+            if (filePointer.Type == BlockPointer.PointerType.Indexed)
+                return 1;
+            if (filePointer.Type == BlockPointer.PointerType.SubIndexed)
+                return 1 + (uint)GetSubIndexedGroupIndexBlockIds(filePointer).Count;
+            return 0;
+        }
+
+        /// <summary>
+        /// Pages SINTRAN charges to the owner of one file: its real data pages plus its index and
+        /// sub-index blocks. <paramref name="dataPointers"/> is the list from
+        /// <see cref="GetAllBlockPointersForFile"/>.
+        /// </summary>
+        /// <param name="filePointer">
+        /// The file's top pointer from its object entry, or null.
+        /// </param>
+        /// <param name="dataPointers">
+        /// The file's data pointers, or null for none.
+        /// </param>
+        /// <returns>
+        /// Real data pages plus index blocks.
+        /// </returns>
+        private uint CountChargedPages(BlockPointer? filePointer, List<BlockPointer>? dataPointers)
+        {
+            uint data = dataPointers != null ? CountRealDataPages(dataPointers) : 0;
+            return data + CountIndexBlocks(filePointer);
+        }
+
+        /// <summary>
+        /// Object data pages that belong to one user: the valid pointers in the user's 8 slots of the
+        /// object index (slot = user*8 .. user*8+7, inside the user's group of 64 users). SINTRAN charges
+        /// each of them to the user, so the first file of a user costs one page more than its own pages.
+        /// </summary>
+        /// <param name="userIndex">
+        /// Index of the user.
+        /// </param>
+        /// <returns>
+        /// The number of object data pages that exist for the user.
+        /// </returns>
+        private uint CountUserObjectPages(int userIndex)
+        {
+            if (_device == null || _masterBlock?.ObjectFilePointer == null)
+                return 0;
+
+            const int PAGE_SIZE = NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+            var top = _masterBlock.ObjectFilePointer;
+            int group = userIndex / 64;
+            int first = (userIndex % 64) * 8;
+            var indexPage = new byte[PAGE_SIZE];
+
+            if (top.Type == BlockPointer.PointerType.Indexed)
+            {
+                if (group != 0)
+                    return 0;
+                _device.ReadBlock(BlockAddress.FromLBA(top.BlockID), indexPage);
+            }
+            else if (top.Type == BlockPointer.PointerType.SubIndexed)
+            {
+                var subPage = new byte[PAGE_SIZE];
+                _device.ReadBlock(BlockAddress.FromLBA(top.BlockID), subPage);
+                var groupPointer = BlockPointer.FromBytes(subPage, group * 4);
+                if (groupPointer.BlockID == 0)
+                    return 0;
+                _device.ReadBlock(BlockAddress.FromLBA(groupPointer.BlockID), indexPage);
+            }
+            else
+            {
+                return 0;
+            }
+
+            uint count = 0;
+            for (int k = 0; k < 8; k++)
+            {
+                if (BlockPointer.FromBytes(indexPage, (first + k) * 4).BlockID != 0)
+                    count++;
+            }
+            return count;
         }
 
         private static void WriteBlockPointer(byte[] buffer, int offset, uint value)

@@ -148,8 +148,8 @@ namespace RetroIO.Tests
                 INdfsFileSystem? ndfs = driver.GetFileSystem();
                 Assert.That(ndfs, Is.Not.Null, "driver must expose the NDFS filesystem");
 
-                // A freshly created image has no users, and a file needs an owner.
-                Assert.That(ndfs!.AddUser("SYSTEM", 64), Is.True, "SYSTEM user must be created");
+                // A freshly created image has the SYSTEM user, which owns the file.
+                Assert.That(ndfs!.GetUsers().Count, Is.EqualTo(1), "SYSTEM is the only user of a new image");
 
                 ndfs.WriteFile(path, contents);
 
@@ -264,7 +264,7 @@ namespace RetroIO.Tests
                 driver.Mount(stream, readOnly: false);
 
                 INdfsFileSystem ndfs = driver.GetFileSystem()!;
-                Assert.That(ndfs.AddUser("SYSTEM", 64), Is.True, "SYSTEM user must be created");
+                Assert.That(ndfs.GetUsers().Count, Is.EqualTo(1), "SYSTEM is the only user of a new image");
                 ndfs.WriteFile("SYSTEM/BACK:DATA", contents);
 
                 byte[] readBack = ndfs.ReadFile("SYSTEM/BACK:DATA");

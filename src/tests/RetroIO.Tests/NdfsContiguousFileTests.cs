@@ -426,11 +426,11 @@ namespace RetroIO.Tests
                 uint pagesUsedBefore = before!.PagesUsed;
 
                 ndfs.CreateContiguousFile("/ALICE/CHARGED:DATA", 5);
-                Assert.That(before.PagesUsed, Is.EqualTo(pagesUsedBefore + 5u),
-                    "creation must charge the whole run");
+                Assert.That(before.PagesUsed, Is.EqualTo(pagesUsedBefore + 5u + 1u),
+                    "creation must charge the whole run, and the user's first object data page");
 
                 ndfs.WriteFile("/ALICE/CHARGED:DATA", new byte[100]);
-                Assert.That(before.PagesUsed, Is.EqualTo(pagesUsedBefore + 5u),
+                Assert.That(before.PagesUsed, Is.EqualTo(pagesUsedBefore + 5u + 1u),
                     "writing into an already-allocated run must not charge again");
 
                 driver.Dispose();

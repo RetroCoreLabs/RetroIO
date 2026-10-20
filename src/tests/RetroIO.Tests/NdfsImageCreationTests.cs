@@ -331,17 +331,18 @@ namespace RetroIO.Tests
 
             MasterBlock masterBlock = MasterBlock.FromBytes(block0);
 
-            // Floppy pointer positions (near end)
-            uint ndfsPages = 154;
+            // Where real SINTRAN puts them (docs/CREATE-DIRECTORY-PLACEMENT.md): the bit file at
+            // 9 * floor(floor(154 / 2) / 9) = 72, then the four pages from (72 - 1) OR 15 = 79 going
+            // down: 79 user data, 78 user index, 77 object data, 76 object index.
             AssertMasterBlockPointers(masterBlock);
-            Assert.That(masterBlock.ObjectFilePointer!.BlockID, Is.EqualTo(ndfsPages - 5), "ObjectFile should be at NdfsPages - 5");
-            Assert.That(masterBlock.UserFilePointer!.BlockID, Is.EqualTo(ndfsPages - 3), "UserFile should be at NdfsPages - 3");
-            Assert.That(masterBlock.BitFilePointer!.BlockID, Is.EqualTo(ndfsPages - 1), "BitFile should be at NdfsPages - 1");
+            Assert.That(masterBlock.ObjectFilePointer!.BlockID, Is.EqualTo(76u), "ObjectFile index block");
+            Assert.That(masterBlock.UserFilePointer!.BlockID, Is.EqualTo(78u), "UserFile index block");
+            Assert.That(masterBlock.BitFilePointer!.BlockID, Is.EqualTo(72u), "BitFile");
 
-            Console.WriteLine($"✅ Floppy pointer positioning verified");
-            Console.WriteLine($"   Object: {masterBlock.ObjectFilePointer.BlockID} (expected {ndfsPages - 5})");
-            Console.WriteLine($"   User: {masterBlock.UserFilePointer.BlockID} (expected {ndfsPages - 3})");
-            Console.WriteLine($"   Bit: {masterBlock.BitFilePointer.BlockID} (expected {ndfsPages - 1})");
+            Console.WriteLine($"Floppy pointer positioning verified");
+            Console.WriteLine($"   Object: {masterBlock.ObjectFilePointer.BlockID} (expected 76)");
+            Console.WriteLine($"   User: {masterBlock.UserFilePointer.BlockID} (expected 78)");
+            Console.WriteLine($"   Bit: {masterBlock.BitFilePointer.BlockID} (expected 72)");
         }
 
         [Test]

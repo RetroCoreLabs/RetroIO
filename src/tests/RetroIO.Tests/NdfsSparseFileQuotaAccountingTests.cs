@@ -88,8 +88,10 @@ namespace RetroIO.Tests
             driver.WriteFile("/ALICE/ZERO:DAT", data);
             uint after = PagesUsedFor(driver, "ALICE");
 
-            Assert.That(after, Is.EqualTo(before),
-                "a fully-sparse file allocates no real data blocks and no index block is charged to quota");
+            // SINTRAN charges a file's index block and the user's first object data page to the user
+            // (measured, docs/NDFS-ALLOCATION-RULES.md section 7); the sparse holes themselves are free.
+            Assert.That(after - before, Is.EqualTo(2u),
+                "a fully-sparse file allocates no real data blocks; its index block and the user's first object page are charged");
         }
 
         [Test]
@@ -110,8 +112,8 @@ namespace RetroIO.Tests
             driver.WriteFile("/BOB/MIXED:DAT", data);
             uint after = PagesUsedFor(driver, "BOB");
 
-            Assert.That(after - before, Is.EqualTo(3u),
-                "only the 3 real (non-zero) pages should count toward quota — not the 7 holes, and not the index block");
+            Assert.That(after - before, Is.EqualTo(3u + 1u + 1u),
+                "the 3 real (non-zero) pages, the index block and the user's first object page count toward quota — not the 7 holes");
         }
 
         [Test]
@@ -129,8 +131,8 @@ namespace RetroIO.Tests
             driver.WriteFile("/CAROL/FULL:DAT", data);
             uint after = PagesUsedFor(driver, "CAROL");
 
-            Assert.That(after - before, Is.EqualTo(6u),
-                "exactly the 6 real data pages — the index block must not add +1 to quota");
+            Assert.That(after - before, Is.EqualTo(6u + 1u + 1u),
+                "the 6 real data pages plus the index block plus the user's first object page");
         }
 
         [Test]
@@ -151,7 +153,9 @@ namespace RetroIO.Tests
             driver.DeleteFile("/DAVE/MIXED:DAT");
             uint after = PagesUsedFor(driver, "DAVE");
 
-            Assert.That(after, Is.EqualTo(before), "delete must refund exactly what create charged");
+            // Delete refunds the data pages and the index block. The user's object data page stays
+            // charged: SINTRAN never gives it back.
+            Assert.That(after, Is.EqualTo(before + 1u), "delete must refund the data pages and the index block");
         }
 
         [Test]
@@ -170,16 +174,16 @@ namespace RetroIO.Tests
             uint beforeFirstWrite = PagesUsedFor(driver, "EVE");
             driver.WriteFile("/EVE/GROW:DAT", MakePattern(2 * PageSize));
             uint afterFirstWrite = PagesUsedFor(driver, "EVE");
-            Assert.That(afterFirstWrite - beforeFirstWrite, Is.EqualTo(2u));
+            Assert.That(afterFirstWrite - beforeFirstWrite, Is.EqualTo(2u + 1u + 1u));
 
             driver.WriteFile("/EVE/GROW:DAT", MakePattern(8 * PageSize));
             uint afterOverwrite = PagesUsedFor(driver, "EVE");
-            Assert.That(afterOverwrite - beforeFirstWrite, Is.EqualTo(8u),
+            Assert.That(afterOverwrite - beforeFirstWrite, Is.EqualTo(8u + 1u + 1u),
                 "overwriting with a larger file must charge the NEW real page count, replacing the old");
 
             driver.WriteFile("/EVE/GROW:DAT", MakePattern(1 * PageSize));
             uint afterShrink = PagesUsedFor(driver, "EVE");
-            Assert.That(afterShrink - beforeFirstWrite, Is.EqualTo(1u),
+            Assert.That(afterShrink - beforeFirstWrite, Is.EqualTo(1u + 1u + 1u),
                 "overwriting with a smaller file must refund down to the new (smaller) real page count");
         }
 
@@ -202,8 +206,10 @@ namespace RetroIO.Tests
             driver.WriteFile("/FRANK/BIGSPARSE:DAT", data);
             uint after = PagesUsedFor(driver, "FRANK");
 
-            Assert.That(after - before, Is.EqualTo(2u),
-                "only the 2 real pages count — none of the sub-index block or group index blocks this file needed");
+            // 2 real pages, the top block and 2 group index blocks (600 pages = 2 groups of 512), and
+            // the user's first object page.
+            Assert.That(after - before, Is.EqualTo(2u + 3u + 1u),
+                "the 2 real pages, the sub-index block and the 2 group index blocks, and the user's first object page count");
         }
     }
 }

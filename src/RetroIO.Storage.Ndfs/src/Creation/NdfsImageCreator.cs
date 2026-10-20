@@ -14,6 +14,22 @@ namespace RetroIO.Storage.Ndfs.Creation
     /// <summary>
     /// Creates new empty NDFS disk images with pre-defined templates or custom configurations.
     /// </summary>
+    /// <remarks>
+    /// <para><b>Layout</b></para>
+    /// The layout is what real SINTRAN M writes with @CREATE-DIRECTORY, measured in the nd100x emulator
+    /// (docs/CREATE-DIRECTORY-ORACLE.md and docs/CREATE-DIRECTORY-PLACEMENT.md in the norskdata-ndfs
+    /// repository):
+    ///  - The bit file goes at the address of SINTRAN's prompt OCTAL BIT FILE ADDRESS (-1 END OF DISC).
+    ///    The default answer gives 9 * floor(floor(capacity / 2) / 9), the answer -1 gives the capacity
+    ///    minus the bit file pages, and a typed address is used as given.
+    ///  - The bit file is ceil(capacity / 16384) pages. It marks page 0, all its own pages, and the
+    ///    pages from the capacity up to the next multiple of 256 (not past the end of the device).
+    ///  - The user data page, user index block, object data page and object index block are the first
+    ///    four free pages going down from (BA - 1) OR 15 (SINTRAN routine RSBPG).
+    ///  - Hard disks get an Extended Info Block with the declared capacity, floppies none.
+    ///  - Unreserved Pages is the capacity minus 1, minus the bit file pages, minus 2, minus 1, minus
+    ///    the SYSTEM quota.
+    /// </remarks>
     public static class NdfsImageCreator
     {
         /// <summary>
@@ -51,6 +67,10 @@ namespace RetroIO.Storage.Ndfs.Creation
                     throw new ArgumentException($"Invalid template: {options.Template}");
                 spec = templateSpec;
             }
+
+            // Work on a copy: the pre-defined templates are shared static objects and the layout is
+            // computed into the spec below.
+            spec = spec.Clone();
 
             // Override boot loader if explicitly specified (null means use template default)
             if (options.BootLoaderType.HasValue)
@@ -96,73 +116,54 @@ namespace RetroIO.Storage.Ndfs.Creation
         /// <summary>
         /// Creates a custom template specification from options.
         /// </summary>
+        /// <param name="options">
+        /// Image creation options with <see cref="NdfsImageCreationOptions.CustomNdfsPages"/> set.
+        /// </param>
+        /// <returns>
+        /// A specification with the sizes filled in. The page numbers of the bit file, user file and
+        /// object file are worked out later by <see cref="ComputeLayout"/>.
+        /// </returns>
         private static NdfsTemplateSpec CreateCustomSpec(NdfsImageCreationOptions options)
         {
             if (options.CustomNdfsPages == 0)
                 throw new ArgumentException("CustomNdfsPages must be specified for Custom template");
 
             uint ndfsPages = options.CustomNdfsPages;
-            uint spareBlocks = CalculateSpareBlocks(ndfsPages, options.ControllerType);
-            uint fileBlocks = ndfsPages + spareBlocks;
 
-            // Calculate pointer positions. KERNEL-DERIVED from ALBIT (137517B): the branch
-            // is whether @CREATE-DIRECTORY was given an explicit bit-file address, NOT the
-            // device size. (The old ">is-floppy / mid-disk-vs-end" switch was wrong — a
-            // small floppy created on the default path still lands mid-disk.)
-            // Placement is driven by the DECLARED page count (pages_available), not the
-            // physical file byte-size.
-            bool isFloppy = (options.ControllerType == NdfsControllerType.Floppy);
-            uint bitFileBlock;
-            uint objectFileBlock;
-            uint userFileBlock;
-
-            if (options.BitFileAddress.HasValue && options.BitFileAddress.Value != 0)
-            {
-                // OVERRIDE path: metadata packed just below the supplied bit-file address.
-                // (Real floppies use this: 615/613/611 of 616 pages -> bit, bit-2, bit-4.)
-                bitFileBlock = options.BitFileAddress.Value;
-                objectFileBlock = bitFileBlock - 4;
-                userFileBlock = bitFileBlock - 2;      // = objectFileBlock + 2
-            }
+            // The image is DevicePages long when the caller gave a length (a named disk type needs its
+            // full SINTRAN layout length); otherwise the spare area of the controller type is added.
+            uint fileBlocks;
+            if (options.DevicePages.HasValue)
+                fileBlocks = Math.Max(options.DevicePages.Value, ndfsPages);
             else
-            {
-                // DEFAULT path: bit_file = floor(pages/2) rounded DOWN to a multiple of 9.
-                // ALBIT 137526B-137532B: SAD ZIN SHR 1 (÷2) -> SAT 11 (=9) -> RDIV ST (÷9)
-                // -> RMPY ST DA (×9). For 36945: 18472 -> 18468 = the real PACK-ONE
-                // bit_file_ptr (plain pages/2 gives 18472, off by 4 — it skips the round).
-                uint half = ndfsPages / 2;
-                bitFileBlock = (half / 9) * 9;
+                fileBlocks = ndfsPages + CalculateSpareBlocks(ndfsPages, options.ControllerType);
 
-                // APPROXIMATE (NOT statically kernel-derivable): the default-path object/user
-                // base comes from the CRDIR scan loop (137173B-137352B) and has no clean
-                // closed form — empirically bit+216 on SMD, bit+202 on floppy. We approximate
-                // as bit + 216. Only bit-exactness of freshly-created images is affected; the
-                // reader is pointer-driven and reads any placement correctly. To pin this
-                // exactly, trace @CREATE-DIRECTORY (break 136741B) and dump the frame words
-                // after ALBIT returns.
-                objectFileBlock = bitFileBlock + 216;
-                userFileBlock = objectFileBlock + 2;   // user = object + 2 (holds on every real image)
-            }
+            bool isFloppy = (options.ControllerType == NdfsControllerType.Floppy);
 
             return new NdfsTemplateSpec
             {
                 NdfsPages = ndfsPages,
                 FileBlocks = fileBlocks,
-                ObjectFileBlock = objectFileBlock,
-                UserFileBlock = userFileBlock,
-                BitFileBlock = bitFileBlock,
-                UnreservedPages = ndfsPages,
                 ControllerType = options.ControllerType,
                 HasFlomon = isFloppy,
                 ExtValid = !isFloppy && options.IncludeExtendedInfo,
                 BootLoaderType = options.BootLoaderType ?? (isFloppy ? NdfsBootLoaderType.Floppy : NdfsBootLoaderType.Winchester),
-                SpareBlocks = spareBlocks
+                SpareBlocks = fileBlocks - ndfsPages
             };
         }
 
         /// <summary>
         /// Calculates spare blocks based on controller type.
         /// </summary>
+        /// <param name="ndfsPages">
+        /// Directory size in pages.
+        /// </param>
+        /// <param name="controllerType">
+        /// Controller type of the disk.
+        /// </param>
+        /// <returns>
+        /// The number of spare pages added after the directory.
+        /// </returns>
         private static uint CalculateSpareBlocks(uint ndfsPages, NdfsControllerType controllerType)
         {
             return controllerType switch
@@ -176,8 +177,199 @@ namespace RetroIO.Storage.Ndfs.Creation
         }
 
         /// <summary>
+        /// Where the structures of a new directory go, and the bit file as @CREATE-DIRECTORY leaves it.
+        /// </summary>
+        private sealed class Layout
+        {
+            /// <summary>
+            /// Pages in the bit file, ceil(capacity / 16384).
+            /// </summary>
+            public uint BitmapPages;
+
+            /// <summary>
+            /// The bit file's contents: BitmapPages pages.
+            /// </summary>
+            public byte[] Bitmap = Array.Empty<byte>();
+
+            /// <summary>
+            /// Pages left for user quotas: the capacity minus page 0, the bit file, the user file and the
+            /// object file index block.
+            /// </summary>
+            public uint Available;
+
+            /// <summary>
+            /// The quota given to SYSTEM.
+            /// </summary>
+            public uint Quota;
+
+            /// <summary>
+            /// Page of the user file data block that holds the SYSTEM entry.
+            /// </summary>
+            public uint UserData;
+
+            /// <summary>
+            /// Page of the object file data block.
+            /// </summary>
+            public uint ObjectData;
+        }
+
+        /// <summary>
+        /// Works out the bit file address, the four directory pages, the bitmap and the quotas, and
+        /// stores the page numbers in <paramref name="spec"/>.
+        /// </summary>
+        /// <param name="options">
+        /// Image creation options, for the bit file address answer.
+        /// </param>
+        /// <param name="spec">
+        /// Specification; its BitFileBlock, UserFileBlock, ObjectFileBlock and UnreservedPages are
+        /// set here.
+        /// </param>
+        /// <returns>
+        /// The layout with the bitmap and the data page numbers.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the bit file address does not fit on the disk, or the disk is too small.
+        /// </exception>
+        private static Layout ComputeLayout(NdfsImageCreationOptions options, NdfsTemplateSpec spec)
+        {
+            uint cap = spec.NdfsPages;
+            uint dev = spec.FileBlocks;
+            var layout = new Layout();
+
+            // The bit file: one bit per page, 16384 bits per page, sized by the declared capacity.
+            layout.BitmapPages = (cap + 16383) / 16384;
+
+            // Bit file address, the answer to SINTRAN's prompt OCTAL BIT FILE ADDRESS (-1 END OF DISC).
+            uint ba;
+            if (options.BitFileAddress.HasValue && options.BitFileAddress.Value != 0)
+                ba = options.BitFileAddress.Value;
+            else if (options.BitFileAtEndOfDisc)
+                ba = cap - layout.BitmapPages;
+            else
+                ba = 9 * ((cap / 2) / 9);
+            if (ba < 8 || ba + layout.BitmapPages > cap)
+                throw new ArgumentException("The bit file address is outside the disk");
+
+            // Pages left for the user quota. Unreserved Pages in the master block is this minus the
+            // sum of the user quotas (measured on 9 runs).
+            if (cap < 40 + layout.BitmapPages)
+                throw new ArgumentException("The disk is too small for a directory");
+            layout.Available = cap - 1 - layout.BitmapPages - 2 - 1;
+            layout.Quota = cap > 1000 ? cap / 2 : Math.Min(layout.Available, 500u);
+
+            // The bitmap, as @CREATE-DIRECTORY leaves it.
+            layout.Bitmap = new byte[layout.BitmapPages * NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+            MarkBlockAllocated(layout.Bitmap, 0);
+            for (uint i = 0; i < layout.BitmapPages; i++)
+                MarkBlockAllocated(layout.Bitmap, (int)(ba + i));
+
+            // When the device is longer than the capacity SINTRAN marks the pages from the capacity up
+            // to the next multiple of 256 as used, but never a page past the end of the device.
+            if (spec.ExtValid && dev > cap)
+            {
+                uint end = Math.Min(((cap + 255) / 256) * 256, dev);
+                for (uint i = cap; i < end; i++)
+                    MarkBlockAllocated(layout.Bitmap, (int)i);
+            }
+
+            // The four pages the first user and the first file take (RSBPG): user data page, user
+            // index block, object data page, object index block.
+            int userData = AllocNearHint(layout.Bitmap, cap, ba - 1);
+            int userIndex = AllocNearHint(layout.Bitmap, cap, ba - 1);
+            int objectData = AllocNearHint(layout.Bitmap, cap, ba - 1);
+            int objectIndex = AllocNearHint(layout.Bitmap, cap, ba - 1);
+            if (userData < 0 || userIndex < 0 || objectData < 0 || objectIndex < 0)
+                throw new ArgumentException("No space for the directory files");
+
+            layout.UserData = (uint)userData;
+            layout.ObjectData = (uint)objectData;
+            spec.BitFileBlock = ba;
+            spec.UserFileBlock = (uint)userIndex;
+            spec.ObjectFileBlock = (uint)objectIndex;
+            spec.UnreservedPages = layout.Available - layout.Quota;
+            return layout;
+        }
+
+        /// <summary>
+        /// SINTRAN's RSBPG rule: the first free page going down from <c>hint OR 15</c>, then word+1
+        /// (lowest bit first), word-1 (highest bit first), word+2 and so on. Marks the page used.
+        /// </summary>
+        /// <param name="bitmap">
+        /// The bit file contents.
+        /// </param>
+        /// <param name="capacity">
+        /// Directory size; pages at or above it are never given.
+        /// </param>
+        /// <param name="hint">
+        /// The hint page, the bit file address minus 1.
+        /// </param>
+        /// <returns>
+        /// The page given, or -1 when there is none.
+        /// </returns>
+        private static int AllocNearHint(byte[] bitmap, uint capacity, uint hint)
+        {
+            uint word = hint >> 4;
+            uint nwords = (capacity + 15) >> 4;
+
+            bool Take(uint page)
+            {
+                if (page >= capacity)
+                    return false;
+                int byteIndex = (int)((page >> 3) ^ 1u);
+                int mask = 1 << (int)(page & 7u);
+                if ((bitmap[byteIndex] & mask) != 0)
+                    return false;
+                bitmap[byteIndex] |= (byte)mask;
+                return true;
+            }
+
+            for (int bit = 15; bit >= 0; bit--)
+            {
+                uint p = (word << 4) + (uint)bit;
+                if (Take(p))
+                    return (int)p;
+            }
+
+            for (uint step = 1; step <= nwords; step++)
+            {
+                uint w = word + step;
+                if (w < nwords)
+                {
+                    for (uint bit = 0; bit < 16; bit++)
+                    {
+                        uint p = (w << 4) + bit;
+                        if (Take(p))
+                            return (int)p;
+                    }
+                }
+
+                if (word >= step)
+                {
+                    w = word - step;
+                    for (int bit = 15; bit >= 0; bit--)
+                    {
+                        uint p = (w << 4) + (uint)bit;
+                        if (Take(p))
+                            return (int)p;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+        /// <summary>
         /// Creates the actual disk image file from specification.
         /// </summary>
+        /// <param name="outputPath">
+        /// Path of the image file to write.
+        /// </param>
+        /// <param name="options">
+        /// Image creation options.
+        /// </param>
+        /// <param name="spec">
+        /// Specification to build from; the layout is stored in it.
+        /// </param>
         private static void CreateImageFromSpec(string outputPath, NdfsImageCreationOptions options, NdfsTemplateSpec spec)
         {
             // Calculate file size
@@ -186,9 +378,9 @@ namespace RetroIO.Storage.Ndfs.Creation
             // Create disk image (zero-filled)
             byte[] diskImage = new byte[fileSize];
 
-            // BLANK IMAGE: a correctly-sized, entirely 0x00 file — no boot sector, no master block,
+            // BLANK IMAGE: a correctly-sized, entirely 0x00 file - no boot sector, no master block,
             // no extended info, no bitmap. Sometimes all you need is an empty device of the right
-            // geometry (e.g. to let SINTRAN's own @CREATE-DIRECTORY format it, or to dd into).
+            // geometry (for example to let SINTRAN's own @CREATE-DIRECTORY format it, or to dd into).
             // Deliberately NOT a mountable NDFS volume: with all-zero pointers it is exactly the
             // shape the hardened detector rejects, so it will not auto-mount. That is intended.
             if (options.CreateBlankImage)
@@ -202,9 +394,13 @@ namespace RetroIO.Storage.Ndfs.Creation
                 return;
             }
 
-            // Step 1: Write boot sector (optional — a valid NDFS volume need not be bootable).
+            // Where everything goes. Done before any byte is written so a disk that is too small fails
+            // without leaving a half-written file.
+            Layout layout = ComputeLayout(options, spec);
+
+            // Step 1: Write boot sector (optional - a valid NDFS volume need not be bootable).
             // The boot region is page-0 bytes 0..1999 (the extended-info block starts at 2000), so
-            // the bootstrap may be up to BOOT_REGION_SIZE bytes — NOT capped at 1024, which would
+            // the bootstrap may be up to BOOT_REGION_SIZE bytes - NOT capped at 1024, which would
             // cut a real hard-disk bootstrap in half (see NdfsBootSectors remarks).
             if (options.IncludeBootSector)
             {
@@ -216,8 +412,10 @@ namespace RetroIO.Storage.Ndfs.Creation
                 }
                 else if (spec.BootLoaderType != NdfsBootLoaderType.None)
                 {
-                    // Use template boot sector
-                    byte[] bootSector = NdfsBootSectors.GetBootSector(spec.BootLoaderType);
+                    // A 616 page floppy has its own loader; the other floppies use the 154 page one.
+                    byte[] bootSector = (spec.BootLoaderType == NdfsBootLoaderType.Floppy && spec.FileBlocks == 616)
+                        ? NdfsBootBlobs.Floppy616
+                        : NdfsBootSectors.GetBootSector(spec.BootLoaderType);
                     Array.Copy(bootSector, 0, diskImage, 0, Math.Min(bootSector.Length, BOOT_REGION_SIZE));
                 }
             }
@@ -230,20 +428,27 @@ namespace RetroIO.Storage.Ndfs.Creation
 
             // Steps 3-6: the filesystem structures. Skipping the master block leaves the volume
             // unmountable by design (no directory name, no object/user/bit-file pointers), so the
-            // bitmap and index blocks it points at are pointless too — skip them together.
+            // bitmap and index blocks it points at are pointless too - skip them together.
             if (options.IncludeMasterBlock)
             {
                 // Step 3: Write Master Block
                 WriteMasterBlock(diskImage, options.DirectoryName, spec);
 
-                // Step 4: Create Bit File (allocation bitmap)
-                CreateBitFile(diskImage, spec);
+                // Step 4: Bit file (allocation bitmap)
+                Array.Copy(layout.Bitmap, 0, diskImage, spec.BitFileBlock * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE, layout.Bitmap.Length);
 
-                // Step 5: Create Object File Index (initially empty)
-                CreateObjectFile(diskImage, spec);
+                // Step 5: Object file index block -> data page (empty)
+                CreateObjectFile(diskImage, spec, layout);
 
-                // Step 6: Create User File Index (with SYSTEM user and custom users)
-                CreateUserFile(diskImage, spec, options.Users ?? new System.Collections.Generic.List<NdfsUserCreationInfo>());
+                // Step 6: User file index block -> data page with SYSTEM and the extra users
+                CreateUserFile(diskImage, spec, layout, options.Users ?? new System.Collections.Generic.List<NdfsUserCreationInfo>());
+            }
+
+            // The real SCSI disk carries data in its last page that SINTRAN requires.
+            if (options.Template == NdfsImageTemplate.Scsi126MB)
+            {
+                byte[] last = NdfsBootBlobs.ScsiLastPage;
+                Array.Copy(last, 0, diskImage, fileSize - NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE, NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
             }
 
             // Step 7: Write to file
@@ -342,36 +547,6 @@ namespace RetroIO.Storage.Ndfs.Creation
         }
 
         /// <summary>
-        /// Creates Bit File (allocation bitmap) and marks reserved blocks as allocated.
-        /// </summary>
-        private static void CreateBitFile(byte[] diskImage, NdfsTemplateSpec spec)
-        {
-            // Calculate bitmap size: 1 bit per page. The bitmap tracks the FULL physical device
-            // (FileBlocks), not just the declared NDFS capacity — SINTRAN sizes the on-disk
-            // bitmap to device geometry (VERIFIED: PACK-ONE's popcount is over all 38400 pages).
-            // Whole 16-bit words: the bit file is word addressed (see BitFile.BitPosition).
-            int bitmapBytes = (int)(((spec.FileBlocks + 7) / 8 + 1) & ~1u);
-            byte[] bitmap = new byte[bitmapBytes];
-
-            // The bit file is CONTIGUOUS and itself spans this many pages starting at BitFileBlock.
-            int pageSize = NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
-            int bitmapPages = (bitmapBytes + pageSize - 1) / pageSize;
-
-            // Mark reserved blocks as allocated.
-            MarkBlockAllocated(bitmap, 0);                          // Master block (page 0)
-            MarkBlockAllocated(bitmap, (int)spec.ObjectFileBlock);  // Object file index
-            MarkBlockAllocated(bitmap, (int)spec.UserFileBlock);    // User file index
-            // The bit file occupies bitmapPages consecutive pages — mark ALL of them used, not
-            // just the first, or the allocator would later hand out the bitmap's own tail pages.
-            for (int p = 0; p < bitmapPages; p++)
-                MarkBlockAllocated(bitmap, (int)spec.BitFileBlock + p);
-
-            // Write the (possibly multi-page) bitmap to disk starting at BitFileBlock.
-            long bitFileOffset = spec.BitFileBlock * (long)pageSize;
-            Array.Copy(bitmap, 0, diskImage, bitFileOffset, bitmapBytes);
-        }
-
-        /// <summary>
         /// Marks a block as allocated in the bitmap.
         /// </summary>
         private static void MarkBlockAllocated(byte[] bitmap, int blockNumber)
@@ -396,33 +571,89 @@ namespace RetroIO.Storage.Ndfs.Creation
         }
 
         /// <summary>
-        /// Creates Object File Index (initially empty).
+        /// Writes the object file: the index block gets one pointer to the (empty) data page.
         /// </summary>
-        private static void CreateObjectFile(byte[] diskImage, NdfsTemplateSpec spec)
+        /// <param name="diskImage">
+        /// The image being built.
+        /// </param>
+        /// <param name="spec">
+        /// Specification with the page of the object file index block.
+        /// </param>
+        /// <param name="layout">
+        /// Layout with the page of the object file data block.
+        /// </param>
+        private static void CreateObjectFile(byte[] diskImage, NdfsTemplateSpec spec, Layout layout)
         {
-            // Object file is initially empty (all zeros)
-            // SINTRAN will populate as files are created
-            // Block is already zeroed, just ensure it exists
-            long objectFileOffset = spec.ObjectFileBlock * NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
-
-            // Write empty object file index page (already zero-filled)
-            // Nothing to do - diskImage is already zeroed
+            long indexOffset = spec.ObjectFileBlock * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+            WriteBlockPointerBytes(diskImage, indexOffset, layout.ObjectData);
         }
 
         /// <summary>
-        /// Creates User File Index with SYSTEM user and optional custom users.
+        /// Writes the user file: the index block gets one pointer to the data page, and the data page
+        /// holds the SYSTEM user and any extra users.
         /// </summary>
-        private static void CreateUserFile(byte[] diskImage, NdfsTemplateSpec spec, System.Collections.Generic.List<NdfsUserCreationInfo> users)
+        /// <param name="diskImage">
+        /// The image being built.
+        /// </param>
+        /// <param name="spec">
+        /// Specification with the page of the user file index block.
+        /// </param>
+        /// <param name="layout">
+        /// Layout with the page of the user file data block and the SYSTEM quota.
+        /// </param>
+        /// <param name="users">
+        /// Extra users. Their passwords are not applied: the password hash is not written by this creator.
+        /// </param>
+        private static void CreateUserFile(byte[] diskImage, NdfsTemplateSpec spec, Layout layout, System.Collections.Generic.List<NdfsUserCreationInfo> users)
         {
-            // User file contains SYSTEM user (ID=0) at minimum
-            long userFileOffset = spec.UserFileBlock * NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+            long indexOffset = spec.UserFileBlock * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+            WriteBlockPointerBytes(diskImage, indexOffset, layout.UserData);
 
-            // TODO: Implement proper user entry serialization
-            // For now, just create an empty user file
-            // SINTRAN will initialize users on first mount
+            long dataOffset = layout.UserData * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
 
-            // Write empty user file index page (already zero-filled)
-            // Full user management implementation requires UserFile.cs integration
+            // SYSTEM is charged the object data page, as SINTRAN charges it after the first file
+            // (measured, docs/NDFS-ALLOCATION-RULES.md section 7).
+            var system = new Elements.UserEntry
+            {
+                UserName = "SYSTEM",
+                UserIndex = 0,
+                PagesReserved = layout.Quota,
+                PagesUsed = 1
+            };
+            Array.Copy(system.ToBytes(), 0, diskImage, dataOffset, 64);
+
+            for (int i = 0; i < users.Count && i + 1 < 32; i++)
+            {
+                int slot = i + 1;
+                var user = new Elements.UserEntry
+                {
+                    UserName = users[i].UserName,
+                    UserIndex = slot,
+                    PagesReserved = users[i].PageQuota,
+                    PagesUsed = 0
+                };
+                Array.Copy(user.ToBytes(), 0, diskImage, dataOffset + slot * 64, 64);
+            }
+        }
+
+        /// <summary>
+        /// Writes one Contiguous block pointer (type 00) at the start of a page.
+        /// </summary>
+        /// <param name="diskImage">
+        /// The image being built.
+        /// </param>
+        /// <param name="offset">
+        /// Byte offset in the image.
+        /// </param>
+        /// <param name="blockId">
+        /// Page number the pointer names.
+        /// </param>
+        private static void WriteBlockPointerBytes(byte[] diskImage, long offset, uint blockId)
+        {
+            diskImage[offset + 0] = (byte)((blockId >> 24) & 0x3F);
+            diskImage[offset + 1] = (byte)((blockId >> 16) & 0xFF);
+            diskImage[offset + 2] = (byte)((blockId >> 8) & 0xFF);
+            diskImage[offset + 3] = (byte)(blockId & 0xFF);
         }
     }
 }

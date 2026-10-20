@@ -11,6 +11,11 @@ namespace RetroIO.Storage.Ndfs.Creation
     /// Internal specification for an NDFS disk image template.
     /// Contains all the technical details needed to create a specific disk type.
     /// </summary>
+    /// <remarks>
+    /// The page numbers in the pre-defined templates below are the values the creator works out with
+    /// the SINTRAN rules (see <see cref="NdfsImageCreator"/>); the creator computes them again for every
+    /// image, so they are for reference and tests only.
+    /// </remarks>
     internal class NdfsTemplateSpec
     {
         /// <summary>
@@ -70,6 +75,18 @@ namespace RetroIO.Storage.Ndfs.Creation
         /// Number of spare blocks (FileBlocks - NdfsPages).
         /// </summary>
         public uint SpareBlocks { get; set; }
+
+        /// <summary>
+        /// Makes a copy. The pre-defined templates are shared static objects; the image creator works
+        /// on a copy because it stores the computed page numbers in the specification.
+        /// </summary>
+        /// <returns>
+        /// A new specification with the same values.
+        /// </returns>
+        public NdfsTemplateSpec Clone()
+        {
+            return (NdfsTemplateSpec)MemberwiseClone();
+        }
     }
 
     /// <summary>
@@ -84,10 +101,10 @@ namespace RetroIO.Storage.Ndfs.Creation
         {
             NdfsPages = 154,
             FileBlocks = 154,
-            ObjectFileBlock = 149,      // NdfsPages - 5
-            UserFileBlock = 151,        // NdfsPages - 3
-            BitFileBlock = 153,         // NdfsPages - 1
-            UnreservedPages = 1,
+            ObjectFileBlock = 76,
+            UserFileBlock = 78,
+            BitFileBlock = 72,
+            UnreservedPages = 0,
             ControllerType = NdfsControllerType.Floppy,
             HasFlomon = true,
             ExtValid = false,
@@ -102,10 +119,10 @@ namespace RetroIO.Storage.Ndfs.Creation
         {
             NdfsPages = 616,
             FileBlocks = 616,
-            ObjectFileBlock = 611,      // NdfsPages - 5
-            UserFileBlock = 613,        // NdfsPages - 3
-            BitFileBlock = 615,         // NdfsPages - 1
-            UnreservedPages = 1,
+            ObjectFileBlock = 316,
+            UserFileBlock = 318,
+            BitFileBlock = 306,
+            UnreservedPages = 111,
             ControllerType = NdfsControllerType.Floppy,
             HasFlomon = true,
             ExtValid = false,
@@ -120,12 +137,12 @@ namespace RetroIO.Storage.Ndfs.Creation
         {
             NdfsPages = 36945,
             FileBlocks = 38400,
-            ObjectFileBlock = 18684,
-            UserFileBlock = 18686,
+            ObjectFileBlock = 18476,
+            UserFileBlock = 18478,
             // KERNEL-CORRECTED: floor(36945/2)=18472 rounded down to a multiple of 9 = 18468,
             // the real PACK-ONE bit_file_ptr (ALBIT 137526B). Plain pages/2 gave 18472 (off by 4).
             BitFileBlock = 18468,
-            UnreservedPages = 36945,    // Initially all free
+            UnreservedPages = 18466,
             ControllerType = NdfsControllerType.Smd,
             HasFlomon = false,
             ExtValid = true,
@@ -157,11 +174,11 @@ namespace RetroIO.Storage.Ndfs.Creation
         {
             NdfsPages = 36396,
             FileBlocks = 36864,         // real device: Micropolis 1325 = 72.0 MiB exactly
-            ObjectFileBlock = 18428,    // real disk (1325.img): bit + 230
-            UserFileBlock = 18430,      // = object + 2
+            ObjectFileBlock = 18204,
+            UserFileBlock = 18206,
             // floor(36396/2)=18198, already a multiple of 9 -> 18198 (ALBIT 137526B).
             BitFileBlock = 18198,
-            UnreservedPages = 36396,    // Initially all free
+            UnreservedPages = 18191,
             ControllerType = NdfsControllerType.Winchester,
             HasFlomon = false,
             ExtValid = true,
@@ -187,10 +204,10 @@ namespace RetroIO.Storage.Ndfs.Creation
         {
             NdfsPages = 61036,
             FileBlocks = 64656,         // raw device incl. the reserved top-of-disk region
-            ObjectFileBlock = 30716,    // real disk: bit + 206
-            UserFileBlock = 30718,      // = object + 2
-            BitFileBlock = 30510,       // 9*floor(floor(61036/2)/9) — matches the real disk exactly
-            UnreservedPages = 61036,    // Initially all free
+            ObjectFileBlock = 30506,
+            UserFileBlock = 30508,
+            BitFileBlock = 30510,
+            UnreservedPages = 30510,
             ControllerType = NdfsControllerType.Scsi,
             HasFlomon = false,
             ExtValid = true,

@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
 using System.Collections.Generic;
 
 namespace RetroIO.Storage.Ndfs.Creation
@@ -66,6 +67,58 @@ namespace RetroIO.Storage.Ndfs.Creation
         /// NOT device size.
         /// </summary>
         public uint? BitFileAddress { get; set; } = null;
+
+        /// <summary>
+        /// Answers SINTRAN's bit file address prompt with -1 ("end of disc"): the bit file goes at
+        /// capacity minus the number of bit file pages. Ignored when <see cref="BitFileAddress"/> is set.
+        /// </summary>
+        public bool BitFileAtEndOfDisc { get; set; } = false;
+
+        /// <summary>
+        /// Image length in pages. When set and larger than the capacity, the image is that long (with
+        /// <see cref="CustomNdfsPages"/> as the directory size). Used with Template=Custom. A named disk
+        /// type needs its full SINTRAN layout length here: the emulator's disk controllers choose the
+        /// geometry from the length of the file. When null a custom image gets the spare area of its
+        /// controller type.
+        /// </summary>
+        public uint? DevicePages { get; set; } = null;
+
+        /// <summary>
+        /// Creates the options for a SINTRAN disk type name such as DISC-288MB-R.
+        /// </summary>
+        /// <param name="diskTypeName">
+        /// Name from <see cref="NdfsDiskTypes"/>, for example DISC-75MB. Case is ignored.
+        /// </param>
+        /// <param name="directoryName">
+        /// Directory name of the new image.
+        /// </param>
+        /// <returns>
+        /// Options for a Custom image with the directory size of the type, the full layout length where
+        /// it is known, and the boot code of the controller family.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the name is not a known disk type, or its size is not known.
+        /// </exception>
+        public static NdfsImageCreationOptions ForDiskType(string diskTypeName, string directoryName = "EMPTY-DISK")
+        {
+            NdfsDiskType? type = NdfsDiskTypes.Find(diskTypeName);
+            if (type == null)
+                throw new ArgumentException($"Unknown SINTRAN disk type: {diskTypeName}", nameof(diskTypeName));
+            if (type.Pages == 0)
+                throw new ArgumentException($"{type.Name} is a valid SINTRAN disk type name but its size is not known", nameof(diskTypeName));
+
+            bool smd = type.Family == NdfsDiskFamily.Smd;
+            return new NdfsImageCreationOptions
+            {
+                Template = NdfsImageTemplate.Custom,
+                DirectoryName = directoryName,
+                CustomNdfsPages = type.Pages,
+                DevicePages = type.LayoutPages > type.Pages ? type.LayoutPages : (uint?)null,
+                ControllerType = smd ? NdfsControllerType.Smd : NdfsControllerType.Winchester,
+                BootLoaderType = smd ? NdfsBootLoaderType.Smd : NdfsBootLoaderType.Winchester,
+                IncludeExtendedInfo = type.Pages > 1000
+            };
+        }
 
         /// <summary>
         /// Users to create in the image (optional).

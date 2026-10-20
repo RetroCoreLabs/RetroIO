@@ -341,8 +341,11 @@ namespace RetroIO.Tests
                 // Default placement: bit = floor(pages/2) rounded to multiple of 9.
                 uint expectedBit = (pages / 2u / 9u) * 9u; // 40000 -> 19998
                 Assert.That(mb.BitFilePointer!.BlockID, Is.EqualTo(expectedBit));
-                Assert.That(mb.ObjectFilePointer!.BlockID, Is.EqualTo(expectedBit + 216));
-                Assert.That(mb.UserFilePointer!.BlockID, Is.EqualTo(expectedBit + 218));
+                // The bit file is 3 pages (19998..20000), so the home word of the hint (19997 OR 15 =
+                // 19999) is taken by it: the four pages are 19997 user data, 19996 user index, 19995
+                // object data and 19994 object index.
+                Assert.That(mb.ObjectFilePointer!.BlockID, Is.EqualTo(expectedBit - 4));
+                Assert.That(mb.UserFilePointer!.BlockID, Is.EqualTo(expectedBit - 2));
 
                 // Page 0 (master), object index, user index — all HIGH blocks — must read used.
                 Assert.That(ndfs.IsBlockUsed(0), Is.True, "master block page 0");
@@ -1009,10 +1012,13 @@ namespace RetroIO.Tests
                 driver.Mount(stream, readOnly: true);
                 MasterBlock mb = driver.GetFileSystem()!.GetMasterBlock();
 
-                // Override: bit = BA, object = BA-4, user = BA-2 (= object+2).
+                // Typed address: bit = BA. The four pages are the first free pages going down from
+                // (BA - 1) OR 15 = 4991 (SINTRAN routine RSBPG): 4991 user data, 4989 user index (4990
+                // is the bit file), 4988 object data, 4987 object index. BA minus 4 and minus 2 hold only
+                // when the bit file ends the home word (the answer -1 case).
                 Assert.That(mb.BitFilePointer!.BlockID, Is.EqualTo(bitAddr));
-                Assert.That(mb.ObjectFilePointer!.BlockID, Is.EqualTo(bitAddr - 4));
-                Assert.That(mb.UserFilePointer!.BlockID, Is.EqualTo(bitAddr - 2));
+                Assert.That(mb.ObjectFilePointer!.BlockID, Is.EqualTo(4987u));
+                Assert.That(mb.UserFilePointer!.BlockID, Is.EqualTo(4989u));
                 driver.Dispose();
             }
             finally

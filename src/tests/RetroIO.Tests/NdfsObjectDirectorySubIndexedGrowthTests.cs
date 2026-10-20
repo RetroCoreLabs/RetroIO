@@ -74,11 +74,10 @@ namespace RetroIO.Tests
                 driver.WriteFile($"/USER{i}/FILE:DAT", new byte[] { 1 });
             }
 
-            // No implicit SYSTEM user exists on a freshly Custom-templated image (image creation's
-            // user-file serialization is itself a separate unimplemented stub) — so USER0 takes
-            // the first slot rather than sitting alongside a pre-existing SYSTEM.
+            // A new image has the SYSTEM user (as after SINTRAN's @CREATE-DIRECTORY), so the 80
+            // users created above sit alongside it.
             INdfsFileSystem ndfs = driver.GetFileSystem()!;
-            Assert.That(ndfs.GetUsers().Count, Is.EqualTo(80));
+            Assert.That(ndfs.GetUsers().Count, Is.EqualTo(81));
         }
 
         [Test]

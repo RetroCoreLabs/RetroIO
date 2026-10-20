@@ -51,11 +51,31 @@ namespace RetroIO.Storage.Ndfs.Structures
         public uint AllocCeiling { get; set; }
 
         /// <summary>
+        /// Page where the bit file itself starts (BA). 0 = not known; the SINTRAN placement rules
+        /// that start from BA then fall back to the top-down search.
+        /// </summary>
+        public uint BitAddress { get; set; }
+
+        /// <summary>
+        /// Pages of the bitmap that <see cref="WriteToDisk"/> writes. SINTRAN sizes the bit file from
+        /// the declared capacity, which can be fewer pages than the device length gives. 0 = the whole
+        /// in-memory bitmap.
+        /// </summary>
+        public uint DiskPages { get; set; }
+
+        /// <summary>
+        /// The 256 page block of the last page given by <see cref="FindFreeDataBlock"/>, or null for a
+        /// fresh bit file (SINTRAN's "cold start").
+        /// </summary>
+        private uint? _cursorBlock;
+
+        /// <summary>
         /// Initializes the bit file with the specified size.
         /// </summary>
         public void Initialize(uint totalPages)
         {
             TotalPages = totalPages;
+            _cursorBlock = null;
 
             // Default the allocation ceiling to the full device until the caller supplies
             // the directory's declared capacity (pages_available).
@@ -82,6 +102,7 @@ namespace RetroIO.Storage.Ndfs.Structures
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
+            _cursorBlock = null;
             _bitmap = new byte[data.Length];
             Array.Copy(data, _bitmap, data.Length);
         }
@@ -238,6 +259,158 @@ namespace RetroIO.Storage.Ndfs.Structures
             return null;
         }
 
+        // ---- SINTRAN placement rules (RSBPG and RSPAG) ---------------------------------------
+        // See docs/NDFS-ALLOCATION-RULES.md and docs/CREATE-DIRECTORY-PLACEMENT.md in the
+        // norskdata-ndfs repository.
+
+        private uint Ceiling()
+        {
+            return (AllocCeiling == 0 || AllocCeiling > TotalPages) ? TotalPages : AllocCeiling;
+        }
+
+        private bool PageOk(uint page, uint ceiling)
+        {
+            return page >= FIRST_ALLOC_BLOCK && page < ceiling && !IsBlockUsed(page);
+        }
+
+        /// <summary>
+        /// SINTRAN's RSBPG rule: index blocks, user and object pages. Start at page
+        /// <c>hint OR 15</c> (the top bit of the bitmap word that holds the hint) and take the first
+        /// free page going down. If the word is full: word+1 (lowest bit first), word-1 (highest bit
+        /// first), word+2, word-2 and so on. Pages below the first allocatable block and at or above
+        /// the ceiling are never given. The page is NOT marked used. Null when there is none.
+        /// </summary>
+        public uint? FindFreeNear(uint hint)
+        {
+            uint ceiling = Ceiling();
+            if (ceiling <= FIRST_ALLOC_BLOCK)
+                return null;
+
+            uint nwords = (ceiling + 15) >> 4;
+            uint word = hint >> 4;
+            if (word >= nwords)
+                word = nwords - 1;
+
+            for (int bit = 15; bit >= 0; bit--)
+            {
+                uint p = word * 16 + (uint)bit;
+                if (PageOk(p, ceiling))
+                    return p;
+            }
+
+            for (uint step = 1; step <= nwords; step++)
+            {
+                uint w = word + step;
+                if (w < nwords)
+                {
+                    for (uint bit = 0; bit < 16; bit++)
+                    {
+                        uint p = w * 16 + bit;
+                        if (PageOk(p, ceiling))
+                            return p;
+                    }
+                }
+
+                if (word >= step)
+                {
+                    w = word - step;
+                    for (int bit = 15; bit >= 0; bit--)
+                    {
+                        uint p = w * 16 + (uint)bit;
+                        if (PageOk(p, ceiling))
+                            return p;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// RSBPG rule with the hint taken from the bit file: <c>BitAddress - 1</c>. Falls back to
+        /// <see cref="FindFirstFreeBlock"/> when <see cref="BitAddress"/> is 0.
+        /// </summary>
+        public uint? FindFreeHint()
+        {
+            if (BitAddress == 0)
+                return FindFirstFreeBlock();
+            return FindFreeNear(BitAddress - 1);
+        }
+
+        /// <summary>
+        /// First 256 page block RSPAG looks in when nothing was allocated yet.
+        /// </summary>
+        /// <remarks>
+        /// With lastPage = (ceiling-1) div 16384 and BP = (BitAddress+1) div 16384:
+        ///  - lastPage after BP: block 0 of lastPage.
+        ///  - lastPage equal to BP: the block of BitAddress+1.
+        ///  - lastPage before BP: block 63 of lastPage.
+        /// Measured on 12 disk formats, see docs/NDFS-ALLOCATION-RULES.md section 3.2.
+        /// </remarks>
+        /// <returns>
+        /// The block number counted from page 0 (page div 256).
+        /// </returns>
+        public uint ColdStartBlock()
+        {
+            uint ceiling = Ceiling();
+            uint lastPage = (ceiling > 0 ? ceiling - 1 : 0) >> 14;
+            uint baPage = (BitAddress + 1) >> 14;
+            if (lastPage > baPage)
+                return lastPage * 64;
+            if (lastPage == baPage)
+                return (BitAddress + 1) >> 8;
+            return lastPage * 64 + 63;
+        }
+
+        /// <summary>
+        /// SINTRAN's RSPAG rule: data pages of indexed files and files of one page. Search 256 page
+        /// blocks: the cursor block (or the cold start block), then +1, -1, +2, -2 ...; in a block the
+        /// LOWEST free page wins. On success the cursor moves to the block of the page found. The page is
+        /// NOT marked used. Falls back to <see cref="FindFirstFreeBlock"/> when <see cref="BitAddress"/>
+        /// is 0. Null when the disk is full.
+        /// </summary>
+        public uint? FindFreeDataBlock()
+        {
+            if (BitAddress == 0)
+                return FindFirstFreeBlock();
+
+            uint ceiling = Ceiling();
+            if (ceiling <= FIRST_ALLOC_BLOCK)
+                return null;
+
+            uint nblocks = (ceiling + 255) >> 8;
+            uint b0 = _cursorBlock ?? ColdStartBlock();
+            if (b0 >= nblocks)
+                b0 = nblocks - 1;
+
+            for (uint step = 0; step <= nblocks; step++)
+            {
+                uint first = b0 + step;
+                bool haveFirst = step == 0 || first < nblocks;
+                uint second = b0 - step;
+                bool haveSecond = step != 0 && b0 >= step;
+
+                for (int c = 0; c < 2; c++)
+                {
+                    bool have = c == 0 ? haveFirst : haveSecond;
+                    if (!have)
+                        continue;
+                    uint b = c == 0 ? first : second;
+                    for (uint k = 0; k < 256; k++)
+                    {
+                        uint p = b * 256 + k;
+                        if (PageOk(p, ceiling))
+                        {
+                            _cursorBlock = b;
+                            return p;
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// Finds a contiguous range of free blocks, scanning HIGH → LOW so the run is
         /// placed in the highest available page addresses (matching SINTRAN's downward
@@ -342,6 +515,9 @@ namespace RetroIO.Storage.Ndfs.Structures
 
             const int PAGE_SIZE = 2048;
             int pagesNeeded = (int)(((_bitmap.Length + PAGE_SIZE - 1) / PAGE_SIZE));
+            // SINTRAN sizes the bit file from the declared capacity: write only those pages.
+            if (DiskPages > 0 && DiskPages < pagesNeeded)
+                pagesNeeded = (int)DiskPages;
 
             // Write bitmap data to contiguous blocks
             for (int i = 0; i < pagesNeeded; i++)
