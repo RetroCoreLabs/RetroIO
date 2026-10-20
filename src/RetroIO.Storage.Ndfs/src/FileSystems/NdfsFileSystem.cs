@@ -2920,6 +2920,12 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// block (either the object file's top-level block, or one SubIndexed group's own index
         /// block) exists, allocating and linking it on demand.
         /// </summary>
+        /// <param name="indexBlockId">
+        /// Block number of the Indexed block that holds the page pointer.
+        /// </param>
+        /// <param name="pageIdx">
+        /// The page's slot inside that Indexed block.
+        /// </param>
         /// <param name="globalPageIdx">
         /// The page's number in the whole object file (the group's own offset included). It tells which
         /// user the page belongs to: the object index has 8 slots per user and 64 users per index block.

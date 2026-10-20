@@ -100,7 +100,9 @@ namespace RetroIO.Protocols.X25.Protocols
 
                 // Send X.29 SET to configure remote PAD for character-at-a-time mode:
                 //   Param 2  = 0: Echo OFF (TAD handles echo with proper BS+SPACE+BS)
-                //   Param 3  = 126: Forward on all printable + control chars
+                //   Param 3  = 126: sum of the X.3 forwarding flags 2 to 64, so forward on CR, ESC/BEL/ENQ/ACK,
+                //                   DEL/CAN/DC2, ETX/EOT, HT/LF/VT/FF and the other control characters
+                //                   (everything except flag 1, the alphanumerics; X3.DataForwardingFlag.ALL_CONTROL)
                 //   Param 4  = 1: Idle timer = 50ms (fast char-by-char forwarding)
                 //   Param 14 = 0: Editing off (TAD handles editing)
                 SendX29Message(session, new byte[] {
