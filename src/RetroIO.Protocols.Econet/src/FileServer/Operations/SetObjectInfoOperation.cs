@@ -14,7 +14,7 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Protocols.Econet.FileServer.Operations;
 
 /// <summary>
-/// <c>SetObjectInfo</c> (fsop 0x13) — writes load/exec/length/access metadata for an existing file to
+/// <c>SetObjectInfo</c> (fsop 0x13) — writes load/exec/access metadata (the length bytes are skipped) for an existing file to
 /// its property bag (the Acorn attribute system of record). A missing object is
 /// <c>0xD6 "Not found"</c>; a malformed path is <c>0xCC "Bad filename"</c>.
 /// </summary>
@@ -44,12 +44,12 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
     public bool RequiresSystem => false;
 
     /// <summary>
-    /// Writes load, exec, length and access to the property bag of the existing file named in
+    /// Writes load, exec and access to the property bag of the existing file named in
     /// the request.
     /// </summary>
     /// <remarks>
     /// Only info commands 2, 5 and the canonical form write anything, and only when at least 12
-    /// parameter bytes are present (the length field ends at byte 11); with fewer the reply is still
+    /// parameter bytes are present (the skipped length field ends at byte 11); with fewer the reply is still
     /// success and nothing is written, and the same holds for every other command. The attribute bytes
     /// are read from parameter offset 1 onwards, the same bytes the path is read from. The access byte
     /// takes the configured default file permission when the parameters end before it.
@@ -84,9 +84,9 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
             {
                 uint load = (uint)(parameters[1] | (parameters[2] << 8) | (parameters[3] << 16) | (parameters[4] << 24));
                 uint exec = (uint)(parameters[5] | (parameters[6] << 8) | (parameters[7] << 16) | (parameters[8] << 24));
-                int length = parameters[9] | (parameters[10] << 8) | (parameters[11] << 16);
+                // Bytes 9 to 11 are the length. They are skipped: the length of a file is the size of the file, as in fs.c (struct objattr has no length).
                 byte access = parameters.Length > 12 ? parameters[12] : context.Configuration.DefaultFilePerm;
-                AcornAttributeStore.WriteAttributes(context.FileSystem, unixPath, load, exec, length, access);
+                AcornAttributeStore.WriteAttributes(context.FileSystem, unixPath, load, exec, access);
             }
         }
 

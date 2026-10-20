@@ -69,7 +69,7 @@ rather than links because a relative link across repositories would 404 on GitHu
 - PiBridge `0x60` (`PiBridgeCommandHandler`) — version, config read/write, force logoff, server logout
 - SJ ops `0x40`/`0x41` (success stubs)
 - OSCLI: `*SAVE`, `*DELETE`, `*INFO`, `*EX`, `*CREATE`/`*BUILD`, `*ACCESS` (ack), `*REN`, `*FSLIST`, `*SDISC`
-- Acorn attribute read/write through the shared property bag (`AcornAttributeStore`), with conversion of older `,inf` helper files
+- Acorn attribute read/write through the shared property bag (`AcornAttributeStore`)
 - `FileServerConfiguration` (NETCONF-style bitmap)
 - AUN **Immediate** echo reply (`0x05` → `0x06`)
 - LOAD bulk queue keyed by **(net, station)** not station alone

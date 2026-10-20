@@ -308,7 +308,7 @@ public sealed class FileServerConfigurationFlagTests
     {
         // fs.c 1110 and 5174 test the object type: only directories are masked. The file has access 0x13, the
         // same bits that a directory shows as D/.
-        AcornAttributeStore.WriteAttributes(_harness.FileSystem, "/econet-root/0RetroFS/USER/HELLO", 0, 0, 10, 0x13);
+        AcornAttributeStore.WriteAttributes(_harness.FileSystem, "/econet-root/0RetroFS/USER/HELLO", 0, 0, 0x13);
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornDir);
         _harness.LoginAsSyst();
 
