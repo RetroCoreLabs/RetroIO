@@ -55,7 +55,7 @@ public sealed class PutByteOperation : IFileServerOperation
     /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
-        byte handle = AcornFileHandles.DivHandle(call.FsRequest.Urd);
+        byte handle = AcornFileHandles.DivHandle(call.FsRequest.Urd, call.Context.Configuration.ManyHandles);
         byte value = call.FsRequest.Cwd;
         OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null || open.ReadOnly)

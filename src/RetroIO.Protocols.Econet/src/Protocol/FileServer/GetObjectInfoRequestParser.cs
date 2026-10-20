@@ -60,9 +60,9 @@ internal static class GetObjectInfoRequestParser
         return path[0] is '$' or ':';
     }
 
-    public static byte ResolveRelativeTo(FileServerRequest request, FileServerSession session)
+    public static byte ResolveRelativeTo(FileServerRequest request, FileServerSession session, bool manyHandles)
     {
-        byte relativeTo = AcornFileHandles.DivHandle(request.Cwd);
+        byte relativeTo = AcornFileHandles.DivHandle(request.Cwd, manyHandles);
         if (relativeTo == 0)
             relativeTo = session.CwdHandle;
 

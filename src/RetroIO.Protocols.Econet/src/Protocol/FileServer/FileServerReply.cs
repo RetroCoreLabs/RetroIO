@@ -185,18 +185,21 @@ public static class FileServerReply
     /// <param name="bootOpt">
     /// The boot option.
     /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set: the handles are sent as plain numbers. False: as bit masks.
+    /// </param>
     /// <returns>
-    /// The login return code, 0, the three handles converted to wire bit masks, and the boot option.
+    /// The login return code, 0, the three handles converted to wire handles, and the boot option.
     /// </returns>
-    public static byte[] LoginSuccess(byte urd, byte cwd, byte lib, byte bootOpt)
+    public static byte[] LoginSuccess(byte urd, byte cwd, byte lib, byte bootOpt, bool manyHandles)
     {
         return
         [
             FileServerOpcodes.LoginSuccessReturnCode,
             0,
-            AcornFileHandles.MulHandle(urd),
-            AcornFileHandles.MulHandle(cwd),
-            AcornFileHandles.MulHandle(lib),
+            AcornFileHandles.MulHandle(urd, manyHandles),
+            AcornFileHandles.MulHandle(cwd, manyHandles),
+            AcornFileHandles.MulHandle(lib, manyHandles),
             bootOpt,
         ];
     }

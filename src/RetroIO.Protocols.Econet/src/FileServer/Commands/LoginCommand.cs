@@ -118,7 +118,7 @@ public sealed class LoginCommand : IOsCliCommand
 
             EconetSecurityAudit.EmitAuthAsync(context.SecurityEvents, session!.RetroUserId, session.Username, true, clientIp)
                 .AsTask().GetAwaiter().GetResult();
-            return FileServerReply.LoginSuccess(session.UrdHandle, session.CwdHandle, session.LibHandle, session.BootOpt);
+            return FileServerReply.LoginSuccess(session.UrdHandle, session.CwdHandle, session.LibHandle, session.BootOpt, context.Configuration.ManyHandles);
         }
 
         EconetSecurityAudit.EmitAuthAsync(context.SecurityEvents, Guid.Empty, username.TrimEnd(), false, clientIp)

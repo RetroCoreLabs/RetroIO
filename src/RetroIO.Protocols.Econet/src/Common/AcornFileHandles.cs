@@ -43,10 +43,26 @@ public static class AcornFileHandles
     public const byte InternalLib = 0x03;
 
     /// <summary>
-    /// Wire bitmask → internal handle index (1..8).
+    /// Converts a wire handle byte to an internal handle number.
     /// </summary>
-    public static byte DivHandle(byte wireHandle) =>
-        wireHandle switch
+    /// <param name="wireHandle">
+    /// The handle byte as sent on the wire.
+    /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set: handles are plain numbers and the byte is returned as it is. False: a power of two from 1 to 128 is a bit mask and gives its bit number from 1 to 8.
+    /// </param>
+    /// <returns>
+    /// The internal handle number. In the bit mask mode any byte that is not a power of two is returned as it is.
+    /// </returns>
+    /// <remarks>
+    /// Source: PiEconetBridge utilities/fs.c line 71 (FS_DIVHANDLE).
+    /// </remarks>
+    public static byte DivHandle(byte wireHandle, bool manyHandles)
+    {
+        if (manyHandles)
+            return wireHandle;
+
+        return wireHandle switch
         {
             128 => 8,
             64 => 7,
@@ -58,12 +74,30 @@ public static class AcornFileHandles
             1 => 1,
             _ => wireHandle,
         };
+    }
 
     /// <summary>
-    /// Internal handle index → wire bitmask for login replies.
+    /// Converts an internal handle number to the byte sent on the wire.
     /// </summary>
-    public static byte MulHandle(byte internalHandle) =>
-        internalHandle is >= 1 and <= 8 ? (byte)(1 << (internalHandle - 1)) : internalHandle;
+    /// <param name="internalHandle">
+    /// The internal handle number.
+    /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set: the number is sent as it is. False: the number 1 to 8 is sent as a bit mask, 1 shifted left by one less than the number.
+    /// </param>
+    /// <returns>
+    /// The wire byte. In the bit mask mode a number outside 1 to 8 is returned as it is.
+    /// </returns>
+    /// <remarks>
+    /// Source: PiEconetBridge utilities/fs.c line 72 (FS_MULHANDLE).
+    /// </remarks>
+    public static byte MulHandle(byte internalHandle, bool manyHandles)
+    {
+        if (manyHandles)
+            return internalHandle;
+
+        return internalHandle is >= 1 and <= 8 ? (byte)(1 << (internalHandle - 1)) : internalHandle;
+    }
 
     /// <summary>
     /// Converts the wire user root handle of a request to an internal handle.
@@ -77,15 +111,18 @@ public static class AcornFileHandles
     /// <param name="opcode">
     /// The file server opcode of the request.
     /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set.
+    /// </param>
     /// <returns>
     /// The wire handle unchanged when the opcode skips the conversion, otherwise the internal handle, or the session user root handle when the conversion gives 0.
     /// </returns>
-    public static byte ResolveUrd(byte wireHandle, FileServerSession session, byte opcode)
+    public static byte ResolveUrd(byte wireHandle, FileServerSession session, byte opcode, bool manyHandles)
     {
         if (SkipsUrdDivHandle(opcode))
             return wireHandle;
 
-        byte internalHandle = DivHandle(wireHandle);
+        byte internalHandle = DivHandle(wireHandle, manyHandles);
         return internalHandle != 0 ? internalHandle : session.UrdHandle;
     }
 
@@ -98,11 +135,14 @@ public static class AcornFileHandles
     /// <param name="session">
     /// The session whose current directory handle is used as fallback.
     /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set.
+    /// </param>
     /// <returns>
     /// The internal handle, or the session current directory handle when the conversion gives 0.
     /// </returns>
-    public static byte ResolveCwd(byte wireHandle, FileServerSession session) =>
-        DivHandle(wireHandle) is byte h and not 0 ? h : session.CwdHandle;
+    public static byte ResolveCwd(byte wireHandle, FileServerSession session, bool manyHandles) =>
+        DivHandle(wireHandle, manyHandles) is byte h and not 0 ? h : session.CwdHandle;
 
     /// <summary>
     /// Converts the wire library handle of a request to an internal handle.
@@ -113,11 +153,14 @@ public static class AcornFileHandles
     /// <param name="session">
     /// The session whose library handle is used as fallback.
     /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set.
+    /// </param>
     /// <returns>
     /// The internal handle, or the session library handle when the conversion gives 0.
     /// </returns>
-    public static byte ResolveLib(byte wireHandle, FileServerSession session) =>
-        DivHandle(wireHandle) is byte h and not 0 ? h : session.LibHandle;
+    public static byte ResolveLib(byte wireHandle, FileServerSession session, bool manyHandles) =>
+        DivHandle(wireHandle, manyHandles) is byte h and not 0 ? h : session.LibHandle;
 
     /// <summary>
     /// Reports whether the user root handle of the opcode is left as sent instead of being converted.

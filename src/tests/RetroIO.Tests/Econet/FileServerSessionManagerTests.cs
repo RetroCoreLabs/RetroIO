@@ -53,13 +53,13 @@ public sealed class FileServerSessionManagerTests
         // Open 29 files: handles 4 to 32 are all in use.
         for (int i = 0; i < 29; i++)
         {
-            byte handle = _handles.AllocateHandle(1, 1);
+            byte handle = _handles.AllocateHandle(1, 1, true);
             FileStream stream = _fileSystem.OpenFile("/econet-root/F", FileMode.Open, FileAccess.Read);
             Assert.That(_handles.TryOpen(handle, "/econet-root/F", stream, true, 1, 1, out _), Is.True);
         }
 
         // The table is full: the next request must not hand out a handle that is in use.
-        byte next = _handles.AllocateHandle(1, 1);
+        byte next = _handles.AllocateHandle(1, 1, true);
 
         Assert.That(next, Is.EqualTo(0), "no free handle: 0 is the 'none' answer");
 
@@ -74,13 +74,13 @@ public sealed class FileServerSessionManagerTests
         // Station 1 uses up all of 4 to 32; station 2 must still get a handle, starting at 4 too.
         for (int i = 0; i < 29; i++)
         {
-            byte handle = _handles.AllocateHandle(1, 1);
+            byte handle = _handles.AllocateHandle(1, 1, true);
             FileStream stream = _fileSystem.OpenFile("/econet-root/F", FileMode.Open, FileAccess.Read);
             Assert.That(_handles.TryOpen(handle, "/econet-root/F", stream, true, 1, 1, out _), Is.True);
         }
 
-        Assert.That(_handles.AllocateHandle(1, 1), Is.EqualTo(0), "station 1 is full");
-        Assert.That(_handles.AllocateHandle(1, 2), Is.EqualTo(4), "station 2 has its own table");
+        Assert.That(_handles.AllocateHandle(1, 1, true), Is.EqualTo(0), "station 1 is full");
+        Assert.That(_handles.AllocateHandle(1, 2, true), Is.EqualTo(4), "station 2 has its own table");
 
         _handles.CloseAllForStation(1, 1);
     }
@@ -122,8 +122,8 @@ public sealed class FileServerSessionManagerTests
         FileStream stream = _fileSystem.OpenFile("/econet-root/F", FileMode.Open, FileAccess.Read);
         Assert.That(_handles.TryOpen(5, "/econet-root/F", stream, true, 1, 1, out _), Is.True);
 
-        Assert.That(_handles.AllocateHandle(1, 1), Is.EqualTo(4));
-        Assert.That(_handles.AllocateHandle(1, 1), Is.EqualTo(6), "5 is open and is skipped");
+        Assert.That(_handles.AllocateHandle(1, 1, true), Is.EqualTo(4));
+        Assert.That(_handles.AllocateHandle(1, 1, true), Is.EqualTo(6), "5 is open and is skipped");
 
         _handles.CloseAllForStation(1, 1);
     }

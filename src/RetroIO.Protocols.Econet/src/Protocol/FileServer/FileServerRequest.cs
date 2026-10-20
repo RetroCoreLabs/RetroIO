@@ -58,11 +58,14 @@ public readonly struct FileServerRequest
     /// <param name="session">
     /// The session used as fallback.
     /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set: handles are plain numbers. False: handles are bit masks.
+    /// </param>
     /// <returns>
     /// The internal handle.
     /// </returns>
-    public byte ResolvedUrd(FileServerSession session) =>
-        AcornFileHandles.ResolveUrd(Urd, session, Opcode);
+    public byte ResolvedUrd(FileServerSession session, bool manyHandles) =>
+        AcornFileHandles.ResolveUrd(Urd, session, Opcode, manyHandles);
 
     /// <summary>
     /// Converts the current directory handle of the request to an internal handle.
@@ -70,11 +73,14 @@ public readonly struct FileServerRequest
     /// <param name="session">
     /// The session used as fallback.
     /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set: handles are plain numbers. False: handles are bit masks.
+    /// </param>
     /// <returns>
     /// The internal handle.
     /// </returns>
-    public byte ResolvedCwd(FileServerSession session) =>
-        AcornFileHandles.ResolveCwd(Cwd, session);
+    public byte ResolvedCwd(FileServerSession session, bool manyHandles) =>
+        AcornFileHandles.ResolveCwd(Cwd, session, manyHandles);
 
     /// <summary>
     /// Converts the library handle of the request to an internal handle.
@@ -82,11 +88,14 @@ public readonly struct FileServerRequest
     /// <param name="session">
     /// The session used as fallback.
     /// </param>
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set: handles are plain numbers. False: handles are bit masks.
+    /// </param>
     /// <returns>
     /// The internal handle.
     /// </returns>
-    public byte ResolvedLib(FileServerSession session) =>
-        AcornFileHandles.ResolveLib(Lib, session);
+    public byte ResolvedLib(FileServerSession session, bool manyHandles) =>
+        AcornFileHandles.ResolveLib(Lib, session, manyHandles);
 
     /// <summary>
     /// Gets all bytes of the request.

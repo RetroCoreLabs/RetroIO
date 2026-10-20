@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using RetroIO.Protocols.Econet.Common;
 using RetroIO.Protocols.Econet.FileServer.Dispatch;
 using RetroIO.Protocols.Econet.FileServer.Handles;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
@@ -52,7 +53,8 @@ public sealed class EndOfFileOperation : IFileServerOperation
     /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
-        byte handle = call.FsRequest.Parameters.Length > 0 ? call.FsRequest.Parameters[0] : (byte)0;
+        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11401).
+        byte handle = AcornFileHandles.DivHandle(call.FsRequest.Parameters.Length > 0 ? call.FsRequest.Parameters[0] : (byte)0, call.Context.Configuration.ManyHandles);
         OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");

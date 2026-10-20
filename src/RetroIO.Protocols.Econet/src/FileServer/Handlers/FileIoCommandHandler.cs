@@ -91,9 +91,13 @@ public sealed class FileIoCommandHandler
                 filename = filename.Substring(0, space);
         }
 
+        // The directory handle in the request is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 9944).
+        relativeTo = AcornFileHandles.DivHandle(relativeTo, _context.Configuration.ManyHandles);
         bool found = _context.Paths.TryResolve(session, filename, relativeTo, out string unixPath, out _, out _) &&
             _context.FileSystem.FileExists(unixPath);
-        if (!found && loadAsCommand)
+        // fs.c lines 8176 to 8178: the library is searched when the file is not in the current directory, for a
+        // *RUN (load as command) and also for every load when the MdfsFunctions flag is set.
+        if (!found && (loadAsCommand || _context.Configuration.MdfsFunctions))
         {
             found = _context.Paths.TryResolve(session, filename, session.LibHandle, out unixPath, out _, out _) &&
                 _context.FileSystem.FileExists(unixPath);
@@ -243,7 +247,20 @@ public sealed class FileIoCommandHandler
         bool readOnly = parameters.Length > 1 && parameters[1] != 0;
         string filename = parameters.Length > 2 ? AcornPath.ReadCrTerminatedString(parameters.Slice(2)) : string.Empty;
 
-        if (!_context.Paths.TryResolve(session, filename, out string unixPath, out _, out _))
+        bool resolved = _context.Paths.TryResolve(session, filename, out string unixPath, out _, out _);
+
+        // fs.c lines 9195 to 9197: with the MdfsFunctions flag set, a file that has to exist and is not in the
+        // current directory is looked for in the library.
+        if (mustExist && _context.Configuration.MdfsFunctions &&
+            (!resolved || !_context.FileSystem.FileExists(unixPath)) &&
+            _context.Paths.TryResolve(session, filename, session.LibHandle, out string libraryPath, out _, out _) &&
+            _context.FileSystem.FileExists(libraryPath))
+        {
+            unixPath = libraryPath;
+            resolved = true;
+        }
+
+        if (!resolved)
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.NotFound, "Not found"));
 
         if (mustExist && !_context.FileSystem.FileExists(unixPath))
@@ -253,7 +270,7 @@ public sealed class FileIoCommandHandler
         FileAccess access = readOnly ? FileAccess.Read : FileAccess.ReadWrite;
 
         // PiFS answers 0xC0 "Too many open files" when no handle is free.
-        byte handle = _context.Handles.AllocateHandle(request.ClientNet, request.ClientStation);
+        byte handle = _context.Handles.AllocateHandle(request.ClientNet, request.ClientStation, _context.Configuration.ManyHandles);
         if (handle == 0)
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Locked, "Too many open files"));
 
@@ -264,13 +281,15 @@ public sealed class FileIoCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.AlreadyOpen, "Already open"));
         }
 
-        byte[] payload = [0, 0, handle];
+        // The reply carries the handle as a bit mask unless ManyHandle is set (fs.c FS_MULHANDLE, line 9329).
+        byte[] payload = [0, 0, AcornFileHandles.MulHandle(handle, _context.Configuration.ManyHandles)];
         return Reply(request, fsRequest.ReplyPort, payload);
     }
 
     private EconetMessage HandleClose(EconetMessage request, FileServerRequest fsRequest)
     {
-        byte handle = fsRequest.Parameters.Length > 0 ? fsRequest.Parameters[0] : (byte)0;
+        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11367).
+        byte handle = AcornFileHandles.DivHandle(fsRequest.Parameters.Length > 0 ? fsRequest.Parameters[0] : (byte)0, _context.Configuration.ManyHandles);
         if (handle == 0)
         {
             _context.Handles.CloseAllForStation(request.ClientNet, request.ClientStation);

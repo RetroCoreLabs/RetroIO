@@ -91,23 +91,26 @@ public sealed class FileServerSession
     /// <param name="request">
     /// The request. GetByte and PutByte requests do not change any handle, and the opcodes that skip the user root conversion do not change UrdHandle.
     /// </param>
-    public void ApplyWireHandles(FileServerRequest request)
+    /// <param name="manyHandles">
+    /// True when FileServerConfiguration.FlagManyHandle is set: the wire handles are plain numbers. False: they are bit masks.
+    /// </param>
+    public void ApplyWireHandles(FileServerRequest request, bool manyHandles)
     {
         if (AcornFileHandles.SkipsWireHandleUpdate(request.Opcode))
             return;
 
         if (!AcornFileHandles.SkipsUrdDivHandle(request.Opcode))
         {
-            byte urd = AcornFileHandles.DivHandle(request.Urd);
+            byte urd = AcornFileHandles.DivHandle(request.Urd, manyHandles);
             if (urd != 0)
                 UrdHandle = urd;
         }
 
-        byte cwd = AcornFileHandles.DivHandle(request.Cwd);
+        byte cwd = AcornFileHandles.DivHandle(request.Cwd, manyHandles);
         if (cwd != 0)
             CwdHandle = cwd;
 
-        byte lib = AcornFileHandles.DivHandle(request.Lib);
+        byte lib = AcornFileHandles.DivHandle(request.Lib, manyHandles);
         if (lib != 0)
             LibHandle = lib;
     }

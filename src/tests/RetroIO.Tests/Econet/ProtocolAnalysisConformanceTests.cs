@@ -101,7 +101,7 @@ public sealed class ProtocolAnalysisConformanceTests
     {
         Login();
         byte handle = OpenFileForByteIo("HELLO");
-        byte getHandleWire = AcornFileHandles.MulHandle(handle);
+        byte getHandleWire = handle; // the open reply already carries the wire (bit mask) form
 
         EconetMessage getRequest = EconetFsTestHarness.CreateLoggedInRequest(
             FileServerOpcodes.GetByte,
