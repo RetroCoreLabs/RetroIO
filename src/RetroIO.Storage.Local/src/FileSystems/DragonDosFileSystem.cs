@@ -272,7 +272,7 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
@@ -280,26 +280,26 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <param name="data">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new NotImplementedException("DragonDOS write operations not yet implemented");
+            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new NotImplementedException("DragonDOS delete operations not yet implemented");
+            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
         }
 
         /// <summary>
@@ -397,35 +397,44 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws NotSupportedException: DragonDOS has no directories other than the root.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="NotSupportedException">
         /// Always thrown.
         /// </exception>
         public void CreateDirectory(string path)
         {
-            throw new NotImplementedException("CreateDirectory not yet implemented");
+            throw new NotSupportedException("DragonDOS has no directories other than the root");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Does not delete anything: a DragonDOS disk has only the root directory.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// The directory to delete.
         /// </param>
-        /// <exception cref="NotImplementedException">
-        /// Always thrown.
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown for any path other than the root, because no other directory exists (the same rule
+        /// as <see cref="ListDirectory"/>).
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown for the root, which cannot be deleted, and because the file system has no write support.
         /// </exception>
         public void DeleteDirectory(string path)
         {
-            throw new NotImplementedException("DeleteDirectory not yet implemented");
+            if (!string.IsNullOrEmpty(path) && path != "/")
+            {
+                throw new DirectoryNotFoundException("DragonDOS has no directory '" + path + "'; only the root exists");
+            }
+
+            throw new IOException("The root directory of a DragonDOS disk cannot be deleted");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="oldPath">
         /// Not used.
@@ -433,12 +442,12 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <param name="newPath">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="IOException">
         /// Always thrown.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
-            throw new NotImplementedException("Rename not yet implemented");
+            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
         }
 
         // ===================================================================

@@ -227,7 +227,7 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws UnauthorizedAccessException: the Dragon VDK driver has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
@@ -235,26 +235,26 @@ namespace RetroIO.Storage.Local.Drivers
         /// <param name="data">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="UnauthorizedAccessException">
         /// Always thrown.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new NotImplementedException("Dragon VDK write operations not yet implemented");
+            throw new UnauthorizedAccessException("The Dragon VDK driver has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws UnauthorizedAccessException: the Dragon VDK driver has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="UnauthorizedAccessException">
         /// Always thrown.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new NotImplementedException("Dragon VDK delete operations not yet implemented");
+            throw new UnauthorizedAccessException("The Dragon VDK driver has no write support, so the volume is read-only");
         }
 
         /// <summary>
@@ -319,7 +319,7 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws UnauthorizedAccessException: the Dragon VDK driver has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="address">
         /// Not used.
@@ -327,12 +327,12 @@ namespace RetroIO.Storage.Local.Drivers
         /// <param name="data">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="UnauthorizedAccessException">
         /// Always thrown.
         /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
-            throw new NotImplementedException("Dragon VDK write operations not yet implemented");
+            throw new UnauthorizedAccessException("The Dragon VDK driver has no write support, so the volume is read-only");
         }
 
         /// <summary>

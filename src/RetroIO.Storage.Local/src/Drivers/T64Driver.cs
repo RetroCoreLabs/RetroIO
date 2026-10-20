@@ -160,7 +160,7 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws UnauthorizedAccessException: the T64 driver has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
@@ -168,26 +168,26 @@ namespace RetroIO.Storage.Local.Drivers
         /// <param name="data">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="UnauthorizedAccessException">
         /// Always thrown.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new NotImplementedException("T64 write operations not yet implemented.");
+            throw new UnauthorizedAccessException("The T64 driver has no write support, so the volume is read-only");
         }
 
         /// <summary>
-        /// Not implemented. Always throws.
+        /// Always throws UnauthorizedAccessException: the T64 driver has no write support, so the volume is read-only.
         /// </summary>
         /// <param name="path">
         /// Not used.
         /// </param>
-        /// <exception cref="NotImplementedException">
+        /// <exception cref="UnauthorizedAccessException">
         /// Always thrown.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new NotImplementedException("T64 delete operations not yet implemented.");
+            throw new UnauthorizedAccessException("The T64 driver has no write support, so the volume is read-only");
         }
 
         /// <summary>
