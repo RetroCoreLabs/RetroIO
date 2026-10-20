@@ -26,6 +26,11 @@ namespace RetroIO.Server.Core.FileSystem;
 /// (PiEconetBridge utilities/fs.c, comment above pathname_to_dotfile, lines 1589 to 1595). The suffix of a .xat file starts with a dot, so no Acorn name can be
 /// the name of a .xat file. <see cref="IsXatName"/> is the test for that.
 /// </para>
+/// <para>
+/// A .xat file that is empty or does not hold a property bag is damaged. <see cref="Read"/> then returns null, as if the object had no bag, and moves the
+/// damaged file to its name followed by <c>.bad</c> (FOO.xat becomes FOO.xat.bad), so the next write makes a fresh .xat file. The .bad file is kept for
+/// a person to look at. <see cref="IsDamagedXatName"/> is the test for that name.
+/// </para>
 /// </remarks>
 public static class XatSidecar
 {
@@ -33,6 +38,11 @@ public static class XatSidecar
     /// The suffix of a .xat file.
     /// </summary>
     public const string Extension = ".xat";
+
+    /// <summary>
+    /// The suffix that is added to the name of a damaged .xat file when it is moved aside.
+    /// </summary>
+    public const string DamagedSuffix = ".bad";
 
     /// <summary>
     /// Tells whether a directory entry name is a .xat file.
@@ -46,6 +56,20 @@ public static class XatSidecar
     public static bool IsXatName(string name)
     {
         return NdfsXatSerializer.IsXatFile(name, Extension);
+    }
+
+    /// <summary>
+    /// Tells whether a directory entry name is a damaged .xat file that was moved aside by <see cref="Read"/>.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the directory entry.
+    /// </param>
+    /// <returns>
+    /// True when the name ends in <c>.xat.bad</c>.
+    /// </returns>
+    public static bool IsDamagedXatName(string name)
+    {
+        return name.EndsWith(Extension + DamagedSuffix, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -84,11 +108,12 @@ public static class XatSidecar
     /// The path of the file or directory.
     /// </param>
     /// <returns>
-    /// The property bag, or null when the object has no .xat file.
+    /// The property bag, or null when the object has no .xat file or its .xat file is damaged.
     /// </returns>
-    /// <exception cref="InvalidDataException">
-    /// Thrown when the .xat file exists but does not hold a property bag.
-    /// </exception>
+    /// <remarks>
+    /// A .xat file that is empty or is not valid JSON for a property bag is moved to its name followed by <c>.bad</c>. An older .bad file of the same name is
+    /// replaced. Only the damage is handled here: a failure to read the file or to move it is not caught and reaches the caller.
+    /// </remarks>
     public static IDictionary<string, object>? Read(IFileSystemBackend fileSystem, string objectPath)
     {
         string xatPath = GetXatPath(objectPath);
@@ -114,18 +139,26 @@ public static class XatSidecar
         }
 
         string json = Encoding.UTF8.GetString(buffer);
-        if (json.Length == 0)
-            throw new InvalidDataException("The attribute file is empty: " + xatPath);
+        if (json.Length > 0)
+        {
+            try
+            {
+                return NdfsXatSerializer.DeserializeFromJson(json);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Damaged: handled below, the same way as an empty file.
+            }
+        }
 
-        try
-        {
-            return NdfsXatSerializer.DeserializeFromJson(json);
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            // Not swallowed: the caller must see that the store is damaged, not get an empty bag.
-            throw new InvalidDataException("The attribute file is not valid: " + xatPath, ex);
-        }
+        // The file is empty or does not hold a bag. It reads as no bag, and the damaged file is kept aside under a .bad name so that
+        // it can be looked at and so that the next write makes a fresh .xat file.
+        string badPath = xatPath + DamagedSuffix;
+        if (fileSystem.FileExists(badPath))
+            fileSystem.DeleteFile(badPath);
+
+        fileSystem.MoveFile(xatPath, badPath);
+        return null;
     }
 
     /// <summary>

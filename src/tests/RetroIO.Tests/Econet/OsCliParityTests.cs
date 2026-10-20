@@ -295,14 +295,14 @@ public sealed class OsCliParityTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // *ACCESS — parses "<object> [<perms>]" and writes the access byte through the ,inf sidecar,
+    // *ACCESS — parses "<object> [<perms>]" and writes the access byte through the property bag,
     // matching PiFS fs_access (fs.c:7270-7310). Owner letters W R H/P L before the slash; only W R
     // after it (public). Empty perms => 0. A bad letter => 0xCF "Bad attribute". See AccessCommand.
     // Ownership is relaxed to "any logged-in session may set access on a resolvable object" because
     // RetroFS has no per-object owner model (documented divergence).
     // ---------------------------------------------------------------------------------------------
 
-    // Reads the access byte back out of the ,inf sidecar the command should have written.
+    // Reads the access byte back out of the property bag the command should have written.
     private byte ReadAccessByte(string acornName)
     {
         string path = _harness.FileSystem.CombinePath(EconetSampleCatalogFixture.UserDirectory, acornName);
@@ -360,7 +360,7 @@ public sealed class OsCliParityTests
 
         // 'Z' is not a legal permission letter => 0xCF "Bad attribute" (error code at payload[1]).
         Assert.That(reply.Payload[1], Is.EqualTo(FileServerErrors.BadAttribute));
-        // The parse fails before any write, so no ,inf exists and the default 0x33 is reported back.
+        // The parse fails before any write, so no property bag exists and the default 0x33 is reported back.
         Assert.That(ReadAccessByte("HELLO"), Is.EqualTo(0x33));
     }
 

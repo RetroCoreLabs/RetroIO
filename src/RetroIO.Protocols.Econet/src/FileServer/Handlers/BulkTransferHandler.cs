@@ -65,7 +65,6 @@ public sealed class BulkTransferHandler
                     completed.UnixPath,
                     completed.LoadAddress,
                     completed.ExecAddress,
-                    (int)bytes,
                     defaultAccess,
                     completed.OwnerId);
 

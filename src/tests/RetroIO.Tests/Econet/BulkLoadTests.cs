@@ -36,7 +36,7 @@ public sealed class BulkLoadTests
         _harness = new EconetFsTestHarness();
         byte[] content = Encoding.ASCII.GetBytes("machine code image");
         _harness.FileSystem.AddFile(ProgUnix, content);
-        AcornAttributeStore.WriteAttributes(_harness.FileSystem, ProgUnix, LoadAddress, ExecAddress, content.Length, Access);
+        AcornAttributeStore.WriteAttributes(_harness.FileSystem, ProgUnix, LoadAddress, ExecAddress, Access);
     }
 
     [Test]
