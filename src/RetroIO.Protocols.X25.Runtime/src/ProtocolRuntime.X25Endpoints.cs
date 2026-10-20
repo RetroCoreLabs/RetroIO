@@ -13,6 +13,7 @@ using RetroIO.Link;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.PacketLayer;
+using RetroIO.Protocols.X25.Runtime.Transport;
 using RetroIO.Protocols.X25.Transport;
 
 namespace RetroIO.Protocols.X25.Runtime
@@ -331,6 +332,48 @@ namespace RetroIO.Protocols.X25.Runtime
             }
 
             endpoint.Receive(packet);
+        }
+
+        /// <summary>
+        /// Every X.25 packet taken out of a LAPB I frame on a serial line goes to that line's engine,
+        /// the same as <see cref="OnXotDataReceived"/> does for an XOT connection.
+        /// </summary>
+        /// <remarks>
+        /// The engine decodes a Call Request and raises the incoming call once, through
+        /// <see cref="OnEndpointIncomingCall"/>, which routes it once and answers through the engine.
+        /// The serial transport's own <c>IncomingCall</c> is not raised, so nothing routes it twice.
+        /// The role comes from the transport's options: a DTE side is a DTE for the engine, a DCE
+        /// side is the DCE. The engine has no default role here because the transport has none.
+        /// </remarks>
+        private void OnSerialPacketReceived(object? sender, TransportDataEventArgs e)
+        {
+            if (sender is not SerialTransport serial || serial.LinkRole == null)
+            {
+                return;
+            }
+
+            byte[]? data = e.Data;
+            if (data == null || e.Length < 3)
+            {
+                return;
+            }
+
+            byte[] packet = data.Length == e.Length ? data : data.AsSpan(0, e.Length).ToArray();
+            X25Endpoint endpoint = FindEndpoint(serial)
+                ?? EndpointFor(serial, serial.Name, serial.SendPacket, isDte: serial.LinkRole == SerialX25LinkRole.Dte);
+            endpoint.Receive(packet);
+        }
+
+        /// <summary>
+        /// A serial data link that is no longer up takes its engine with it, so every call on it is
+        /// reported cleared. The next packet after the link is set up again builds a fresh engine.
+        /// </summary>
+        private void OnSerialLinkStateChanged(object? sender, bool up)
+        {
+            if (!up && sender is SerialTransport serial)
+            {
+                DropEndpoint(serial);
+            }
         }
 
         // ------------------------------------------------------------------ calls
