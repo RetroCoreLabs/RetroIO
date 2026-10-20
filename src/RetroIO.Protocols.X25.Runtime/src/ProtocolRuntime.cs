@@ -516,6 +516,16 @@ namespace RetroIO.Protocols.X25.Runtime
                         continue;
                     }
 
+                    // One owner per port. An interface with complete X25Link options is run by the
+                    // serial transport (HDLC, LAPB and the line's own X.25 engine in
+                    // SerialTransport); a link built here from the same entry would open the same
+                    // port and answer the same frames a second time.
+                    if (serialConfig.X25Link != null && serialConfig.X25Link.IsComplete)
+                    {
+                        _logger.LogInformation("LinkManager: serial interface '{Name}' has X25Link options and is run by the serial transport; no link is created for it", serialConfig.Name);
+                        continue;
+                    }
+
                     try
                     {
                         if (serialConfig.Framing == FramingType.Slip)
@@ -1215,6 +1225,12 @@ namespace RetroIO.Protocols.X25.Runtime
                     serialTransport.IncomingCall += OnTransportIncomingCall;
                     serialTransport.StatusChanged += OnTransportStatusChanged;
 
+                    // X.25 packets taken out of the LAPB I frames go to this line's own engine, and
+                    // a lost data link drops that engine. Both raise only when the interface has
+                    // X25Link options; without them the transport reports raw bytes and nothing else.
+                    serialTransport.X25PacketReceived += OnSerialPacketReceived;
+                    serialTransport.LinkStateChanged += OnSerialLinkStateChanged;
+
                     _logger.LogInformation("Serial transport interface created: {Name}", serialConfig.Name);
                 }
                 catch (Exception ex)
@@ -1313,11 +1329,11 @@ namespace RetroIO.Protocols.X25.Runtime
                 // What is left is a transport with no engine, and there is no way to answer a call
                 // on one - the routing layer used to build a Call Accepted by hand and write it to
                 // the connection, which is the second packet layer this migration is removing.
-                // The serial transport is the only such transport, and nothing raises its event
-                // today; it gets an endpoint in Phase E.
+                // The serial transport used to be such a transport. It has an endpoint now (see
+                // OnSerialPacketReceived) and, like the XOT client, never raises this event.
                 ITransportInterface? sourceTransport = sender as ITransportInterface;
                 _logger.LogWarning(
-                    "Incoming call to {CalledAddress} on transport {Transport} cannot be answered: that transport has no X.25 engine yet",
+                    "Incoming call to {CalledAddress} on transport {Transport} cannot be answered: no X.25 engine answers a call that comes in through the transport event",
                     callRequest.CalledAddress, sourceTransport?.Name ?? sender?.GetType().Name ?? "unknown");
             }
             catch (Exception ex)
@@ -1595,7 +1611,7 @@ namespace RetroIO.Protocols.X25.Runtime
         /// <summary>
         /// Create serial transport from configuration
         /// </summary>
-        private ITransportInterface CreateSerialTransport(SerialInterfaceConfig serialConfig)
+        private SerialTransport CreateSerialTransport(SerialInterfaceConfig serialConfig)
         {
             var transportConfig = new SerialTransportConfig
             {
@@ -1603,7 +1619,8 @@ namespace RetroIO.Protocols.X25.Runtime
                 PortName = serialConfig.PortName,
                 BaudRate = serialConfig.BaudRate,
                 LocalX121Address = serialConfig.RemoteMachineId,
-                Description = serialConfig.Description
+                Description = serialConfig.Description,
+                X25Link = serialConfig.X25Link
             };
 
             return new SerialTransport(_logger, this, transportConfig);

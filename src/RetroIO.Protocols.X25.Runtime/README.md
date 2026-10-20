@@ -116,7 +116,7 @@ flowchart LR
 |---|---|
 | The runtime | `ProtocolRuntime`, `RuntimeConfig`, `TimerManager` |
 | Physical layer | `PhysicalLayer`, `PhysicalLayerConfig`, `PhysicalLayerStatistics`, `StationType` |
-| Serial | `SerialTransport`, `SerialTransportConfig`, `SerialInterfaceConfig`, `MockSerialEventArgs` |
+| Serial | `SerialTransport`, `SerialTransportConfig`, `SerialInterfaceConfig`, `MockSerialEventArgs`, `SerialLapbLink`, `SerialX25LinkOptions`, `SerialX25LinkRole` |
 | Configuration | `LapbConfig`, `X25Config`, `TimerConfig`, `LoggingConfig`, `SintranConfig` |
 | Routing configuration | `X25RoutingConfig`, `X25RouteEntry`, `RouteType`, `TcpLapbInterfaceConfig` |
 | Reachability | `KnownHostEntry`, `HostReachability` |
