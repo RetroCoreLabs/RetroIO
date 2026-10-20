@@ -113,8 +113,20 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             if (_device == null || _masterBlock == null)
                 return;
 
-            // Refresh the cached count from the authoritative bitmap before writing it out.
-            _masterBlock.UnreservedPages = _bitFile.GetFreePages();
+            // Unreserved Pages is the pool for user quotas, not a free page count. SINTRAN keeps it as
+            // the pages a directory can hand out (capacity - 1 - bit file pages - 3: page 0, the user
+            // file's index block and data page, the object file's index block, and the object data
+            // page) minus the sum of what the users have reserved. Measured with SINTRAN M on 9 runs,
+            // see docs/NDFS-ALLOCATION-RULES.md section 7a in the norskdata-ndfs repository. Setting it
+            // to the free page count made DIR show more unreserved pages than the directory has.
+            uint total = _device.TotalBlocks;
+            uint capacity = _bitFile.AllocCeiling != 0 ? _bitFile.AllocCeiling : total;
+            long available = (long)capacity - BitFileDiskPages() - 4;
+            long reserved = 0;
+            foreach (UserEntry user in _userFile.GetUsers())
+                reserved += user.PagesReserved;
+            long unreserved = available - reserved;
+            _masterBlock.UnreservedPages = unreserved > 0 ? (uint)unreserved : 0;
 
             // Read page 0 fresh so we only patch the master-block bytes within it and leave
             // everything else (including the Extended Info Block) exactly as it is on disk.
@@ -1020,6 +1032,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // Write just this user's page
             _userFile.WritePageForEntry(_device, _masterBlock.UserFilePointer, userIndex);
 
+            // The removed user's quota goes back to the Unreserved Pages pool in the master block.
+            PersistMasterBlock();
+
             return true;
         }
 
@@ -1052,6 +1067,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 return false;
 
             _userFile.WritePageForEntry(_device, _masterBlock.UserFilePointer, userIndex);
+
+            // The quota is taken from the Unreserved Pages pool, so the master block changes too.
+            PersistMasterBlock();
 
             // The block device holds writes in memory until it is flushed (see ClearUserPassword).
             _device.Flush();

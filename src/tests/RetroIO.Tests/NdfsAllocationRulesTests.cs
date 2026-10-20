@@ -452,6 +452,59 @@ namespace RetroIO.Tests
             driver.Dispose();
         }
 
+        /// <summary>
+        /// Reads the Unreserved Pages field of the master block straight from the image on disk.
+        /// </summary>
+        private static uint OnDiskUnreserved(string image)
+        {
+            byte[] img = File.ReadAllBytes(image);
+            return (uint)((img[0x7FC] << 24) | (img[0x7FD] << 16) | (img[0x7FE] << 8) | img[0x7FF]);
+        }
+
+        [Test]
+        public void UnreservedPages_IsTheQuotaPool_FilesDoNotChangeIt_QuotaChangesDo()
+        {
+            string image = MakeSmd75("pool.img");
+            uint baseValue;
+            using (var stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var driver = new NdfsDriver();
+                driver.Mount(stream, readOnly: false);
+                INdfsFileSystem ndfs = driver.GetFileSystem()!;
+                ndfs.WriteFile("SYSTEM/A:DATA", new byte[] { 1, 2, 3 });
+                driver.Dispose();
+            }
+            baseValue = OnDiskUnreserved(image);
+            Assert.That(baseValue, Is.EqualTo(18466u), "a file does not change the pool");
+
+            using (var stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var driver = new NdfsDriver();
+                driver.Mount(stream, readOnly: false);
+                INdfsFileSystem ndfs = driver.GetFileSystem()!;
+                Assert.That(ndfs.AddUser("ALPHA", 100), Is.True);
+                driver.Dispose();
+            }
+            Assert.That(OnDiskUnreserved(image), Is.EqualTo(baseValue - 100));
+
+            using (var stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var driver = new NdfsDriver();
+                driver.Mount(stream, readOnly: false);
+                INdfsFileSystem ndfs = driver.GetFileSystem()!;
+                int index = -1;
+                foreach (UserEntry u in ndfs.GetUsers())
+                {
+                    if (u.UserName == "ALPHA")
+                        index = u.UserIndex;
+                }
+
+                Assert.That(ndfs.UpdateUserQuota(index, 300), Is.True);
+                driver.Dispose();
+            }
+            Assert.That(OnDiskUnreserved(image), Is.EqualTo(baseValue - 300));
+        }
+
         // ---- Disk types ----------------------------------------------------------------------
 
         [Test]

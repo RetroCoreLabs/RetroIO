@@ -19,10 +19,11 @@ namespace RetroIO.Tests
     /// <summary>
     /// Regression tests for the "Unreserved Pages" master-block field (offset 0x1C within the
     /// 32-byte master block at <see cref="NdfsBlockDeviceDescriptor.MASTER_BLOCK_OFFSET"/>, page 0).
-    /// Real SINTRAN reads this cached field to report free disk space without rescanning the
-    /// bitmap. Before this fix it was only ever written once, at image-creation time
-    /// (<see cref="NdfsImageCreator"/>) — every subsequent create/delete/user-add through
-    /// <see cref="NdfsFileSystem"/> left it stale relative to the real bit-file state.
+    /// The field is the pool for user quotas, not a free page count. SINTRAN keeps it as the pages
+    /// a directory can hand out (capacity - 1 - bit file pages - 3) minus the sum of the pages
+    /// the users have reserved (measured, docs/NDFS-ALLOCATION-RULES.md section 7a in the
+    /// norskdata-ndfs repository). Files do not change it; adding, changing and removing users does.
+    /// Before this fix the file system set it to the free page count after every write.
     /// </summary>
     [TestFixture]
     public class NdfsMasterBlockFreeCountTests
@@ -55,6 +56,21 @@ namespace RetroIO.Tests
                 directoryName: "MB-FREE-TEST",
                 bootLoaderType: NdfsBootLoaderType.Winchester);
             return path;
+        }
+
+        /// <summary>
+        /// The value SINTRAN keeps in Unreserved Pages: capacity - bit file pages - 4, minus the sum
+        /// of the pages the users have reserved.
+        /// </summary>
+        private static uint ExpectedPool(INdfsFileSystem ndfs)
+        {
+            long capacity = ndfs.GetMasterBlock().ExtPagesAvailable;
+            long bitmapBytes = ((capacity + 7) / 8 + 1) & ~1L;
+            long bitmapPages = (bitmapBytes + PageSize - 1) / PageSize;
+            long pool = capacity - bitmapPages - 4;
+            foreach (var user in ndfs.GetUsers())
+                pool -= user.PagesReserved;
+            return pool > 0 ? (uint)pool : 0u;
         }
 
         // Deterministic non-zero fill so sparse-hole logic doesn't turn pages into holes.
@@ -103,7 +119,7 @@ namespace RetroIO.Tests
         }
 
         [Test]
-        public void CreateFile_OnDiskUnreservedPages_MatchesRealFreePageCount()
+        public void CreateFile_OnDiskUnreservedPages_IsTheQuotaPool()
         {
             string image = MakeImage("create.img");
 
@@ -118,7 +134,7 @@ namespace RetroIO.Tests
                 driver.WriteFile("/ALICE/FILE:DAT", MakePattern(10 * PageSize));
 
                 INdfsFileSystem ndfs = driver.GetFileSystem()!;
-                liveFreePagesAfterCreate = ndfs.GetPagesAvailable();
+                liveFreePagesAfterCreate = ExpectedPool(ndfs);
 
                 driver.Dispose(); // flush buffered writes to the underlying stream
             }
@@ -126,11 +142,11 @@ namespace RetroIO.Tests
             onDiskAfterCreate = ReadOnDiskUnreservedPages(image);
 
             Assert.That(onDiskAfterCreate, Is.EqualTo(liveFreePagesAfterCreate),
-                "On-disk Unreserved Pages must be rewritten to match the true free-page count after a file create.");
+                "On-disk Unreserved Pages must be the quota pool after a file create (capacity minus overhead minus the reserved pages).");
         }
 
         [Test]
-        public void DeleteFile_OnDiskUnreservedPages_IncreasesBackAfterDelete()
+        public void DeleteFile_OnDiskUnreservedPages_DoesNotChangeThePool()
         {
             string image = MakeImage("delete.img");
 
@@ -154,18 +170,18 @@ namespace RetroIO.Tests
                 driver.DeleteFile("/BOB/FILE:DAT");
 
                 INdfsFileSystem ndfs = driver.GetFileSystem()!;
-                uint liveFreePagesAfterDelete = ndfs.GetPagesAvailable();
+                uint liveFreePagesAfterDelete = ExpectedPool(ndfs);
 
                 driver.Dispose();
 
                 onDiskAfterDelete = ReadOnDiskUnreservedPages(image);
 
                 Assert.That(onDiskAfterDelete, Is.EqualTo(liveFreePagesAfterDelete),
-                    "On-disk Unreserved Pages must be rewritten to match the true free-page count after a file delete.");
+                    "On-disk Unreserved Pages must still be the quota pool after a file delete.");
             }
 
-            Assert.That(onDiskAfterDelete, Is.GreaterThan(onDiskAfterCreate),
-                "Deleting the file must free pages back, so the on-disk count must go back up.");
+            Assert.That(onDiskAfterDelete, Is.EqualTo(onDiskAfterCreate),
+                "Files do not change the quota pool: the user's reservation covers them.");
         }
 
         [Test]
@@ -182,7 +198,7 @@ namespace RetroIO.Tests
 
                 // Step 1: create file A.
                 driver.WriteFile("/CAROL/A:DAT", MakePattern(20 * PageSize));
-                uint liveAfterA = ndfs.GetPagesAvailable();
+                uint liveAfterA = ExpectedPool(ndfs);
                 driver.Dispose();
                 Assert.That(ReadOnDiskUnreservedPages(image), Is.EqualTo(liveAfterA), "after creating A");
             }
@@ -195,7 +211,7 @@ namespace RetroIO.Tests
 
                 // Step 2: create file B (on top of A).
                 driver.WriteFile("/CAROL/B:DAT", MakePattern(15 * PageSize));
-                uint liveAfterB = ndfs.GetPagesAvailable();
+                uint liveAfterB = ExpectedPool(ndfs);
                 driver.Dispose();
                 Assert.That(ReadOnDiskUnreservedPages(image), Is.EqualTo(liveAfterB), "after creating B");
             }
@@ -208,14 +224,14 @@ namespace RetroIO.Tests
 
                 // Step 3: delete file A, leaving B in place.
                 driver.DeleteFile("/CAROL/A:DAT");
-                uint liveAfterDeleteA = ndfs.GetPagesAvailable();
+                uint liveAfterDeleteA = ExpectedPool(ndfs);
                 driver.Dispose();
                 Assert.That(ReadOnDiskUnreservedPages(image), Is.EqualTo(liveAfterDeleteA), "after deleting A");
             }
         }
 
         [Test]
-        public void AddUser_OnDiskUnreservedPages_ReflectsPageAllocatedForNewUserEntry()
+        public void AddUser_OnDiskUnreservedPages_TakesTheQuotaFromThePool()
         {
             // Adding a user can allocate a fresh user-file data page on demand
             // (EnsureUserFilePageAllocated) — that allocation must also be reflected here.
@@ -236,12 +252,12 @@ namespace RetroIO.Tests
                     ndfs.AddUser("USER" + i, reservedPages: 5);
                 }
 
-                liveFreeAfterAdd = ndfs.GetPagesAvailable();
+                liveFreeAfterAdd = ExpectedPool(ndfs);
                 driver.Dispose();
             }
 
             Assert.That(ReadOnDiskUnreservedPages(image), Is.EqualTo(liveFreeAfterAdd),
-                "On-disk Unreserved Pages must reflect pages allocated for new user-file entries.");
+                "On-disk Unreserved Pages must take the quotas of the new users from the pool.");
         }
 
         [Test]
