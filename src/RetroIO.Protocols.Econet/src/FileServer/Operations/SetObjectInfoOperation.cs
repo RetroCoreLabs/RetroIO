@@ -72,7 +72,7 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
 
         byte command = parameters[0];
         string path = AcornPath.ReadCrTerminatedString(parameters.Slice(1));
-        if (!context.Paths.TryResolve(session, path, call.FsRequest.ResolvedCwd(session), out string unixPath, out _, out _) ||
+        if (!context.Paths.TryResolve(session, path, call.FsRequest.ResolvedCwd(session, context.Configuration.ManyHandles), out string unixPath, out _, out _) ||
             !context.FileSystem.FileExists(unixPath))
         {
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");

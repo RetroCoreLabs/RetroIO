@@ -66,7 +66,7 @@ public sealed class CatHeaderOperation : IFileServerOperation
             ? AcornPath.ReadCrTerminatedString(call.FsRequest.Parameters)
             : ".";
 
-        if (!context.Paths.TryResolve(session, path, call.FsRequest.ResolvedCwd(session), out string unixPath, out _, out _) ||
+        if (!context.Paths.TryResolve(session, path, call.FsRequest.ResolvedCwd(session, context.Configuration.ManyHandles), out string unixPath, out _, out _) ||
             !context.FileSystem.DirectoryExists(unixPath))
         {
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");

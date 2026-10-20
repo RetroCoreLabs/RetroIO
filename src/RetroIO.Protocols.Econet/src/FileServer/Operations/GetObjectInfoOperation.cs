@@ -86,7 +86,7 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
         // "Not found" (0xd6 for cmd 6) when it is 0/unopened. BeebEm's *CAT sends CWD handle 0,
         // so we must NOT silently substitute the session CWD here: doing so produced a success
         // directory block that BeebEm rejects and re-requests forever -> "Net error".
-        byte rawRelativeTo = AcornFileHandles.DivHandle(fsRequest.Cwd);
+        byte rawRelativeTo = AcornFileHandles.DivHandle(fsRequest.Cwd, context.Configuration.ManyHandles);
         if (rawRelativeTo == 0)
         {
             if (command == 6)
@@ -95,7 +95,7 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
             return FileServerReply.ObjectInfoNotFound();
         }
 
-        byte relativeTo = GetObjectInfoRequestParser.ResolveRelativeTo(fsRequest, session);
+        byte relativeTo = GetObjectInfoRequestParser.ResolveRelativeTo(fsRequest, session, context.Configuration.ManyHandles);
         string unixPath;
         bool resolved;
         if (command == 6)

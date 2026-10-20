@@ -91,6 +91,8 @@ public sealed class FileIoCommandHandler
                 filename = filename.Substring(0, space);
         }
 
+        // The directory handle in the request is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 9944).
+        relativeTo = AcornFileHandles.DivHandle(relativeTo, _context.Configuration.ManyHandles);
         bool found = _context.Paths.TryResolve(session, filename, relativeTo, out string unixPath, out _, out _) &&
             _context.FileSystem.FileExists(unixPath);
         if (!found && loadAsCommand)
@@ -253,7 +255,7 @@ public sealed class FileIoCommandHandler
         FileAccess access = readOnly ? FileAccess.Read : FileAccess.ReadWrite;
 
         // PiFS answers 0xC0 "Too many open files" when no handle is free.
-        byte handle = _context.Handles.AllocateHandle(request.ClientNet, request.ClientStation);
+        byte handle = _context.Handles.AllocateHandle(request.ClientNet, request.ClientStation, _context.Configuration.ManyHandles);
         if (handle == 0)
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Locked, "Too many open files"));
 
@@ -264,13 +266,15 @@ public sealed class FileIoCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.AlreadyOpen, "Already open"));
         }
 
-        byte[] payload = [0, 0, handle];
+        // The reply carries the handle as a bit mask unless ManyHandle is set (fs.c FS_MULHANDLE, line 9329).
+        byte[] payload = [0, 0, AcornFileHandles.MulHandle(handle, _context.Configuration.ManyHandles)];
         return Reply(request, fsRequest.ReplyPort, payload);
     }
 
     private EconetMessage HandleClose(EconetMessage request, FileServerRequest fsRequest)
     {
-        byte handle = fsRequest.Parameters.Length > 0 ? fsRequest.Parameters[0] : (byte)0;
+        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11367).
+        byte handle = AcornFileHandles.DivHandle(fsRequest.Parameters.Length > 0 ? fsRequest.Parameters[0] : (byte)0, _context.Configuration.ManyHandles);
         if (handle == 0)
         {
             _context.Handles.CloseAllForStation(request.ClientNet, request.ClientStation);

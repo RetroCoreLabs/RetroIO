@@ -56,7 +56,7 @@ public sealed class ExamineCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.BadPath, "Bad filename"));
 
         string path = AcornPath.ReadCrTerminatedString(pathBytes);
-        byte relativeTo = GetObjectInfoRequestParser.ResolveRelativeTo(fsRequest, session);
+        byte relativeTo = GetObjectInfoRequestParser.ResolveRelativeTo(fsRequest, session, _context.Configuration.ManyHandles);
 
         if (!CatalogueEnumerator.TryResolveCatalogueDirectory(_context, session, path, relativeTo, out string unixPath))
         {

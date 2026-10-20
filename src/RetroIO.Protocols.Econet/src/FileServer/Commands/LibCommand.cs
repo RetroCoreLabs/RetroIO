@@ -71,6 +71,6 @@ public sealed class LibCommand : IOsCliCommand
 
         call.Session!.AcornLibPath = newAcorn;
         call.Session!.LibraryDirectoryUnix = unixPath;
-        return FileServerReply.LibraryChanged(AcornFileHandles.MulHandle(call.Session!.LibHandle));
+        return FileServerReply.LibraryChanged(AcornFileHandles.MulHandle(call.Session!.LibHandle, call.Context.Configuration.ManyHandles));
     }
 }

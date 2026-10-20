@@ -344,7 +344,9 @@ public static class EconetProtocolDiagnostics
         if (!GetObjectInfoRequestParser.TryParse(request, out byte command, out ReadOnlySpan<byte> pathBytes))
             return "get-object-info parse failed";
 
-        byte relativeTo = AcornFileHandles.DivHandle(request.Cwd);
+        // The trace shows the handle byte as it was sent. Turning it into a handle number depends on the ManyHandle
+        // flag, and the trace code has no access to the configuration.
+        byte relativeTo = request.Cwd;
         bool implicitCmd = request.Parameters.Length > 0 && !GetObjectInfoRequestParser.IsKnownCommand(request.Parameters[0]);
         string mode = implicitCmd ? "implicit-cmd" : "explicit-cmd";
         if (request.Parameters.IsEmpty)

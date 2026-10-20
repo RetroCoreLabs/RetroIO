@@ -98,7 +98,7 @@ public sealed class FileServerCommandHandler
         else
         {
             FileServerSession? session = _context.Sessions.GetSession(request.ClientNet, request.ClientStation);
-            session?.ApplyWireHandles(fsRequest);
+            session?.ApplyWireHandles(fsRequest, _context.Configuration.ManyHandles);
             response = DispatchLoggedIn(request, fsRequest);
         }
 
