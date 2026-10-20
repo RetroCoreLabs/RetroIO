@@ -586,6 +586,18 @@ namespace RetroIO.Protocols.X25.Runtime
         /// this serial port. Both run LAPB.
         /// </summary>
         public FramingType Framing { get; set; } = FramingType.Hdlc;
+
+        /// <summary>
+        /// Role and LAPB values for running X.25 on this port through the serial transport
+        /// (<c>SerialTransport</c>), or null for none.
+        /// </summary>
+        /// <remarks>
+        /// Null (the value when nothing is set) means that transport reports raw bytes only; it is
+        /// not read as DTE or DCE. This is a second way to run X.25 over the same port, beside the
+        /// serial link the link manager builds from the fields above, and the two must not be
+        /// enabled on one port: both would open it.
+        /// </remarks>
+        public RetroIO.Protocols.X25.Runtime.Transport.SerialX25LinkOptions? X25Link { get; set; }
     }
 
     /// <summary>
