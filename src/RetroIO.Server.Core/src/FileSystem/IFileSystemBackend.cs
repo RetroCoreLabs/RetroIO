@@ -132,4 +132,58 @@ public interface IFileSystemBackend
     /// Combine path segments.
     /// </summary>
     string CombinePath(params string[] paths);
+
+    /// <summary>
+    /// Tells where the property bags of objects are kept.
+    /// </summary>
+    /// <returns>
+    /// A capabilities value whose <see cref="RetroIO.Storage.Core.FileSystemCapabilities.SupportsExtendedAttributes"/> is true when the backend stores the
+    /// property bag on the object itself, as an extended attribute of the host. It is false when the backend cannot, and the bag then lives in the .xat file
+    /// (see <see cref="XatSidecar"/>), exactly as NDFS declares it. Every backend in this repository says false, because .NET has no portable extended attribute call.
+    /// </returns>
+    RetroIO.Storage.Core.FileSystemCapabilities GetAttributeCapabilities();
+
+    /// <summary>
+    /// Gets the property bag of a file or directory.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the object.
+    /// </param>
+    /// <returns>
+    /// The property bag, or null when the object has none.
+    /// </returns>
+    /// <remarks>
+    /// A backend that cannot store attributes on the object reads the .xat file with <see cref="XatSidecar.Read"/>. A backend with native attributes implements all four attribute members together.
+    /// </remarks>
+    IDictionary<string, object>? GetObjectProperties(string path);
+
+    /// <summary>
+    /// Sets the property bag of a file or directory. The bag replaces the bag that was there, and an empty bag removes it.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the object.
+    /// </param>
+    /// <param name="propertyBag">
+    /// The properties to store.
+    /// </param>
+    void SetObjectProperties(string path, IDictionary<string, object> propertyBag);
+
+    /// <summary>
+    /// Moves the property bag of an object to the new path of the object, when it has one. Call it after the object itself was moved.
+    /// </summary>
+    /// <param name="fromPath">
+    /// The path the object had.
+    /// </param>
+    /// <param name="toPath">
+    /// The path the object has now.
+    /// </param>
+    void MoveObjectProperties(string fromPath, string toPath);
+
+    /// <summary>
+    /// Removes the property bag of an object, when it has one. Call it after the object itself was deleted.
+    /// </summary>
+    /// <param name="path">
+    /// The path the object had.
+    /// </param>
+    void DeleteObjectProperties(string path);
 }

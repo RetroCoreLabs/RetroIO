@@ -127,7 +127,7 @@ public sealed class ExamineCommandHandler
             bool isDirectory = _context.FileSystem.IsDirectory(fullPath);
 
             byte perm = isDirectory ? defaultDirPerm : defaultFilePerm;
-            if (!isDirectory && !AcornInfStore.TryReadAttributes(_context.FileSystem, fullPath, out _, out _, out _, out perm))
+            if (!isDirectory && !AcornAttributeStore.TryReadAttributes(_context.FileSystem, fullPath, out _, out _, out _, out perm))
                 perm = defaultFilePerm;
 
             // fs.c line 5170: is_owner is the effective owner test, so a system user counts as the owner.

@@ -60,7 +60,7 @@ public sealed class BulkTransferHandler
             InboundSaveTransfer? completed = _context.BulkTransfers.CompleteSave(request.EconetPort);
             if (completed != null)
             {
-                AcornInfStore.WriteAttributes(
+                AcornAttributeStore.WriteAttributes(
                     _context.FileSystem,
                     completed.UnixPath,
                     completed.LoadAddress,

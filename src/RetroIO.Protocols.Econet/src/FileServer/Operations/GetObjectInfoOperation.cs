@@ -141,7 +141,7 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
         byte monthYear = 0;
         if (isFile)
         {
-            AcornInfStore.TryReadAttributes(context.FileSystem, unixPath, out load, out exec, out length, out access);
+            AcornAttributeStore.TryReadAttributes(context.FileSystem, unixPath, out load, out exec, out length, out access);
             if (length == 0)
             {
                 RetroIO.Server.Core.FileSystem.BackendFileInfo? info = context.FileSystem.GetFileInfo(unixPath);

@@ -443,4 +443,62 @@ public sealed class AzureBlobFileSystemBackend : IFileSystemBackend
         var combined = Path.Combine(paths);
         return combined.Replace('\\', '/');
     }
+
+    // ---- Property bags (the Acorn attributes of the Econet file server, and any other extended attribute) ----
+    // This backend cannot store attributes on the object itself, because .NET has no portable extended attribute call.
+    // So it declares that, and keeps each bag in the .xat file beside the object, the same fallback NDFS declares.
+
+    /// <summary>
+    /// Says that this backend has no native extended attributes, so property bags live in the .xat file.
+    /// </summary>
+    /// <returns>
+    /// Capabilities with extended attributes switched off.
+    /// </returns>
+    public RetroIO.Storage.Core.FileSystemCapabilities GetAttributeCapabilities()
+        => RetroIO.Storage.Core.FileSystemCapabilities.Basic;
+
+    /// <summary>
+    /// Gets the property bag of a file or directory from its .xat file.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the object.
+    /// </param>
+    /// <returns>
+    /// The property bag, or null when the object has none.
+    /// </returns>
+    public System.Collections.Generic.IDictionary<string, object>? GetObjectProperties(string path)
+        => RetroIO.Server.Core.FileSystem.XatSidecar.Read(this, path);
+
+    /// <summary>
+    /// Writes the property bag of a file or directory to its .xat file.
+    /// </summary>
+    /// <param name="path">
+    /// The path of the object.
+    /// </param>
+    /// <param name="propertyBag">
+    /// The properties to store. An empty bag removes the .xat file.
+    /// </param>
+    public void SetObjectProperties(string path, System.Collections.Generic.IDictionary<string, object> propertyBag)
+        => RetroIO.Server.Core.FileSystem.XatSidecar.Write(this, path, propertyBag);
+
+    /// <summary>
+    /// Moves the .xat file of an object to the new name of the object.
+    /// </summary>
+    /// <param name="fromPath">
+    /// The path the object had.
+    /// </param>
+    /// <param name="toPath">
+    /// The path the object has now.
+    /// </param>
+    public void MoveObjectProperties(string fromPath, string toPath)
+        => RetroIO.Server.Core.FileSystem.XatSidecar.Move(this, fromPath, toPath);
+
+    /// <summary>
+    /// Removes the .xat file of an object.
+    /// </summary>
+    /// <param name="path">
+    /// The path the object had.
+    /// </param>
+    public void DeleteObjectProperties(string path)
+        => RetroIO.Server.Core.FileSystem.XatSidecar.Delete(this, path);
 }

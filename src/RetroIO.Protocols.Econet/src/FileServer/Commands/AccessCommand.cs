@@ -29,7 +29,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// RetroFS has no per-object MDFS owner model (see the <c>isOwner = true</c> note in
 /// <c>HandleGetObjectInfo</c>), so the gate collapses to "a logged-in session may set access on any
 /// object it can resolve" — the dispatcher already enforces the login via <see cref="RequiresLogin"/>.
-/// The new access byte is persisted through <see cref="AcornInfStore"/> (the <c>,inf</c> sidecar is the
+/// The new access byte is persisted through <see cref="AcornAttributeStore"/> (the property bag of the object is the
 /// Acorn attribute system of record) and round-trips back to <c>*INFO</c>/<c>*EX</c>/GetObjectInfo.
 /// </remarks>
 public sealed class AccessCommand : IOsCliCommand
@@ -59,7 +59,7 @@ public sealed class AccessCommand : IOsCliCommand
 
     /// <summary>
     /// Sets the access byte of the object named in the argument from the permission string that
-    /// follows it, and writes the byte to the object's <c>,inf</c> sidecar.
+    /// follows it, and writes the byte to the property bag of the object.
     /// </summary>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
@@ -92,9 +92,9 @@ public sealed class AccessCommand : IOsCliCommand
         if (!call.Context.Paths.TryResolve(call.Session!, fsp, out string unixPath, out _, out _))
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
 
-        // Read-modify-write the ,inf sidecar: keep load/exec/length, replace only the access byte.
-        AcornInfStore.TryReadAttributes(call.Context.FileSystem, unixPath, out uint load, out uint exec, out int length, out _);
-        AcornInfStore.WriteAttributes(call.Context.FileSystem, unixPath, load, exec, length, newAccess);
+        // Read-modify-write the property bag: keep load/exec/length, replace only the access byte.
+        AcornAttributeStore.TryReadAttributes(call.Context.FileSystem, unixPath, out uint load, out uint exec, out int length, out _);
+        AcornAttributeStore.WriteAttributes(call.Context.FileSystem, unixPath, load, exec, length, newAccess);
 
         // Success is a plain completion (return code 0) — the same payload the stub always returned.
         return FileServerReply.Success();

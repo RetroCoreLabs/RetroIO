@@ -15,13 +15,13 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 
 /// <summary>
 /// <c>SetObjectInfo</c> (fsop 0x13) — writes load/exec/length/access metadata for an existing file to
-/// its <c>,inf</c> sidecar (the Acorn attribute system of record). A missing object is
+/// its property bag (the Acorn attribute system of record). A missing object is
 /// <c>0xD6 "Not found"</c>; a malformed path is <c>0xCC "Bad filename"</c>.
 /// </summary>
 /// <remarks>
 /// Migrated from <c>MiscOpcodeHandler.HandleSetObjectInfo</c>, unchanged. This is the write half that
 /// pairs with <c>GetObjectInfo</c> (0x12) and with the <c>*ACCESS</c> command — all three round-trip
-/// the access byte through <see cref="AcornInfStore"/>.
+/// the access byte through <see cref="AcornAttributeStore"/>.
 /// </remarks>
 public sealed class SetObjectInfoOperation : IFileServerOperation
 {
@@ -44,7 +44,7 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
     public bool RequiresSystem => false;
 
     /// <summary>
-    /// Writes load, exec, length and access to the <c>,inf</c> sidecar of the existing file named in
+    /// Writes load, exec, length and access to the property bag of the existing file named in
     /// the request.
     /// </summary>
     /// <remarks>
@@ -86,7 +86,7 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
                 uint exec = (uint)(parameters[5] | (parameters[6] << 8) | (parameters[7] << 16) | (parameters[8] << 24));
                 int length = parameters[9] | (parameters[10] << 8) | (parameters[11] << 16);
                 byte access = parameters.Length > 12 ? parameters[12] : context.Configuration.DefaultFilePerm;
-                AcornInfStore.WriteAttributes(context.FileSystem, unixPath, load, exec, length, access);
+                AcornAttributeStore.WriteAttributes(context.FileSystem, unixPath, load, exec, length, access);
             }
         }
 

@@ -40,7 +40,7 @@ public sealed class RunAndInfoTests
         _harness.FileSystem.AddFile(InvadersUnix, Encoding.ASCII.GetBytes("invaders code"));
 
         _harness.FileSystem.AddFile(ProgUnix, ProgContent);
-        AcornInfStore.WriteAttributes(_harness.FileSystem, ProgUnix, LoadAddress, ExecAddress, ProgContent.Length, Access);
+        AcornAttributeStore.WriteAttributes(_harness.FileSystem, ProgUnix, LoadAddress, ExecAddress, ProgContent.Length, Access);
     }
 
     [Test]
