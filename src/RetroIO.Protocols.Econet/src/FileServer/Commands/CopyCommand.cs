@@ -8,6 +8,7 @@
 using System;
 using System.IO;
 using RetroIO.Protocols.Econet.FileServer.Dispatch;
+using RetroIO.Protocols.Econet.FileServer.Metadata;
 using RetroIO.Protocols.Econet.Protocol.FileServer;
 
 namespace RetroIO.Protocols.Econet.FileServer.Commands;
@@ -81,6 +82,9 @@ public sealed class CopyCommand : IOsCliCommand
 
         byte[] data = ReadAll(call.Context, sourcePath);
         WriteAll(call.Context, destPath, data);
+
+        // fs.c line 6474: the copy is owned by the user who made it.
+        ObjectOwnership.SetOwner(call.Context, call.Session!, destPath);
         return FileServerReply.Success();
     }
 

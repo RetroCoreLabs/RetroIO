@@ -204,6 +204,7 @@ public sealed class FileServerSessionManager
                 ClientNet = net,
                 ClientStation = station,
                 RetroUserId = retroUser.UserId,
+                UserIndex = profile.UserIndex,
                 Username = profile.Username.TrimEnd(),
                 IsAdmin = profile.IsAdmin,
                 BootOpt = profile.BootOpt,

@@ -59,7 +59,7 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
     ///  - the canonical form (<see cref="FileServerOpcodes.GetObjectInfoCanonical"/>) adds the path and a
     ///    CR after the info reply.
     ///  - command 6 fills in the 10-byte directory name and the entry count, capped at 255.
-    /// The owner byte always reports the caller as owner, since there is no per-object owner model.
+    /// The owner byte is 0 when the caller owns the object (see ObjectOwnership) and 0xFF when not. For commands 4, 5 and 96 a system user counts as owner (fs.c line 5694). For command 6 only the owner does (fs.c line 5735).
     /// </remarks>
     /// <param name="call">
     /// Everything the operation needs: the request, the decoded header, the session, and services.
@@ -157,11 +157,17 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
             }
         }
 
+        // fs.c line 5694: the owner byte of commands 4, 5 and 96 is 0 for the owner or a system user, 0xFF for anyone else.
+        // fs.c line 5735: the owner byte of command 6 is 0 for the owner only, a system user is not counted.
+        ushort owner = ObjectOwnership.GetOwner(context, unixPath);
+        bool isOwner = ObjectOwnership.IsEffectiveOwner(session, owner);
+        bool isDirectoryOwner = ObjectOwnership.IsOwner(session, owner);
+
         if (command == FileServerOpcodes.GetObjectInfoCanonical)
         {
             byte[] canonical = Encoding.ASCII.GetBytes(path + "\r");
             byte[] baseReply = FileServerReply.ObjectInfoForCommand(
-                command, fileType, load, exec, length, access, day, monthYear, isOwner: true, ReadOnlySpan<byte>.Empty, 0);
+                command, fileType, load, exec, length, access, day, monthYear, isOwner, ReadOnlySpan<byte>.Empty, 0);
             byte[] reply = new byte[baseReply.Length + canonical.Length];
             baseReply.CopyTo(reply, 0);
             canonical.CopyTo(reply.AsSpan(baseReply.Length));
@@ -178,10 +184,7 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
             entryCount = (byte)Math.Min(count, 255);
         }
 
-        // MDFS owner byte is catalogue metadata, not an access gate. PiFS sets 0x00 when
-        // the active uid owns the object; RetroFS has no per-file MDFS owner — if we
-        // resolved the path for this session, report as owner (0x00).
-        bool isOwner = true;
+        // The owner byte is catalogue metadata, not an access gate (see the owner lines above).
         byte[] payload = FileServerReply.ObjectInfoForCommand(
             command,
             fileType,
@@ -193,7 +196,8 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
             monthYear,
             isOwner,
             dirName10,
-            entryCount);
+            entryCount,
+            isDirectoryOwner);
         return payload;
     }
 }

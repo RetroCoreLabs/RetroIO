@@ -18,7 +18,8 @@ public sealed class FileServerConfiguration
     /// <remarks>
     /// PiFS name FS_CONFIG_ACORNHOME, NETCONF item ACORNHOME. The PiFS field comment says it means implement Acorn home directory ownership semantics.
     /// PiFS checks it when it resolves paths and at login (fs_login), where it looks up the home owner of a directory. The PiFS menu text calls it Acorn home dir permissions.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (struct fs_config, fs_acorn_home; the checks near lines 2784, 2928, 3061 and 4677). This code does not read the bit: it needs an owner and a home directory owner for each object, and this server keeps neither.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (struct fs_config, fs_acorn_home; the checks near lines 2784, 2928, 3061 and 4677). This code reads the bit through AcornHome. With it set, a user directory without a home owner gets the user number of the user who logs in (line 4677), and every object at or below a directory that has a home owner is owned by that user (lines 2784, 2928 and 3061). The owner and the home owner are kept in the sidecar file (see AcornInfStore and ObjectOwnership). *SETHOME writes the home owner whatever the bit says, as in PiFS (lines 10715 to 10751).
+    /// This server gives every user the USER directory of the disc as the home, unless the user has a *SETHOME value, so users who share that directory share one home owner: the first one to log in with the bit set.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagAcornHome = 0x01;
@@ -30,7 +31,8 @@ public sealed class FileServerConfiguration
     /// With it set, PiFS accepts function codes 64 and above, and the %PASSWORDS file, the hidden or private permission bit, the extra owner bytes in object information, and a library search on load and open. With it clear, function codes 64 and above are refused.
     /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_sjfunc; the checks near lines 1104, 1131, 2203, 5089, 5392, 5744, 8178, 9197 and 9911).
     /// This code reads the bit for: operations from 64 up refused as Unsupported (line 9911), get object info command 0x40 refused (line 5392), and the library search on load (line 8178) and on open of an existing file (line 9197).
-    /// It does not implement the %PASSWORDS file, the hidden bit conversion or the owner bytes in object information, because this server keeps no owner for each object and has no MDFS password file.
+    /// It reads the bit for the owner bytes of the binary catalogue entry (EXAMINE argument 0, lines 5089 to 5094): the owner number, bits 8 to 10 of it shifted down by 3, and 0 for the auxiliary account. With the bit clear PiFS puts the internal number there, and this server has none, so those bytes stay 0.
+    /// It does not implement the %PASSWORDS file (line 2203), the hidden bit conversion (lines 1104 and 1131) or the creation and modification time of get object info command 64 (lines 5741 to 5764), because this server has no MDFS password file, and it sends the stored access byte without converting it to the Acorn layout (see FlagAcornDir), so there is no conversion to add the hidden bit to. (Line 1104 masks fs_sjfunc (0x01 or 0) with FS_PERM_H (0x80), which is always 0, so the reference never sets 0x40 there either.)
     /// PiFS default for a new configuration is on.
     /// </remarks>
     public const byte FlagMdfsFunctions = 0x02;
@@ -67,7 +69,7 @@ public sealed class FileServerConfiguration
     /// </summary>
     /// <remarks>
     /// PiFS name FS_CONFIG_MDFSINFO, NETCONF item MDFSINFO. The PiFS field comment says it enables longer output from *INFO akin to MDFS. The long form adds the creation date and time and the internal number, and it also shows the owner and other access letters in lower case for objects the user does not own.
-    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_mdfsinfo; fs.c lines 205, 5123 to 5128, 5180 to 5187 and 7195 to 7201). This code does not read the bit: the letter case depends on whether the viewer owns the object, which this server does not know, and *INFO here is a redirect to get object info, not the text of fs_info.
+    /// Source: PiEconetBridge utilities/fs.c and include/econet-fs-hpbridge-common.h (fs_mdfsinfo; fs.c lines 205, 5123 to 5128, 5180 to 5187 and 7195 to 7201). This code reads the bit in the text catalogue (EXAMINE argument 3): the letters are lower case for the owner letters of an object the viewer does not own, and for the other-user letters of an object the viewer owns (lines 5180 to 5187). It does not make the long *INFO text (lines 7201 to 7216): that text carries the internal number of the object, which this server does not have, and *INFO here is a redirect to get object info, not the text of fs_info.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagMdfsInfo = 0x20;
@@ -77,7 +79,7 @@ public sealed class FileServerConfiguration
     /// <remarks>
     /// PiFS name FS_CONFIG_PIFSPERMS, NETCONF item PIFSPERMS. The PiFS field comment says it enables more flexible permissions on directories and enforces them.
     /// With it set, the create check also lets another user create in a directory that has the other-write and owner-write bits.
-    /// Source: PiEconetBridge utilities/fs.c (fs_pifsperms, line 207; FS_PERM_CREATE, line 372) and include/econet-fs-hpbridge-common.h line 16. This code does not read the bit: the checks need an owner and the access of the parent directory, which this server does not keep.
+    /// Source: PiEconetBridge utilities/fs.c (fs_pifsperms, line 207; FS_PERM_CREATE, line 372) and include/econet-fs-hpbridge-common.h line 16. This code does not read the bit, on purpose. In fs.c the field is only stored, sent and set (lines 570, 591 and 10486 to 10487). The macros that would use it (FS_PERM_CREATE, FS_PERM_SAVE, FS_PERM_LOAD, FS_PERM_RENAME, FS_PERM_OPENOUT, FS_PERM_WRITE, lines 372 to 421) are never called, and they cannot compile as written: they name FS_CONFIG_PIFSPERMS as if it were a function, and use FS_PERM_SET_ and FS_PERM OTH(W) that are not defined. The checks that PiFS really makes (for example the save check at lines 5834 to 5846) do not look at the bit. With no written rule to follow, nothing is enforced here.
     /// PiFS default for a new configuration is off.
     /// </remarks>
     public const byte FlagPifsPerms = 0x40;
@@ -164,6 +166,16 @@ public sealed class FileServerConfiguration
     /// Gets a value indicating whether FlagMdfsFunctions is set in ConfigBits.
     /// </summary>
     public bool MdfsFunctions => (ConfigBits & FlagMdfsFunctions) != 0;
+
+    /// <summary>
+    /// Gets a value indicating whether FlagAcornHome is set in ConfigBits.
+    /// </summary>
+    public bool AcornHome => (ConfigBits & FlagAcornHome) != 0;
+
+    /// <summary>
+    /// Gets a value indicating whether FlagMdfsInfo is set in ConfigBits.
+    /// </summary>
+    public bool MdfsInfo => (ConfigBits & FlagMdfsInfo) != 0;
 
     /// <summary>
     /// Gets a value indicating whether FlagAcornDir is set in ConfigBits.
