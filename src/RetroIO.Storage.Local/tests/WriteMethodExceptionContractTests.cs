@@ -147,7 +147,7 @@ namespace RetroIO.Storage.Local.Tests
 
         // ------------------------------------------------------------------ the exact exception, per file system
 
-        [TestCase(typeof(DecbFileSystem))]
+        // DecbFileSystem left this list when it got write support (see DecbWriteTests).
         [TestCase(typeof(DragonDosFileSystem))]
         public void FileSystemWithoutWriteSupport_WriteFileAndDeleteFile_ThrowIOException(Type fsType)
         {

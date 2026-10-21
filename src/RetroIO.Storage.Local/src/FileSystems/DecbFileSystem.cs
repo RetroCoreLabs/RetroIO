@@ -238,34 +238,104 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Always throws IOException: the DECB file system has no write support, so the volume is read-only.
+        /// Creates a file or replaces the contents of an existing one.
         /// </summary>
+        /// <remarks>
+        /// An existing file keeps its file type and ASCII flag. A new file gets them from its extension: BAS is type 0
+        /// binary, DAT is type 1 ASCII, BIN is type 2 binary, TXT is type 3 ASCII, anything else is type 2 binary.
+        /// The extension table is a choice made here, because the disk format does not tie a type to an extension.
+        /// Use the overload with the type and the flag to set them yourself.
+        /// </remarks>
         /// <param name="path">
-        /// Not used.
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>. Letters are stored in upper case.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The new contents.
         /// </param>
         /// <exception cref="IOException">
-        /// Always thrown.
+        /// Thrown when the volume is read-only, the directory has no free entry or the disk has too few free granules.
+        /// The disk is not changed in the last two cases.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the name does not fit a DECB name.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new IOException("The DECB file system has no write support, so the volume is read-only");
+            EnsureInitialized();
+            SplitName(path, out string name, out string extension);
+            WriteFileCore(name, extension, data, 0, 0, false);
         }
 
         /// <summary>
-        /// Always throws IOException: the DECB file system has no write support, so the volume is read-only.
+        /// Creates a file or replaces an existing one and sets the file type and the ASCII flag in the directory entry.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>.
         /// </param>
+        /// <param name="data">
+        /// The new contents.
+        /// </param>
+        /// <param name="fileType">
+        /// 0 BASIC program, 1 BASIC data, 2 machine language, 3 text.
+        /// </param>
+        /// <param name="asciiFlag">
+        /// 0x00 for a binary file, 0xFF for an ASCII file.
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the type is above 3 or the flag is neither 0x00 nor 0xFF.
+        /// </exception>
         /// <exception cref="IOException">
-        /// Always thrown.
+        /// Thrown when the volume is read-only, the directory is full or the disk is full.
+        /// </exception>
+        public void WriteFile(string path, byte[] data, byte fileType, byte asciiFlag)
+        {
+            EnsureInitialized();
+            if (fileType > 3)
+            {
+                throw new ArgumentOutOfRangeException(nameof(fileType), "DECB file types are 0 to 3");
+            }
+
+            if (asciiFlag != 0x00 && asciiFlag != 0xFF)
+            {
+                throw new ArgumentOutOfRangeException(nameof(asciiFlag), "The DECB ASCII flag is 0x00 or 0xFF");
+            }
+
+            SplitName(path, out string name, out string extension);
+            WriteFileCore(name, extension, data, fileType, asciiFlag, true);
+        }
+
+        /// <summary>
+        /// Deletes a file: the first byte of its directory entry is set to 0 and every granule of its chain becomes free (0xFF) in the FAT.
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>.
+        /// </param>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when the file is not in the directory.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the volume is read-only.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new IOException("The DECB file system has no write support, so the volume is read-only");
+            EnsureInitialized();
+            EnsureWritable();
+            SplitName(path, out string name, out string extension);
+            ScanDirectory(name, extension, out int found, out int firstEmpty);
+            if (found < 0)
+            {
+                throw new System.IO.FileNotFoundException($"File not found: {path}");
+            }
+
+            byte[] entry = ReadDirEntry(found);
+            byte[] fat = (byte[])_fat!.Clone();
+            FreeChain(fat, entry[13]);
+
+            // Same as Toolshed kill: only the first byte of the entry is cleared, the rest stays.
+            entry[0] = 0x00;
+            CommitFat(fat);
+            WriteDirEntry(found, entry);
+            _device!.Flush();
         }
 
         /// <summary>
@@ -379,20 +449,43 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Always throws IOException: the DECB file system has no write support, so the volume is read-only.
+        /// Renames a file by rewriting the name and extension in its directory entry. Nothing else changes.
         /// </summary>
         /// <param name="oldPath">
-        /// Not used.
+        /// Current name as <c>NAME.EXT</c>.
         /// </param>
         /// <param name="newPath">
-        /// Not used.
+        /// New name as <c>NAME.EXT</c>.
         /// </param>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when <paramref name="oldPath"/> is not in the directory.
+        /// </exception>
         /// <exception cref="IOException">
-        /// Always thrown.
+        /// Thrown when the volume is read-only or a file with the new name exists.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
-            throw new IOException("The DECB file system has no write support, so the volume is read-only");
+            EnsureInitialized();
+            EnsureWritable();
+            SplitName(oldPath, out string oldName, out string oldExtension);
+            SplitName(newPath, out string newName, out string newExtension);
+
+            ScanDirectory(oldName, oldExtension, out int found, out int firstEmpty);
+            if (found < 0)
+            {
+                throw new System.IO.FileNotFoundException($"File not found: {oldPath}");
+            }
+
+            ScanDirectory(newName, newExtension, out int clash, out firstEmpty);
+            if (clash >= 0)
+            {
+                throw new IOException($"A file named {newPath} exists");
+            }
+
+            byte[] entry = ReadDirEntry(found);
+            PutName(entry, newName, newExtension);
+            WriteDirEntry(found, entry);
+            _device!.Flush();
         }
 
         // ===================================================================
@@ -563,7 +656,10 @@ namespace RetroIO.Storage.Local.FileSystems
                 return 0;
             }
 
-            int fileSize = ((totalSectors - 1) * SECTOR_SIZE) + (lastSectorBytes == 0 ? SECTOR_SIZE : lastSectorBytes);
+            // The byte count of the last sector is taken as it stands. A full last sector is stored as 256 (syzygy.dsk
+            // SYZYGY10.BIN holds 0100) and an empty file is one granule with one sector and a count of 0, which is how
+            // Toolshed (libdecb gs_size: 2304 per full granule + 256 per full sector + the count) and DECB size it.
+            int fileSize = ((totalSectors - 1) * SECTOR_SIZE) + Math.Min((int)lastSectorBytes, SECTOR_SIZE);
             return fileSize;
         }
 
@@ -602,9 +698,10 @@ namespace RetroIO.Storage.Local.FileSystems
                     _device!.ReadBlock(BlockAddress.FromLBA(lsn), sectorData);
 
                     bool isLastSector = isLastGranule && (s == sectorsToRead - 1);
-                    if (isLastSector && entry.LastSectorBytes > 0)
+                    if (isLastSector)
                     {
-                        for (int j = 0; j < entry.LastSectorBytes; j++)
+                        int usedBytes = Math.Min((int)entry.LastSectorBytes, SECTOR_SIZE);
+                        for (int j = 0; j < usedBytes; j++)
                         {
                             fileData.Add(sectorData[j]);
                         }
@@ -645,6 +742,376 @@ namespace RetroIO.Storage.Local.FileSystems
                 3 => "Text",
                 _ => $"Type {fileType}"
             };
+        }
+
+        // ---- write support ----
+        //
+        // Rules used, all checked against real disks written by Toolshed 2.2 (decb dskini, copy, kill, rename, attr)
+        // and against the Toolshed libdecb source (write, open/create, kill, rename, gs_size):
+        //  - FAT: sector 2 of track 17, one byte per granule (68). 0xFF is free. A value below 0xC0 is the next granule
+        //    of the chain. 0xC0 plus N (N = 1 to 9) ends the chain and says how many sectors of the last granule are used.
+        //  - Directory: sectors 3 to 11 of track 17, 8 entries of 32 bytes, 72 in all. First byte 0x00 is a deleted
+        //    entry (the rest stays), 0xFF is the end of the directory.
+        //  - Entry: name 0-7, extension 8-10 (space padded), type 11, ASCII flag 12, first granule 13, bytes used in the
+        //    last sector 14-15 (big-endian, 256 for a full sector, 0 for an empty file), 16 zero bytes.
+        //  - An empty file still owns one granule (FAT value 0xC1, count 0).
+        //  - Free granule search is the Toolshed port of what the DECB ROM does (find_free_granule): first granule of a
+        //    file is searched from granule 34, each next granule from the one before it.
+
+        private void EnsureWritable()
+        {
+            if (_device!.IsReadOnly)
+            {
+                throw new IOException("The volume is mounted read-only");
+            }
+        }
+
+        private static bool IsNameChar(char c)
+        {
+            return c > ' ' && c < 0x7F && c != '.' && c != '/' && c != ',' && c != ':';
+        }
+
+        private static void SplitName(string path, out string name, out string extension)
+        {
+            if (path == null)
+            {
+                throw new ArgumentNullException(nameof(path));
+            }
+
+            if (path.StartsWith("/"))
+            {
+                path = path.Substring(1);
+            }
+
+            int dot = path.IndexOf('.');
+            if (dot >= 0)
+            {
+                name = path.Substring(0, dot);
+                extension = path.Substring(dot + 1);
+            }
+            else
+            {
+                name = path;
+                extension = string.Empty;
+            }
+
+            name = name.ToUpperInvariant();
+            extension = extension.ToUpperInvariant();
+
+            if (name.Length < 1 || name.Length > 8 || extension.Length > 3)
+            {
+                throw new ArgumentException($"Not a DECB name (1 to 8 characters, extension up to 3): {path}");
+            }
+
+            for (int i = 0; i < name.Length; i++)
+            {
+                if (!IsNameChar(name[i]))
+                {
+                    throw new ArgumentException($"Character not allowed in a DECB name: {path}");
+                }
+            }
+
+            for (int i = 0; i < extension.Length; i++)
+            {
+                if (!IsNameChar(extension[i]))
+                {
+                    throw new ArgumentException($"Character not allowed in a DECB extension: {path}");
+                }
+            }
+        }
+
+        private static void PutName(byte[] entry, string name, string extension)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                entry[i] = i < name.Length ? (byte)name[i] : (byte)' ';
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                entry[8 + i] = i < extension.Length ? (byte)extension[i] : (byte)' ';
+            }
+        }
+
+        private byte[] ReadDirEntry(int index)
+        {
+            byte[] sector = new byte[SECTOR_SIZE];
+            _device!.ReadBlock(BlockAddress.FromLBA(CalculateLSN(FAT_TRACK, DIR_START_SECTOR + (index / ENTRIES_PER_SECTOR))), sector);
+            byte[] entry = new byte[DIR_ENTRY_SIZE];
+            Array.Copy(sector, (index % ENTRIES_PER_SECTOR) * DIR_ENTRY_SIZE, entry, 0, DIR_ENTRY_SIZE);
+            return entry;
+        }
+
+        private void WriteDirEntry(int index, byte[] entry)
+        {
+            uint lsn = CalculateLSN(FAT_TRACK, DIR_START_SECTOR + (index / ENTRIES_PER_SECTOR));
+            byte[] sector = new byte[SECTOR_SIZE];
+            _device!.ReadBlock(BlockAddress.FromLBA(lsn), sector);
+            Array.Copy(entry, 0, sector, (index % ENTRIES_PER_SECTOR) * DIR_ENTRY_SIZE, DIR_ENTRY_SIZE);
+            _device.WriteBlock(BlockAddress.FromLBA(lsn), sector);
+        }
+
+        // Looks for a name in the directory. found is the entry index or -1. firstEmpty is the first entry that is
+        // deleted (0x00) or the end marker (0xFF), or -1 when all 72 are in use. The scan stops at the end marker.
+        private void ScanDirectory(string name, string extension, out int found, out int firstEmpty)
+        {
+            found = -1;
+            firstEmpty = -1;
+            byte[] sector = new byte[SECTOR_SIZE];
+
+            for (int s = 0; s <= DIR_END_SECTOR - DIR_START_SECTOR; s++)
+            {
+                _device!.ReadBlock(BlockAddress.FromLBA(CalculateLSN(FAT_TRACK, DIR_START_SECTOR + s)), sector);
+                for (int e = 0; e < ENTRIES_PER_SECTOR; e++)
+                {
+                    int offset = e * DIR_ENTRY_SIZE;
+                    int index = (s * ENTRIES_PER_SECTOR) + e;
+                    byte first = sector[offset];
+
+                    if (first == 0xFF)
+                    {
+                        if (firstEmpty < 0)
+                        {
+                            firstEmpty = index;
+                        }
+
+                        return;
+                    }
+
+                    if (first == 0x00)
+                    {
+                        if (firstEmpty < 0)
+                        {
+                            firstEmpty = index;
+                        }
+
+                        continue;
+                    }
+
+                    string entryName = Encoding.ASCII.GetString(sector, offset, 8).Trim();
+                    string entryExtension = Encoding.ASCII.GetString(sector, offset + 8, 3).Trim();
+                    if (string.Equals(entryName, name, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(entryExtension, extension, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = index;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Sets every granule of the chain that starts at firstGranule to free. The walk is bounded so a damaged
+        // (looping) chain cannot run for ever.
+        private static void FreeChain(byte[] fat, byte firstGranule)
+        {
+            int granule = firstGranule;
+            int steps = 0;
+            while (granule < MAX_GRANULES && steps <= MAX_GRANULES)
+            {
+                byte next = fat[granule];
+                fat[granule] = 0xFF;
+                if (next >= 0xC0 || next == 0xFF)
+                {
+                    break;
+                }
+
+                granule = next;
+                steps++;
+            }
+        }
+
+        // Port of Toolshed find_free_granule, which says it matches the DECB ROM: start at the first granule of the
+        // track of nextTo, then alternate outward over the tracks. Returns -1 when no granule is free.
+        private static int FindFreeGranule(byte[] fat, int nextTo)
+        {
+            int counter = 0;
+            int direction = 0;
+            int granule = nextTo & ~1;
+
+            while (counter < MAX_GRANULES)
+            {
+                if (granule >= 0 && granule < MAX_GRANULES && fat[granule] == 0xFF)
+                {
+                    return granule;
+                }
+
+                counter++;
+                granule++;
+
+                if ((granule & 1) != 0)
+                {
+                    continue;
+                }
+
+                int save = granule;
+                granule -= 2;
+                direction = ~direction;
+
+                if (direction != 0)
+                {
+                    granule -= counter;
+                    if (granule < 0)
+                    {
+                        granule = save;
+                        direction = ~direction;
+                    }
+                }
+                else
+                {
+                    granule += counter;
+                    if (granule >= MAX_GRANULES)
+                    {
+                        granule = save;
+                        granule -= 4;
+                        direction = ~direction;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+        private void CommitFat(byte[] fat)
+        {
+            uint lsn = CalculateLSN(FAT_TRACK, FAT_SECTOR);
+            _device!.WriteBlock(BlockAddress.FromLBA(lsn), fat);
+            _fat = fat;
+        }
+
+        private static void DefaultTypeFor(string extension, out byte fileType, out byte asciiFlag)
+        {
+            fileType = 2;
+            asciiFlag = 0x00;
+            if (extension == "BAS")
+            {
+                fileType = 0;
+            }
+            else if (extension == "DAT")
+            {
+                fileType = 1;
+                asciiFlag = 0xFF;
+            }
+            else if (extension == "TXT")
+            {
+                fileType = 3;
+                asciiFlag = 0xFF;
+            }
+        }
+
+        private void WriteFileCore(string name, string extension, byte[] data, byte fileType, byte asciiFlag, bool typeGiven)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            EnsureWritable();
+            ScanDirectory(name, extension, out int found, out int firstEmpty);
+            byte[] fat = (byte[])_fat!.Clone();
+
+            int slot = firstEmpty;
+            if (found >= 0)
+            {
+                byte[] old = ReadDirEntry(found);
+                if (!typeGiven)
+                {
+                    fileType = old[11];
+                    asciiFlag = old[12];
+                }
+
+                // Toolshed overwrites by killing the old file and creating a new one, so its granules are free again
+                // for the new data and the first empty entry is used (which can be the old one).
+                FreeChain(fat, old[13]);
+                if (slot < 0 || found < slot)
+                {
+                    slot = found;
+                }
+            }
+            else if (!typeGiven)
+            {
+                DefaultTypeFor(extension, out fileType, out asciiFlag);
+            }
+
+            if (slot < 0)
+            {
+                throw new IOException("The DECB directory is full (72 entries)");
+            }
+
+            int granulesNeeded = Math.Max(1, (data.Length + GRANULE_SIZE - 1) / GRANULE_SIZE);
+            int[] chain = new int[granulesNeeded];
+            int previous = 34;
+            for (int i = 0; i < granulesNeeded; i++)
+            {
+                int granule = FindFreeGranule(fat, previous);
+                if (granule < 0)
+                {
+                    throw new IOException("The disk is full: not enough free granules");
+                }
+
+                fat[granule] = 0xC1; // taken for now; the real value is set below
+                chain[i] = granule;
+                previous = granule;
+            }
+
+            // Sectors used in the last granule and bytes used in the last sector.
+            int remaining = data.Length - ((granulesNeeded - 1) * GRANULE_SIZE);
+            int sectorsInLast = Math.Max(1, (remaining + SECTOR_SIZE - 1) / SECTOR_SIZE);
+            int lastSectorBytes = data.Length == 0 ? 0 : (remaining % SECTOR_SIZE == 0 ? SECTOR_SIZE : remaining % SECTOR_SIZE);
+
+            for (int i = 0; i < granulesNeeded - 1; i++)
+            {
+                fat[chain[i]] = (byte)chain[i + 1];
+            }
+
+            fat[chain[granulesNeeded - 1]] = (byte)(0xC0 + sectorsInLast);
+
+            // Data first, then FAT, then the directory entry, so a failure leaves the old directory entry valid.
+            byte[] buffer = new byte[SECTOR_SIZE];
+            int position = 0;
+            for (int i = 0; i < granulesNeeded; i++)
+            {
+                int track = chain[i] / 2;
+                if (track >= FAT_TRACK)
+                {
+                    track++;
+                }
+
+                int startSector = ((chain[i] % 2) * SECTORS_PER_GRANULE) + 1;
+                int sectors = i == granulesNeeded - 1 ? sectorsInLast : SECTORS_PER_GRANULE;
+                for (int s = 0; s < sectors; s++)
+                {
+                    Array.Clear(buffer, 0, buffer.Length);
+                    int count = Math.Min(SECTOR_SIZE, data.Length - position);
+                    if (count > 0)
+                    {
+                        Array.Copy(data, position, buffer, 0, count);
+                        position += count;
+                    }
+
+                    _device!.WriteBlock(BlockAddress.FromLBA(CalculateLSN(track, startSector + s)), buffer);
+                }
+            }
+
+            CommitFat(fat);
+
+            byte[] entry = new byte[DIR_ENTRY_SIZE];
+            PutName(entry, name, extension);
+            entry[11] = fileType;
+            entry[12] = asciiFlag;
+            entry[13] = (byte)chain[0];
+            entry[14] = (byte)(lastSectorBytes >> 8);
+            entry[15] = (byte)(lastSectorBytes & 0xFF);
+            WriteDirEntry(slot, entry);
+
+            // The new entry went into an earlier empty slot: the old entry of the same name is deleted as Toolshed kill does.
+            if (found >= 0 && found != slot)
+            {
+                byte[] oldEntry = ReadDirEntry(found);
+                oldEntry[0] = 0x00;
+                WriteDirEntry(found, oldEntry);
+            }
+
+            _device!.Flush();
         }
 
         private void EnsureInitialized()
