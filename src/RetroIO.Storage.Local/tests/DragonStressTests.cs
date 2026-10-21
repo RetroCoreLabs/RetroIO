@@ -758,6 +758,8 @@ namespace RetroIO.Storage.Local.Tests
             private readonly Stopwatch _tFsck = new Stopwatch();
             private readonly Stopwatch _tList = new Stopwatch();
             private readonly Stopwatch _tRead = new Stopwatch();
+            private readonly Stopwatch _tBlocks = new Stopwatch();
+            private readonly byte[] _block = new byte[Sector];
             private double _sizeScale = 1.0;
 
             public Run(Variant v, int ops, int seed, bool stress)
@@ -1045,6 +1047,20 @@ namespace RetroIO.Storage.Local.Tests
                 {
                     Fail("file system check: " + f.Problem);
                 }
+
+                // What is in the image FILE is what the driver holds: every sector, so a change that was not written back fails at once.
+                _tBlocks.Start();
+                int blocks = sectors.Length / Sector;
+                for (int i = 0; i < blocks; i++)
+                {
+                    _driver.ReadBlock(BlockAddress.FromLBA((uint)i), _block);
+                    if (!_block.AsSpan().SequenceEqual(sectors.AsSpan(i * Sector, Sector)))
+                    {
+                        Fail("sector " + i + " in the image file is not what the driver holds: the change was not written back");
+                    }
+                }
+
+                _tBlocks.Stop();
 
                 int lost = _v.Kind == Kind.Os9 ? f.Lost - _lostBaseline : f.Lost;
                 if (lost != 0)
@@ -1506,7 +1522,7 @@ namespace RetroIO.Storage.Local.Tests
 
                     TestContext.Out.WriteLine(_v.Name + ": " + _ops + " operations in " + total.ElapsedMilliseconds + " ms (" + (total.ElapsedMilliseconds / (double)_ops).ToString("F2")
                         + " ms each with every check; operation " + _tStep.ElapsedMilliseconds + " ms, file read " + _tRaw.ElapsedMilliseconds + " ms, image check " + _tFsck.ElapsedMilliseconds
-                        + " ms, listing " + _tList.ElapsedMilliseconds + " ms, read back " + _tRead.ElapsedMilliseconds + " ms); " + probeText
+                        + " ms, listing " + _tList.ElapsedMilliseconds + " ms, read back " + _tRead.ElapsedMilliseconds + " ms, file against driver " + _tBlocks.ElapsedMilliseconds + " ms); " + probeText
                         + "; managed memory without the model " + (memoryAtMark / 1024) + " KB at op " + markMemory + " and " + (memoryEnd / 1024) + " KB at the end (samples "
                         + string.Join(" ", memorySamples.ConvertAll(m => (m / 1024).ToString())) + " KB); most extents of a file " + _maxExtentsSeen
                         + ", files over four extents at once " + _filesOverFour);
