@@ -26,16 +26,21 @@ namespace RetroIO.Storage.Local.Drivers
     /// WALKABOU.DSK, syzygy.dsk and NITR09.DSK. No real image with a JVC header is in the test folder, so the header fields are as documented by XRoar and have no
     /// real-image proof here.
     /// <para><b>Header</b></para>
-    /// The header is as long as the remainder of the file size divided by 256 (XRoar uses the remainder by 128, so that 128-byte sectors and
-    /// sector attribute bytes do not confuse it; this driver accepts 256-byte sectors only). A header holds up to five bytes, and a missing byte takes its default:
+    /// The header is as long as the remainder of the file size divided by 128. The original JVC description says 256; XRoar uses 128 so that
+    /// 128-byte sectors and sector attribute bytes do not confuse it, and so does this driver (a header of 128 bytes or more cannot be told
+    /// from sector data, and no real file has one). This driver accepts 256-byte sectors only. A header holds up to five bytes, and a missing byte takes its default:
     ///  - Byte 0: sectors per track. Default 18.
     ///  - Byte 1: sides. Default 1.
     ///  - Byte 2: sector size code, the size is 128 shifted left by the code. Default 1, which is 256 bytes.
     ///  - Byte 3: the number of the first sector on a track. Default 1.
-    ///  - Byte 4: the sector attribute flag, which adds a byte in front of every sector. Default 0. This driver does not support it.
+    ///  - Byte 4: the sector attribute flag, which adds a byte in front of every sector. Default 0. This driver does not support it and refuses
+    ///    an image that sets it (NotSupportedException).
     /// <para><b>Sectors</b></para>
     /// The sectors follow in the order cylinder, then side, then sector. The number of tracks is the data size divided by sectors per track,
-    /// sides and sector size.
+    /// sides and sector size. XRoar adds one more track when the rest holds at least one sector ("Some images are distributed with partial last
+    /// tracks") and takes the missing sectors as zero; this driver does the same and shows the missing sectors as zero bytes. A rest of less than
+    /// one sector is refused. A single sided image of 88 tracks or more is taken as double sided (XRoar: too many tracks is implausible, so it is
+    /// a 720 KB disk).
     /// <para><b>Images without a header</b></para>
     /// A headerless image is taken as 18 sectors per track and one side, which cannot tell a 40 track two sided disk from an 80 track one sided disk of
     /// the same size. For an OS-9 disk the identification sector settles it: track size in sectors (byte 3), sectors per track (bytes 17 and 18)
@@ -43,6 +48,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// <para><b>What this driver does with it</b></para>
     /// It mounts the sectors and picks the file system from the contents of the disk: OS-9 first (strict signature in sector 0), then DECB for a
     /// 35 track disk, then DragonDOS. The VDK format is described in <see cref="DragonVdkDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
+    /// <para><b>Writing</b></para>
+    /// The mounted volume (DragonDOS, DECB or OS-9) can be written (create, overwrite, delete, rename) through its file system; the changes go back to the image stream after each operation. The
+    /// header is kept as it is.
     /// </remarks>
     public sealed class DragonDskDriver : IFileSystemDriver
     {
@@ -65,17 +73,24 @@ namespace RetroIO.Storage.Local.Drivers
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ".";
 
         /// <summary>
-        /// Gets the capability flags of this driver: read, directory listing, file types, volume label and block read.
+        /// Gets the capability flags of this driver: read, directory listing, file types, volume label and block read, and write when <see cref="CanWrite"/> is true.
         /// </summary>
         public DriverCapabilities Capabilities
         {
             get
             {
-                return DriverCapabilities.Read |
-                       DriverCapabilities.ListDirectory |
-                       DriverCapabilities.FileTypes |
-                       DriverCapabilities.VolumeLabel |
-                       DriverCapabilities.BlockRead;
+                DriverCapabilities caps = DriverCapabilities.Read |
+                                          DriverCapabilities.ListDirectory |
+                                          DriverCapabilities.FileTypes |
+                                          DriverCapabilities.VolumeLabel |
+                                          DriverCapabilities.BlockRead;
+
+                if (CanWrite)
+                {
+                    caps |= DriverCapabilities.Write;
+                }
+
+                return caps;
             }
         }
 
@@ -84,11 +99,11 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public bool CanRead => true;
         /// <summary>
-        /// Gets false, because the driver does not write yet.
+        /// Gets <c>true</c> when an image is mounted read-write and holds a volume that can be written: DragonDOS (with a valid BAM), DECB or OS-9.
         /// </summary>
-        public bool CanWrite => false;
+        public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly && _filesystem != null && (_filesystem is not DragonDosFileSystem dragonDos || dragonDos.IsDragonDosVolume);
         /// <summary>
-        /// Gets <c>true</c>, because this driver can read raw blocks of the image. Block writes are not implemented.
+        /// Gets <c>true</c>, because this driver can read raw blocks of the image.
         /// </summary>
         public bool HasBlockAccess => true;
 
@@ -107,7 +122,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// Reads the optional JVC header, checks the geometry, mounts the data part of the image as a block device and initializes the file system.
         /// </summary>
         /// <remarks>
-        /// The header size is the file size modulo 256. DragonDOS is tried first. For a 35-track disk the DECB file system is tried before the fall back to DragonDOS.
+        /// The header size is the file size modulo 128. DragonDOS is tried first. For a 35-track disk the DECB file system is tried before the fall back to DragonDOS.
         /// </remarks>
         /// <param name="imageStream">
         /// The stream holding the disk image.
@@ -122,7 +137,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// Thrown when the header cannot be read or the sector size, first sector number, track count or data size do not fit a DragonDOS disk.
         /// </exception>
         /// <exception cref="NotSupportedException">
-        /// Thrown when the track and side count are not supported.
+        /// Thrown when the track and side count are not supported, or the header sets the sector attribute flag.
         /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
@@ -133,8 +148,9 @@ namespace RetroIO.Storage.Local.Drivers
 
             long fileSize = imageStream.Length;
 
-            // Calculate header size using JVC formula: fileSize % 256
-            int headerSize = (int)(fileSize % 256);
+            // Calculate header size: fileSize % 128. The JVC description says % 256, XRoar uses % 128 so that 128-byte sectors
+            // and sector attribute bytes do not hide a header (see the remarks of this class).
+            int headerSize = (int)(fileSize % 128);
 
             // Read header bytes if present
             byte sectorsPerTrack = 18;  // Default
@@ -167,6 +183,13 @@ namespace RetroIO.Storage.Local.Drivers
                 sides = os9Sides;
             }
 
+            // A set sector attribute flag puts one byte in front of every sector; that layout is not read.
+            if (attributeFlag != 0)
+            {
+                throw new NotSupportedException(
+                    $"JVC sector attribute bytes (header byte 4 = {attributeFlag}) are not supported");
+            }
+
             // Calculate sector size from code: 128 << code
             int sectorSize = 128 << sectorSizeCode;
 
@@ -184,10 +207,34 @@ namespace RetroIO.Storage.Local.Drivers
                     $"Unsupported first sector ID: {firstSectorId}. DragonDOS requires sector numbering starting at 1.");
             }
 
+            if (sectorsPerTrack == 0 || sides == 0)
+            {
+                throw new InvalidDataException(
+                    $"Bad DSK/JVC header: {sectorsPerTrack} sectors per track, {sides} side(s)");
+            }
+
             // Calculate track count
             long dataSize = fileSize - headerSize;
             long bytesPerTrack = sectorsPerTrack * sectorSize;
-            int tracks = (int)(dataSize / (bytesPerTrack * sides));
+            long bytesPerCylinder = bytesPerTrack * sides;
+            int tracks = (int)(dataSize / bytesPerCylinder);
+
+            // XRoar: a single sided image with this many tracks is implausible, it is a 720 KB double sided disk.
+            if (tracks >= 88 && sides == 1)
+            {
+                sides = 2;
+                bytesPerCylinder = bytesPerTrack * sides;
+                tracks = (int)(dataSize / bytesPerCylinder);
+            }
+
+            // XRoar: when the rest holds at least one sector, the file has one more (partial) last track.
+            bool partialLastTrack = false;
+            long rest = dataSize % bytesPerCylinder;
+            if (rest >= sectorSize)
+            {
+                tracks++;
+                partialLastTrack = true;
+            }
 
             // Validate track count
             if (tracks != 35 && tracks != 40 && tracks != 80)
@@ -199,17 +246,26 @@ namespace RetroIO.Storage.Local.Drivers
             // Detect descriptor based on geometry
             _descriptor = DetectDescriptor(tracks, sides);
 
-            // Validate data size matches expected geometry
+            // Validate data size matches expected geometry. A partial last track is the only accepted shortage.
             long expectedSize = tracks * sides * sectorsPerTrack * sectorSize;
-            if (dataSize != expectedSize)
+            if (dataSize != expectedSize && !partialLastTrack)
             {
                 throw new InvalidDataException(
                     $"DSK/JVC data size mismatch: expected {expectedSize} bytes ({tracks}T × {sides}S × {sectorsPerTrack}SPT × {sectorSize}), " +
                     $"got {dataSize} bytes after {headerSize}-byte header");
             }
 
-            // Create SubStream to expose only data portion (skipping header)
-            SubStream dataStream = new SubStream(imageStream, headerSize, dataSize);
+            // Create a stream to expose only the data portion (skipping header). A partial last track is padded with zero bytes behind
+            // the whole sectors that are there.
+            Stream dataStream;
+            if (partialLastTrack)
+            {
+                dataStream = new PaddedSubStream(imageStream, headerSize, (dataSize / sectorSize) * sectorSize, expectedSize);
+            }
+            else
+            {
+                dataStream = new SubStream(imageStream, headerSize, dataSize);
+            }
 
             // Mount block device with descriptor using data-only stream
             _blockDevice = new GenericBlockDevice(_descriptor);
@@ -403,34 +459,65 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the DSK/JVC driver has no write support, so the volume is read-only.
+        /// Creates or replaces a file on the mounted volume and writes the changed sectors to the image.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// Name of the file.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The file contents.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume cannot be written.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new UnauthorizedAccessException("The DSK/JVC driver has no write support, so the volume is read-only");
+            EnsureWritable();
+            _filesystem!.WriteFile(path, data);
+            _blockDevice!.Flush();
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the DSK/JVC driver has no write support, so the volume is read-only.
+        /// Deletes a file from the mounted volume and writes the changed sectors to the image.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// Name of the file.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume cannot be written.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new UnauthorizedAccessException("The DSK/JVC driver has no write support, so the volume is read-only");
+            EnsureWritable();
+            _filesystem!.DeleteFile(path);
+            _blockDevice!.Flush();
+        }
+
+        /// <summary>
+        /// Renames a file on the mounted volume and writes the changed sectors to the image.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Current name of the file.
+        /// </param>
+        /// <param name="newPath">
+        /// New name of the file.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume cannot be written.
+        /// </exception>
+        public void RenameFile(string oldPath, string newPath)
+        {
+            EnsureWritable();
+            _filesystem!.Rename(oldPath, newPath);
+            _blockDevice!.Flush();
+        }
+
+        private void EnsureWritable()
+        {
+            if (!CanWrite)
+            {
+                throw new UnauthorizedAccessException("The DSK/JVC volume is not mounted for writing, or cannot be written, so it is read-only");
+            }
         }
 
         /// <summary>
@@ -511,20 +598,26 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the DSK/JVC driver has no write support, so the volume is read-only.
+        /// Writes one sector of the image data and writes the image back.
         /// </summary>
         /// <param name="address">
-        /// Not used.
+        /// The block to write.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The 256 bytes of the sector.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted or the image is mounted read-only.
         /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
-            throw new UnauthorizedAccessException("The DSK/JVC driver has no write support, so the volume is read-only");
+            if (_blockDevice == null || _blockDevice.IsReadOnly)
+            {
+                throw new UnauthorizedAccessException("The DSK/JVC image is not mounted for writing, so the volume is read-only");
+            }
+
+            _blockDevice.WriteBlock(address, data);
+            _blockDevice.Flush();
         }
 
         /// <summary>
