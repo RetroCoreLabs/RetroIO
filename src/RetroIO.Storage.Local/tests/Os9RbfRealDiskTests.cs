@@ -35,9 +35,9 @@ namespace RetroIO.Storage.Local.Tests
     /// </para>
     /// <para>
     /// The DriveWire images (dw in the name) say in sector 0 that the volume has 524268 sectors, but the file stops after the last sector in
-    /// use. The reader refuses such a file because the volume is larger than the device; the tests read and write a copy made as long as the
-    /// volume with zero bytes. Nothing of the volume lies in the added part except free sectors, and Toolshed reads the short file and the long
-    /// copy alike.
+    /// use. On a device of the file's own size the reader refuses it, because the volume is larger than the device. The tests use the copy as
+    /// it is, not padded: the device is the whole volume through a PaddedSubStream, the sectors behind the file read as zero, and a write grows
+    /// the file only as far as the last sector written, as Toolshed does when it writes to such a file.
     /// </para>
     /// <para>
     /// The exact sector numbers expected in the layout tests are worked out in the comments from the rules of rbf.asm (FatScan, Create, L0D07,
@@ -123,8 +123,7 @@ namespace RetroIO.Storage.Local.Tests
             return Path.Combine(root, "os9", name);
         }
 
-        // Copies the image into the temporary folder and makes the copy as long as the volume says (see the class remarks). Skips the test
-        // when the image is missing.
+        // Copies the image into the temporary folder, as it is (see the class remarks). Skips the test when the image is missing.
         private string CopyOf(string name)
         {
             string source = ImagePath(name);
@@ -135,26 +134,23 @@ namespace RetroIO.Storage.Local.Tests
 
             string copy = Path.Combine(_folder, name);
             File.Copy(source, copy);
-            byte[] id = new byte[SectorSize];
-            using (FileStream stream = new FileStream(copy, FileMode.Open, FileAccess.ReadWrite))
-            {
-                stream.ReadExactly(id, 0, SectorSize);
-                long volume = (long)U24(id, 0) * SectorSize;
-                if (stream.Length < volume)
-                {
-                    stream.SetLength(volume);
-                }
-            }
-
             return copy;
         }
 
+        // Mounts the image as the whole volume sector 0 describes. A file shorter than its volume (the DriveWire images) is shown through a
+        // PaddedSubStream: the sectors behind the file read as zero and a write grows the file only as far as the sector written.
         private Os9RbfFileSystem Mount(string path, bool readOnly)
         {
-            long sectors = new FileInfo(path).Length / SectorSize;
+            long fileBytes = new FileInfo(path).Length;
             FileStream stream = new FileStream(path, FileMode.Open, readOnly ? FileAccess.Read : FileAccess.ReadWrite, FileShare.ReadWrite);
+            byte[] id = new byte[SectorSize];
+            stream.ReadExactly(id, 0, SectorSize);
+            long sectors = Math.Max(fileBytes / SectorSize, U24(id, 0));
+            Stream data = fileBytes < sectors * SectorSize
+                ? new RetroIO.Storage.Local.Streams.PaddedSubStream(stream, 0, fileBytes, sectors * SectorSize)
+                : stream;
             GenericBlockDevice device = new GenericBlockDevice(Descriptor(sectors));
-            device.Mount(stream, readOnly);
+            device.Mount(data, readOnly);
             _open.Add(stream);
             _open.Add(device);
             Os9RbfFileSystem fs = new Os9RbfFileSystem();

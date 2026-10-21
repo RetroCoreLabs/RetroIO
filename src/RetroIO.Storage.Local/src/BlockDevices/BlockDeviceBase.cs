@@ -8,6 +8,7 @@
 using System;
 using System.IO;
 using RetroIO.Storage.Core;
+using RetroIO.Storage.Local.Streams;
 
 namespace RetroIO.Storage.Local.BlockDevices
 {
@@ -64,13 +65,30 @@ namespace RetroIO.Storage.Local.BlockDevices
     ///  - LBAToCHS() / CHSToLBA() - For uniform geometry multi-sided devices
     ///  - GetTrackSectorOffset() - Calculate byte offset for Track/Sector with ZBR
     ///  - GetCHSOffset() - Calculate byte offset for CHS with uniform geometry
+    ///
+    /// <para><b>HOW THE IMAGE IS HELD AND WRITTEN BACK:</b></para>
+    ///  - The image is held in pages of 4096 bytes. Mount reads the bytes the stream really holds; for a <c>PaddedSubStream</c> that is its
+    ///    real length, so the zero padding behind a short file is never read or held.
+    ///  - A page that holds no byte of the file and was never written is not held; reading it gives zero bytes.
+    ///  - Every block written is marked changed. Flush writes only the changed blocks, in rising order, and then forgets the marks. A block
+    ///    behind the end of a short file therefore grows the file only as far as that block (the <c>PaddedSubStream</c> fills the gap with
+    ///    zero bytes first), instead of making the file as long as the whole volume.
     /// </remarks>
     public abstract class BlockDeviceBase : IBlockDevice
     {
-        /// <summary>
-        /// The whole disk image held in memory, or null when not mounted.
-        /// </summary>
-        protected byte[]? _imageData;
+        // Size of one page of the image in memory: 4096 bytes, so 16 sectors of 256 bytes or 8 blocks of 512.
+        private const int PageShift = 12;
+        private const int PageSize = 1 << PageShift;
+
+        // The image in pages of PageSize bytes, or null when not mounted. A null page holds only zero bytes.
+        private byte[]?[]? _pages;
+
+        // Length of the image as the stream shows it (for a PaddedSubStream, including the padding).
+        private long _imageLength;
+
+        // One bit per block: set when the block was written since the last flush.
+        private ulong[]? _changed;
+
         /// <summary>
         /// True when the device was mounted read-only.
         /// </summary>
@@ -83,7 +101,33 @@ namespace RetroIO.Storage.Local.BlockDevices
         /// <summary>
         /// Gets whether the device is mounted and ready (IBlockDevice interface).
         /// </summary>
-        public bool IsMounted => _imageData != null;
+        public bool IsMounted => _pages != null;
+
+        /// <summary>
+        /// Gets the number of bytes of the image this device holds in memory: whole pages of 4096 bytes for the part of the file that was
+        /// read at mount and for every page written since.
+        /// </summary>
+        public long HeldBytes
+        {
+            get
+            {
+                if (_pages == null)
+                {
+                    return 0;
+                }
+
+                long held = 0;
+                for (int i = 0; i < _pages.Length; i++)
+                {
+                    if (_pages[i] != null)
+                    {
+                        held += PageSize;
+                    }
+                }
+
+                return held;
+            }
+        }
 
         /// <summary>
         /// Gets whether the device is read-only (IBlockDevice interface).
@@ -121,14 +165,119 @@ namespace RetroIO.Storage.Local.BlockDevices
             _readOnly = readOnly;
             _imageStream = imageStream; // Keep reference for writing back
 
-            // Read entire image into memory
+            // Read the part of the image the file really holds into memory. A PaddedSubStream shows zero bytes behind its real length;
+            // those are not read, so a short file of a large volume costs only the memory of the file.
             long length = imageStream.Length;
-            _imageData = new byte[length];
+            long stored = imageStream is PaddedSubStream padded ? padded.RealLength : length;
+            byte[]?[] pages = new byte[]?[(length + PageSize - 1) >> PageShift];
             imageStream.Position = 0;
-            imageStream.ReadExactly(_imageData, 0, (int)length);
+            for (long offset = 0; offset < stored; offset += PageSize)
+            {
+                byte[] page = new byte[PageSize];
+                imageStream.ReadExactly(page, 0, (int)Math.Min(PageSize, stored - offset));
+                pages[offset >> PageShift] = page;
+            }
+
+            _imageLength = length;
+            _pages = pages;
+            long blocks = (length + BlockSize - 1) / BlockSize;
+            _changed = new ulong[(blocks + 63) / 64];
 
             // Validate geometry (device-specific)
             ValidateGeometry(length);
+        }
+
+        /// <summary>
+        /// Copies bytes of the image into a buffer. Bytes of a page that is not held read as zero.
+        /// </summary>
+        /// <param name="offset">
+        /// Position in the image of the first byte.
+        /// </param>
+        /// <param name="destination">
+        /// Receives the bytes; its length is the number of bytes copied.
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the bytes reach outside the image.
+        /// </exception>
+        protected void ReadImage(long offset, Span<byte> destination)
+        {
+            EnsureMounted();
+            CheckRange(offset, destination.Length);
+            int done = 0;
+            while (done < destination.Length)
+            {
+                long at = offset + done;
+                int inPage = (int)(at & (PageSize - 1));
+                int count = Math.Min(PageSize - inPage, destination.Length - done);
+                byte[]? page = _pages![at >> PageShift];
+                if (page == null)
+                {
+                    destination.Slice(done, count).Clear();
+                }
+                else
+                {
+                    page.AsSpan(inPage, count).CopyTo(destination.Slice(done, count));
+                }
+
+                done += count;
+            }
+        }
+
+        /// <summary>
+        /// Copies bytes into the image and marks every block they touch as changed, so the next flush writes those blocks.
+        /// </summary>
+        /// <param name="offset">
+        /// Position in the image of the first byte.
+        /// </param>
+        /// <param name="source">
+        /// The bytes to store.
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the bytes reach outside the image.
+        /// </exception>
+        protected void WriteImage(long offset, ReadOnlySpan<byte> source)
+        {
+            EnsureMounted();
+            CheckRange(offset, source.Length);
+            if (source.Length == 0)
+            {
+                return;
+            }
+
+            int done = 0;
+            while (done < source.Length)
+            {
+                long at = offset + done;
+                int inPage = (int)(at & (PageSize - 1));
+                int count = Math.Min(PageSize - inPage, source.Length - done);
+                long index = at >> PageShift;
+                byte[]? page = _pages![index];
+                if (page == null)
+                {
+                    page = new byte[PageSize];
+                    _pages[index] = page;
+                }
+
+                source.Slice(done, count).CopyTo(page.AsSpan(inPage, count));
+                done += count;
+            }
+
+            long first = offset / BlockSize;
+            long last = (offset + source.Length - 1) / BlockSize;
+            for (long block = first; block <= last; block++)
+            {
+                _changed![block >> 6] |= 1UL << (int)(block & 63);
+            }
+        }
+
+        // Refuses a range that does not lie inside the image.
+        private void CheckRange(long offset, int count)
+        {
+            if (offset < 0 || offset + count > _imageLength)
+            {
+                throw new ArgumentOutOfRangeException(nameof(offset),
+                    $"Bytes {offset} to {offset + count - 1} are outside the image of {_imageLength} bytes");
+            }
         }
 
         /// <summary>
@@ -165,11 +314,16 @@ namespace RetroIO.Storage.Local.BlockDevices
         public abstract int GetBlocksPerTrack(int track);
 
         /// <summary>
-        /// Flushes any pending changes to the underlying stream.
+        /// Flushes any pending changes to the underlying stream: every block written since the last flush, and nothing else.
         /// </summary>
+        /// <remarks>
+        /// Runs of changed blocks are written in rising order, each run with one seek. A run behind the end of a short file (a
+        /// <c>PaddedSubStream</c>) grows the file to the end of that run, and the stream fills any gap before it with zero bytes. The part of
+        /// the last block that lies past the end of the image (the image is not a whole number of blocks) is not written.
+        /// </remarks>
         public virtual void Flush()
         {
-            if (_imageData == null || _imageStream == null)
+            if (_pages == null || _imageStream == null || _changed == null)
             {
                 return; // Not mounted, nothing to flush
             }
@@ -184,9 +338,52 @@ namespace RetroIO.Storage.Local.BlockDevices
                 return; // Stream not writable
             }
 
-            _imageStream.Position = 0;
-            _imageStream.Write(_imageData, 0, _imageData.Length);
+            long blocks = (_imageLength + BlockSize - 1) / BlockSize;
+            long block = 0;
+            while (block < blocks)
+            {
+                ulong word = _changed[block >> 6] >> (int)(block & 63);
+                if (word == 0)
+                {
+                    // Nothing changed in the rest of this word: go to the start of the next one.
+                    block = ((block >> 6) + 1) << 6;
+                    continue;
+                }
+
+                block += System.Numerics.BitOperations.TrailingZeroCount(word);
+                long end = block;
+                while (end < blocks && (_changed[end >> 6] & (1UL << (int)(end & 63))) != 0)
+                {
+                    _changed[end >> 6] &= ~(1UL << (int)(end & 63));
+                    end++;
+                }
+
+                WriteRun(block * BlockSize, Math.Min(end * BlockSize, _imageLength));
+                block = end;
+            }
+
             _imageStream.Flush();
+        }
+
+        // Writes the bytes from start up to end (not included) from the pages to the stream. Every page in the range is held, because a
+        // block is only marked changed after its bytes were stored.
+        private void WriteRun(long start, long end)
+        {
+            _imageStream!.Position = start;
+            long at = start;
+            while (at < end)
+            {
+                int inPage = (int)(at & (PageSize - 1));
+                int count = (int)Math.Min(PageSize - inPage, end - at);
+                byte[]? page = _pages![at >> PageShift];
+                if (page == null)
+                {
+                    throw new InvalidOperationException($"Block at byte {at} is marked changed but its page is not held");
+                }
+
+                _imageStream.Write(page, inPage, count);
+                at += count;
+            }
         }
 
         /// <summary>
@@ -205,7 +402,8 @@ namespace RetroIO.Storage.Local.BlockDevices
             // FileStream/MemoryStream.Dispose is idempotent, so a double-close by the caller is safe.
             _imageStream?.Dispose();
 
-            _imageData = null;
+            _pages = null;
+            _changed = null;
             _imageStream = null;
         }
 
@@ -417,13 +615,8 @@ namespace RetroIO.Storage.Local.BlockDevices
         }
 
         /// <summary>
-        /// Gets the raw image data.
+        /// Gets the total size of the image in bytes, as the stream showed it at mount (for a <c>PaddedSubStream</c>, including the padding).
         /// </summary>
-        protected byte[]? GetImageData() => _imageData;
-
-        /// <summary>
-        /// Gets the total size of the image in bytes.
-        /// </summary>
-        protected long GetImageSize() => _imageData?.Length ?? 0;
+        protected long GetImageSize() => _pages == null ? 0 : _imageLength;
     }
 }

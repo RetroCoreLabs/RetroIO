@@ -14,6 +14,7 @@ using NUnit.Framework;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.BlockDevices;
 using RetroIO.Storage.Local.FileSystems;
+using RetroIO.Storage.Local.Streams;
 
 namespace RetroIO.Storage.Local.Tests
 {
@@ -29,7 +30,9 @@ namespace RetroIO.Storage.Local.Tests
     /// disk, 80 tracks, with 2 sectors per map bit; the UUCPbb 2.1 package, 10000 sectors with 5 map sectors; and two empty volumes made by
     /// Toolshed os9 format, 40000 sectors with 20 map sectors, and 20000 sectors with 4 sectors per map bit. The code cannot format a disk, so
     /// the empty disks are built byte for byte the way Toolshed <c>os9 format</c> lays them out (dumped from images it made on 2026-10-21), and
-    /// Toolshed <c>os9 dcheck</c> checks each one before the run starts.
+    /// Toolshed <c>os9 dcheck</c> checks each one before the run starts. One more variant is the NitrOS-9 Level 1 DriveWire disk, whose file
+    /// is shorter than its volume (sector 0 says 524268 sectors, the file holds far fewer). It is used as it is, not padded: the device is the
+    /// whole volume, the sectors behind the file read as zero, and the file grows only as far as the last sector written.
     /// </para>
     /// <para>
     /// Where the outcome of a call depends on the allocation map, the model works it out from the rules of rbf.asm: a new file takes one cluster
@@ -80,6 +83,7 @@ namespace RetroIO.Storage.Local.Tests
             yield return new TestCaseData("UUCPBB").SetName("Os9_RealUucpPackage_FiveMapSectors_500RandomCalls");
             yield return new TestCaseData("HD40000").SetName("Os9_ToolshedHardDisk40000_TwentyMapSectors_500RandomCalls");
             yield return new TestCaseData("HD20000C4").SetName("Os9_ToolshedHardDisk20000_FourSectorClusters_500RandomCalls");
+            yield return new TestCaseData("CoCo1L1_DW").SetName("Os9_RealNitros9DriveWire_ShortFile_500RandomCalls");
         }
 
         /// <summary>
@@ -100,6 +104,7 @@ namespace RetroIO.Storage.Local.Tests
             yield return new TestCaseData("UUCPBB").SetName("Os9_RealUucpPackage_FiveMapSectors_5000RandomCalls");
             yield return new TestCaseData("HD40000").SetName("Os9_ToolshedHardDisk40000_TwentyMapSectors_5000RandomCalls");
             yield return new TestCaseData("HD20000C4").SetName("Os9_ToolshedHardDisk20000_FourSectorClusters_5000RandomCalls");
+            yield return new TestCaseData("CoCo1L1_DW").SetName("Os9_RealNitros9DriveWire_ShortFile_5000RandomCalls");
         }
 
         [TestCaseSource(nameof(Variants))]
@@ -178,6 +183,7 @@ namespace RetroIO.Storage.Local.Tests
         private string _imagePath = string.Empty;
         private BlockDeviceDescriptor? _descriptor;
         private GenericBlockDevice? _device;
+        private FileStream? _file;
         private CountingBlockDevice? _counter;
         private Os9RbfFileSystem? _fs;
         private Node _root = new Node();
@@ -363,6 +369,8 @@ namespace RetroIO.Storage.Local.Tests
             {
                 _device?.Dispose();
                 _device = null;
+                _file?.Dispose();
+                _file = null;
                 if (Directory.Exists(_folder))
                 {
                     Directory.Delete(_folder, true);
@@ -404,8 +412,10 @@ namespace RetroIO.Storage.Local.Tests
                     Assert.Ignore("Test image not found: os9/" + realName);
                 }
 
+                // The copy is used as it is. A DriveWire file is shorter than its volume (sector 0 says 524268 sectors): the device is
+                // the whole volume and the sectors behind the file read as zero (see Mount), and the file grows as sectors are written.
                 File.Copy(source, _imagePath);
-                long sectors = new FileInfo(_imagePath).Length / SectorSize;
+                long sectors = Math.Max(new FileInfo(_imagePath).Length / SectorSize, VolumeSectorsOf(_imagePath));
                 _descriptor = new BlockDeviceDescriptor
                 {
                     Name = "OS-9 " + _variant,
@@ -478,9 +488,23 @@ namespace RetroIO.Storage.Local.Tests
                     return "toolshed_hd_40000.dsk";
                 case "HD20000C4":
                     return "toolshed_hd_20000_c4.dsk";
+                case "CoCo1L1_DW":
+                    return "NOS9_6809_L1_v030300_coco1_dw.dsk";
                 default:
                     return null;
             }
+        }
+
+        // DD.TOT, the sectors of the volume, from sector 0 of an image file (3 bytes at offset 0, NitrOS-9 defs/rbf.d).
+        private static long VolumeSectorsOf(string path)
+        {
+            byte[] id = new byte[SectorSize];
+            using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                stream.ReadExactly(id, 0, SectorSize);
+            }
+
+            return U24(id, 0);
         }
 
         // An empty OS-9 disk laid out the way Toolshed 2.2 "os9 format -tN [-ss|-ds] [-dr] -e" lays it out. Every value below was read from
@@ -599,8 +623,13 @@ namespace RetroIO.Storage.Local.Tests
         private void Mount()
         {
             FileStream stream = new FileStream(_imagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            _file = stream;
+            long volumeBytes = (long)_descriptor!.TotalBlocks * SectorSize;
+            Stream data = stream.Length < volumeBytes
+                ? new PaddedSubStream(stream, 0, stream.Length, volumeBytes)
+                : stream;
             _device = new GenericBlockDevice(_descriptor!);
-            _device.Mount(stream, false);
+            _device.Mount(data, false);
             _counter = new CountingBlockDevice(_device);
             _fs = new Os9RbfFileSystem();
             Assert.That(_fs.CanHandle(_counter), Is.True, "Os9RbfFileSystem takes the image, " + _variant);
@@ -612,6 +641,10 @@ namespace RetroIO.Storage.Local.Tests
         {
             _device!.Dispose();
             _device = null;
+
+            // A PaddedSubStream does not close the file under it, so the file is closed here.
+            _file?.Dispose();
+            _file = null;
             _fs = null;
             Assert.That(StressMemory.CanOpenExclusively(_imagePath, out string reason), Is.True,
                 "the image file is still open after the device was disposed: " + reason + ", " + Where());
@@ -2271,7 +2304,16 @@ namespace RetroIO.Storage.Local.Tests
         {
             _callText = "image file after round " + _round;
             byte[] file = StressMemory.ReadShared(_imagePath);
-            Assert.That(file.AsSpan().SequenceEqual(Snapshot()), Is.True, "the image file is not what the device holds: a write was not flushed, " + Where());
+            byte[] device = Snapshot();
+
+            // A short file (DriveWire) holds the first part of the volume; every sector behind it must be zero on the device, and the file
+            // must end on a whole sector.
+            Assert.That(file.Length % SectorSize, Is.EqualTo(0), "the image file is not whole sectors, " + Where());
+            Assert.That(file.Length, Is.LessThanOrEqualTo(device.Length), "the image file is longer than the volume, " + Where());
+            Assert.That(file.AsSpan().SequenceEqual(device.AsSpan(0, file.Length)), Is.True,
+                "the image file is not what the device holds: a write was not flushed, " + Where());
+            Assert.That(device.AsSpan(file.Length).IndexOfAnyExcept((byte)0), Is.EqualTo(-1),
+                "the device holds data behind the end of the image file: a write was not flushed, " + Where());
         }
 
         // ---- Toolshed ----
