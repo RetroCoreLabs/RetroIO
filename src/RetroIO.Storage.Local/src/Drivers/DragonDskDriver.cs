@@ -49,7 +49,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// It mounts the sectors and picks the file system from the contents of the disk: OS-9 first (strict signature in sector 0), then DECB for a
     /// 35 track disk, then DragonDOS. The VDK format is described in <see cref="DragonVdkDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
     /// <para><b>Writing</b></para>
-    /// A DragonDOS volume can be written (create, overwrite, delete, rename); the changes go back to the image stream after each operation. The
+    /// The mounted volume (DragonDOS, DECB or OS-9) can be written (create, overwrite, delete, rename) through its file system; the changes go back to the image stream after each operation. The
     /// header is kept as it is.
     /// </remarks>
     public sealed class DragonDskDriver : IFileSystemDriver
@@ -99,9 +99,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public bool CanRead => true;
         /// <summary>
-        /// Gets <c>true</c> when an image is mounted read-write and holds a DragonDOS volume.
+        /// Gets <c>true</c> when an image is mounted read-write and holds a volume that can be written: DragonDOS (with a valid BAM), DECB or OS-9.
         /// </summary>
-        public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly && _filesystem is DragonDosFileSystem;
+        public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly && _filesystem != null && (_filesystem is not DragonDosFileSystem dragonDos || dragonDos.IsDragonDosVolume);
         /// <summary>
         /// Gets <c>true</c>, because this driver can read raw blocks of the image.
         /// </summary>
@@ -459,7 +459,7 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Creates or replaces a file on the mounted DragonDOS volume and writes the changed sectors to the image.
+        /// Creates or replaces a file on the mounted volume and writes the changed sectors to the image.
         /// </summary>
         /// <param name="path">
         /// Name of the file.
@@ -468,7 +468,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// The file contents.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Thrown when nothing is mounted, the image is mounted read-only or the volume is not a DragonDOS volume.
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume cannot be written.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
@@ -478,13 +478,13 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Deletes a file from the mounted DragonDOS volume and writes the changed sectors to the image.
+        /// Deletes a file from the mounted volume and writes the changed sectors to the image.
         /// </summary>
         /// <param name="path">
         /// Name of the file.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Thrown when nothing is mounted, the image is mounted read-only or the volume is not a DragonDOS volume.
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume cannot be written.
         /// </exception>
         public void DeleteFile(string path)
         {
@@ -494,7 +494,7 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Renames a file on the mounted DragonDOS volume and writes the changed sectors to the image.
+        /// Renames a file on the mounted volume and writes the changed sectors to the image.
         /// </summary>
         /// <param name="oldPath">
         /// Current name of the file.
@@ -503,7 +503,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// New name of the file.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Thrown when nothing is mounted, the image is mounted read-only or the volume is not a DragonDOS volume.
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume cannot be written.
         /// </exception>
         public void RenameFile(string oldPath, string newPath)
         {
@@ -516,7 +516,7 @@ namespace RetroIO.Storage.Local.Drivers
         {
             if (!CanWrite)
             {
-                throw new UnauthorizedAccessException("The DSK/JVC volume is not mounted for writing, or is not a DragonDOS volume, so it is read-only");
+                throw new UnauthorizedAccessException("The DSK/JVC volume is not mounted for writing, or cannot be written, so it is read-only");
             }
         }
 
