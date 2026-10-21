@@ -32,23 +32,33 @@ namespace RetroIO.Storage.Local.Tests
     {
         private const int SectorSize = 256;
         private const int SectorsPerTrack = 18;
-        private const int ImageSize = 35 * SectorsPerTrack * SectorSize;
         private const int FatOffset = ((17 * SectorsPerTrack) + 1) * SectorSize;
         private const int DirOffset = ((17 * SectorsPerTrack) + 2) * SectorSize;
         private const int GranuleBytes = 2304;
 
+        // The granules of each geometry, as Toolshed dskini writes the FAT (libdecbdskini.c: 35 tracks 68, 40 tracks 78, 80 tracks 156).
+        private static int GranulesOf(int tracks)
+        {
+            return tracks == 35 ? 68 : (tracks == 40 ? 78 : 156);
+        }
+
         private static BlockDeviceDescriptor Descriptor()
+        {
+            return Descriptor(35);
+        }
+
+        private static BlockDeviceDescriptor Descriptor(int tracks)
         {
             return new BlockDeviceDescriptor
             {
-                Name = "CoCo DSK 35T/SS",
+                Name = "CoCo DSK " + tracks + "T/SS",
                 BlockSize = 256,
                 AddressMode = BlockAddressMode.LBA,
-                Cylinders = 35,
+                Cylinders = tracks,
                 Heads = 1,
                 UniformSectorsPerTrack = 18,
-                TotalBlocks = 630,
-                ExpectedImageSize = ImageSize,
+                TotalBlocks = (uint)(tracks * SectorsPerTrack),
+                ExpectedImageSize = tracks * SectorsPerTrack * SectorSize,
                 SupportsVariableGeometry = false
             };
         }
@@ -57,8 +67,16 @@ namespace RetroIO.Storage.Local.Tests
         // zero, the whole directory 0xFF.
         private static byte[] BlankImage()
         {
-            byte[] image = new byte[ImageSize];
-            for (int i = 0; i < 68; i++)
+            return BlankImage(35);
+        }
+
+        // The same for 40 and 80 tracks: 78 or 156 free FAT bytes, checked against decb dskini -4 and -8 (2026-10-21: the FAT sector of
+        // their images is 0xFF for exactly that many bytes and zero after).
+        private static byte[] BlankImage(int tracks)
+        {
+            byte[] image = new byte[tracks * SectorsPerTrack * SectorSize];
+            int granules = GranulesOf(tracks);
+            for (int i = 0; i < granules; i++)
             {
                 image[FatOffset + i] = 0xFF;
             }
@@ -71,9 +89,10 @@ namespace RetroIO.Storage.Local.Tests
             return image;
         }
 
+        // Mounts the image with the geometry its length gives: 35, 40 or 80 tracks of 18 sectors.
         private static DecbFileSystem Open(byte[] image, bool readOnly)
         {
-            GenericBlockDevice device = new GenericBlockDevice(Descriptor());
+            GenericBlockDevice device = new GenericBlockDevice(Descriptor(image.Length / (SectorsPerTrack * SectorSize)));
             device.Mount(new MemoryStream(image, writable: true), readOnly);
             DecbFileSystem fs = new DecbFileSystem();
             fs.Initialize(device);
@@ -575,6 +594,263 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That(second.GetBlocksFree(), Is.EqualTo(67 * 9));
         }
 
+        // ---- 40 and 80 track disks ----
+        //
+        // Toolshed makes DECB disks of 35, 40 and 80 tracks, one side, 18 sectors (decb dskini -3, -4, -8). The FAT has one byte per
+        // granule: 68, 78 or 156 (libdecbdskini.c, and decb -g in 2.6.1). A granule is at granule * 2304 bytes, plus two granules
+        // (track 17) for granules above 33 (libdecbseek.c _decb_seekgranule), so GranuleOffset above holds for every geometry.
+
+        [TestCase(35)]
+        [TestCase(40)]
+        [TestCase(80)]
+        public void Geometry_BlankDisk_HasTheGranulesToolshedMakes(int tracks)
+        {
+            byte[] image = BlankImage(tracks);
+            GenericBlockDevice device = new GenericBlockDevice(Descriptor(tracks));
+            device.Mount(new MemoryStream(image, writable: true), false);
+            DecbFileSystem fs = new DecbFileSystem();
+
+            Assert.That(fs.CanHandle(device), Is.True);
+            fs.Initialize(device);
+
+            Assert.That(fs.GranuleCount, Is.EqualTo(GranulesOf(tracks)));
+            Assert.That(DecbFileSystem.GranulesForTracks(tracks), Is.EqualTo(GranulesOf(tracks)));
+            Assert.That(fs.GetBlocksFree(), Is.EqualTo(GranulesOf(tracks) * 9));
+            Assert.That(fs.ListDirectory("/").Length, Is.EqualTo(0));
+        }
+
+        [TestCase(35)]
+        [TestCase(40)]
+        [TestCase(80)]
+        public void Geometry_EveryGranuleIsUsedOnceAndLiesWhereToolshedPutsIt(int tracks)
+        {
+            int granules = GranulesOf(tracks);
+            byte[] image = BlankImage(tracks);
+            byte[] blank = (byte[])image.Clone();
+            DecbFileSystem fs = Open(image, false);
+            byte[] full = Pattern((granules * GranuleBytes) - 3, 7);
+
+            fs.WriteFile("ALL.BIN", full);
+
+            Assert.That(fs.GetBlocksFree(), Is.EqualTo(0));
+            Assert.That(fs.ReadFile("ALL.BIN"), Is.EqualTo(full));
+
+            // Walk the chain in the raw FAT: every granule once, and each granule's bytes at the place _decb_seekgranule gives.
+            bool[] seen = new bool[granules];
+            int g = image[EntryOffset(0) + 13];
+            int position = 0;
+            int count = 0;
+            while (true)
+            {
+                Assert.That(g, Is.LessThan(granules), "chain link " + count);
+                Assert.That(seen[g], Is.False, "granule " + g + " twice");
+                seen[g] = true;
+                count++;
+                int take = Math.Min(GranuleBytes, full.Length - position);
+                int expectedOffset = (g * GranuleBytes) + (g > 33 ? 2 * GranuleBytes : 0);
+                Assert.That(GranuleOffset(g), Is.EqualTo(expectedOffset), "granule " + g);
+                Assert.That(image.AsSpan(expectedOffset, take).SequenceEqual(full.AsSpan(position, take)), Is.True, "data of granule " + g);
+                position += take;
+                int next = image[FatOffset + g];
+                if (next >= 0xC0)
+                {
+                    Assert.That(next, Is.EqualTo(0xC9), "the last granule holds 2301 bytes, 9 sectors");
+                    break;
+                }
+
+                g = next;
+            }
+
+            Assert.That(count, Is.EqualTo(granules));
+            Assert.That((image[EntryOffset(0) + 14] << 8) | image[EntryOffset(0) + 15], Is.EqualTo(253));
+
+            // The FAT bytes after the last granule, the rest of track 17 and, on 80 tracks, track 79 (which holds no granule) are not touched.
+            for (int i = granules; i < SectorSize; i++)
+            {
+                Assert.That(image[FatOffset + i], Is.EqualTo(0), "FAT byte " + i);
+            }
+
+            int track17 = 17 * SectorsPerTrack * SectorSize;
+            for (int i = track17; i < track17 + (SectorsPerTrack * SectorSize); i++)
+            {
+                bool inFat = i >= FatOffset && i < FatOffset + granules;
+                bool inDirectory = i >= DirOffset && i < DirOffset + (9 * SectorSize);
+                if (!inFat && !inDirectory)
+                {
+                    Assert.That(image[i], Is.EqualTo(blank[i]), "track 17 byte " + (i - track17));
+                }
+            }
+
+            int lastGranuleEnd = GranuleOffset(granules - 1) + GranuleBytes;
+            for (int i = lastGranuleEnd; i < image.Length; i++)
+            {
+                Assert.That(image[i], Is.EqualTo(blank[i]), "byte " + i + " after the last granule");
+            }
+
+            Assert.Throws<IOException>(() => fs.WriteFile("ONE.BIN", new byte[] { 1 }));
+        }
+
+        [TestCase(35, 1, true)]
+        [TestCase(40, 1, true)]
+        [TestCase(80, 1, true)]
+        [TestCase(36, 1, false)]
+        [TestCase(40, 2, false)]
+        [TestCase(80, 2, false)]
+        public void CanHandle_TakesTheToolshedGeometriesOnly(int tracks, int heads, bool expected)
+        {
+            // A two sided layout is refused: Toolshed has none for DECB (it reads the image as one side of 18 sectors per track).
+            int sectors = tracks * heads * SectorsPerTrack;
+            byte[] image = new byte[sectors * SectorSize];
+            int freeBytes = tracks == 40 || tracks == 80 ? GranulesOf(tracks) : 68;
+            for (int i = 0; i < freeBytes; i++)
+            {
+                image[FatOffset + i] = 0xFF;
+            }
+
+            BlockDeviceDescriptor descriptor = new BlockDeviceDescriptor
+            {
+                Name = "test",
+                BlockSize = 256,
+                AddressMode = BlockAddressMode.LBA,
+                Cylinders = tracks,
+                Heads = heads,
+                UniformSectorsPerTrack = 18,
+                TotalBlocks = (uint)sectors,
+                ExpectedImageSize = image.Length,
+                SupportsVariableGeometry = false
+            };
+            GenericBlockDevice device = new GenericBlockDevice(descriptor);
+            device.Mount(new MemoryStream(image, writable: true), true);
+            DecbFileSystem fs = new DecbFileSystem();
+
+            Assert.That(fs.CanHandle(device), Is.EqualTo(expected));
+            if (!expected)
+            {
+                Assert.Throws<NotSupportedException>(() => fs.Initialize(device));
+            }
+        }
+
+        [TestCase(40)]
+        [TestCase(80)]
+        public void CanHandle_EveryFatByteOfTheDiskMustBeAFatValue(int tracks)
+        {
+            int granules = GranulesOf(tracks);
+
+            // Values the FAT can hold: free, a next granule on this disk, the end of a chain.
+            Assert.That(CanHandleWithFat(tracks, granules - 1, 0xFF), Is.True, "free");
+            Assert.That(CanHandleWithFat(tracks, 0, granules - 1, granules - 1, 0xC1), Is.True, "granule 0 links to the last granule, which ends the chain");
+            Assert.That(CanHandleWithFat(tracks, granules - 1, 0xC0), Is.True, "0xC0");
+            Assert.That(CanHandleWithFat(tracks, granules - 1, 0xC9), Is.True, "0xC9");
+
+            // Not FAT values: a granule number this disk does not have, the unused range between it and 0xC0, and past 0xC9.
+            Assert.That(CanHandleWithFat(tracks, granules - 1, granules), Is.False, "granule " + granules + " does not exist");
+            Assert.That(CanHandleWithFat(tracks, 0, 0xBF), Is.False, "0xBF");
+            Assert.That(CanHandleWithFat(tracks, granules - 1, 0xCA), Is.False, "0xCA");
+        }
+
+        [TestCase(40)]
+        [TestCase(80)]
+        public void CanHandle_TheFatMustBeLinkedListsThatEnd(int tracks)
+        {
+            // libdecbopen.c: "the bytes in the FAT form a linked list for each file". A sector of zeros holds only valid values (every granule
+            // "links to granule 0"), so it is the list structure that tells it from a FAT.
+            int granules = GranulesOf(tracks);
+            Assert.That(CanHandleWithFat(tracks, 3, 4, 4, 5, 5, 0xC2), Is.True, "3 to 4 to 5, end");
+            Assert.That(CanHandleWithFat(tracks, 3, 5, 4, 5, 5, 0xC2), Is.False, "3 and 4 both link to 5");
+            Assert.That(CanHandleWithFat(tracks, 3, 3), Is.False, "3 links to itself");
+            Assert.That(CanHandleWithFat(tracks, 3, 4, 4, 3), Is.False, "3 and 4 link to each other");
+            Assert.That(CanHandleWithFat(tracks, 3, 4), Is.False, "3 links to 4, which is free");
+
+            byte[] zeros = new byte[tracks * SectorsPerTrack * SectorSize];
+            GenericBlockDevice device = new GenericBlockDevice(Descriptor(tracks));
+            device.Mount(new MemoryStream(zeros, writable: true), true);
+            Assert.That(new DecbFileSystem().CanHandle(device), Is.False, "a disk of zeros");
+            Assert.That(granules, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void CanHandle_35Tracks_KeepsTheCheckItAlwaysMade()
+        {
+            // On 35 tracks no other file system of the Dragon drivers has a layout, so CanHandle keeps its old check there: at least one of
+            // the 68 FAT bytes is a free or allocated value. RetroIO.Tests Mount_CoCo35Track_ShouldSucceed relies on it with a sector of 0x33.
+            byte[] image = BlankImage(35);
+            for (int i = 0; i < SectorSize; i++)
+            {
+                image[FatOffset + i] = 0x33;
+            }
+
+            GenericBlockDevice device = new GenericBlockDevice(Descriptor(35));
+            device.Mount(new MemoryStream(image, writable: true), true);
+            Assert.That(new DecbFileSystem().CanHandle(device), Is.True, "0x33 is a granule number below 68");
+
+            for (int i = 0; i < 68; i++)
+            {
+                image[FatOffset + i] = 0xA0;
+            }
+
+            device = new GenericBlockDevice(Descriptor(35));
+            device.Mount(new MemoryStream(image, writable: true), true);
+            Assert.That(new DecbFileSystem().CanHandle(device), Is.False, "no byte is a FAT value");
+        }
+
+        [TestCase(35, true)]
+        [TestCase(40, false)]
+        [TestCase(80, false)]
+        public void CanHandle_TheRestOfTheFatSector_IsZeroOn40And80Tracks(int tracks, bool otherBytesAllowed)
+        {
+            // Toolshed dskini leaves the FAT sector zero after the last granule byte, at every size. On 40 and 80 tracks that is the only
+            // layout known, so it is required. On 35 tracks it is not, because syzygy.dsk (a real disk) has 0xFF there.
+            int granules = GranulesOf(tracks);
+            Assert.That(CanHandleWithFat(tracks, granules, 0xFF), Is.EqualTo(otherBytesAllowed), "0xFF after the last granule");
+            Assert.That(CanHandleWithFat(tracks, 255, 0xAA), Is.EqualTo(otherBytesAllowed), "0xAA in the last byte of the sector");
+        }
+
+        // Mounts a blank disk with FAT bytes changed (pairs of index and value) and asks CanHandle. The device copies the image when it mounts,
+        // so each case needs its own mount.
+        private static bool CanHandleWithFat(int tracks, params int[] indexValuePairs)
+        {
+            byte[] image = BlankImage(tracks);
+            for (int i = 0; i < indexValuePairs.Length; i += 2)
+            {
+                image[FatOffset + indexValuePairs[i]] = (byte)indexValuePairs[i + 1];
+            }
+
+            GenericBlockDevice device = new GenericBlockDevice(Descriptor(tracks));
+            device.Mount(new MemoryStream(image, writable: true), true);
+            return new DecbFileSystem().CanHandle(device);
+        }
+
+        [TestCase(35)]
+        [TestCase(40)]
+        public void WriteFile_SearchPastTheTop_GoesOnDownward(int tracks)
+        {
+            // The overflow branch of the granule search (Toolshed find_free_granule, "If overflow, try previous granule (minus 4), in other
+            // direction"). Only granules 66 and 0 are free. The first granule of a file is searched from 34, alternating outward (34, 32, 36,
+            // 30, ... 64, 2, 66, 0 on 68 granules; 78 granules give the same order up to there), so it is 66. The second granule is searched
+            // from 66: 66, 64, then upward past the last granule, which is the overflow, and from there downward one track at a time to 0.
+            // The other FAT bytes are set to "last granule, one sector" so that the search sees them as used; no directory entry owns them,
+            // because only the search is under test.
+            int granules = GranulesOf(tracks);
+            byte[] image = BlankImage(tracks);
+            for (int i = 0; i < granules; i++)
+            {
+                image[FatOffset + i] = 0xC1;
+            }
+
+            image[FatOffset + 66] = 0xFF;
+            image[FatOffset + 0] = 0xFF;
+            DecbFileSystem fs = Open(image, false);
+            byte[] data = Pattern(GranuleBytes + 1, 3);
+
+            fs.WriteFile("TOP.BIN", data);
+
+            Assert.That(image[EntryOffset(0) + 13], Is.EqualTo(66), "first granule");
+            Assert.That(image[FatOffset + 66], Is.EqualTo(0), "second granule, found after the search ran past the top");
+            Assert.That(image[FatOffset + 0], Is.EqualTo(0xC1));
+            Assert.That(fs.ReadFile("TOP.BIN"), Is.EqualTo(data));
+            Assert.That(fs.GetBlocksFree(), Is.EqualTo(0));
+        }
+
         // ---- a real disk ----
 
         private static string? RealImage(string name)
@@ -858,6 +1134,163 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.That(dir, Does.Not.Contain("T2 "));
                 Decb(out string freeText, "free", wslImage);
                 Assert.That(freeText, Does.Contain("Free granules: " + (fs.GetBlocksFree() / 9) + " "));
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+
+        // ---- Toolshed at 35, 40 and 80 tracks ----
+
+        private static string DskiniOption(int tracks)
+        {
+            return tracks == 35 ? "-3" : (tracks == 40 ? "-4" : "-8");
+        }
+
+        // Every name in the decb dir listing, as NAME.EXT.
+        private static string[] DirNames(string dir)
+        {
+            string[] lines = dir.Split('\n');
+            string[] names = new string[lines.Length];
+            int n = 0;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].TrimEnd('\r');
+                if (line.Length < 14 || line.StartsWith("Directory of", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string name = line.Substring(0, 8).Trim();
+                string ext = line.Substring(9, 3).Trim();
+                names[n++] = ext.Length == 0 ? name : name + "." + ext;
+            }
+
+            Array.Resize(ref names, n);
+            return names;
+        }
+
+        [TestCase(35)]
+        [TestCase(40)]
+        [TestCase(80)]
+        public void Toolshed_ReadsWhatWeWrite_AtEachGeometry(int tracks)
+        {
+            RequireToolshed();
+            string folder = NewTempFolder();
+            try
+            {
+                byte[] image = BlankImage(tracks);
+                DecbFileSystem fs = Open(image, false);
+                int[] sizes = { 0, 1, 256, 2305, 9000 };
+                string[] names = new string[sizes.Length + 1];
+                byte[][] contents = new byte[sizes.Length + 1][];
+                for (int i = 0; i < sizes.Length; i++)
+                {
+                    names[i] = "S" + i + ".BIN";
+                    contents[i] = Pattern(sizes[i], 60 + i);
+                    fs.WriteFile(names[i], contents[i]);
+                }
+
+                // One more file takes every granule that is left, so the granules past 67 on a 40 or 80 track disk are in it.
+                names[sizes.Length] = "REST.BIN";
+                contents[sizes.Length] = Pattern(((fs.GetBlocksFree() / 9) * GranuleBytes) - 100, 70);
+                fs.WriteFile(names[sizes.Length], contents[sizes.Length]);
+                Assert.That(fs.GetBlocksFree(), Is.EqualTo(0));
+
+                string imagePath = Path.Combine(folder, "w" + tracks + ".dsk");
+                File.WriteAllBytes(imagePath, image);
+                string wslImage = ToWslPath(imagePath);
+
+                for (int i = 0; i < names.Length; i++)
+                {
+                    string outPath = Path.Combine(folder, "out" + i + ".bin");
+                    Assert.That(Decb(out string copyOutput, "copy", "-b", wslImage + "," + names[i], ToWslPath(outPath)), Is.EqualTo(0), copyOutput);
+                    Assert.That(File.ReadAllBytes(outPath), Is.EqualTo(contents[i]), "Toolshed copy out of " + names[i]);
+                }
+
+                Assert.That(Decb(out string freeText, "free", wslImage), Is.EqualTo(0), freeText);
+                Assert.That(freeText, Does.Contain("Free granules: 0 "));
+
+                Assert.That(Decb(out string dir, "dir", wslImage), Is.EqualTo(0), dir);
+                Assert.That(DirNames(dir), Is.EqualTo(names), dir);
+
+                // Deleting the big file gives every one of its granules back, and Toolshed counts them all.
+                fs.DeleteFile("REST.BIN");
+                File.WriteAllBytes(imagePath, image);
+                Decb(out freeText, "free", wslImage);
+                Assert.That(freeText, Does.Contain("Free granules: " + (fs.GetBlocksFree() / 9) + " "));
+                Assert.That(fs.GetBlocksFree() / 9, Is.GreaterThan(GranulesOf(tracks) - 10));
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+
+        [TestCase(35)]
+        [TestCase(40)]
+        [TestCase(80)]
+        public void WeReadAndChangeADiskThatToolshedMade_AtEachGeometry(int tracks)
+        {
+            RequireToolshed();
+            string folder = NewTempFolder();
+            try
+            {
+                int granules = GranulesOf(tracks);
+                string imagePath = Path.Combine(folder, "t" + tracks + ".dsk");
+                string wslImage = ToWslPath(imagePath);
+                Assert.That(Decb(out string text, "dskini", DskiniOption(tracks), wslImage), Is.EqualTo(0), text);
+                Assert.That(new FileInfo(imagePath).Length, Is.EqualTo(tracks * SectorsPerTrack * SectorSize), "dskini image size");
+
+                byte[] fresh = File.ReadAllBytes(imagePath);
+                Assert.That(Open(fresh, true).GetBlocksFree(), Is.EqualTo(granules * 9), "the blank Toolshed disk");
+
+                // Toolshed 2.2 takes granules upward from 35, so a file of 40 granules reaches past granule 67 on 40 and 80 tracks.
+                int[] sizes = { 1, 2305, 40 * GranuleBytes };
+                if (tracks == 35)
+                {
+                    sizes[2] = 30 * GranuleBytes;
+                }
+
+                for (int i = 0; i < sizes.Length; i++)
+                {
+                    string source = Path.Combine(folder, "in" + i + ".bin");
+                    File.WriteAllBytes(source, Pattern(sizes[i], 80 + i));
+                    Assert.That(Decb(out text, "copy", "-2", "-b", ToWslPath(source), wslImage + ",T" + i + ".BIN"), Is.EqualTo(0), text);
+                }
+
+                byte[] image = File.ReadAllBytes(imagePath);
+                DecbFileSystem fs = Open(image, false);
+                Assert.That(fs.ListDirectory("/").Length, Is.EqualTo(sizes.Length));
+                for (int i = 0; i < sizes.Length; i++)
+                {
+                    Assert.That(fs.ReadFile("T" + i + ".BIN"), Is.EqualTo(Pattern(sizes[i], 80 + i)), "T" + i);
+                    Assert.That(fs.GetMetadata("T" + i + ".BIN")!.Size, Is.EqualTo(sizes[i]));
+                }
+
+                Decb(out string freeBefore, "free", wslImage);
+                Assert.That(freeBefore, Does.Contain("Free granules: " + (fs.GetBlocksFree() / 9) + " "), "free count of the Toolshed disk");
+
+                // Change it with our code: delete one, rename one, and write a file that takes all granules that are left.
+                fs.DeleteFile("T1.BIN");
+                fs.Rename("T0.BIN", "FIRST.BIN");
+                byte[] rest = Pattern(((fs.GetBlocksFree() / 9) * GranuleBytes) - 1, 99);
+                fs.WriteFile("REST.BIN", rest);
+                Assert.That(fs.GetBlocksFree(), Is.EqualTo(0));
+                File.WriteAllBytes(imagePath, image);
+
+                string back = Path.Combine(folder, "back.bin");
+                Assert.That(Decb(out text, "copy", "-b", wslImage + ",REST.BIN", ToWslPath(back)), Is.EqualTo(0), text);
+                Assert.That(File.ReadAllBytes(back), Is.EqualTo(rest));
+                Assert.That(Decb(out text, "copy", "-b", wslImage + ",FIRST.BIN", ToWslPath(back)), Is.EqualTo(0), text);
+                Assert.That(File.ReadAllBytes(back), Is.EqualTo(Pattern(1, 80)));
+                Assert.That(Decb(out text, "copy", "-b", wslImage + ",T2.BIN", ToWslPath(back)), Is.EqualTo(0), text);
+                Assert.That(File.ReadAllBytes(back), Is.EqualTo(Pattern(sizes[2], 82)));
+                Assert.That(Decb(out string dir, "dir", wslImage), Is.EqualTo(0), dir);
+                Assert.That(DirNames(dir), Is.EqualTo(new[] { "FIRST.BIN", "REST.BIN", "T2.BIN" }), dir);
+                Decb(out string freeText, "free", wslImage);
+                Assert.That(freeText, Does.Contain("Free granules: 0 "));
             }
             finally
             {

@@ -47,7 +47,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// and bit 0 of the disk format byte (byte 16, set for two sides), and the declared total sectors (bytes 0 to 2) may not exceed the file.
     /// <para><b>What this driver does with it</b></para>
     /// It mounts the sectors and picks the file system from the contents of the disk: OS-9 first (strict signature in sector 0), then DECB for a
-    /// 35 track disk, then DragonDOS. The VDK format is described in <see cref="DragonVdkDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
+    /// 35 track disk, then DragonDOS; a one sided 40 or 80 track disk whose DragonDOS BAM does not check out is taken as DECB when its FAT fits. The VDK format is described in <see cref="DragonVdkDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
     /// <para><b>Writing</b></para>
     /// The mounted volume (DragonDOS, DECB or OS-9) can be written (create, overwrite, delete, rename) through its file system; the changes go back to the image stream after each operation. The
     /// header is kept as it is.
@@ -59,7 +59,7 @@ namespace RetroIO.Storage.Local.Drivers
         private BlockDeviceDescriptor? _descriptor;
 
         /// <summary>
-        /// Gets the file system type of the mounted file system (DragonDOS or, for some 35-track disks, DECB),
+        /// Gets the file system type of the mounted file system (DragonDOS, OS-9 or DECB),
         /// or <c>DragonDOS</c> when nothing is mounted.
         /// </summary>
         public string FileSystemType => _filesystem?.FileSystemType ?? "DragonDOS";
@@ -122,7 +122,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// Reads the optional JVC header, checks the geometry, mounts the data part of the image as a block device and initializes the file system.
         /// </summary>
         /// <remarks>
-        /// The header size is the file size modulo 128. DragonDOS is tried first. For a 35-track disk the DECB file system is tried before the fall back to DragonDOS.
+        /// The header size is the file size modulo 128. DragonDOS is tried first. For a 35-track disk the DECB file system is tried before the fall back to DragonDOS; for a 40 or 80 track disk DECB is tried after DragonDOS.
         /// </remarks>
         /// <param name="imageStream">
         /// The stream holding the disk image.
@@ -272,7 +272,7 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice.Mount(dataStream, readOnly);
 
             // An OS-9 volume has a strict signature in sector 0, so it is tried first. Then DragonDOS, with DECB
-            // tried before it for 35-track disks.
+            // tried before it for 35-track disks and after it for 40 and 80 track disks.
             Os9RbfFileSystem os9 = new Os9RbfFileSystem();
             if (os9.CanHandle(_blockDevice))
             {
@@ -300,9 +300,42 @@ namespace RetroIO.Storage.Local.Drivers
             }
             else
             {
-                // Not 35-track, use DragonDOS
-                _filesystem.Initialize(_blockDevice);
+                // Not 35-track: DragonDOS when its BAM checks out, else DECB when the disk is a 40 or 80 track one sided DECB disk
+                // (Toolshed decb dskini -4 and -8 make those), else DragonDOS as before.
+                _filesystem = PickDragonDosOrDecb(_blockDevice);
             }
+        }
+
+        /// <summary>
+        /// Picks the file system of a disk that is not OS-9 and not 35 tracks: DragonDOS when its BAM geometry checks out, otherwise
+        /// DECB when the FAT on track 17 holds only DECB values, otherwise DragonDOS (which then reports that it is not a DragonDOS volume).
+        /// </summary>
+        /// <remarks>
+        /// DragonDOS is asked first so that every disk that mounted as DragonDOS before still does. A DECB disk has its directory on track 17
+        /// and keeps track 20 for data, so its track 20 has a DragonDOS BAM only if file data happens to hold the four geometry bytes and their
+        /// complements in the right places.
+        /// </remarks>
+        /// <param name="device">
+        /// The mounted block device.
+        /// </param>
+        /// <returns>
+        /// The initialized file system.
+        /// </returns>
+        internal static IBlockFileSystem PickDragonDosOrDecb(IBlockDevice device)
+        {
+            DragonDosFileSystem dragonDos = new DragonDosFileSystem();
+            if (!dragonDos.CanHandle(device))
+            {
+                DecbFileSystem decb = new DecbFileSystem();
+                if (decb.CanHandle(device))
+                {
+                    decb.Initialize(device);
+                    return decb;
+                }
+            }
+
+            dragonDos.Initialize(device);
+            return dragonDos;
         }
 
         /// <summary>

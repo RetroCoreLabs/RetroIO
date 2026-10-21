@@ -15,9 +15,18 @@ namespace RetroIO.Storage.Local.FileSystems
 {
     /// <summary>
     /// CoCo DECB (Disk Extended Color BASIC) filesystem implementation.
-    /// Used on Color Computer disk images (35 tracks, single-sided).
+    /// Used on Color Computer disk images of 35, 40 or 80 tracks, one side, 18 sectors of 256 bytes.
     /// Directory and FAT on Track 17, data on other tracks.
     /// </summary>
+    /// <remarks>
+    /// The geometries are the ones Toolshed makes and reads. Toolshed <c>decb dskini</c> (libdecbdskini.c in 2.6.1, decbdskini.c in
+    /// the 2.2 tag) takes 35, 40 or 80 tracks and writes a FAT of 68, 78 or 156 free granules; the rest of the FAT sector is zero.
+    /// Toolshed 2.6.1 <c>decb -g</c> names the same three counts (68 for 35 tracks, 78 for 40, 156 for 80). A granule is placed by
+    /// libdecbseek.c <c>_decb_seekgranule</c>: granule times 2304 bytes from the start of the image, plus two granules (track 17) for
+    /// granules above 33. So granules past 67 simply go on past track 35 in the same way, two per track: 78 granules end on track 39
+    /// and 156 granules end on track 78 (track 79 of an 80 track disk holds no granule). Toolshed treats the image as one side of
+    /// 18 sectors per track and has no two sided DECB layout, so a two sided device is not taken.
+    /// </remarks>
     public class DecbFileSystem : IBlockFileSystem
     {
         private IBlockDevice? _device;
@@ -25,6 +34,7 @@ namespace RetroIO.Storage.Local.FileSystems
         private byte[]? _fat;
         private int _sectorsPerTrack = 18;
         private int _trackCount = 35;
+        private int _granuleCount = 68;
 
         private const int FAT_TRACK = 17;
         private const int FAT_SECTOR = 2;
@@ -35,7 +45,39 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int SECTOR_SIZE = 256;
         private const int GRANULE_SIZE = 2304; // 9 sectors * 256 bytes
         private const int SECTORS_PER_GRANULE = 9;
-        private const int MAX_GRANULES = 68;
+        private const int SECTORS_PER_TRACK = 18;
+
+        /// <summary>
+        /// Gives the number of granules of a DECB disk with this many tracks, as Toolshed dskini writes the FAT.
+        /// </summary>
+        /// <remarks>
+        /// From Toolshed libdecbdskini.c: 40 tracks give 78 granules, 80 tracks give 156, 35 tracks give 68.
+        /// </remarks>
+        /// <param name="tracks">
+        /// Tracks of one side.
+        /// </param>
+        /// <returns>
+        /// 68, 78 or 156, or 0 when Toolshed makes no DECB disk with this many tracks.
+        /// </returns>
+        public static int GranulesForTracks(int tracks)
+        {
+            switch (tracks)
+            {
+                case 35:
+                    return 68;
+                case 40:
+                    return 78;
+                case 80:
+                    return 156;
+                default:
+                    return 0;
+            }
+        }
+
+        /// <summary>
+        /// Gets the number of granules of the mounted disk: 68, 78 or 156.
+        /// </summary>
+        public int GranuleCount => _granuleCount;
 
         /// <summary>
         /// Gets the file system type identifier: <c>DECB</c>.
@@ -54,7 +96,8 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Attaches the file system to a block device, takes the geometry from it and reads the FAT from track 17, sector 2.
         /// </summary>
         /// <remarks>
-        /// When the device gives no sectors-per-track or cylinder count, 18 sectors and 35 tracks are used.
+        /// When the device gives no sectors-per-track or cylinder count, 18 sectors and 35 tracks are used. The granule count
+        /// comes from the track count (see <see cref="GranulesForTracks"/>).
         /// </remarks>
         /// <param name="device">
         /// Block device holding the disk image, addressed by LBA.
@@ -62,16 +105,31 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="device"/> is <c>null</c>.
         /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when the device is not one side of 35, 40 or 80 tracks of 18 sectors, which are the DECB disks Toolshed makes.
+        /// </exception>
         public void Initialize(IBlockDevice device)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
 
             BlockDeviceInfo? info = device.GetBlockDeviceInfo();
+            int heads = 1;
             if (info != null)
             {
                 _sectorsPerTrack = info.SectorsPerTrack > 0 ? info.SectorsPerTrack : 18;
                 _trackCount = info.CylinderCount > 0 ? info.CylinderCount : 35;
+                heads = info.HeadCount > 0 ? info.HeadCount : 1;
             }
+
+            int granules = GranulesForTracks(_trackCount);
+            if (granules == 0 || _sectorsPerTrack != SECTORS_PER_TRACK || heads != 1)
+            {
+                _device = null;
+                throw new NotSupportedException(
+                    $"DECB disks are one side of 35, 40 or 80 tracks of 18 sectors; this device has {_trackCount} tracks, {heads} side(s), {_sectorsPerTrack} sectors per track");
+            }
+
+            _granuleCount = granules;
 
             // Read FAT from Track 17, Sector 2
             uint fatLsn = CalculateLSN(FAT_TRACK, FAT_SECTOR);
@@ -106,8 +164,14 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Checks whether the device looks like a DECB disk.
         /// </summary>
         /// <remarks>
-        /// The device must report 35 cylinders and 18 sectors per track. The FAT sector (track 17, sector 2)
-        /// is then read and its first 68 bytes must hold at least one free or allocated granule value.
+        /// The device must report one side of 35, 40 or 80 cylinders and 18 sectors per track. The FAT sector (track 17, sector 2)
+        /// is then read. On 35 tracks its first 68 bytes must hold at least one free or allocated granule value, as this method has
+        /// always asked. On 40 and 80 tracks every one of its first 78 or 156 bytes (one per granule) must be a FAT value: 0xFF for
+        /// a free granule, a granule number below the granule count for the next granule of a file, or 0xC0 to 0xC9 for the last
+        /// granule of a file. Those are the values the DECB FAT holds (Toolshed libdecbopen.c, the format notes at the top).
+        /// The FAT must also be a set of linked lists: no granule is the next granule of two others, and every chain ends in a
+        /// last-granule value without running into a free granule or going round in a loop. And the rest of the FAT sector must
+        /// be zero, as Toolshed dskini leaves it.
         /// The device is not changed. Any exception while reading gives <c>false</c>.
         /// </remarks>
         /// <param name="device">
@@ -123,34 +187,98 @@ namespace RetroIO.Storage.Local.FileSystems
                 BlockDeviceInfo? info = device.GetBlockDeviceInfo();
                 if (info == null) return false;
 
-                // DECB is typically 35 tracks, 18 sectors per track
-                if (info.CylinderCount != 35 || info.SectorsPerTrack != 18)
+                int granules = GranulesForTracks(info.CylinderCount);
+                if (granules == 0 || info.SectorsPerTrack != SECTORS_PER_TRACK || info.HeadCount > 1)
                 {
                     return false;
                 }
 
                 // Read FAT sector to check validity
-                uint fatLsn = (uint)((17 * 18) + (2 - 1)); // Track 17, Sector 2
+                uint fatLsn = (uint)((FAT_TRACK * SECTORS_PER_TRACK) + (FAT_SECTOR - 1)); // Track 17, Sector 2
                 byte[] fatSector = new byte[SECTOR_SIZE];
                 device.ReadBlock(BlockAddress.FromLBA(fatLsn), fatSector);
 
-                // Count free granules (0xFF bytes) and allocated granules
-                int freeCount = 0;
-                int allocCount = 0;
-                for (int i = 0; i < MAX_GRANULES; i++)
+                if (granules == 68)
                 {
-                    if (fatSector[i] == 0xFF)
+                    // 35 tracks: the check this method has always made is kept as it was. No other file system of the Dragon drivers has a 35
+                    // track layout (DragonDOS is 40 or 80 tracks, OS-9 is tried before DECB), so the DSK driver takes a 35 track disk as DECB
+                    // whenever this says yes, and RetroIO.Tests Mount_CoCo35Track_ShouldSucceed pins that with a FAT sector of 0x33 bytes,
+                    // which is not a set of linked lists. Count free granules (0xFF bytes) and allocated granules.
+                    int freeCount = 0;
+                    int allocCount = 0;
+                    for (int i = 0; i < granules; i++)
                     {
-                        freeCount++;
+                        if (fatSector[i] == 0xFF)
+                        {
+                            freeCount++;
+                        }
+                        else if (fatSector[i] < granules || fatSector[i] >= 0xC0)
+                        {
+                            allocCount++;
+                        }
                     }
-                    else if (fatSector[i] < MAX_GRANULES || fatSector[i] >= 0xC0)
+
+                    // Valid DECB should have some allocated or free granules
+                    return freeCount > 0 || allocCount > 0;
+                }
+
+                // 40 and 80 tracks: DragonDOS is the other file system of the same size, and it is asked first, so this is only asked about
+                // a disk that is not DragonDOS. It says yes only for a FAT that holds DECB values, forms linked lists and is laid out as
+                // Toolshed lays it out.
+                Span<bool> hasPredecessor = stackalloc bool[granules];
+                for (int i = 0; i < granules; i++)
+                {
+                    byte value = fatSector[i];
+                    bool free = value == 0xFF;
+                    bool next = value < granules;
+                    bool last = value >= 0xC0 && value <= 0xC9;
+                    if (!free && !next && !last)
                     {
-                        allocCount++;
+                        return false;
+                    }
+
+                    // The FAT is one linked list per file ("the bytes in the FAT form a linked list for each file", libdecbopen.c), so no
+                    // granule is the next granule of two others. An all-zero sector would otherwise pass as every granule linking to granule 0.
+                    if (next)
+                    {
+                        if (hasPredecessor[value])
+                        {
+                            return false;
+                        }
+
+                        hasPredecessor[value] = true;
                     }
                 }
 
-                // Valid DECB should have some allocated or free granules
-                return (freeCount > 0 || allocCount > 0) && (freeCount + allocCount) > 0;
+                // Every chain must end in a last-granule value: it may not run into a free granule or go round in a loop.
+                for (int i = 0; i < granules; i++)
+                {
+                    int granule = i;
+                    int steps = 0;
+                    while (fatSector[granule] < granules)
+                    {
+                        granule = fatSector[granule];
+                        if (fatSector[granule] == 0xFF || ++steps > granules)
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                // On 40 and 80 tracks the only layout known is the one Toolshed dskini -4 and -8 writes: the bytes of the FAT sector after the
+                // last granule are zero (libdecbdskini.c fills the sector with 0 and sets only the granule bytes to 0xFF), and neither Toolshed
+                // nor this code writes them later. A real 35 track disk need not follow it (syzygy.dsk has 0xFF in bytes 68 to 255), so it is
+                // a rule for these two sizes only. Two real 40 track game images (HTCHHKER.VDK, PLANETFALL.VDK) hold a 68 granule FAT (0xFF or
+                // 0x00 after byte 67), which is not this layout, so they are not taken as 78 granule DECB disks.
+                for (int i = granules; i < SECTOR_SIZE; i++)
+                {
+                    if (fatSector[i] != 0x00)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
             catch
             {
@@ -329,7 +457,7 @@ namespace RetroIO.Storage.Local.FileSystems
 
             byte[] entry = ReadDirEntry(found);
             byte[] fat = (byte[])_fat!.Clone();
-            FreeChain(fat, entry[13]);
+            FreeChain(fat, entry[13], _granuleCount);
 
             // Same as Toolshed kill: only the first byte of the entry is cleared, the rest stays.
             entry[0] = 0x00;
@@ -409,7 +537,7 @@ namespace RetroIO.Storage.Local.FileSystems
             EnsureInitialized();
 
             int freeGranules = 0;
-            for (int i = 0; i < MAX_GRANULES; i++)
+            for (int i = 0; i < _granuleCount; i++)
             {
                 if (_fat![i] == 0xFF)
                 {
@@ -620,7 +748,7 @@ namespace RetroIO.Storage.Local.FileSystems
 
         private int CalculateFileSize(byte firstGranule, ushort lastSectorBytes)
         {
-            if (firstGranule >= MAX_GRANULES)
+            if (firstGranule >= _granuleCount)
             {
                 return 0;
             }
@@ -629,7 +757,7 @@ namespace RetroIO.Storage.Local.FileSystems
             byte currentGranule = firstGranule;
             int granuleCount = 0;
 
-            while (currentGranule < MAX_GRANULES && granuleCount < MAX_GRANULES)
+            while (currentGranule < _granuleCount && granuleCount < _granuleCount)
             {
                 byte fatEntry = _fat![currentGranule];
 
@@ -639,7 +767,7 @@ namespace RetroIO.Storage.Local.FileSystems
                     totalSectors += sectorsInLastGranule;
                     break;
                 }
-                else if (fatEntry < MAX_GRANULES)
+                else if (fatEntry < _granuleCount)
                 {
                     totalSectors += SECTORS_PER_GRANULE;
                     currentGranule = fatEntry;
@@ -671,7 +799,7 @@ namespace RetroIO.Storage.Local.FileSystems
             bool isLastGranule = false;
             int sectorsInLastGranule = 0;
 
-            while (currentGranule < MAX_GRANULES && granuleCount < MAX_GRANULES)
+            while (currentGranule < _granuleCount && granuleCount < _granuleCount)
             {
                 byte fatEntry = _fat![currentGranule];
 
@@ -682,7 +810,8 @@ namespace RetroIO.Storage.Local.FileSystems
                 }
 
                 // Calculate starting LSN for this granule
-                // Granule 0-67 map to tracks (excluding track 17)
+                // Granule 0-67 map to tracks (excluding track 17); on 40 and 80 track disks granules 68 and up go on the same way
+                // (Toolshed _decb_seekgranule: granule * 2304, plus two granules for granules above 33).
                 int trackOffset = currentGranule / 2;
                 if (trackOffset >= FAT_TRACK) trackOffset++; // Skip track 17
 
@@ -748,8 +877,9 @@ namespace RetroIO.Storage.Local.FileSystems
         //
         // Rules used, all checked against real disks written by Toolshed 2.2 (decb dskini, copy, kill, rename, attr)
         // and against the Toolshed libdecb source (write, open/create, kill, rename, gs_size):
-        //  - FAT: sector 2 of track 17, one byte per granule (68). 0xFF is free. A value below 0xC0 is the next granule
-        //    of the chain. 0xC0 plus N (N = 1 to 9) ends the chain and says how many sectors of the last granule are used.
+        //  - FAT: sector 2 of track 17, one byte per granule (68, 78 or 156 for 35, 40 or 80 tracks). 0xFF is free. A value
+        //    below 0xC0 is the next granule of the chain. 0xC0 plus N (N = 1 to 9) ends the chain and says how many sectors
+        //    of the last granule are used. The FAT bytes after the last granule are never written (dskini leaves them 0).
         //  - Directory: sectors 3 to 11 of track 17, 8 entries of 32 bytes, 72 in all. First byte 0x00 is a deleted
         //    entry (the rest stays), 0xFF is the end of the directory.
         //  - Entry: name 0-7, extension 8-10 (space padded), type 11, ASCII flag 12, first granule 13, bytes used in the
@@ -902,11 +1032,11 @@ namespace RetroIO.Storage.Local.FileSystems
 
         // Sets every granule of the chain that starts at firstGranule to free. The walk is bounded so a damaged
         // (looping) chain cannot run for ever.
-        private static void FreeChain(byte[] fat, byte firstGranule)
+        private static void FreeChain(byte[] fat, byte firstGranule, int granuleCount)
         {
             int granule = firstGranule;
             int steps = 0;
-            while (granule < MAX_GRANULES && steps <= MAX_GRANULES)
+            while (granule < granuleCount && steps <= granuleCount)
             {
                 byte next = fat[granule];
                 fat[granule] = 0xFF;
@@ -922,15 +1052,15 @@ namespace RetroIO.Storage.Local.FileSystems
 
         // Port of Toolshed find_free_granule, which says it matches the DECB ROM: start at the first granule of the
         // track of nextTo, then alternate outward over the tracks. Returns -1 when no granule is free.
-        private static int FindFreeGranule(byte[] fat, int nextTo)
+        private static int FindFreeGranule(byte[] fat, int nextTo, int granuleCount)
         {
             int counter = 0;
             int direction = 0;
             int granule = nextTo & ~1;
 
-            while (counter < MAX_GRANULES)
+            while (counter < granuleCount)
             {
-                if (granule >= 0 && granule < MAX_GRANULES && fat[granule] == 0xFF)
+                if (granule >= 0 && granule < granuleCount && fat[granule] == 0xFF)
                 {
                     return granule;
                 }
@@ -959,8 +1089,20 @@ namespace RetroIO.Storage.Local.FileSystems
                 else
                 {
                     granule += counter;
-                    if (granule >= MAX_GRANULES)
+                    if (granule >= granuleCount)
                     {
+                        // The upward step ran past the last granule, so there are no tracks left above: Toolshed's comment is "If
+                        // overflow, try previous granule (minus 4), in other direction". At this point save is the first granule
+                        // AFTER the lower track that was just checked, so save - 2 is that same track again and save - 4 is the
+                        // next track down. Minus 4 is therefore what lets the search go on downward one new track per step once the
+                        // top is used up. With minus 2 it would land on the track it has just checked, take the same branch again
+                        // next time, and check that one track over and over until the counter runs out, so a free granule further
+                        // down would never be found and the disk would be called full. This happens when the search starts near the
+                        // top of the disk: DecbWriteTests WriteFile_SearchPastTheTop_GoesOnDownward shows it at 68 and 78 granules
+                        // (first granule 66, the only other free granule far below). At 156 granules a search through WriteFile
+                        // cannot get there: the first granule of a file is the first free one in the order from granule 34, which
+                        // sweeps 0 to 67 before it climbs 68 to 155, so a search from a granule above 67 only has free granules
+                        // above it, and a search from 67 or below meets granule 0 before the top.
                         granule = save;
                         granule -= 4;
                         direction = ~direction;
@@ -1021,7 +1163,7 @@ namespace RetroIO.Storage.Local.FileSystems
 
                 // Toolshed overwrites by killing the old file and creating a new one, so its granules are free again
                 // for the new data and the first empty entry is used (which can be the old one).
-                FreeChain(fat, old[13]);
+                FreeChain(fat, old[13], _granuleCount);
                 if (slot < 0 || found < slot)
                 {
                     slot = found;
@@ -1042,7 +1184,7 @@ namespace RetroIO.Storage.Local.FileSystems
             int previous = 34;
             for (int i = 0; i < granulesNeeded; i++)
             {
-                int granule = FindFreeGranule(fat, previous);
+                int granule = FindFreeGranule(fat, previous, _granuleCount);
                 if (granule < 0)
                 {
                     throw new IOException("The disk is full: not enough free granules");

@@ -36,15 +36,17 @@ namespace RetroIO.Storage.Local.Tests
     /// RBF never shortens a directory file). The image file must then open exclusively after the driver is disposed.
     /// <para><b>Memory and speed</b></para>
     /// Memory is compared with GC.GetTotalMemory(true) after 20 percent of the operations and at the end. Speed is compared inside one run: a
-    /// probe (write, read and delete of an 8 KB file, 5 times, in three passes) runs every 50 operations and at the last operation, and the last
-    /// one is compared with the first earlier one at about the same fill level (the random walk is steered towards half full). What is compared
+    /// probe (write, read and delete of an 8 KB file, 5 times, in three passes) runs every 50 operations, and after the last operation the disk
+    /// is brought to the fill level of the earliest of those probes (files deleted or added, each checked) and the final probe runs there and is
+    /// compared with that earliest one. Every variant makes that comparison; none can skip it. What is compared
     /// is the number of blocks the file system read and wrote through a counting block device put between the file system and the block device
     /// of the driver, so the check gives the same answer on every machine. The wall-clock times are printed for information only; they are not
     /// asserted, because a sub-millisecond probe time moves with whatever else the machine is doing (once 3.1 times slower with no change in
     /// the code).
     /// <para><b>What cannot be run</b></para>
-    /// DECB exists on 35 track disks only and the VDK driver takes 40 and 80 track disks only, so there is no DECB-in-VDK variant. A headerless JVC
-    /// image cannot tell 40 tracks two sided from 80 tracks one sided, so only the one sided ones are run without a header. The pydmk program could
+    /// DECB is one sided only (Toolshed has no two sided DECB layout), so the DECB variants are 35 tracks (JVC and DMK) and 40 and 80 tracks
+    /// (VDK, and JVC without a header). A headerless JVC image cannot tell 40 tracks two sided from 80 tracks one sided, so only the one sided
+    /// ones are run without a header. The pydmk program could
     /// not be installed here (no such package on the Python package index), so DMK is read back by the test's own decoder only. DECB and OS-9
     /// are read back by Toolshed (decb, os9 dcheck) when WSL is there; DragonDOS has no outside tool in these tests (the XRoar emulator needs ROM files).
     /// </remarks>
@@ -96,6 +98,10 @@ namespace RetroIO.Storage.Local.Tests
             yield return V("DECB in JVC 35 no header", Kind.Decb, Box.Jvc, 35, 1);
             yield return V("DECB in JVC 35 header", Kind.Decb, Box.JvcHeader, 35, 1);
             yield return V("DECB in DMK 35 built", Kind.Decb, Box.Dmk, 35, 1);
+            yield return V("DECB in VDK SS40", Kind.Decb, Box.Vdk, 40, 1);
+            yield return V("DECB in VDK SS80", Kind.Decb, Box.Vdk, 80, 1);
+            yield return V("DECB in JVC 40 no header", Kind.Decb, Box.Jvc, 40, 1);
+            yield return V("DECB in JVC 80 no header", Kind.Decb, Box.Jvc, 80, 1);
             yield return V("OS-9 in JVC real NitrOS-9", Kind.Os9, Box.Jvc, 40, 2, "dsk", "NITR09.DSK");
             yield return V("OS-9 in VDK real NitrOS-9", Kind.Os9, Box.Vdk, 40, 2, "dsk", "NITR09.DSK");
             yield return V("OS-9 in DMK real NitrOS-9", Kind.Os9, Box.Dmk, 40, 2, "dsk", "NITR09.DSK");
@@ -493,14 +499,22 @@ namespace RetroIO.Storage.Local.Tests
             return r;
         }
 
-        // DECB: FAT in sector 2 of track 17, 68 granules (two per track, track 17 skipped), directory in sectors 3 to 11.
-        private static Fsck CheckDecb(byte[] s)
+        // The granules of a DECB disk of this many tracks, as Toolshed dskini writes the FAT (libdecbdskini.c), written out here rather than
+        // taken from DecbFileSystem so that a wrong count in the code under test cannot set the test.
+        private static int DecbGranules(int tracks)
+        {
+            return tracks == 35 ? 68 : (tracks == 40 ? 78 : (tracks == 80 ? 156 : 0));
+        }
+
+        // DECB: FAT in sector 2 of track 17, 68, 78 or 156 granules for 35, 40 or 80 tracks (two per track, track 17 skipped; Toolshed dskini
+        // writes those counts), directory in sectors 3 to 11.
+        private static Fsck CheckDecb(byte[] s, int granules)
         {
             Fsck r = new Fsck();
             int fat = ((17 * 18) + 1) * Sector;
             int dir = ((17 * 18) + 2) * Sector;
-            r.Total = 68;
-            int[] owner = new int[68];
+            r.Total = granules;
+            int[] owner = new int[granules];
             for (int e = 0; e < 72; e++)
             {
                 int o = dir + (e * 32);
@@ -518,7 +532,7 @@ namespace RetroIO.Storage.Local.Tests
                 int length = 0;
                 while (true)
                 {
-                    if (g >= 68)
+                    if (g >= granules)
                     {
                         r.Problem = "file entry " + e + " points at granule " + g;
                         return r;
@@ -554,7 +568,7 @@ namespace RetroIO.Storage.Local.Tests
                 }
             }
 
-            for (int g = 0; g < 68; g++)
+            for (int g = 0; g < granules; g++)
             {
                 bool free = s[fat + g] == 0xFF;
                 if (free)
@@ -798,12 +812,14 @@ namespace RetroIO.Storage.Local.Tests
                     : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive", "Documents", "RetroFS", "test-images");
             }
 
-            private static byte[] BlankDecbSectors()
+            // A blank DECB disk as Toolshed dskini makes it: the FAT free for every granule of the geometry and zero after, the directory 0xFF.
+            private static byte[] BlankDecbSectors(int tracks)
             {
-                byte[] image = new byte[35 * 18 * Sector];
+                byte[] image = new byte[tracks * 18 * Sector];
                 int fat = ((17 * 18) + 1) * Sector;
                 int dir = ((17 * 18) + 2) * Sector;
-                for (int i = 0; i < 68; i++)
+                int granules = DecbGranules(tracks);
+                for (int i = 0; i < granules; i++)
                 {
                     image[fat + i] = 0xFF;
                 }
@@ -837,7 +853,7 @@ namespace RetroIO.Storage.Local.Tests
 
                 if (_v.Kind == Kind.Decb)
                 {
-                    return BlankDecbSectors();
+                    return BlankDecbSectors(_v.Tracks);
                 }
 
                 return DragonDosTestDisk.Format(_v.Tracks, _v.Heads);
@@ -950,7 +966,7 @@ namespace RetroIO.Storage.Local.Tests
                     case Kind.DragonDos:
                         return CheckDragonDos(sectors, _dosTracks, _dosHeads, _lostBaseline);
                     case Kind.Decb:
-                        return CheckDecb(sectors);
+                        return CheckDecb(sectors, DecbGranules(_v.Tracks));
                     default:
                         return CheckOs9(sectors);
                 }
@@ -1438,6 +1454,63 @@ namespace RetroIO.Storage.Local.Tests
                 return new double[] { best, fewest, fewestReads, fewestWrites };
             }
 
+            // Free bytes a probe needs before it runs: the probe file is 8 KB, the rest is room to spare.
+            private const long ProbeRoom = 64 * 1024;
+
+            // How far below the fill level of the earliest probe the final probe may run. 5 percent of the space files can use is 7.6 KB on a
+            // 35 track DECB disk (3 granules) and more on every other disk, so one file of the missing size always lands inside it.
+            private const double FillWindow = 0.05;
+
+            // Part of the space that was free at the start that is in use now, 0 to 1.
+            private double Fill()
+            {
+                return 1.0 - ((double)Free() * Sector / _usedBytesCapacity);
+            }
+
+            // Brings the disk to a fill level between target - FillWindow and target: random files are deleted while it is fuller, and files
+            // of the missing size (aimed at the middle of the window, at most 30 KB times the size scale each) are added while it is emptier.
+            // Each of these is an operation like any other and is checked after it.
+            private void SteerToFill(double target)
+            {
+                int guard = 0;
+                while (true)
+                {
+                    double fill = Fill();
+                    if (fill > target)
+                    {
+                        if (_model.Count == 0)
+                        {
+                            Fail("the disk is fuller than " + target.ToString("P1") + " with no file of the test on it");
+                        }
+
+                        _op++;
+                        DoDelete();
+                        _what = "to the probe's fill level: " + _what;
+                    }
+                    else if (fill < target - FillWindow)
+                    {
+                        long missing = (long)((target - (FillWindow / 2) - fill) * _usedBytesCapacity);
+                        int size = (int)Math.Min(missing, (long)(30000 * _sizeScale));
+                        _op++;
+                        string name = NewName();
+                        byte[] data = Content(Math.Max(1, size));
+                        _what = "to the probe's fill level: create " + name + " " + data.Length + " bytes";
+                        _driver.WriteFile("/" + name, data);
+                        _model[name] = data;
+                    }
+                    else
+                    {
+                        return;
+                    }
+
+                    VerifyAll(true);
+                    if (++guard > 400)
+                    {
+                        Fail("the disk could not be brought to the fill level " + target.ToString("P1") + " of the earliest probe; it is at " + Fill().ToString("P1"));
+                    }
+                }
+            }
+
             // ---- the run
 
             public void Execute()
@@ -1525,22 +1598,10 @@ namespace RetroIO.Storage.Local.Tests
                         _tStep.Stop();
                         VerifyAll(_op % 25 != 0);
 
-                        if (_op == _ops)
+                        if (_op % 50 == 0 && (long)Free() * Sector >= ProbeRoom)
                         {
-                            // The probe file needs room: free some if the random walk left the disk nearly full.
-                            while (_model.Count > 0 && (long)Free() * Sector < 64 * 1024)
-                            {
-                                _op++;
-                                DoDelete();
-                                VerifyAll(true);
-                            }
-                        }
-
-                        if ((_op % 50 == 0 || _op == _ops) && (long)Free() * Sector >= 64 * 1024)
-                        {
-                            double fill = 1.0 - ((double)Free() * Sector / _usedBytesCapacity);
                             double[] probe = Probe();
-                            samples.Add(new[] { _op, fill, probe[0], probe[1], probe[2], probe[3] });
+                            samples.Add(new[] { _op, Fill(), probe[0], probe[1], probe[2], probe[3] });
                         }
 
                         if (_op == markMemory)
@@ -1556,29 +1617,33 @@ namespace RetroIO.Storage.Local.Tests
 
                     total.Stop();
                     long memoryEnd = MemoryWithoutModel();
-                    Assert.That(samples.Count, Is.GreaterThan(1), "no speed probe could run (" + Where() + ")");
-                    double[] last = samples[samples.Count - 1];
-                    double[]? first = null;
-                    for (int i = 0; i < samples.Count - 1 && first == null; i++)
+
+                    // The final probe. It is compared with the EARLIEST probe of the run, because work that grows with the operations made shows
+                    // most between the two ends. The fill level is part of what a probe costs, so the disk is first brought to the fill level that
+                    // earliest probe had (a little below it, never above, so the probe file still has room), by deleting random files or adding
+                    // files of the missing size, each one checked like any other operation. So the final probe always runs, always at the end, and
+                    // always has a partner at a matching fill level; no variant can skip the check. (Before 2026-10-21 the probe at the last
+                    // operation was skipped whenever the disk was nearly full there, and an earlier probe stood in for "the end"; for OS-9 that was
+                    // the one at op 200, and once the probe was moved, no earlier probe had the same fill level and the check was skipped.)
+                    Assert.That(samples.Count, Is.GreaterThan(0), "no probe could run during the operations, so the final probe has nothing to compare with (" + Where() + ")");
+                    double[] first = samples[0];
+                    SteerToFill(first[1]);
+                    double[] finalProbe = Probe();
+                    double[] last = new[] { _op, Fill(), finalProbe[0], finalProbe[1], finalProbe[2], finalProbe[3] };
+                    samples.Add(last);
+                    if (last[1] > first[1] || last[1] < first[1] - FillWindow)
                     {
-                        if (Math.Abs(samples[i][1] - last[1]) <= 0.12)
-                        {
-                            first = samples[i];
-                        }
+                        Fail("the final probe ran at fill " + last[1].ToString("P1") + ", not within " + FillWindow.ToString("P0") + " below the " + first[1].ToString("P1")
+                            + " of the probe at op " + first[0]);
                     }
 
-                    string probeText = "no earlier probe at the same fill level (" + last[1].ToString("P0") + ")";
-                    double blockRatio = 1.0;
-                    if (first != null)
-                    {
-                        // The time is for information only: it moves with whatever else the machine is doing. The block count decides.
-                        double timeRatio = last[2] / first[2];
-                        blockRatio = last[3] / first[3];
-                        probeText = "probe at op " + first[0] + " (fill " + first[1].ToString("P0") + "): " + first[3] + " blocks (" + first[4] + " read, " + first[5]
-                            + " written, " + (first[3] * Sector) + " bytes), " + first[2].ToString("F1") + " ms; at op " + last[0] + " (fill " + last[1].ToString("P0") + "): "
-                            + last[3] + " blocks (" + last[4] + " read, " + last[5] + " written, " + (last[3] * Sector) + " bytes), " + last[2].ToString("F1")
-                            + " ms; block ratio " + blockRatio.ToString("F3") + ", time ratio " + timeRatio.ToString("F2") + " (time not checked)";
-                    }
+                    // The time is for information only: it moves with whatever else the machine is doing. The block count decides.
+                    double timeRatio = last[2] / first[2];
+                    double blockRatio = last[3] / first[3];
+                    string probeText = "probe at op " + first[0] + " (fill " + first[1].ToString("P0") + "): " + first[3] + " blocks (" + first[4] + " read, " + first[5]
+                        + " written, " + (first[3] * Sector) + " bytes), " + first[2].ToString("F1") + " ms; at op " + last[0] + " (fill " + last[1].ToString("P0") + "): "
+                        + last[3] + " blocks (" + last[4] + " read, " + last[5] + " written, " + (last[3] * Sector) + " bytes), " + last[2].ToString("F1")
+                        + " ms; block ratio " + blockRatio.ToString("F3") + ", time ratio " + timeRatio.ToString("F2") + " (time not checked)";
 
                     string allProbes = string.Empty;
                     for (int i = 0; i < samples.Count; i++)
@@ -1593,15 +1658,8 @@ namespace RetroIO.Storage.Local.Tests
                         + string.Join(" ", memorySamples.ConvertAll(m => (m / 1024).ToString())) + " KB); most extents of a file " + _maxExtentsSeen
                         + ", files over four extents at once " + _filesOverFour + "; probe blocks per pass (op:fill:blocks)" + allProbes);
 
-                    if (first != null)
-                    {
-                        Assert.That(blockRatio, Is.LessThanOrEqualTo(MaxProbeBlockRatio), "the probe read and wrote " + blockRatio.ToString("F3")
-                            + " times as many blocks at the end as at op " + first[0] + " at about the same fill level: " + probeText + " (" + Where() + ")");
-                    }
-                    else
-                    {
-                        Assert.Warn("speed ratio not asserted: " + probeText);
-                    }
+                    Assert.That(blockRatio, Is.LessThanOrEqualTo(MaxProbeBlockRatio), "the probe read and wrote " + blockRatio.ToString("F3")
+                        + " times as many blocks at the end as at op " + first[0] + " at about the same fill level: " + probeText + " (" + Where() + ")");
 
                     // A leak shows as growth in nearly every interval. Measured on all variants (500 operations, 10 samples, model bytes taken off): most
                     // intervals change by 0 to 2 KB, and now and then ONE interval jumps up once by 12 to 410 KB and stays there (a buffer or cache that is
@@ -1672,6 +1730,10 @@ namespace RetroIO.Storage.Local.Tests
             // Work that grows with the number of operations made fails at once: with one extra directory read per earlier write added to
             // DragonDosFileSystem.ReadFile, 10 of the 11 DragonDOS variants came out at 1.43 to 3.17 (the wall-clock ratio of the same runs was
             // 0.77 to 1.80 and would have passed the old limit of 3.0). This is the same factor the DECB and OS-9 stress tests use.
+            // Measured again 2026-10-21 after the final probe got its own run at the fill level of the earliest probe, over the 21 variants
+            // (the DECB 40 and 80 track ones added): ratios 0.969 to 1.032 with the code as it is. With one extra directory read per earlier
+            // write added to ReadFile of DragonDosFileSystem, DecbFileSystem and Os9RbfFileSystem at once, all 21 variants failed, at 1.685 to
+            // 4.224 (the lowest is FEdit SS40, whose earliest probe is at op 250 because the disk is too full for one before that).
             private const double MaxProbeBlockRatio = StressChecks.BlockFactor;
 
             private void FillTheDisk()
