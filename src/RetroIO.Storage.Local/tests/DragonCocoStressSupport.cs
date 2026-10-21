@@ -36,6 +36,29 @@ namespace RetroIO.Storage.Local.Tests
         /// </returns>
         public static string? Run(string program, params string[] arguments)
         {
+            return RunWithTimeout(program, 120000, arguments);
+        }
+
+        /// <summary>
+        /// Runs one program in WSL Ubuntu and gives everything it printed, waiting at most the given time.
+        /// </summary>
+        /// <param name="program">
+        /// The program, for example <c>os9</c>, <c>decb</c> or <c>bash</c>.
+        /// </param>
+        /// <param name="timeoutMilliseconds">
+        /// How long to wait for the program to finish. When it takes longer, it is killed and <see cref="TimeoutException"/> is thrown.
+        /// </param>
+        /// <param name="arguments">
+        /// The arguments, one per element.
+        /// </param>
+        /// <returns>
+        /// Standard output followed by standard error, or null when WSL or the program is not on this machine.
+        /// </returns>
+        /// <exception cref="TimeoutException">
+        /// Thrown when the program did not finish in time.
+        /// </exception>
+        public static string? RunWithTimeout(string program, int timeoutMilliseconds, params string[] arguments)
+        {
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 return null;
@@ -74,16 +97,18 @@ namespace RetroIO.Storage.Local.Tests
 
             using (process)
             {
+                // Both streams are read in the background. Reading standard output to the end here first would wait until the program exits,
+                // so a program that hangs (Toolshed "os9 dir" on a disk whose sector 0 is all 0xFF does) would never reach the timeout below.
                 System.Threading.Tasks.Task<string> error = process.StandardError.ReadToEndAsync();
-                string output = process.StandardOutput.ReadToEnd();
-                if (!process.WaitForExit(120000))
+                System.Threading.Tasks.Task<string> output = process.StandardOutput.ReadToEndAsync();
+                if (!process.WaitForExit(timeoutMilliseconds))
                 {
                     // Our own child process: killed by its handle, not by name.
                     process.Kill(true);
-                    throw new TimeoutException(program + " did not finish in 120 seconds");
+                    throw new TimeoutException(program + " did not finish in " + (timeoutMilliseconds / 1000) + " seconds");
                 }
 
-                string all = output + error.Result;
+                string all = output.Result + error.Result;
 
                 // wsl.exe prints its OWN messages (such as a missing distribution) in UTF-16, while the program inside prints UTF-8. Read as UTF-8,
                 // UTF-16 text has a NUL after every character, so "There is no distribution" never matched and the CI runner (wsl.exe present, no

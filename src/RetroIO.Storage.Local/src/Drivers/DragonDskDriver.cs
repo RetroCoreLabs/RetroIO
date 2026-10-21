@@ -45,6 +45,13 @@ namespace RetroIO.Storage.Local.Drivers
     /// A headerless image is taken as 18 sectors per track and one side, which cannot tell a 40 track two sided disk from an 80 track one sided disk of
     /// the same size. For an OS-9 disk the identification sector settles it: track size in sectors (byte 3), sectors per track (bytes 17 and 18)
     /// and bit 0 of the disk format byte (byte 16, set for two sides), and the declared total sectors (bytes 0 to 2) may not exceed the file.
+    /// <para><b>OS-9 hard disk volumes</b></para>
+    /// A headerless image can also hold an OS-9 volume that is no floppy: the CoCo SDC images (18432 sectors), DriveWire images (524268
+    /// sectors, from "os9 format -t29126") and other hard disk volumes. When sector 0 is a consistent OS-9 identification sector and its volume
+    /// does not fit the 35, 40 or 80 track layout, the image is mounted as DD.TOT sectors in a row with the OS-9 file system. The file may hold
+    /// fewer sectors than DD.TOT, because Toolshed writes the rest of a new volume only when asked to (its -e option); the sectors it leaves
+    /// out read as zero, as they would after "os9 format -e". Such a short image is mounted read-only, because writing it back would make the
+    /// file as long as the whole volume.
     /// <para><b>What this driver does with it</b></para>
     /// It mounts the sectors and picks the file system from the contents of the disk: OS-9 first (strict signature in sector 0), then DECB for a
     /// 35 track disk, then DragonDOS; a one sided 40 or 80 track disk whose DragonDOS BAM does not check out is taken as DECB when its FAT fits. The VDK format is described in <see cref="DragonVdkDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
@@ -57,6 +64,9 @@ namespace RetroIO.Storage.Local.Drivers
         private GenericBlockDevice? _blockDevice;
         private IBlockFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
+
+        // Why the mounted volume cannot be written although the image was mounted for writing, or null.
+        private string? _readOnlyReason;
 
         /// <summary>
         /// Gets the file system type of the mounted file system (DragonDOS, OS-9 or DECB),
@@ -147,6 +157,7 @@ namespace RetroIO.Storage.Local.Drivers
             }
 
             long fileSize = imageStream.Length;
+            _readOnlyReason = null;
 
             // Calculate header size: fileSize % 128. The JVC description says % 256, XRoar uses % 128 so that 128-byte sectors
             // and sector attribute bytes do not hide a header (see the remarks of this class).
@@ -234,6 +245,19 @@ namespace RetroIO.Storage.Local.Drivers
             {
                 tracks++;
                 partialLastTrack = true;
+            }
+
+            // A headerless image whose sector 0 is an OS-9 identification sector, but whose volume is no floppy this driver lays out (another
+            // track count, or more sectors than the floppy holds), is an OS-9 hard disk volume: CoCo SDC and DriveWire images, and any volume
+            // made with "os9 format -t<tracks>". Sector 0 gives its size, so it is mounted as that many sectors in a row.
+            if (headerSize == 0 && TryReadOs9Volume(ReadSectorZero(imageStream, fileSize), fileSize, out long os9Sectors))
+            {
+                bool floppyLayout = tracks == 35 || tracks == 40 || tracks == 80;
+                if (!floppyLayout || os9Sectors > (long)tracks * sides * sectorsPerTrack)
+                {
+                    MountOs9Volume(imageStream, fileSize, os9Sectors, readOnly);
+                    return;
+                }
             }
 
             // Validate track count
@@ -399,6 +423,136 @@ namespace RetroIO.Storage.Local.Drivers
             return true;
         }
 
+        // Sector 0 of the image, or an empty span when the file is shorter than one sector.
+        private static byte[] ReadSectorZero(Stream imageStream, long fileSize)
+        {
+            if (fileSize < 256)
+            {
+                return Array.Empty<byte>();
+            }
+
+            byte[] id = new byte[256];
+            imageStream.Position = 0;
+            imageStream.ReadExactly(id, 0, id.Length);
+            return id;
+        }
+
+        /// <summary>
+        /// Tells whether a sector is the identification sector of an OS-9 volume that a headerless image holds, and gives the size of the volume.
+        /// </summary>
+        /// <param name="id">
+        /// Sector 0 of the image.
+        /// </param>
+        /// <param name="fileSize">
+        /// The size of the image file in bytes.
+        /// </param>
+        /// <param name="totalSectors">
+        /// Receives DD.TOT, the sectors in the volume.
+        /// </param>
+        /// <returns>
+        /// True when the fields agree with each other and with the file: the file is whole 256-byte sectors, DD.TOT is at least 3, the track
+        /// size DD.TKS is not zero and equals the sectors per track DD.SPT, the allocation map (DD.MAP bytes, DD.BIT sectors per bit) covers
+        /// DD.TOT, the root directory descriptor DD.DIR lies behind the map and inside the volume, and the file holds every sector up to and
+        /// including DD.DIR. Otherwise false.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Field offsets are those of the RBF identification sector (NitrOS-9 defs/rbf.d): DD.TOT 0 (3 bytes), DD.TKS 3, DD.MAP 4 (2 bytes),
+        /// DD.BIT 6 (2 bytes), DD.DIR 8 (3 bytes), DD.SPT 17 (2 bytes). The allocation map starts at sector 1.
+        /// </para>
+        /// <para>
+        /// The file may hold fewer sectors than DD.TOT. Toolshed's "os9 format" writes the rest of the disk as zero sectors only with its -e
+        /// option (os9/os9format.c, "Write Rest of disk as empty sectors"), and the NitrOS-9 build formats its DriveWire disks without it
+        /// (rules.mak: OS9FORMAT_DW = os9 format -t29126 -ss -dd), so those files stop after the last sector that was written.
+        /// </para>
+        /// </remarks>
+        public static bool TryReadOs9Volume(ReadOnlySpan<byte> id, long fileSize, out long totalSectors)
+        {
+            totalSectors = 0;
+            if (id.Length < 256 || fileSize % 256 != 0)
+            {
+                return false;
+            }
+
+            long total = (id[0] << 16) | (id[1] << 8) | id[2];
+            int trackSize = id[3];
+            long mapBytes = (id[4] << 8) | id[5];
+            long sectorsPerBit = (id[6] << 8) | id[7];
+            long rootFd = (id[8] << 16) | (id[9] << 8) | id[10];
+            int declaredSectorsPerTrack = (id[17] << 8) | id[18];
+
+            if (total < 3 || trackSize == 0 || trackSize != declaredSectorsPerTrack)
+            {
+                return false;
+            }
+
+            if (mapBytes == 0 || sectorsPerBit == 0 || mapBytes * 8 * sectorsPerBit < total)
+            {
+                return false;
+            }
+
+            long mapSectors = (mapBytes + 255) / 256;
+            if (rootFd < 1 + mapSectors || rootFd >= total || (rootFd + 1) * 256 > fileSize)
+            {
+                return false;
+            }
+
+            totalSectors = total;
+            return true;
+        }
+
+        // Mounts a headerless OS-9 volume as DD.TOT sectors in a row (or the file's sectors, when the file holds more). Sectors the file does
+        // not hold read as zero, as they would be on a disk formatted with "os9 format -e".
+        private void MountOs9Volume(Stream imageStream, long fileSize, long os9Sectors, bool readOnly)
+        {
+            long fileSectors = fileSize / 256;
+            long sectors = Math.Max(os9Sectors, fileSectors);
+
+            // The block device holds the whole volume in memory, in one array.
+            if (sectors * 256 > int.MaxValue)
+            {
+                throw new NotSupportedException(
+                    $"The OS-9 volume has {sectors} sectors ({sectors * 256} bytes), more than this driver can hold in memory");
+            }
+
+            _descriptor = new BlockDeviceDescriptor
+            {
+                Name = $"OS-9 volume {sectors} sectors",
+                BlockSize = 256,
+                AddressMode = BlockAddressMode.LBA,
+                Cylinders = 1,
+                Heads = 1,
+                UniformSectorsPerTrack = 1,
+                TotalBlocks = (uint)sectors,
+                ExpectedImageSize = sectors * 256,
+                SupportsVariableGeometry = false
+            };
+
+            // A file shorter than its volume is mounted read-only. Writing it back would make the file as long as the whole volume (the block
+            // device writes every sector it holds), which for a DriveWire disk is 134 MB from a file of a few hundred kB.
+            bool shortFile = os9Sectors > fileSectors;
+            _readOnlyReason = shortFile
+                ? $"the image file holds {fileSectors} of the {os9Sectors} sectors of its OS-9 volume, and writing it would make the file as long as the whole volume"
+                : null;
+
+            Stream dataStream = shortFile
+                ? new PaddedSubStream(imageStream, 0, fileSectors * 256, sectors * 256)
+                : new SubStream(imageStream, 0, fileSize);
+            _blockDevice = new GenericBlockDevice(_descriptor);
+            _blockDevice.Mount(dataStream, readOnly || shortFile);
+
+            Os9RbfFileSystem os9 = new Os9RbfFileSystem();
+            if (!os9.CanHandle(_blockDevice))
+            {
+                _blockDevice = null;
+                throw new InvalidDataException(
+                    $"Sector 0 describes an OS-9 volume of {os9Sectors} sectors, but its root directory is not a usable OS-9 directory");
+            }
+
+            os9.Initialize(_blockDevice);
+            _filesystem = os9;
+        }
+
         private BlockDeviceDescriptor DetectDescriptor(int tracks, byte sides)
         {
             // Determine descriptor based on geometry
@@ -547,6 +701,11 @@ namespace RetroIO.Storage.Local.Drivers
 
         private void EnsureWritable()
         {
+            if (_readOnlyReason != null)
+            {
+                throw new UnauthorizedAccessException("The DSK/JVC volume is read-only: " + _readOnlyReason);
+            }
+
             if (!CanWrite)
             {
                 throw new UnauthorizedAccessException("The DSK/JVC volume is not mounted for writing, or cannot be written, so it is read-only");
@@ -680,6 +839,7 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice = null;
             _filesystem = null;
             _descriptor = null;
+            _readOnlyReason = null;
         }
     }
 }
