@@ -92,6 +92,14 @@ namespace RetroIO.Storage.Local.Streams
         public override long Length => _length;
 
         /// <summary>
+        /// Gets the number of bytes of the part that really are in the base stream. It grows when a write reaches past it.
+        /// </summary>
+        /// <remarks>
+        /// A block device reads only this much when it is mounted on this stream, so the padding is never held in memory.
+        /// </remarks>
+        public long RealLength => _realLength;
+
+        /// <summary>
         /// Gets or sets the position inside the stream.
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">

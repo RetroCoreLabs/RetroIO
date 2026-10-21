@@ -104,8 +104,8 @@ namespace RetroIO.Storage.Local.BlockDevices
 
             int offset = CalculateOffset(address);
 
-            // Copy data to buffer
-            _imageData.AsSpan(offset, BlockSize).CopyTo(buffer);
+            // Copy data to buffer (a block the file does not hold and that was never written reads as zero bytes)
+            ReadImage(offset, buffer.Slice(0, BlockSize));
 
             return BlockSize;
         }
@@ -143,8 +143,8 @@ namespace RetroIO.Storage.Local.BlockDevices
 
             int offset = CalculateOffset(address);
 
-            // Write data
-            data.CopyTo(_imageData.AsSpan(offset, BlockSize));
+            // Write data; the block is marked changed and goes to the stream at the next flush
+            WriteImage(offset, data);
         }
 
         /// <summary>

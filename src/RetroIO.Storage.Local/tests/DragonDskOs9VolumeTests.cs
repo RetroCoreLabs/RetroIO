@@ -15,7 +15,8 @@ namespace RetroIO.Storage.Local.Tests
 {
     /// <summary>
     /// Headerless DSK images that hold an OS-9 volume that is no floppy: hard disk volumes such as the CoCo SDC and DriveWire images of the
-    /// NitrOS-9 project, including DriveWire files that are shorter than their volume.
+    /// NitrOS-9 project, including DriveWire files that are shorter than their volume. A short file can be written: only the changed sectors
+    /// are written back, so the file grows only as far as the last sector written.
     /// </summary>
     /// <remarks>
     /// The volumes are built from the RBF field layout (NitrOS-9 defs/rbf.d). The shapes are those of the real NitrOS-9 3.3.0 snapshot images,
@@ -36,19 +37,64 @@ namespace RetroIO.Storage.Local.Tests
             byte[] image = BuildVolume(4000, 18, 2, out byte[] content, out int usedSectors, shortFile: true);
             Assert.That(image.Length / SectorSize, Is.EqualTo(usedSectors), "the file holds only the used sectors");
 
-            using (MemoryStream stream = new MemoryStream(image, true))
+            using (MemoryStream stream = new MemoryStream(image, false))
             {
                 DragonDskDriver driver = new DragonDskDriver();
-                driver.Mount(stream, false);
+                driver.Mount(stream, true);
 
                 Assert.That(driver.FileSystemType, Is.EqualTo("OS-9"));
                 Assert.That(driver.GetBlockDeviceInfo()!.TotalBlocks, Is.EqualTo(4000u), "the device is DD.TOT sectors long");
                 Assert.That(driver.ReadFile("/HELLO"), Is.EqualTo(content));
                 Assert.That(driver.GetBlocksFree(), Is.EqualTo(4000 - usedSectors));
-                Assert.That(driver.CanWrite, Is.False, "a short file would grow to the whole volume when written back");
-                UnauthorizedAccessException? refused = Assert.Throws<UnauthorizedAccessException>(() => driver.WriteFile("/NEW", new byte[] { 1 }));
-                Assert.That(refused!.Message, Does.Contain("holds " + usedSectors + " of the 4000 sectors"));
                 driver.Dispose();
+            }
+        }
+
+        [Test]
+        public void ShortVolume_CanBeWritten_AndTheFileGrowsOnlyAsFarAsTheLastSectorWritten()
+        {
+            byte[] image = BuildVolume(4000, 18, 2, out byte[] content, out int usedSectors, shortFile: true);
+
+            // A stream that can grow, as a file on disk can.
+            using (MemoryStream stream = new MemoryStream())
+            {
+                stream.Write(image, 0, image.Length);
+                DragonDskDriver driver = new DragonDskDriver();
+                driver.Mount(stream, false);
+                Assert.That(driver.CanWrite, Is.True, "a short file is written sector by sector, so it can be written");
+
+                // 3000 bytes need 12 data sectors and one descriptor sector. Every sector up to the last used one is taken, so RBF takes the
+                // sectors right behind them, all behind the end of the file.
+                byte[] data = new byte[3000];
+                for (int i = 0; i < data.Length; i++)
+                {
+                    data[i] = (byte)(i * 13);
+                }
+
+                driver.WriteFile("/NEW", data);
+                Assert.That(driver.ReadFile("/NEW"), Is.EqualTo(data));
+                Assert.That(driver.ReadFile("/HELLO"), Is.EqualTo(content));
+                int freeAfter = driver.GetBlocksFree();
+                long grownTo = stream.Length;
+                driver.Dispose();
+
+                Assert.That(grownTo % SectorSize, Is.EqualTo(0));
+                Assert.That(grownTo, Is.GreaterThan(image.Length), "the new sectors lie behind the old end of the file");
+                Assert.That(grownTo, Is.LessThanOrEqualTo((long)(4000 - freeAfter) * SectorSize),
+                    "the file ends at the last sector in use, not at the end of the volume");
+
+                byte[] after = stream.ToArray();
+                Assert.That(after.AsSpan(0, SectorSize).ToArray(), Is.EqualTo(image.AsSpan(0, SectorSize).ToArray()), "sector 0 is unchanged");
+
+                // The grown file mounts again and reads the same.
+                using (MemoryStream again = new MemoryStream(after, false))
+                {
+                    DragonDskDriver second = new DragonDskDriver();
+                    second.Mount(again, true);
+                    Assert.That(second.ReadFile("/NEW"), Is.EqualTo(data));
+                    Assert.That(second.GetBlocksFree(), Is.EqualTo(freeAfter));
+                    second.Dispose();
+                }
             }
         }
 
