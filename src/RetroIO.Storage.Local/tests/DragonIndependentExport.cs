@@ -246,5 +246,120 @@ namespace RetroIO.Storage.Local.Tests
 
             File.WriteAllText(Path_("manifest.txt"), _manifest.ToString());
         }
+
+        /// <summary>
+        /// Reads disks that the real DragonDOS ROM wrote (in the XRoar emulator), then changes a copy of one with our code and exports it, so
+        /// that the ROM can read the change. Needs RETROIO_DRAGON_XROAR_MADE, the folder with the disks (simple.vdk and frag.vdk).
+        /// </summary>
+        /// <remarks>
+        /// The 6809 program that made the disks calls the DragonDOS jump table: create, write, close, delete, sync directory. Every file it wrote
+        /// holds the same pattern, the bytes of the DragonDOS test pattern (seed 0) cut to the size. frag.vdk was filled with 114 files of 6 sectors,
+        /// every second one deleted, and then BIG.DAT (20000 bytes) was written into the gaps, so the DOS itself made a file with a continuation
+        /// entry.
+        /// </remarks>
+        // What the 6809 program wrote for a file of this size: it wrote the same 8 KB buffer (the pattern, seed 0) again and again.
+        private static byte[] MadeByDos(int size)
+        {
+            byte[] block = DragonDosTestDisk.Pattern(8192, 0);
+            byte[] data = new byte[size];
+            for (int i = 0; i < size; i++)
+            {
+                data[i] = block[i % 8192];
+            }
+
+            return data;
+        }
+
+        [Test]
+        public void ReadAndEditDisksMadeByTheRealDos()
+        {
+            string? made = Environment.GetEnvironmentVariable("RETROIO_DRAGON_XROAR_MADE");
+            if (string.IsNullOrEmpty(made))
+            {
+                Assert.Ignore("RETROIO_DRAGON_XROAR_MADE is not set");
+            }
+
+            // simple.vdk
+            using (FileStream stream = File.OpenRead(Path.Combine(made!, "simple.vdk")))
+            {
+                DragonVdkDriver driver = new DragonVdkDriver();
+                driver.Mount(stream, true);
+                int[] sizes = { 1000, 5000, 0, 256, 257, 20000 };
+                string[] names = { "AAA.BIN", "BBB.BIN", "EMPTY.DAT", "SECT.DAT", "SECT1.DAT", "BIG.DAT" };
+                Assert.That(driver.ListDirectory("/").Length, Is.EqualTo(names.Length), "TMP.DAT was deleted by the DOS");
+                for (int i = 0; i < names.Length; i++)
+                {
+                    Assert.That(driver.ReadFile(names[i]), Is.EqualTo(MadeByDos(sizes[i])), names[i]);
+                }
+
+                Assert.That(driver.GetMetadata("TMP.DAT"), Is.Null);
+                driver.Dispose();
+            }
+
+            // frag.vdk: even numbered F files stay, the odd ones were deleted by the DOS, BIG.DAT fills the gaps.
+            byte[] frag = File.ReadAllBytes(Path.Combine(made!, "frag.vdk"));
+            using (MemoryStream stream = new MemoryStream(frag))
+            {
+                DragonVdkDriver driver = new DragonVdkDriver();
+                driver.Mount(stream, true);
+                int count = driver.ListDirectory("/").Length;
+                Assert.That(count, Is.EqualTo(57 + 3), "57 even F files, BIG.DAT, EMPTY.DAT and EXACT.DAT");
+                for (int i = 0; i < 114; i += 2)
+                {
+                    Assert.That(driver.ReadFile("F" + i.ToString("D3")), Is.EqualTo(MadeByDos(1536)), "F" + i.ToString("D3"));
+                }
+
+                Assert.That(driver.GetMetadata("F001"), Is.Null);
+                Assert.That(driver.ReadFile("BIG.DAT"), Is.EqualTo(MadeByDos(20000)), "BIG.DAT is in more than four extents");
+                Assert.That(driver.ReadFile("EXACT.DAT"), Is.EqualTo(MadeByDos(2048)));
+                Assert.That(driver.ReadFile("EMPTY.DAT"), Is.Empty);
+                driver.Dispose();
+            }
+
+            // Which entries the DOS used: the number of continuation entries it made, from the raw bytes (attribute 01H, bit 7 clear).
+            int continuations = 0;
+            for (int n = 0; n < 160; n++)
+            {
+                int attribute = frag[12 + (((20 * 18) + 2 + (n / 10)) * 256) + ((n % 10) * 25)];
+                if ((attribute & 0x81) == 0x01)
+                {
+                    continuations++;
+                }
+            }
+
+            Assert.That(continuations, Is.GreaterThanOrEqualTo(1), "the real DOS made a continuation entry");
+            TestContext.Out.WriteLine("frag.vdk, written by the real DOS: " + continuations + " continuation entries");
+
+            // Edit a copy with our code: delete the file the DOS fragmented, write two new ones into the gaps, rename one. Then export it for the DOS to read.
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RETROIO_DRAGON_EXPORT_FOLDER")))
+            {
+                return;
+            }
+
+            _folder = Environment.GetEnvironmentVariable("RETROIO_DRAGON_EXPORT_FOLDER")!;
+            Directory.CreateDirectory(Path.Combine(_folder, "expected"));
+            _manifest = new StringBuilder();
+            File.WriteAllBytes(Path_("edited_frag.vdk"), frag);
+            using (FileStream stream = new FileStream(Path_("edited_frag.vdk"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            {
+                DragonVdkDriver driver = new DragonVdkDriver();
+                driver.Mount(stream, false);
+                driver.DeleteFile("BIG.DAT");
+                byte[] bigger = DragonDosTestDisk.Pattern(9000, 9);
+                driver.WriteFile("NEWBIG.DAT", bigger);
+                byte[] small = DragonDosTestDisk.Pattern(100, 3);
+                driver.WriteFile("SMALL.TXT", small);
+                driver.RenameFile("F000", "FIRST.TXT");
+                Expect("edited_frag.vdk", "NEWBIG.DAT", bigger);
+                Expect("edited_frag.vdk", "SMALL.TXT", small);
+                Expect("edited_frag.vdk", "FIRST.TXT", MadeByDos(1536));
+                Expect("edited_frag.vdk", "F002!", MadeByDos(1536));
+                ExpectAbsent("edited_frag.vdk", "BIG.DAT");
+                ExpectAbsent("edited_frag.vdk", "F000!");
+                driver.Dispose();
+            }
+
+            File.WriteAllText(Path_("manifest2.txt"), _manifest.ToString());
+        }
     }
 }
