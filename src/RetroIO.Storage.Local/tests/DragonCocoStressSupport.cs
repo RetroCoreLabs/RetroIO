@@ -84,8 +84,13 @@ namespace RetroIO.Storage.Local.Tests
                 }
 
                 string all = output + error.Result;
-                if (all.Contains("execvpe(" + program + ") failed") || all.Contains("Command '" + program + "' not found")
-                    || all.Contains("There is no distribution with the supplied name"))
+
+                // wsl.exe prints its OWN messages (such as a missing distribution) in UTF-16, while the program inside prints UTF-8. Read as UTF-8,
+                // UTF-16 text has a NUL after every character, so "There is no distribution" never matched and the CI runner (wsl.exe present, no
+                // Ubuntu) failed five tests instead of skipping the Toolshed check. The NULs are dropped for the test only; the text returned is unchanged.
+                string plain = all.Replace("\0", string.Empty);
+                if (plain.Contains("execvpe(" + program + ") failed") || plain.Contains("Command '" + program + "' not found")
+                    || plain.Contains("There is no distribution with the supplied name"))
                 {
                     return null;
                 }
