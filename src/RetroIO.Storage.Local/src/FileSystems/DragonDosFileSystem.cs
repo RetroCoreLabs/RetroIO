@@ -103,6 +103,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// </remarks>
         public string VolumeLabel => _volumeLabel;
         /// <summary>
+        /// Gets a value indicating whether the BAM geometry bytes of the mounted disk passed their complement check, so that it is a DragonDOS volume.
+        /// </summary>
+        public bool IsDragonDosVolume => _validBam;
+        /// <summary>
         /// Gets <c>.</c>, the separator between file name and extension in DragonDOS.
         /// </summary>
         public string ExtensionSeparator => ".";  // DragonDOS uses name.ext format

@@ -56,7 +56,7 @@ namespace RetroIO.Storage.Local.Drivers
         public bool CanRead => _inner.CanRead;
 
         /// <summary>
-        /// Gets <c>true</c> when the image is mounted read-write, is not marked write protected and holds a DragonDOS volume.
+        /// Gets <c>true</c> when the image is mounted read-write, is not marked write protected and holds a volume that can be written.
         /// </summary>
         public bool CanWrite => _writable && _inner.CanWrite;
 

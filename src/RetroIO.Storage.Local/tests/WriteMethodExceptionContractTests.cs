@@ -147,20 +147,7 @@ namespace RetroIO.Storage.Local.Tests
 
         // ------------------------------------------------------------------ the exact exception, per file system
 
-<<<<<<< HEAD
-        [TestCase(typeof(DecbFileSystem))]
-=======
-        // DecbFileSystem left this list when it got write support (see DecbWriteTests).
-        [TestCase(typeof(DragonDosFileSystem))]
->>>>>>> main
-        public void FileSystemWithoutWriteSupport_WriteFileAndDeleteFile_ThrowIOException(Type fsType)
-        {
-            IBlockFileSystem fs = (IBlockFileSystem)Activator.CreateInstance(fsType)!;
-
-            Assert.That(Catch(() => fs.WriteFile("/A", new byte[] { 1 })), Is.InstanceOf<IOException>());
-            Assert.That(Catch(() => fs.DeleteFile("/A")), Is.InstanceOf<IOException>());
-            Assert.That(Catch(() => fs.Rename("/A", "/B")), Is.InstanceOf<IOException>());
-        }
+        // DecbFileSystem and DragonDosFileSystem left this list when they got write support (see DecbWriteTests and DragonDosWriteTests).
 
         [Test]
         public void DragonDos_CreateDirectory_ThrowsNotSupported_BecauseTheDiskHasOnlyARoot()
