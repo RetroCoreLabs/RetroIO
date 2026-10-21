@@ -39,6 +39,11 @@ namespace RetroIO.Storage.Local.Tests
     /// every byte as it was), and ends by deleting every file. The memory still held after each round, and the time each call took, are
     /// compared between the early and the late rounds.
     /// </para>
+    /// <para>
+    /// These runs stay at the file system level: the file system sits on a plain <c>GenericBlockDevice</c>, with no Dragon driver and no
+    /// container format in between. The same disks through the JVC, VDK and DMK drivers are run by <c>DragonStressTests</c>, so driver
+    /// variants belong there and not here.
+    /// </para>
     /// </remarks>
     [TestFixture]
     public class DecbStressTests
