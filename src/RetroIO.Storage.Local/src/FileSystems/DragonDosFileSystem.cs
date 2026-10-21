@@ -326,7 +326,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the name is not a valid DragonDOS file name.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is read-only, is not a DragonDOS volume, the existing file is write protected, the disk is full or the directory is full.
+        /// Thrown when the volume is read-only, the existing file is write protected, the disk is full or the directory is full.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the disk is not a DragonDOS volume (its BAM geometry bytes fail the check), so nothing is written.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
@@ -436,7 +439,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the file is not in the directory.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is read-only or not a DragonDOS volume, or the file is write protected.
+        /// Thrown when the volume is read-only or the file is write protected.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the disk is not a DragonDOS volume.
         /// </exception>
         public void DeleteFile(string path)
         {
@@ -592,7 +598,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the new name is not a valid DragonDOS file name.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is read-only or not a DragonDOS volume, the file is write protected, or a different file already has the new name.
+        /// Thrown when the volume is read-only, the file is write protected, or a different file already has the new name.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the disk is not a DragonDOS volume.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
