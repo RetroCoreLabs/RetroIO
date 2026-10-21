@@ -258,13 +258,15 @@ namespace RetroIO.Storage.Local.FileSystems
         /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
-            EnsureDragonDosVolume();
+            EnsureInitialized();
 
             // DragonDOS only supports root directory
             if (!string.IsNullOrEmpty(path) && path != "/")
             {
                 throw new DirectoryNotFoundException($"DragonDOS has only a root directory: {path}");
             }
+
+            EnsureDragonDosVolume();
 
             return ListRootDirectory();
         }
