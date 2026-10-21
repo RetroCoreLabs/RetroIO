@@ -28,7 +28,8 @@ namespace RetroIO.Storage.Local.Drivers
         public override string Description => "Dragon 32/64 DSK/JVC disk images (35/40/80 tracks, DragonDOS)";
 
         /// <summary>
-        /// Scores the file from its extension (.dsk or .jvc), a plausible JVC header and its size. Returns 0 when the header starts with the VDK signature.
+        /// Scores the file from its extension (.dsk or .jvc), a plausible JVC header, its size, and an OS-9 identification sector in a headerless
+        /// image. Returns 0 when the header starts with the VDK signature.
         /// </summary>
         /// <param name="hints">
         /// The file name, size and header bytes.
@@ -76,6 +77,15 @@ namespace RetroIO.Storage.Local.Drivers
             // 5. Check file size matches known configurations
             float sizeConfidence = DetectConfidenceFromSize(hints.FileSize);
             confidence += sizeConfidence;
+
+            // 6. A headerless image whose sector 0 is a consistent OS-9 identification sector is an OS-9 volume this driver mounts, whatever
+            //    its size: CoCo SDC and DriveWire images are not floppy sized, and DriveWire files are shorter than their volume. That alone is
+            //    enough to pick this driver.
+            if (headerSize == 0 && hints.HeaderBytes != null
+                && DragonDskDriver.TryReadOs9Volume(hints.HeaderBytes, hints.FileSize, out _))
+            {
+                confidence += 0.5f;
+            }
 
             return Math.Min(confidence, 1.0f);
         }
