@@ -16,8 +16,36 @@ namespace RetroIO.Storage.Local.FileSystems
     /// <summary>
     /// DragonDOS filesystem implementation for Dragon 32/64 VDK disk images.
     /// Supports 40/80 track, single/double-sided formats.
-    /// Read-only implementation (write operations to be added later).
+    /// Reads, creates, overwrites, deletes and renames files.
     /// </summary>
+    /// <remarks>
+    /// <para><b>The DragonDOS disk layout (from the DragonDOS 1.2 source, dosdefs.asm and ddos12.asm)</b></para>
+    /// The directory track is track 20 (DirPrimary). A DragonDOS track holds the sectors of every head of a cylinder, so it has 18 sectors on a
+    /// single sided disk and 36 on a double sided one, and the logical sector number (LSN) of sector s of track t is t x sectors per track + s - 1.
+    /// <para><b>Directory track</b></para>
+    ///  - Sectors 1 and 2: the block availability map (BAM). One bit per sector, 1 means free, the lowest sector of a byte is bit 0. Sector 1 holds
+    ///    the first 1440 LSNs in its bytes 0 to 179, sector 2 the next 1440. Bytes FCH to FFH of sector 1 are the number of tracks, the sectors
+    ///    per track, and the complement of each.
+    ///  - Sectors 3 to 18: the directory, 10 entries of 25 bytes per sector, 160 entries in all, numbered from 0.
+    /// <para><b>Directory entry</b></para>
+    ///  - Byte 0: attributes. Bit 7 deleted (the entry may be reused), bit 5 the entry is continued in another entry, bit 3 end of directory
+    ///    (no entry after this one is used), bit 1 write protected, bit 0 the entry is a continuation entry.
+    ///  - A file entry: bytes 1 to 8 name, 9 to 11 extension (both padded with zero bytes), then four extents at 12, 15, 18 and 21.
+    ///  - A continuation entry: seven extents at 1, 4, 7, 10, 13, 16 and 19.
+    ///  - An extent is 3 bytes: the first LSN (high byte first) and the number of sectors (1 to 255). A count of zero is an unused extent.
+    ///  - Byte 24: when bit 5 is set it is the number of the next entry of the file (never 0); otherwise it is the number of bytes used in the last
+    ///    sector of the file (0 means all 256). So the length of a file comes from the LAST entry of its chain.
+    ///  - A formatted disk has entries filled with 89H (deleted, end of directory, continuation) and zero. Deleting a file sets the attribute byte of
+    ///    every entry of the file to 81H and sets the BAM bits of its extents; the names stay.
+    /// <para><b>Backup directory</b></para>
+    /// Every sector of the directory track that the DOS changes is copied to the same sector number of track 16 (DirBackup, routine DOSSyncDir), BAM
+    /// sectors included. The real images in the test folder have the two tracks byte for byte equal. This class does the same on every write.
+    /// <para><b>What this class chooses itself</b></para>
+    /// Where a new file is placed on the disk is not fixed by the format. The DOS prefers free sectors after the end of the data it has just written,
+    /// then free runs on tracks outside the directory track. This class continues the last extent when the next sector is free, and otherwise takes the
+    /// first free run after the directory track, then the first free run before it. Overwriting a file deletes it and creates it again (the DOS
+    /// BASIC command instead renames the old file to BAK; that is a BASIC feature, not the file system).
+    /// </remarks>
     public class DragonDosFileSystem : IBlockFileSystem
     {
         private IBlockDevice? _device;
@@ -26,6 +54,7 @@ namespace RetroIO.Storage.Local.FileSystems
         private int _sectorsPerTrack;
         private int _trackCount;
         private bool _doubleSided;
+        private bool _validBam;
 
         private const int PRIMARY_DIR_TRACK = 20;
         private const int BACKUP_DIR_TRACK = 16;
@@ -33,6 +62,26 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int ENTRIES_PER_SECTOR = 10;
         private const int MAX_FILES = 160;
         private const int SECTOR_SIZE = 256;
+
+        // dosdefs.asm: first directory sector on the directory track (sectors 1 and 2 are the BAM), number of directory sectors,
+        // the attribute bits, and the entry length and layout.
+        private const int FIRST_DIR_SECTOR = 3;
+        private const int DIR_SECTORS = 16;
+        private const int AttrDeleted = 0x80;
+        private const int AttrContinued = 0x20;
+        private const int AttrEndOfDir = 0x08;
+        private const int AttrWriteProtect = 0x02;
+        private const int AttrIsContinuation = 0x01;
+        private const int AttrAfterDelete = 0x81;
+        private const int FileEntryExtents = 4;
+        private const int ContinuationEntryExtents = 7;
+        private const int FileEntryFirstExtent = 12;
+        private const int ContinuationFirstExtent = 1;
+        private const int EntryFlagOffset = 24;
+        private const int MaxExtentSectors = 255;
+
+        // dosdefs.asm BAMLSNPerSec (MaxLSN / 2) and BAMEntriesSec: the LSNs one BAM sector covers, and the bytes it uses.
+        private const int BamLsnPerSector = 1440;
 
         // dosdefs.asm DirTracks: offset of the geometry bytes in the first BAM sector. The four bytes are
         // tracks, sectors per track, complement of tracks, complement of sectors per track.
@@ -53,6 +102,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// at $FC to $FF check out, or <c>VDK DISK</c> when they fail.
         /// </remarks>
         public string VolumeLabel => _volumeLabel;
+        /// <summary>
+        /// Gets a value indicating whether the BAM geometry bytes of the mounted disk passed their complement check, so that it is a DragonDOS volume.
+        /// </summary>
+        public bool IsDragonDosVolume => _validBam;
         /// <summary>
         /// Gets <c>.</c>, the separator between file name and extension in DragonDOS.
         /// </summary>
@@ -114,9 +167,11 @@ namespace RetroIO.Storage.Local.FileSystems
                 _trackCount = info != null && info.CylinderCount > 0 ? info.CylinderCount : 40;
                 _doubleSided = (_sectorsPerTrack == 36);
                 _volumeLabel = "VDK DISK";
+                _validBam = false;
             }
             else
             {
+                _validBam = true;
                 _sectorsPerTrack = bamSectorsPerTrack;
                 _trackCount = bamTracks;
                 _doubleSided = (_sectorsPerTrack == 36);
@@ -181,6 +236,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <summary>
         /// Lists the files in the root directory.
         /// </summary>
+        /// <remarks>
+        /// The 160 directory entries are read in order. A deleted entry, a continuation entry and an entry that is all zero are skipped, and the
+        /// scan stops at the first entry with the end of directory bit (08H), as the DOS DIR command does.
+        /// </remarks>
         /// <param name="path">
         /// Must be <c>null</c>, empty or <c>/</c>, because DragonDOS has only a root directory.
         /// </param>
@@ -193,6 +252,10 @@ namespace RetroIO.Storage.Local.FileSystems
         /// <exception cref="DirectoryNotFoundException">
         /// Thrown when <paramref name="path"/> names anything other than the root directory.
         /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the disk is not a DragonDOS volume (its BAM geometry bytes fail the check), or the continuation chain of a file points
+        /// at an entry that is not a continuation entry.
+        /// </exception>
         public DirectoryEntry[] ListDirectory(string path)
         {
             EnsureInitialized();
@@ -202,6 +265,8 @@ namespace RetroIO.Storage.Local.FileSystems
             {
                 throw new DirectoryNotFoundException($"DragonDOS has only a root directory: {path}");
             }
+
+            EnsureDragonDosVolume();
 
             return ListRootDirectory();
         }
@@ -223,28 +288,9 @@ namespace RetroIO.Storage.Local.FileSystems
         /// </exception>
         public byte[] ReadFile(string path)
         {
-            EnsureInitialized();
+            EnsureDragonDosVolume();
 
-            // Normalize path
-            if (path.StartsWith("/"))
-            {
-                path = path.Substring(1);
-            }
-
-            // Split filename and extension
-            string filename;
-            string extension;
-            int dotIndex = path.IndexOf('.');
-            if (dotIndex >= 0)
-            {
-                filename = path.Substring(0, dotIndex);
-                extension = path.Substring(dotIndex + 1);
-            }
-            else
-            {
-                filename = path;
-                extension = string.Empty;
-            }
+            SplitLookupName(path, out string filename, out string extension);
 
             // Find file in directory
             DragonDosEntry? entry = FindFileInDirectory(filename, extension);
@@ -258,34 +304,166 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
+        /// Creates a file, or replaces the file with the same name.
         /// </summary>
+        /// <remarks>
+        /// The old file, if any, is deleted first (its entries are marked 81H and its BAM bits are set). Then the data is placed in free extents, the
+        /// directory entry (with continuation entries when the file has more than four extents) is written, and the changed directory track sectors
+        /// are written to track 20 and copied to track 16. All checks (name, space, free entries) are done before the first sector is written, so a
+        /// failure leaves the disk as it was.
+        /// </remarks>
         /// <param name="path">
-        /// Not used.
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>. The name has up to 8 characters and the extension up to 3, from A to Z
+        /// (lower case is turned to upper case), 0 to 9 and the minus sign.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The file contents.
         /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="data"/> is <c>null</c>.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the name is not a valid DragonDOS file name.
+        /// </exception>
         /// <exception cref="IOException">
-        /// Always thrown.
+        /// Thrown when the volume is read-only, the existing file is write protected, the disk is full or the directory is full.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the disk is not a DragonDOS volume (its BAM geometry bytes fail the check), so nothing is written.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            EnsureWritable();
+            ParseNewName(path, out string filename, out string extension);
+
+            DirectoryTable table = LoadTable();
+
+            int existing = FindHeadNumber(table, filename, extension);
+            if (existing >= 0)
+            {
+                DragonDosEntry old = ParseFileEntry(table.Dir, existing)!;
+                if ((old.Attributes & AttrWriteProtect) != 0)
+                {
+                    throw new IOException("The file " + path + " is write protected");
+                }
+
+                ReleaseFile(table, old);
+            }
+
+            int sectorsNeeded = (data.Length + SECTOR_SIZE - 1) / SECTOR_SIZE;
+            List<AllocationBlock> extents = AllocateExtents(table, sectorsNeeded);
+
+            // The first four extents fit the file entry, every further seven need one continuation entry.
+            int continuations = extents.Count <= FileEntryExtents ? 0 : (extents.Count - FileEntryExtents + ContinuationEntryExtents - 1) / ContinuationEntryExtents;
+            int[] slots = FindFreeEntries(table, 1 + continuations);
+
+            byte lastBytes = (byte)(data.Length % SECTOR_SIZE);
+            int extentIndex = 0;
+            for (int slotIndex = 0; slotIndex < slots.Length; slotIndex++)
+            {
+                int offset = EntryOffset(slots[slotIndex]);
+                Array.Clear(table.Dir, offset, DIR_ENTRY_SIZE);
+
+                int firstExtent;
+                int capacity;
+                if (slotIndex == 0)
+                {
+                    table.Dir[offset] = 0;
+                    WritePaddedName(table.Dir, offset + 1, filename, 8);
+                    WritePaddedName(table.Dir, offset + 9, extension, 3);
+                    firstExtent = FileEntryFirstExtent;
+                    capacity = FileEntryExtents;
+                }
+                else
+                {
+                    table.Dir[offset] = AttrIsContinuation;
+                    firstExtent = ContinuationFirstExtent;
+                    capacity = ContinuationEntryExtents;
+                }
+
+                for (int e = 0; e < capacity && extentIndex < extents.Count; e++)
+                {
+                    int at = offset + firstExtent + (e * 3);
+                    table.Dir[at] = (byte)(extents[extentIndex].LSN >> 8);
+                    table.Dir[at + 1] = (byte)(extents[extentIndex].LSN & 0xFF);
+                    table.Dir[at + 2] = extents[extentIndex].Count;
+                    extentIndex++;
+                }
+
+                if (slotIndex + 1 < slots.Length)
+                {
+                    table.Dir[offset] |= AttrContinued;
+                    table.Dir[offset + EntryFlagOffset] = (byte)slots[slotIndex + 1];
+                }
+                else
+                {
+                    table.Dir[offset + EntryFlagOffset] = lastBytes;
+                }
+
+                table.DirDirty[slots[slotIndex] / ENTRIES_PER_SECTOR] = true;
+            }
+
+            // Data first, then the directory track, so a failed data write never leaves a directory entry that points at nothing.
+            int dataOffset = 0;
+            byte[] sector = new byte[SECTOR_SIZE];
+            for (int e = 0; e < extents.Count; e++)
+            {
+                for (int s = 0; s < extents[e].Count; s++)
+                {
+                    Array.Clear(sector, 0, SECTOR_SIZE);
+                    int chunk = Math.Min(SECTOR_SIZE, data.Length - dataOffset);
+                    Array.Copy(data, dataOffset, sector, 0, chunk);
+                    dataOffset += chunk;
+                    _device!.WriteBlock(BlockAddress.FromLBA((uint)(extents[e].LSN + s)), sector);
+                }
+            }
+
+            CommitTable(table);
         }
 
         /// <summary>
-        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
+        /// Deletes a file: every entry of the file is marked 81H and the BAM bits of its extents are set (free).
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// File name as <c>NAME.EXT</c>, with or without a leading <c>/</c>.
         /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the file system is not initialized.
+        /// </exception>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when the file is not in the directory.
+        /// </exception>
         /// <exception cref="IOException">
-        /// Always thrown.
+        /// Thrown when the volume is read-only or the file is write protected.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the disk is not a DragonDOS volume.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
+            EnsureWritable();
+            SplitLookupName(path, out string filename, out string extension);
+
+            DirectoryTable table = LoadTable();
+            int number = FindHeadNumber(table, filename, extension);
+            if (number < 0)
+            {
+                throw new System.IO.FileNotFoundException($"File not found: {path}");
+            }
+
+            DragonDosEntry entry = ParseFileEntry(table.Dir, number)!;
+            if ((entry.Attributes & AttrWriteProtect) != 0)
+            {
+                throw new IOException("The file " + path + " is write protected");
+            }
+
+            ReleaseFile(table, entry);
+            CommitTable(table);
         }
 
         /// <summary>
@@ -302,26 +480,9 @@ namespace RetroIO.Storage.Local.FileSystems
         /// </exception>
         public FileMetadata? GetMetadata(string path)
         {
-            EnsureInitialized();
+            EnsureDragonDosVolume();
 
-            if (path.StartsWith("/"))
-            {
-                path = path.Substring(1);
-            }
-
-            string filename;
-            string extension;
-            int dotIndex = path.IndexOf('.');
-            if (dotIndex >= 0)
-            {
-                filename = path.Substring(0, dotIndex);
-                extension = path.Substring(dotIndex + 1);
-            }
-            else
-            {
-                filename = path;
-                extension = string.Empty;
-            }
+            SplitLookupName(path, out string filename, out string extension);
 
             DragonDosEntry? entry = FindFileInDirectory(filename, extension);
             if (entry == null)
@@ -350,7 +511,8 @@ namespace RetroIO.Storage.Local.FileSystems
         /// </summary>
         /// <remarks>
         /// The BAM is a bitmap, one bit per sector, 1 = free (DragonDOS 1.2 DOSGetFree). The set bits in the
-        /// first 180 bytes of each of the two BAM sectors are counted.
+        /// first 180 bytes of each of the two BAM sectors are counted. The BAM is read from the device on every call, so
+        /// changes made by writes are counted.
         /// </remarks>
         /// <returns>
         /// The number of set bits in the two BAM sectors.
@@ -366,16 +528,17 @@ namespace RetroIO.Storage.Local.FileSystems
             // sector, 1 = free and 0 = used (comment at GetBit). It lives in the first two sectors of
             // the directory track; the free count is the number of SET BITS in the first
             // BAMEntriesSec = 180 bytes of each sector (dosdefs.asm: MaxLSN/2/SectorsPerBAM, 8 sectors
-            // per byte). _bam holds the two sectors one after the other, 256 bytes each.
+            // per byte). The two sectors are held one after the other, 256 bytes each.
             const int BamEntriesPerSector = 180;
             int freeSectors = 0;
+            byte[] bam = ReadBam();
 
             for (int sector = 0; sector < 2; sector++)
             {
                 int start = sector * SECTOR_SIZE;
                 for (int i = 0; i < BamEntriesPerSector; i++)
                 {
-                    freeSectors += System.Numerics.BitOperations.PopCount(_bam![start + i]);
+                    freeSectors += System.Numerics.BitOperations.PopCount(bam[start + i]);
                 }
             }
 
@@ -407,7 +570,7 @@ namespace RetroIO.Storage.Local.FileSystems
         /// as <see cref="ListDirectory"/>).
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown for the root, which cannot be deleted, and because the file system has no write support.
+        /// Thrown for the root, which cannot be deleted.
         /// </exception>
         public void DeleteDirectory(string path)
         {
@@ -420,20 +583,56 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
-        /// Always throws IOException: the DragonDOS file system has no write support, so the volume is read-only.
+        /// Renames a file: the 11 name and extension bytes of its first directory entry are replaced (DOSRename).
         /// </summary>
         /// <param name="oldPath">
-        /// Not used.
+        /// Current name as <c>NAME.EXT</c>.
         /// </param>
         /// <param name="newPath">
-        /// Not used.
+        /// New name as <c>NAME.EXT</c>, with the same rules as <see cref="WriteFile"/>.
         /// </param>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when <paramref name="oldPath"/> is not in the directory.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the new name is not a valid DragonDOS file name.
+        /// </exception>
         /// <exception cref="IOException">
-        /// Always thrown.
+        /// Thrown when the volume is read-only, the file is write protected, or a different file already has the new name.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the disk is not a DragonDOS volume.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
-            throw new IOException("The DragonDOS file system has no write support, so the volume is read-only");
+            EnsureWritable();
+            SplitLookupName(oldPath, out string oldName, out string oldExtension);
+            ParseNewName(newPath, out string newName, out string newExtension);
+
+            DirectoryTable table = LoadTable();
+            int number = FindHeadNumber(table, oldName, oldExtension);
+            if (number < 0)
+            {
+                throw new System.IO.FileNotFoundException($"File not found: {oldPath}");
+            }
+
+            DragonDosEntry entry = ParseFileEntry(table.Dir, number)!;
+            if ((entry.Attributes & AttrWriteProtect) != 0)
+            {
+                throw new IOException("The file " + oldPath + " is write protected");
+            }
+
+            int clash = FindHeadNumber(table, newName, newExtension);
+            if (clash >= 0 && clash != number)
+            {
+                throw new IOException("A file named " + newPath + " already exists");
+            }
+
+            int offset = EntryOffset(number);
+            WritePaddedName(table.Dir, offset + 1, newName, 8);
+            WritePaddedName(table.Dir, offset + 9, newExtension, 3);
+            table.DirDirty[number / ENTRIES_PER_SECTOR] = true;
+            CommitTable(table);
         }
 
         // ===================================================================
@@ -472,99 +671,415 @@ namespace RetroIO.Storage.Local.FileSystems
                 && sectorsPerTrack == (~sectorsComplement & 0xFF);
         }
 
+        // The directory track as it is in memory while one write operation works on it: the two BAM sectors, the sixteen directory sectors,
+        // and which of them were changed and must be written back (to track 20 and to the backup on track 16).
+        private sealed class DirectoryTable
+        {
+            public readonly byte[] Bam = new byte[2 * SECTOR_SIZE];
+            public readonly byte[] Dir = new byte[DIR_SECTORS * SECTOR_SIZE];
+            public readonly bool[] BamDirty = new bool[2];
+            public readonly bool[] DirDirty = new bool[DIR_SECTORS];
+        }
+
+        // Offset of directory entry number n (0 to 159) inside the 4096 bytes of the directory sectors: ten entries of 25 bytes per sector.
+        private static int EntryOffset(int number)
+        {
+            return ((number / ENTRIES_PER_SECTOR) * SECTOR_SIZE) + ((number % ENTRIES_PER_SECTOR) * DIR_ENTRY_SIZE);
+        }
+
+        private byte[] ReadBam()
+        {
+            byte[] bam = new byte[2 * SECTOR_SIZE];
+            byte[] sector = new byte[SECTOR_SIZE];
+            for (int i = 0; i < 2; i++)
+            {
+                _device!.ReadBlock(BlockAddress.FromLBA(CalculateLSN(PRIMARY_DIR_TRACK, 0, 1 + i)), sector);
+                Array.Copy(sector, 0, bam, i * SECTOR_SIZE, SECTOR_SIZE);
+            }
+
+            return bam;
+        }
+
+        private DirectoryTable LoadTable()
+        {
+            DirectoryTable table = new DirectoryTable();
+            byte[] bam = ReadBam();
+            Array.Copy(bam, 0, table.Bam, 0, bam.Length);
+
+            byte[] sector = new byte[SECTOR_SIZE];
+            for (int i = 0; i < DIR_SECTORS; i++)
+            {
+                _device!.ReadBlock(BlockAddress.FromLBA(CalculateLSN(PRIMARY_DIR_TRACK, 0, FIRST_DIR_SECTOR + i)), sector);
+                Array.Copy(sector, 0, table.Dir, i * SECTOR_SIZE, SECTOR_SIZE);
+            }
+
+            return table;
+        }
+
+        // Writes every changed sector of the table to the directory track and then to the same sector of the backup track (DOSSyncDir).
+        private void CommitTable(DirectoryTable table)
+        {
+            byte[] sector = new byte[SECTOR_SIZE];
+            for (int i = 0; i < 2; i++)
+            {
+                if (table.BamDirty[i])
+                {
+                    Array.Copy(table.Bam, i * SECTOR_SIZE, sector, 0, SECTOR_SIZE);
+                    WriteDirectoryTrackSector(1 + i, sector);
+                }
+            }
+
+            for (int i = 0; i < DIR_SECTORS; i++)
+            {
+                if (table.DirDirty[i])
+                {
+                    Array.Copy(table.Dir, i * SECTOR_SIZE, sector, 0, SECTOR_SIZE);
+                    WriteDirectoryTrackSector(FIRST_DIR_SECTOR + i, sector);
+                }
+            }
+        }
+
+        private void WriteDirectoryTrackSector(int sectorNumber, byte[] sector)
+        {
+            _device!.WriteBlock(BlockAddress.FromLBA(CalculateLSN(PRIMARY_DIR_TRACK, 0, sectorNumber)), sector);
+            _device.WriteBlock(BlockAddress.FromLBA(CalculateLSN(BACKUP_DIR_TRACK, 0, sectorNumber)), sector);
+        }
+
+        // BAM bit of one LSN: sector 1 of the directory track covers the first 1440 LSNs, sector 2 the next 1440; inside a byte the lowest LSN is bit 0.
+        private static bool IsFree(byte[] bam, int lsn)
+        {
+            int index = ((lsn / BamLsnPerSector) * SECTOR_SIZE) + ((lsn % BamLsnPerSector) / 8);
+            return (bam[index] & (1 << (lsn % 8))) != 0;
+        }
+
+        private static void SetFree(DirectoryTable table, int lsn, bool free)
+        {
+            int index = ((lsn / BamLsnPerSector) * SECTOR_SIZE) + ((lsn % BamLsnPerSector) / 8);
+            if (free)
+            {
+                table.Bam[index] |= (byte)(1 << (lsn % 8));
+            }
+            else
+            {
+                table.Bam[index] &= (byte)~(1 << (lsn % 8));
+            }
+
+            table.BamDirty[lsn / BamLsnPerSector] = true;
+        }
+
+        // Marks every entry of the file deleted (81H) and sets the BAM bits of all its extents.
+        private void ReleaseFile(DirectoryTable table, DragonDosEntry entry)
+        {
+            for (int b = 0; b < entry.Blocks.Length; b++)
+            {
+                int first = entry.Blocks[b].LSN;
+                int count = entry.Blocks[b].Count;
+                if (first + count > 2 * BamLsnPerSector)
+                {
+                    throw new InvalidDataException("An extent of " + entry.Filename + " lies outside the BAM (LSN " + first + ", " + count + " sectors)");
+                }
+
+                for (int s = 0; s < count; s++)
+                {
+                    SetFree(table, first + s, true);
+                }
+            }
+
+            for (int c = 0; c < entry.Chain.Length; c++)
+            {
+                table.Dir[EntryOffset(entry.Chain[c])] = AttrAfterDelete;
+                table.DirDirty[entry.Chain[c] / ENTRIES_PER_SECTOR] = true;
+            }
+        }
+
+        // Takes free sectors for a file of the given size as a list of extents (at most 255 sectors each) and clears their BAM bits.
+        // Policy (not fixed by the format): continue the last extent while the next sector is free, otherwise take the first free run after the
+        // directory track, then the first free run before it. Throws IOException when the disk has too few free sectors.
+        private List<AllocationBlock> AllocateExtents(DirectoryTable table, int sectors)
+        {
+            List<AllocationBlock> extents = new List<AllocationBlock>();
+            int total = Math.Min(_trackCount * _sectorsPerTrack, 2 * BamLsnPerSector);
+            int dirStart = (int)CalculateLSN(PRIMARY_DIR_TRACK, 0, 1);
+            int afterDir = dirStart + _sectorsPerTrack;
+            int remaining = sectors;
+
+            while (remaining > 0)
+            {
+                if (extents.Count > 0)
+                {
+                    AllocationBlock last = extents[extents.Count - 1];
+                    int next = last.LSN + last.Count;
+                    if (last.Count < MaxExtentSectors && next < total && IsFree(table.Bam, next))
+                    {
+                        int add = 0;
+                        while (add < remaining && last.Count + add < MaxExtentSectors && next + add < total && IsFree(table.Bam, next + add))
+                        {
+                            SetFree(table, next + add, false);
+                            add++;
+                        }
+
+                        last.Count = (byte)(last.Count + add);
+                        extents[extents.Count - 1] = last;
+                        remaining -= add;
+                        continue;
+                    }
+                }
+
+                int start = FindFreeSector(table, afterDir, total);
+                if (start < 0)
+                {
+                    start = FindFreeSector(table, 0, dirStart);
+                }
+
+                if (start < 0)
+                {
+                    throw new IOException("The disk is full");
+                }
+
+                int length = 0;
+                while (length < remaining && length < MaxExtentSectors && start + length < total && IsFree(table.Bam, start + length))
+                {
+                    SetFree(table, start + length, false);
+                    length++;
+                }
+
+                extents.Add(new AllocationBlock { LSN = (ushort)start, Count = (byte)length });
+                remaining -= length;
+            }
+
+            return extents;
+        }
+
+        private static int FindFreeSector(DirectoryTable table, int from, int to)
+        {
+            for (int lsn = from; lsn < to; lsn++)
+            {
+                if (IsFree(table.Bam, lsn))
+                {
+                    return lsn;
+                }
+            }
+
+            return -1;
+        }
+
+        // Finds the lowest entry numbers that can take new entries: deleted entries and entries that are all zero. A continuation entry may not
+        // be entry 0, because a next-entry number of 0 means "none". Taking the lowest numbers keeps every entry with the end of directory bit after
+        // all the entries in use.
+        private int[] FindFreeEntries(DirectoryTable table, int count)
+        {
+            int[] found = new int[count];
+            int have = 0;
+
+            for (int n = 0; n < MAX_FILES && have < count; n++)
+            {
+                if (have > 0 && n == 0)
+                {
+                    continue;
+                }
+
+                int offset = EntryOffset(n);
+                bool reusable = (table.Dir[offset] & AttrDeleted) != 0 || IsAllZero(table.Dir, offset);
+                if (reusable)
+                {
+                    found[have] = n;
+                    have++;
+                }
+            }
+
+            if (have < count)
+            {
+                throw new IOException("The directory is full");
+            }
+
+            return found;
+        }
+
+        private static bool IsAllZero(byte[] data, int offset)
+        {
+            for (int i = 0; i < DIR_ENTRY_SIZE; i++)
+            {
+                if (data[offset + i] != 0)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static void WritePaddedName(byte[] target, int offset, string text, int length)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                target[offset + i] = i < text.Length ? (byte)text[i] : (byte)0;
+            }
+        }
+
+        // Splits a path for a lookup. Nothing is rejected: an existing disk may hold names the DOS would not accept today.
+        private static void SplitLookupName(string path, out string filename, out string extension)
+        {
+            if (path.StartsWith("/"))
+            {
+                path = path.Substring(1);
+            }
+
+            int dotIndex = path.IndexOf('.');
+            if (dotIndex >= 0)
+            {
+                filename = path.Substring(0, dotIndex);
+                extension = path.Substring(dotIndex + 1);
+            }
+            else
+            {
+                filename = path;
+                extension = string.Empty;
+            }
+        }
+
+        // Splits and checks a name that is about to be written, as the DOS name check does (ddos12.asm, DOSValidFilename): one dot at the most,
+        // letters (lower case becomes upper case), digits and the minus sign only. The limits are 8 and 3 characters.
+        private static void ParseNewName(string path, out string filename, out string extension)
+        {
+            SplitLookupName(path, out filename, out extension);
+            filename = filename.ToUpperInvariant();
+            extension = extension.ToUpperInvariant();
+
+            if (filename.Length == 0 || filename.Length > 8 || extension.Length > 3 || extension.IndexOf('.') >= 0)
+            {
+                throw new ArgumentException("Not a DragonDOS file name (1 to 8 characters, a dot and up to 3 characters): " + path, nameof(path));
+            }
+
+            string both = filename + extension;
+            for (int i = 0; i < both.Length; i++)
+            {
+                char c = both[i];
+                bool valid = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
+                if (!valid)
+                {
+                    throw new ArgumentException("Character '" + c + "' is not allowed in a DragonDOS file name: " + path, nameof(path));
+                }
+            }
+        }
+
+        // Reading the directory of a disk whose BAM geometry bytes fail their complement check would show random sector contents as files. Such
+        // a disk is not a DragonDOS volume (a game disk with its own loader, for example), so the read members say so instead.
+        private void EnsureDragonDosVolume()
+        {
+            EnsureInitialized();
+
+            if (!_validBam)
+            {
+                throw new InvalidDataException("The disk is not a DragonDOS volume: bytes FCH to FFH of sector 1 of track 20 are not tracks, sectors per track and their complements");
+            }
+        }
+
+        private void EnsureWritable()
+        {
+            EnsureDragonDosVolume();
+
+            if (_device!.IsReadOnly)
+            {
+                throw new IOException("The volume is read-only");
+            }
+        }
+
         private DirectoryEntry[] ListRootDirectory()
         {
             List<DirectoryEntry> entries = new List<DirectoryEntry>();
+            DirectoryTable table = LoadTable();
 
-            // Read directory sectors (Track 20, Sectors 3-18)
-            for (int sector = 3; sector <= 18; sector++)
+            for (int n = 0; n < MAX_FILES; n++)
             {
-                uint lsn = CalculateLSN(PRIMARY_DIR_TRACK, 0, sector);
-                byte[] sectorData = new byte[SECTOR_SIZE];
-                _device!.ReadBlock(BlockAddress.FromLBA(lsn), sectorData);
-
-                // Parse 10 entries per sector
-                for (int entryNum = 0; entryNum < ENTRIES_PER_SECTOR; entryNum++)
+                byte attr = table.Dir[EntryOffset(n)];
+                if ((attr & AttrEndOfDir) != 0)
                 {
-                    int offset = entryNum * DIR_ENTRY_SIZE;
-                    DragonDosEntry? entry = ParseDirectoryEntry(sectorData, offset);
-
-                    if (entry != null && !entry.IsDeleted && !entry.IsEmpty)
-                    {
-                        string fullName = string.IsNullOrEmpty(entry.Extension)
-                            ? entry.Filename
-                            : entry.Filename + "." + entry.Extension;
-
-                        FileMetadata metadata = new FileMetadata
-                        {
-                            Name = fullName,
-                            Path = "/" + fullName,
-                            IsDirectory = false,
-                            Size = entry.FileSize,
-                            FileType = entry.Extension,
-                            Attributes = entry.IsContinuation ? "Continuation" : "File",
-                            UrnIdentifier = UrnIdentifier.Encode(fullName)
-                        };
-
-                        entries.Add(new DirectoryEntry { Name = fullName, Metadata = metadata });
-                    }
+                    break;
                 }
+
+                DragonDosEntry? entry = ParseFileEntry(table.Dir, n);
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                string fullName = string.IsNullOrEmpty(entry.Extension)
+                    ? entry.Filename
+                    : entry.Filename + "." + entry.Extension;
+
+                FileMetadata metadata = new FileMetadata
+                {
+                    Name = fullName,
+                    Path = "/" + fullName,
+                    IsDirectory = false,
+                    Size = entry.FileSize,
+                    FileType = entry.Extension,
+                    Attributes = "File",
+                    UrnIdentifier = UrnIdentifier.Encode(fullName)
+                };
+
+                entries.Add(new DirectoryEntry { Name = fullName, Metadata = metadata });
             }
 
             return entries.ToArray();
         }
 
-        private DragonDosEntry? ParseDirectoryEntry(byte[] data, int offset)
+        // Parses directory entry n and follows its continuation chain. Returns null for a deleted entry, a continuation entry and an entry
+        // that is all zero. The length is counted from the sectors of all extents, and the bytes in the last sector come from the LAST entry of
+        // the chain (ddos12.asm, FindFSNinU and DOSGetFLen).
+        private DragonDosEntry? ParseFileEntry(byte[] dir, int number)
         {
-            byte flag = data[offset];
+            int offset = EntryOffset(number);
+            byte attr = dir[offset];
 
-            // Check if deleted (bit 7)
-            bool isDeleted = (flag & 0x80) != 0;
-
-            // Check if all zeros (empty entry)
-            bool isEmpty = true;
-            for (int i = 0; i < DIR_ENTRY_SIZE; i++)
+            if ((attr & (AttrDeleted | AttrIsContinuation)) != 0 || IsAllZero(dir, offset))
             {
-                if (data[offset + i] != 0x00)
+                return null;
+            }
+
+            string filename = Encoding.ASCII.GetString(dir, offset + 1, 8).Trim('\0', ' ');
+            string extension = Encoding.ASCII.GetString(dir, offset + 9, 3).Trim('\0', ' ');
+
+            List<AllocationBlock> blocks = new List<AllocationBlock>();
+            List<int> chain = new List<int>();
+            chain.Add(number);
+
+            int current = number;
+            byte lastSectorBytes;
+            while (true)
+            {
+                int currentOffset = EntryOffset(current);
+                bool isHead = current == number;
+                int firstExtent = isHead ? FileEntryFirstExtent : ContinuationFirstExtent;
+                int extentCount = isHead ? FileEntryExtents : ContinuationEntryExtents;
+
+                for (int i = 0; i < extentCount; i++)
                 {
-                    isEmpty = false;
+                    int blockOffset = currentOffset + firstExtent + (i * 3);
+                    ushort lsn = (ushort)((dir[blockOffset] << 8) | dir[blockOffset + 1]);
+                    byte count = dir[blockOffset + 2];
+
+                    if (count > 0)
+                    {
+                        blocks.Add(new AllocationBlock { LSN = lsn, Count = count });
+                    }
+                }
+
+                if ((dir[currentOffset] & AttrContinued) == 0)
+                {
+                    lastSectorBytes = dir[currentOffset + EntryFlagOffset];
                     break;
                 }
-            }
 
-            if (isEmpty)
-            {
-                return new DragonDosEntry { IsEmpty = true };
-            }
-
-            // Check if continuation block (bit 0)
-            bool isContinuation = (flag & 0x01) != 0;
-
-            if (isContinuation)
-            {
-                // Continuation block - skip for directory listing
-                return new DragonDosEntry { IsContinuation = true, IsDeleted = isDeleted };
-            }
-
-            // Parse file header
-            string filename = Encoding.ASCII.GetString(data, offset + 1, 8).Trim('\0', ' ');
-            string extension = Encoding.ASCII.GetString(data, offset + 9, 3).Trim('\0', ' ');
-
-            // Parse allocation blocks
-            List<AllocationBlock> blocks = new List<AllocationBlock>();
-            for (int i = 0; i < 4; i++)
-            {
-                int blockOffset = offset + 12 + (i * 3);
-                ushort lsn = (ushort)((data[blockOffset] << 8) | data[blockOffset + 1]);
-                byte count = data[blockOffset + 2];
-
-                if (count > 0)
+                int next = dir[currentOffset + EntryFlagOffset];
+                if (next == 0 || next >= MAX_FILES || chain.Count >= MAX_FILES || (dir[EntryOffset(next)] & AttrIsContinuation) == 0)
                 {
-                    blocks.Add(new AllocationBlock { LSN = lsn, Count = count });
+                    throw new InvalidDataException("DragonDOS directory entry " + current + " (" + filename + ") points at entry " + next + ", which is not a continuation entry");
                 }
-            }
 
-            byte lastSectorBytes = data[offset + 24];
+                chain.Add(next);
+                current = next;
+            }
 
             // Calculate file size
             int totalSectors = 0;
@@ -587,45 +1102,51 @@ namespace RetroIO.Storage.Local.FileSystems
             {
                 Filename = filename,
                 Extension = extension,
+                Attributes = attr,
                 Blocks = blocks.ToArray(),
+                Chain = chain.ToArray(),
                 LastSectorBytes = lastSectorBytes,
                 FileSize = fileSize,
-                IsDeleted = isDeleted,
+                IsDeleted = false,
                 IsContinuation = false,
                 IsEmpty = false
             };
         }
 
-        private DragonDosEntry? FindFileInDirectory(string filename, string extension)
+        // The number of the first entry of the named file, or -1. The scan stops at the end of directory bit like the DOS lookup.
+        private int FindHeadNumber(DirectoryTable table, string filename, string extension)
         {
-            for (int sector = 3; sector <= 18; sector++)
+            for (int n = 0; n < MAX_FILES; n++)
             {
-                uint lsn = CalculateLSN(PRIMARY_DIR_TRACK, 0, sector);
-                byte[] sectorData = new byte[SECTOR_SIZE];
-                _device!.ReadBlock(BlockAddress.FromLBA(lsn), sectorData);
-
-                for (int entryNum = 0; entryNum < ENTRIES_PER_SECTOR; entryNum++)
+                if ((table.Dir[EntryOffset(n)] & AttrEndOfDir) != 0)
                 {
-                    int offset = entryNum * DIR_ENTRY_SIZE;
-                    DragonDosEntry? entry = ParseDirectoryEntry(sectorData, offset);
+                    break;
+                }
 
-                    if (entry != null && !entry.IsDeleted && !entry.IsEmpty && !entry.IsContinuation)
-                    {
-                        if (string.Equals(entry.Filename, filename, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(entry.Extension, extension, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return entry;
-                        }
-                    }
+                DragonDosEntry? entry = ParseFileEntry(table.Dir, n);
+                if (entry != null &&
+                    string.Equals(entry.Filename, filename, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(entry.Extension, extension, StringComparison.OrdinalIgnoreCase))
+                {
+                    return n;
                 }
             }
 
-            return null;
+            return -1;
+        }
+
+        private DragonDosEntry? FindFileInDirectory(string filename, string extension)
+        {
+            DirectoryTable table = LoadTable();
+            int number = FindHeadNumber(table, filename, extension);
+            return number < 0 ? null : ParseFileEntry(table.Dir, number);
         }
 
         private byte[] ReadFileData(DragonDosEntry entry)
         {
-            List<byte> fileData = new List<byte>(entry.FileSize);
+            byte[] fileData = new byte[entry.FileSize];
+            byte[] sectorData = new byte[SECTOR_SIZE];
+            int written = 0;
 
             // Read all allocation blocks
             for (int i = 0; i < entry.Blocks.Length; i++)
@@ -634,30 +1155,16 @@ namespace RetroIO.Storage.Local.FileSystems
 
                 for (int s = 0; s < block.Count; s++)
                 {
-                    byte[] sectorData = new byte[SECTOR_SIZE];
                     uint lsn = (uint)(block.LSN + s);
                     _device!.ReadBlock(BlockAddress.FromLBA(lsn), sectorData);
 
-                    // For last sector, only add used bytes (0 means full sector = 256 bytes)
-                    bool isLastSector = (i == entry.Blocks.Length - 1) && (s == block.Count - 1);
-                    if (isLastSector && entry.LastSectorBytes > 0)
-                    {
-                        for (int j = 0; j < entry.LastSectorBytes; j++)
-                        {
-                            fileData.Add(sectorData[j]);
-                        }
-                    }
-                    else
-                    {
-                        for (int j = 0; j < SECTOR_SIZE; j++)
-                        {
-                            fileData.Add(sectorData[j]);
-                        }
-                    }
+                    int take = Math.Min(SECTOR_SIZE, fileData.Length - written);
+                    Array.Copy(sectorData, 0, fileData, written, take);
+                    written += take;
                 }
             }
 
-            return fileData.ToArray();
+            return fileData;
         }
 
         // Sectors in one DragonDOS track: the sectors of a cylinder over all its heads (18, or 36 on a double sided disk).
@@ -702,7 +1209,9 @@ namespace RetroIO.Storage.Local.FileSystems
         {
             public string Filename { get; set; } = string.Empty;
             public string Extension { get; set; } = string.Empty;
+            public byte Attributes { get; set; }
             public AllocationBlock[] Blocks { get; set; } = Array.Empty<AllocationBlock>();
+            public int[] Chain { get; set; } = Array.Empty<int>();
             public byte LastSectorBytes { get; set; }
             public int FileSize { get; set; }
             public bool IsDeleted { get; set; }

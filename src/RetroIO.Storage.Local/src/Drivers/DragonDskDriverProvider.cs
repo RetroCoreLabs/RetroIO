@@ -56,8 +56,8 @@ namespace RetroIO.Storage.Local.Drivers
                 }
             }
 
-            // 3. Calculate header size from file size modulo 256
-            int headerSize = (int)(hints.FileSize % 256);
+            // 3. Calculate header size from file size modulo 128 (as XRoar does)
+            int headerSize = (int)(hints.FileSize % 128);
 
             // 4. Attempt to parse JVC header if present
             if (headerSize > 0 && hints.HeaderBytes != null && hints.HeaderBytes.Length >= headerSize)
@@ -94,11 +94,11 @@ namespace RetroIO.Storage.Local.Drivers
         /// <summary>
         /// Detects confidence based on file size matching known DSK/JVC formats.
         /// Formula: (tracks × sides × 18 spt × 256 bytes) + header_size
-        /// where header_size = file_size % 256
+        /// where header_size = file_size % 128
         /// </summary>
         private float DetectConfidenceFromSize(long fileSize)
         {
-            int headerSize = (int)(fileSize % 256);
+            int headerSize = (int)(fileSize % 128);
             long dataSize = fileSize - headerSize;
 
             // Check if data size matches known configurations
