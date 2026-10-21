@@ -466,10 +466,15 @@ namespace RetroIO.Storage.Local.FileSystems
             // Parse file entry
             string filename = Encoding.ASCII.GetString(data, offset + 0, 8).Trim();
             string extension = Encoding.ASCII.GetString(data, offset + 8, 3).Trim();
-            byte fileType = data[offset + 12];
-            byte asciiFlag = data[offset + 13];
-            byte firstGranule = data[offset + 14];
-            ushort lastSectorBytes = (ushort)(data[offset + 15] | (data[offset + 16] << 8));
+            // DECB directory entry (32 bytes): name 0-7, extension 8-10, file type 11, ASCII flag 12, first granule 13,
+            // bytes used in the last sector 14-15 (big-endian, as on the 6809). Checked on syzygy.dsk: SYZYGY30.BIN has
+            // first granule 11 at offset 13 and 11 bytes at 14-15, and the granule chain then gives the size that its
+            // own BIN load records add up to (28939). Reading these one byte late made it start at granule 0 and
+            // return the data of SYZYGY10.BIN.
+            byte fileType = data[offset + 11];
+            byte asciiFlag = data[offset + 12];
+            byte firstGranule = data[offset + 13];
+            ushort lastSectorBytes = (ushort)((data[offset + 14] << 8) | data[offset + 15]);
 
             // Calculate file size by following granule chain
             int fileSize = CalculateFileSize(firstGranule, lastSectorBytes);
