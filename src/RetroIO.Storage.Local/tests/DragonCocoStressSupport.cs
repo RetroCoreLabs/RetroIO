@@ -291,16 +291,18 @@ namespace RetroIO.Storage.Local.Tests
         /// <summary>
         /// Compares the probe of every round after the first two with the probe of round 1 (round 0 is the warm-up), at each fill level.
         /// </summary>
-        /// <param name="timeFactor">
-        /// How many times slower a later probe may be.
-        /// </param>
+        /// <remarks>
+        /// Only the block count decides. The probe times are printed in the run report but do not fail the test: the fastest of three passes
+        /// varied up to 2.1 times between rounds on an idle machine (2026-10-21), and the same kind of wall-clock check in DragonStressTests
+        /// failed once in 16 full runs from machine noise alone (sub-millisecond probes, ratio 3.10). A CI runner is slower and busier still.
+        /// </remarks>
         /// <param name="blockFactor">
         /// How many times more blocks a later probe may read and write.
         /// </param>
         /// <returns>
-        /// The probes that were too slow or did too much, one per line, or an empty string.
+        /// The probes that did too much, one per line, or an empty string.
         /// </returns>
-        public string ProbeGrowth(double timeFactor, double blockFactor)
+        public string ProbeGrowth(double blockFactor)
         {
             StringBuilder problems = new StringBuilder();
             if (_rounds < 3)
@@ -310,18 +312,9 @@ namespace RetroIO.Storage.Local.Tests
 
             for (int level = 0; level < ProbePercent.Length; level++)
             {
-                double baseline = ProbeMicroseconds(1, level);
                 long baseBlocks = _probeIo[ProbePercent.Length + level];
                 for (int round = 2; round < _rounds; round++)
                 {
-                    double now = ProbeMicroseconds(round, level);
-                    if (baseline > 0 && now > baseline * timeFactor)
-                    {
-                        problems.Append("probe at ").Append(ProbePercent[level]).Append(" % full: ").Append(baseline.ToString("F0"))
-                            .Append(" us in round 1, ").Append(now.ToString("F0")).Append(" us in round ").Append(round)
-                            .Append(", ratio ").Append((now / baseline).ToString("F2")).AppendLine();
-                    }
-
                     long blocks = _probeIo[(round * ProbePercent.Length) + level];
                     if (blocks > baseBlocks * blockFactor)
                     {
@@ -566,14 +559,6 @@ namespace RetroIO.Storage.Local.Tests
         public const long TotalGrowthBytes = 640 * 1024;
 
         /// <summary>
-        /// How many times slower a later probe may be than the probe of round 1. Measured 2026-10-21: the fastest of three passes varied up
-        /// to 2.1 times from round to round (every call also writes the whole image file, and the disk cache and virus scanner are not under
-        /// the test's control), so a smaller factor would fail on a busy machine. The block count below is the exact check; this one only
-        /// catches a slowdown that does not show in the blocks (time spent in the code itself).
-        /// </summary>
-        public const double SlowdownFactor = 5.0;
-
-        /// <summary>
         /// How many times more blocks a later probe may read and write than the probe of round 1. The count does not depend on the clock, so
         /// it is the same on every machine. It may still rise a little because directories keep the slots they ever had (DECB keeps deleted
         /// entries up to the end marker, OS-9 never shrinks a directory), and a lookup reads the directory up to that point. Measured
@@ -611,8 +596,8 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         /// <summary>
-        /// Fails when the fixed probe of any later round, at any fill level, took more than <see cref="SlowdownFactor"/> times as long as in
-        /// round 1, or read and wrote more than <see cref="BlockFactor"/> times as many blocks.
+        /// Fails when the fixed probe of any later round, at any fill level, read and wrote more than <see cref="BlockFactor"/> times as many
+        /// blocks as in round 1. The probe times are in the report only (see <see cref="StressTimings.ProbeGrowth"/>).
         /// </summary>
         /// <param name="timings">
         /// The timings of the run.
@@ -622,7 +607,7 @@ namespace RetroIO.Storage.Local.Tests
         /// </param>
         public static void RequireNoSlowdown(StressTimings timings, string report)
         {
-            string growth = timings.ProbeGrowth(SlowdownFactor, BlockFactor);
+            string growth = timings.ProbeGrowth(BlockFactor);
             NUnit.Framework.Assert.That(growth, NUnit.Framework.Is.Empty, "the same calls got slower as the run went on:\n" + growth + report);
         }
     }
