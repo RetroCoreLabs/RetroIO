@@ -655,7 +655,8 @@ namespace RetroIO.Storage.Local.Tests
             int at = (20 * 18 + 2) * 256;
             WriteFileEntry(image, at, "BAD", "BIN", 400, 1, 1);
             image[at] = 0x20;
-            image[at + 24] = 0;
+            image[at + 24] = 2;
+            WriteFileEntry(image, at + (2 * 25), "OTHER", "BIN", 401, 1, 0);
 
             DragonDosFileSystem fs = DragonDosTestDisk.Mount(image, Tracks, 1, out _);
 
