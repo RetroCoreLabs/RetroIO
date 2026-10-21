@@ -14,14 +14,20 @@ using RetroIO.Storage.Core;
 namespace RetroIO.Storage.Local.FileSystems
 {
     /// <summary>
-    /// Reader and writer for OS-9 and NitrOS-9 floppy disks (the Random Block File manager, RBF), as used on the Dragon and the Color Computer.
+    /// Reader and writer for OS-9 and NitrOS-9 disks (the Random Block File manager, RBF), as used on the Dragon and the Color Computer.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Writing (create, replace and delete files, make and delete directories, rename and move) follows the NitrOS-9 sources for the RBF manager
-    /// (level1/modules/rbf.asm and the layouts in defs/rbf.d). It is only implemented for volumes with one sector per allocation map bit, which
-    /// is every floppy seen so far. File owners and permissions are not checked. Nothing is written to the device until a change has found all
-    /// the space it needs.
+    /// (level1/modules/rbf.asm and the layouts in defs/rbf.d) and for the commands that drive it (level1/cmds/rename.asm, deldir.asm, attr.asm).
+    /// Each member says which RBF calls it stands for. The allocation map is searched and changed the way RBF does it, cluster by cluster
+    /// (labels FatScan and ClrFBits), so volumes with more than one sector per map bit are written too. Nothing is written to the device
+    /// until a change has passed every check and found all the space it needs.
+    /// </para>
+    /// <para>
+    /// Owner and permission bits are checked as RBF checks them for the calling process (rbf.asm, labels ChkAttrs and FindFile). The calling
+    /// user is <see cref="User"/>; 0 is the super user, who is treated as the owner of every file. Reading (listing and reading files) does not
+    /// check permissions.
     /// </para>
     /// <para>
     /// The layout was written from the field definitions of the RBF manager (identification sector, file descriptor and directory entry) and
@@ -35,7 +41,8 @@ namespace RetroIO.Storage.Local.FileSystems
     /// All multi-byte numbers are big-endian.
     /// </para>
     /// <para>
-    /// The allocation map starts at logical sector 1. Bit 7 of the first byte is logical sector 0, and a set bit means used.
+    /// The allocation map starts at logical sector 1. Bit 7 of the first byte is the first cluster, and a set bit means used. A cluster is the
+    /// number of sectors per map bit; cluster n holds sectors n times that number and up.
     /// </para>
     /// <para>
     /// File descriptor (one sector): attributes (1 byte at 0), owner (2 at 1), date last modified (5 at 3: year since 1900, month, day, hour, minute),
@@ -74,11 +81,26 @@ namespace RetroIO.Storage.Local.FileSystems
         private byte[]? _originalMap;
         private int _sas;
 
+        // The allocation map sector RBF searched last (V.MapSct in the drive table). It lives as long as the volume is mounted, as the drive
+        // table does, and starts at zero. _mapSctAtStart restores it when a change fails.
+        private int _mapSct;
+        private int _mapSctAtStart;
+
+        // Log2 of the sectors per map bit, set when a change starts.
+        private int _bitShift;
+
         /// <summary>
         /// Gets or sets the clock that supplies the date and time written into the file descriptors of files and directories that are created
         /// or changed. When null, the local time of the computer is used.
         /// </summary>
         public Func<DateTime>? Clock { get; set; }
+
+        /// <summary>
+        /// Gets or sets the OS-9 user number the changes are made for (P$User of the calling process). It is checked against the owner and
+        /// permission bits of files and directories, and it is the owner of new files and directories. 0, the default, is the super user,
+        /// whom RBF treats as the owner of every file.
+        /// </summary>
+        public ushort User { get; set; }
 
         /// <summary>
         /// Gets the name of the file system.
@@ -125,6 +147,7 @@ namespace RetroIO.Storage.Local.FileSystems
             _sectorsPerBit = ReadUInt16(id, 6);
             _rootFd = ReadUInt24(id, 8);
             _volumeLabel = ReadName(id, 31, 32);
+            _mapSct = 0;
         }
 
         /// <summary>
@@ -281,16 +304,25 @@ namespace RetroIO.Storage.Local.FileSystems
         /// </summary>
         /// <remarks>
         /// <para>
-        /// A new file gets a file descriptor sector (the first free sector), a segment list for exactly the sectors its data needs, and an entry
-        /// in the parent directory (the first slot whose first byte is zero, otherwise a new entry at the end, which makes the directory file
-        /// 32 bytes longer). This is the order the RBF manager uses when it creates a file (level1/modules/rbf.asm, label Create).
+        /// A new file is what I$Create, I$Write and I$Close make (rbf.asm, labels Create, Write and Close). Create takes one cluster for the file
+        /// descriptor (the first sector of the cluster; the rest of the cluster becomes the first segment of the file), then a directory entry
+        /// (the first slot whose first byte is zero, otherwise a new entry at the end, which makes the directory 32 bytes longer). The write
+        /// then adds segments until the data fits; each request is at least the segment allocation size of the volume. Close cuts the file back to
+        /// the data, releasing the whole clusters past the last byte (label L0EFE). The new file belongs to <see cref="User"/> and has the
+        /// attributes 0x0B (owner read and write, public read; the same as the startup file on a real disk).
         /// </para>
         /// <para>
-        /// An existing file keeps its descriptor sector, owner, attributes and creation date. Its old segments are released and new ones are
-        /// allocated for the new data, as the RBF manager does when it truncates a file (rbf.asm, labels L0EFE and ClrFBits).
+        /// An existing file is what I$Open in write mode, I$SetStt SS.Size 0, I$Write and I$Close do: it keeps its descriptor sector, owner,
+        /// attributes and creation date, gets a new date last modified, is cut to nothing and then written as above.
         /// </para>
         /// <para>
-        /// Nothing is written to the device until every allocation has succeeded, so a full disk or a full segment list leaves the volume as it was.
+        /// Permissions (rbf.asm, labels FindFile and ChkAttrs): <see cref="User"/> needs write permission on every directory of the path, the root
+        /// directory included, and on an existing file.
+        /// </para>
+        /// <para>
+        /// The unused bytes at the end of the last sector keep what the sector held before, since RBF reads a sector before it writes part of it
+        /// (label Read4D9). Nothing is written to the device until every allocation has succeeded, so a full disk or a full segment list leaves
+        /// the volume as it was.
         /// </para>
         /// </remarks>
         /// <param name="path">
@@ -306,11 +338,11 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the directory that should hold the file does not exist.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is mounted read-only, the name is not a legal OS-9 name, the path names a directory, the disk is full, or
-        /// the file would need more than 48 segments.
+        /// Thrown when the volume is mounted read-only, the name is not a legal OS-9 name, the path names a directory, the user may not write
+        /// there, the disk is full, or the file would need more segments than RBF lets a file grow to (47).
         /// </exception>
         /// <exception cref="NotSupportedException">
-        /// Thrown when the volume has more than one sector per allocation map bit (not implemented, see the class remarks).
+        /// Thrown when the sectors per map bit is not a power of two, which the RBF arithmetic cannot handle.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
@@ -320,7 +352,7 @@ namespace RetroIO.Storage.Local.FileSystems
             BeginWrite();
             try
             {
-                SplitPath(path, out uint parentFd, out byte[] parentDesc, out string name);
+                SplitPathChecked(path, ModeWrite, out uint parentFd, out byte[] parentDesc, out string name, out _);
                 ValidateName(name);
 
                 byte[] parentData = ReadFileData(parentDesc);
@@ -328,14 +360,9 @@ namespace RetroIO.Storage.Local.FileSystems
 
                 uint fdLsn;
                 byte[] fd;
-                bool isNew = entryOffset < 0;
-                if (isNew)
+                if (entryOffset < 0)
                 {
-                    fdLsn = AllocateSectors(1)[0].Lsn;
-                    fd = new byte[SectorSize];
-                    fd[FdAttributes] = NewFileAttributes;
-                    SetCreated(fd);
-                    fd[FdLinkCount] = 1;
+                    fd = CreateDescriptor(parentFd, parentDesc, name, NewFileAttributes, out fdLsn);
                 }
                 else
                 {
@@ -344,31 +371,24 @@ namespace RetroIO.Storage.Local.FileSystems
                     if ((fd[FdAttributes] & DirectoryAttribute) != 0)
                         throw new IOException("Is a directory: " + path);
 
-                    FreeSegments(ReadSegments(fd));
-                }
+                    // I$Open in write mode: the file must give write permission, and the date last modified is set (rbf.asm, Open1BB).
+                    RequireAccess(fd, ModeWrite, path);
+                    SetModified(fd);
 
-                int sectors = (int)(((long)data.Length + SectorSize - 1) / SectorSize);
-                List<Segment> segments = sectors > 0 ? AllocateSectors(sectors) : new List<Segment>();
-                StoreSegments(fd, segments);
-                WriteUInt32(fd, FdSize, data.Length);
-                SetModified(fd);
-
-                long written = 0;
-                for (int s = 0; s < segments.Count; s++)
-                {
-                    for (int k = 0; k < segments[s].Count; k++)
+                    // I$SetStt SS.Size 0 cuts the file only when it is longer than that (rbf.asm, Sst659 to Sst682).
+                    if (ReadUInt32(fd, FdSize) > 0)
                     {
-                        byte[] sector = new byte[SectorSize];
-                        int take = (int)Math.Min(SectorSize, data.Length - written);
-                        Buffer.BlockCopy(data, (int)written, sector, 0, take);
-                        written += take;
-                        PutPending(segments[s].Lsn + (uint)k, sector);
+                        WriteUInt32(fd, FdSize, 0);
+                        Truncate(fd, 0);
                     }
                 }
 
+                // I$Write of all the bytes from position 0, then I$Close: the size is stored and the file is cut at its end.
+                Extend(fd, data.Length);
+                WriteData(fd, data);
+                WriteUInt32(fd, FdSize, data.Length);
+                Truncate(fd, data.Length);
                 PutPending(fdLsn, fd);
-                if (isNew)
-                    AddDirectoryEntry(parentFd, parentDesc, name, fdLsn);
 
                 CommitWrite();
             }
@@ -383,10 +403,11 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Deletes a file.
         /// </summary>
         /// <remarks>
-        /// Follows the RBF manager (level1/modules/rbf.asm, label Delete): the link count in the descriptor goes down by one, and when it
-        /// reaches zero the segments and the descriptor sector are released in the allocation map and the descriptor is left with size zero and an
-        /// empty segment list. The first byte of the directory entry is set to zero, which marks the slot as free.
-        /// File permissions and owners are not checked.
+        /// Follows I$Delete (level1/modules/rbf.asm, label Delete): the user needs write permission on every directory of the path and on the
+        /// file. The link count in the descriptor goes down by one. When it reaches zero the file is cut to nothing as I$Close does (label L0EFE),
+        /// the cluster of the descriptor is released together with what is left of the first segment, and the descriptor is left with size zero
+        /// and link count zero. The first byte of the directory entry is set to zero, which marks the slot as free. The NitrOS-9 Level 2 manager
+        /// writes the old descriptor back instead (level2/modules/rbf.asm, Del3D4), keeping its size and segments; this code does what Level 1 does.
         /// </remarks>
         /// <param name="path">
         /// The file, with slashes between the names.
@@ -395,14 +416,14 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the file does not exist.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is mounted read-only or the path names a directory.
+        /// Thrown when the volume is mounted read-only, the path names a directory, or the user may not delete the file.
         /// </exception>
         public void DeleteFile(string path)
         {
             BeginWrite();
             try
             {
-                SplitPath(path, out uint parentFd, out byte[] parentDesc, out string name);
+                SplitPathChecked(path, ModeWrite, out uint parentFd, out byte[] parentDesc, out string name, out _);
                 byte[] parentData = ReadFileData(parentDesc);
                 int entryOffset = FindEntry(parentData, name);
                 if (entryOffset < 0 || IsDotName(name))
@@ -413,8 +434,9 @@ namespace RetroIO.Storage.Local.FileSystems
                 if ((fd[FdAttributes] & DirectoryAttribute) != 0)
                     throw new IOException("Is a directory: " + path);
 
+                RequireAccess(fd, ModeShare | ModeWrite, path);
                 ReleaseDescriptor(fdLsn, fd);
-                ClearDirectoryEntry(parentFd, parentDesc, entryOffset);
+                ClearDirectoryEntry(parentDesc, entryOffset);
                 CommitWrite();
             }
             catch
@@ -428,9 +450,12 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Creates a directory.
         /// </summary>
         /// <remarks>
-        /// Follows the RBF manager (level1/modules/rbf.asm, label MakDir) and the directories on the real disk: a descriptor sector with the directory
-        /// attribute and permissions 0xBF, followed by the segment allocation size (byte 77 of sector 0, 8 on the real disk) of sectors as one
-        /// segment. The file size is 64 bytes: the entry for the parent directory (name two dots) and the entry for the directory itself (name one dot).
+        /// Follows I$MakDir (level1/modules/rbf.asm, label MakDir): the user needs write permission on every directory of the path. A descriptor
+        /// and a directory entry are made as for a new file, then the directory is given room for 64 bytes (at least the segment allocation size
+        /// of the volume, 8 sectors on the real disks, unless the rest of the descriptor's cluster already holds them), and its first sector is
+        /// cleared and gets the entry for the parent (name two dots) and the entry for the directory itself (name one dot). The file size is 64.
+        /// A new directory belongs to <see cref="User"/> and has the attributes 0xBF (directory, owner and public read, write and execute; the
+        /// same as the directories on the real disks). I$MakDir closes no path, so the directory is not cut back (ioman.asm, IMakDir).
         /// </remarks>
         /// <param name="path">
         /// The new directory, with slashes between the names. The directory that holds it must exist.
@@ -439,47 +464,37 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the directory that should hold the new one does not exist.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is mounted read-only, the name is not a legal OS-9 name, the name is taken, or the disk is full.
+        /// Thrown when the volume is mounted read-only, the name is not a legal OS-9 name, the name is taken, the user may not write there, or
+        /// the disk is full.
         /// </exception>
         public void CreateDirectory(string path)
         {
             BeginWrite();
             try
             {
-                SplitPath(path, out uint parentFd, out byte[] parentDesc, out string name);
+                SplitPathChecked(path, ModeDirectory | ModeWrite, out uint parentFd, out byte[] parentDesc, out string name, out _);
                 ValidateName(name);
 
                 byte[] parentData = ReadFileData(parentDesc);
                 if (FindEntry(parentData, name) >= 0)
                     throw new IOException("A file or directory with this name exists: " + path);
 
-                uint fdLsn = AllocateSectors(1)[0].Lsn;
-                List<Segment> segments = AllocateDirectorySectors();
+                // Create masks the directory bit out of the attributes it is given; MakDir sets it afterwards.
+                byte[] fd = CreateDescriptor(parentFd, parentDesc, name, (byte)(NewDirectoryAttributes & ~DirectoryAttribute), out uint fdLsn);
 
-                byte[] fd = new byte[SectorSize];
-                fd[FdAttributes] = NewDirectoryAttributes;
-                SetCreated(fd);
-                fd[FdLinkCount] = 1;
-                StoreSegments(fd, segments);
+                Extend(fd, 2 * DirEntrySize);
+                fd[FdAttributes] |= DirectoryAttribute;
                 WriteUInt32(fd, FdSize, 2 * DirEntrySize);
-                SetModified(fd);
 
-                // Sector one of the new directory holds the entry for the parent and the entry for the directory itself. The rest is zero.
-                for (int s = 0; s < segments.Count; s++)
-                {
-                    for (int k = 0; k < segments[s].Count; k++)
-                        PutPending(segments[s].Lsn + (uint)k, new byte[SectorSize]);
-                }
-
+                // The first sector of the new directory is cleared and holds the entry for the parent and the entry for the directory itself.
                 byte[] first = new byte[SectorSize];
                 PutDirName(first, 0, "..");
                 WriteUInt24(first, DirNameLength, (int)parentFd);
                 PutDirName(first, DirEntrySize, ".");
                 WriteUInt24(first, DirEntrySize + DirNameLength, (int)fdLsn);
-                PutPending(segments[0].Lsn, first);
+                PutPending(FileSector(fd, 0), first);
 
                 PutPending(fdLsn, fd);
-                AddDirectoryEntry(parentFd, parentDesc, name, fdLsn);
                 CommitWrite();
             }
             catch
@@ -493,10 +508,17 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Deletes an empty directory.
         /// </summary>
         /// <remarks>
-        /// The directory must hold nothing but the entries for itself and its parent (free slots do not count). Its segments and descriptor sector
-        /// are released like those of a file. The deldir command empties a directory and then calls the plain delete service on it
-        /// (level1/cmds/deldir.asm, I$Delete), and level1/modules/rbf.asm, label Delete, has no separate path for directories. The directory attribute
-        /// stays set in the released descriptor.
+        /// <para>
+        /// Follows the deldir command (level1/cmds/deldir.asm) run with the whole path. It changes into every directory of the path in read and
+        /// write mode (I$ChgDir, which sets their date last modified), opens the directory for reading, runs "attr -d" on it, which needs the
+        /// user to be the owner or the super user and clears the directory bit (level1/cmds/attr.asm; its open in update mode sets the date last
+        /// modified), and then deletes it with I$Delete like a file. So the user needs read and write permission on every directory of the path
+        /// and on the directory itself, and its released descriptor no longer has the directory bit.
+        /// </para>
+        /// <para>
+        /// The directory must hold nothing but the entries for itself and its parent (free slots do not count); deldir would delete the contents
+        /// first, which this member does not do.
+        /// </para>
         /// </remarks>
         /// <param name="path">
         /// The directory, with slashes between the names.
@@ -505,7 +527,7 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the directory does not exist or the path names a file.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is mounted read-only, the path is the root directory, or the directory is not empty.
+        /// Thrown when the volume is mounted read-only, the path is the root directory, the directory is not empty, or the user may not delete it.
         /// </exception>
         public void DeleteDirectory(string path)
         {
@@ -515,7 +537,7 @@ namespace RetroIO.Storage.Local.FileSystems
                 if ((path ?? string.Empty).Split('/', StringSplitOptions.RemoveEmptyEntries).Length == 0)
                     throw new IOException("The root directory of an OS-9 disk cannot be deleted");
 
-                SplitPath(path ?? string.Empty, out uint parentFd, out byte[] parentDesc, out string name);
+                SplitPathChecked(path ?? string.Empty, ModeRead | ModeWrite, out uint parentFd, out byte[] parentDesc, out string name, out List<uint> walked);
                 byte[] parentData = ReadFileData(parentDesc);
                 int entryOffset = FindEntry(parentData, name);
                 if (entryOffset < 0 || IsDotName(name))
@@ -537,8 +559,26 @@ namespace RetroIO.Storage.Local.FileSystems
                         throw new IOException("The directory is not empty: " + path);
                 }
 
+                // deldir opens the directory for reading; attr -d needs the owner or the super user and opens it in update mode; I$Delete then
+                // needs write permission on it once the directory bit is gone.
+                RequireAccess(fd, ModeDirectory | ModeRead, path);
+                if (User != 0 && User != ReadUInt16(fd, FdOwner))
+                    throw new IOException("Only the owner or the super user may delete this directory (attr refuses to clear its directory bit): " + path);
+
+                RequireAccess(fd, ModeDirectory | ModeRead | ModeWrite, path);
+
+                // Every directory deldir changed into gets a new date last modified; the parent is the last of them.
+                for (int i = 0; i < walked.Count; i++)
+                {
+                    byte[] walkedDesc = walked[i] == parentFd ? parentDesc : ReadSectorChecked(walked[i]);
+                    SetModified(walkedDesc);
+                    PutPending(walked[i], walkedDesc);
+                }
+
+                SetModified(fd);
+                fd[FdAttributes] &= unchecked((byte)~DirectoryAttribute);
                 ReleaseDescriptor(fdLsn, fd);
-                ClearDirectoryEntry(parentFd, parentDesc, entryOffset);
+                ClearDirectoryEntry(parentDesc, entryOffset);
                 CommitWrite();
             }
             catch
@@ -552,11 +592,21 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Renames a file or directory, or moves it to another directory.
         /// </summary>
         /// <remarks>
-        /// Only directory entries change. In the same directory the name field of the entry is rewritten (the rename command does the same,
-        /// level1/cmds/rename.asm; it writes only the new name and leaves the bytes after it, this code also clears them). The rename command
-        /// cannot move a file; a move here writes a new entry in the other directory and frees the old slot, and the descriptor, data and allocation
-        /// map stay as they are. A moved directory gets its entry for the parent (name two dots) pointed at the new parent.
-        /// A name that differs only in case from the old name is allowed.
+        /// <para>
+        /// A rename in the same directory follows the rename command (level1/cmds/rename.asm): it opens the file in write mode (a directory in
+        /// directory and write mode), which sets its date last modified, changes into the directory that holds it in read and write mode, and
+        /// opens that directory in update mode; both set the directory's date last modified. Then it writes the new name over the old one,
+        /// as many bytes as the new name has, with bit 7 on the last; bytes left over from a longer old name stay. A name that differs only in
+        /// case from the old name is allowed, as the command allows it.
+        /// </para>
+        /// <para>
+        /// The rename command cannot move a file. A move here does the same opens in both directories, writes a new entry in the other directory
+        /// as Create does and frees the old slot as Delete does; the descriptor, data and allocation map stay as they are. A moved directory gets
+        /// its entry for the parent (name two dots) pointed at the new parent.
+        /// </para>
+        /// <para>
+        /// Permissions: read and write on every directory of both paths, write on the file or directory that is renamed.
+        /// </para>
         /// </remarks>
         /// <param name="oldPath">
         /// The current path.
@@ -571,52 +621,64 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Thrown when the directory that should hold the new name does not exist.
         /// </exception>
         /// <exception cref="IOException">
-        /// Thrown when the volume is mounted read-only, the new name is not a legal OS-9 name or is taken, or a directory would move into itself.
+        /// Thrown when the volume is mounted read-only, the new name is not a legal OS-9 name or is taken, a directory would move into itself,
+        /// or the user may not make the change.
         /// </exception>
         public void Rename(string oldPath, string newPath)
         {
             BeginWrite();
             try
             {
-                SplitPath(oldPath, out uint oldParentFd, out byte[] oldParentDesc, out string oldName);
+                SplitPathChecked(oldPath, ModeRead | ModeWrite, out uint oldParentFd, out byte[] oldParentDesc, out string oldName, out _);
                 byte[] oldParentData = ReadFileData(oldParentDesc);
                 int oldOffset = FindEntry(oldParentData, oldName);
                 if (oldOffset < 0 || IsDotName(oldName))
                     throw new FileNotFoundException("File not found: " + oldPath);
 
-                SplitPath(newPath, out uint newParentFd, out byte[] newParentDesc, out string newName);
+                SplitPathChecked(newPath, ModeRead | ModeWrite, out uint newParentFd, out byte[] newParentDesc, out string newName, out _);
                 ValidateName(newName);
 
                 uint targetFd = ReadUInt24(oldParentData, oldOffset + DirNameLength);
-                byte[] newParentData = newParentFd == oldParentFd ? oldParentData : ReadFileData(newParentDesc);
+                byte[] target = ReadSectorChecked(targetFd);
+                bool isDirectory = (target[FdAttributes] & DirectoryAttribute) != 0;
+                RequireAccess(target, isDirectory ? ModeDirectory | ModeWrite : ModeWrite, oldPath);
+                RequireAccess(oldParentDesc, ModeDirectory | ModeRead | ModeWrite, oldPath);
+                RequireAccess(newParentDesc, ModeDirectory | ModeRead | ModeWrite, newPath);
+
+                bool sameParent = newParentFd == oldParentFd;
+                byte[] newParentData = sameParent ? oldParentData : ReadFileData(newParentDesc);
                 int existing = FindEntry(newParentData, newName);
-                if (existing >= 0 && !(newParentFd == oldParentFd && existing == oldOffset))
+                if (existing >= 0 && !(sameParent && existing == oldOffset))
                     throw new IOException("A file or directory with this name exists: " + newPath);
 
-                if (newParentFd == oldParentFd)
+                if (isDirectory && !sameParent)
+                    CheckNotInside(targetFd, newParentFd);
+
+                // The open of the file in write mode sets its date last modified.
+                SetModified(target);
+                PutPending(targetFd, target);
+
+                // Changing into the directory and opening it in update mode set its date last modified.
+                SetModified(oldParentDesc);
+                PutPending(oldParentFd, oldParentDesc);
+
+                if (sameParent)
                 {
-                    List<Segment> segments = ReadSegments(oldParentDesc);
-                    byte[] entry = new byte[DirEntrySize];
-                    PutDirName(entry, 0, newName);
-                    WriteUInt24(entry, DirNameLength, (int)targetFd);
-                    PatchFile(segments, oldOffset, entry);
-                    SetModified(oldParentDesc);
-                    PutPending(oldParentFd, oldParentDesc);
+                    byte[] nameBytes = new byte[newName.Length];
+                    PutDirName(nameBytes, 0, newName);
+                    PatchFile(oldParentDesc, oldOffset, nameBytes);
                 }
                 else
                 {
-                    byte[] target = ReadSectorChecked(targetFd);
-                    bool isDirectory = (target[FdAttributes] & DirectoryAttribute) != 0;
-                    if (isDirectory)
-                        CheckNotInside(targetFd, newParentFd);
-
-                    AddDirectoryEntry(newParentFd, newParentDesc, newName, targetFd);
-                    ClearDirectoryEntry(oldParentFd, ReadSectorChecked(oldParentFd), oldOffset);
+                    SetModified(newParentDesc);
+                    PutPending(newParentFd, newParentDesc);
+                    AddDirectoryEntry(newParentDesc, newName, targetFd);
+                    PutPending(newParentFd, newParentDesc);
+                    ClearDirectoryEntry(oldParentDesc, oldOffset);
 
                     if (isDirectory)
                     {
                         // The moved directory keeps its content; only its entry for the parent changes.
-                        List<Segment> targetSegments = ReadSegments(target);
                         byte[] targetData = ReadFileData(target);
                         int dotDot = FindEntry(targetData, "..");
                         if (dotDot < 0)
@@ -624,7 +686,7 @@ namespace RetroIO.Storage.Local.FileSystems
 
                         byte[] link = new byte[3];
                         WriteUInt24(link, 0, (int)newParentFd);
-                        PatchFile(targetSegments, dotDot + DirNameLength, link);
+                        PatchFile(target, dotDot + DirNameLength, link);
                     }
                 }
 
@@ -655,12 +717,25 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int FdSize = 9;
         private const int FdCreated = 13;
 
-        // Segment allocation size: byte 14 of the option area, which starts at byte 63 of sector 0 (defs/rbf.d, IT.SAS and DD.OPT).
+        // Segment allocation size: byte 14 of the option area, which starts at byte 63 of sector 0 (defs/rbf.d, IT.SAS and DD.OPT). RBF takes
+        // it from the path options of the drive (PD.SAS); format copies the path options of the drive that formatted the disk into DD.OPT
+        // (level1/cmds/format.asm, I$GetStt SS.Opt into LSN0+DD.OPT), so this is the value of that drive.
         private const int SasOffset = 63 + 14;
 
         // One allocation map sector holds 256 bytes, so 2048 bits. RBF searches the map one sector at a time, so a segment never crosses
         // this boundary (level1/modules/rbf.asm, label FatScan: "force one sector of clusters max.").
         private const int BitsPerMapSector = 2048;
+
+        // RBF grows a file to at most 47 segments: L0D07 looks for a free slot only up to the slot before the last (the 48th slot is read
+        // but never filled, rbf.asm L0D29 to L0D4A).
+        private const int MaxGrowSegments = 47;
+
+        // Access mode bits (defs/os9.d: READ., WRITE., EXEC., PREAD., PWRIT., PEXEC., SHARE., DIR.).
+        private const int ModeRead = 0x01;
+        private const int ModeWrite = 0x02;
+        private const int ModeExec = 0x04;
+        private const int ModeShare = 0x40;
+        private const int ModeDirectory = 0x80;
 
         private struct Segment
         {
@@ -676,19 +751,24 @@ namespace RetroIO.Storage.Local.FileSystems
             if (_device!.IsReadOnly)
                 throw new IOException("The volume is mounted read-only");
 
-            // A cluster of more than one sector puts the rest of the cluster in the segment list of every new descriptor (rbf.asm, Create).
-            // That path is not tested against a real disk here, so it is refused instead of guessed.
-            if (_sectorsPerBit != 1)
-                throw new NotSupportedException("Writing is only implemented for volumes with one sector per allocation map bit (this one has " + _sectorsPerBit + ")");
+            // RBF turns sectors into clusters by shifting until the lowest set bit of DD.BIT falls out (rbf.asm FatScan L0DDD and ClrFBits L0FE5).
+            // That is a division only when DD.BIT is a power of two.
+            if ((_sectorsPerBit & (_sectorsPerBit - 1)) != 0)
+                throw new NotSupportedException("The volume has " + _sectorsPerBit + " sectors per allocation map bit; RBF only works with a power of two");
+
+            _bitShift = 0;
+            while ((1 << _bitShift) < _sectorsPerBit)
+            {
+                _bitShift++;
+            }
 
             _pending = new Dictionary<uint, byte[]>();
             _workMap = ReadAllocationMap();
             _originalMap = (byte[])_workMap.Clone();
+            _mapSctAtStart = _mapSct;
 
             byte[] id = ReadSectorChecked(0);
             _sas = id[SasOffset];
-            if (_sas == 0 || _sas > _totalSectors / 2)
-                _sas = 1;
         }
 
         // Writes the changed map sectors and every held sector to the device, then flushes the device.
@@ -727,15 +807,18 @@ namespace RetroIO.Storage.Local.FileSystems
             }
 
             _device!.Flush();
-            AbortWrite();
+            _pending = null;
+            _workMap = null;
+            _originalMap = null;
         }
 
-        // Drops the held sectors and the working map.
+        // Drops the held sectors and the working map, and puts back the map sector RBF would search first.
         private void AbortWrite()
         {
             _pending = null;
             _workMap = null;
             _originalMap = null;
+            _mapSct = _mapSctAtStart;
         }
 
         private void PutPending(uint lsn, byte[] sector)
@@ -743,32 +826,66 @@ namespace RetroIO.Storage.Local.FileSystems
             _pending![lsn] = (byte[])sector.Clone();
         }
 
-        // Splits a path into the parent directory (its descriptor sector number and contents) and the last name.
-        private void SplitPath(string path, out uint parentFd, out byte[] parentDesc, out string name)
+        // ---- paths and permissions ----
+
+        // Splits a path into the parent directory (its descriptor sector number and contents) and the last name, and checks each directory
+        // on the way the way FindFile does (rbf.asm, Sst865 to L08C1): before a directory is searched, the user must have the access mode
+        // plus the directory bit on it (ChkAttrs). The root directory is the first one checked, as for a path that starts with the device name.
+        // walked gets the descriptor sectors of the directories from the root to the parent.
+        private void SplitPathChecked(string path, int mode, out uint parentFd, out byte[] parentDesc, out string name, out List<uint> walked)
         {
             string[] parts = (path ?? string.Empty).Split('/', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
                 throw new IOException("The path names the root directory");
 
             name = parts[parts.Length - 1];
-            StringBuilder parent = new StringBuilder();
-            for (int i = 0; i < parts.Length - 1; i++)
+            walked = new List<uint>();
+            uint current = _rootFd;
+            byte[] currentDesc = ReadSectorChecked(current);
+            StringBuilder built = new StringBuilder();
+            for (int i = 0; i < parts.Length; i++)
             {
-                parent.Append('/').Append(parts[i]);
+                if ((currentDesc[FdAttributes] & DirectoryAttribute) == 0)
+                    throw new DirectoryNotFoundException("Not a directory: " + (built.Length == 0 ? "/" : built.ToString()));
+
+                RequireAccess(currentDesc, mode | ModeDirectory, built.Length == 0 ? "/" : built.ToString());
+                walked.Add(current);
+                if (i == parts.Length - 1)
+                    break;
+
+                byte[] data = ReadFileData(currentDesc);
+                int offset = FindEntry(data, parts[i]);
+                built.Append('/').Append(parts[i]);
+                if (offset < 0)
+                    throw new DirectoryNotFoundException("Directory not found: " + built);
+
+                current = ReadUInt24(data, offset + DirNameLength);
+                currentDesc = ReadSectorChecked(current);
             }
 
-            try
-            {
-                parentFd = ResolvePath(parent.ToString(), out _);
-            }
-            catch (FileNotFoundException)
-            {
-                throw new DirectoryNotFoundException("Directory not found: " + parent);
-            }
+            parentFd = current;
+            parentDesc = currentDesc;
+        }
 
-            parentDesc = ReadSectorChecked(parentFd);
-            if ((parentDesc[FdAttributes] & DirectoryAttribute) == 0)
-                throw new DirectoryNotFoundException("Not a directory: " + parent);
+        // ChkAttrs (rbf.asm): keeps the read, write and execute bits of the mode, moves them to the public bits when the user is neither the
+        // super user (0) nor the owner, adds the directory bit of the mode, and requires those bits in the attributes. The directory bit is
+        // compared both ways: a mode without it fails on a directory and a mode with it fails on a file. The sharable bit is not checked here.
+        private bool HasAccess(byte[] descriptor, int mode)
+        {
+            int access = mode & (ModeExec | ModeRead | ModeWrite);
+            int directoryBits = mode & (ModeDirectory | ModeShare);
+            int owner = ReadUInt16(descriptor, FdOwner);
+            if (User != 0 && User != owner)
+                access <<= 3;
+
+            int required = (access | directoryBits) & ~ModeShare;
+            return ((required | ModeDirectory) & descriptor[FdAttributes]) == required;
+        }
+
+        private void RequireAccess(byte[] descriptor, int mode, string? path)
+        {
+            if (!HasAccess(descriptor, mode))
+                throw new IOException("Not accessible for user " + User + " (OS-9 error 214, E$FNA): " + path);
         }
 
         private static bool IsDotName(string name)
@@ -830,13 +947,48 @@ namespace RetroIO.Storage.Local.FileSystems
             entry[offset + name.Length - 1] |= 0x80;
         }
 
-        // Adds an entry to a directory: the first free slot (first byte zero), or a new entry at the end of the file. A directory that has
-        // no room left gets a new segment of the segment allocation size (RBF never shrinks a directory, rbf.asm L0EFE).
-        private void AddDirectoryEntry(uint dirFd, byte[] dirDesc, string name, uint targetFd)
+        // ---- creating and deleting ----
+
+        // The Create part of I$Create and I$MakDir (rbf.asm, Create): one cluster for the descriptor (FatScan for one sector), then the directory
+        // entry, then the descriptor itself: the given attributes, the user as owner, the date as modified and created, link count 1, and, when a
+        // cluster has more than one sector, the rest of the descriptor's cluster as the first segment. The file size is zero. The descriptor
+        // is held as pending; the caller changes it further and stores it again.
+        private byte[] CreateDescriptor(uint parentFd, byte[] parentDesc, string name, byte attributes, out uint fdLsn)
+        {
+            Segment cluster = FatScan(1);
+            fdLsn = cluster.Lsn;
+
+            AddDirectoryEntry(parentDesc, name, fdLsn);
+            PutPending(parentFd, parentDesc);
+
+            byte[] fd = new byte[SectorSize];
+            fd[FdAttributes] = attributes;
+            fd[FdOwner] = (byte)(User >> 8);
+            fd[FdOwner + 1] = (byte)User;
+            SetModified(fd);
+            fd[FdCreated] = fd[FdModified];
+            fd[FdCreated + 1] = fd[FdModified + 1];
+            fd[FdCreated + 2] = fd[FdModified + 2];
+            fd[FdLinkCount] = 1;
+            if (cluster.Count > 1)
+            {
+                // "addd #1 ... adcb #$00": the segment starts at the sector after the descriptor and holds the rest of the cluster.
+                WriteUInt24(fd, SegmentListStart, (int)(fdLsn + 1));
+                WriteUInt16(fd, SegmentListStart + 3, cluster.Count - 1);
+            }
+
+            PutPending(fdLsn, fd);
+            return fd;
+        }
+
+        // Adds an entry to a directory (rbf.asm, Create from CreatAC): the first slot whose first byte is zero, otherwise a new entry at the end;
+        // the directory then grows by 32 bytes (Writ599 and L0C6F) and its new size is stored (MDir263). The 32 bytes of the entry are cleared
+        // (Creat169) and get the name and the descriptor sector. The directory descriptor is changed in place; the caller stores it. Its date last
+        // modified does not change: no part of Create sets it.
+        private void AddDirectoryEntry(byte[] dirDesc, string name, uint targetFd)
         {
             byte[] data = ReadFileData(dirDesc);
             long size = data.Length;
-            List<Segment> segments = ReadSegments(dirDesc);
 
             long slot = -1;
             for (long offset = 0; offset + DirEntrySize <= size; offset += DirEntrySize)
@@ -851,99 +1003,40 @@ namespace RetroIO.Storage.Local.FileSystems
             if (slot < 0)
             {
                 slot = size;
-                long capacity = 0;
-                for (int i = 0; i < segments.Count; i++)
-                {
-                    capacity += (long)segments[i].Count * SectorSize;
-                }
-
-                if (slot + DirEntrySize > capacity)
-                {
-                    List<Segment> more = AllocateDirectorySectors();
-                    for (int i = 0; i < more.Count; i++)
-                    {
-                        for (int k = 0; k < more[i].Count; k++)
-                            PutPending(more[i].Lsn + (uint)k, new byte[SectorSize]);
-
-                        AppendSegment(segments, more[i]);
-                    }
-
-                    StoreSegments(dirDesc, segments);
-                }
-
+                Extend(dirDesc, size + DirEntrySize);
                 WriteUInt32(dirDesc, FdSize, size + DirEntrySize);
             }
 
             byte[] entry = new byte[DirEntrySize];
             PutDirName(entry, 0, name);
             WriteUInt24(entry, DirNameLength, (int)targetFd);
-            PatchFile(segments, slot, entry);
-
-            SetModified(dirDesc);
-            PutPending(dirFd, dirDesc);
+            PatchFile(dirDesc, slot, entry);
         }
 
-        // Frees a directory slot by setting the first byte of the entry to zero (rbf.asm, Delete: "clear first byte of filename").
-        private void ClearDirectoryEntry(uint dirFd, byte[] dirDesc, long entryOffset)
+        // Frees a directory slot by setting the first byte of the entry to zero (rbf.asm, Delete: "clear first byte of filename"). The
+        // directory's date last modified does not change.
+        private void ClearDirectoryEntry(byte[] dirDesc, long entryOffset)
         {
-            List<Segment> segments = ReadSegments(dirDesc);
             byte[] one = new byte[1];
-            PatchFile(segments, entryOffset, one);
-            SetModified(dirDesc);
-            PutPending(dirFd, dirDesc);
+            PatchFile(dirDesc, entryOffset, one);
         }
 
-        // Writes bytes into a file at a byte offset. The bytes must lie inside one sector, which holds for a 32-byte entry at a multiple of 32
-        // and for the three bytes of a sector number inside an entry.
-        private void PatchFile(List<Segment> segments, long offset, byte[] bytes)
-        {
-            long sectorIndex = offset / SectorSize;
-            int within = (int)(offset % SectorSize);
-            if (within + bytes.Length > SectorSize)
-                throw new InvalidOperationException("A patch must stay inside one sector");
-
-            uint lsn = 0;
-            bool found = false;
-            long remaining = sectorIndex;
-            for (int i = 0; i < segments.Count && !found; i++)
-            {
-                if (remaining < segments[i].Count)
-                {
-                    lsn = segments[i].Lsn + (uint)remaining;
-                    found = true;
-                }
-                else
-                {
-                    remaining -= segments[i].Count;
-                }
-            }
-
-            if (!found)
-                throw new InvalidDataException("The offset " + offset + " is outside the segments of the file");
-
-            byte[] sector = ReadSectorChecked(lsn);
-            Buffer.BlockCopy(bytes, 0, sector, within, bytes.Length);
-            PutPending(lsn, sector);
-        }
-
-        // Releases the segments and the descriptor sector of a file whose last link goes away. The descriptor is left with size zero and an
-        // empty segment list, as RBF leaves it after it truncates the file to nothing (rbf.asm, Delete and L0EFE).
+        // The part of I$Delete after the permission check (rbf.asm, Delete from Del332): the link count goes down; while it is above zero only
+        // the descriptor is written. At zero the file is cut to nothing (L0EFE with size 0), then ClrFBits releases the descriptor sector and
+        // as many sectors after it as the first segment still holds ("ldd <$13,x / addd #1": with clusters of more than one sector, the rest of
+        // the descriptor's cluster).
         private void ReleaseDescriptor(uint fdLsn, byte[] fd)
         {
-            byte links = fd[FdLinkCount];
-            if (links > 1)
+            fd[FdLinkCount] = (byte)(fd[FdLinkCount] - 1);
+            if (fd[FdLinkCount] != 0)
             {
-                fd[FdLinkCount] = (byte)(links - 1);
                 PutPending(fdLsn, fd);
                 return;
             }
 
-            FreeSegments(ReadSegments(fd));
-            ClearBit(fdLsn);
-
-            fd[FdLinkCount] = 0;
             WriteUInt32(fd, FdSize, 0);
-            Array.Clear(fd, SegmentListStart, SectorSize - SegmentListStart);
+            Truncate(fd, 0);
+            ClrFBits(fdLsn, ReadUInt16(fd, SegmentListStart + 3) + 1);
             PutPending(fdLsn, fd);
         }
 
@@ -972,60 +1065,208 @@ namespace RetroIO.Storage.Local.FileSystems
             throw new InvalidDataException("The directory tree is deeper than 1000 levels or loops");
         }
 
-        // ---- segments ----
+        // ---- file contents ----
 
-        private static List<Segment> ReadSegments(byte[] descriptor)
+        // The logical sector of a file's sector number index, through its segment list. Throws when the index is past the segments.
+        private uint FileSector(byte[] fd, long index)
         {
-            List<Segment> list = new List<Segment>();
+            long remaining = index;
             for (int i = 0; i < MaxSegments; i++)
             {
-                int at = SegmentListStart + (i * SegmentSize);
-                int count = ReadUInt16(descriptor, at + 3);
+                int count = SlotCount(fd, i);
                 if (count == 0)
                     break;
 
-                Segment segment;
-                segment.Lsn = ReadUInt24(descriptor, at);
-                segment.Count = count;
-                list.Add(segment);
+                if (remaining < count)
+                    return SlotLsn(fd, i) + (uint)remaining;
+
+                remaining -= count;
             }
 
-            return list;
+            throw new InvalidDataException("Sector " + index + " is outside the segments of the file");
         }
 
-        // Stores a segment list in a descriptor and clears the rest of the list. The file size is set separately.
-        private static void StoreSegments(byte[] descriptor, List<Segment> segments)
+        // Writes the data from the start of the file. A whole sector is written over; the last sector, when the data ends inside it, is read
+        // first and only its first bytes are replaced, as RBF reads a sector before it writes part of it (rbf.asm, Read4D9: only a write of a
+        // whole sector from its start skips the read).
+        private void WriteData(byte[] fd, byte[] data)
         {
-            if (segments.Count > MaxSegments)
-                throw new IOException("The segment list is full (" + MaxSegments + " segments); the free space is too fragmented for this file");
-
-            Array.Clear(descriptor, SegmentListStart, SectorSize - SegmentListStart);
-            for (int i = 0; i < segments.Count; i++)
+            long sectors = ((long)data.Length + SectorSize - 1) / SectorSize;
+            for (long k = 0; k < sectors; k++)
             {
-                int at = SegmentListStart + (i * SegmentSize);
-                WriteUInt24(descriptor, at, (int)segments[i].Lsn);
-                descriptor[at + 3] = (byte)(segments[i].Count >> 8);
-                descriptor[at + 4] = (byte)segments[i].Count;
+                uint lsn = FileSector(fd, k);
+                long start = k * SectorSize;
+                int take = (int)Math.Min(SectorSize, data.Length - start);
+                byte[] sector = take == SectorSize ? new byte[SectorSize] : ReadSectorChecked(lsn);
+                Buffer.BlockCopy(data, (int)start, sector, 0, take);
+                PutPending(lsn, sector);
             }
         }
 
-        // Adds a segment at the end of a list. When it starts right after the last one inside the same allocation map sector, the last one grows
-        // instead (rbf.asm L0D4E to L0D96), as long as the count still fits in 16 bits.
-        private static void AppendSegment(List<Segment> list, Segment added)
+        // Writes bytes into a file at a byte offset. The bytes must lie inside one sector, which holds for a 32-byte entry at a multiple of 32
+        // and for the three bytes of a sector number inside an entry.
+        private void PatchFile(byte[] fd, long offset, byte[] bytes)
         {
-            if (list.Count > 0)
+            int within = (int)(offset % SectorSize);
+            if (within + bytes.Length > SectorSize)
+                throw new InvalidOperationException("A patch must stay inside one sector");
+
+            uint lsn = FileSector(fd, offset / SectorSize);
+            byte[] sector = ReadSectorChecked(lsn);
+            Buffer.BlockCopy(bytes, 0, sector, within, bytes.Length);
+            PutPending(lsn, sector);
+        }
+
+        // ---- segments ----
+
+        private static int SlotCount(byte[] fd, int slot)
+        {
+            return ReadUInt16(fd, SegmentListStart + (slot * SegmentSize) + 3);
+        }
+
+        private static uint SlotLsn(byte[] fd, int slot)
+        {
+            return ReadUInt24(fd, SegmentListStart + (slot * SegmentSize));
+        }
+
+        // The number of segments in use: the slots before the first one with a count of zero.
+        private static int UsedSlots(byte[] fd)
+        {
+            int used = 0;
+            while (used < MaxSegments && SlotCount(fd, used) != 0)
             {
-                Segment last = list[list.Count - 1];
-                long end = (long)last.Lsn + last.Count;
-                if (end == added.Lsn && (end - 1) / BitsPerMapSector == added.Lsn / BitsPerMapSector && last.Count + added.Count <= 0xFFFF)
+                used++;
+            }
+
+            return used;
+        }
+
+        // Makes room in a file for newSize bytes (rbf.asm, L0C6F with L0CB4 and L0D07). While the segments hold fewer sectors than the size
+        // needs, the missing number of sectors is asked from FatScan; a request below 256 sectors is raised to the segment allocation size
+        // (PD.SAS), and one above 65535 is cut to 65535. FatScan may give fewer sectors than asked (the longest free run) and the loop asks again.
+        // In RBF the loop compares against the segment that holds the current position; for one write from the start of the file, the only
+        // write done here, that comes to the same as comparing against all the segments.
+        private void Extend(byte[] fd, long newSize)
+        {
+            long needed = (newSize + SectorSize - 1) / SectorSize;
+            long allocated = 0;
+            int used = UsedSlots(fd);
+            for (int i = 0; i < used; i++)
+            {
+                allocated += SlotCount(fd, i);
+            }
+
+            while (needed > allocated)
+            {
+                long request = needed - allocated;
+                if (request > 0xFFFF)
+                    request = 0xFFFF;
+
+                if (request < 256 && request < _sas)
+                    request = _sas;
+
+                Segment segment = FatScan((int)request);
+                AddSegment(fd, segment);
+                allocated += segment.Count;
+            }
+        }
+
+        // Adds a segment from FatScan to a descriptor (rbf.asm, L0D07). With an empty list it becomes the first segment. When 47 segments are
+        // in use the new sectors are released again and the segment list is full (E$SLF). Otherwise it joins the last segment when it starts
+        // right after it, both start in the same region of 2048 clusters (the high 16 bits of the two sector numbers, exclusive or, shifted
+        // right 3, masked with the complement of DD.BIT - 1, must be zero) and the count stays within 16 bits; if not, it takes the next slot.
+        private void AddSegment(byte[] fd, Segment segment)
+        {
+            int used = UsedSlots(fd);
+            if (used == 0)
+            {
+                StoreSlot(fd, 0, segment.Lsn, segment.Count);
+                return;
+            }
+
+            if (used >= MaxGrowSegments)
+            {
+                ClrFBits(segment.Lsn, segment.Count);
+                throw new IOException("The segment list is full (RBF lets a file grow to " + MaxGrowSegments + " segments, OS-9 error 217, E$SLF); the free space is too fragmented for this file");
+            }
+
+            int last = used - 1;
+            uint lastLsn = SlotLsn(fd, last);
+            int lastCount = SlotCount(fd, last);
+            bool adjacent = ((lastLsn + (uint)lastCount) & 0xFFFFFF) == segment.Lsn;
+            int mask = ~(_sectorsPerBit - 1) & 0xFFFF;
+            bool sameRegion = (((int)((lastLsn >> 8) ^ (segment.Lsn >> 8)) >> 3) & mask) == 0;
+            if (adjacent && sameRegion && lastCount + segment.Count <= 0xFFFF)
+            {
+                StoreSlot(fd, last, lastLsn, lastCount + segment.Count);
+                return;
+            }
+
+            StoreSlot(fd, used, segment.Lsn, segment.Count);
+        }
+
+        private static void StoreSlot(byte[] fd, int slot, uint lsn, int count)
+        {
+            int at = SegmentListStart + (slot * SegmentSize);
+            WriteUInt24(fd, at, (int)lsn);
+            WriteUInt16(fd, at + 3, count);
+        }
+
+        // Cuts a file to newSize bytes (rbf.asm, L0EFE, as I$Close and I$SetStt SS.Size do it; I$Delete with size 0). The segment that holds the
+        // byte at newSize keeps the sectors up to the one holding that byte, rounded up to whole clusters; the clusters after it are released and
+        // its count is cut. Every later segment is released and its slot cleared, up to the slot before the last (the loop stops one slot early).
+        // When no segment holds that byte, nothing is released. The slot of a segment cut to nothing keeps its sector number with a count of zero.
+        // The file size is set by the caller.
+        private void Truncate(byte[] fd, long newSize)
+        {
+            long cpSector = newSize >> 8;
+            bool partial = (newSize & 0xFF) != 0;
+
+            // L10B2: find the segment that holds the position.
+            long start = 0;
+            int slot = 0;
+            bool found = false;
+            for (; slot < MaxSegments; slot++)
+            {
+                int count = SlotCount(fd, slot);
+                if (count == 0)
+                    break;
+
+                if (start + count > cpSector)
                 {
-                    last.Count += added.Count;
-                    list[list.Count - 1] = last;
-                    return;
+                    found = true;
+                    break;
+                }
+
+                start += count;
+            }
+
+            if (found)
+            {
+                int count = SlotCount(fd, slot);
+                long free = start + count - cpSector;
+                if (partial)
+                    free--;
+
+                free &= ~(long)(_sectorsPerBit - 1);
+                if (free > 0)
+                {
+                    int kept = count - (int)free;
+                    ClrFBits(SlotLsn(fd, slot) + (uint)kept, (int)free);
+                    WriteUInt16(fd, SegmentListStart + (slot * SegmentSize) + 3, kept);
                 }
             }
 
-            list.Add(added);
+            // L0F79 to L0FC1: release the segments after it. The loop ends before the last slot.
+            for (int next = slot + 1; next < MaxSegments - 1; next++)
+            {
+                int count = SlotCount(fd, next);
+                if (count == 0)
+                    break;
+
+                ClrFBits(SlotLsn(fd, next), count);
+                StoreSlot(fd, next, 0, 0);
+            }
         }
 
         // ---- allocation map ----
@@ -1045,107 +1286,155 @@ namespace RetroIO.Storage.Local.FileSystems
             _workMap![(int)(bit >> 3)] &= (byte)~(0x80 >> (int)(bit & 7));
         }
 
-        private void FreeSegments(List<Segment> segments)
+        // Searches the allocation map for sectors and marks them used, as FatScan does (rbf.asm). The request in sectors becomes clusters,
+        // rounded up ((DD.BIT - 1 + sectors) shifted down, 65535 when the sum overflows 16 bits), and at most 2048 clusters, one map sector.
+        // The map is searched one map sector at a time with F$SchBit (level1/modules/kernel/fallbit.asm: the first run that is long enough,
+        // otherwise the first longest run). The search starts at the map sector of the last allocation (V.MapSct, set back to the first map
+        // sector when it is not below the number of whole map sectors) and goes round the map once. The first map sector with a long
+        // enough run wins; when none has one, the first longest run found is taken. A map sector number is 8 bits, so on a map of 256 sectors
+        // the search wraps to sector 0, which counts as the reserved sector (V.ResBit is 0) and is skipped: the last map sector is never searched.
+        // The result is in sectors: the first cluster times DD.BIT and the number of clusters times DD.BIT.
+        private Segment FatScan(int sectors)
         {
-            for (int i = 0; i < segments.Count; i++)
+            int sum = _sectorsPerBit - 1 + sectors;
+            if (sum > 0xFFFF)
+                sum = 0xFFFF;
+
+            int want = sum >> _bitShift;
+            if (want >= 0x800)
+                want = 0x800;
+
+            int mapHigh = (_mapBytes >> 8) & 0xFF;
+            int mapLow = _mapBytes & 0xFF;
+            if (_mapSct >= mapHigh)
+                _mapSct = 0;
+
+            int b = _mapSct;
+            int bestSector = 0;
+            int bestStart = 0;
+            int bestLength = 0;
+            while (true)
             {
-                for (int k = 0; k < segments[i].Count; k++)
+                b = (b + 1) & 0xFF;
+                if (b != 0)
                 {
-                    ClearBit(segments[i].Lsn + k);
-                }
-            }
-        }
+                    int bytes = b <= mapHigh ? SectorSize : mapLow;
+                    long firstBit = (long)(b - 1) * BitsPerMapSector;
+                    int found = SearchBits(firstBit, bytes * 8, want, out int runStart);
+                    if (found == want)
+                        return AllocateRun(b, runStart, want);
 
-        // Finds and marks free sectors, the way RBF does (rbf.asm, FatScan): the map is searched one allocation map sector (2048 bits) at a time,
-        // from the first; the first run in a map sector that is long enough for the request (at most 2048) is taken. When no map sector has such
-        // a run, the longest run found is taken and the search goes on for the rest. A run never crosses a map sector.
-        private List<Segment> AllocateSectors(int count)
-        {
-            List<Segment> result = new List<Segment>();
-            long total = _totalSectors;
-            long maxBits = (long)_mapBytes * 8;
-            if (maxBits < total)
-                total = maxBits;
-
-            int remaining = count;
-            while (remaining > 0)
-            {
-                int want = Math.Min(remaining, BitsPerMapSector);
-                long takeStart = -1;
-                int takeLength = 0;
-                long bestStart = -1;
-                int bestLength = 0;
-
-                for (long groupStart = 0; groupStart < total && takeStart < 0; groupStart += BitsPerMapSector)
-                {
-                    long groupEnd = Math.Min(groupStart + BitsPerMapSector, total);
-                    long runStart = -1;
-                    int runLength = 0;
-                    for (long bit = groupStart; bit < groupEnd; bit++)
+                    if (found > bestLength)
                     {
-                        if (BitIsSet(bit))
-                        {
-                            runLength = 0;
-                            continue;
-                        }
-
-                        if (runLength == 0)
-                            runStart = bit;
-
-                        runLength++;
-                        if (runLength > bestLength)
-                        {
-                            bestLength = runLength;
-                            bestStart = runStart;
-                        }
-
-                        if (runLength == want)
-                        {
-                            takeStart = runStart;
-                            takeLength = want;
-                            break;
-                        }
+                        bestLength = found;
+                        bestStart = runStart;
+                        bestSector = b;
                     }
                 }
 
-                if (takeStart < 0)
-                {
-                    if (bestLength == 0)
-                    {
-                        // Give back what this request marked, so a request that fails leaves the working map as it was.
-                        FreeSegments(result);
-                        throw new IOException("The disk is full");
-                    }
+                // L0E70: go on with the next map sector, or round to the start after the last one.
+                if (b > mapHigh || (b == mapHigh && mapLow == 0))
+                    b = 0;
 
-                    takeStart = bestStart;
-                    takeLength = bestLength;
-                }
-
-                for (int k = 0; k < takeLength; k++)
-                {
-                    SetBit(takeStart + k);
-                }
-
-                Segment segment;
-                segment.Lsn = (uint)takeStart;
-                segment.Count = takeLength;
-                AppendSegment(result, segment);
-                remaining -= takeLength;
+                if (b == _mapSct)
+                    break;
             }
 
-            return result;
+            if (bestSector == 0)
+                throw new IOException("The disk is full");
+
+            return AllocateRun(bestSector, bestStart, bestLength);
         }
 
-        // The sectors a directory gets when it needs room: the segment allocation size from sector 0, or a single sector when that does not fit.
-        private List<Segment> AllocateDirectorySectors()
+        // F$SchBit over the bits of one map sector: gives the length of the first run of free bits that reaches want, or else of the first
+        // longest run, and where it starts (relative to firstBit).
+        private int SearchBits(long firstBit, int bitCount, int want, out int start)
         {
-            try
+            int runStart = 0;
+            int runLength = 0;
+            int bestStart = 0;
+            int bestLength = 0;
+            for (int i = 0; i < bitCount; i++)
             {
-                return AllocateSectors(_sas);
+                long bit = firstBit + i;
+                bool used = (bit >> 3) >= _workMap!.Length || BitIsSet(bit);
+                if (used)
+                {
+                    runLength = 0;
+                    continue;
+                }
+
+                if (runLength == 0)
+                    runStart = i;
+
+                runLength++;
+                if (runLength >= want)
+                {
+                    start = runStart;
+                    return want;
+                }
+
+                if (runLength > bestLength)
+                {
+                    bestLength = runLength;
+                    bestStart = runStart;
+                }
             }
-            catch (IOException) when (_sas > 1)
+
+            start = bestStart;
+            return bestLength;
+        }
+
+        // F$AllBit on the run, then the cluster number becomes a sector number. V.MapSct becomes the map sector of the run.
+        private Segment AllocateRun(int mapSector, int startBit, int clusters)
+        {
+            long firstCluster = ((long)(mapSector - 1) * BitsPerMapSector) + startBit;
+            long lsn = firstCluster << _bitShift;
+            long count = (long)clusters << _bitShift;
+            if (lsn + count > _totalSectors)
+                throw new InvalidDataException("The allocation map marks sectors past the end of the volume as free (sector " + lsn + ", " + count + " sectors)");
+
+            for (int k = 0; k < clusters; k++)
             {
-                return AllocateSectors(1);
+                SetBit(firstCluster + k);
+            }
+
+            _mapSct = mapSector - 1;
+
+            Segment segment;
+            segment.Lsn = (uint)lsn;
+            segment.Count = (int)count;
+            return segment;
+        }
+
+        // Releases sectors in the allocation map, as ClrFBits does (rbf.asm): the first sector is rounded up to a whole cluster and the count
+        // down to whole clusters, so a part of a cluster is not released. RBF reads the one map sector that holds the first cluster and clears
+        // the bits there (F$DelBit), so a run that goes on past that map sector, and a map sector number that wraps past 255 to sector 0, are
+        // things RBF gets wrong; both are refused here before anything changes. A cluster past the map (above DD.MAP) is the E$IBA error.
+        private void ClrFBits(long lsn, int count)
+        {
+            long firstCluster = (lsn + _sectorsPerBit - 1) >> _bitShift;
+            int clusters = count >> _bitShift;
+            if (clusters == 0)
+                return;
+
+            long mapSectorIndex = firstCluster / BitsPerMapSector;
+            int mapHigh = (_mapBytes >> 8) & 0xFF;
+            if ((mapSectorIndex & 0xFF) > mapHigh)
+                throw new InvalidDataException("Sector " + lsn + " lies past the allocation map (OS-9 error 244, E$IBA)");
+
+            if (mapSectorIndex >= 255)
+                throw new IOException("RBF cannot release sector " + lsn + ": its map sector number wraps past 255 to sector 0");
+
+            if ((firstCluster % BitsPerMapSector) + clusters > BitsPerMapSector)
+                throw new IOException("RBF cannot release sectors " + lsn + " to " + (lsn + count - 1) + ": the run crosses an allocation map sector, and RBF clears bits in one map sector only");
+
+            if (((firstCluster + clusters - 1) >> 3) >= _workMap!.Length)
+                throw new InvalidDataException("Sectors " + lsn + " to " + (lsn + count - 1) + " lie past the allocation map");
+
+            for (int k = 0; k < clusters; k++)
+            {
+                ClearBit(firstCluster + k);
             }
         }
 
@@ -1156,7 +1445,8 @@ namespace RetroIO.Storage.Local.FileSystems
             return Clock != null ? Clock() : DateTime.Now;
         }
 
-        // Date last modified: year since 1900, month, day, hour, minute (defs/rbf.d, FD.DAT; the seconds that F$Time returns are dropped).
+        // Date last modified: year since 1900, month, day, hour, minute (defs/rbf.d, FD.DAT; SetMTime keeps the link count that the sixth byte
+        // of F$Time would overwrite, so the seconds are dropped).
         private void SetModified(byte[] fd)
         {
             DateTime now = Now();
@@ -1167,15 +1457,10 @@ namespace RetroIO.Storage.Local.FileSystems
             fd[FdModified + 4] = (byte)now.Minute;
         }
 
-        // A new descriptor gets the date as both modified and created (rbf.asm, Create: "save it as creation date"). The owner is zero.
-        private void SetCreated(byte[] fd)
+        private static void WriteUInt16(byte[] data, int offset, int value)
         {
-            SetModified(fd);
-            fd[FdCreated] = fd[FdModified];
-            fd[FdCreated + 1] = fd[FdModified + 1];
-            fd[FdCreated + 2] = fd[FdModified + 2];
-            fd[FdOwner] = 0;
-            fd[FdOwner + 1] = 0;
+            data[offset] = (byte)(value >> 8);
+            data[offset + 1] = (byte)value;
         }
 
         private static void WriteUInt24(byte[] data, int offset, int value)
