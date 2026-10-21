@@ -117,6 +117,63 @@ namespace RetroIO.Storage.Local.Tests
             return driver.ReadFile(path);
         }
 
+        // ------------------------------------------------------------------ raw block writes reach the file
+
+        [Test]
+        public void Vdk_WriteBlock_ReachesTheFile_AtTheRightOffset()
+        {
+            string path = Save("b.vdk", Join(Header12(40, 1), DragonDosTestDisk.Format(40, 1)));
+            byte[] block = DragonDosTestDisk.Pattern(256, 3);
+
+            using (FileStream stream = OpenReadWrite(path))
+            {
+                DragonVdkDriver driver = new DragonVdkDriver();
+                driver.Mount(stream, false);
+                driver.WriteBlock(BlockAddress.FromLBA(100), block);
+
+                byte[] raw = ReadRaw(path);
+                Assert.That(raw.AsSpan(12 + (100 * 256), 256).ToArray(), Is.EqualTo(block), "after the call, before the driver is disposed");
+                driver.Dispose();
+            }
+        }
+
+        [Test]
+        public void Dsk_WriteBlock_ReachesTheFile_BehindTheHeader()
+        {
+            string path = Save("b.dsk", Join(new byte[] { 18, 1, 1, 1, 0 }, DragonDosTestDisk.Format(40, 1)));
+            byte[] block = DragonDosTestDisk.Pattern(256, 4);
+
+            using (FileStream stream = OpenReadWrite(path))
+            {
+                DragonDskDriver driver = new DragonDskDriver();
+                driver.Mount(stream, false);
+                driver.WriteBlock(BlockAddress.FromLBA(100), block);
+
+                byte[] raw = ReadRaw(path);
+                Assert.That(raw.AsSpan(5 + (100 * 256), 256).ToArray(), Is.EqualTo(block));
+                driver.Dispose();
+            }
+        }
+
+        [Test]
+        public void Dmk_WriteBlock_ReachesTheFile_WithValidCrcs()
+        {
+            string path = Copy(RealImage("dmk", "FEdit.dmk"), "block.dmk");
+            byte[] block = DragonDosTestDisk.Pattern(256, 5);
+
+            using (FileStream stream = OpenReadWrite(path))
+            {
+                DragonDmkDriver driver = new DragonDmkDriver();
+                driver.Mount(stream, false);
+                driver.WriteBlock(BlockAddress.FromLBA(700), block);
+
+                // A new decode of the file bytes as they are now: every CRC is checked, and the sector is the new one.
+                DmkDiskImage now = DmkDiskImage.Parse(new MemoryStream(ReadRaw(path)));
+                Assert.That(now.GetSectorImage().AsSpan(700 * 256, 256).ToArray(), Is.EqualTo(block));
+                driver.Dispose();
+            }
+        }
+
         // ------------------------------------------------------------------ VDK, DragonDOS
 
         [Test]

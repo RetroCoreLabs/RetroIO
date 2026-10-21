@@ -253,6 +253,23 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         [Test]
+        public void SetSectorImage_ChangedAndThenChangedBack_WritesTheOriginalBytesAgain()
+        {
+            Layout layout = new Layout();
+            byte[] file = Build(layout);
+            DmkDiskImage image = Parse(file);
+            byte[] original = image.GetSectorImage();
+            byte[] changed = (byte[])original.Clone();
+            changed[(2 * 256) + 9] ^= 0x55;
+
+            Assert.That(image.SetSectorImage(changed), Is.EqualTo(1));
+            Assert.That(image.ToFileBytes(), Is.Not.EqualTo(file));
+            Assert.That(image.SetSectorImage(original), Is.EqualTo(1), "the sector differs from what the image holds now, so it is rebuilt again");
+
+            Assert.That(image.ToFileBytes(), Is.EqualTo(file), "back to the first bytes, CRC included");
+        }
+
+        [Test]
         public void SetSectorImage_WrongLength_Throws()
         {
             DmkDiskImage image = Parse(Build(new Layout()));
