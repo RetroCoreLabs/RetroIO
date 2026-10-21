@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using NUnit.Framework;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.Drivers;
@@ -34,9 +35,13 @@ namespace RetroIO.Storage.Local.Tests
     /// Then every file is deleted and the free space must be what it was at the start (OS-9: less the sectors the root directory grew by, because
     /// RBF never shortens a directory file). The image file must then open exclusively after the driver is disposed.
     /// <para><b>Memory and speed</b></para>
-    /// Memory is compared with GC.GetTotalMemory(true) after 20 percent of the operations and at the end. Speed is compared as a ratio inside
-    /// one run: a probe (write, read and delete of an 8 KB file, 10 times) is timed at operation 50 and at the last operation, both at about the
-    /// same fill level because the random walk is steered towards half full. The numbers are printed. No wall-clock time is asserted.
+    /// Memory is compared with GC.GetTotalMemory(true) after 20 percent of the operations and at the end. Speed is compared inside one run: a
+    /// probe (write, read and delete of an 8 KB file, 5 times, in three passes) runs every 50 operations and at the last operation, and the last
+    /// one is compared with the first earlier one at about the same fill level (the random walk is steered towards half full). What is compared
+    /// is the number of blocks the file system read and wrote through a counting block device put between the file system and the block device
+    /// of the driver, so the check gives the same answer on every machine. The wall-clock times are printed for information only; they are not
+    /// asserted, because a sub-millisecond probe time moves with whatever else the machine is doing (once 3.1 times slower with no change in
+    /// the code).
     /// <para><b>What cannot be run</b></para>
     /// DECB exists on 35 track disks only and the VDK driver takes 40 and 80 track disks only, so there is no DECB-in-VDK variant. A headerless JVC
     /// image cannot tell 40 tracks two sided from 80 tracks one sided, so only the one sided ones are run without a header. The pydmk program could
@@ -735,6 +740,7 @@ namespace RetroIO.Storage.Local.Tests
             private readonly string _folder;
             private string _path = string.Empty;
             private IFileSystemDriver _driver = null!;
+            private CountingBlockDevice _counter = null!;
             private FileStream _stream = null!;
             private readonly Dictionary<string, byte[]> _model = new Dictionary<string, byte[]>();
             private readonly Dictionary<string, byte[]> _initial = new Dictionary<string, byte[]>();
@@ -885,6 +891,7 @@ namespace RetroIO.Storage.Local.Tests
                 }
 
                 _driver.Mount(_stream, false);
+                AttachCounter();
             }
 
             private void Close()
@@ -1353,16 +1360,56 @@ namespace RetroIO.Storage.Local.Tests
                 return GC.GetTotalMemory(true) - model;
             }
 
-            // ---- speed probe: write, read and delete an 8 KB file, ten times
+            // ---- speed probe: write, read and delete an 8 KB file, five times, in three passes
 
-            private double Probe()
+            // Puts a counting block device between the file system of the driver and the block device the driver made for it. The drivers
+            // build both inside Mount and give no way in, so the two private fields are read by name; a rename in the driver fails here
+            // loudly instead of leaving the count at zero. The file system is then initialized again on the counting device: Initialize only
+            // reads the volume header (BAM, FAT or identification sector) from the device, and the device holds the same sectors as before,
+            // so the file system state is the same. Every block the file system asks for from now on goes through the counter. The checks of
+            // the test that read the image (Raw, the driver's ReadBlock) go past the file system and are not counted.
+            private void AttachCounter()
+            {
+                // The DMK driver hands everything to a DSK driver of its own over the decoded sectors.
+                object holder = _driver is DragonDmkDriver ? PrivateField(_driver, "_inner") : _driver;
+                IBlockDevice device = (IBlockDevice)PrivateField(holder, "_blockDevice");
+                IBlockFileSystem fileSystem = (IBlockFileSystem)PrivateField(holder, "_filesystem");
+                _counter = new CountingBlockDevice(device);
+                fileSystem.Initialize(_counter);
+            }
+
+            private static object PrivateField(object owner, string name)
+            {
+                FieldInfo? field = owner.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field == null)
+                {
+                    Assert.Fail(owner.GetType().Name + " has no field " + name + ", so the block counter cannot be put in front of its file system");
+                }
+
+                object? value = field!.GetValue(owner);
+                if (value == null)
+                {
+                    Assert.Fail(owner.GetType().Name + "." + name + " is null after Mount");
+                }
+
+                return value!;
+            }
+
+            // Gives { milliseconds of the fastest pass, blocks of the pass with the fewest blocks, reads of that pass, writes of that pass }.
+            // The time is printed only. The blocks are what the file system asked the block device for, so they do not depend on the machine.
+            private double[] Probe()
             {
                 byte[] data = new byte[8192];
                 _rnd.NextBytes(data);
                 string name = _v.Kind == Kind.Os9 ? "probe" : "PROBE.BIN";
                 double best = double.MaxValue;
+                long fewest = long.MaxValue;
+                long fewestReads = 0;
+                long fewestWrites = 0;
                 for (int round = 0; round < 3; round++)
                 {
+                    long reads = _counter.Reads;
+                    long writes = _counter.Writes;
                     _clock.Restart();
                     for (int i = 0; i < 5; i++)
                     {
@@ -1378,9 +1425,17 @@ namespace RetroIO.Storage.Local.Tests
 
                     _clock.Stop();
                     best = Math.Min(best, _clock.Elapsed.TotalMilliseconds);
+                    reads = _counter.Reads - reads;
+                    writes = _counter.Writes - writes;
+                    if (reads + writes < fewest)
+                    {
+                        fewest = reads + writes;
+                        fewestReads = reads;
+                        fewestWrites = writes;
+                    }
                 }
 
-                return best;
+                return new double[] { best, fewest, fewestReads, fewestWrites };
             }
 
             // ---- the run
@@ -1484,7 +1539,8 @@ namespace RetroIO.Storage.Local.Tests
                         if ((_op % 50 == 0 || _op == _ops) && (long)Free() * Sector >= 64 * 1024)
                         {
                             double fill = 1.0 - ((double)Free() * Sector / _usedBytesCapacity);
-                            samples.Add(new[] { _op, fill, Probe() });
+                            double[] probe = Probe();
+                            samples.Add(new[] { _op, fill, probe[0], probe[1], probe[2], probe[3] });
                         }
 
                         if (_op == markMemory)
@@ -1512,12 +1568,22 @@ namespace RetroIO.Storage.Local.Tests
                     }
 
                     string probeText = "no earlier probe at the same fill level (" + last[1].ToString("P0") + ")";
-                    double ratio = 1.0;
+                    double blockRatio = 1.0;
                     if (first != null)
                     {
-                        ratio = last[2] / first[2];
-                        probeText = "probe " + first[2].ToString("F1") + " ms at op " + first[0] + " (fill " + first[1].ToString("P0") + ") and " + last[2].ToString("F1")
-                            + " ms at op " + last[0] + " (fill " + last[1].ToString("P0") + "), ratio " + ratio.ToString("F2");
+                        // The time is for information only: it moves with whatever else the machine is doing. The block count decides.
+                        double timeRatio = last[2] / first[2];
+                        blockRatio = last[3] / first[3];
+                        probeText = "probe at op " + first[0] + " (fill " + first[1].ToString("P0") + "): " + first[3] + " blocks (" + first[4] + " read, " + first[5]
+                            + " written, " + (first[3] * Sector) + " bytes), " + first[2].ToString("F1") + " ms; at op " + last[0] + " (fill " + last[1].ToString("P0") + "): "
+                            + last[3] + " blocks (" + last[4] + " read, " + last[5] + " written, " + (last[3] * Sector) + " bytes), " + last[2].ToString("F1")
+                            + " ms; block ratio " + blockRatio.ToString("F3") + ", time ratio " + timeRatio.ToString("F2") + " (time not checked)";
+                    }
+
+                    string allProbes = string.Empty;
+                    for (int i = 0; i < samples.Count; i++)
+                    {
+                        allProbes += " " + samples[i][0] + ":" + samples[i][1].ToString("P0") + ":" + samples[i][3];
                     }
 
                     TestContext.Out.WriteLine(_v.Name + ": " + _ops + " operations in " + total.ElapsedMilliseconds + " ms (" + (total.ElapsedMilliseconds / (double)_ops).ToString("F2")
@@ -1525,11 +1591,12 @@ namespace RetroIO.Storage.Local.Tests
                         + " ms, listing " + _tList.ElapsedMilliseconds + " ms, read back " + _tRead.ElapsedMilliseconds + " ms, file against driver " + _tBlocks.ElapsedMilliseconds + " ms); " + probeText
                         + "; managed memory without the model " + (memoryAtMark / 1024) + " KB at op " + markMemory + " and " + (memoryEnd / 1024) + " KB at the end (samples "
                         + string.Join(" ", memorySamples.ConvertAll(m => (m / 1024).ToString())) + " KB); most extents of a file " + _maxExtentsSeen
-                        + ", files over four extents at once " + _filesOverFour);
+                        + ", files over four extents at once " + _filesOverFour + "; probe blocks per pass (op:fill:blocks)" + allProbes);
 
                     if (first != null)
                     {
-                        Assert.That(ratio, Is.LessThan(MaxProbeRatio), "the probe got " + ratio.ToString("F2") + " times slower between op " + first[0] + " and the end at about the same fill level (" + Where() + ")");
+                        Assert.That(blockRatio, Is.LessThanOrEqualTo(MaxProbeBlockRatio), "the probe read and wrote " + blockRatio.ToString("F3")
+                            + " times as many blocks at the end as at op " + first[0] + " at about the same fill level: " + probeText + " (" + Where() + ")");
                     }
                     else
                     {
@@ -1597,8 +1664,15 @@ namespace RetroIO.Storage.Local.Tests
                 }
             }
 
-            // Measured ratios between the last and an earlier probe at the same fill level: 0.62 to 1.50 over the 17 variants; 3.0 is twice the worst.
-            private const double MaxProbeRatio = 3.0;
+            // Most times as many blocks the last probe may read and write as the earlier probe at about the same fill level. The count is what
+            // the file system asked the block device for, so it is the same on every machine and every run: it only changes when the code does.
+            // It may still differ a little between the two probes, because the disk is not laid out the same at the two points. Measured
+            // 2026-10-21 over the 17 variants: ratios 0.969 to 1.025 (DragonDOS 630 or 650 blocks per pass, the 20 more being writes; DECB 385
+            // to 405, the difference being reads; OS-9 525 in every probe). Which sectors make up those small differences was not traced.
+            // Work that grows with the number of operations made fails at once: with one extra directory read per earlier write added to
+            // DragonDosFileSystem.ReadFile, 10 of the 11 DragonDOS variants came out at 1.43 to 3.17 (the wall-clock ratio of the same runs was
+            // 0.77 to 1.80 and would have passed the old limit of 3.0). This is the same factor the DECB and OS-9 stress tests use.
+            private const double MaxProbeBlockRatio = StressChecks.BlockFactor;
 
             private void FillTheDisk()
             {
