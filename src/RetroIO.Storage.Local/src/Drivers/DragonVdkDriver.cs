@@ -23,7 +23,7 @@ namespace RetroIO.Storage.Local.Drivers
     public sealed class DragonVdkDriver : IFileSystemDriver
     {
         private GenericBlockDevice? _blockDevice;
-        private DragonDosFileSystem? _filesystem;
+        private IBlockFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
 
         /// <summary>
@@ -156,8 +156,17 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice = new GenericBlockDevice(_descriptor);
             _blockDevice.Mount(dataStream, readOnly);
 
-            // 6. Mount DragonDOS filesystem
-            _filesystem = new DragonDosFileSystem();
+            // 6. Mount the file system: an OS-9 volume has a strict signature in sector 0, so it is tried first, then DragonDOS.
+            Os9RbfFileSystem os9 = new Os9RbfFileSystem();
+            if (os9.CanHandle(_blockDevice))
+            {
+                _filesystem = os9;
+            }
+            else
+            {
+                _filesystem = new DragonDosFileSystem();
+            }
+
             _filesystem.Initialize(_blockDevice);
         }
 

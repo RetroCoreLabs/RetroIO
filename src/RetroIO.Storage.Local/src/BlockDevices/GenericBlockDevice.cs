@@ -163,6 +163,7 @@ namespace RetroIO.Storage.Local.BlockDevices
                 BlockSize = BlockSize,
                 TrackCount = (byte)(_descriptor.TotalTracks > 0 ? _descriptor.TotalTracks : _descriptor.Cylinders),
                 CylinderCount = (ushort)_descriptor.Cylinders,
+                HeadCount = (byte)_descriptor.Heads,
                 SectorsPerTrack = (byte)(_descriptor.UniformSectorsPerTrack > 0
                     ? _descriptor.UniformSectorsPerTrack
                     : GetMaxSectorsPerTrack()),
