@@ -83,7 +83,7 @@ namespace RetroIO.Storage.Local.FileSystems
             BlockDeviceInfo? info = device.GetBlockDeviceInfo();
             if (info != null && info.SectorsPerTrack > 0)
             {
-                _sectorsPerTrack = info.SectorsPerTrack;
+                _sectorsPerTrack = LogicalSectorsPerTrack(info);
                 _doubleSided = (_sectorsPerTrack == 36);
             }
             else
@@ -110,7 +110,7 @@ namespace RetroIO.Storage.Local.FileSystems
             if (!TryReadGeometry(bamSector1, out int bamTracks, out int bamSectorsPerTrack))
             {
                 // This may not be a DragonDOS disk, try to use VDK header geometry instead
-                _sectorsPerTrack = info != null && info.SectorsPerTrack > 0 ? info.SectorsPerTrack : 18;
+                _sectorsPerTrack = LogicalSectorsPerTrack(info);
                 _trackCount = info != null && info.CylinderCount > 0 ? info.CylinderCount : 40;
                 _doubleSided = (_sectorsPerTrack == 36);
                 _volumeLabel = "VDK DISK";
@@ -131,7 +131,7 @@ namespace RetroIO.Storage.Local.FileSystems
         /// Checks whether the device looks like a DragonDOS disk.
         /// </summary>
         /// <remarks>
-        /// Reads the BAM sector at LBA 360 (track 20, sector 1 on a single-sided disk) and checks that it gives
+        /// Reads the BAM sector at the start of track 20 (LBA 360 on a single-sided disk, 720 on a double-sided one) and checks that it gives
         /// 18 or 36 sectors per track and 40 or 80 tracks, each with a matching complement byte. The device is
         /// not changed. Any exception while reading gives <c>false</c>.
         /// </remarks>
@@ -148,8 +148,9 @@ namespace RetroIO.Storage.Local.FileSystems
                 // Try reading BAM sector and check for valid geometry
                 byte[] bamSector = new byte[SECTOR_SIZE];
 
-                // Assume single-sided for detection
-                uint lsn = 20 * 18; // Track 20, Sector 1 (SS)
+                // DragonDOS counts both sides of a cylinder as one track (36 sectors on a double sided disk), so track 20
+                // starts at 20 times the sectors of a cylinder: 360 on a single sided disk, 720 on a double sided one.
+                uint lsn = (uint)(20 * LogicalSectorsPerTrack(device.GetBlockDeviceInfo()));
                 device.ReadBlock(BlockAddress.FromLBA(lsn), bamSector);
 
                 // Both pairs must pass their complement check (see TryReadGeometry) ...
@@ -657,6 +658,18 @@ namespace RetroIO.Storage.Local.FileSystems
             }
 
             return fileData.ToArray();
+        }
+
+        // Sectors in one DragonDOS track: the sectors of a cylinder over all its heads (18, or 36 on a double sided disk).
+        // The device is asked for its head count; without device information a single sided disk of 18 sectors is assumed.
+        private static int LogicalSectorsPerTrack(BlockDeviceInfo? info)
+        {
+            if (info == null || info.SectorsPerTrack <= 0)
+            {
+                return 18;
+            }
+
+            return info.SectorsPerTrack * Math.Max(1, (int)info.HeadCount);
         }
 
         private uint CalculateLSN(int track, int side, int sector)
