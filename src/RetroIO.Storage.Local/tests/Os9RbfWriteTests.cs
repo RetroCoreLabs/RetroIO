@@ -466,7 +466,8 @@ namespace RetroIO.Storage.Local.Tests
             byte[] rootDescriptor = Sector(image, 18);
             Assert.That(U32(rootDescriptor, 9), Is.EqualTo(256), "the directory grows by one entry of 32 bytes (224 + 32)");
             Assert.That(Segments(rootDescriptor).Count, Is.EqualTo(1), "the 8 sectors it already has are enough");
-            Assert.That(new[] { rootDescriptor[3], rootDescriptor[4], rootDescriptor[5], rootDescriptor[6], rootDescriptor[7] }, Is.EqualTo(new byte[] { 126, 10, 21, 12, 34 }), "the directory was changed ");
+            byte[] rootBefore = Sector(_original, 18);
+            Assert.That(new[] { rootDescriptor[3], rootDescriptor[4], rootDescriptor[5], rootDescriptor[6], rootDescriptor[7] }, Is.EqualTo(new[] { rootBefore[3], rootBefore[4], rootBefore[5], rootBefore[6], rootBefore[7] }), "rbf.asm Create does not set the date of the directory it adds the entry to");
 
             byte[] entry = new byte[32];
             Buffer.BlockCopy(image, 19 * SectorSize + 224, entry, 0, 32);
@@ -699,16 +700,34 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         [Test]
-        public void WriteFile_OnAVolumeWithTwoSectorsPerBit_IsRefusedNotGuessed()
+        public void WriteFile_OnAVolumeWhoseSectorsPerBitIsNotAPowerOfTwo_IsRefused()
         {
+            // RBF divides by DD.BIT by shifting until its lowest set bit falls out (rbf.asm FatScan L0DDD, ClrFBits L0FE5), which only
+            // divides when DD.BIT is a power of two.
             byte[] changed = (byte[])_original.Clone();
-            changed[7] = 2;
+            changed[7] = 3;
             Unmount();
             File.WriteAllBytes(_imagePath, changed);
             Mount(false);
 
             Assert.Throws<NotSupportedException>(() => _fs!.WriteFile("/x", new byte[1]));
             Assert.Throws<NotSupportedException>(() => _fs!.CreateDirectory("/D"));
+            Assert.That(Image(), Is.EqualTo(changed));
+        }
+
+        [Test]
+        public void WriteFile_WhenTheMapMarksSectorsPastTheEndFree_IsRefused()
+        {
+            // Two sectors per bit on this disk makes the 180 byte map cover 2880 sectors, and bits 720 and up are clear. The first free cluster
+            // FatScan finds lies past the 1440 sectors of the volume. RBF would hand it out; here it is refused before anything is written.
+            byte[] changed = (byte[])_original.Clone();
+            changed[7] = 2;
+            Unmount();
+            File.WriteAllBytes(_imagePath, changed);
+            Mount(false);
+
+            Assert.Throws<InvalidDataException>(() => _fs!.WriteFile("/x", new byte[1]));
+            Assert.That(Image(), Is.EqualTo(changed));
         }
 
         // ---- many files in one directory ----
@@ -769,9 +788,12 @@ namespace RetroIO.Storage.Local.Tests
 
             byte[] freed = Sector(image, fd);
             Assert.That(U32(freed, 9), Is.EqualTo(0), "size zero");
+            Assert.That(freed[8], Is.EqualTo(0), "link count zero");
             Assert.That(Segments(freed).Count, Is.EqualTo(0), "no segments");
+            Assert.That(U24(freed, 16), Is.EqualTo(104u), "L0EFE cuts the first segment to a count of zero and leaves its sector number");
             Assert.That(U32(cmds, 9), Is.EqualTo(2336), "the directory does not shrink");
-            Assert.That(new[] { cmds[3], cmds[4], cmds[5], cmds[6], cmds[7] }, Is.EqualTo(new byte[] { 126, 10, 21, 12, 34 }), "the directory was changed");
+            byte[] cmdsBefore = Sector(image0, 85);
+            Assert.That(new[] { cmds[3], cmds[4], cmds[5], cmds[6], cmds[7] }, Is.EqualTo(new[] { cmdsBefore[3], cmdsBefore[4], cmdsBefore[5], cmdsBefore[6], cmdsBefore[7] }), "rbf.asm Delete does not set the date of the directory");
 
             Assert.That(_fs.GetBlocksFree(), Is.EqualTo(470 + 28));
             Assert.That(_fs.ListDirectory("/CMDS").Length, Is.EqualTo(70));
@@ -818,9 +840,11 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         [Test]
-        public void CreateDirectory_WhenFewerSectorsAreFreeThanTheAllocationSize_UsesOneSectorAndLeaksNothing()
+        public void CreateDirectory_WhenFewerSectorsAreFreeThanTheAllocationSize_TakesTheLongestFreeRun()
         {
-            // Leave 3 free sectors. The directory needs a descriptor (1) and would like 8; it gets 1.
+            // Leave 3 free sectors. The descriptor takes 1 (FatScan for one sector). The directory then asks for the segment allocation size, 8;
+            // no run is that long, so FatScan gives the longest run there is, the other 2 (rbf.asm FatScan L0E70 to L0E96, F$SchBit's longest run).
+            // MakDir closes no path, so nothing is given back.
             _fs!.WriteFile("/big", Pattern(466 * SectorSize, 16));
             Assert.That(_fs.GetBlocksFree(), Is.EqualTo(3));
 
@@ -830,8 +854,8 @@ namespace RetroIO.Storage.Local.Tests
             byte[] descriptor = Sector(image, RawFind(image, "/NEW"));
             List<uint[]> segments = Segments(descriptor);
             Assert.That(segments.Count, Is.EqualTo(1));
-            Assert.That(segments[0][1], Is.EqualTo(1u));
-            Assert.That(_fs.GetBlocksFree(), Is.EqualTo(1), "the failed try for 8 sectors gave its sectors back");
+            Assert.That(segments[0][1], Is.EqualTo(2u));
+            Assert.That(_fs.GetBlocksFree(), Is.EqualTo(0));
             AssertToolshedClean(5, 84);
         }
 
@@ -951,26 +975,45 @@ namespace RetroIO.Storage.Local.Tests
         // ---- Rename ----
 
         [Test]
-        public void Rename_InTheSameDirectory_ChangesOnlyTheNameField()
+        public void Rename_InTheSameDirectory_WritesTheNewNameAndTheDatesAsTheRenameCommandDoes()
         {
             byte[] image0 = Image();
             uint fd = RawFind(image0, "/startup");
             byte[] descriptorBefore = Sector(image0, fd);
+            int offset0 = RawEntryOffset(image0, "/", "startup");
+            byte[] root0 = FileBytes(image0, Sector(image0, 18));
 
             _fs!.Rename("/startup", "/boot");
 
             byte[] image = Image();
             Assert.That(RawFind(image, "/boot"), Is.EqualTo(fd));
             Assert.That(RawFind(image, "/startup"), Is.EqualTo(0u));
-            Assert.That(Sector(image, fd), Is.EqualTo(descriptorBefore), "the descriptor is not touched");
             Assert.That(MapBytes(image), Is.EqualTo(MapBytes(image0)), "the allocation map is not touched");
 
+            // rename.asm opens the file in write mode first, and I$Open in write mode sets the date last modified (rbf.asm Open1BB). The rest of
+            // the descriptor is as it was.
+            byte[] descriptor = Sector(image, fd);
+            Assert.That(new[] { descriptor[3], descriptor[4], descriptor[5], descriptor[6], descriptor[7] }, Is.EqualTo(new byte[] { 126, 10, 21, 12, 34 }));
+            for (int i = 0; i < SectorSize; i++)
+            {
+                if (i < 3 || i > 7)
+                {
+                    Assert.That(descriptor[i], Is.EqualTo(descriptorBefore[i]), "descriptor byte " + i);
+                }
+            }
+
+            // It also changes into the directory and opens it in update mode, which sets the directory's date.
+            byte[] rootDescriptor = Sector(image, 18);
+            Assert.That(new[] { rootDescriptor[3], rootDescriptor[4], rootDescriptor[5], rootDescriptor[6], rootDescriptor[7] }, Is.EqualTo(new byte[] { 126, 10, 21, 12, 34 }));
+
+            // It writes as many bytes as the new name has, bit 7 on the last; the rest of the old, longer name stays.
             int offset = RawEntryOffset(image, "/", "boot");
+            Assert.That(offset, Is.EqualTo(offset0));
             byte[] root = FileBytes(image, Sector(image, 18));
             Assert.That(root[offset + 3], Is.EqualTo((byte)(0x74 | 0x80)));
-            for (int i = 4; i < 29; i++)
+            for (int i = 4; i < 32; i++)
             {
-                Assert.That(root[offset + i], Is.EqualTo(0), "no byte of the old, longer name is left at " + i);
+                Assert.That(root[offset + i], Is.EqualTo(root0[offset + i]), "byte " + i + " of the entry is as it was");
             }
 
             Assert.That(ToolshedCopyOut("/boot"), Is.EqualTo(_fs.ReadFile("/boot")));
