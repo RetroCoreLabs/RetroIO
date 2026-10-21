@@ -135,6 +135,12 @@ namespace RetroIO.Storage.Local.Drivers
                 if (headerSize >= 4) firstSectorId = header[3];
                 if (headerSize >= 5) attributeFlag = header[4];
             }
+            else if (TryReadOs9Geometry(imageStream, fileSize, out byte os9SectorsPerTrack, out byte os9Sides))
+            {
+                // A headerless image that holds an OS-9 volume: the identification sector says how the disk is laid out.
+                sectorsPerTrack = os9SectorsPerTrack;
+                sides = os9Sides;
+            }
 
             // Calculate sector size from code: 128 << code
             int sectorSize = 128 << sectorSizeCode;
@@ -184,7 +190,16 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice = new GenericBlockDevice(_descriptor);
             _blockDevice.Mount(dataStream, readOnly);
 
-            // Try DragonDOS first, then fall back to DECB for 35-track disks
+            // An OS-9 volume has a strict signature in sector 0, so it is tried first. Then DragonDOS, with DECB
+            // tried before it for 35-track disks.
+            Os9RbfFileSystem os9 = new Os9RbfFileSystem();
+            if (os9.CanHandle(_blockDevice))
+            {
+                _filesystem = os9;
+                _filesystem.Initialize(_blockDevice);
+                return;
+            }
+
             _filesystem = new DragonDosFileSystem();
 
             if (_blockDevice.GetBlockDeviceInfo()?.CylinderCount == 35)
@@ -207,6 +222,67 @@ namespace RetroIO.Storage.Local.Drivers
                 // Not 35-track, use DragonDOS
                 _filesystem.Initialize(_blockDevice);
             }
+        }
+
+        /// <summary>
+        /// Reads sector 0 of a headerless image and, when it is the identification sector of an OS-9 volume, gives the geometry it describes.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The image, positioned anywhere.
+        /// </param>
+        /// <param name="fileSize">
+        /// The size of the image in bytes.
+        /// </param>
+        /// <param name="sectorsPerTrack">
+        /// Receives the sectors per track (the track size in sectors at byte 3).
+        /// </param>
+        /// <param name="sides">
+        /// Receives 2 when bit 0 of the disk format byte (byte 16) is set, otherwise 1.
+        /// </param>
+        /// <returns>
+        /// True when the sector fits an OS-9 disk of exactly this image: the track size equals the sectors per track field, the declared
+        /// size is not larger than the image, and the image is a whole number of tracks on this many sides. Otherwise false.
+        /// </returns>
+        /// <remarks>
+        /// Field offsets are from the RBF identification sector layout: total sectors (3 bytes at 0), track size (1 at 3), disk format (1 at 16),
+        /// sectors per track (2 at 17). Nothing is read from a header because a headerless image has none.
+        /// </remarks>
+        private static bool TryReadOs9Geometry(Stream imageStream, long fileSize, out byte sectorsPerTrack, out byte sides)
+        {
+            sectorsPerTrack = 0;
+            sides = 0;
+
+            if (fileSize < 256)
+            {
+                return false;
+            }
+
+            byte[] id = new byte[256];
+            imageStream.Position = 0;
+            int read = imageStream.Read(id, 0, id.Length);
+            if (read < id.Length)
+            {
+                return false;
+            }
+
+            long total = (id[0] << 16) | (id[1] << 8) | id[2];
+            int trackSize = id[3];
+            int declaredSectorsPerTrack = (id[17] << 8) | id[18];
+            int sidesFromFormat = (id[16] & 1) + 1;
+
+            if (total == 0 || trackSize == 0 || trackSize != declaredSectorsPerTrack)
+            {
+                return false;
+            }
+
+            if (total * 256 > fileSize || fileSize % (trackSize * 256L * sidesFromFormat) != 0)
+            {
+                return false;
+            }
+
+            sectorsPerTrack = (byte)trackSize;
+            sides = (byte)sidesFromFormat;
+            return true;
         }
 
         private BlockDeviceDescriptor DetectDescriptor(int tracks, byte sides)
