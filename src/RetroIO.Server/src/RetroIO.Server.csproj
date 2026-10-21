@@ -13,7 +13,7 @@
     <PackageId>RetroIO.Server</PackageId>
     <AssemblyName>RetroIO.Server</AssemblyName>
     <RootNamespace>RetroIO.Server</RootNamespace>
-    <Description>ASP.NET Core composition of the RetroServer daemon: AddRetroServer wires identity, security, storage, TNFS, Econet and the management API.</Description>
+    <Description>ASP.NET Core composition of the RetroServer daemon: AddRetroServer wires identity, security, storage, TNFS, Econet, DriveWire and the management API.</Description>
     <PackageTags>retroio;retrofs;retrofs.server</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <LangVersion>latest</LangVersion>
@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\RetroIO.Server.Hosting\src\RetroIO.Server.Hosting.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Tnfs\src\RetroIO.Protocols.Tnfs.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Econet\src\RetroIO.Protocols.Econet.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.DriveWire\src\RetroIO.Protocols.DriveWire.csproj" />
     <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
   </ItemGroup>
 

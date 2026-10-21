@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RetroIO.Management.Api;
+using RetroIO.Protocols.DriveWire.Server;
 using RetroIO.Protocols.Econet.Server;
 using RetroIO.Protocols.Tnfs.Server;
 using RetroIO.Server.Hosting;
@@ -39,8 +40,8 @@ public static class RetroServerComposition
     /// Service collection to add to.
     /// </param>
     /// <param name="configuration">
-    /// Host configuration. Command-line and appsettings keys under <c>Tnfs:</c> and <c>Econet:</c>
-    /// override the saved protocol configuration files.
+    /// Host configuration. Command-line and appsettings keys under <c>Tnfs:</c>, <c>Econet:</c> and
+    /// <c>DriveWire:</c> override the saved protocol configuration files.
     /// </param>
     /// <param name="loggingBuilder">
     /// Host logging builder, so the management API can attach its in-memory log buffer and the
@@ -112,6 +113,34 @@ public static class RetroServerComposition
             if (opts.PrintBanners)
             {
                 ServerHostingBanners.PrintEconetConfiguration(econetConfig);
+            }
+        }
+
+        if (opts.EnableDriveWire)
+        {
+            DriveWireServerConfiguration driveWireConfig =
+                ProtocolConfigurationLoader.LoadDriveWireConfiguration(retroFsPath, configuration);
+
+            if (driveWireConfig.Enabled)
+            {
+                services.AddDriveWireServer(o =>
+                {
+                    o.Port = driveWireConfig.Port;
+                    o.BindAddress = driveWireConfig.BindAddress;
+                    o.TransactionTimeoutMilliseconds = driveWireConfig.TransactionTimeoutMilliseconds;
+                    o.NamedObjectDirectory = driveWireConfig.NamedObjectDirectory;
+                    o.PrintDirectory = driveWireConfig.PrintDirectory;
+                    for (int i = 0; i < driveWireConfig.Drives.Count; i++)
+                    {
+                        DriveWireDriveConfiguration drive = driveWireConfig.Drives[i];
+                        o.Drives.Add(new DriveWireDriveOptions { Drive = drive.Drive, Path = drive.Path, ReadOnly = drive.ReadOnly });
+                    }
+                });
+
+                if (opts.PrintBanners)
+                {
+                    ServerHostingBanners.PrintDriveWireConfiguration(driveWireConfig);
+                }
             }
         }
 

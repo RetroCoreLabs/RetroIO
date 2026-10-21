@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     A LIBRARY, not an executable. It carries the management API (controllers, SignalR hub,
@@ -55,6 +55,7 @@
     <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Tnfs\src\RetroIO.Protocols.Tnfs.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Econet\src\RetroIO.Protocols.Econet.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.DriveWire\src\RetroIO.Protocols.DriveWire.csproj" />
     <ProjectReference Include="..\..\RetroIO.Server.Hosting\src\RetroIO.Server.Hosting.csproj" />
     <ProjectReference Include="..\..\RetroIO.Identity\src\RetroIO.Identity.csproj" />
     <ProjectReference Include="..\..\RetroIO.Security.Firewall\src\RetroIO.Security.Firewall.csproj" />

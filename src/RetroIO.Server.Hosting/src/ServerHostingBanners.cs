@@ -118,4 +118,32 @@ public static class ServerHostingBanners
         ConsoleBox.Bottom();
         Console.WriteLine();
     }
+
+    /// <summary>
+    /// Prints the DriveWire server settings and drives in a box.
+    /// </summary>
+    /// <param name="config">
+    /// The settings to print.
+    /// </param>
+    public static void PrintDriveWireConfiguration(DriveWireServerConfiguration config)
+    {
+        ConsoleBox.Top();
+        ConsoleBox.Title("DRIVEWIRE SERVER CONFIGURATION");
+        ConsoleBox.Divider();
+        ConsoleBox.LabelValue("  Listen:          ", $"{config.BindAddress}:{config.Port}");
+        ConsoleBox.LabelValue("  Byte Timeout:    ", $"{config.TransactionTimeoutMilliseconds} ms");
+        if (config.Drives.Count == 0)
+        {
+            ConsoleBox.LabelValue("  Drives:          ", "none");
+        }
+
+        for (int i = 0; i < config.Drives.Count; i++)
+        {
+            DriveWireDriveConfiguration drive = config.Drives[i];
+            ConsoleBox.LabelValue($"  Drive {drive.Drive,-3}       ", drive.ReadOnly ? drive.Path + " (read-only)" : drive.Path);
+        }
+
+        ConsoleBox.Bottom();
+        Console.WriteLine();
+    }
 }

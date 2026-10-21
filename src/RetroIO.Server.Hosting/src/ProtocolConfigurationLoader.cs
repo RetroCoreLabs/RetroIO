@@ -115,6 +115,94 @@ public static class ProtocolConfigurationLoader
         return config;
     }
 
+    /// <summary>
+    /// Loads the DriveWire settings from drivewire-config.json, applies overrides from the application configuration, and writes the file only when it did not exist.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When the file is missing or cannot be read, the defaults are used. The file is written only when it was missing (with the overrides included). An existing file is never overwritten.
+    /// </para>
+    /// <para>
+    /// The keys DriveWire:Enabled, DriveWire:Port, DriveWire:BindAddress and DriveWire:TransactionTimeoutMilliseconds override the loaded values. A drive is set with DriveWire:Drives:N:Path and DriveWire:Drives:N:ReadOnly, where N is the drive number; it replaces any drive with that number from the file.
+    /// </para>
+    /// </remarks>
+    /// <param name="retroFsPath">
+    /// The folder that holds the JSON file.
+    /// </param>
+    /// <param name="configuration">
+    /// The application configuration with the optional overrides.
+    /// </param>
+    /// <returns>
+    /// The DriveWire settings.
+    /// </returns>
+    public static DriveWireServerConfiguration LoadDriveWireConfiguration(string retroFsPath, IConfiguration configuration)
+    {
+        string configPath = Path.Combine(retroFsPath, "drivewire-config.json");
+        bool existed = File.Exists(configPath);
+        DriveWireServerConfiguration config;
+
+        if (existed)
+        {
+            try
+            {
+                string json = File.ReadAllText(configPath);
+                config = JsonSerializer.Deserialize<DriveWireServerConfiguration>(json) ?? DriveWireServerConfiguration.GetDefault();
+            }
+            catch (Exception ex) when (ex is IOException || ex is JsonException || ex is UnauthorizedAccessException)
+            {
+                Console.WriteLine($"Failed to load DriveWire configuration: {ex.Message}");
+                Console.WriteLine("Using default configuration...");
+                config = DriveWireServerConfiguration.GetDefault();
+            }
+        }
+        else
+        {
+            config = DriveWireServerConfiguration.GetDefault();
+        }
+
+        ApplyDriveWireOverrides(configuration, config);
+        if (!existed)
+        {
+            SaveConfiguration(configPath, config, "DriveWire");
+        }
+
+        return config;
+    }
+
+    private static void ApplyDriveWireOverrides(IConfiguration configuration, DriveWireServerConfiguration config)
+    {
+        string? enabled = configuration["DriveWire:Enabled"];
+        if (!string.IsNullOrEmpty(enabled) && bool.TryParse(enabled, out bool isEnabled))
+            config.Enabled = isEnabled;
+
+        string? port = configuration["DriveWire:Port"];
+        if (!string.IsNullOrEmpty(port) && int.TryParse(port, out int portNumber))
+            config.Port = portNumber;
+
+        string? bindAddress = configuration["DriveWire:BindAddress"];
+        if (!string.IsNullOrEmpty(bindAddress))
+            config.BindAddress = bindAddress;
+
+        string? timeout = configuration["DriveWire:TransactionTimeoutMilliseconds"];
+        if (!string.IsNullOrEmpty(timeout) && int.TryParse(timeout, out int timeoutMs))
+            config.TransactionTimeoutMilliseconds = timeoutMs;
+
+        // DriveWire:Drives:<drive number>:Path and :ReadOnly. The section children are read with an enumerator, as the
+        // configuration API offers no indexed access.
+        using IEnumerator<IConfigurationSection> drives = configuration.GetSection("DriveWire:Drives").GetChildren().GetEnumerator();
+        while (drives.MoveNext())
+        {
+            IConfigurationSection section = drives.Current;
+            string? path = section["Path"];
+            if (string.IsNullOrEmpty(path) || !int.TryParse(section.Key, out int drive))
+                continue;
+
+            bool readOnly = bool.TryParse(section["ReadOnly"], out bool ro) && ro;
+            config.Drives.RemoveAll(d => d.Drive == drive);
+            config.Drives.Add(new DriveWireDriveConfiguration { Drive = drive, Path = path, ReadOnly = readOnly });
+        }
+    }
+
     private static void ApplyTnfsOverrides(IConfiguration configuration, TnfsServerConfiguration config)
     {
         string? rootDirOverride = configuration["Tnfs:RootDirectory"];
