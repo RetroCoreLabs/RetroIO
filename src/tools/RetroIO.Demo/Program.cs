@@ -43,6 +43,7 @@ namespace RetroIO.Demo
             factory.Register(new PcFloppyDriverProvider());       // Handles PC floppies (360K-2.88M, FAT12)
             factory.Register(new DragonVdkDriverProvider());      // Handles Dragon/CoCo VDK (DragonDOS)
             factory.Register(new DragonDskDriverProvider());      // Handles Dragon/CoCo DSK/JVC (DragonDOS)
+            factory.Register(new DragonDmkDriverProvider());      // Handles Dragon/CoCo DMK (DragonDOS, DECB, OS-9)
             factory.Register(new NdfsDriverProvider());           // Handles NDFS (Nord Disk File System)
             factory.Register(new V7DriverProvider());             // Handles UNIX V7 filesystem (1979)
             factory.Register(new FfsDriverProvider());            // Handles Berkeley Fast File System (FFS/UFS)

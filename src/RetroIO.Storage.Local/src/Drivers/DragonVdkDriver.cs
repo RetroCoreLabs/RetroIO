@@ -18,8 +18,32 @@ namespace RetroIO.Storage.Local.Drivers
     /// <summary>
     /// Driver for Dragon 32/64 VDK disk images with DragonDOS filesystem.
     /// Supports 40/80 tracks, single/double-sided formats.
-    /// Thin wrapper that composes GenericBlockDevice + DragonDosFileSystem.
+    /// Thin wrapper that composes GenericBlockDevice + an OS-9 or DragonDOS file system.
     /// </summary>
+    /// <remarks>
+    /// <para><b>The VDK format</b></para>
+    /// VDK is the disk image format of the PC-Dragon emulator. A header is followed by the raw sectors, with no gaps, marks or CRCs. The
+    /// description below is the header layout as documented in the XRoar emulator from the PC-Dragon source, and it matches the real images
+    /// in the test folder (6809TUT1.VDK and 6809EXPR.VDK with a 12 byte header, HTCHHKER.VDK and PLANETFALL.VDK with a 256 byte header).
+    /// <para><b>Header</b></para>
+    ///  - Bytes 0 and 1: the signature dk.
+    ///  - Bytes 2 and 3: the length of the whole header, low byte first. 12 or more. The sectors start at this offset.
+    ///  - Byte 4: the VDK version. Byte 5: the oldest version that can read the file (the real images have 10H in both).
+    ///  - Byte 6: who made the file, P for PC-Dragon or X for XRoar (the 256 byte header images say X). Byte 7: that program's version.
+    ///  - Byte 8: the number of cylinders. Byte 9: the number of heads (sides).
+    ///  - Byte 10: flags. Bit 0 set means write protected.
+    ///  - Byte 11: bits 0 to 2 are the compression flags, which must be zero because compressed images are not supported, and bits 3 to 7 are
+    ///    the length of the disk name that may follow.
+    ///  - After byte 11 comes the disk name (up to 31 bytes) and padding up to the header length. This reader skips them.
+    /// <para><b>Sectors</b></para>
+    /// The data is 256-byte sectors, always 18 per track, in the order cylinder, then head, then sector 1 to 18. That is the order of the
+    /// logical sector numbers of both DragonDOS (which counts a two sided cylinder as one track of 36 sectors) and OS-9. The file is the header
+    /// plus cylinders x heads x 18 x 256 bytes.
+    /// <para><b>What this driver does with it</b></para>
+    /// It reads the geometry from bytes 8 and 9 and the header length from bytes 2 and 3, mounts the sectors after the header, and picks the
+    /// file system from the contents of the disk: OS-9 first (it has a strict signature in sector 0), otherwise DragonDOS. The DSK and JVC format
+    /// is described in <see cref="DragonDskDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
+    /// </remarks>
     public sealed class DragonVdkDriver : IFileSystemDriver
     {
         private GenericBlockDevice? _blockDevice;

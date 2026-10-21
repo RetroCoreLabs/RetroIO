@@ -17,8 +17,33 @@ namespace RetroIO.Storage.Local.Drivers
     /// <summary>
     /// Driver for Dragon 32/64 DSK/JVC disk images with DragonDOS filesystem.
     /// Supports optional 0-255 byte header with geometry detection.
-    /// Thin wrapper that composes GenericBlockDevice + DragonDosFileSystem.
+    /// Thin wrapper that composes GenericBlockDevice + an OS-9, DECB or DragonDOS file system.
     /// </summary>
+    /// <remarks>
+    /// <para><b>The DSK and JVC format</b></para>
+    /// A DSK or JVC image is the raw sectors of the disk, optionally behind a short header that gives the geometry. The format is the one used
+    /// by the Color Computer emulators and read by XRoar; the layout below is what the common emulators do, checked here on the headerless images
+    /// WALKABOU.DSK, syzygy.dsk and NITR09.DSK. No real image with a JVC header is in the test folder, so the header fields are as documented by XRoar and have no
+    /// real-image proof here.
+    /// <para><b>Header</b></para>
+    /// The header is as long as the remainder of the file size divided by 256 (XRoar uses the remainder by 128, so that 128-byte sectors and
+    /// sector attribute bytes do not confuse it; this driver accepts 256-byte sectors only). A header holds up to five bytes, and a missing byte takes its default:
+    ///  - Byte 0: sectors per track. Default 18.
+    ///  - Byte 1: sides. Default 1.
+    ///  - Byte 2: sector size code, the size is 128 shifted left by the code. Default 1, which is 256 bytes.
+    ///  - Byte 3: the number of the first sector on a track. Default 1.
+    ///  - Byte 4: the sector attribute flag, which adds a byte in front of every sector. Default 0. This driver does not support it.
+    /// <para><b>Sectors</b></para>
+    /// The sectors follow in the order cylinder, then side, then sector. The number of tracks is the data size divided by sectors per track,
+    /// sides and sector size.
+    /// <para><b>Images without a header</b></para>
+    /// A headerless image is taken as 18 sectors per track and one side, which cannot tell a 40 track two sided disk from an 80 track one sided disk of
+    /// the same size. For an OS-9 disk the identification sector settles it: track size in sectors (byte 3), sectors per track (bytes 17 and 18)
+    /// and bit 0 of the disk format byte (byte 16, set for two sides), and the declared total sectors (bytes 0 to 2) may not exceed the file.
+    /// <para><b>What this driver does with it</b></para>
+    /// It mounts the sectors and picks the file system from the contents of the disk: OS-9 first (strict signature in sector 0), then DECB for a
+    /// 35 track disk, then DragonDOS. The VDK format is described in <see cref="DragonVdkDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
+    /// </remarks>
     public sealed class DragonDskDriver : IFileSystemDriver
     {
         private GenericBlockDevice? _blockDevice;
