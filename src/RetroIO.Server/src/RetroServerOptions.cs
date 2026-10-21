@@ -28,6 +28,14 @@ public sealed class RetroServerOptions
     public bool EnableEconet { get; set; } = true;
 
     /// <summary>
+    /// Serve DriveWire over TCP for emulated Color Computers and Dragons. Default true.
+    /// </summary>
+    /// <remarks>
+    /// The server also has its own switch, Enabled in drivewire-config.json (or DriveWire:Enabled); both must be on.
+    /// </remarks>
+    public bool EnableDriveWire { get; set; } = true;
+
+    /// <summary>
     /// Serve the management API and its SignalR hub. Default true.
     /// </summary>
     public bool EnableManagementApi { get; set; } = true;

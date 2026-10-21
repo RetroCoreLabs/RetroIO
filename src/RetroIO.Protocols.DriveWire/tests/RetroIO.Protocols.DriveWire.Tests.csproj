@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Protocols.DriveWire.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.DriveWire.Tests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Description>Tests for RetroIO.Protocols.DriveWire: every operation as byte frames from the specification, and a client over TCP against real NitrOS-9 DriveWire images.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Local\src\RetroIO.Storage.Local.csproj" />
+    <ProjectReference Include="..\src\RetroIO.Protocols.DriveWire.csproj" />
+  </ItemGroup>
+
+</Project>

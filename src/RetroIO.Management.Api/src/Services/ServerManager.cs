@@ -8,6 +8,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RetroIO.Management.Contracts;
+using RetroIO.Protocols.DriveWire.Server;
 using RetroIO.Protocols.Econet.Server;
 using RetroIO.Protocols.Tnfs.Server;
 
@@ -71,7 +72,7 @@ public class ServerManager : IServerManager
     /// Finds the protocol background services, once.
     /// </summary>
     /// <returns>
-    /// The TNFS and Econet services hosted in this process. Empty when the API is hosted on its
+    /// The TNFS, Econet and DriveWire services hosted in this process. Empty when the API is hosted on its
     /// own, in which case start and stop have nothing to drive and say so.
     /// </returns>
     /// <remarks>
@@ -90,7 +91,7 @@ public class ServerManager : IServerManager
 
         foreach (IHostedService service in _services.GetServices<IHostedService>())
         {
-            if (service is TnfsServerService || service is EconetFileServerService)
+            if (service is TnfsServerService || service is EconetFileServerService || service is DriveWireServerService)
             {
                 found.Add((BackgroundService)service);
             }
@@ -131,7 +132,7 @@ public class ServerManager : IServerManager
     }
 
     /// <summary>
-    /// Starts the TNFS and Econet protocol services hosted in this process.
+    /// Starts the TNFS, Econet and DriveWire protocol services hosted in this process.
     /// </summary>
     /// <remarks>
     /// Only one start or stop runs at a time. An exception from a service is logged and turned
@@ -183,7 +184,7 @@ public class ServerManager : IServerManager
     }
 
     /// <summary>
-    /// Stops the TNFS and Econet protocol services hosted in this process.
+    /// Stops the TNFS, Econet and DriveWire protocol services hosted in this process.
     /// </summary>
     /// <remarks>
     /// Only one start or stop runs at a time. The host process and the management API keep
