@@ -390,6 +390,21 @@ namespace RetroIO.Storage.Local.Drivers
             return _filesystem!.GetMetadata(path);
         }
 
+        /// <summary>
+        /// Returns the number of free blocks reported by the mounted file system.
+        /// </summary>
+        /// <returns>
+        /// The free block count.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
+        public int GetBlocksFree()
+        {
+            EnsureMounted();
+            return _filesystem!.GetBlocksFree();
+        }
+
         // ===================================================================
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
