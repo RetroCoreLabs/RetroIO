@@ -24,9 +24,20 @@ namespace RetroIO.Storage.Local.Tests
     /// <remarks>
     /// <para>
     /// Variants: four empty disks built here (CoCo 35 tracks one side, CoCo 40 tracks one side, Dragon 40 tracks two sides with the first track
-    /// reserved, CoCo 80 tracks two sides, whose allocation map needs two sectors), and a copy of the real NitrOS-9 disk NITR09.DSK. The code
-    /// cannot format a disk, so the empty disks are built byte for byte the way Toolshed <c>os9 format</c> lays them out (dumped from images it
-    /// made on 2026-10-21), and Toolshed <c>os9 dcheck</c> checks each one before the run starts.
+    /// reserved, CoCo 80 tracks two sides, whose allocation map needs two sectors), a copy of the real NitrOS-9 disk NITR09.DSK, and copies of
+    /// disks in the os9 test-image folder (see <c>Os9RbfRealDiskTests</c>): the NitrOS-9 Level 1 disk for the CoCo, 80 tracks; the Dragon 64
+    /// disk, 80 tracks, with 2 sectors per map bit; the UUCPbb 2.1 package, 10000 sectors with 5 map sectors; and two empty volumes made by
+    /// Toolshed os9 format, 40000 sectors with 20 map sectors, and 20000 sectors with 4 sectors per map bit. The code cannot format a disk, so
+    /// the empty disks are built byte for byte the way Toolshed <c>os9 format</c> lays them out (dumped from images it made on 2026-10-21), and
+    /// Toolshed <c>os9 dcheck</c> checks each one before the run starts.
+    /// </para>
+    /// <para>
+    /// Where the outcome of a call depends on the allocation map, the model works it out from the rules of rbf.asm: a new file takes one cluster
+    /// for its descriptor, a directory that must grow takes the segment allocation size or, when no free run is that long, the longest free run
+    /// (FatScan), and a file's data ends up in whole clusters counted with the descriptor's cluster (Create and L0EFE). On a disk with more than
+    /// one whole map sector FatScan starts where it last allocated, which the model does not follow; there the model takes every possible start
+    /// and accepts both outcomes when they differ. A file on a real disk whose segment crosses an allocation map sector cannot be released
+    /// (RBF clears bits in one map sector only); the model keeps it and expects every delete or overwrite of it to be refused unchanged.
     /// </para>
     /// <para>
     /// After every call the whole image is read back through the block device and walked from the root without the code under test: every
@@ -64,6 +75,11 @@ namespace RetroIO.Storage.Local.Tests
             yield return new TestCaseData("Dragon40DS").SetName("Os9_Dragon40TrackTwoSides_500RandomCalls");
             yield return new TestCaseData("CoCo80DS").SetName("Os9_CoCo80TrackTwoSides_500RandomCalls");
             yield return new TestCaseData("NITR09").SetName("Os9_RealNitros9Disk_500RandomCalls");
+            yield return new TestCaseData("CoCo1L1_80D").SetName("Os9_RealNitros9CoCoLevel1_80Track_500RandomCalls");
+            yield return new TestCaseData("D64_80D").SetName("Os9_RealNitros9Dragon64_TwoSectorClusters_500RandomCalls");
+            yield return new TestCaseData("UUCPBB").SetName("Os9_RealUucpPackage_FiveMapSectors_500RandomCalls");
+            yield return new TestCaseData("HD40000").SetName("Os9_ToolshedHardDisk40000_TwentyMapSectors_500RandomCalls");
+            yield return new TestCaseData("HD20000C4").SetName("Os9_ToolshedHardDisk20000_FourSectorClusters_500RandomCalls");
         }
 
         /// <summary>
@@ -79,6 +95,11 @@ namespace RetroIO.Storage.Local.Tests
             yield return new TestCaseData("Dragon40DS").SetName("Os9_Dragon40TrackTwoSides_5000RandomCalls");
             yield return new TestCaseData("CoCo80DS").SetName("Os9_CoCo80TrackTwoSides_5000RandomCalls");
             yield return new TestCaseData("NITR09").SetName("Os9_RealNitros9Disk_5000RandomCalls");
+            yield return new TestCaseData("CoCo1L1_80D").SetName("Os9_RealNitros9CoCoLevel1_80Track_5000RandomCalls");
+            yield return new TestCaseData("D64_80D").SetName("Os9_RealNitros9Dragon64_TwoSectorClusters_5000RandomCalls");
+            yield return new TestCaseData("UUCPBB").SetName("Os9_RealUucpPackage_FiveMapSectors_5000RandomCalls");
+            yield return new TestCaseData("HD40000").SetName("Os9_ToolshedHardDisk40000_TwentyMapSectors_5000RandomCalls");
+            yield return new TestCaseData("HD20000C4").SetName("Os9_ToolshedHardDisk20000_FourSectorClusters_5000RandomCalls");
         }
 
         [TestCaseSource(nameof(Variants))]
@@ -133,6 +154,10 @@ namespace RetroIO.Storage.Local.Tests
             public int CapacitySectors;
             public uint Fd;
             public int LinkCount = 1;
+
+            // A file from the disk with a segment that crosses an allocation map sector: RBF cannot release it, so every delete or overwrite
+            // of it must be refused.
+            public bool Pinned;
         }
 
         // Stand-ins in a directory's slot list for the entries named one dot (the directory itself) and two dots (its parent).
@@ -163,8 +188,22 @@ namespace RetroIO.Storage.Local.Tests
         private int _mapBytes;
         private int _mapSectors;
         private int _sas;
+
+        // Sectors per allocation map bit (a cluster), its log2, the number of clusters, and the whole map sectors (DD.MAP high byte).
+        private int _bit = 1;
+        private int _shift;
+        private int _clusters;
+        private int _mapHigh;
+
+        // Reserved sectors (as they were counted before clusters), and reserved clusters: marked used on the disk before the run but holding
+        // no sector of a file or directory.
         private bool[] _reserved = Array.Empty<bool>();
         private int _reservedCount;
+        private bool[] _reservedCluster = Array.Empty<bool>();
+        private int _reservedClusters;
+        private long _toolshedUnreferenced = -1;
+        private int _pinnedRefusals;
+        private int _maybeCalls;
         private int _emptyFree;
         private int _free;
         private int _call;
@@ -352,6 +391,36 @@ namespace RetroIO.Storage.Local.Tests
                 return;
             }
 
+            string? realName = RealImageName(_variant);
+            if (realName != null)
+            {
+                string? fromEnvironment = Environment.GetEnvironmentVariable("RETROIO_DRAGON_TEST_IMAGES");
+                string root = !string.IsNullOrEmpty(fromEnvironment)
+                    ? fromEnvironment
+                    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive", "Documents", "RetroFS", "test-images");
+                string source = Path.Combine(root, "os9", realName);
+                if (!File.Exists(source))
+                {
+                    Assert.Ignore("Test image not found: os9/" + realName);
+                }
+
+                File.Copy(source, _imagePath);
+                long sectors = new FileInfo(_imagePath).Length / SectorSize;
+                _descriptor = new BlockDeviceDescriptor
+                {
+                    Name = "OS-9 " + _variant,
+                    BlockSize = SectorSize,
+                    AddressMode = BlockAddressMode.LBA,
+                    Cylinders = (int)sectors,
+                    Heads = 1,
+                    UniformSectorsPerTrack = 1,
+                    TotalBlocks = (uint)sectors,
+                    ExpectedImageSize = sectors * SectorSize,
+                    SupportsVariableGeometry = false
+                };
+                return;
+            }
+
             int cylinders;
             int heads;
             bool dragon = false;
@@ -392,6 +461,26 @@ namespace RetroIO.Storage.Local.Tests
                 ExpectedImageSize = cylinders * heads * SectorsPerTrack * SectorSize,
                 SupportsVariableGeometry = false
             };
+        }
+
+        // The file in the os9 test-image folder for a variant that runs on a real disk, or null for the other variants.
+        private static string? RealImageName(string variant)
+        {
+            switch (variant)
+            {
+                case "CoCo1L1_80D":
+                    return "NOS9_6809_L1_v030300_coco1_80d.dsk";
+                case "D64_80D":
+                    return "NOS9_6809_L1_v030300_d64_80d.dsk";
+                case "UUCPBB":
+                    return "uucpbb21_6809.dsk";
+                case "HD40000":
+                    return "toolshed_hd_40000.dsk";
+                case "HD20000C4":
+                    return "toolshed_hd_20000_c4.dsk";
+                default:
+                    return null;
+            }
         }
 
         // An empty OS-9 disk laid out the way Toolshed 2.2 "os9 format -tN [-ss|-ds] [-dr] -e" lays it out. Every value below was read from
@@ -572,9 +661,29 @@ namespace RetroIO.Storage.Local.Tests
             return name.ToString();
         }
 
-        private bool MapBit(byte[] image, int sector)
+        // A bit of the allocation map: bit n is cluster n, which holds sectors n times the sectors per bit and up.
+        private static bool ClusterBit(byte[] image, int cluster)
         {
-            return (image[SectorSize + (sector >> 3)] & (0x80 >> (sector & 7))) != 0;
+            return (image[SectorSize + (cluster >> 3)] & (0x80 >> (cluster & 7))) != 0;
+        }
+
+        // Rounds a number of sectors up to whole clusters.
+        private int RoundUp(int sectors)
+        {
+            return ((sectors + _bit - 1) >> _shift) << _shift;
+        }
+
+        // The sectors a file of this length holds in its segments after Close: its data and the descriptor rounded up to whole clusters,
+        // less the descriptor (Create puts the rest of the descriptor's cluster into the first segment; L0EFE keeps whole clusters).
+        private int FileSectors(int length)
+        {
+            return RoundUp(1 + SectorsFor(length)) - 1;
+        }
+
+        // The clusters a file of this length takes besides its descriptor's cluster.
+        private int DataClusters(int length)
+        {
+            return (RoundUp(1 + SectorsFor(length)) >> _shift) - 1;
         }
 
         // The bytes of a file whose descriptor starts at fdOffset, cut at the size, and the number of sectors its segments hold.
@@ -619,28 +728,46 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That((int)U24(image, 0), Is.EqualTo(_total), "total sectors in sector 0 against the device");
             _mapBytes = U16(image, 4);
             _mapSectors = (_mapBytes + SectorSize - 1) / SectorSize;
+            _mapHigh = (_mapBytes >> 8) & 0xFF;
             _sas = image[77];
-            Assert.That(U16(image, 6), Is.EqualTo(1), "one sector per map bit");
+            _bit = U16(image, 6);
+            Assert.That(_bit & (_bit - 1), Is.EqualTo(0), "sectors per map bit is a power of two");
+            _shift = 0;
+            while ((1 << _shift) < _bit)
+            {
+                _shift++;
+            }
+
+            _clusters = (_total + _bit - 1) >> _shift;
             Assert.That(_sas, Is.GreaterThan(0));
             uint rootFd = U24(image, 8);
             _root = new Node { Name = "/", IsDirectory = true, Fd = rootFd };
             _root.Parent = _root;
             LoadDirectory(image, _root, rootFd);
 
-            // Reserved sectors: marked used on the disk before the run but in no file or directory.
+            // Reserved clusters: marked used on the disk before the run but holding no sector of a file or directory.
             int[] owner = Walk(image, false);
             _reserved = new bool[_total];
             _reservedCount = 0;
-            for (int s = 0; s < _total; s++)
+            _reservedCluster = new bool[_clusters];
+            _reservedClusters = 0;
+            for (int c = 0; c < _clusters; c++)
             {
-                if (MapBit(image, s) && owner[s] < 0)
+                if (!ClusterBit(image, c) || ClusterOwned(owner, c))
+                {
+                    continue;
+                }
+
+                _reservedCluster[c] = true;
+                _reservedClusters++;
+                for (int s = c << _shift; s < Math.Min(_total, (c + 1) << _shift); s++)
                 {
                     _reserved[s] = true;
                     _reservedCount++;
                 }
             }
 
-            if (_variant != "NITR09")
+            if (_variant == "Dragon40DS" || _variant == "CoCo35SS" || _variant == "CoCo40SS" || _variant == "CoCo80DS")
             {
                 // A built disk reserves sector 0 and the map sectors; a Dragon disk the whole first track.
                 int expectedReserved = _variant == "Dragon40DS" ? SectorsPerTrack : 1 + _mapSectors;
@@ -652,7 +779,98 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             _rootStartSectors = _root.CapacitySectors;
-            _emptyFree = _total - _reservedCount - 1 - _root.CapacitySectors;
+            _emptyFree = EmptyFree();
+        }
+
+        // True when a sector of the cluster belongs to a file or directory.
+        private bool ClusterOwned(int[] owner, int cluster)
+        {
+            for (int s = cluster << _shift; s < Math.Min(_total, (cluster + 1) << _shift); s++)
+            {
+                if (owner[s] >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // The free space once everything that can be deleted is deleted: what the root directory, the files that cannot be released and the
+        // directories that hold them take stays.
+        private int EmptyFree()
+        {
+            return ((_clusters - _reservedClusters) << _shift) - Staying(_root);
+        }
+
+        // The sectors a directory takes, its descriptor included, and what stays below it.
+        private static int Staying(Node directory)
+        {
+            int sectors = 1 + directory.CapacitySectors;
+            for (int i = 0; i < directory.Slots.Count; i++)
+            {
+                Node? slot = directory.Slots[i];
+                if (!IsChild(slot))
+                {
+                    continue;
+                }
+
+                if (slot!.IsDirectory)
+                {
+                    if (HoldsPinned(slot))
+                    {
+                        sectors += Staying(slot);
+                    }
+                }
+                else if (slot.Pinned)
+                {
+                    sectors += 1 + slot.DataSectors;
+                }
+            }
+
+            return sectors;
+        }
+
+        private static bool HoldsPinned(Node directory)
+        {
+            for (int i = 0; i < directory.Slots.Count; i++)
+            {
+                Node? slot = directory.Slots[i];
+                if (!IsChild(slot))
+                {
+                    continue;
+                }
+
+                if (slot!.IsDirectory ? HoldsPinned(slot) : slot.Pinned)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // True when a segment of the descriptor runs from one allocation map sector (2048 clusters) into the next.
+        private bool CrossesMapSector(byte[] image, int fdOffset)
+        {
+            for (int i = 0; i < 48; i++)
+            {
+                int at = fdOffset + 16 + (i * 5);
+                int count = U16(image, at + 3);
+                if (count == 0)
+                {
+                    return false;
+                }
+
+                long first = U24(image, at) >> _shift;
+                long last = ((long)U24(image, at) + count - 1) >> _shift;
+                if (first / 2048 != last / 2048)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void LoadDirectory(byte[] image, Node directory, uint fd)
@@ -696,6 +914,7 @@ namespace RetroIO.Storage.Local.Tests
                 {
                     child.Data = RawFile(image, childOffset, out int dataSectors);
                     child.DataSectors = dataSectors;
+                    child.Pinned = CrossesMapSector(image, childOffset);
                 }
             }
         }
@@ -846,10 +1065,74 @@ namespace RetroIO.Storage.Local.Tests
             throw new InvalidOperationException("model: " + child.Name + " is not in its parent");
         }
 
-        // The sectors a directory takes when it must grow with this many free: the allocation size, or one when that does not fit.
-        private int GrowthSectors(int free)
+        // The clusters a directory gets when it must grow right after a new descriptor took its cluster (rbf.asm Create: FatScan for the
+        // descriptor, then the directory's Writ599 and L0C6F). FatScan for the allocation size wants (DD.BIT - 1 + SAS) >> shift clusters and
+        // gives that many when some free run in one map sector is that long, otherwise the longest such run. The descriptor takes the first
+        // free cluster from the map sector FatScan starts at (V.MapSct), which is always the first one when the map has fewer than two whole
+        // sectors; otherwise every start is tried. least and most are the smallest and largest growth over those starts.
+        private void GrowthAfterDescriptor(byte[] image, out int least, out int most)
         {
-            return free >= _sas ? _sas : 1;
+            int want = (_bit - 1 + _sas) >> _shift;
+            int starts = _mapHigh <= 1 ? 1 : _mapHigh;
+            least = int.MaxValue;
+            most = 0;
+            for (int start = 0; start < starts; start++)
+            {
+                int descriptor = FirstFree(image, start);
+                int growth = Math.Min(want, LongestRun(image, descriptor));
+                least = Math.Min(least, growth);
+                most = Math.Max(most, growth);
+            }
+        }
+
+        private int MapBitsIn(int mapSector)
+        {
+            return Math.Min(2048, (_mapBytes * 8) - (mapSector * 2048));
+        }
+
+        // The first free cluster, searching the map sectors from this one on and round to the start.
+        private int FirstFree(byte[] image, int start)
+        {
+            for (int k = 0; k < _mapSectors; k++)
+            {
+                int sector = (start + k) % _mapSectors;
+                int first = sector * 2048;
+                int bits = MapBitsIn(sector);
+                for (int c = first; c < first + bits && c < _clusters; c++)
+                {
+                    if (!ClusterBit(image, c))
+                    {
+                        return c;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+        // The longest run of free clusters inside one map sector, with the cluster taken counted as used.
+        private int LongestRun(byte[] image, int taken)
+        {
+            int longest = 0;
+            for (int sector = 0; sector < _mapSectors; sector++)
+            {
+                int first = sector * 2048;
+                int bits = MapBitsIn(sector);
+                int run = 0;
+                for (int c = first; c < first + bits && c < _clusters; c++)
+                {
+                    if (c == taken || ClusterBit(image, c))
+                    {
+                        run = 0;
+                        continue;
+                    }
+
+                    run++;
+                    longest = Math.Max(longest, run);
+                }
+            }
+
+            return longest;
         }
 
         // A path as it is passed in: each name in random case (OS-9 compares names without case), sometimes with a trailing slash.
@@ -1032,20 +1315,20 @@ namespace RetroIO.Storage.Local.Tests
             }
         }
 
-        // Counts runs of free sectors in the allocation map, with a break at every 2048-sector boundary (the code never lets a segment cross one).
+        // Counts runs of free clusters in the allocation map, with a break at every map sector of 2048 clusters (a segment never crosses one).
         private int FreeRuns()
         {
             byte[] image = Snapshot();
             int runs = 0;
             bool inRun = false;
-            for (int s = 0; s < _total; s++)
+            for (int c = 0; c < _clusters; c++)
             {
-                if (s % 2048 == 0)
+                if (c % 2048 == 0)
                 {
                     inRun = false;
                 }
 
-                bool free = !MapBit(image, s);
+                bool free = !ClusterBit(image, c);
                 if (free && !inRun)
                 {
                     runs++;
@@ -1058,9 +1341,10 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         // Runs one call that changes the disk. When it is expected to work it must work; when the model says there is not enough space it must
-        // throw an IOException that says the disk is full and change nothing. A refusal because the segment list (48 entries) would overflow is
-        // accepted only when the free space really is in more than 48 pieces.
-        private bool Attempt(Action call, bool fits, int kind, string what)
+        // throw an IOException that says the disk is full and change nothing; when the model cannot tell (maybe), either is accepted, a refusal
+        // only as "full" and unchanged. A refusal because the segment list is full (RBF grows a file to 47 segments) is accepted only when the
+        // free space, with the pieces the call releases first (oldSegments), is in at least 48 pieces.
+        private bool Attempt(Action call, bool fits, int kind, string what, bool maybe = false, int oldSegments = 0)
         {
             TakeBefore();
             int bucket = Bucket();
@@ -1076,9 +1360,14 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             long ticks = Stopwatch.GetTimestamp() - start;
+            if (maybe)
+            {
+                _maybeCalls++;
+            }
+
             if (error == null)
             {
-                if (!fits)
+                if (!fits && !maybe)
                 {
                     Assert.Fail("a " + what + " that needs more sectors than are free did not throw, " + Where());
                 }
@@ -1089,24 +1378,50 @@ namespace RetroIO.Storage.Local.Tests
 
             Record(KindRefused, bucket, _round, ticks);
             RequireUnchanged(what);
-            if (!fits)
+            if (error.Message.Contains("segment"))
+            {
+                int runs = FreeRuns();
+                Assert.That(runs + oldSegments, Is.GreaterThanOrEqualTo(48), "the " + what + " was refused for too many segments, but the free space is in only "
+                    + runs + " pieces (and the call releases " + oldSegments + " segments first), " + Where());
+                _refusedSegments++;
+                return false;
+            }
+
+            if (!fits || maybe)
             {
                 Assert.That(error.Message, Does.Contain("full"), Where());
                 _refusedFull++;
                 return false;
             }
 
-            if (error.Message.Contains("segment"))
-            {
-                int runs = FreeRuns();
-                Assert.That(runs, Is.GreaterThan(48), "the " + what + " was refused for too many segments, but the free space is in only " + runs
-                    + " pieces, " + Where());
-                _refusedSegments++;
-                return false;
-            }
-
             Assert.Fail("the " + what + " failed although there was room, " + Where() + ": " + error.Message);
             return false;
+        }
+
+        // A refused call on a file the code cannot release: it must throw, name the crossing, and change nothing.
+        private void RequirePinnedRefusal(Action call, string what)
+        {
+            TakeBefore();
+            long start = Stopwatch.GetTimestamp();
+            IOException? error = Assert.Throws<IOException>(() => call(), what + " of a file whose segment crosses a map sector did not throw, " + Where());
+            Record(KindRefused, Bucket(), _round, Stopwatch.GetTimestamp() - start);
+            Assert.That(error!.Message, Does.Contain("crosses an allocation map sector"), Where());
+            RequireUnchanged(what);
+            _pinnedRefusals++;
+        }
+
+        // The number of segments in a file's descriptor on the disk.
+        private int SegmentCount(Node file)
+        {
+            byte[] image = Snapshot();
+            int at = (int)file.Fd * SectorSize;
+            int count = 0;
+            while (count < 48 && U16(image, at + 16 + (count * 5) + 3) != 0)
+            {
+                count++;
+            }
+
+            return count;
         }
 
         private void WriteSomewhere()
@@ -1142,12 +1457,32 @@ namespace RetroIO.Storage.Local.Tests
         {
             string path = PathOf(directory) == "/" ? "/" + name : PathOf(directory) + "/" + name;
             bool grow = NeedsGrowth(directory);
-            int need = 1 + SectorsFor(data.Length) + (grow ? 1 : 0);
-            bool fits = _free >= need;
-            Begin("create " + path + " with " + data.Length + " bytes" + (grow ? ", the directory grows" : string.Empty) + (fits ? string.Empty : ", does not fit"));
-            if (Attempt(() => _fs!.WriteFile(SpelledChild(directory, name), data), fits, KindCreate, "create"))
+
+            // The descriptor's cluster, then (when the directory must grow) the directory's growth, then the data clusters.
+            int free = _free >> _shift;
+            int data2 = DataClusters(data.Length);
+            bool fits;
+            bool maybe = false;
+            if (!grow)
             {
-                Node file = new Node { Name = name, Data = data, DataSectors = SectorsFor(data.Length) };
+                fits = free >= 1 + data2;
+            }
+            else if (free < 2)
+            {
+                fits = false;
+            }
+            else
+            {
+                GrowthAfterDescriptor(Snapshot(), out int least, out int most);
+                fits = free - 1 - most >= data2;
+                maybe = !fits && free - 1 - least >= data2;
+            }
+
+            Begin("create " + path + " with " + data.Length + " bytes" + (grow ? ", the directory grows" : string.Empty)
+                + (fits ? string.Empty : maybe ? ", may not fit" : ", does not fit"));
+            if (Attempt(() => _fs!.WriteFile(SpelledChild(directory, name), data), fits, KindCreate, "create", maybe))
+            {
+                Node file = new Node { Name = name, Data = data, DataSectors = FileSectors(data.Length) };
                 AddEntry(directory, file);
                 _creates++;
             }
@@ -1176,14 +1511,24 @@ namespace RetroIO.Storage.Local.Tests
 
         private void Overwrite(Node file, byte[] data)
         {
-            int available = _free + file.DataSectors;
-            bool fits = SectorsFor(data.Length) <= available;
             string path = PathOf(file);
+            if (file.Pinned)
+            {
+                Begin("overwrite " + path + ", which has a segment across a map sector");
+                RequirePinnedRefusal(() => _fs!.WriteFile(Spelled(path), data), "overwrite");
+                Verify();
+                return;
+            }
+
+            // SS.Size 0 releases every cluster of the file but the descriptor's; the new data then needs its own clusters.
+            int kept = (RoundUp(1 + file.DataSectors) >> _shift) - 1;
+            bool fits = (_free >> _shift) + kept >= DataClusters(data.Length);
             Begin("overwrite " + path + " (" + file.Data.Length + " bytes) with " + data.Length + " bytes" + (fits ? string.Empty : ", does not fit"));
-            if (Attempt(() => _fs!.WriteFile(Spelled(path), data), fits, KindOverwrite, "overwrite"))
+            int oldSegments = SegmentCount(file);
+            if (Attempt(() => _fs!.WriteFile(Spelled(path), data), fits, KindOverwrite, "overwrite", false, oldSegments))
             {
                 file.Data = data;
-                file.DataSectors = SectorsFor(data.Length);
+                file.DataSectors = FileSectors(data.Length);
                 _overwrites++;
             }
 
@@ -1234,6 +1579,14 @@ namespace RetroIO.Storage.Local.Tests
         private void Delete(Node file)
         {
             string path = PathOf(file);
+            if (file.Pinned)
+            {
+                Begin("delete " + path + ", which has a segment across a map sector");
+                RequirePinnedRefusal(() => _fs!.DeleteFile(Spelled(path)), "delete");
+                Verify();
+                return;
+            }
+
             Begin("delete " + path);
             int bucket = Bucket();
             long start = Stopwatch.GetTimestamp();
@@ -1392,15 +1745,13 @@ namespace RetroIO.Storage.Local.Tests
                 return;
             }
 
-            // The descriptor, then the directory's own sectors (allocation size, or one), then the parent's growth (allocation size, or one).
+            // MakDir: the descriptor's cluster, then the parent's growth when it needs one, then room for the 64 bytes of the new directory, which
+            // the rest of the descriptor's cluster already gives when a cluster has more than one sector. Each step takes at least one cluster
+            // when any is free (FatScan gives the longest run when none is long enough), so the call fits exactly when there are as many free
+            // clusters as steps.
             bool grow = NeedsGrowth(parent);
-            int rest = _free - 1;
-            bool fits = rest >= 1;
-            if (fits)
-            {
-                rest -= GrowthSectors(rest);
-                fits = !grow || rest >= 1;
-            }
+            int steps = 1 + (grow ? 1 : 0) + (_bit == 1 ? 1 : 0);
+            bool fits = (_free >> _shift) >= steps;
 
             Begin("make directory " + path + (grow ? ", the parent grows" : string.Empty) + (fits ? string.Empty : ", does not fit"));
             if (Attempt(() => _fs!.CreateDirectory(SpelledChild(parent, name)), fits, KindMakeDir, "make directory"))
@@ -1574,7 +1925,8 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         // Deletes every file and directory, deepest first, and requires the free space of an empty disk back. The root directory never
-        // shrinks, so any sectors it gained during the run stay with it; the slack check in Verify limits how many that can be.
+        // shrinks, so any sectors it gained during the run stay with it; the slack check in Verify limits how many that can be. Files that
+        // cannot be released, and the directories that hold them, stay (with any growth of those directories).
         private void DeleteAll()
         {
             List<Node> files = new List<Node>();
@@ -1583,13 +1935,22 @@ namespace RetroIO.Storage.Local.Tests
             while (files.Count > 0)
             {
                 int pick = _random.Next(files.Count);
-                Delete(files[pick]);
+                if (!files[pick].Pinned)
+                {
+                    Delete(files[pick]);
+                }
+
                 files.RemoveAt(pick);
             }
 
             for (int i = directories.Count - 1; i >= 1; i--)
             {
                 Node directory = directories[i];
+                if (HoldsPinned(directory))
+                {
+                    continue;
+                }
+
                 string path = PathOf(directory);
                 Begin("remove directory " + path + " while emptying the disk");
                 long start = Stopwatch.GetTimestamp();
@@ -1601,13 +1962,14 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             Begin("everything deleted");
-            int rootGrowth = _root.CapacitySectors - _rootStartSectors;
+            int rootGrowth = _emptyFree - EmptyFree();
             Assert.That(_fs!.GetBlocksFree(), Is.EqualTo(_emptyFree - rootGrowth),
                 "free space after everything was deleted is not the empty-disk value (" + _emptyFree + ") less the " + rootGrowth
-                + " sectors the root directory grew by, " + Where());
-            if (rootGrowth > _maxRootGrowth)
+                + " sectors the directories that stay grew by, " + Where());
+            int rootOnly = _root.CapacitySectors - _rootStartSectors;
+            if (rootOnly > _maxRootGrowth)
             {
-                _maxRootGrowth = rootGrowth;
+                _maxRootGrowth = rootOnly;
             }
         }
 
@@ -1704,9 +2066,11 @@ namespace RetroIO.Storage.Local.Tests
                     directory.InitialSlack = (sectors * SectorSize) - (int)size;
                 }
 
-                // A directory only takes more sectors when an entry does not fit; it may then hold up to one allocation less one entry spare.
+                // A directory only takes more sectors when an entry does not fit; it may then hold up to one allocation (the allocation size in
+                // whole clusters) less one entry spare.
                 int slack = (sectors * SectorSize) - (int)size;
-                if (slack < 0 || slack > Math.Max(directory.InitialSlack, (_sas * SectorSize) - 32))
+                int allocation = ((_bit - 1 + _sas) >> _shift) << _shift;
+                if (slack < 0 || slack > Math.Max(directory.InitialSlack, (allocation * SectorSize) - 32))
                 {
                     Assert.Fail(PathOf(directory) + " holds " + sectors + " sectors for " + size + " bytes, " + Where());
                 }
@@ -1794,35 +2158,45 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.Fail("sector 0 changed, " + Where());
             }
 
-            for (int i = _total; i < _mapSectors * SectorSize * 8; i++)
+            for (int i = _clusters; i < _mapSectors * SectorSize * 8; i++)
             {
                 int at = SectorSize + (i >> 3);
                 int mask = 0x80 >> (i & 7);
                 if ((image[at] & mask) != (_initial[at] & mask))
                 {
-                    Assert.Fail("allocation map bit " + i + " (past the last sector) changed, " + Where());
+                    Assert.Fail("allocation map bit " + i + " (past the last cluster) changed, " + Where());
                 }
             }
 
+            // Every cluster: its bit is set exactly when one of its sectors belongs to a file or directory or it was reserved.
             int[] owner = Walk(image, true);
             int owned = 0;
+            int ownedClusters = 0;
             for (int s = 0; s < _total; s++)
             {
-                bool set = MapBit(image, s);
-                bool inUse = owner[s] >= 0;
-                if (inUse)
+                if (owner[s] >= 0)
                 {
                     owned++;
                 }
+            }
 
-                if (set && !inUse && !_reserved[s])
+            for (int c = 0; c < _clusters; c++)
+            {
+                bool set = ClusterBit(image, c);
+                bool inUse = ClusterOwned(owner, c);
+                if (inUse)
                 {
-                    Assert.Fail("lost sector " + s + ": marked used in the allocation map but in no file or directory, " + Where());
+                    ownedClusters++;
                 }
 
-                if (!set && (inUse || _reserved[s]))
+                if (set && !inUse && !_reservedCluster[c])
                 {
-                    Assert.Fail("sector " + s + " is in use" + (inUse ? string.Empty : " (reserved)") + " but marked free in the allocation map, " + Where());
+                    Assert.Fail("lost cluster " + c + ": marked used in the allocation map but no sector of it is in a file or directory, " + Where());
+                }
+
+                if (!set && (inUse || _reservedCluster[c]))
+                {
+                    Assert.Fail("cluster " + c + " is in use" + (inUse ? string.Empty : " (reserved)") + " but marked free in the allocation map, " + Where());
                 }
             }
 
@@ -1846,12 +2220,12 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.Fail("the walk found " + owned + " sectors in use, the model's files and directories own " + modelOwned + ", " + Where());
             }
 
-            _free = _total - _reservedCount - owned;
+            _free = (_clusters - _reservedClusters - ownedClusters) << _shift;
             int free = _fs!.GetBlocksFree();
             if (free != _free)
             {
-                Assert.Fail("free space is " + free + " sectors, but " + _total + " total - " + _reservedCount + " reserved - " + owned + " in use = " + _free
-                    + ", " + Where());
+                Assert.Fail("free space is " + free + " sectors, but (" + _clusters + " clusters - " + _reservedClusters + " reserved - " + ownedClusters
+                    + " in use) times " + _bit + " = " + _free + ", " + Where());
             }
 
             // The code's own view: every listing in slot order, every file read back.
@@ -1926,9 +2300,19 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That(check, Does.Contain("0 clusters in file structure but not in allocation map"), check + Where());
             Assert.That(check, Does.Contain("0 bad file decriptor sector"), check + Where());
 
-            // dcheck counts neither sector 0 nor the map sectors as reserved, so a CoCo disk shows 0 here and a Dragon disk 16 (sectors 2 to 17).
-            Assert.That(StressToolshed.NumberBefore(check, " clusters in allocation map but not in file structure"), Is.EqualTo(_reservedCount - 1 - _mapSectors),
-                check + Where());
+            // dcheck counts neither sector 0 nor the map sectors as reserved, so a built CoCo disk shows 0 here and a built Dragon disk 16 (sectors
+            // 2 to 17). On every disk the number dcheck gives before the run must stay the same: a cluster lost or a reserved one released changes it.
+            long unreferenced = StressToolshed.NumberBefore(check, " clusters in allocation map but not in file structure");
+            if (_toolshedUnreferenced < 0)
+            {
+                _toolshedUnreferenced = unreferenced;
+                if (RealImageName(_variant) == null && _variant != "NITR09")
+                {
+                    Assert.That(unreferenced, Is.EqualTo(_reservedCount - 1 - _mapSectors), check + Where());
+                }
+            }
+
+            Assert.That(unreferenced, Is.EqualTo(_toolshedUnreferenced), check + Where());
             Assert.That(StressToolshed.NumberBefore(check, " director"), Is.EqualTo(directories.Count), check + Where());
             Assert.That(StressToolshed.NumberBefore(check, " files"), Is.EqualTo(files.Count), check + Where());
 
@@ -1959,6 +2343,9 @@ namespace RetroIO.Storage.Local.Tests
                 .Append(_makeDirs).Append(" mkdir, ").Append(_removeDirs).Append(" rmdir, ").Append(_refusedFull).Append(" refused as disk full, ")
                 .Append(_refusedSegments).Append(" refused for too many segments, ").Append(_refusedOther).Append(" other refusals, ")
                 .Append(_fills).Append(" fills); the root directory grew by up to ").Append(_maxRootGrowth).Append(" sectors").AppendLine();
+            report.Append("  ").Append(_bit).Append(" sectors per map bit, ").Append(_mapSectors).Append(" map sectors; ").Append(_pinnedRefusals)
+                .Append(" refusals of files with a segment across a map sector; ").Append(_maybeCalls).Append(" creates whose outcome depended on where FatScan started")
+                .AppendLine();
             report.Append("  Toolshed checks run: ").Append(_toolshedRuns).Append(". ").Append(_notes.ToString()).AppendLine();
             report.Append("  memory still held after each round (bytes):");
             for (int i = 0; i < _rounds; i++)
