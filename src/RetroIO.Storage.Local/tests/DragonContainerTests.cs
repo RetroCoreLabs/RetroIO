@@ -279,6 +279,17 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         [Test]
+        public void Jvc_34TracksAndHalfASector_IsNotAPartial35thTrack()
+        {
+            byte[] sectors = DragonDosTestDisk.Format(40, 1);
+            byte[] file = new byte[(34 * 18 * 256) + 128];
+            Array.Copy(sectors, file, file.Length);
+            DragonDskDriver driver = new DragonDskDriver();
+
+            Assert.That(() => driver.Mount(new MemoryStream(file), true), Throws.InstanceOf<InvalidDataException>());
+        }
+
+        [Test]
         public void Jvc_AttributeFlag_IsRefusedWithAClearError()
         {
             byte[] file = Jvc(DragonDosTestDisk.Format(40, 1), 18, 1, 1, 1, 1);
@@ -322,6 +333,26 @@ namespace RetroIO.Storage.Local.Tests
             driver.Mount(new MemoryStream(file), true);
 
             Assert.That(driver.GetBlockDeviceInfo()!.HeadCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void PaddedSubStream_JunkBehindTheRealData_IsNeverShown_AndIsClearedByAWriteBehindIt()
+        {
+            // The file has a stub of 4 junk bytes behind the whole sectors (a half sector at the end of a cut file).
+            MemoryStream baseStream = new MemoryStream();
+            baseStream.Write(new byte[] { 9, 9, 1, 2, 3, 4, 0xEE, 0xEE, 0xEE, 0xEE }, 0, 10);
+            PaddedSubStream padded = new PaddedSubStream(baseStream, 2, 4, 10);
+            byte[] buffer = new byte[10];
+
+            Assert.That(padded.Read(buffer, 0, 10), Is.EqualTo(10));
+            Assert.That(buffer, Is.EqualTo(new byte[] { 1, 2, 3, 4, 0, 0, 0, 0, 0, 0 }), "the junk is not shown");
+
+            padded.Position = 7;
+            padded.Write(new byte[] { 7, 8 }, 0, 2);
+            padded.Position = 0;
+            Assert.That(padded.Read(buffer, 0, 10), Is.EqualTo(10));
+            Assert.That(buffer, Is.EqualTo(new byte[] { 1, 2, 3, 4, 0, 0, 0, 7, 8, 0 }), "the gap between the real data and the write is zero, not junk");
+            Assert.That(baseStream.ToArray()[6], Is.EqualTo(0), "the junk in the base stream is cleared too");
         }
 
         [Test]

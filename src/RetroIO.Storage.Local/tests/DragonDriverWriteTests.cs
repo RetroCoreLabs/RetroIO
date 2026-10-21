@@ -103,6 +103,15 @@ namespace RetroIO.Storage.Local.Tests
             return all;
         }
 
+        // Mounts a new driver of the given type on a copy of the bytes that are in the file right now. What it shows is what a later
+        // mount of the file shows, whatever the first driver still holds in memory.
+        private static T Fresh<T>(string path) where T : IFileSystemDriver, new()
+        {
+            T driver = new T();
+            driver.Mount(new MemoryStream(ReadRaw(path)), true);
+            return driver;
+        }
+
         private static byte[] ReadBack(IFileSystemDriver driver, string path)
         {
             return driver.ReadFile(path);
@@ -127,10 +136,16 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.That(driver.Capabilities.HasFlag(DriverCapabilities.Write), Is.True);
 
                 driver.WriteFile("A.BIN", first);
+                Assert.That(Fresh<DragonVdkDriver>(path).ReadFile("A.BIN"), Is.EqualTo(first), "after the first write the file has it");
                 driver.WriteFile("B.BIN", second);
+                Assert.That(Fresh<DragonVdkDriver>(path).ReadFile("B.BIN"), Is.EqualTo(second));
                 driver.RenameFile("B.BIN", "C.BIN");
+                Assert.That(Fresh<DragonVdkDriver>(path).ReadFile("C.BIN"), Is.EqualTo(second), "after the rename the file has the new name");
+                Assert.That(Fresh<DragonVdkDriver>(path).GetMetadata("B.BIN"), Is.Null);
                 driver.WriteFile("D.BIN", new byte[] { 1 });
+                Assert.That(Fresh<DragonVdkDriver>(path).GetMetadata("D.BIN"), Is.Not.Null);
                 driver.DeleteFile("D.BIN");
+                Assert.That(Fresh<DragonVdkDriver>(path).GetMetadata("D.BIN"), Is.Null, "after the delete the file does not have it");
 
                 // The file on disk is already complete: nothing waits for Dispose.
                 byte[] raw = ReadRaw(path);
@@ -295,10 +310,16 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.That(driver.CanWrite, Is.True);
 
                 driver.WriteFile("/ONE.BIN", first);
+                Assert.That(Fresh<DragonDskDriver>(path).ReadFile("/ONE.BIN"), Is.EqualTo(first));
                 driver.WriteFile("/TWO.TXT", second);
+                Assert.That(Fresh<DragonDskDriver>(path).ReadFile("/TWO.TXT"), Is.EqualTo(second));
                 driver.RenameFile("/TWO.TXT", "/THREE.TXT");
+                Assert.That(Fresh<DragonDskDriver>(path).ReadFile("/THREE.TXT"), Is.EqualTo(second));
+                Assert.That(Fresh<DragonDskDriver>(path).GetMetadata("/TWO.TXT"), Is.Null);
                 driver.WriteFile("/GONE.BIN", new byte[] { 1 });
+                Assert.That(Fresh<DragonDskDriver>(path).GetMetadata("/GONE.BIN"), Is.Not.Null);
                 driver.DeleteFile("/GONE.BIN");
+                Assert.That(Fresh<DragonDskDriver>(path).GetMetadata("/GONE.BIN"), Is.Null);
                 driver.Dispose();
             }
 
@@ -393,10 +414,16 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.That(driver.CanWrite, Is.True);
 
                 driver.WriteFile("NEWFILE.BIN", first);
+                Assert.That(Fresh<DragonDmkDriver>(path).ReadFile("NEWFILE.BIN"), Is.EqualTo(first));
                 driver.WriteFile("TWO.TXT", second);
+                Assert.That(Fresh<DragonDmkDriver>(path).ReadFile("TWO.TXT"), Is.EqualTo(second));
                 driver.RenameFile("TWO.TXT", "THREE.TXT");
+                Assert.That(Fresh<DragonDmkDriver>(path).ReadFile("THREE.TXT"), Is.EqualTo(second));
+                Assert.That(Fresh<DragonDmkDriver>(path).GetMetadata("TWO.TXT"), Is.Null);
                 driver.WriteFile("TMP.TXT", new byte[] { 1, 2, 3 });
+                Assert.That(Fresh<DragonDmkDriver>(path).GetMetadata("TMP.TXT"), Is.Not.Null);
                 driver.DeleteFile("TMP.TXT");
+                Assert.That(Fresh<DragonDmkDriver>(path).GetMetadata("TMP.TXT"), Is.Null);
                 driver.Dispose();
             }
 
