@@ -704,6 +704,25 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That(fs.ReadFile("SECOND"), Is.EqualTo(DragonDosTestDisk.Pattern(600 * 256, 2)));
             Assert.That(fs.GetBlocksFree(), Is.EqualTo(free - 1900));
             AssertBackupEqualsPrimary(image, 2);
+
+            // Every sector of both files is marked used at its place in the BAM, which is split at LSN 1440 between BAM sector 1 and 2.
+            bool crossed = false;
+            for (int n = 0; n < 2; n++)
+            {
+                byte[] entry = DragonDosTestDisk.Entry(image, 2, n, false);
+                for (int e = 0; e < 4; e++)
+                {
+                    int lsn = (entry[12 + (e * 3)] << 8) | entry[13 + (e * 3)];
+                    int count = entry[14 + (e * 3)];
+                    for (int s = 0; s < count; s++)
+                    {
+                        Assert.That(DragonDosTestDisk.IsFreeInImage(image, 2, lsn + s), Is.False, "LSN " + (lsn + s));
+                        crossed |= lsn + s >= 1440;
+                    }
+                }
+            }
+
+            Assert.That(crossed, Is.True, "the test must reach the second BAM sector");
         }
     }
 }
