@@ -28,21 +28,27 @@ namespace RetroIO.Storage.Local.Drivers
     /// <para><b>Header</b></para>
     ///  - Bytes 0 and 1: the signature dk.
     ///  - Bytes 2 and 3: the length of the whole header, low byte first. 12 or more. The sectors start at this offset.
-    ///  - Byte 4: the VDK version. Byte 5: the oldest version that can read the file (the real images have 10H in both).
+    ///  - Byte 4: the VDK version. Byte 5: the oldest version that can read the file (the real images have 10H in both). A file whose byte 5
+    ///    is above 10H is refused, as XRoar does.
     ///  - Byte 6: who made the file, P for PC-Dragon or X for XRoar (the 256 byte header images say X). Byte 7: that program's version.
     ///  - Byte 8: the number of cylinders. Byte 9: the number of heads (sides).
     ///  - Byte 10: flags. Bit 0 set means write protected.
-    ///  - Byte 11: bits 0 to 2 are the compression flags, which must be zero because compressed images are not supported, and bits 3 to 7 are
-    ///    the length of the disk name that may follow.
+    ///  - Byte 11: bits 0 to 2 are the compression flags, which must be zero because compressed images are not supported (a compressed image is
+    ///    refused with NotSupportedException), and bits 3 to 7 are the length of the disk name that may follow.
     ///  - After byte 11 comes the disk name (up to 31 bytes) and padding up to the header length. This reader skips them.
     /// <para><b>Sectors</b></para>
     /// The data is 256-byte sectors, always 18 per track, in the order cylinder, then head, then sector 1 to 18. That is the order of the
     /// logical sector numbers of both DragonDOS (which counts a two sided cylinder as one track of 36 sectors) and OS-9. The file is the header
-    /// plus cylinders x heads x 18 x 256 bytes.
+    /// plus cylinders x heads x 18 x 256 bytes. Some files in the wild stop inside the last cylinder; XRoar reads what is there and takes the
+    /// missing sectors as zero. This driver does the same when the file reaches into the last cylinder (it then has more than the cylinders before
+    /// it), and shows the missing sectors as zero bytes; a file that is shorter than that, or longer than the header says, is refused.
     /// <para><b>What this driver does with it</b></para>
     /// It reads the geometry from bytes 8 and 9 and the header length from bytes 2 and 3, mounts the sectors after the header, and picks the
     /// file system from the contents of the disk: OS-9 first (it has a strict signature in sector 0), otherwise DragonDOS. The DSK and JVC format
     /// is described in <see cref="DragonDskDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
+    /// <para><b>Writing</b></para>
+    /// A DragonDOS volume can be written (create, overwrite, delete, rename); the changes go back to the image stream after each operation.
+    /// The sectors are never moved and the header is kept as it is.
     /// </remarks>
     public sealed class DragonVdkDriver : IFileSystemDriver
     {
@@ -64,18 +70,24 @@ namespace RetroIO.Storage.Local.Drivers
         public string ExtensionSeparator => _filesystem?.ExtensionSeparator ?? ".";
 
         /// <summary>
-        /// Gets the capability flags of this driver: read, directory listing, file types, volume label and block read.
+        /// Gets the capability flags of this driver: read, directory listing, file types, volume label and block read, and write when <see cref="CanWrite"/> is true.
         /// </summary>
         public DriverCapabilities Capabilities
         {
             get
             {
-                return DriverCapabilities.Read |
-                       DriverCapabilities.ListDirectory |
-                       DriverCapabilities.FileTypes |
-                       DriverCapabilities.VolumeLabel |
-                       DriverCapabilities.BlockRead;
-                // TODO: Add write capabilities when implemented
+                DriverCapabilities caps = DriverCapabilities.Read |
+                                          DriverCapabilities.ListDirectory |
+                                          DriverCapabilities.FileTypes |
+                                          DriverCapabilities.VolumeLabel |
+                                          DriverCapabilities.BlockRead;
+
+                if (CanWrite)
+                {
+                    caps |= DriverCapabilities.Write;
+                }
+
+                return caps;
             }
         }
 
@@ -84,11 +96,11 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public bool CanRead => true;
         /// <summary>
-        /// Gets false, because the driver does not write yet.
+        /// Gets <c>true</c> when an image is mounted read-write and holds a DragonDOS volume.
         /// </summary>
-        public bool CanWrite => false; // TODO: Implement write operations
+        public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly && _filesystem is DragonDosFileSystem;
         /// <summary>
-        /// Gets <c>true</c>, because this driver can read raw blocks of the image. Block writes are not implemented.
+        /// Gets <c>true</c>, because this driver can read raw blocks of the image.
         /// </summary>
         public bool HasBlockAccess => true;
 
@@ -118,6 +130,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// </exception>
         /// <exception cref="InvalidDataException">
         /// Thrown when the file is too small, the signature is missing, the header size is under 12 bytes, the geometry is unknown or the data size does not fit the geometry.
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when the header says the data is compressed (byte 11, bits 0 to 2) or needs a newer reader (byte 5 above 10H).
         /// </exception>
         public void Mount(Stream imageStream, bool readOnly)
         {
@@ -155,6 +170,20 @@ namespace RetroIO.Storage.Local.Drivers
             byte tracks = header[8];
             byte sides = header[9];
 
+            // The compression flags (bits 0 to 2 of byte 11) must be zero, and a file that asks for a newer reader than version 10H is refused;
+            // XRoar refuses both. The sectors of a compressed file cannot be read as they are.
+            if ((header[11] & 0x07) != 0)
+            {
+                throw new NotSupportedException(
+                    $"Compressed VDK images are not supported (compression flags {header[11] & 0x07} in header byte 11)");
+            }
+
+            if (header[5] > 0x10)
+            {
+                throw new NotSupportedException(
+                    $"VDK backwards compatibility version {header[5]:X2}H is newer than the 10H this driver reads");
+            }
+
             // 2. Detect descriptor from geometry
             _descriptor = DetectDescriptor(tracks, sides);
 
@@ -163,18 +192,30 @@ namespace RetroIO.Storage.Local.Drivers
             long dataOffset = headerSize;
             long dataLength = imageStream.Length - headerSize;
 
-            // Validate data size matches expected geometry
+            // Validate data size matches expected geometry. A file that stops inside the last cylinder is accepted (XRoar reads what is there and
+            // takes the rest as zero): it must have more than the cylinders before the last one.
             long expectedSize = tracks * sides * 18 * 256;
-            if (dataLength != expectedSize)
+            long cylinderBytes = sides * 18 * 256;
+            bool partialLastTrack = dataLength < expectedSize && dataLength > expectedSize - cylinderBytes;
+            if (dataLength != expectedSize && !partialLastTrack)
             {
                 throw new InvalidDataException(
                     $"VDK data size mismatch: expected {expectedSize} bytes ({tracks}T × {sides}S × 18SPT × 256), " +
                     $"got {dataLength} bytes after {headerSize}-byte header");
             }
 
-            // 4. Create a SubStream that exposes only the data portion (skipping VDK header)
-            // This ensures GenericBlockDevice sees the correct length for validation
-            SubStream dataStream = new SubStream(imageStream, dataOffset, dataLength);
+            // 4. Create a stream that exposes only the data portion (skipping VDK header)
+            // This ensures GenericBlockDevice sees the correct length for validation. A partial last track is padded with zero bytes
+            // behind the whole sectors that are there.
+            Stream dataStream;
+            if (partialLastTrack)
+            {
+                dataStream = new PaddedSubStream(imageStream, dataOffset, (dataLength / 256) * 256, expectedSize);
+            }
+            else
+            {
+                dataStream = new SubStream(imageStream, dataOffset, dataLength);
+            }
 
             // 5. Mount block device with descriptor using data-only stream
             _blockDevice = new GenericBlockDevice(_descriptor);
@@ -260,34 +301,57 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the Dragon VDK driver has no write support, so the volume is read-only.
+        /// Creates or replaces a file on the mounted DragonDOS volume and writes the changed sectors to the image.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// Name of the file.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The file contents.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume is not a DragonDOS volume.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
-            throw new UnauthorizedAccessException("The Dragon VDK driver has no write support, so the volume is read-only");
+            EnsureWritable();
+            _filesystem!.WriteFile(path, data);
+            _blockDevice!.Flush();
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the Dragon VDK driver has no write support, so the volume is read-only.
+        /// Deletes a file from the mounted DragonDOS volume and writes the changed sectors to the image.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// Name of the file.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume is not a DragonDOS volume.
         /// </exception>
         public void DeleteFile(string path)
         {
-            throw new UnauthorizedAccessException("The Dragon VDK driver has no write support, so the volume is read-only");
+            EnsureWritable();
+            _filesystem!.DeleteFile(path);
+            _blockDevice!.Flush();
+        }
+
+        /// <summary>
+        /// Renames a file on the mounted DragonDOS volume and writes the changed sectors to the image.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Current name of the file.
+        /// </param>
+        /// <param name="newPath">
+        /// New name of the file.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Thrown when nothing is mounted, the image is mounted read-only or the volume is not a DragonDOS volume.
+        /// </exception>
+        public void RenameFile(string oldPath, string newPath)
+        {
+            EnsureWritable();
+            _filesystem!.Rename(oldPath, newPath);
+            _blockDevice!.Flush();
         }
 
         /// <summary>
@@ -352,20 +416,26 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the Dragon VDK driver has no write support, so the volume is read-only.
+        /// Writes one sector of the image data and writes the image back.
         /// </summary>
         /// <param name="address">
-        /// Not used.
+        /// The block to write.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The 256 bytes of the sector.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted or the image is mounted read-only.
         /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
-            throw new UnauthorizedAccessException("The Dragon VDK driver has no write support, so the volume is read-only");
+            if (_blockDevice == null || _blockDevice.IsReadOnly)
+            {
+                throw new UnauthorizedAccessException("The Dragon VDK image is not mounted for writing, so the volume is read-only");
+            }
+
+            _blockDevice.WriteBlock(address, data);
+            _blockDevice.Flush();
         }
 
         /// <summary>
@@ -395,6 +465,14 @@ namespace RetroIO.Storage.Local.Drivers
             _filesystem = null;
             _blockDevice?.Dispose();
             _blockDevice = null;
+        }
+
+        private void EnsureWritable()
+        {
+            if (!CanWrite)
+            {
+                throw new UnauthorizedAccessException("The Dragon VDK volume is not mounted for writing, or is not a DragonDOS volume, so it is read-only");
+            }
         }
 
         private void EnsureMounted()

@@ -148,7 +148,6 @@ namespace RetroIO.Storage.Local.Tests
         // ------------------------------------------------------------------ the exact exception, per file system
 
         [TestCase(typeof(DecbFileSystem))]
-        [TestCase(typeof(DragonDosFileSystem))]
         public void FileSystemWithoutWriteSupport_WriteFileAndDeleteFile_ThrowIOException(Type fsType)
         {
             IBlockFileSystem fs = (IBlockFileSystem)Activator.CreateInstance(fsType)!;

@@ -60,6 +60,12 @@ namespace RetroIO.Storage.Local.Drivers
     /// It checks every CRC and stops with an error naming the cylinder, side and sector when one is wrong. It supports 256-byte sectors with
     /// the numbers 1 to N on every track, double density. Anything else (single density, other sizes, other numbering, a real-disk file)
     /// stops with NotSupportedException and a message that says what was found, so no wrong disk is read quietly.
+    /// <para><b>Writing back</b></para>
+    /// The image keeps the bytes of the file as they were read, and the place of every sector header and data field in them. When
+    /// <see cref="SetSectorImage"/> is given changed sectors, only those sectors are rebuilt in place: the sector header is written again
+    /// (FEH, cylinder, side, sector number, size code 1) with its CRC, the data address mark becomes FBH (a controller write makes a normal
+    /// data mark), the 256 data bytes are replaced, and the data CRC is worked out again over the three A1H sync bytes, the mark and the data.
+    /// Gaps, pointers and every other sector stay byte for byte as they were, so the track layout and the file length do not change.
     /// </remarks>
     public sealed class DmkDiskImage
     {
@@ -71,9 +77,15 @@ namespace RetroIO.Storage.Local.Drivers
         private const int MaxImageSize = 64 * 1024 * 1024;
 
         private readonly byte[] _sectors;
+        private readonly byte[] _file;
+        private readonly int[] _headerOffsets;
+        private readonly int[] _markOffsets;
 
-        private DmkDiskImage(int cylinders, int sides, int trackLength, bool writeProtected, int sectorsPerTrack, byte[] sectors)
+        private DmkDiskImage(int cylinders, int sides, int trackLength, bool writeProtected, int sectorsPerTrack, byte[] sectors, byte[] file, int[] headerOffsets, int[] markOffsets)
         {
+            _file = file;
+            _headerOffsets = headerOffsets;
+            _markOffsets = markOffsets;
             Cylinders = cylinders;
             Sides = sides;
             TrackLength = trackLength;
@@ -214,6 +226,8 @@ namespace RetroIO.Storage.Local.Drivers
             }
 
             byte[]? sectors = null;
+            int[]? headerOffsets = null;
+            int[]? markOffsets = null;
             int sectorsPerTrack = 0;
 
             for (int cylinder = 0; cylinder < cylinders; cylinder++)
@@ -221,7 +235,7 @@ namespace RetroIO.Storage.Local.Drivers
                 for (int side = 0; side < sides; side++)
                 {
                     int blockStart = DiskHeaderSize + (((cylinder * sides) + side) * trackLength);
-                    byte[][] found = ReadTrack(file, blockStart, trackLength, cylinder, side);
+                    SectorRef[] found = ReadTrack(file, blockStart, trackLength, cylinder, side);
 
                     int count = 0;
                     int highest = 0;
@@ -244,6 +258,8 @@ namespace RetroIO.Storage.Local.Drivers
 
                         sectorsPerTrack = count;
                         sectors = new byte[cylinders * sides * sectorsPerTrack * SectorBytes];
+                        headerOffsets = new int[cylinders * sides * sectorsPerTrack];
+                        markOffsets = new int[cylinders * sides * sectorsPerTrack];
                     }
 
                     if (count != sectorsPerTrack || highest != sectorsPerTrack || found[0] != null)
@@ -255,12 +271,91 @@ namespace RetroIO.Storage.Local.Drivers
                     int trackStart = ((cylinder * sides) + side) * sectorsPerTrack * SectorBytes;
                     for (int id = 1; id <= sectorsPerTrack; id++)
                     {
-                        Buffer.BlockCopy(found[id], 0, sectors, trackStart + ((id - 1) * SectorBytes), SectorBytes);
+                        Buffer.BlockCopy(found[id].Data, 0, sectors, trackStart + ((id - 1) * SectorBytes), SectorBytes);
+                        int logical = (trackStart / SectorBytes) + (id - 1);
+                        headerOffsets![logical] = found[id].HeaderOffset;
+                        markOffsets![logical] = found[id].MarkOffset;
                     }
                 }
             }
 
-            return new DmkDiskImage(cylinders, sides, trackLength, writeProtected, sectorsPerTrack, sectors!);
+            return new DmkDiskImage(cylinders, sides, trackLength, writeProtected, sectorsPerTrack, sectors!, file, headerOffsets!, markOffsets!);
+        }
+
+        /// <summary>
+        /// Takes the sectors of the whole disk and rebuilds every sector that differs from the one held, in the bytes of the DMK file.
+        /// </summary>
+        /// <remarks>
+        /// For each changed sector the sector header (FEH, cylinder, side, sector number, size code 1) and its CRC are written, the data address mark
+        /// is set to FBH, the 256 data bytes are copied in, and the data CRC is worked out again (see the remarks of the class). Nothing else in
+        /// the file changes. Use <see cref="ToFileBytes"/> to get the file.
+        /// </remarks>
+        /// <param name="sectors">
+        /// All sectors in logical order, as <see cref="GetSectorImage"/> gives them. Exactly that many bytes.
+        /// </param>
+        /// <returns>
+        /// The number of sectors that were rebuilt.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="sectors"/> has another length than the disk.
+        /// </exception>
+        public int SetSectorImage(ReadOnlySpan<byte> sectors)
+        {
+            if (sectors.Length != _sectors.Length)
+            {
+                throw new ArgumentException("The sector image has " + sectors.Length + " bytes but the disk has " + _sectors.Length, nameof(sectors));
+            }
+
+            int changed = 0;
+            int count = _sectors.Length / SectorBytes;
+            for (int logical = 0; logical < count; logical++)
+            {
+                ReadOnlySpan<byte> incoming = sectors.Slice(logical * SectorBytes, SectorBytes);
+                if (incoming.SequenceEqual(new ReadOnlySpan<byte>(_sectors, logical * SectorBytes, SectorBytes)))
+                {
+                    continue;
+                }
+
+                int track = logical / SectorsPerTrack;
+                int sectorNumber = (logical % SectorsPerTrack) + 1;
+                int cylinder = track / Sides;
+                int side = track % Sides;
+
+                int header = _headerOffsets[logical];
+                _file[header] = 0xFE;
+                _file[header + 1] = (byte)cylinder;
+                _file[header + 2] = (byte)side;
+                _file[header + 3] = (byte)sectorNumber;
+                _file[header + 4] = SizeCode256;
+                int headerCrc = Crc(_file, header, 5);
+                _file[header + 5] = (byte)(headerCrc >> 8);
+                _file[header + 6] = (byte)(headerCrc & 0xFF);
+
+                int mark = _markOffsets[logical];
+                _file[mark] = 0xFB;
+                incoming.CopyTo(new Span<byte>(_file, mark + 1, SectorBytes));
+                int dataCrc = Crc(_file, mark, 1 + SectorBytes);
+                _file[mark + 1 + SectorBytes] = (byte)(dataCrc >> 8);
+                _file[mark + 2 + SectorBytes] = (byte)(dataCrc & 0xFF);
+
+                incoming.CopyTo(new Span<byte>(_sectors, logical * SectorBytes, SectorBytes));
+                changed++;
+            }
+
+            return changed;
+        }
+
+        /// <summary>
+        /// Gets the DMK file as it is now, with every change of <see cref="SetSectorImage"/> in it.
+        /// </summary>
+        /// <returns>
+        /// A copy of the file bytes.
+        /// </returns>
+        public byte[] ToFileBytes()
+        {
+            byte[] copy = new byte[_file.Length];
+            Buffer.BlockCopy(_file, 0, copy, 0, copy.Length);
+            return copy;
         }
 
         /// <summary>
@@ -294,10 +389,18 @@ namespace RetroIO.Storage.Local.Drivers
             return jvc;
         }
 
-        // Returns the sectors of one track block, indexed by sector number.
-        private static byte[][] ReadTrack(byte[] file, int blockStart, int trackLength, int cylinder, int side)
+        // One sector found in a track: its data and where its header (FEH) and its data address mark are in the file.
+        private sealed class SectorRef
         {
-            byte[][] found = new byte[256][];
+            public byte[] Data = Array.Empty<byte>();
+            public int HeaderOffset;
+            public int MarkOffset;
+        }
+
+        // Returns the sectors of one track block, indexed by sector number.
+        private static SectorRef[] ReadTrack(byte[] file, int blockStart, int trackLength, int cylinder, int side)
+        {
+            SectorRef[] found = new SectorRef[256];
 
             for (int index = 0; index < MaxPointers; index++)
             {
@@ -377,7 +480,7 @@ namespace RetroIO.Storage.Local.Drivers
 
                 byte[] data = new byte[SectorBytes];
                 Buffer.BlockCopy(file, position + 1, data, 0, SectorBytes);
-                found[sector] = data;
+                found[sector] = new SectorRef { Data = data, HeaderOffset = header, MarkOffset = position };
             }
 
             return found;

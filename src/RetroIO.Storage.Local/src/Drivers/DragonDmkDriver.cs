@@ -17,11 +17,18 @@ namespace RetroIO.Storage.Local.Drivers
     /// <remarks>
     /// The DMK file is decoded by <see cref="DmkDiskImage"/>, which also describes the format. The decoded sectors are handed to a
     /// <see cref="DragonDskDriver"/> behind a JVC header, so the choice of file system and everything after it is the DSK driver's.
+    /// <para><b>Writing</b></para>
+    /// A change made through the DSK driver lands in the decoded sectors. After every write, delete, rename or block write this driver gives the
+    /// decoded sectors back to <see cref="DmkDiskImage.SetSectorImage"/>, which rebuilds the sector headers, data and both CRCs of the changed
+    /// sectors, and writes the DMK file back to the stream from its start. An image whose header marks it write protected is mounted read-only.
     /// </remarks>
     public sealed class DragonDmkDriver : IFileSystemDriver
     {
         private readonly DragonDskDriver _inner = new DragonDskDriver();
         private MemoryStream? _sectors;
+        private DmkDiskImage? _image;
+        private Stream? _fileStream;
+        private bool _writable;
 
         /// <summary>
         /// Gets the file system type of the mounted volume.
@@ -49,9 +56,9 @@ namespace RetroIO.Storage.Local.Drivers
         public bool CanRead => _inner.CanRead;
 
         /// <summary>
-        /// Gets <c>false</c>, because this driver has no write support.
+        /// Gets <c>true</c> when the image is mounted read-write, is not marked write protected and holds a DragonDOS volume.
         /// </summary>
-        public bool CanWrite => _inner.CanWrite;
+        public bool CanWrite => _writable && _inner.CanWrite;
 
         /// <summary>
         /// Gets <c>true</c>, because the decoded sectors can be read as blocks.
@@ -87,8 +94,13 @@ namespace RetroIO.Storage.Local.Drivers
         public void Mount(Stream imageStream, bool readOnly)
         {
             DmkDiskImage image = DmkDiskImage.Parse(imageStream);
-            _sectors = new MemoryStream(image.ToJvcImage(), false);
-            _inner.Mount(_sectors, readOnly);
+
+            // A disk the header marks write protected is never written, and a stream that cannot be written cannot take the changes back.
+            _writable = !readOnly && !image.WriteProtected && imageStream.CanWrite && imageStream.CanSeek;
+            _sectors = new MemoryStream(image.ToJvcImage(), _writable);
+            _inner.Mount(_sectors, !_writable);
+            _image = image;
+            _fileStream = imageStream;
         }
 
         /// <summary>
@@ -106,34 +118,54 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the driver has no write support, so the volume is read-only.
+        /// Creates or replaces a file on the mounted volume and writes the DMK file back.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// The file.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The file contents.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted for writing or the volume cannot be written.
         /// </exception>
         public void WriteFile(string path, byte[] data)
         {
             _inner.WriteFile(path, data);
+            SaveToFile();
         }
 
         /// <summary>
-        /// Always throws UnauthorizedAccessException: the driver has no write support, so the volume is read-only.
+        /// Deletes a file from the mounted volume and writes the DMK file back.
         /// </summary>
         /// <param name="path">
-        /// Not used.
+        /// The file.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when nothing is mounted for writing or the volume cannot be written.
         /// </exception>
         public void DeleteFile(string path)
         {
             _inner.DeleteFile(path);
+            SaveToFile();
+        }
+
+        /// <summary>
+        /// Renames a file on the mounted volume and writes the DMK file back.
+        /// </summary>
+        /// <param name="oldPath">
+        /// Current name of the file.
+        /// </param>
+        /// <param name="newPath">
+        /// New name of the file.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Thrown when nothing is mounted for writing or the volume cannot be written.
+        /// </exception>
+        public void RenameFile(string oldPath, string newPath)
+        {
+            _inner.RenameFile(oldPath, newPath);
+            SaveToFile();
         }
 
         /// <summary>
@@ -193,17 +225,21 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Always throws: the driver has no write support, so the volume is read-only.
+        /// Writes one decoded sector and writes the DMK file back.
         /// </summary>
         /// <param name="address">
-        /// Not used.
+        /// The block to write.
         /// </param>
         /// <param name="data">
-        /// Not used.
+        /// The 256 bytes of the sector.
         /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Thrown when nothing is mounted for writing.
+        /// </exception>
         public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
         {
             _inner.WriteBlock(address, data);
+            SaveToFile();
         }
 
         /// <summary>
@@ -225,6 +261,30 @@ namespace RetroIO.Storage.Local.Drivers
             _inner.Dispose();
             _sectors?.Dispose();
             _sectors = null;
+            _image = null;
+            _fileStream = null;
+        }
+
+        // Gives the decoded sectors to the DMK image, which rebuilds the changed ones (headers, data, CRCs), and writes the whole file back.
+        // The sectors in the memory stream are up to date because the DSK driver flushes its block device after every write.
+        private void SaveToFile()
+        {
+            if (_image == null || _sectors == null || _fileStream == null)
+            {
+                return;
+            }
+
+            byte[] jvc = _sectors.ToArray();
+            int changed = _image.SetSectorImage(new ReadOnlySpan<byte>(jvc, 5, jvc.Length - 5));
+            if (changed == 0)
+            {
+                return;
+            }
+
+            byte[] file = _image.ToFileBytes();
+            _fileStream.Position = 0;
+            _fileStream.Write(file, 0, file.Length);
+            _fileStream.Flush();
         }
     }
 }
