@@ -18,7 +18,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// <summary>
     /// Driver for Dragon 32/64 VDK disk images with DragonDOS filesystem.
     /// Supports 40/80 tracks, single/double-sided formats.
-    /// Thin wrapper that composes GenericBlockDevice + an OS-9 or DragonDOS file system.
+    /// Thin wrapper that composes GenericBlockDevice + an OS-9, DragonDOS or DECB file system.
     /// </summary>
     /// <remarks>
     /// <para><b>The VDK format</b></para>
@@ -44,10 +44,10 @@ namespace RetroIO.Storage.Local.Drivers
     /// it), and shows the missing sectors as zero bytes; a file that is shorter than that, or longer than the header says, is refused.
     /// <para><b>What this driver does with it</b></para>
     /// It reads the geometry from bytes 8 and 9 and the header length from bytes 2 and 3, mounts the sectors after the header, and picks the
-    /// file system from the contents of the disk: OS-9 first (it has a strict signature in sector 0), otherwise DragonDOS. The DSK and JVC format
+    /// file system from the contents of the disk: OS-9 first (it has a strict signature in sector 0), then DragonDOS when its BAM checks out, then DECB (a one sided 40 or 80 track disk whose FAT fits), otherwise DragonDOS. The DSK and JVC format
     /// is described in <see cref="DragonDskDriver"/>, and the DMK format in <see cref="DmkDiskImage"/>.
     /// <para><b>Writing</b></para>
-    /// The mounted volume (DragonDOS, or OS-9) can be written (create, overwrite, delete, rename) through its file system; the changes go back to the image stream after each operation.
+    /// The mounted volume (DragonDOS, DECB or OS-9) can be written (create, overwrite, delete, rename) through its file system; the changes go back to the image stream after each operation.
     /// The sectors are never moved and the header is kept as it is.
     /// </remarks>
     public sealed class DragonVdkDriver : IFileSystemDriver
@@ -96,7 +96,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public bool CanRead => true;
         /// <summary>
-        /// Gets <c>true</c> when an image is mounted read-write and holds a volume that can be written: DragonDOS (with a valid BAM) or OS-9.
+        /// Gets <c>true</c> when an image is mounted read-write and holds a volume that can be written: DragonDOS (with a valid BAM), DECB or OS-9.
         /// </summary>
         public bool CanWrite => _blockDevice != null && !_blockDevice.IsReadOnly && _filesystem != null && (_filesystem is not DragonDosFileSystem dragonDos || dragonDos.IsDragonDosVolume);
         /// <summary>
@@ -117,7 +117,7 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Checks the VDK header, picks the disk geometry from it, mounts the data part of the image as a block device and initializes the DragonDOS file system.
+        /// Checks the VDK header, picks the disk geometry from it, mounts the data part of the image as a block device and initializes the OS-9, DragonDOS or DECB file system found on it.
         /// </summary>
         /// <param name="imageStream">
         /// The stream holding the disk image.
@@ -221,18 +221,18 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice = new GenericBlockDevice(_descriptor);
             _blockDevice.Mount(dataStream, readOnly);
 
-            // 6. Mount the file system: an OS-9 volume has a strict signature in sector 0, so it is tried first, then DragonDOS.
+            // 6. Mount the file system: an OS-9 volume has a strict signature in sector 0, so it is tried first, then DragonDOS, then DECB
+            //    (a one sided 40 or 80 track DECB disk, as Toolshed decb dskini -4 and -8 make them), and DragonDOS when nothing fits.
             Os9RbfFileSystem os9 = new Os9RbfFileSystem();
             if (os9.CanHandle(_blockDevice))
             {
                 _filesystem = os9;
+                _filesystem.Initialize(_blockDevice);
             }
             else
             {
-                _filesystem = new DragonDosFileSystem();
+                _filesystem = DragonDskDriver.PickDragonDosOrDecb(_blockDevice);
             }
-
-            _filesystem.Initialize(_blockDevice);
         }
 
         /// <summary>

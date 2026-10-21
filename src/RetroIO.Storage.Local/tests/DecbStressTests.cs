@@ -23,9 +23,8 @@ namespace RetroIO.Storage.Local.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The only DECB layout <c>DecbFileSystem</c> accepts is 35 tracks, one side, 18 sectors of 256 bytes (its <c>CanHandle</c> asks for exactly
-    /// that, and it has 68 granules built in). Toolshed can make 40 and 80 track DECB disks (<c>decb dskini -4</c> and <c>-8</c>), but the code
-    /// does not take them, so they are not run here.
+    /// Every DECB layout Toolshed makes is run: 35, 40 and 80 tracks, one side, 18 sectors of 256 bytes (<c>decb dskini -3</c>, <c>-4</c>,
+    /// <c>-8</c>), with 68, 78 and 156 granules. Toolshed has no two sided DECB layout, so there is none here.
     /// </para>
     /// <para>
     /// After every call the whole image is read back from the block device and checked byte by byte, without using the code under test:
@@ -51,7 +50,15 @@ namespace RetroIO.Storage.Local.Tests
         [Test]
         public void Decb35Track_500RandomCalls_EveryCheckHoldsAfterEveryCall()
         {
-            DecbStressRun run = new DecbStressRun(20261021, 5, 100, false);
+            DecbStressRun run = new DecbStressRun(35, 20261021, 5, 100, false);
+            run.Execute();
+        }
+
+        [TestCase(40)]
+        [TestCase(80)]
+        public void DecbTracks_500RandomCalls_EveryCheckHoldsAfterEveryCall(int tracks)
+        {
+            DecbStressRun run = new DecbStressRun(tracks, 20261021 + tracks, 5, 100, false);
             run.Execute();
         }
 
@@ -60,7 +67,17 @@ namespace RetroIO.Storage.Local.Tests
         [Category("Stress")]
         public void Decb35Track_5000RandomCalls_EveryCheckHoldsAfterEveryCall()
         {
-            DecbStressRun run = new DecbStressRun(4711, 50, 100, true);
+            DecbStressRun run = new DecbStressRun(35, 4711, 50, 100, true);
+            run.Execute();
+        }
+
+        [TestCase(40)]
+        [TestCase(80)]
+        [Explicit("Long run, about a minute each: start it by hand")]
+        [Category("Stress")]
+        public void DecbTracks_5000RandomCalls_EveryCheckHoldsAfterEveryCall(int tracks)
+        {
+            DecbStressRun run = new DecbStressRun(tracks, 4711 + tracks, 50, 100, true);
             run.Execute();
         }
     }
@@ -72,9 +89,6 @@ namespace RetroIO.Storage.Local.Tests
     {
         private const int SectorSize = 256;
         private const int SectorsPerTrack = 18;
-        private const int Tracks = 35;
-        private const int TotalSectors = Tracks * SectorsPerTrack;
-        private const int Granules = 68;
         private const int GranuleBytes = 2304;
         private const int SectorsPerGranule = 9;
         private const int DirectoryEntries = 72;
@@ -126,8 +140,11 @@ namespace RetroIO.Storage.Local.Tests
         private int _call;
         private string _callText = string.Empty;
         private int _round;
-        private readonly byte[] _snapshot = new byte[TotalSectors * SectorSize];
-        private readonly byte[] _before = new byte[TotalSectors * SectorSize];
+        private readonly int _tracks;
+        private readonly int _totalSectors;
+        private readonly int _granules;
+        private readonly byte[] _snapshot;
+        private readonly byte[] _before;
         private readonly StringBuilder _toolshedNotes = new StringBuilder();
 
         // Counters for the report.
@@ -141,8 +158,16 @@ namespace RetroIO.Storage.Local.Tests
         private int _fills;
         private int _toolshedRuns;
 
-        public DecbStressRun(int seed, int rounds, int callsPerRound, bool toolshedEveryRound)
+        public DecbStressRun(int tracks, int seed, int rounds, int callsPerRound, bool toolshedEveryRound)
         {
+            // 35, 40 or 80 tracks of one side; the granules are the ones Toolshed dskini puts in the FAT (libdecbdskini.c: 68, 78, 156). The
+            // count is written out here rather than taken from DecbFileSystem, so that a wrong count in the code under test cannot set the test.
+            _tracks = tracks;
+            _totalSectors = tracks * SectorsPerTrack;
+            _granules = tracks == 35 ? 68 : (tracks == 40 ? 78 : (tracks == 80 ? 156 : 0));
+            Assert.That(_granules, Is.GreaterThan(0), "Toolshed makes no DECB disk of " + tracks + " tracks");
+            _snapshot = new byte[_totalSectors * SectorSize];
+            _before = new byte[_totalSectors * SectorSize];
             _seed = seed;
             _rounds = rounds;
             _callsPerRound = callsPerRound;
@@ -164,11 +189,11 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             // The probe needs at most 18 granules at once (while it overwrites), so the fullest ballast must leave that: 70 % is 47 granules,
-            // and 47 + 18 = 65 of 68.
+            // and 47 + 18 = 65 of 68 (on 40 and 80 tracks 54 + 18 = 72 of 78 and 109 + 18 = 127 of 156).
             _ballast = new byte[StressTimings.ProbePercent.Length][];
             for (int level = 0; level < _ballast.Length; level++)
             {
-                _ballast[level] = new byte[Granules * StressTimings.ProbePercent[level] / 100 * GranuleBytes];
+                _ballast[level] = new byte[_granules * StressTimings.ProbePercent[level] / 100 * GranuleBytes];
             }
 
             // 120 names: a letter and two digits, with one of the extensions.
@@ -213,11 +238,12 @@ namespace RetroIO.Storage.Local.Tests
             }
         }
 
-        // A freshly formatted disk as Toolshed dskini makes it: 68 free FAT bytes (0xFF), the rest of the FAT sector zero, the whole directory 0xFF.
-        private static byte[] BlankImage()
+        // A freshly formatted disk as Toolshed dskini makes it: 68, 78 or 156 free FAT bytes (0xFF), the rest of the FAT sector zero, the whole
+        // directory 0xFF.
+        private byte[] BlankImage()
         {
-            byte[] image = new byte[TotalSectors * SectorSize];
-            for (int i = 0; i < Granules; i++)
+            byte[] image = new byte[_totalSectors * SectorSize];
+            for (int i = 0; i < _granules; i++)
             {
                 image[FatOffset + i] = 0xFF;
             }
@@ -234,14 +260,14 @@ namespace RetroIO.Storage.Local.Tests
         {
             BlockDeviceDescriptor descriptor = new BlockDeviceDescriptor
             {
-                Name = "CoCo DSK 35T/SS",
+                Name = "CoCo DSK " + _tracks + "T/SS",
                 BlockSize = SectorSize,
                 AddressMode = BlockAddressMode.LBA,
-                Cylinders = Tracks,
+                Cylinders = _tracks,
                 Heads = 1,
                 UniformSectorsPerTrack = SectorsPerTrack,
-                TotalBlocks = TotalSectors,
-                ExpectedImageSize = TotalSectors * SectorSize,
+                TotalBlocks = (uint)_totalSectors,
+                ExpectedImageSize = _totalSectors * SectorSize,
                 SupportsVariableGeometry = false
             };
 
@@ -269,7 +295,7 @@ namespace RetroIO.Storage.Local.Tests
         private byte[] Snapshot()
         {
             byte[] image = _snapshot;
-            for (uint lba = 0; lba < TotalSectors; lba++)
+            for (uint lba = 0; lba < _totalSectors; lba++)
             {
                 _device!.ReadBlock(BlockAddress.FromLBA(lba), image.AsSpan((int)lba * SectorSize, SectorSize));
             }
@@ -593,12 +619,12 @@ namespace RetroIO.Storage.Local.Tests
 
         private int Bucket()
         {
-            return StressTimings.BucketOf(UsedGranules(), Granules);
+            return StressTimings.BucketOf(UsedGranules(), _granules);
         }
 
         private void Create(string name)
         {
-            int free = Granules - UsedGranules();
+            int free = _granules - UsedGranules();
             byte[] data = RandomData(RandomSize(free));
             bool typed = _random.Next(5) == 0;
             byte type = (byte)_random.Next(4);
@@ -608,7 +634,7 @@ namespace RetroIO.Storage.Local.Tests
 
         private void Overwrite(ModelFile file)
         {
-            int available = Granules - UsedGranules() + GranulesFor(file.Data.Length);
+            int available = _granules - UsedGranules() + GranulesFor(file.Data.Length);
             byte[] data = RandomData(RandomSize(available));
             bool typed = _random.Next(8) == 0;
             byte type = (byte)_random.Next(4);
@@ -621,7 +647,7 @@ namespace RetroIO.Storage.Local.Tests
         private void Write(string name, byte[] data, bool typed, byte type, byte flag)
         {
             int found = IndexOf(name);
-            int available = Granules - UsedGranules() + (found >= 0 ? GranulesFor(_slots[found]!.Data.Length) : 0);
+            int available = _granules - UsedGranules() + (found >= 0 ? GranulesFor(_slots[found]!.Data.Length) : 0);
             bool fits = GranulesFor(data.Length) <= available;
             Begin((found >= 0 ? "overwrite " : "create ") + name + " with " + data.Length + " bytes" + (typed ? " type " + type + " flag " + flag : string.Empty)
                 + (fits ? string.Empty : ", does not fit"));
@@ -812,7 +838,7 @@ namespace RetroIO.Storage.Local.Tests
                 return;
             }
 
-            int available = Granules - UsedGranules() + GranulesFor(file.Data.Length);
+            int available = _granules - UsedGranules() + GranulesFor(file.Data.Length);
             int size = (available * GranuleBytes) - _random.Next(SectorSize);
             Write(file.Name, RandomData(size), false, 0, 0);
             Assert.That(_fs!.GetBlocksFree(), Is.EqualTo(0), "the disk is not full after the fill, " + Where());
@@ -827,7 +853,7 @@ namespace RetroIO.Storage.Local.Tests
             Write(file.Name, RandomData((available * GranuleBytes) + 1), false, 0, 0);
         }
 
-        // Deletes every file in a random order and requires the whole disk back: 612 free sectors, every FAT byte free.
+        // Deletes every file in a random order and requires the whole disk back: 612, 702 or 1404 free sectors, every FAT byte free.
         private void DeleteAll()
         {
             while (FileCount() > 0)
@@ -836,9 +862,9 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             Begin("all files deleted");
-            Assert.That(_fs!.GetBlocksFree(), Is.EqualTo(Granules * SectorsPerGranule), "free space did not come back to the empty-disk value, " + Where());
+            Assert.That(_fs!.GetBlocksFree(), Is.EqualTo(_granules * SectorsPerGranule), "free space did not come back to the empty-disk value, " + Where());
             byte[] image = Snapshot();
-            for (int g = 0; g < Granules; g++)
+            for (int g = 0; g < _granules; g++)
             {
                 Assert.That(image[FatOffset + g], Is.EqualTo(0xFF), "granule " + g + " is not free after every file was deleted, " + Where());
             }
@@ -858,10 +884,10 @@ namespace RetroIO.Storage.Local.Tests
         {
             byte[] image = Snapshot();
 
-            // Track 17 outside the FAT and directory sectors, and the FAT sector after byte 67, are never written.
+            // Track 17 outside the FAT and directory sectors, and the FAT sector after the last granule's byte (67, 77 or 155), are never written.
             for (int i = Track17Offset; i < Track17Offset + (SectorsPerTrack * SectorSize); i++)
             {
-                bool inFat = i >= FatOffset + Granules && i < FatOffset + SectorSize;
+                bool inFat = i >= FatOffset + _granules && i < FatOffset + SectorSize;
                 bool outsideBoth = i < FatOffset || i >= DirOffset + (9 * SectorSize);
                 if ((inFat || outsideBoth) && image[i] != _initial[i])
                 {
@@ -869,8 +895,19 @@ namespace RetroIO.Storage.Local.Tests
                 }
             }
 
-            int[] owner = new int[Granules];
-            for (int g = 0; g < Granules; g++)
+            // Nothing after the last granule is written either: on 80 tracks that is track 79, which holds no granule (156 granules end on
+            // track 78). On 35 and 40 tracks the last granule ends at the end of the image.
+            int lastTrack = ((_granules - 1) / 2) + 1;
+            for (int i = (lastTrack + 1) * SectorsPerTrack * SectorSize; i < image.Length; i++)
+            {
+                if (image[i] != _initial[i])
+                {
+                    Assert.Fail("byte " + i + " after the last granule changed, " + Where());
+                }
+            }
+
+            int[] owner = new int[_granules];
+            for (int g = 0; g < _granules; g++)
             {
                 owner[g] = -1;
             }
@@ -894,7 +931,7 @@ namespace RetroIO.Storage.Local.Tests
                 usedGranules += CheckEntry(image, slot, file, owner);
             }
 
-            for (int g = 0; g < Granules; g++)
+            for (int g = 0; g < _granules; g++)
             {
                 if (owner[g] < 0 && image[FatOffset + g] != 0xFF)
                 {
@@ -904,10 +941,10 @@ namespace RetroIO.Storage.Local.Tests
 
             // Free space plus the space the files need is the whole disk.
             int free = _fs!.GetBlocksFree();
-            if (free != (Granules - usedGranules) * SectorsPerGranule)
+            if (free != (_granules - usedGranules) * SectorsPerGranule)
             {
-                Assert.Fail("free space is " + free + " sectors, the files need " + usedGranules + " of " + Granules + " granules, so it should be "
-                    + ((Granules - usedGranules) * SectorsPerGranule) + ", " + Where());
+                Assert.Fail("free space is " + free + " sectors, the files need " + usedGranules + " of " + _granules + " granules, so it should be "
+                    + ((_granules - usedGranules) * SectorsPerGranule) + ", " + Where());
             }
 
             DirectoryEntry[] listing = _fs.ListDirectory("/");
@@ -967,7 +1004,7 @@ namespace RetroIO.Storage.Local.Tests
             int position = 0;
             for (int j = 0; j < granules; j++)
             {
-                if (granule >= Granules)
+                if (granule >= _granules)
                 {
                     Assert.Fail(file.Name + ": granule " + j + " of the chain is " + granule + ", outside the disk, " + Where());
                 }
@@ -986,7 +1023,7 @@ namespace RetroIO.Storage.Local.Tests
                         + ", " + Where());
                 }
 
-                if (!lastOne && value >= Granules)
+                if (!lastOne && value >= _granules)
                 {
                     Assert.Fail(file.Name + ": the chain stops after " + (j + 1) + " granules (FAT value " + value + "), expected " + granules + ", " + Where());
                 }
@@ -1036,7 +1073,7 @@ namespace RetroIO.Storage.Local.Tests
 
             _toolshedRuns++;
             _callText = "Toolshed check after round " + _round;
-            Assert.That(StressToolshed.NumberAfter(free, "Free granules:"), Is.EqualTo(Granules - UsedGranules()), "decb free: " + free + ", " + Where());
+            Assert.That(StressToolshed.NumberAfter(free, "Free granules:"), Is.EqualTo(_granules - UsedGranules()), "decb free: " + free + ", " + Where());
 
             string? dir = StressToolshed.Run("decb", "dir", image);
             Assert.That(dir, Is.Not.Null);
@@ -1091,7 +1128,7 @@ namespace RetroIO.Storage.Local.Tests
         private void Report()
         {
             StringBuilder report = new StringBuilder();
-            report.Append("DECB 35 track stress, seed ").Append(_seed).Append(": ").Append(_call).Append(" calls in ").Append(_rounds).Append(" rounds (")
+            report.Append("DECB ").Append(_tracks).Append(" track stress, seed ").Append(_seed).Append(": ").Append(_call).Append(" calls in ").Append(_rounds).Append(" rounds (")
                 .Append(_creates).Append(" creates, ").Append(_overwrites).Append(" overwrites, ").Append(_reads).Append(" reads, ")
                 .Append(_deletes).Append(" deletes, ").Append(_renames).Append(" renames, ").Append(_refusedFull).Append(" refused as disk full, ")
                 .Append(_refusedOther).Append(" other refusals, ").Append(_fills).Append(" fills to the last granule)").AppendLine();
