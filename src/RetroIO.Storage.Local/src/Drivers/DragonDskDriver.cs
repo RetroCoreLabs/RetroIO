@@ -329,7 +329,8 @@ namespace RetroIO.Storage.Local.Drivers
 
         /// <summary>
         /// Picks the file system of a disk that is not OS-9 and not 35 tracks: DragonDOS when its BAM geometry checks out, otherwise
-        /// DECB when the FAT on track 17 holds only DECB values, otherwise DragonDOS (which then reports that it is not a DragonDOS volume).
+        /// DECB when the FAT on track 17 holds only DECB values (first with the granule count of the track count, then with the 68
+        /// granules of a 35 track disk), otherwise DragonDOS (which then reports that it is not a DragonDOS volume).
         /// </summary>
         /// <remarks>
         /// DragonDOS is asked first so that every disk that mounted as DragonDOS before still does. A DECB disk has its directory on track 17
@@ -352,6 +353,15 @@ namespace RetroIO.Storage.Local.Drivers
                 {
                     decb.Initialize(device);
                     return decb;
+                }
+
+                // A DECB disk of 35 track layout in a larger image: 68 granules on track 17, nothing on the tracks past 34
+                // (HTCHHKER.VDK and PLANETFALL.VDK are 40 track images of this kind).
+                DecbFileSystem sixtyEight = DecbFileSystem.WithSixtyEightGranules();
+                if (sixtyEight.CanHandle(device))
+                {
+                    sixtyEight.Initialize(device);
+                    return sixtyEight;
                 }
             }
 

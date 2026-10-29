@@ -36,6 +36,10 @@ namespace RetroIO.Storage.Local.FileSystems
         private int _trackCount = 35;
         private int _granuleCount = 68;
 
+        // 68 for an instance made by WithSixtyEightGranules, which takes the granule count from the FAT layout rather than the track count;
+        // 0 when the granule count comes from the track count.
+        private readonly int _fixedGranuleCount;
+
         private const int FAT_TRACK = 17;
         private const int FAT_SECTOR = 2;
         private const int DIR_START_SECTOR = 3;
@@ -46,6 +50,18 @@ namespace RetroIO.Storage.Local.FileSystems
         private const int GRANULE_SIZE = 2304; // 9 sectors * 256 bytes
         private const int SECTORS_PER_GRANULE = 9;
         private const int SECTORS_PER_TRACK = 18;
+
+        /// <summary>
+        /// Makes a file system that takes the granule count from the track count of the device: 68, 78 or 156.
+        /// </summary>
+        public DecbFileSystem()
+        {
+        }
+
+        private DecbFileSystem(int fixedGranuleCount)
+        {
+            _fixedGranuleCount = fixedGranuleCount;
+        }
 
         /// <summary>
         /// Gives the number of granules of a DECB disk with this many tracks, as Toolshed dskini writes the FAT.
@@ -121,7 +137,10 @@ namespace RetroIO.Storage.Local.FileSystems
                 heads = info.HeadCount > 0 ? info.HeadCount : 1;
             }
 
-            int granules = GranulesForTracks(_trackCount);
+            // An instance made by WithSixtyEightGranules uses 68 granules on any device of at least 35 tracks.
+            int granules = _fixedGranuleCount != 0
+                ? (_trackCount >= 35 ? _fixedGranuleCount : 0)
+                : GranulesForTracks(_trackCount);
             if (granules == 0 || _sectorsPerTrack != SECTORS_PER_TRACK || heads != 1)
             {
                 _device = null;
@@ -198,6 +217,32 @@ namespace RetroIO.Storage.Local.FileSystems
                 byte[] fatSector = new byte[SECTOR_SIZE];
                 device.ReadBlock(BlockAddress.FromLBA(fatLsn), fatSector);
 
+                if (_fixedGranuleCount != 0)
+                {
+                    // The 68 granule layout on a device of any track count (see WithSixtyEightGranules): linked lists in bytes 0 to 67, and
+                    // one filler, 0x00 or 0xFF, in all the rest of the sector.
+                    if (!IsLinkedListFat(fatSector, _fixedGranuleCount))
+                    {
+                        return false;
+                    }
+
+                    byte filler = fatSector[_fixedGranuleCount];
+                    if (filler != 0x00 && filler != 0xFF)
+                    {
+                        return false;
+                    }
+
+                    for (int i = _fixedGranuleCount + 1; i < SECTOR_SIZE; i++)
+                    {
+                        if (fatSector[i] != filler)
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
                 if (granules == 68)
                 {
                     // 35 tracks: the check this method has always made is kept as it was. No other file system of the Dragon drivers has a 35
@@ -225,51 +270,17 @@ namespace RetroIO.Storage.Local.FileSystems
                 // 40 and 80 tracks: DragonDOS is the other file system of the same size, and it is asked first, so this is only asked about
                 // a disk that is not DragonDOS. It says yes only for a FAT that holds DECB values, forms linked lists and is laid out as
                 // Toolshed lays it out.
-                Span<bool> hasPredecessor = stackalloc bool[granules];
-                for (int i = 0; i < granules; i++)
+                if (!IsLinkedListFat(fatSector, granules))
                 {
-                    byte value = fatSector[i];
-                    bool free = value == 0xFF;
-                    bool next = value < granules;
-                    bool last = value >= 0xC0 && value <= 0xC9;
-                    if (!free && !next && !last)
-                    {
-                        return false;
-                    }
-
-                    // The FAT is one linked list per file ("the bytes in the FAT form a linked list for each file", libdecbopen.c), so no
-                    // granule is the next granule of two others. An all-zero sector would otherwise pass as every granule linking to granule 0.
-                    if (next)
-                    {
-                        if (hasPredecessor[value])
-                        {
-                            return false;
-                        }
-
-                        hasPredecessor[value] = true;
-                    }
-                }
-
-                // Every chain must end in a last-granule value: it may not run into a free granule or go round in a loop.
-                for (int i = 0; i < granules; i++)
-                {
-                    int granule = i;
-                    int steps = 0;
-                    while (fatSector[granule] < granules)
-                    {
-                        granule = fatSector[granule];
-                        if (fatSector[granule] == 0xFF || ++steps > granules)
-                        {
-                            return false;
-                        }
-                    }
+                    return false;
                 }
 
                 // On 40 and 80 tracks the only layout known is the one Toolshed dskini -4 and -8 writes: the bytes of the FAT sector after the
                 // last granule are zero (libdecbdskini.c fills the sector with 0 and sets only the granule bytes to 0xFF), and neither Toolshed
                 // nor this code writes them later. A real 35 track disk need not follow it (syzygy.dsk has 0xFF in bytes 68 to 255), so it is
                 // a rule for these two sizes only. Two real 40 track game images (HTCHHKER.VDK, PLANETFALL.VDK) hold a 68 granule FAT (0xFF or
-                // 0x00 after byte 67), which is not this layout, so they are not taken as 78 granule DECB disks.
+                // 0x00 after byte 67), which is not this layout, so they are not taken as 78 granule DECB disks; the instance made by
+                // WithSixtyEightGranules takes them.
                 for (int i = granules; i < SECTOR_SIZE; i++)
                 {
                     if (fatSector[i] != 0x00)
@@ -284,6 +295,93 @@ namespace RetroIO.Storage.Local.FileSystems
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Makes an instance that reads and writes a disk as 68 granules, the FAT of a 35 track disk, whatever the track count of the device.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Some 40 track Dragon and CoCo images hold a DECB disk of 35 track layout: the FAT on track 17 has 68 granules and the last 5
+        /// tracks hold no granule. HTCHHKER.VDK and PLANETFALL.VDK are two (their FAT has 0xFF, and 0xC1 for PLANETFALL's GAME.BIN, in bytes
+        /// 0 to 67, and 0xFF or 0x00 in all of bytes 68 to 255). Toolshed decb reads them so: on the 40 track image and on a cut of its first
+        /// 35 tracks it lists the same directory and, for PLANETFALL, 67 free granules.
+        /// </para>
+        /// <para>
+        /// <see cref="CanHandle"/> on this instance asks for one side of at least 35 tracks of 18 sectors and a FAT whose 68 granule bytes
+        /// are DECB values forming linked lists (the same rule as on 40 and 80 tracks), with bytes 68 to 255 all 0x00 or all 0xFF. Those two
+        /// are the only fillers seen on real disks (PLANETFALL 0x00; HTCHHKER and the 35 track syzygy.dsk 0xFF). A file written to such a
+        /// disk goes in granules 0 to 67 only, so tracks 35 and up are never written.
+        /// </para>
+        /// </remarks>
+        /// <returns>
+        /// A file system that is not initialized.
+        /// </returns>
+        public static DecbFileSystem WithSixtyEightGranules()
+        {
+            return new DecbFileSystem(68);
+        }
+
+        /// <summary>
+        /// Tells whether the first granule bytes of a FAT sector are DECB values that form one linked list per file.
+        /// </summary>
+        /// <remarks>
+        /// Every byte must be 0xFF for a free granule, a granule number below the granule count for the next granule of a file, or 0xC0 to
+        /// 0xC9 for the last granule of a file (Toolshed libdecbopen.c, the format notes at the top). No granule may be the next granule of two
+        /// others, and every chain must end in a last-granule value without running into a free granule or going round in a loop.
+        /// </remarks>
+        /// <param name="fatSector">
+        /// The FAT sector.
+        /// </param>
+        /// <param name="granules">
+        /// The granule count.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the bytes form a DECB FAT.
+        /// </returns>
+        private static bool IsLinkedListFat(ReadOnlySpan<byte> fatSector, int granules)
+        {
+            Span<bool> hasPredecessor = stackalloc bool[granules];
+            for (int i = 0; i < granules; i++)
+            {
+                byte value = fatSector[i];
+                bool free = value == 0xFF;
+                bool next = value < granules;
+                bool last = value >= 0xC0 && value <= 0xC9;
+                if (!free && !next && !last)
+                {
+                    return false;
+                }
+
+                // The FAT is one linked list per file ("the bytes in the FAT form a linked list for each file", libdecbopen.c), so no
+                // granule is the next granule of two others. An all-zero sector would otherwise pass as every granule linking to granule 0.
+                if (next)
+                {
+                    if (hasPredecessor[value])
+                    {
+                        return false;
+                    }
+
+                    hasPredecessor[value] = true;
+                }
+            }
+
+            // Every chain must end in a last-granule value: it may not run into a free granule or go round in a loop.
+            for (int i = 0; i < granules; i++)
+            {
+                int granule = i;
+                int steps = 0;
+                while (fatSector[granule] < granules)
+                {
+                    granule = fatSector[granule];
+                    if (fatSector[granule] == 0xFF || ++steps > granules)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

@@ -223,7 +223,8 @@ namespace RetroIO.Storage.Local.Drivers
             _blockDevice.Mount(dataStream, readOnly);
 
             // 6. Mount the file system: an OS-9 volume has a strict signature in sector 0, so it is tried first, then DragonDOS, then DECB
-            //    (a one sided 40 or 80 track DECB disk, as Toolshed decb dskini -4 and -8 make them), and DragonDOS when nothing fits.
+            //    (a one sided 40 or 80 track DECB disk, as Toolshed decb dskini -4 and -8 make them, or a 68 granule DECB disk of 35 track
+            //    layout in a larger image), and DragonDOS when nothing fits.
             Os9RbfFileSystem os9 = new Os9RbfFileSystem();
             if (os9.CanHandle(_blockDevice))
             {

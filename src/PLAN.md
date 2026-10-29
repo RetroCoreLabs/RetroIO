@@ -13,7 +13,6 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
 
 ## RetroIO
 
-1. **Game disks as DECB** (HTCHHKER.VDK, PLANETFALL.VDK): not started. PLANETFALL's FAT has GAME.BIN at granule 32 and zeros in bytes 68 to 255; HTCHHKER's FAT is all 0xFF with an empty directory. Add a valid 68-granule FAT check for 40-track disks in `PickDragonDosOrDecb`, check with Toolshed `decb` on a 35-track cut.
-2. **Test-host memory warm-up** for the DECB stress memory check: not started. VSTest 17.13 sends run statistics on a 1.5 s timer while a test runs; wait for the first send before the first measured round, then prove it with filtered runs.
-3. **dmk2jv3 in CI**: not added (native build step or WSL on the runner).
-4. **NuGet publish**: needs the `NUGET_API_KEY` secret and tag `v0.1.0`; the user said "not yet".
+1. **Test-host memory warm-up** for the DECB stress memory check: not started. VSTest 17.13 sends run statistics on a 1.5 s timer while a test runs; wait for the first send before the first measured round, then prove it with filtered runs.
+2. **dmk2jv3 in CI**: not added (native build step or WSL on the runner).
+3. **NuGet publish**: needs the `NUGET_API_KEY` secret and tag `v0.1.0`; the user said "not yet".
