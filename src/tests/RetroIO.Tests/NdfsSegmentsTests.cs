@@ -106,7 +106,9 @@ namespace RetroIO.Tests
                 NdfsCpuIdentityTests.PutSegEntry(seg, TablePage, SegIdpit, DpitLogad, 4, IdpitMadr, 0x49, 0xE400);
                 NdfsCpuIdentityTests.PutSegEntry(seg, TablePage, SegSdpit, DpitLogad, 4, SdpitMadr, 0x49, 0xE400);
                 NdfsCpuIdentityTests.PutSegEntry(seg, TablePage, SegSave4, 0x18 /* 000030 */, 2, Save4Madr, 0x8049 /* 100111 */, 0xE400);
-                NdfsCpuIdentityTests.PutSegEntry(seg, TablePage, SegUser, 0x30 /* 000060 */, 3, UserMadr, 0x2049 /* 020111 */, 0xE400);
+                // A segment the RT-loader wrote onto segment file 1: FLAG 020000, 5OK clear (it means
+                // "loaded in memory", not "on disk"), as measured on 2026-10-29.
+                NdfsCpuIdentityTests.PutSegEntry(seg, TablePage, SegUser, 0x30 /* 000060 */, 3, UserMadr, 0x2000 /* 020000 */, 0xE400);
 
                 // Recognisable content: every page of a segment carries its number and page index.
                 for (int p = 0; p < 4; p++) NdfsCpuIdentityTests.PutWord(seg, (long)(FsMadr + p) * Page, 0x5300 | p);

@@ -117,7 +117,8 @@ namespace RetroIO.Storage.Ndfs.Elements
         public int SegmentFile { get; init; }
 
         /// <summary>
-        /// Gets whether FLAG bit 0 is set, which means the segment has a disk address.
+        /// Gets whether FLAG bit 0 (5OK) is set: the segment is loaded in memory, set by SEGIN at run time.
+        /// It says nothing about pages on disk; a segment the RT-loader just wrote has it clear.
         /// </summary>
         public bool Ok5 { get; init; }
 
