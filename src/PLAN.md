@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: RetroIO item 1, the changed-sector writes (red stress variant), which unblock the DriveWire server (RetroIO item 2).
+Next: RetroIO item 1, merge the DriveWire server and turn its 2 red tests green (the changed-block writes they waited for are on main).
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -13,9 +13,8 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
 
 ## RetroIO
 
-1. **Changed-sector writes.** Branch `worktree-agent-a90216b08e6c3a153`, WIP `470248f`. Done: block device in 4 KB pages, flush writes changed blocks only, short DriveWire images grow like Toolshed (100,000-byte copy: 256,768 to 357,120 bytes) and mount writable. Red: the short-DriveWire OS-9 stress variant fails at call 1983, Toolshed dcheck reports bad descriptor segments for two files, image grown to 124 MB; cause not found (compare the descriptor sector dcheck reads with ours on the image kept in the session scratchpad `keep` folder). Then mutation checks, one full suite run, merge.
-2. **DriveWire server.** Branch `worktree-agent-a5c2d45995712c7c3`, commit `64a906b` (on main `6a45f28`). New package `RetroIO.Protocols.DriveWire` plus hosting in RetroIO.Server and two management endpoints. 48 of 50 tests pass; the 2 red ones are writes past the end of a short image, which need item 1. Defaults: TCP 65504, loopback, 250 ms byte timeout, 256 drives. Spec: "DriveWire Protocol Version 4.0.0" (github.com/DrPitre/DriveWire). Then: merge after item 1; publish to the local feed with `src/eng/publish-local.ps1 -Feed <shared localfeed folder>` (its default is wrong from a worktree); in RetroServer, a new branch adding the package reference, the DriveWire keys in `--help`, and a hosting test.
-3. **Game disks as DECB** (HTCHHKER.VDK, PLANETFALL.VDK): not started. PLANETFALL's FAT has GAME.BIN at granule 32 and zeros in bytes 68 to 255; HTCHHKER's FAT is all 0xFF with an empty directory. Add a valid 68-granule FAT check for 40-track disks in `PickDragonDosOrDecb`, check with Toolshed `decb` on a 35-track cut.
-4. **Test-host memory warm-up** for the DECB stress memory check: not started. VSTest 17.13 sends run statistics on a 1.5 s timer while a test runs; wait for the first send before the first measured round, then prove it with filtered runs.
-5. **dmk2jv3 in CI**: not added (native build step or WSL on the runner).
-6. **NuGet publish**: needs the `NUGET_API_KEY` secret and tag `v0.1.0`; the user said "not yet".
+1. **DriveWire server.** Branch `worktree-agent-a5c2d45995712c7c3`, commit `64a906b` (on main `6a45f28`). New package `RetroIO.Protocols.DriveWire` plus hosting in RetroIO.Server and two management endpoints. 48 of 50 tests pass; the 2 red ones are writes past the end of a short image, which needed the changed-block writes (now on main). Defaults: TCP 65504, loopback, 250 ms byte timeout, 256 drives. Spec: "DriveWire Protocol Version 4.0.0" (github.com/DrPitre/DriveWire). Then: merge; publish to the local feed with `src/eng/publish-local.ps1 -Feed <shared localfeed folder>` (its default is wrong from a worktree); in RetroServer, a new branch adding the package reference, the DriveWire keys in `--help`, and a hosting test.
+2. **Game disks as DECB** (HTCHHKER.VDK, PLANETFALL.VDK): not started. PLANETFALL's FAT has GAME.BIN at granule 32 and zeros in bytes 68 to 255; HTCHHKER's FAT is all 0xFF with an empty directory. Add a valid 68-granule FAT check for 40-track disks in `PickDragonDosOrDecb`, check with Toolshed `decb` on a 35-track cut.
+3. **Test-host memory warm-up** for the DECB stress memory check: not started. VSTest 17.13 sends run statistics on a 1.5 s timer while a test runs; wait for the first send before the first measured round, then prove it with filtered runs.
+4. **dmk2jv3 in CI**: not added (native build step or WSL on the runner).
+5. **NuGet publish**: needs the `NUGET_API_KEY` secret and tag `v0.1.0`; the user said "not yet".
