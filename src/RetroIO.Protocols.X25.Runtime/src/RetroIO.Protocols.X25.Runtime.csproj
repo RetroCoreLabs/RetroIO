@@ -24,6 +24,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- For the test seam on PlaceCallViaEndpoint (ProtocolRuntime.X25Endpoints.cs). -->
+    <InternalsVisibleTo Include="RetroIO.Protocols.X25.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

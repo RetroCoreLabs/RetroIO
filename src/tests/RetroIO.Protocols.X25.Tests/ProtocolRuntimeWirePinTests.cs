@@ -31,6 +31,7 @@ using NUnit.Framework;
 
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
+using RetroIO.Protocols.X25.PacketLayer;
 using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Runtime.Models;
 
@@ -313,6 +314,35 @@ namespace RetroIO.Protocols.X25.Tests
 
             // X.29 4.1: protocol identifier 01 00 00 00 in the first four octets of the CUD.
             Assert.That(Hex(info.CallUserData), Is.EqualTo("01 00 00 00"));
+
+            pad.Disconnect();
+        }
+
+        [Test]
+        public void CallConnected_TakenBeforeThePlacingThreadMovesOn_StillReachesThePad()
+        {
+            // The order that made ConnectPad fail now and then under load (CI, 2026-10-21): the
+            // placing thread leaves the engine lock, the reader thread feeds the engine the DCE's
+            // Call Connected, and only then does the placing thread map the runtime's local LCN onto
+            // the engine's channel. The Call Connected found no local LCN and was dropped, so the
+            // PAD never heard it. The seam holds the placing thread at exactly that point until the
+            // engine has taken the answer, which forces that order every time.
+            using RecordingXotDce dce = new RecordingXotDce();
+            using ProtocolRuntime runtime = CreateRuntime(dce.Port);
+            bool answerTaken = false;
+            runtime.CallPlacedOnEndpointForTest = (endpoint, lci) =>
+            {
+                answerTaken = dce.WaitFor(() =>
+                {
+                    lock (endpoint.Sync)
+                    {
+                        return endpoint.Layer.Circuits.TryGetValue(lci, out X25Vc? vc) && vc.State == X25VcState.DataTransfer;
+                    }
+                }, 10000);
+            };
+
+            using PadClient pad = ConnectPad(runtime, dce, "PinRace");
+            Assert.That(answerTaken, Is.True, "the engine never took the Call Connected while the placing thread was held");
 
             pad.Disconnect();
         }
