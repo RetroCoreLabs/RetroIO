@@ -177,6 +177,9 @@ namespace RetroIO.Storage.Local.Tests
         private readonly Random _random;
         private readonly StressTimings _timings;
         private readonly long[] _memory;
+
+        // What StressMemory.WaitForTestHostWarmUp said before the first measurement, for the report.
+        private string _hostWarmUp = string.Empty;
         private readonly StringBuilder _notes = new StringBuilder();
 
         private string _folder = string.Empty;
@@ -1292,6 +1295,12 @@ namespace RetroIO.Storage.Local.Tests
                 if (last || _toolshedEveryRound)
                 {
                     ToolshedCheck("after everything was deleted in round " + _round);
+                }
+
+                if (first)
+                {
+                    // The test host's one-time step must be behind us before the first measurement (see WaitForTestHostWarmUp).
+                    _hostWarmUp = StressMemory.WaitForTestHostWarmUp();
                 }
 
                 _held[_round] = _device!.HeldBytes;
@@ -2424,6 +2433,7 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             report.AppendLine();
+            report.Append("  before the first measurement: ").Append(_hostWarmUp).AppendLine();
             report.Append("  image bytes the device held after each round:");
             for (int i = 0; i < _rounds; i++)
             {
