@@ -16,18 +16,24 @@ namespace RetroIO.Storage.Local.Streams
     /// <remarks>
     /// Disk image files are sometimes cut short: the last track is only partly there. The emulators that load such a file (XRoar does)
     /// take the missing sectors as zero bytes. This stream gives a block device the full length of the disk while the file keeps its real
-    /// length. A write behind the end of the real data first fills the gap with zero bytes, so the base stream grows only as far as it must.
+    /// length. How a write grows the base stream is chosen by the caller, because the tools that make these files differ:
+    ///  - Grow to the full length (XRoar): the first write fills everything behind the real data with zero bytes, so the file holds the
+    ///    whole disk. XRoar saves a VDK or JVC disk by writing every cylinder, head and sector (src/vdisk.c, vdisk_save_vdk and
+    ///    vdisk_save_jvc), so a short file it loaded is full length once it is saved.
+    ///  - Grow only as far as the write (Toolshed): a write behind the end of the real data first fills the gap with zero bytes, and the
+    ///    base stream ends at the last byte written. Toolshed "os9 copy" grows a short DriveWire image this way.
     /// </remarks>
     public sealed class PaddedSubStream : Stream
     {
         private readonly Stream _baseStream;
         private readonly long _offset;
         private readonly long _length;
+        private readonly bool _growToFullLength;
         private long _realLength;
         private long _position;
 
         /// <summary>
-        /// Creates the stream.
+        /// Creates the stream. A write grows the base stream only as far as the write.
         /// </summary>
         /// <param name="baseStream">
         /// The stream to read from and write to.
@@ -48,6 +54,36 @@ namespace RetroIO.Storage.Local.Streams
         /// Thrown when a number is negative, <paramref name="length"/> is smaller than <paramref name="realLength"/>, or the real part goes past the end of the base stream.
         /// </exception>
         public PaddedSubStream(Stream baseStream, long offset, long realLength, long length)
+            : this(baseStream, offset, realLength, length, false)
+        {
+        }
+
+        /// <summary>
+        /// Creates the stream.
+        /// </summary>
+        /// <param name="baseStream">
+        /// The stream to read from and write to.
+        /// </param>
+        /// <param name="offset">
+        /// Position in <paramref name="baseStream"/> where the part starts.
+        /// </param>
+        /// <param name="realLength">
+        /// The number of bytes of the part that really are in <paramref name="baseStream"/>.
+        /// </param>
+        /// <param name="length">
+        /// The length this stream shows. At least <paramref name="realLength"/>.
+        /// </param>
+        /// <param name="growToFullLength">
+        /// True: the first write fills the base stream with zero bytes up to <paramref name="length"/>, as XRoar does when it saves a disk.
+        /// False: a write grows the base stream only as far as the write, as Toolshed does.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="baseStream"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when a number is negative, <paramref name="length"/> is smaller than <paramref name="realLength"/>, or the real part goes past the end of the base stream.
+        /// </exception>
+        public PaddedSubStream(Stream baseStream, long offset, long realLength, long length, bool growToFullLength)
         {
             _baseStream = baseStream ?? throw new ArgumentNullException(nameof(baseStream));
 
@@ -69,6 +105,7 @@ namespace RetroIO.Storage.Local.Streams
             _offset = offset;
             _realLength = realLength;
             _length = length;
+            _growToFullLength = growToFullLength;
         }
 
         /// <summary>
@@ -233,7 +270,8 @@ namespace RetroIO.Storage.Local.Streams
         }
 
         /// <summary>
-        /// Writes bytes at the current position. A gap between the real data and the position is filled with zero bytes first.
+        /// Writes bytes at the current position. The base stream is first filled with zero bytes behind the real data: up to the position,
+        /// or up to the full length when the stream was made to grow to the full length.
         /// </summary>
         /// <param name="buffer">
         /// The bytes to write.
@@ -269,12 +307,14 @@ namespace RetroIO.Storage.Local.Streams
                 throw new IOException("Write would exceed PaddedSubStream length");
             }
 
-            if (_position > _realLength)
+            // XRoar mode: the file becomes the whole disk at the first write, zero bytes behind the real data.
+            long fillTo = _growToFullLength ? _length : _position;
+            if (fillTo > _realLength)
             {
-                byte[] zeros = new byte[_position - _realLength];
+                byte[] zeros = new byte[fillTo - _realLength];
                 _baseStream.Position = _offset + _realLength;
                 _baseStream.Write(zeros, 0, zeros.Length);
-                _realLength = _position;
+                _realLength = fillTo;
             }
 
             _baseStream.Position = _offset + _position;

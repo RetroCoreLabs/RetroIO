@@ -276,11 +276,12 @@ namespace RetroIO.Storage.Local.Drivers
             }
 
             // Create a stream to expose only the data portion (skipping header). A partial last track is padded with zero bytes behind
-            // the whole sectors that are there.
+            // the whole sectors that are there. The first write makes the file the whole disk, as XRoar's save does (it writes every
+            // cylinder, head and sector, src/vdisk.c vdisk_save_jvc).
             Stream dataStream;
             if (partialLastTrack)
             {
-                dataStream = new PaddedSubStream(imageStream, headerSize, (dataSize / sectorSize) * sectorSize, expectedSize);
+                dataStream = new PaddedSubStream(imageStream, headerSize, (dataSize / sectorSize) * sectorSize, expectedSize, true);
             }
             else
             {

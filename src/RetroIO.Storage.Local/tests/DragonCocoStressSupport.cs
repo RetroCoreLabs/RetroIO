@@ -825,6 +825,24 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         /// <summary>
+        /// Measures what one byte array of the given length costs on the managed heap: its bytes plus the runtime's object header.
+        /// </summary>
+        /// <param name="length">
+        /// The number of bytes in the array.
+        /// </param>
+        /// <returns>
+        /// The bytes the runtime allocated for one such array on this thread.
+        /// </returns>
+        public static long ArrayCost(int length)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            byte[] array = new byte[length];
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            GC.KeepAlive(array);
+            return after - before;
+        }
+
+        /// <summary>
         /// Tells whether a file can be opened with no sharing at all, which fails while any handle to it is still open.
         /// </summary>
         /// <param name="path">
