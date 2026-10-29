@@ -39,6 +39,15 @@ which quota, and whether fixing it is safe. Hence `AnalysisReport` with severity
   medium addressing, and the 9-word geometry block a real page-0 relocator embeds.
 - Reading and writing the **SINTRAN initial-command buffer** — the commands SINTRAN runs at every
   restart, exactly as `@LIST-INITIAL-COMMANDS` prints them.
+- Reading and changing the **SINTRAN CPU number and CPU type** of a system pack
+  (`ReadSintranCpuIdentity` / `WriteSintranCpuIdentity`): both disk copies of the resident data page
+  (`SYSNO`, `FCPUN`, `HWINF+2`), the generation symbols `33CPN` / `33CPU`, and the directory's
+  "entered by system N" stamp, which `ReleaseDirectory` clears. Addresses come from the pack's own
+  symbol lists and segment numbers from the RT-loader name records, so one implementation serves
+  every SINTRAN generation. Two nodes with the same number break COSMOS routing; this is the offline
+  form of the DMAC `)CLOAD S3IDPIT ... SYSNO/old new` session.
+- Listing, exporting and importing **SINTRAN segments** (`ListSintranSegments`, `ExportSintranSegment`,
+  `ImportSintranSegment`) by name, on any of the five segment files, with the disk page of each.
 - **Not losing NDFS metadata** when copying to a filesystem that has no room for it: a `.xat` JSON
   sidecar, through `IExtendedAttributeSupport`.
 
@@ -50,7 +59,7 @@ which quota, and whether fixing it is safe. Hence `AnalysisReport` with severity
 | `RetroIO.Storage.Core` | The contracts | |
 | `RetroIO.Storage.Local` | `GenericBlockDevice` | The driver is a thin composition over it |
 | An NDFS image | Anything real | |
-| **A copy of the image** | Anything that writes | `repair` and `set-initial-commands` write **in place** |
+| **A copy of the image** | Anything that writes | `repair`, `set-initial-commands` and `WriteSintranCpuIdentity` write **in place** |
 | The research notes | The boot and buffer internals | `DISC-BOOT-SECTOR-ANATOMY.md`, via the `DOC` junction |
 
 ## What is on an NDFS volume
@@ -143,6 +152,7 @@ what it is asked about.
 | Repair | `NdfsRepairTool`, `RepairPlan`, `RepairAction`, `RepairActionType`, `RepairRisk`, `RepairResult` |
 | Creation | `NdfsImageCreator`, `NdfsImageCreationOptions`, `NdfsImageTemplate`, `NdfsUserCreationInfo` |
 | SINTRAN initial commands | `SintranInitialCommands`, `SintranInitialCommandBuffer` |
+| SINTRAN CPU identity and segments | `SintranCpuIdentity`, `SintranCpuIdentityInfo`, `SintranDpitCopy`, `SintranSymbolAddresses`, `SintranCpuIdentityException`, `SintranSegmentList`, `SintranSegment`, `SintranSegmentFile` |
 | Metadata preservation | `NdfsPropertyBagKeys`, `NdfsPropertyBagSerializer`, `NdfsXatSerializer` |
 | Other | `FileTypes`, `NdDateTime`, `NdfsObjectBlocks`, `ObjectBlockInfo`, `ChecksumValidationState` |
 

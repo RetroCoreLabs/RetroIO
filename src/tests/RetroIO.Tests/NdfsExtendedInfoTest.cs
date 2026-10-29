@@ -13,6 +13,7 @@ using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.BlockDevices;
 using RetroIO.Storage.Ndfs.BlockDevices;
 using RetroIO.Storage.Ndfs.FileSystems;
+using RetroIO.Storage.Ndfs.Structures;
 
 namespace RetroIO.Tests
 {
@@ -53,7 +54,8 @@ namespace RetroIO.Tests
                 Assert.That(info, Is.Not.Null, "Extended Info should be returned");
 
                 // Verify SMD-ID-100 specific values (from verification data)
-                // Expected: Checksum 0x00B5 = (0x0051 ^ 0 ^ 0 ^ 0 ^ 0 ^ 0) + 100
+                // The checksum is the kernel's additive sum of words 1751B-1757B (WXDIR / CHDSI); the
+                // formula is asserted against the words on the image in ChecksumCalculation_MatchesExpectedValues.
                 Assert.That(info["SystemNumber"], Is.EqualTo(100), "System number should be 100");
                 Assert.That(info["Reserved1"], Is.EqualTo(0), "Reserved1 should be 0 (hard disk)");
                 Assert.That(info["Reserved2"], Is.EqualTo(0), "Reserved2 should be 0 (hard disk)");
@@ -206,7 +208,8 @@ namespace RetroIO.Tests
                 // System Number = 100
                 // Reserved fields = 0
                 // Flag Word = 0
-                // Expected checksum = (0x0051 ^ 0 ^ 0 ^ 0 ^ 0 ^ 0) + 100 = 81 + 100 = 181 = 0x00B5
+                // The checksum is the kernel's plain 16-bit additive sum of words 1751B-1757B (WXDIR 37702B
+                // writes it, CHDSI 37763B checks it); the words themselves are read from the image below.
 
                 ushort stored = (ushort)info["Checksum"];
                 ushort calculated = (ushort)info["ChecksumCalculated"];
@@ -217,6 +220,16 @@ namespace RetroIO.Tests
                 Console.WriteLine($"Match: {valid}");
 
                 Assert.That(valid, Is.True, "Checksum should validate");
+
+                // The stored word must be the plain additive sum of the seven words as they are ON THIS
+                // IMAGE (read back here, not assumed), which is the kernel formula; an XOR of the same
+                // words would differ as soon as two of them have overlapping bits.
+                uint pages = (uint)info["PagesAvailable"];
+                ushort additive = MasterBlock.ComputeExtChecksum(
+                    (ushort)info["Reserved3"], (ushort)info["Reserved2"], (ushort)info["Reserved1"],
+                    (ushort)(uint)info["FlagWord"], (ushort)(uint)info["SystemNumber"],
+                    (ushort)(pages >> 16), (ushort)(pages & 0xFFFF));
+                Assert.That(stored, Is.EqualTo(additive), "the stored checksum is the additive sum of the words on the image");
             }
         }
     }
