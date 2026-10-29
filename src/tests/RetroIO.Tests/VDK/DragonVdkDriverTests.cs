@@ -34,7 +34,8 @@ namespace RetroIO.Tests.VDK
                 Assert.DoesNotThrow(() => driver.Mount(stream, readOnly: true),
                     "VDK mount should not throw exception");
 
-                Assert.That(driver.FileSystemType, Is.EqualTo("DragonDOS"));
+                // PLANETFALL.VDK is a CoCo DECB disk of 68 granules in a 40 track image (see DragonDosNonDosDiskTests).
+                Assert.That(driver.FileSystemType, Is.EqualTo("DECB"));
                 Assert.That(driver.VolumeLabel, Is.Not.Null);
             }
 
@@ -44,7 +45,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void Mount_ValidVdkImage_ShouldListFiles()
         {
-            // 6809TUT1.VDK is a DragonDOS disk. PLANETFALL.VDK is not: its sector 0 holds 6809 boot code and it has no directory (see DragonDosNonDosDiskTests).
+            // 6809TUT1.VDK is a DragonDOS disk. PLANETFALL.VDK is not: its sector 0 holds 6809 boot code and it is a DECB disk with one file (see DragonDosNonDosDiskTests).
             string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\vdk\6809TUT1.VDK");
 
             if (!File.Exists(testImagePath))
