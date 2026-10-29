@@ -31,6 +31,13 @@
   <Folder Name="/src/RetroIO.Management.Contracts/src/">
     <Project Path="RetroIO.Management.Contracts/src/RetroIO.Management.Contracts.csproj" />
   </Folder>
+  <Folder Name="/src/RetroIO.Protocols.DriveWire/" />
+  <Folder Name="/src/RetroIO.Protocols.DriveWire/src/">
+    <Project Path="RetroIO.Protocols.DriveWire/src/RetroIO.Protocols.DriveWire.csproj" />
+  </Folder>
+  <Folder Name="/src/RetroIO.Protocols.DriveWire/tests/">
+    <Project Path="RetroIO.Protocols.DriveWire/tests/RetroIO.Protocols.DriveWire.Tests.csproj" />
+  </Folder>
   <Folder Name="/src/RetroIO.Protocols.Econet/" />
   <Folder Name="/src/RetroIO.Protocols.Econet/src/">
     <Project Path="RetroIO.Protocols.Econet/src/RetroIO.Protocols.Econet.csproj" />

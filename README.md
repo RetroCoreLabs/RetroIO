@@ -150,6 +150,7 @@ flowchart TB
 
     subgraph PROTO["RetroIO.Protocols.* - the wire side"]
         Tnfs["Protocols.Tnfs"]
+        DriveWire["Protocols.DriveWire"]
         Econet["Protocols.Econet"]
         X25["Protocols.X25.*<br/>ten packages"]
         Xmsg["Protocols.Xmsg.*<br/>twelve packages"]
@@ -173,6 +174,7 @@ flowchart TB
     Link --> Lapb --> Hdlc
     Tnfs --> SCore
     Econet --> SCore
+    DriveWire --> SLocal
     SLocal --> SCore
     SNdfs --> SCore
     SProv --> SCore
@@ -187,7 +189,7 @@ flowchart TB
     classDef cross fill:#FFA726,stroke:#F57C00,stroke-width:2px,color:#000
 
     class SCore,SLocal,SNdfs,SProv,SAzure,SUtil store
-    class Tnfs,Econet,X25,Xmsg proto
+    class Tnfs,DriveWire,Econet,X25,Xmsg proto
     class Hdlc,Lapb,Link link
     class Ident,Sec,Mgmt,Server cross
 ```
@@ -208,6 +210,7 @@ flowchart TB
 | Package | What it is | README |
 |---|---|---|
 | `RetroIO.Protocols.Tnfs` | TNFS: filesystem-over-UDP, what an 8-bit machine with a network adapter speaks | [README](src/RetroIO.Protocols.Tnfs/README.md) |
+| `RetroIO.Protocols.DriveWire` | DriveWire 4: Dragon and CoCo disk images served as virtual drives over TCP, for an emulator's Becker port | [README](src/RetroIO.Protocols.DriveWire/README.md) |
 | `RetroIO.Protocols.Econet` | Acorn Econet over AUN, including a Level-3 file server and its `*` commands | [README](src/RetroIO.Protocols.Econet/README.md) |
 | **X.25 — ten packages** | Packet layer, client, switch, routing, monitor, NMC, SINTRAN, runtime | [family index](src/RetroIO.Protocols.X25/README.md) |
 | **XMSG — twelve packages** | The ND messaging system: codec, kernel API, file access, chat, sync, Ethernet, node | [family index](src/RetroIO.Protocols.Xmsg/README.md) |

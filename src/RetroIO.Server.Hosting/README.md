@@ -41,10 +41,11 @@ separate bindable type is the honest fix, and the reason is recorded where it is
 |---|---|---|
 | .NET SDK as pinned in `global.json` | Everything | |
 | `RetroIO.Server`, `.Server.Core` | Composition and the backend | |
-| `RetroIO.Protocols.Tnfs`, `.Econet` | The servers being hosted | |
+| `RetroIO.Protocols.Tnfs`, `.Econet`, `.DriveWire` | The servers being hosted | |
 | `RetroIO.Storage.Providers` | The VFS-backed discs | |
 | `econet-config.json` | Econet | Defines the discs |
 | A TNFS configuration | TNFS | |
+| `drivewire-config.json` | DriveWire | The drives; written with the defaults (port 65504, loopback, no drives) when missing |
 | A writable data directory | Identity, logs, state | See `PathHelper` |
 
 ## From configuration to a running server
