@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.DriveWire</PackageId>
+    <AssemblyName>RetroIO.Protocols.DriveWire</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.DriveWire</RootNamespace>
+    <Description>DriveWire 4 server for the Tandy Color Computer and the Dragon: serves Dragon and CoCo disk images (DSK, JVC, VDK, DMK and headerless OS-9 volumes) as virtual drives over TCP, the way an emulator's Becker port connects.</Description>
+    <PackageTags>retroio;drivewire;coco;dragon;nitros9;os9;becker</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Storage.Core\src\RetroIO.Storage.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Storage.Local\src\RetroIO.Storage.Local.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RetroIO.Protocols.DriveWire.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

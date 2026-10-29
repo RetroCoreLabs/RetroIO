@@ -134,6 +134,79 @@ public sealed class ProtocolConfigurationLoaderTests
     }
 
     [Test]
+    public void LoadDriveWireConfiguration_MissingFile_GivesTheDefaults_AndIsCreated()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            Console.SetOut(new StringWriter());
+            DriveWireServerConfiguration result =
+                ProtocolConfigurationLoader.LoadDriveWireConfiguration(tempPath, new ConfigurationBuilder().Build());
+            Console.SetOut(originalOut);
+
+            Assert.That(result.Enabled, Is.True);
+            Assert.That(result.Port, Is.EqualTo(65504), "the Becker port default");
+            Assert.That(result.BindAddress, Is.EqualTo("127.0.0.1"));
+            Assert.That(result.TransactionTimeoutMilliseconds, Is.EqualTo(250), "the specification's time limit");
+            Assert.That(result.Drives, Is.Empty);
+            Assert.That(File.Exists(Path.Combine(tempPath, "drivewire-config.json")), Is.True);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
+    public void LoadDriveWireConfiguration_OverridesSetPortAndDrives_ByDriveNumber()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(tempPath, "drivewire-config.json"),
+                "{ \"Port\": 7000, \"Drives\": [ { \"Drive\": 0, \"Path\": \"a.dsk\" }, { \"Drive\": 1, \"Path\": \"b.dsk\", \"ReadOnly\": true } ] }");
+            IConfiguration config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["DriveWire:Port"] = "65510",
+                    ["DriveWire:BindAddress"] = "0.0.0.0",
+                    ["DriveWire:Drives:0:Path"] = "boot.dsk",
+                    ["DriveWire:Drives:0:ReadOnly"] = "true",
+                    ["DriveWire:Drives:3:Path"] = "work.dsk"
+                })
+                .Build();
+
+            DriveWireServerConfiguration result = ProtocolConfigurationLoader.LoadDriveWireConfiguration(tempPath, config);
+
+            Assert.That(result.Port, Is.EqualTo(65510));
+            Assert.That(result.BindAddress, Is.EqualTo("0.0.0.0"));
+            Assert.That(result.Drives, Has.Count.EqualTo(3));
+            DriveWireDriveConfiguration? drive0 = result.Drives.Find(d => d.Drive == 0);
+            DriveWireDriveConfiguration? drive1 = result.Drives.Find(d => d.Drive == 1);
+            DriveWireDriveConfiguration? drive3 = result.Drives.Find(d => d.Drive == 3);
+            Assert.That(drive0!.Path, Is.EqualTo("boot.dsk"), "the override replaces drive 0 from the file");
+            Assert.That(drive0.ReadOnly, Is.True);
+            Assert.That(drive1!.Path, Is.EqualTo("b.dsk"));
+            Assert.That(drive1.ReadOnly, Is.True);
+            Assert.That(drive3!.Path, Is.EqualTo("work.dsk"));
+            Assert.That(drive3.ReadOnly, Is.False);
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
     public void LoadEconetConfiguration_ParsesDiscsAndWireProfileFromJson()
     {
         // Exercises the REAL loader (System.Text.Json, default options) over a representative

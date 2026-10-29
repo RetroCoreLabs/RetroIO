@@ -42,7 +42,7 @@ flowchart TB
     STORE["Storage: Core, Local, Ndfs,<br/>Providers, the VFS"]
     IDENT["Identity: RetroIDP"]
     SEC["Security + Firewall"]
-    PROTO["Protocol servers:<br/>TNFS, Econet"]
+    PROTO["Protocol servers:<br/>TNFS, Econet, DriveWire"]
     MGMT["Management API + hub"]
 
     HOST --> OPT --> COMP
