@@ -13,5 +13,5 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
 
 ## RetroIO
 
-1. **dmk2jv3 in CI**: not added (native build step or WSL on the runner).
+1. **dmk2jv3 in CI**: the build step is in `.github/workflows/build.yml` (cw2dmk 4.10.1 source, SHA-256 checked, built with the runner's gcc). Still to do: on the first CI run after the next push, check the step passed and `DmkIndependentReaderTests` ran instead of skipping. Nothing is pushed until the user says so.
 2. **NuGet publish**: needs the `NUGET_API_KEY` secret and tag `v0.1.0`; the user said "not yet".

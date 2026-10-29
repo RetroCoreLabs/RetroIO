@@ -23,6 +23,24 @@ jobs:
         shell: pwsh
         run: ./eng/fetch-test-images.ps1
         working-directory: src
+      # dmk2jv3 from cw2dmk (Tim Mann, GPL 2, github.com/qbarnes/cw2dmk) is the DMK reader written by other people that
+      # DmkIndependentReaderTests checks our DMK images with. It is built here from the v4.10.1 release source (SHA-256 checked)
+      # with the gcc on the runner, and the tests find it through RETROIO_DMK2JV3; without it they skip.
+      - name: build dmk2jv3
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'cw2dmk'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $tar = Join-Path $dir 'cw2dmk-4.10.1-src.tar.gz'
+          Invoke-WebRequest 'https://github.com/qbarnes/cw2dmk/releases/download/v4.10.1/cw2dmk-4.10.1-src.tar.gz' -OutFile $tar
+          $hash = (Get-FileHash $tar -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '2a986034b882c3f57e5382a3b90f8514d1eceaa2ef947580c8fe5d71b2f68e4f') { throw "cw2dmk-4.10.1-src.tar.gz has SHA-256 $hash, not the one the tests were written against" }
+          tar -xzf $tar -C $dir
+          $src = Join-Path $dir 'cw2dmk-4.10.1'
+          $exe = Join-Path $src 'dmk2jv3.exe'
+          gcc -O2 -std=gnu99 -o $exe (Join-Path $src 'dmk2jv3.c')
+          if ($LASTEXITCODE -ne 0) { throw 'gcc could not build dmk2jv3' }
+          "RETROIO_DMK2JV3=$exe" >> $env:GITHUB_ENV
       - run: dotnet build -c Release --no-restore -warnaserror -nodeReuse:false
         working-directory: src
       - run: dotnet test -c Release --no-build -nodeReuse:false --filter "Category!=Azure&Category!=ExternalTNFSD&Category!=RealNetwork&Category!=Manual&Category!=ProcessSpawn"
