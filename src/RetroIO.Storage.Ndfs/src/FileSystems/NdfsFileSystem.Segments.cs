@@ -241,13 +241,16 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
             ReadSegmentFileTables(seg, outList, idpit);
 
-            // Disk page of every segment with a disk copy on a known, local segment file.
+            // Disk page of every segment with pages on a known, local segment file. The 5OK bit is
+            // NOT a condition: it means "loaded in memory" (SEGIN sets it at run time), and a segment
+            // the RT-loader has just written has it clear while its pages are on disk (measured
+            // 2026-10-29: segment 101B on a fresh segment file 1, FLAG 020000).
             for (int i = 0; i < outList.Segments.Count; i++)
             {
                 var s = outList.Segments[i];
                 var sf = outList.SegmentFiles[s.SegmentFile];
                 if (s.MemoryOnly || s.Segle == 0) continue;
-                if (!s.Ok5 || !sf.Defined || !sf.OnThisDisk) continue;
+                if (!sf.Defined || !sf.OnThisDisk) continue;
                 s.DiskPage = sf.BasePage + s.Madr;
             }
             return outList;

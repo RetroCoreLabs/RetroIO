@@ -76,7 +76,7 @@ namespace RetroIO.Storage.Ndfs.Elements
         public int SegmentNumber { get; set; } = -1;
 
         /// <summary>
-        /// Gets whether the segment table entry is usable: it has pages, the 5OK bit, and covers <c>SYSNO</c>.
+        /// Gets whether the segment table entry is usable: it has pages and covers <c>SYSNO</c>.
         /// </summary>
         public bool Present { get; set; }
 

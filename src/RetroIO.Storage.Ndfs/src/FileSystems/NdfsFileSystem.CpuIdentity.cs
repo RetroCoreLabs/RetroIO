@@ -374,9 +374,10 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 c.Flag = SintranCpuIdentity.Word(seg, o + 10);
                 c.SegmentFile = (c.Flag >> 13) & 7;
                 c.FilePath = string.Empty;
-                // Usable: a length, a disk address (the 5OK bit) and a range that covers SYSNO. The
-                // logical base comes from the entry itself, not from a constant.
-                c.Present = c.Segle > 0 && (c.Flag & 1) != 0 &&
+                // Usable: a length and a range that covers SYSNO. The logical base comes from the entry
+                // itself, not from a constant. The 5OK bit is not required: it means "loaded in memory"
+                // (SEGIN sets it at run time), not "has pages on disk".
+                c.Present = c.Segle > 0 &&
                             SintranCpuIdentity.SegmentWordOffset(c.Logad, c.Segle, c.Madr, outInfo.Symbols.Sysno) >= 0;
                 if (!c.Present) continue;
                 string? path = SintranSegmentFilePath(c.SegmentFile, segfilPath);
