@@ -53,6 +53,19 @@ namespace RetroIO.Protocols.X25.Runtime
         private readonly Dictionary<X25Endpoint, Dictionary<ushort, ushort>> _localLcnByCircuit = new Dictionary<X25Endpoint, Dictionary<ushort, ushort>>();
         private Timer? _endpointTicker;
 
+        /// <summary>
+        /// Test seam: called on the placing thread after the engine has taken an outgoing XOT call
+        /// and its lock is released, before <see cref="PlaceCallViaEndpoint"/> returns.
+        /// </summary>
+        /// <remarks>
+        /// From that point on the connection's reader thread is free to feed the engine the peer's
+        /// answer. The seam lets a test hold the placing thread there until the answer has been
+        /// taken. That is the order that lost the Call Connected while the local LCN was still
+        /// mapped after the lock instead of inside it (ProtocolRuntimeWirePinTests). Null outside
+        /// tests.
+        /// </remarks>
+        internal Action<X25Endpoint, ushort>? CallPlacedOnEndpointForTest { get; set; }
+
         // ------------------------------------------------------------------ endpoints
 
         /// <summary>
@@ -401,6 +414,18 @@ namespace RetroIO.Protocols.X25.Runtime
 
                 byte[]? cud = request.CallUserData.Length == 0 ? null : request.CallUserData;
                 lci = endpoint.Layer.PlaceCall(request.CalledAddress, request.CallingAddress, cud);
+
+                // Map the local LCN BEFORE this lock is released. The moment it is, the
+                // connection's reader thread may feed the engine the peer's Call Connected (or a
+                // Clear Indication), and the engine's handlers find their owner only through this
+                // map. Mapped after the lock, as it was until 2026-10-21, a fast answer found no
+                // local LCN and was dropped without a word, so the PAD never learned the call was
+                // up (ProtocolRuntimeWirePinTests failed now and then under load). Lock order is
+                // Sync then _routingLock, the same order the engine's handlers use.
+                if (lci != 0 && request.SourceLcn != 0)
+                {
+                    MapCircuit(request.SourceLcn, endpoint, lci);
+                }
             }
 
             if (lci == 0)
@@ -409,10 +434,7 @@ namespace RetroIO.Protocols.X25.Runtime
                 return false;
             }
 
-            if (request.SourceLcn != 0)
-            {
-                MapCircuit(request.SourceLcn, endpoint, lci);
-            }
+            CallPlacedOnEndpointForTest?.Invoke(endpoint, lci);
 
             request.UsedTransport = transport;
             _logger.LogInformation("XOT call to {Called} placed on {Name} channel {Lci} (local LCN {Local})",
