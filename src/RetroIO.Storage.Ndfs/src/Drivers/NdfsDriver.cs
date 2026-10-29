@@ -498,6 +498,36 @@ namespace RetroIO.Storage.Ndfs.Drivers
             ext.Add("Pages available", $"{master.ExtPagesAvailable:N0}");
             ext.Add("FLOMON signature", master.HasFlomon ? "Present (floppy)" : "Absent");
 
+            // -- SINTRAN CPU identity -------------------------------------------------------
+            // Only a SINTRAN system pack has it (symbol lists, RT-loader name records, a segment
+            // table); a data pack or a floppy simply has no section.
+            try
+            {
+                SintranCpuIdentityInfo id = _filesystem.ReadSintranCpuIdentity();
+                var cpu = info.AddSection("SINTRAN CPU identity", "\U0001F5A7");
+                cpu.Add("SINTRAN version", id.Version.ToString(), $"INIBU {Convert.ToString(id.Symbols.Inibu, 8)}B");
+                for (int i = 0; i < id.Copies.Count; i++)
+                {
+                    SintranDpitCopy c = id.Copies[i];
+                    string where = c.Present
+                        ? $"segment {Convert.ToString(c.SegmentNumber, 8)}B, segment file {c.SegmentFile}, {c.FilePath}, page {c.Madr}"
+                        : $"segment {Convert.ToString(c.SegmentNumber, 8)}B not usable";
+                    cpu.Add($"CPU number ({c.Role} copy)", c.Sysno < 0 ? "-" : c.Sysno.ToString(), where);
+                    cpu.Add($"FCPUN ({c.Role} copy)", c.Fcpun < 0 ? "-" : c.Fcpun.ToString());
+                    cpu.Add($"CPU type ({c.Role} copy)", c.CpuType < 0 ? "-" : c.CpuType.ToString());
+                    cpu.Add($"Patch level ({c.Role} copy)", c.Revle < 0 ? "-" : Convert.ToString(c.Revle, 8) + "B");
+                }
+                cpu.Add("33CPN / 33CPU", $"{id.Symbols.Cpn33} / {id.Symbols.Cpu33}", "the generation's CPU number and type");
+            }
+            catch (SintranCpuIdentityException)
+            {
+                // Not a SINTRAN system pack, or one this reader cannot address: no section.
+            }
+            catch (IOException)
+            {
+                // A file named by the pack could not be read; the rest of the volume info still stands.
+            }
+
             // -- Users --------------------------------------------------------------------
             try
             {

@@ -366,5 +366,60 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// buffer / contain an embedded quote.
         /// </summary>
         bool WriteSintranInitialCommands(IReadOnlyList<string> commands);
+
+        // ==================== SINTRAN CPU number / type and segments ====================
+
+        /// <summary>
+        /// Reads the CPU number (<c>SYSNO</c>, <c>FCPUN</c>) and CPU type (<c>HWINF+2</c>) from both disk
+        /// copies of the resident data page (segments <c>S3IDPIT</c> and <c>S3SDPIT</c>), the generation
+        /// symbols <c>33CPN</c> / <c>33CPU</c>, and the directory's "entered by system N" stamp. Word
+        /// addresses come from the pack's own symbol lists, segment numbers from the RT-loader name
+        /// records, pages from the segment table. Throws <c>SintranCpuIdentityException</c> on a pack that
+        /// lacks any of those.
+        /// </summary>
+        SintranCpuIdentityInfo ReadSintranCpuIdentity();
+
+        /// <summary>
+        /// Sets the CPU number in both copies, the CPU type when given, rewrites <c>33CPN</c> / <c>33CPU</c>,
+        /// clears the directory stamp unless <paramref name="keepStamp"/>, and reads everything back.
+        /// Nothing is written unless every target word is reachable.
+        /// </summary>
+        SintranCpuIdentityInfo WriteSintranCpuIdentity(int cpuNumber, int? cpuType, bool keepStamp);
+
+        /// <summary>
+        /// Clears the directory's "entered by system N" stamp: flag word bit 15 and the system number,
+        /// with a fresh checksum. Reports what the stamp was.
+        /// </summary>
+        void ReleaseDirectory(out bool wasEntered, out int wasSystemNumber);
+
+        /// <summary>
+        /// Lists every SINTRAN segment on the pack with its name, segment file and first disk page.
+        /// </summary>
+        SintranSegmentList ListSintranSegments();
+
+        /// <summary>
+        /// The pages of one segment as they are on the pack.
+        /// </summary>
+        byte[] ExportSintranSegment(SintranSegmentList list, int index);
+
+        /// <summary>
+        /// Writes bytes over one segment's pages; a last partial page keeps its remaining bytes.
+        /// </summary>
+        void ImportSintranSegment(SintranSegmentList list, int index, ReadOnlySpan<byte> data);
+
+        /// <summary>
+        /// Gets the number of 2048-byte pages the device holds.
+        /// </summary>
+        uint TotalPages { get; }
+
+        /// <summary>
+        /// Reads one raw disk page.
+        /// </summary>
+        byte[] ReadDiskPage(uint page);
+
+        /// <summary>
+        /// Overwrites one raw disk page.
+        /// </summary>
+        void WriteDiskPage(uint page, ReadOnlySpan<byte> pageData);
     }
 }
