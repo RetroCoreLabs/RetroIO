@@ -825,6 +825,70 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         /// <summary>
+        /// How long the retained memory must stay flat before the first measured round: longer than the 1.5 s timer on which the VSTest test
+        /// host sends run statistics while a test runs, so at least one send falls inside the flat stretch.
+        /// </summary>
+        public const int HostQuietMilliseconds = 2000;
+
+        /// <summary>
+        /// Longest the wait for the flat stretch may take before the run goes on without it.
+        /// </summary>
+        public const int HostQuietLimitMilliseconds = 20000;
+
+        // Set once a flat stretch was seen in this process: the test host's one-time step is behind us for every later run.
+        private static bool _hostSettled;
+
+        /// <summary>
+        /// Waits until the retained memory has stayed within <see cref="StressChecks.RoundGrowthBytes"/> for
+        /// <see cref="HostQuietMilliseconds"/>, once per test process.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The memory check counts every byte the process keeps, the test host's too. The first time the VSTest test host sends run statistics
+        /// it builds its JSON serialization caches (TestRunStatisticsConverter, TestObjectConverter; seen in heap dumps per round), about
+        /// 300 KB that stay. When a stress test is the first test of a process (a filtered run) that send falls inside the first rounds, and the
+        /// step was counted as growth in two rounds (DECB 35 tracks, 2 runs of 10 red: +200 kB, +96 kB, then flat).
+        /// </para>
+        /// <para>
+        /// The host sends on a timer while a test runs. If the first send has not happened yet, it happens inside any stretch longer than the
+        /// timer, the memory rises and the stretch starts again; so a flat stretch means the first send is done. A later send builds nothing
+        /// new and leaves the memory flat. Called before the first round is measured, so the first use of the file system's own code still
+        /// lands in the first measurement.
+        /// </para>
+        /// </remarks>
+        /// <returns>
+        /// A line for the run report: how long the wait took, and whether it ended on the limit instead of a flat stretch.
+        /// </returns>
+        public static string WaitForTestHostWarmUp()
+        {
+            if (_hostSettled)
+            {
+                return "test host already settled in this process";
+            }
+
+            System.Diagnostics.Stopwatch total = System.Diagnostics.Stopwatch.StartNew();
+            System.Diagnostics.Stopwatch quiet = System.Diagnostics.Stopwatch.StartNew();
+            long reference = Retained();
+            while (total.ElapsedMilliseconds < HostQuietLimitMilliseconds)
+            {
+                System.Threading.Thread.Sleep(100);
+                long now = Retained();
+                if (now - reference > StressChecks.RoundGrowthBytes)
+                {
+                    reference = now;
+                    quiet.Restart();
+                }
+                else if (quiet.ElapsedMilliseconds >= HostQuietMilliseconds)
+                {
+                    _hostSettled = true;
+                    return "test host settled after " + total.ElapsedMilliseconds + " ms";
+                }
+            }
+
+            return "test host did NOT settle within " + HostQuietLimitMilliseconds + " ms; the memory check below includes its step";
+        }
+
+        /// <summary>
         /// Measures what one byte array of the given length costs on the managed heap: its bytes plus the runtime's object header.
         /// </summary>
         /// <param name="length">

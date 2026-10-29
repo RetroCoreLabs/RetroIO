@@ -124,6 +124,9 @@ namespace RetroIO.Storage.Local.Tests
         private readonly StressTimings _timings;
         private readonly List<ModelFile?> _slots = new List<ModelFile?>(DirectoryEntries);
         private readonly long[] _memory;
+
+        // What StressMemory.WaitForTestHostWarmUp said before the first measurement, for the report.
+        private string _hostWarmUp = string.Empty;
         private readonly string[] _names;
         private readonly byte[][] _probeData;
         private readonly byte[][] _probeOther;
@@ -484,6 +487,12 @@ namespace RetroIO.Storage.Local.Tests
                 if (last || _toolshedEveryRound)
                 {
                     ToolshedCheck();
+                }
+
+                if (first)
+                {
+                    // The test host's one-time step must be behind us before the first measurement (see WaitForTestHostWarmUp).
+                    _hostWarmUp = StressMemory.WaitForTestHostWarmUp();
                 }
 
                 _memory[_round] = StressMemory.Retained();
@@ -1140,6 +1149,7 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             report.AppendLine();
+            report.Append("  before the first measurement: ").Append(_hostWarmUp).AppendLine();
             _timings.Describe(report, _rounds);
             _timings.DescribeProbes(report);
             TestContext.Out.WriteLine(report.ToString());
