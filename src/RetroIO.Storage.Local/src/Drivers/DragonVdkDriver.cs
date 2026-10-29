@@ -206,11 +206,12 @@ namespace RetroIO.Storage.Local.Drivers
 
             // 4. Create a stream that exposes only the data portion (skipping VDK header)
             // This ensures GenericBlockDevice sees the correct length for validation. A partial last track is padded with zero bytes
-            // behind the whole sectors that are there.
+            // behind the whole sectors that are there. The first write makes the file the whole disk, as XRoar's save does (it writes every
+            // cylinder, head and sector, src/vdisk.c vdisk_save_vdk).
             Stream dataStream;
             if (partialLastTrack)
             {
-                dataStream = new PaddedSubStream(imageStream, dataOffset, (dataLength / 256) * 256, expectedSize);
+                dataStream = new PaddedSubStream(imageStream, dataOffset, (dataLength / 256) * 256, expectedSize, true);
             }
             else
             {

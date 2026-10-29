@@ -184,6 +184,12 @@ namespace RetroIO.Storage.Local.Tests
         private BlockDeviceDescriptor? _descriptor;
         private GenericBlockDevice? _device;
         private FileStream? _file;
+
+        // Size of one page of the image in BlockDeviceBase, which holds and counts the image in whole pages (see HeldBytes).
+        private const int DevicePageSize = 4096;
+
+        // Bytes of the image the block device holds in memory at the end of each round (BlockDeviceBase.HeldBytes).
+        private long[] _held = Array.Empty<long>();
         private CountingBlockDevice? _counter;
         private Os9RbfFileSystem? _fs;
         private Node _root = new Node();
@@ -240,6 +246,7 @@ namespace RetroIO.Storage.Local.Tests
             _random = new Random(seed);
             _timings = new StressTimings(KindNames, rounds * (callsPerRound + 400), rounds);
             _memory = new long[rounds];
+            _held = new long[rounds];
 
             // The probe data, made once so the probes allocate nothing. At most about 110 sectors are in use at once during a probe pass,
             // which fits beside the fullest ballast (70 % of the free space) on the smallest disk (619 free sectors: 433 + 110 = 543).
@@ -1194,17 +1201,14 @@ namespace RetroIO.Storage.Local.Tests
             return parent == "/" ? "/" + name : Spelled(parent) + "/" + name;
         }
 
-        // Names: short ones that repeat (so they are taken again after a delete and renames run into them), some with the other legal
-        // characters, and now and then the longest legal name (29 characters).
+        // Names: short ones that repeat (so they are taken again after a delete and renames run into them), and some with the other legal
+        // characters. No 29-character name: Toolshed os9 dcheck (2.2 and the current source) ends the name in place by writing a zero byte
+        // after it, which for a 29-character name is the top byte of the entry's descriptor sector, so on a volume over 65536 sectors it
+        // reads the wrong descriptor and reports errors the image does not have.
         private string RandomName(bool directory)
         {
-            int r = _random.Next(20);
+            int r = _random.Next(19);
             if (r == 0)
-            {
-                return "L" + _random.Next(10) + "2345678901234567890123456789".Substring(0, 27);
-            }
-
-            if (r == 1)
             {
                 return "x-" + _random.Next(10) + ".y_$";
             }
@@ -1290,11 +1294,16 @@ namespace RetroIO.Storage.Local.Tests
                     ToolshedCheck("after everything was deleted in round " + _round);
                 }
 
+                _held[_round] = _device!.HeldBytes;
                 _memory[_round] = StressMemory.Retained();
             }
 
             _device!.Dispose();
             _device = null;
+
+            // A PaddedSubStream does not close the file under it, so the file is closed here (as in Remount).
+            _file?.Dispose();
+            _file = null;
             _fs = null;
             Assert.That(StressMemory.CanOpenExclusively(_imagePath, out string reason), Is.True, "the image file is still open at the end: " + reason);
 
@@ -2248,6 +2257,25 @@ namespace RetroIO.Storage.Local.Tests
                 modelOwned += 1 + directories[i].CapacitySectors;
             }
 
+            // RBF never makes a segment that crosses an allocation map sector: FatScan searches one map sector at a time, and L0D07 joins a new
+            // run to the last segment only when both start in the same map sector (rbf.asm, L0D4E to L0D96). Only a file that came with the disk
+            // may have one.
+            for (int i = 0; i < files.Count; i++)
+            {
+                if (!files[i].Pinned && CrossesMapSector(image, (int)files[i].Fd * SectorSize))
+                {
+                    Assert.Fail(PathOf(files[i]) + " has a segment that crosses an allocation map sector, which RBF never makes, " + Where());
+                }
+            }
+
+            for (int i = 0; i < directories.Count; i++)
+            {
+                if (CrossesMapSector(image, (int)directories[i].Fd * SectorSize))
+                {
+                    Assert.Fail("directory " + PathOf(directories[i]) + " has a segment that crosses an allocation map sector, which RBF never makes, " + Where());
+                }
+            }
+
             if (modelOwned != owned)
             {
                 Assert.Fail("the walk found " + owned + " sectors in use, the model's files and directories own " + modelOwned + ", " + Where());
@@ -2396,11 +2424,29 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             report.AppendLine();
+            report.Append("  image bytes the device held after each round:");
+            for (int i = 0; i < _rounds; i++)
+            {
+                report.Append(' ').Append(_held[i]);
+            }
+
+            report.AppendLine();
             _timings.Describe(report, _rounds);
             _timings.DescribeProbes(report);
             TestContext.Out.WriteLine(report.ToString());
 
-            StressChecks.RequireNoLeak(_memory, report.ToString());
+            // On a short DriveWire file the device holds only the 4096-byte pages of the image that are in the file or were written
+            // (BlockDeviceBase.HeldBytes), so it holds more each time the run writes somewhere new on the volume, up to the whole volume. Those
+            // pages are the disk, not memory the file system kept, so the leak check looks at what is held besides them: each page counted at
+            // what one 4096-byte array really costs on this runtime. On a full-size image the device holds the same pages in every round.
+            long pageCost = StressMemory.ArrayCost(DevicePageSize);
+            long[] besidesImage = new long[_rounds];
+            for (int i = 0; i < _rounds; i++)
+            {
+                besidesImage[i] = _memory[i] - ((_held[i] / DevicePageSize) * pageCost);
+            }
+
+            StressChecks.RequireNoLeak(besidesImage, report.ToString());
             StressChecks.RequireNoSlowdown(_timings, report.ToString());
         }
     }

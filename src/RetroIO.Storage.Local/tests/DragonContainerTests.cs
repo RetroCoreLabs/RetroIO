@@ -267,6 +267,31 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That(sector, Is.All.EqualTo((byte)0));
         }
 
+        /// <summary>
+        /// A write into a JVC file cut inside its last track makes the file the whole disk, as XRoar's save does (vdisk_save_jvc writes every
+        /// sector), even when the sector written is not the last one.
+        /// </summary>
+        [Test]
+        public void Jvc_WriteIntoTheMissingPart_GrowsTheFileToTheFullLength()
+        {
+            byte[] sectors = DragonDosTestDisk.Format(40, 1);
+            byte[] file = Truncate(sectors, 714 * 256);
+            MemoryStream stream = new MemoryStream();
+            stream.Write(file, 0, file.Length);
+            DragonDskDriver driver = new DragonDskDriver();
+            driver.Mount(stream, false);
+            byte[] data = new byte[256];
+            Array.Fill(data, (byte)0x66);
+
+            driver.WriteBlock(BlockAddress.FromLBA(716), data);
+
+            byte[] after = stream.ToArray();
+            Assert.That(after.Length, Is.EqualTo(720 * 256), "the image is complete now");
+            Assert.That(after[716 * 256], Is.EqualTo(0x66));
+            Assert.That(after[715 * 256], Is.EqualTo(0), "the gap before it is zero");
+            Assert.That(after[719 * 256], Is.EqualTo(0), "the sectors behind it are zero");
+        }
+
         [Test]
         public void Jvc_RestOfLessThanOneSector_IsRefused()
         {
