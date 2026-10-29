@@ -31,11 +31,14 @@ namespace RetroIO.Protocols.DriveWire.Drives;
 /// <see cref="DriveWireError"/>); the specification gives no rule of its own for a sector outside the image.
 /// </para>
 /// <para>
-/// A write goes to the driver's block write, which writes the image back. Whether a short OS-9 volume can be written, and
-/// how far the file grows, is decided by the driver; this class adds nothing to it.
+/// A write goes to the driver's block write. How far the file grows is decided by the driver; this class adds nothing to
+/// it. For a short headerless OS-9 volume the file grows only to the last sector written, as Toolshed os9 copy grows it;
+/// a VDK or JVC file cut inside its last track becomes the whole disk at the first write, as XRoar's save makes it.
 /// </para>
 /// <para>
-/// The drivers hold the whole volume in memory. A NitrOS-9 DriveWire volume of 524268 sectors takes 134 MB per drive.
+/// The drivers hold the image in 4 KB pages: only the parts the file holds and the parts written, not the whole volume, and
+/// a flush writes back only the sectors that changed. A NitrOS-9 DriveWire volume of 524268 sectors in a 256 KB file
+/// starts at about 256 KB per drive and grows with what is written.
 /// </para>
 /// </remarks>
 public sealed class DriveWireImageDrive : IDriveWireDrive
