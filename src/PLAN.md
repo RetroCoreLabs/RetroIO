@@ -6,7 +6,7 @@ Proof level for all items: lean. One full suite run after a merge, a mutation ch
 
 ## RetroCore (the sibling RetroCore repository)
 
-RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 64 and CoCo 3 boot work, the MOOH cartridge, the Becker port and `Nuget/BUGS.md`. The Dragon items (quick load for `.cas`, Dragon 32 graphics bands with Juxtaposition) are in `Machines.Dragon/TODO.md`; the Becker port is on all five 6809 machines (CoCo 1/2/3, Dragon 32/64); the CoCo 1/2 has a cartridge slot and boots HDB-DOS from the port (`Coco2BeckerDiskBasicTests`); what is left of DriveWire (the bit-banger serial line) is Phase 9 in `Machines.Coco/TODO.md`.
+RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 64 and CoCo 3 boot work, the MOOH cartridge, the Becker port and `Nuget/BUGS.md`. The Dragon items (quick load for `.cas`, Dragon 32 graphics bands with Juxtaposition) are in `Machines.Dragon/TODO.md`; the Becker port is on all five 6809 machines (CoCo 1/2/3, Dragon 32/64); the CoCo 1/2 has a cartridge slot and boots HDB-DOS from the port (`Coco2BeckerDiskBasicTests`). DriveWire is done; the bit-banger serial line is not being built (owner's decision, 2026-10-31).
 
 ## RetroIO
 
