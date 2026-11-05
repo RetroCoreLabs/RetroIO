@@ -82,6 +82,108 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// </returns>
         ObjectBlockInfo GetObjectBlockInfo(string userNameOrIndex);
 
+        // ==================== File access and friends ====================
+        //
+        // The SINTRAN commands @LIST-FRIENDS, @CREATE-FRIEND, @DELETE-FRIEND,
+        // @SET-FRIEND-ACCESS, @SET-FILE-ACCESS and @SET-DEFAULT-FILE-ACCESS
+        // (SINTRAN III Reference Manual ND-60.128.5). Each change is written to the
+        // device at once. Access fields use SINTRAN's own form, see
+        // Security.SintranAccessForm.
+
+        /// <summary>
+        /// Lists a user's friends in slot order (<c>@LIST-FRIENDS</c>).
+        /// </summary>
+        /// <param name="userNameOrIndex">
+        /// The owner, by name or decimal index.
+        /// </param>
+        /// <returns>
+        /// The friends; empty when the user has none.
+        /// </returns>
+        IReadOnlyList<NdfsFriendInfo> ListFriends(string userNameOrIndex);
+
+        /// <summary>
+        /// Adds a friend to a user (<c>@CREATE-FRIEND</c>).
+        /// </summary>
+        /// <param name="userNameOrIndex">
+        /// The owner, by name or decimal index.
+        /// </param>
+        /// <param name="friendNameOrIndex">
+        /// The friend, by name or decimal index (0-255).
+        /// </param>
+        /// <param name="rights">
+        /// One SINTRAN access field; SINTRAN gives a new friend RWA.
+        /// </param>
+        void AddFriend(string userNameOrIndex, string friendNameOrIndex, string rights = "RWA");
+
+        /// <summary>
+        /// Removes a friend from a user (<c>@DELETE-FRIEND</c>).
+        /// </summary>
+        /// <param name="userNameOrIndex">
+        /// The owner, by name or decimal index.
+        /// </param>
+        /// <param name="friendNameOrIndex">
+        /// The friend, by name or decimal index.
+        /// </param>
+        void RemoveFriend(string userNameOrIndex, string friendNameOrIndex);
+
+        /// <summary>
+        /// Changes the rights of a friend already on the list (<c>@SET-FRIEND-ACCESS</c>).
+        /// </summary>
+        /// <param name="userNameOrIndex">
+        /// The owner, by name or decimal index.
+        /// </param>
+        /// <param name="friendNameOrIndex">
+        /// The friend, by name or decimal index.
+        /// </param>
+        /// <param name="rights">
+        /// One SINTRAN access field: <c>N</c> or letters RWACD; empty means no change.
+        /// </param>
+        void SetFriendAccess(string userNameOrIndex, string friendNameOrIndex, string rights);
+
+        /// <summary>
+        /// Sets the 15-bit access word of an existing file (<c>@SET-FILE-ACCESS</c>).
+        /// </summary>
+        /// <param name="path">
+        /// <c>USER/NAME:TYPE</c>.
+        /// </param>
+        /// <param name="accessBits">
+        /// The new access word: OWN bits 0-4, FRIEND 5-9, PUBLIC 10-14.
+        /// </param>
+        void SetFileAccess(string path, ushort accessBits);
+
+        /// <summary>
+        /// Gets the 15-bit access word of an existing file.
+        /// </summary>
+        /// <param name="path">
+        /// <c>USER/NAME:TYPE</c>.
+        /// </param>
+        /// <returns>
+        /// The access word.
+        /// </returns>
+        ushort GetFileAccess(string path);
+
+        /// <summary>
+        /// Sets the access a user's new files get (<c>@SET-DEFAULT-FILE-ACCESS</c>).
+        /// </summary>
+        /// <param name="userNameOrIndex">
+        /// The user, by name or decimal index.
+        /// </param>
+        /// <param name="accessBits">
+        /// The new default access word.
+        /// </param>
+        void SetDefaultFileAccess(string userNameOrIndex, ushort accessBits);
+
+        /// <summary>
+        /// Gets the access a user's new files get.
+        /// </summary>
+        /// <param name="userNameOrIndex">
+        /// The user, by name or decimal index.
+        /// </param>
+        /// <returns>
+        /// The default access word.
+        /// </returns>
+        ushort GetDefaultFileAccess(string userNameOrIndex);
+
         /// <summary>
         /// Adds a new user to the filesystem.
         /// </summary>

@@ -2506,7 +2506,12 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 // points its next/prev version at itself (else SINTRAN ";2").
                 ObjectEntryNextVersion = (uint)objIndex,
                 ObjectEntryPrevVersion = (uint)objIndex,
-                AccessBits = 0x03FF,                 // owner+friend full, public none
+                // The owner's default file access, as SINTRAN gives a new file (measured
+                // 2026-11-04 on nd100x: with SYSTEM's default set to N,RW,RWACD,
+                // @CREATE-FILE stored 0x007F for an indexed and a contiguous file alike).
+                // This used to be a fixed 0x03FF, which ignored the user entry. Same
+                // fallback as the norskdata-ndfs ports when the user entry holds 0.
+                AccessBits = NewFileAccess(user),
                 FileTypeFlags = FileTypes.IndexedFile,
                 BytesInFile = (ulong)data.Length,
 
@@ -3119,7 +3124,12 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 FileNumber = ObjectEntry.ComputeFileNumber(objIndex, user.UserIndex),
                 ObjectEntryNextVersion = (uint)objIndex,
                 ObjectEntryPrevVersion = (uint)objIndex,
-                AccessBits = 0x03FF,                 // owner+friend full, public none
+                // The owner's default file access, as SINTRAN gives a new file (measured
+                // 2026-11-04 on nd100x: with SYSTEM's default set to N,RW,RWACD,
+                // @CREATE-FILE stored 0x007F for an indexed and a contiguous file alike).
+                // This used to be a fixed 0x03FF, which ignored the user entry. Same
+                // fallback as the norskdata-ndfs ports when the user entry holds 0.
+                AccessBits = NewFileAccess(user),
 
                 // Contiguous, not indexed - this is the flag SINTRAN prints as "CONTINUOUS FILE".
                 FileTypeFlags = FileTypes.ContiguousFile,

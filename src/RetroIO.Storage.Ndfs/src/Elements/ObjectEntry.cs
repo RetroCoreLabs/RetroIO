@@ -566,8 +566,12 @@ namespace RetroIO.Storage.Ndfs.Elements
             buffer[offset + 54] = (byte)(PagesInFile >> 8);
             buffer[offset + 55] = (byte)PagesInFile;
 
-            // Bytes in file - 1 (bytes 56-59, big-endian)
-            ulong bytesMinusOne = BytesInFile > 0 ? BytesInFile - 1 : 0;
+            // Bytes in file - 1 (bytes 56-59, big-endian), wrapped to 32 bits: an empty file is
+            // stored as 0xFFFFFFFF, as SINTRAN stores it (measured on nd100x SMD0.IMG: ten
+            // SINTRAN-made entries, e.g. (SYSTEM)SINTRAN:DATA and (SYSTEM)TERMINAL, hold
+            // 0xFFFFFFFF). Up to 2026-11-04 this wrote 0, which reads back as 1 byte, so
+            // rewriting an object page turned every empty file on it into a 1-byte file.
+            uint bytesMinusOne = unchecked((uint)BytesInFile - 1u);
             buffer[offset + 56] = (byte)(bytesMinusOne >> 24);
             buffer[offset + 57] = (byte)(bytesMinusOne >> 16);
             buffer[offset + 58] = (byte)(bytesMinusOne >> 8);

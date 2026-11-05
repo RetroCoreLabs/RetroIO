@@ -154,6 +154,41 @@ namespace RetroIO.Tests
         }
 
         /// <summary>
+        /// An empty file is stored as 0xFFFFFFFF in bytes 56-59 (bytes in file minus one).
+        /// </summary>
+        /// <remarks>
+        /// SINTRAN stores it that way: nd100x SMD0.IMG holds 0xFFFFFFFF in ten SINTRAN-made
+        /// entries such as (SYSTEM)SINTRAN:DATA and (SYSTEM)TERMINAL. Before 2026-11-04
+        /// <c>ToBytes</c> wrote 0, which reads back as 1 byte, so rewriting an object page turned
+        /// every empty file on it into a 1-byte file.
+        /// </remarks>
+        [Test]
+        public void EmptyFile_IsStoredAsAllOnes_AndReadsBackAsZeroBytes()
+        {
+            byte[] raw = BuildEntry();
+            raw[56] = 0xFF;
+            raw[57] = 0xFF;
+            raw[58] = 0xFF;
+            raw[59] = 0xFF;
+
+            ObjectEntry entry = ObjectEntry.FromBytes(raw, 0)!;
+            Assert.That(entry.BytesInFile, Is.EqualTo(0UL));
+
+            byte[] written = new byte[64];
+            entry.ToBytes(written, 0);
+            Assert.That(written[56], Is.EqualTo(0xFF));
+            Assert.That(written[57], Is.EqualTo(0xFF));
+            Assert.That(written[58], Is.EqualTo(0xFF));
+            Assert.That(written[59], Is.EqualTo(0xFF));
+
+            // A fresh entry with no bytes is written the same way.
+            ObjectEntry fresh = new ObjectEntry { Header = ObjectEntry.HeaderEntryUsed, ObjectName = "NEW", Type = "DATA" };
+            fresh.ToBytes(written, 0);
+            Assert.That(written[56], Is.EqualTo(0xFF));
+            Assert.That(written[59], Is.EqualTo(0xFF));
+        }
+
+        /// <summary>
         /// A slot whose used bit is clear is reported as free rather than parsed.
         /// </summary>
         [Test]
