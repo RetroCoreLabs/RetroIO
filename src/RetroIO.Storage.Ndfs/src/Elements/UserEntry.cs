@@ -94,7 +94,8 @@ namespace RetroIO.Storage.Ndfs.Elements
 
         /// <summary>
         /// Default file access permissions for files created by this user.
-        /// Default: 0x4FF (owner full, friends read/write, public read)
+        /// Default: 0x4FF (owner RWACD, friends RWA, public R - SINTRAN's own default,
+        /// ND-60.128.5 @SET-DEFAULT-FILE-ACCESS)
         /// </summary>
         public ushort DefaultFileAccess { get; set; } = 0x4FF;
 

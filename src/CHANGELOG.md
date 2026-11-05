@@ -10,7 +10,28 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   from `ssh-keygen -lf`), or `?hostKeyCheck=accept-new` to remember the key on the first
   connection. `?hostKeyCheck=off` restores the old behaviour. See `RetroIO.Storage.Providers`.
 
+### Fixed
+- `RetroIO.Storage.Ndfs`: **rewriting an object page turned every empty file on it into a 1-byte
+  file.** SINTRAN stores "bytes in file" as bytes minus one, so an empty file holds 0xFFFFFFFF
+  (measured on nd100x `SMD0.IMG`: ten SINTRAN-made entries such as `(SYSTEM)SINTRAN:DATA`).
+  `ObjectEntry.ToBytes` wrote 0 for it, which reads back as 1 byte; it now writes 0xFFFFFFFF. A
+  pack rewritten by an older version may hold 1-byte files that were empty; nothing repairs them.
+  The norskdata-ndfs C, Python and TypeScript writers had the same mistake and are fixed the same
+  way.
+- `RetroIO.Storage.Ndfs`: a new file gets its owner's default file access, indexed and contiguous
+  alike, as SINTRAN gives it (measured on nd100x: with SYSTEM's default set to `N,RW,RWACD`,
+  `@CREATE-FILE` stored 0x007F for both kinds). It was a fixed 0x03FF.
+
 ### Added
+- `RetroIO.Storage.Ndfs`: the SINTRAN access and friend commands on `INdfsFileSystem`:
+  `ListFriends` (`@LIST-FRIENDS`), `AddFriend` (`@CREATE-FRIEND`, RWA by default),
+  `RemoveFriend` (`@DELETE-FRIEND`), `SetFriendAccess` (`@SET-FRIEND-ACCESS`),
+  `SetFileAccess` / `GetFileAccess` (`@SET-FILE-ACCESS`) and `SetDefaultFileAccess` /
+  `GetDefaultFileAccess` (`@SET-DEFAULT-FILE-ACCESS`). Each change is written to the device at
+  once. `Security.SintranAccessForm` reads and writes SINTRAN's own form (`PUBLIC,FRIEND,OWN`, each
+  field `N` or letters `RWACD`, an empty field keeps that part). The same calls exist in the
+  norskdata-ndfs C, Python and TypeScript libraries and in ndtool. Checked against SINTRAN on
+  nd100x: `@LIST-FRIENDS`, `@FILE-STATISTICS` and `@USER-STATISTICS` show what was written.
 - `RetroIO.Storage.Ndfs`: the SINTRAN CPU number and CPU type of a system pack can be read and
   changed (`ReadSintranCpuIdentity`, `WriteSintranCpuIdentity`): both disk copies of the resident
   data page (`SYSNO`, `FCPUN`, `HWINF+2` in the segments `S3IDPIT` and `S3SDPIT`), the generation

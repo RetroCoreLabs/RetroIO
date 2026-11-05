@@ -12,6 +12,7 @@ using NUnit.Framework;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.BlockDevices;
 using RetroIO.Storage.Ndfs.BlockDevices;
+using RetroIO.Storage.Ndfs.Elements;
 using RetroIO.Storage.Ndfs.FileSystems;
 
 namespace RetroIO.Tests
@@ -164,7 +165,12 @@ namespace RetroIO.Tests
                     // Single-version file: self-referential version chain.
                     Assert.That(e.ObjectEntryNextVersion, Is.EqualTo((uint)e.ObjectIndex));
                     Assert.That(e.ObjectEntryPrevVersion, Is.EqualTo((uint)e.ObjectIndex));
-                    Assert.That(e.AccessBits, Is.EqualTo((uint)0x03FF));
+                    // A new file gets its owner's default access, as SINTRAN gives it (measured
+                    // 2026-11-04 on nd100x with @CREATE-FILE). This asserted a fixed 0x03FF until
+                    // then, which ignored the user entry.
+                    UserEntry? build = fileSystem.GetUser(buildUserIndex);
+                    Assert.That(build, Is.Not.Null);
+                    Assert.That(e.AccessBits, Is.EqualTo((uint)build!.DefaultFileAccess));
 
                     fileSystem.Dispose();
                     blockDevice.Dispose();
