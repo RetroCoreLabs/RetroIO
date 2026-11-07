@@ -118,27 +118,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
             FaObjectHeaderFlags.EntryUsed | FaObjectHeaderFlags.MaxBytePointerValid;
 
         /// <summary>
-        /// The span in years of the packed ND date word - 1950 to 2013 inclusive.
-        /// </summary>
-        /// <remarks>
-        /// The year is six bits counted from 1950, so the format holds exactly 64 of them and
-        /// cannot express any year from 2014 onwards. See
-        /// <c>RetroIO.Storage.Ndfs.Elements.NdDateTime</c> for the full bit layout.
-        /// </remarks>
-        public const int NdDateSpanYears = 64;
-
-        /// <summary>
-        /// The first year the packed ND date word can express.
-        /// </summary>
-        public const int NdDateFirstYear = 1950;
-
-        /// <summary>
-        /// The last year the packed ND date word can express.
-        /// </summary>
-        public const int NdDateLastYear = 2013;
-
-        /// <summary>
-        /// Packs a timestamp into the ND date word, folding the year into the range the format can
+        /// Packs a timestamp into the ND date word, moving the year into the range the format can
         /// hold instead of giving up and writing zero.
         /// </summary>
         /// <param name="when">
@@ -150,19 +130,20 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// <remarks>
         /// <para>
         /// Why this exists. <c>NdDateTime.ToNdDateOrUnset</c> returns 0 for anything from
-        /// 2014 onwards, which is the right answer when WRITING a file to a real pack - better no
-        /// timestamp than a fabricated one. It is the wrong answer for a listing record, because
-        /// the wire says so: in the 49 records of
+        /// 2014 onwards. That is the wrong answer for a listing record, because the wire says so:
+        /// in the 49 records of
         /// <c>DOC\captures\FA-READ-WRITE-2026-08-04\capture-list-files.txt</c>, the creation date
         /// is non-zero on every single one. The last-opened fields are often zero (17 and 9
         /// records respectively); the creation date never is. Every record we served carried zero,
         /// because every file in a Windows folder has a present-day timestamp.
         /// </para>
         /// <para>
-        /// What the fold does. It subtracts whole 64-year cycles until the year is in range,
-        /// so 2026 becomes 1962 and the month, day and time of day are carried across untouched. The
-        /// year is therefore congruent to the real one modulo the format's own span, which makes the
-        /// mapping reversible and derived from the format rather than an invented constant.
+        /// What it does. <see cref="NdDateTime.FitNdRange"/>, the one rule every RetroIO writer
+        /// uses (Ronny Hansen, 2026-11-07): a year after 2013 moves back 30 years until it fits, a
+        /// year before 1950 becomes 1950, and the month, day and time of day are carried across, so
+        /// 2026 becomes 1996. Until 2026-11-07 this method had its own fold of whole 64-year
+        /// cycles (2026 became 1962), which gave a served file a different year from the same file
+        /// written to a pack.
         /// </para>
         /// <para>
         /// It is still not the real year, and that is a compromise. The alternatives were a
@@ -170,35 +151,10 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// The proper fix is the sidecar that holds the ND-specific fields for a served folder - see
         /// <c>DOC\PLAN-CSHARP-FILE-SERVER-AND-FOLDER-SYNC-2026-08-01.md</c> section 1.
         /// </para>
-        /// <para>
-        /// 29 February needs no special handling: a fold only ever lands in 1950-2013, whose one
-        /// century year (2000) IS a leap year, so a leap day cannot fold onto a non-leap year.
-        /// </para>
         /// </remarks>
         public static uint ToListingDate(DateTime when)
         {
-            int year = when.Year;
-
-            while (year > NdDateLastYear)
-            {
-                year -= NdDateSpanYears;
-            }
-
-            while (year < NdDateFirstYear)
-            {
-                year += NdDateSpanYears;
-            }
-
-            DateTime folded = new DateTime(
-                year,
-                when.Month,
-                when.Day,
-                when.Hour,
-                when.Minute,
-                when.Second,
-                DateTimeKind.Unspecified);
-
-            return NdDateTime.ToNdDate(folded);
+            return NdDateTime.ToNdDate(NdDateTime.FitNdRange(when));
         }
 
         /// <summary>

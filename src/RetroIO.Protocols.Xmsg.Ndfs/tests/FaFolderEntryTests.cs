@@ -165,8 +165,8 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
         /// non-zero on ALL of them - it is the one date field the wire never leaves blank.
         /// </para>
         /// <para>
-        /// <c>2026-08-05</c> folds by one 64-year cycle to <c>1962-08-05</c>: same month, day and
-        /// time, year congruent modulo the format's own span.
+        /// <c>2026-08-05</c> moves back 30 years to <c>1996-08-05</c>: same month, day and time
+        /// (NdDateTime.FitNdRange, Ronny's 2026-11-07 rule, the same one the pack writers use).
         /// </para>
         /// </remarks>
         [Fact]
@@ -190,7 +190,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
             DateTime? decoded = RetroIO.Storage.Ndfs.Elements.NdDateTime.FromNdDate(created);
 
             Assert.NotNull(decoded);
-            Assert.Equal(1962, decoded.Value.Year);
+            Assert.Equal(1996, decoded.Value.Year);
             Assert.Equal(modified.Month, decoded.Value.Month);
             Assert.Equal(modified.Day, decoded.Value.Day);
             Assert.Equal(modified.Hour, decoded.Value.Hour);

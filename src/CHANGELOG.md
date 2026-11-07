@@ -17,6 +17,10 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   the 1950-2013 range by Ronny Hansen's rule: before 1950 becomes the same day in 1950, after 2013
   moves back 30 years until it fits (2026-11-07 becomes 1996-11-07). A contiguous file now gets
   only the creation date, as `@CREATE-FILE` gives it (measured); it also got a last-write date.
+- `RetroIO.Protocols.Xmsg.Ndfs`: the COSMOS file server's listing dates use the same rule
+  (`FaFolderEntry.ToListingDate` calls `NdDateTime.FitNdRange`). It had its own 64-year fold, so a
+  file modified in 2026 was listed as 1962 while the pack writers gave 1996. The three
+  `FaFolderEntry.NdDate*` constants are gone; nothing else used them.
 - `RetroIO.Storage.Ndfs`: **an empty file owns no page, as SINTRAN writes one.** It used to get
   one data page and one index block. Measured on nd100x (a copy of `SMD0.IMG`):
   `@CREATE-FILE E0:SYMB,0` and `@COPY-FILE "C0:SYMB",E0:SYMB` store 0 pages, file pointer 0,
