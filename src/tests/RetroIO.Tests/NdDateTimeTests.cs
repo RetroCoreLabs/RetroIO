@@ -84,6 +84,40 @@ namespace RetroIO.Tests
             Assert.That(NdDateTime.ToNdDateOrUnset(dt), Is.EqualTo(NdDateTime.ToNdDate(dt)));
         }
 
+        /// <summary>
+        /// Ronny's rule (2026-11-07): before 1950 becomes the same day in 1950; after 2013 moves
+        /// back 30 years until it fits. Month and time never change; 29 February becomes
+        /// 28 February in a year without one. The same cases are in the norskdata-ndfs C, Python
+        /// and TypeScript tests.
+        /// </summary>
+        [TestCase(2026, 11, 7, 1996, 7)]    // today
+        [TestCase(2014, 1, 1, 1984, 1)]     // first year that does not fit
+        [TestCase(2043, 12, 31, 2013, 31)]  // still one step
+        [TestCase(2044, 1, 1, 1984, 1)]     // two steps
+        [TestCase(2013, 12, 31, 2013, 31)]  // in range: unchanged
+        [TestCase(1950, 1, 1, 1950, 1)]
+        [TestCase(1949, 6, 15, 1950, 15)]   // too old
+        [TestCase(1800, 3, 2, 1950, 2)]
+        [TestCase(2028, 2, 29, 1998, 28)]   // 1998 has no 29 February
+        [TestCase(2044, 2, 29, 1984, 29)]   // 1984 has one
+        [TestCase(1948, 2, 29, 1950, 28)]
+        public void FitNdRange_MovesTheYearAndKeepsTheRest(int year, int month, int day, int wantYear, int wantDay)
+        {
+            DateTime got = NdDateTime.FitNdRange(new DateTime(year, month, day, 13, 45, 30));
+            Assert.That(got, Is.EqualTo(new DateTime(wantYear, month, wantDay, 13, 45, 30)));
+        }
+
+        /// <summary>
+        /// "Now" always packs into a valid, nonzero ND date.
+        /// </summary>
+        [Test]
+        public void Now_IsInRange()
+        {
+            DateTime? decoded = NdDateTime.FromNdDate(NdDateTime.Now());
+            Assert.That(decoded, Is.Not.Null);
+            Assert.That(decoded!.Value.Year, Is.InRange(1950, 2013));
+        }
+
         [Test]
         public void FromNdDate_HourField24To31_ClampsToZero()
         {

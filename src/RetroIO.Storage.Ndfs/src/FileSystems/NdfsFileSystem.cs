@@ -2484,7 +2484,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             BlockPointer filePointer = AllocateEmptyOrSparse(data, filePages, pointerType);
 
             // Create ObjectEntry
-            uint createdNow = NdDateTime.ToNdDateOrUnset(DateTime.Now);
+            uint createdNow = NdDateTime.Now();
             var newEntry = new ObjectEntry
             {
                 // Mark the slot in use. ToBytes writes Header verbatim now, so leaving this unset
@@ -3106,7 +3106,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
             EnsureObjectDirPage(objIndex);
 
-            uint createdNow = NdDateTime.ToNdDateOrUnset(DateTime.Now);
+            uint createdNow = NdDateTime.Now();
             ObjectEntry newEntry = new ObjectEntry
             {
                 Header = ObjectEntry.HeaderEntryUsed,
@@ -3143,8 +3143,10 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 // of the file is simply block (FilePointer.BlockID + N).
                 FilePointer = new BlockPointer(startBlock.Value, BlockPointer.PointerType.Contiguous),
                 FileType = 0, // DATA file
-                DateCreated = createdNow,
-                LastDateOpenedForWrite = createdNow
+                // Only the creation date: @CREATE-FILE leaves the last-write date 0 (measured
+                // 2026-11-07, E0:SYMB had offset 40 set and offset 48 zero). NdDateTime.Now moves
+                // today's date back 30 years so it fits (Ronny's rule, see FitNdRange).
+                DateCreated = createdNow
             };
 
             _objectFile.AddObject(newEntry);
@@ -3226,7 +3228,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // PagesInFile stays at the reservation. For a contiguous file the pages are allocated
             // whether or not the data reaches them, so counting only the written pages would
             // under-report the disk this file actually holds.
-            existingEntry.LastDateOpenedForWrite = NdDateTime.ToNdDateOrUnset(DateTime.Now);
+            existingEntry.LastDateOpenedForWrite = NdDateTime.Now();
 
             if (_masterBlock.ObjectFilePointer != null)
                 _objectFile.WritePageForEntry(_device, _masterBlock.ObjectFilePointer, existingEntry.ObjectIndex);
@@ -3298,7 +3300,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // Allocated count, not the logical extent - see the note at the create site.
             existingEntry.PagesInFile = CountRealDataPages(data);
             existingEntry.FilePointer = filePointer;
-            existingEntry.LastDateOpenedForWrite = NdDateTime.ToNdDateOrUnset(DateTime.Now);
+            existingEntry.LastDateOpenedForWrite = NdDateTime.Now();
 
             if (user != null)
             {
