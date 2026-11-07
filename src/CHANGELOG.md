@@ -11,6 +11,15 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   connection. `?hostKeyCheck=off` restores the old behaviour. See `RetroIO.Storage.Providers`.
 
 ### Fixed
+- `RetroIO.Storage.Ndfs`: **an empty file owns no page, as SINTRAN writes one.** It used to get
+  one data page and one index block. Measured on nd100x (a copy of `SMD0.IMG`):
+  `@CREATE-FILE E0:SYMB,0` and `@COPY-FILE "C0:SYMB",E0:SYMB` store 0 pages, file pointer 0,
+  bytes 0xFFFFFFFF and the indexed flag, and the free page map does not move. `WriteFile` now does
+  the same, charges nothing, and gives all pages back when a file is overwritten with nothing.
+- `RetroIO.Storage.Ndfs`: **`ReadFile` threw "Invalid file pointer" on an empty file SINTRAN had
+  made**, because such a file has pointer 0. A 0 pointer with 0 bytes now reads as an empty file;
+  with bytes recorded it is still an error. The `ndfs.holes` property is left out for every
+  0-byte file, whether or not an older tool gave it a page.
 - `RetroIO.Storage.Ndfs`: **rewriting an object page turned every empty file on it into a 1-byte
   file.** SINTRAN stores "bytes in file" as bytes minus one, so an empty file holds 0xFFFFFFFF
   (measured on nd100x `SMD0.IMG`: ten SINTRAN-made entries such as `(SYSTEM)SINTRAN:DATA`).
