@@ -390,8 +390,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // reservation must cover them too.
             uint filePagesForQuota = (uint)((data.Length + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - 1) /
                                            NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
-            if (filePagesForQuota == 0)
-                filePagesForQuota = 1;
+            // An empty file has no index block either (StructuralPagesFor(0) is 0).
             requiredPages += StructuralPagesFor(filePagesForQuota);
 
             // Check if file already exists
@@ -2111,8 +2110,16 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             if (_device == null)
                 throw new InvalidOperationException("Device not initialized");
 
+            // A pointer of 0 is how SINTRAN stores an empty file: no page at all (measured
+            // 2026-11-07, @CREATE-FILE E0:SYMB,0 on nd100x). Before then this threw, so RetroIO
+            // could not read an empty file SINTRAN had made. A 0 pointer on a file that claims
+            // bytes is still damage.
             if (obj.FilePointer == null || obj.FilePointer.BlockID == 0)
+            {
+                if (obj.BytesInFile == 0)
+                    return Array.Empty<byte>();
                 throw new InvalidDataException("Invalid file pointer");
+            }
 
             var data = new byte[obj.BytesInFile];
             ulong bytesLeft = obj.BytesInFile;
@@ -2450,10 +2457,8 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             uint filePages = (uint)((data.Length + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - 1) /
                                    NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
 
-            if (filePages == 0)
-                filePages = 1; // Minimum 1 page
-
-            // Determine pointer type based on file size
+            // Determine pointer type based on file size. An empty file (0 pages) gets no block at
+            // all - see AllocateEmptyOrSparse.
             BlockPointer.PointerType pointerType;
             if (filePages <= 512)
                 pointerType = BlockPointer.PointerType.Indexed; // Up to 512 pages
@@ -2472,19 +2477,11 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // the home word of the bit file before the file's index block does.
             EnsureObjectDirPage(objIndex);
 
-            // Allocate blocks for data with sparse support
-            var allocatedBlocks = AllocateFileBlocksSparse(data, pointerType);
-            if (allocatedBlocks == null || allocatedBlocks.Count == 0)
-                throw new InvalidOperationException("Failed to allocate blocks for file");
-
-            // Write file data to allocated blocks (skip sparse holes). SubIndexed files write
-            // their data pages inline during allocation (see AllocateFileBlocksSparse) since a
-            // single flat "skip the first element" pass can't express a file split across
-            // multiple per-group index blocks the way WriteFileDataSparse assumes.
-            if (pointerType != BlockPointer.PointerType.SubIndexed)
-            {
-                WriteFileDataSparse(allocatedBlocks, data);
-            }
+            // Allocate blocks for data with sparse support. SubIndexed files write their data
+            // pages inline during allocation (see AllocateFileBlocksSparse) since a single flat
+            // "skip the first element" pass can't express a file split across multiple per-group
+            // index blocks the way WriteFileDataSparse assumes.
+            BlockPointer filePointer = AllocateEmptyOrSparse(data, filePages, pointerType);
 
             // Create ObjectEntry
             uint createdNow = NdDateTime.ToNdDateOrUnset(DateTime.Now);
@@ -2527,7 +2524,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                 // The logical extent is not lost: it is ceil(BytesInFile / 2048), which is what
                 // GetAllBlockPointersForFile already uses to walk the index.
                 PagesInFile = CountRealDataPages(data),
-                FilePointer = allocatedBlocks[0], // First pointer (index or data block)
+                FilePointer = filePointer, // Index block, or 0 for an empty file
                 FileType = 0, // DATA file
                 DateCreated = createdNow,
                 LastDateOpenedForWrite = createdNow
@@ -3282,9 +3279,6 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             uint filePages = (uint)((data.Length + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - 1) /
                                    NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
 
-            if (filePages == 0)
-                filePages = 1;
-
             BlockPointer.PointerType pointerType;
             if (filePages <= 512)
                 pointerType = BlockPointer.PointerType.Indexed;
@@ -3293,23 +3287,17 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             else
                 throw new InvalidOperationException($"File too large: {data.Length} bytes");
 
-            var allocatedBlocks = AllocateFileBlocksSparse(data, pointerType);
-            if (allocatedBlocks == null || allocatedBlocks.Count == 0)
-                throw new InvalidOperationException("Failed to allocate blocks for file");
-
             // Write file data with sparse support (SubIndexed writes its data pages inline
-            // during allocation — see the comment in CreateNewFile for why).
-            if (pointerType != BlockPointer.PointerType.SubIndexed)
-            {
-                WriteFileDataSparse(allocatedBlocks, data);
-            }
+            // during allocation — see the comment in CreateNewFile for why). An empty file
+            // gets no block at all.
+            BlockPointer filePointer = AllocateEmptyOrSparse(data, filePages, pointerType);
 
             // Update entry
             existingEntry.BytesInFile = (ulong)data.Length;
 
             // Allocated count, not the logical extent - see the note at the create site.
             existingEntry.PagesInFile = CountRealDataPages(data);
-            existingEntry.FilePointer = allocatedBlocks[0];
+            existingEntry.FilePointer = filePointer;
             existingEntry.LastDateOpenedForWrite = NdDateTime.ToNdDateOrUnset(DateTime.Now);
 
             if (user != null)
@@ -3584,6 +3572,51 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         }
 
         /// <summary>
+        /// Allocates and writes the blocks of an indexed or sub-indexed file, or nothing at all for
+        /// an empty one.
+        /// </summary>
+        /// <remarks>
+        /// An empty file owns no page: no index block, no data page, and a file pointer of 0. That
+        /// is what SINTRAN writes (measured 2026-11-07 on nd100x, a copy of SMD0.IMG:
+        /// <c>@CREATE-FILE E0:SYMB,0</c> and <c>@COPY-FILE "C0:SYMB",E0:SYMB</c> both give 0 pages
+        /// and pointer 0, and the free page map does not move; a copy of an empty file that HAS a
+        /// page comes out with none). Every reader here treats a 0 pointer as "no data". Until
+        /// then an empty file got one index block and one data page.
+        /// </remarks>
+        /// <param name="data">
+        /// The file contents.
+        /// </param>
+        /// <param name="filePages">
+        /// Number of data pages the contents need; 0 for an empty file.
+        /// </param>
+        /// <param name="pointerType">
+        /// Indexed or SubIndexed, chosen by the caller from <paramref name="filePages"/>.
+        /// </param>
+        /// <returns>
+        /// The pointer to store in the object entry: the top index block, or 0 for an empty file.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the blocks cannot be allocated.
+        /// </exception>
+        private BlockPointer AllocateEmptyOrSparse(byte[] data, uint filePages, BlockPointer.PointerType pointerType)
+        {
+            if (filePages == 0)
+                return new BlockPointer();
+
+            var allocatedBlocks = AllocateFileBlocksSparse(data, pointerType);
+            if (allocatedBlocks == null || allocatedBlocks.Count == 0)
+                throw new InvalidOperationException("Failed to allocate blocks for file");
+
+            if (pointerType != BlockPointer.PointerType.SubIndexed)
+            {
+                WriteFileDataSparse(allocatedBlocks, data);
+            }
+
+            // First pointer: the index (or sub-index) block.
+            return allocatedBlocks[0];
+        }
+
+        /// <summary>
         /// Index and sub-index blocks that belong to a file with <paramref name="filePages"/> pages:
         /// one for an Indexed file (up to 512 pages), and for a SubIndexed file the top block plus one
         /// group index block for every 512 pages. SINTRAN charges these blocks to the owner's quota like
@@ -3591,13 +3624,16 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// docs/NDFS-ALLOCATION-RULES.md section 7).
         /// </summary>
         /// <param name="filePages">
-        /// Number of data pages of the file, at least 1.
+        /// Number of data pages of the file. 0 for an empty file, which has no index block.
         /// </param>
         /// <returns>
         /// The number of index and sub-index blocks the file needs.
         /// </returns>
         private static uint StructuralPagesFor(uint filePages)
         {
+            // An empty file has no index block (see AllocateEmptyOrSparse).
+            if (filePages == 0)
+                return 0;
             if (filePages <= 512)
                 return 1;
             return 1 + (filePages + 511) / 512;
@@ -3876,10 +3912,16 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         /// An empty array means the file was checked and is solid. The key is absent only when the
         /// file has no contents at all, which is not the same claim.
         /// </para>
+        /// <para>
+        /// "No contents" is decided by the byte count, not by whether a page exists: SINTRAN
+        /// stores an empty file with no page (pointer 0, measured 2026-11-07), while an empty file
+        /// written by an older tool still carries one index block and one unused page. Both are
+        /// the same empty file and get the same answer.
+        /// </para>
         /// </remarks>
         private void AddSparseHoles(ObjectEntry obj, IDictionary<string, object> propertyBag)
         {
-            if (obj.FilePointer == null || obj.FilePointer.BlockID == 0)
+            if (obj.BytesInFile == 0 || obj.FilePointer == null || obj.FilePointer.BlockID == 0)
                 return;
 
             List<BlockPointer> blocks = GetAllBlockPointersForFile(obj.FilePointer, obj.BytesInFile);
