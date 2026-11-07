@@ -57,7 +57,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </summary>
         /// <remarks>
         /// Fixed so the packed ND date in the record is fixed. The year is deliberately a present-day
-        /// one, so the 64-year fold in <c>FaFolderEntry.ToListingDate</c> is exercised rather than
+        /// one, so the year fold in <c>FaFolderEntry.ToListingDate</c> (30 years back) is exercised rather than
         /// side-stepped - that fold is what stopped every record carrying a zero creation date, which
         /// no real record in the capture ever does.
         /// </remarks>
@@ -148,6 +148,13 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         // runs on 2026-08-08. The one run that completed is the one whose letter happened to carry
         // 0002, where the constant was accidentally right. That coincidence is why this survived,
         // and why FaTestClient's letter carrying 0004 makes the test disagree now.
+        // RE-RECORDED 2026-11-07, deliberately. Four bytes moved and nothing else: the first byte
+        // of the creation date and of the last-write date in both file records, 0x32 to 0xBA. The
+        // date word 320AB5A1 (1962-08-05 11:22:33) became BA0AB5A1 (1996-08-05 11:22:33): only the
+        // 6 year bits changed, 12 to 46. FaFolderEntry.ToListingDate now uses the shared
+        // NdDateTime.FitNdRange (back 30 years, Ronny's rule) instead of its own 64-year fold, so a
+        // served file and a file written to a pack get the same year. The header checksum covers
+        // words 0 to 5 only, so it does not move.
         private static readonly string[] ExpectedFrames =
         {
             // The connection confirmation: 07D2, the echoed letter word 0004, our connection
@@ -156,7 +163,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             // First file: the acknowledgement, then the 64-byte object entry for ALPHA:SYMB.
             "2113000E00644E1F00010008905221009600006402F74E1F0211000807A200040100922A",
-            "2113000E00644E1F000200628FF721009600006402F74E1F0211006207F000048000908192000C920001F200028C4BA20000A20000A20001B0409000414C504841270000000000000000000053594D420000000004F7000800000000000000000000320AB5A100000000320AB5A10000000100000002400078DAF200FF00",
+            "2113000E00644E1F000200628FF721009600006402F74E1F0211006207F000048000908192000C920001F200028C4BA20000A20000A20001B0409000414C504841270000000000000000000053594D420000000004F7000800000000000000000000BA0AB5A100000000BA0AB5A10000000100000002400078DAF200FF00",
 
             // The directory entry: a 42-byte record naming PACK-ONE, under the same B0 tag as a
             // file record and told apart only by its length.
@@ -169,7 +176,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             // Second file: BETA:DATA, at walk ordinal 1.
             "2113000E00644E1F00070008904C21009600006402F74E1F0211000807A200040400922A",
-            "2113000E00644E1F000800628FF121009600006402F74E1F0211006207F000048300908192000C920004F200028C4BA20000A20001A20001B040900042455441270000000000000000000000444154410001000104F7000800000000000100000000320AB5A100000000320AB5A10000000100000006400078DAF200FF00",
+            "2113000E00644E1F000800628FF121009600006402F74E1F0211006207F000048300908192000C920004F200028C4BA20000A20001A20001B040900042455441270000000000000000000000444154410001000104F7000800000000000100000000BA0AB5A100000000BA0AB5A10000000100000006400078DAF200FF00",
 
             // Past the end of the walk: selector 1 with SINTRAN error 0x00C5 = 197, "no more
             // files". A refusal is the presence of selector 1, not a flag inside it.
