@@ -11,6 +11,12 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   connection. `?hostKeyCheck=off` restores the old behaviour. See `RetroIO.Storage.Providers`.
 
 ### Fixed
+- `RetroIO.Storage.Ndfs`: **new files get a date.** The write paths stamped
+  `ToNdDateOrUnset(DateTime.Now)`, which is 0 from 2014 on, so SINTRAN showed every file RetroIO
+  wrote as created `?0, 1950`. New `NdDateTime.FitNdRange` and `NdDateTime.Now` move a date into
+  the 1950-2013 range by Ronny Hansen's rule: before 1950 becomes the same day in 1950, after 2013
+  moves back 30 years until it fits (2026-11-07 becomes 1996-11-07). A contiguous file now gets
+  only the creation date, as `@CREATE-FILE` gives it (measured); it also got a last-write date.
 - `RetroIO.Storage.Ndfs`: **an empty file owns no page, as SINTRAN writes one.** It used to get
   one data page and one index block. Measured on nd100x (a copy of `SMD0.IMG`):
   `@CREATE-FILE E0:SYMB,0` and `@COPY-FILE "C0:SYMB",E0:SYMB` store 0 pages, file pointer 0,

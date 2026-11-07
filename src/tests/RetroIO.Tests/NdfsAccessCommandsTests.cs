@@ -14,7 +14,6 @@ using NUnit.Framework;
 
 using RetroIO.Storage.Ndfs.Creation;
 using RetroIO.Storage.Ndfs.Drivers;
-using RetroIO.Storage.Ndfs.Elements;
 using RetroIO.Storage.Ndfs.FileSystems;
 using RetroIO.Storage.Ndfs.Security;
 
@@ -118,103 +117,6 @@ namespace RetroIO.Tests
             Assert.That(mounted, Is.Not.Null, "driver must expose the NDFS filesystem");
             fs = mounted!;
             return driver;
-        }
-
-        // ---------------------------------------------------------------
-        // An empty file
-        // ---------------------------------------------------------------
-
-        /// <summary>
-        /// Finds a file's object entry by object name.
-        /// </summary>
-        /// <param name="fs">
-        /// The mounted file system.
-        /// </param>
-        /// <param name="objectName">
-        /// The object name, without the type.
-        /// </param>
-        /// <returns>
-        /// The entry.
-        /// </returns>
-        private static ObjectEntry EntryOf(INdfsFileSystem fs, string objectName)
-        {
-            IReadOnlyList<ObjectEntry> entries = fs.GetObjectEntries();
-            for (int i = 0; i < entries.Count; i++)
-            {
-                if (entries[i].ObjectName == objectName)
-                    return entries[i];
-            }
-            Assert.Fail("no entry " + objectName);
-            return null!;
-        }
-
-        /// <summary>
-        /// Pages the owner has used.
-        /// </summary>
-        /// <param name="fs">
-        /// The mounted file system.
-        /// </param>
-        /// <returns>
-        /// The owner's pages-used count.
-        /// </returns>
-        private static uint OwnerPagesUsed(INdfsFileSystem fs)
-        {
-            IReadOnlyList<UserEntry> users = fs.GetUsers();
-            for (int i = 0; i < users.Count; i++)
-            {
-                if (users[i].UserName == Owner)
-                    return users[i].PagesUsed;
-            }
-            Assert.Fail("no user " + Owner);
-            return 0;
-        }
-
-        /// <summary>
-        /// An empty file owns no page: 0 pages, file pointer 0, no index block, the indexed flag,
-        /// and no change to the free page count or the owner's quota. Overwriting a file with
-        /// nothing gives its pages back, and the empty file can be filled again.
-        /// </summary>
-        /// <remarks>
-        /// Measured 2026-11-07 on nd100x (a copy of SMD0.IMG): <c>@CREATE-FILE E0:SYMB,0</c>,
-        /// <c>@COPY-FILE "C0:SYMB",E0:SYMB</c> and a copy of an empty file that held one page all
-        /// gave pages 0, pointer 0, bytes 0xFFFFFFFF, flags 0x0008, and the free page map did not
-        /// move. Checked again after the image is mounted a second time.
-        /// </remarks>
-        [Test]
-        public void EmptyFileOwnsNoPage()
-        {
-            string imagePath = MakeImage("empty");
-            uint usedBefore;
-            uint freeBefore;
-
-            using (NdfsDriver driver = Open(imagePath, readOnly: false, out INdfsFileSystem fs))
-            {
-                usedBefore = OwnerPagesUsed(fs);
-                freeBefore = fs.GetBitFile().GetFreePages();
-                fs.WriteFile("ALICE/E0:SYMB", Array.Empty<byte>());
-                fs.WriteFile("ALICE/F3:DATA", new byte[] { 0x33, 0x33, 0x33 });
-                Assert.That(OwnerPagesUsed(fs), Is.EqualTo(usedBefore + 2), "1 data page + 1 index block");
-                fs.WriteFile("ALICE/F3:DATA", Array.Empty<byte>());
-            }
-
-            using (NdfsDriver driver = Open(imagePath, readOnly: false, out INdfsFileSystem fs))
-            {
-                ObjectEntry e0 = EntryOf(fs, "E0");
-                Assert.That(e0.PagesInFile, Is.EqualTo(0u));
-                Assert.That(e0.BytesInFile, Is.EqualTo(0UL));
-                Assert.That(e0.FilePointer!.BlockID, Is.EqualTo(0u));
-                Assert.That(e0.FileTypeFlags, Is.EqualTo(FileTypes.IndexedFile));
-                ObjectEntry f3 = EntryOf(fs, "F3");
-                Assert.That(f3.PagesInFile, Is.EqualTo(0u));
-                Assert.That(f3.FilePointer!.BlockID, Is.EqualTo(0u));
-                Assert.That(OwnerPagesUsed(fs), Is.EqualTo(usedBefore));
-                Assert.That(fs.GetBitFile().GetFreePages(), Is.EqualTo(freeBefore));
-                Assert.That(fs.ReadFile("ALICE/E0:SYMB").Length, Is.EqualTo(0));
-
-                fs.WriteFile("ALICE/E0:SYMB", Encoding.ASCII.GetBytes("FILLED\r\n"));
-                Assert.That(Encoding.ASCII.GetString(fs.ReadFile("ALICE/E0:SYMB")), Is.EqualTo("FILLED\r\n"));
-                Assert.That(fs.VerifyFileSystemIntegrity(), Is.True);
-            }
         }
 
         // ---------------------------------------------------------------

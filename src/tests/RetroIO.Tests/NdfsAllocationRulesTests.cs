@@ -213,20 +213,123 @@ namespace RetroIO.Tests
         }
 
         /// <summary>
-        /// The top pointer block of a file, found by object name (the part before the colon).
+        /// A file's object entry, found by object name (the part before the colon).
         /// </summary>
-        private static uint FilePointerOf(INdfsFileSystem ndfs, string name, string user)
+        private static ObjectEntry EntryOf(INdfsFileSystem ndfs, string name, string user)
         {
             string objectName = name.Split(':')[0];
             foreach (ObjectEntry e in ndfs.GetObjectEntries())
             {
                 if (string.Equals(e.ObjectName, objectName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(e.UserName, user, StringComparison.OrdinalIgnoreCase))
-                    return e.FilePointer!.BlockID;
+                    return e;
             }
 
             Assert.Fail($"{name} not found");
-            return 0;
+            return null!;
+        }
+
+        /// <summary>
+        /// The top pointer block of a file, found by object name (the part before the colon).
+        /// </summary>
+        private static uint FilePointerOf(INdfsFileSystem ndfs, string name, string user)
+        {
+            return EntryOf(ndfs, name, user).FilePointer!.BlockID;
+        }
+
+        /// <summary>
+        /// An empty file owns no page: 0 pages, file pointer 0, no index block, the indexed flag,
+        /// and no change to the free page count or the owner's quota. Overwriting a file with
+        /// nothing gives its pages back, and the empty file can be filled again.
+        /// </summary>
+        /// <remarks>
+        /// Measured 2026-11-07 on nd100x (a copy of SMD0.IMG): <c>@CREATE-FILE E0:SYMB,0</c>,
+        /// <c>@COPY-FILE "C0:SYMB",E0:SYMB</c> and a copy of an empty file that held one page all
+        /// gave pages 0, pointer 0, bytes 0xFFFFFFFF, flags 0x0008, and the free page map did not
+        /// move. Checked again after the image is mounted a second time. The same test is in the
+        /// norskdata-ndfs C, Python and TypeScript allocation-rule tests.
+        /// </remarks>
+        [Test]
+        public void EmptyFile_OwnsNoPage()
+        {
+            string image = MakeSmd75("empty.img");
+            uint usedBefore;
+            uint freeBefore;
+
+            using (var stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var driver = new NdfsDriver();
+                driver.Mount(stream, readOnly: false);
+                INdfsFileSystem ndfs = driver.GetFileSystem()!;
+
+                usedBefore = PagesUsedOf(ndfs, "SYSTEM");
+                freeBefore = ndfs.GetBitFile().GetFreePages();
+                ndfs.WriteFile("SYSTEM/E0:SYMB", Array.Empty<byte>());
+                ndfs.WriteFile("SYSTEM/F3:DATA", new byte[] { 0x33, 0x33, 0x33 });
+                Assert.That(PagesUsedOf(ndfs, "SYSTEM"), Is.EqualTo(usedBefore + 2), "1 data page + 1 index block");
+                ndfs.WriteFile("SYSTEM/F3:DATA", Array.Empty<byte>());
+                driver.Dispose();
+            }
+
+            using (var stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var driver = new NdfsDriver();
+                driver.Mount(stream, readOnly: false);
+                INdfsFileSystem ndfs = driver.GetFileSystem()!;
+
+                ObjectEntry e0 = EntryOf(ndfs, "E0:SYMB", "SYSTEM");
+                Assert.That(e0.PagesInFile, Is.EqualTo(0u));
+                Assert.That(e0.BytesInFile, Is.EqualTo(0UL));
+                Assert.That(e0.FilePointer!.BlockID, Is.EqualTo(0u));
+                Assert.That(e0.FileTypeFlags, Is.EqualTo(FileTypes.IndexedFile));
+                Assert.That(FilePointerOf(ndfs, "F3:DATA", "SYSTEM"), Is.EqualTo(0u));
+                Assert.That(EntryOf(ndfs, "F3:DATA", "SYSTEM").PagesInFile, Is.EqualTo(0u));
+                Assert.That(PagesUsedOf(ndfs, "SYSTEM"), Is.EqualTo(usedBefore));
+                Assert.That(ndfs.GetBitFile().GetFreePages(), Is.EqualTo(freeBefore));
+                Assert.That(ndfs.ReadFile("SYSTEM/E0:SYMB").Length, Is.EqualTo(0));
+
+                byte[] filled = { 0x46, 0x0D, 0x0A };
+                ndfs.WriteFile("SYSTEM/E0:SYMB", filled);
+                Assert.That(ndfs.ReadFile("SYSTEM/E0:SYMB"), Is.EqualTo(filled));
+                Assert.That(ndfs.VerifyFileSystemIntegrity(), Is.True);
+                driver.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// New files carry a real date, as SINTRAN gives them (measured 2026-11-07): a written file
+        /// gets the creation date and the last-write date, <c>@CREATE-FILE</c>'s contiguous file only
+        /// the creation date. Today's year does not fit the 6-bit field, so it is moved back 30 years
+        /// (Ronny's rule); before this the dates were 0 and SINTRAN showed "?0, 1950".
+        /// </summary>
+        [Test]
+        public void NewFiles_GetADate()
+        {
+            string image = MakeSmd75("dated.img");
+            using var stream = new FileStream(image, FileMode.Open, FileAccess.ReadWrite);
+            var driver = new NdfsDriver();
+            driver.Mount(stream, readOnly: false);
+            INdfsFileSystem ndfs = driver.GetFileSystem()!;
+            byte[] text = { 0x58, 0x0D, 0x0A };
+
+            ndfs.WriteFile("SYSTEM/DATED:SYMB", text);
+            ndfs.CreateContiguousFile("SYSTEM/DATEC:DATA", 2);
+
+            ObjectEntry e = EntryOf(ndfs, "DATED:SYMB", "SYSTEM");
+            Assert.That(NdDateTime.FromNdDate(e.DateCreated)!.Value.Year, Is.InRange(1950, 2013));
+            Assert.That(e.LastDateOpenedForWrite, Is.EqualTo(e.DateCreated));
+
+            e = EntryOf(ndfs, "DATEC:DATA", "SYSTEM");
+            Assert.That(NdDateTime.FromNdDate(e.DateCreated), Is.Not.Null);
+            Assert.That(e.LastDateOpenedForWrite, Is.EqualTo(0u));
+            uint created = e.DateCreated;
+
+            // Writing into it sets the last-write date and keeps the creation date.
+            ndfs.WriteFile("SYSTEM/DATEC:DATA", text);
+            e = EntryOf(ndfs, "DATEC:DATA", "SYSTEM");
+            Assert.That(e.DateCreated, Is.EqualTo(created));
+            Assert.That(NdDateTime.FromNdDate(e.LastDateOpenedForWrite), Is.Not.Null);
+            driver.Dispose();
         }
 
         [Test]
