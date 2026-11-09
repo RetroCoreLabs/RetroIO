@@ -35,6 +35,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         private const uint XroutSetupControlService = (uint)XmcsmService.XsletLetter;   // XSLET directory letter
         private const uint SessionSetupControlService = (uint)XmcsmService.SessionSetup; // 06/1B/1C/FF negotiation chain
         private const uint TerminalDataControlService = (uint)XmcsmService.TerminalData; // DC/TAD terminal data
+        private const uint IamControlService = 0x00480000u; // 7WHO / 7IAM control word 0x0048 (records 3618, 3653)
 
         private readonly ushort _clientNode;
         private readonly ushort _serverNode;
@@ -296,6 +297,35 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         {
             return BuildControl(TadOp.Dcon, controlService: (uint)XmcsmService.BareTadControl,
                 role: (byte)(XmsgSendOptions.WaitForTransfer | XmsgSendOptions.Bounce | XmsgSendOptions.RoutedLetter));
+        }
+
+        /// <summary>
+        /// Builds the 7IAM answer to a host's 7WHO ("who are you"): sent from the port that was asked,
+        /// back to the port that asked.
+        /// </summary>
+        /// <remarks>
+        /// MEASURED, <c>src/pcap-decode-sample.json</c> record 3618: frame flags 0x86
+        /// (<see cref="XmsgFrameFlags.Setup"/>), role 0x84, control word 0x0048, body
+        /// <c>00 00 00 3F</c> and then the chain. The asking port is a fresh *TADADM port on every TADA
+        /// run, so it is taken from the question, never remembered as the session port.
+        /// </remarks>
+        /// <param name="chain">
+        /// The packed 7IAM chain, <c>FF 00</c> terminator included (see <see cref="TadAskerSession"/>).
+        /// </param>
+        /// <param name="askedPort">
+        /// Our port the 7WHO was sent to; it is the source port of the answer.
+        /// </param>
+        /// <param name="askingPort">
+        /// The host port the 7WHO came from; it is the destination port of the answer.
+        /// </param>
+        /// <returns>
+        /// The assembled 7IAM frame.
+        /// </returns>
+        public XmsgFrame BuildIam(byte[] chain, ushort askedPort, ushort askingPort)
+        {
+            return Assemble(IamControlService, (byte)XmsgFrameFlags.Setup,
+                role: (byte)(XmsgSendOptions.WaitForTransfer | XmsgSendOptions.RoutedLetter),
+                sourcePort: askedPort, destinationPort: askingPort, payload: chain ?? throw new ArgumentNullException(nameof(chain)));
         }
 
         /// <summary>

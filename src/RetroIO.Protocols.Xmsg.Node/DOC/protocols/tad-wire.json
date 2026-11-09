@@ -378,6 +378,34 @@
         "evidence": "78MOD=000054 / 7UMOD=000053 octal in SINTRAN/NPL-SOURCE/SYMBOLS/L07 and M06. ABSENT from K03 - these two arrived after Release K. Not implemented here; recorded so the value is not re-carved"
       },
       {
+        "name": "Iam",
+        "value": "0x28",
+        "meaning": "I am - the answer to 7WHO; no data of its own, followed in the same chain by the system name (0x0A, 33 bytes), the terminal number (0x0B, 2 bytes) and the user name (0x10, 17 bytes)",
+        "status": "MEASURED",
+        "evidence": "7IAM=000050 octal in the SINTRAN J, K03, L07 and M06 symbol tables. On the wire in src/pcap-decode-sample.json record 3618 and packets 251/287 and 295/331 of X25Emulator/pcap/2026-08-01-1105-hub-hdlc-route-through-d102-via-d100-to-d103-working.pcapng: flags 0x86, role 0x84, control word 0x0048, chain 28 00 | 0A 21 + 33 | 00 | 0B 02 + 2 | 10 11 + 17 | FF 00 (63 bytes), from the asked port back to the asking port"
+      },
+      {
+        "name": "IamSystemName",
+        "value": "0x0A",
+        "meaning": "inside 7IAM only: the asker's own system name, a fixed 33-byte field (name, apostrophe, zeros); TADA prints it in its SYSTEM column",
+        "status": "MEASURED",
+        "evidence": "src/pcap-decode-sample.json record 3618 carries D102' from system 102. Live on RetroCore D100 2026-11-09 a C asker on node 19999 sent D19999 and TADA printed it under SYSTEM. No SINTRAN symbol name found; the name is ours"
+      },
+      {
+        "name": "IamUserName",
+        "value": "0x10",
+        "meaning": "inside 7IAM only: the user name on the asker's side, a fixed 17-byte field (name, apostrophe, zeros); TADA prints it in its USER column",
+        "status": "MEASURED",
+        "evidence": "src/pcap-decode-sample.json record 3618 carries SYSTEM'. Live on RetroCore D100 2026-11-09 TADA printed this field under USER. No SINTRAN symbol name found; the name is ours"
+      },
+      {
+        "name": "Who",
+        "value": "0xFC",
+        "meaning": "who are you - no data; the host's TADADM sends it from a fresh port on each TADA run to every remote asker and waits for 7IAM; without the answer TADA hangs",
+        "status": "MEASURED",
+        "evidence": "7WHO=000374 octal in the SINTRAN J, K03, L07 and M06 symbol tables. On the wire in src/pcap-decode-sample.json records 3653-3665 (flags 0x82, role 0x14, control word 0x0048, body 00 00 00 02 FC 00) and packets 251 and 295 of the 2026-08-01 hub capture. Seen live on RetroCore D100 2026-11-09"
+      },
+      {
         "name": "Uscn",
         "value": "0x14",
         "meaning": "the USER CONTROL word - one 16-bit payload word; the sender then waits for an ERRS response",

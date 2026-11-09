@@ -396,5 +396,60 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         /// </para>
         /// </remarks>
         Mod8 = 0x2C,
+
+        /// <summary>
+        /// 7IAM - "I am", the answer to <see cref="Who"/> (<c>0x28</c>). No data of its own; the
+        /// elements <see cref="IamSystemName"/>, <see cref="Lun"/> (the terminal number) and
+        /// <see cref="IamUserName"/> follow it in the same chain.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>7IAM = 000050</c> octal in the SINTRAN J, K03, L07 and M06 symbol tables.
+        /// </para>
+        /// <para>
+        /// MEASURED: <c>src/pcap-decode-sample.json</c> record 3618, and packets 251/287 and 295/331
+        /// of <c>X25Emulator/pcap/2026-08-01-1105-hub-hdlc-route-through-d102-via-d100-to-d103-working.pcapng</c>.
+        /// The answer goes from the asked port back to the asking port, frame flags 0x86, role 0x84,
+        /// control word 0x0048, and its 63-byte chain is
+        /// <c>28 00 | 0A 21 + 33 bytes | 00 | 0B 02 + 2 bytes | 10 11 + 17 bytes | FF 00</c>.
+        /// </para>
+        /// </remarks>
+        Iam = 0x28,
+
+        /// <summary>
+        /// In a 7IAM chain: the asker's own system name, a fixed 33-byte field holding the name,
+        /// <c>'</c> and zeros (<c>0x0A</c>).
+        /// </summary>
+        /// <remarks>
+        /// MEASURED, not taken from a symbol table: record 3618 carries "D102'" here from system 102,
+        /// and live on RetroCore D100 (2026-11-09) TADA printed this field in its SYSTEM column. No
+        /// SINTRAN symbol name for this element has been found, so the name here is ours.
+        /// </remarks>
+        IamSystemName = 0x0A,
+
+        /// <summary>
+        /// In a 7IAM chain: the user name on the asker's side, a fixed 17-byte field holding the name,
+        /// <c>'</c> and zeros (<c>0x10</c>).
+        /// </summary>
+        /// <remarks>
+        /// MEASURED, not taken from a symbol table: record 3618 carries "SYSTEM'" here, and TADA
+        /// prints this field in its USER column. No SINTRAN symbol name for this element has been
+        /// found, so the name here is ours.
+        /// </remarks>
+        IamUserName = 0x10,
+
+        /// <summary>
+        /// 7WHO - "who are you" (<c>0xFC</c>). No data. The host's TADADM program sends it, from a
+        /// fresh port each TADA run, to every remote asker to fill TADA's TERMNO, USER and SYSTEM
+        /// columns, and then waits for the <see cref="Iam"/> answer. Without one TADA hangs.
+        /// </summary>
+        /// <remarks>
+        /// <c>7WHO = 000374</c> octal in the SINTRAN J, K03, L07 and M06 symbol tables. MEASURED in
+        /// <c>src/pcap-decode-sample.json</c> records 3653-3665 (bare control frame, flags 0x82,
+        /// role 0x14, control word 0x0048, body <c>00 00 00 02 FC 00</c>), and in packets 251 and 295
+        /// of the 2026-08-01 hub capture named on <see cref="Iam"/>. Seen live on RetroCore D100,
+        /// 2026-11-09.
+        /// </remarks>
+        Who = 0xFC,
     }
 }

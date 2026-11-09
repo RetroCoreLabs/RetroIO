@@ -32,7 +32,25 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         private readonly SintranProtocolId _ackChannel;
         private readonly string _targetName;
 
+        /// <summary>
+        /// Size of the 7IAM system-name field, measured in record 3618 (element 0x0A, length 0x21).
+        /// </summary>
+        private const int IamSystemNameSize = 33;
+
+        /// <summary>
+        /// Size of the 7IAM user-name field, measured in record 3618 (element 0x10, length 0x11).
+        /// </summary>
+        private const int IamUserNameSize = 17;
+
+        /// <summary>
+        /// Length of the whole 7IAM chain: 28 00 | 0A 21 + 33 | 00 pad | 0B 02 + 2 | 10 11 + 17 | FF 00.
+        /// Record 3618 carries 0x3F = 63.
+        /// </summary>
+        private const int IamChainLength = 2 + 2 + IamSystemNameSize + 1 + 4 + 2 + IamUserNameSize + 2;
+
         private bool _terminalSetupSent;
+        private string _ownSystemName;
+        private string _userName = "SYSTEM";
 
         /// <summary>
         /// Occurs when the host sends terminal text (BDAT), high bit stripped, for display.
@@ -87,7 +105,57 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             // connect-counter + 0x0A) from the resumed connect Flags1; seed the receiver identically.
             _ackChannel = _client.AckChannel;
             _ackReceiver = new SecureDatagramReceiver(_client.InitialAckCounter);
+
+            // "D" + our system number in decimal is the form the real asker sends (record 3618:
+            // system 102 says "D102"; live 2026-11-09 a C asker on 19999 said "D19999").
+            _ownSystemName = "D" + clientNode.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
+
+        /// <summary>
+        /// Gets or sets our own system name, sent in the 7IAM answer to the host's 7WHO. TADA prints it
+        /// in its SYSTEM column. Default: "D" + our system number (for example "D100").
+        /// </summary>
+        /// <remarks>
+        /// At most 32 characters: the field is 33 bytes and the name is followed by <c>'</c>.
+        /// </remarks>
+        /// <exception cref="ArgumentException">
+        /// The name is empty, not printable ASCII, or longer than 32 characters.
+        /// </exception>
+        public string OwnSystemName
+        {
+            get => _ownSystemName;
+            set => _ownSystemName = CheckName(value, IamSystemNameSize - 1, nameof(OwnSystemName));
+        }
+
+        /// <summary>
+        /// Gets or sets our terminal number, sent in the 7IAM answer (element 0x0B). TADA prints it in
+        /// its TERMNO column. Default: 1 (record 3618 carries 0001).
+        /// </summary>
+        public ushort TerminalNumber { get; set; } = 1;
+
+        /// <summary>
+        /// Gets or sets the user name on our side, sent in the 7IAM answer (element 0x10). TADA prints
+        /// it in its USER column.
+        /// </summary>
+        /// <remarks>
+        /// The default "SYSTEM" is a LABEL, not a measured value for this session: it is the name the
+        /// real asker sent in record 3618, but this class does not know who is logged in, so the owner
+        /// should set it. At most 16 characters: the field is 17 bytes and the name is followed by
+        /// <c>'</c>.
+        /// </remarks>
+        /// <exception cref="ArgumentException">
+        /// The name is empty, not printable ASCII, or longer than 16 characters.
+        /// </exception>
+        public string UserName
+        {
+            get => _userName;
+            set => _userName = CheckName(value, IamUserNameSize - 1, nameof(UserName));
+        }
+
+        /// <summary>
+        /// Gets how many 7WHO questions this session has answered with 7IAM.
+        /// </summary>
+        public int WhoAnswerCount { get; private set; }
 
         /// <summary>
         /// Starts the session: the connect letter to the host's port 0.
@@ -136,6 +204,18 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
 
             // Ack every host data frame (spec 22.5), then render and drive.
             outgoing.Add(_ackReceiver.ReceiveDataFrame(frame, _ackChannel));
+
+            if (HasOpcode(frame, TadOp.Who))
+            {
+                // The host asks who we are (TADA does, for each remote terminal it lists, and waits for
+                // the answer - without one it hangs). Answer to the port that asked, from the port that
+                // was asked; the asking port is a fresh *TADADM port on each TADA run. The frame is a
+                // question, not terminal content, so no DUMM and no other driving frame.
+                WhoAnswerCount++;
+                Log?.Invoke($"[asker] 7WHO from port 0x{frame.SubHeader.SourcePort:X4} -> 7IAM");
+                outgoing.Add(_client.BuildIam(BuildIamChain(), frame.SubHeader.DestinationPort, frame.SubHeader.SourcePort));
+                return outgoing;
+            }
             RenderBdat(frame);
 
             uint controlService = frame.XmcsmWithBodyWord;
@@ -278,6 +358,96 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             {
                 TerminalText?.Invoke(sb.ToString());
             }
+        }
+
+        /// <summary>
+        /// Builds the 7IAM chain as record 3618 lays it out (63 bytes):
+        /// <c>28 00 | 0A 21 + 33 bytes system name | 00 | 0B 02 + terminal (big-endian) | 10 11 + 17 bytes user name | FF 00</c>.
+        /// </summary>
+        /// <remarks>
+        /// The single 00 after the system name is the word-alignment pad a SINTRAN host puts before an
+        /// element that would start at an odd offset (TAD-Message-Formats 2.1); it is in the capture.
+        /// Same layout as <c>build_iam</c> in libxmsg <c>tad/tad_asker.c</c>, verified live there.
+        /// </remarks>
+        /// <returns>
+        /// The packed chain, terminator included.
+        /// </returns>
+        private byte[] BuildIamChain()
+        {
+            byte[] c = new byte[IamChainLength];
+            int n = 0;
+            c[n++] = (byte)TadOp.Iam;
+            c[n++] = 0;
+            c[n++] = (byte)TadOp.IamSystemName;
+            c[n++] = IamSystemNameSize;
+            PutName(c.AsSpan(n, IamSystemNameSize), _ownSystemName);
+            n += IamSystemNameSize;
+            c[n++] = 0; // alignment pad
+            c[n++] = (byte)TadOp.Lun;
+            c[n++] = 2;
+            c[n++] = (byte)(TerminalNumber >> 8);
+            c[n++] = (byte)TerminalNumber;
+            c[n++] = (byte)TadOp.IamUserName;
+            c[n++] = IamUserNameSize;
+            PutName(c.AsSpan(n, IamUserNameSize), _userName);
+            n += IamUserNameSize;
+            c[n++] = 0xFF; // chain terminator
+            c[n] = 0;
+            return c;
+        }
+
+        /// <summary>
+        /// Writes a name into a fixed SINTRAN string field: the text, <c>'</c>, then zeros (the array
+        /// is new, so the zeros are already there).
+        /// </summary>
+        /// <param name="field">
+        /// The field to fill.
+        /// </param>
+        /// <param name="name">
+        /// The name, already checked to leave room for the <c>'</c>.
+        /// </param>
+        private static void PutName(Span<byte> field, string name)
+        {
+            for (int i = 0; i < name.Length; i++)
+            {
+                field[i] = (byte)name[i];
+            }
+
+            field[name.Length] = (byte)'\'';
+        }
+
+        /// <summary>
+        /// Checks a name for a fixed 7IAM field: not empty, printable ASCII, and short enough to leave
+        /// room for the closing <c>'</c>.
+        /// </summary>
+        /// <param name="value">
+        /// The name.
+        /// </param>
+        /// <param name="maxLength">
+        /// The longest allowed name.
+        /// </param>
+        /// <param name="paramName">
+        /// The property name, for the exception.
+        /// </param>
+        /// <returns>
+        /// The name.
+        /// </returns>
+        private static string CheckName(string value, int maxLength, string paramName)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length > maxLength)
+            {
+                throw new ArgumentException($"must be 1 to {maxLength} characters", paramName);
+            }
+
+            for (int i = 0; i < value.Length; i++)
+            {
+                if (value[i] < 0x20 || value[i] > 0x7E)
+                {
+                    throw new ArgumentException("must be printable ASCII", paramName);
+                }
+            }
+
+            return value;
         }
 
         /// <summary>
