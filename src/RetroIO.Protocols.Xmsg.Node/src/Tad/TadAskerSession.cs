@@ -45,6 +45,18 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         public event XmsgLogHandler? Log;
 
         /// <summary>
+        /// Occurs when the host sends its 0xFD session notice (XMCSM SessionNotify from the host's
+        /// *TADADM port). The notice does NOT end the session; the owner decides when its user is done
+        /// and then calls <see cref="Hangup"/>.
+        /// </summary>
+        public event Action? SessionNoticeReceived;
+
+        /// <summary>
+        /// Gets how many 0xFD session notices the host has sent on this session so far.
+        /// </summary>
+        public int SessionNoticeCount { get; private set; }
+
+        /// <summary>
         /// Initialises the asker session.
         /// </summary>
         /// <param name="clientNode">
@@ -144,9 +156,24 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             }
             else if (controlService == (uint)XmcsmService.SessionNotify)
             {
-                // 0xFD session-state notification -> end the session with DCON.
-                Log?.Invoke("[asker] 0xFD received -> DCON");
-                outgoing.Add(_client.BuildDcon());
+                // 0xFD session notice from the host's *TADADM port. It does NOT end the session, so
+                // it is acked (above) and reported, and no DCON is sent here.
+                // Measured in pcap-decode-sample.json (record = list index), asker node 100 port 02E3,
+                // host 102, session port 0313, *TADADM port 0156: record 1324 login "OK", 1326 the "@"
+                // prompt, 1327 the first FD from 0156, and then the session goes on - records
+                // 1329-1337 more host text on the session port, the user typed more (asker records
+                // 1246-1250, "log"), 1337 "--EXIT--", 1341 a second FD, and the asker's last frame is
+                // DCON to session port 0313 (record 1260). Asker 103/0245 shows the same: OK, FD, more
+                // session, EXIT, FD, then DCON. Sessions 100/0288, 100/0291, 100/0298 and 102/0288:
+                // OK, EXIT, FD, then DCON. Both FDs of a session are byte-identical apart from Flags1,
+                // so nothing in the frame says which one is "the end". Live, 2026-11-09, a RetroCore
+                // D100 host sent FD about 3 s after connect, once in the middle of a LIST-FILES
+                // listing; answering it with DCON killed a working session.
+                // The real asker hangs up when its USER is done (after LOGOUT, or when the person
+                // disconnects); the host's FD then confirms the end. That is Hangup().
+                SessionNoticeCount++;
+                Log?.Invoke("[asker] 0xFD session notice received (no DCON; the owner hangs up)");
+                SessionNoticeReceived?.Invoke();
             }
 
             // 0x00080000 (host 0x20 answering our ESCA): ack only, no driving frame.
@@ -165,6 +192,19 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         public IReadOnlyList<XmsgFrame> SendLine(string text)
         {
             return new List<XmsgFrame> { _client.BuildInput(text ?? string.Empty) };
+        }
+
+        /// <summary>
+        /// Builds the hang-up: a DCON to the host's session port. Call it when the user is done (after
+        /// LOGOUT, or when the person disconnects); the host's 0xFD then confirms the end.
+        /// </summary>
+        /// <returns>
+        /// The DCON frame to transmit.
+        /// </returns>
+        public IReadOnlyList<XmsgFrame> Hangup()
+        {
+            Log?.Invoke("[asker] hang-up -> DCON");
+            return new List<XmsgFrame> { _client.BuildDcon() };
         }
 
         /// <summary>
