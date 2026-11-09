@@ -56,8 +56,25 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// lands on the wrong bytes, and 100 silently discards the frame as a line error (V(R) frozen).
         /// That silent discard was the login username-accepted stall and the Problem-A odd-length hangs.
         /// See XMSG-PROTOCOL.md section 3.1 / 3.6 and LAPB-REQUIREMENTS.md A1b.
+        /// <para>
+        /// The rest of the address is the sender's RECEIVE WINDOW (read from the SINTRAN XMSG kernel
+        /// routine XHSTR at 143630 octal, carved segment 076-S3XMK; NDInsight
+        /// SINTRAN/XMSG/DOC/HDLC-ADDRESS-BYTE-ANALYSIS-2026-11-09.md). On every I, RR and REJ frame
+        /// SINTRAN builds address = window * 2 + 1 (plus 0x80 on an odd-length I-frame), where window
+        /// = free receive buffers - 1, never below 0 and at most 7. So <c>0x09</c> is window 4 (the
+        /// normal case), <c>0x07</c> window 3, <c>0x05</c> window 2, <c>0x03</c> window 1 and
+        /// <c>0x01</c> window 0 (0x01 is also always used on SABM and UA). We send 0x09 ourselves;
+        /// what we receive limits how many I-frames we keep unacknowledged - see
+        /// <see cref="PeerWindow"/>.
+        /// </para>
         /// </remarks>
         public const byte AddressData = 0x09;
+
+        /// <summary>
+        /// The largest receive window a peer can announce in the address (3 bits), and the value
+        /// assumed until a window has been heard.
+        /// </summary>
+        public const int MaxPeerWindow = 7;
 
         /// <summary>
         /// The ND odd-info-length marker bit OR-ed into the data-transfer address when the information
@@ -214,6 +231,12 @@ namespace RetroIO.Protocols.Xmsg.Live
         private long _rejectionsReceived;
         private long _t1Timeouts;
         private long _t2Timeouts;
+        private long _windowWaits;
+
+        // The receive window the peer announced in the address of its last I or S frame (see
+        // AddressData). MaxPeerWindow until one is heard, and again after every link reset, so
+        // before that only our own window k limits sending.
+        private int _peerWindow = MaxPeerWindow;
 
         // T2 (X.25 2.4.9.2): true while the acknowledgement of a received I frame is being held back.
         // The held acknowledgement is simply the current V(R), so one RR (or the N(R) of an outgoing
@@ -453,6 +476,33 @@ namespace RetroIO.Protocols.Xmsg.Live
         }
 
         /// <summary>
+        /// Gets the receive window the peer announced in the address of its last I or S frame
+        /// (window = (address &gt;&gt; 1) &amp; 7, see <see cref="AddressData"/>), or
+        /// <see cref="MaxPeerWindow"/> while none has been heard since the link was reset.
+        /// </summary>
+        /// <remarks>
+        /// We never have more than min(<see cref="LapbOptions.WindowSize"/>, PeerWindow)
+        /// unacknowledged I-frames. A window of 0 stops sending even with nothing outstanding; it
+        /// opens again when the peer's next RR arrives - SINTRAN sends one whenever its window or
+        /// N(R) changes (XHSTR, 143702..143705), so no poll is needed. Only the ND dialect carries a
+        /// window here; in ITU mode the address is A or B and this stays at the maximum.
+        /// </remarks>
+        public int PeerWindow
+        {
+            get { return _peerWindow; }
+        }
+
+        /// <summary>
+        /// Gets the number of times sending stopped with frames still queued only because the
+        /// peer's announced window (<see cref="PeerWindow"/>) was full while our own window k still
+        /// had room.
+        /// </summary>
+        public long WindowWaits
+        {
+            get { return _windowWaits; }
+        }
+
+        /// <summary>
         /// Gets the number of times T1 ran out.
         /// </summary>
         public long T1Timeouts
@@ -565,6 +615,14 @@ namespace RetroIO.Protocols.Xmsg.Live
                 case LapbLayerState.FrmrSent:
                     ResendFrmr(currentTicks);
                     return;
+            }
+
+            // Every I, RR and REJ from a SINTRAN machine carries its current receive window in the
+            // address (see AddressData). A frame whose address does not have that shape is still
+            // taken, as it always was - it just leaves the window alone.
+            if (!IsItu && AddressCarriesWindow(frame.Address))
+            {
+                _peerWindow = (frame.Address >> 1) & 0x07;
             }
 
             if (frame.Kind == LapbFrameKind.Information)
@@ -1016,9 +1074,11 @@ namespace RetroIO.Protocols.Xmsg.Live
         private void TransmitPending(long currentTicks)
         {
             // Send while connected, the peer is not busy, the window has room, and work is queued (4.2).
+            // The window is our own k, or less when the peer announced a smaller one (PeerWindow).
+            int sendWindow = _options.WindowSize < _peerWindow ? _options.WindowSize : _peerWindow;
             while (_state == LapbLayerState.Connected
                 && !_peerBusy
-                && ((_sendVariable - _acknowledgeVariable) & 0x07) < _options.WindowSize
+                && ((_sendVariable - _acknowledgeVariable) & 0x07) < sendWindow
                 && _pending.Count > 0)
             {
                 byte[] payload = _pending.Dequeue();
@@ -1042,6 +1102,32 @@ namespace RetroIO.Protocols.Xmsg.Live
                     StartT1(currentTicks);
                 }
             }
+
+            // Count a stop that only the peer's window caused: work queued, our own k has room.
+            int outstandingNow = (_sendVariable - _acknowledgeVariable) & 0x07;
+            if (_state == LapbLayerState.Connected
+                && !_peerBusy
+                && _pending.Count > 0
+                && outstandingNow >= _peerWindow
+                && outstandingNow < _options.WindowSize)
+            {
+                _windowWaits++;
+            }
+        }
+
+        /// <summary>
+        /// True when an address has the shape SINTRAN gives every I, RR and REJ frame:
+        /// window * 2 + 1, with only the odd-length bit 0x80 allowed on top.
+        /// </summary>
+        /// <param name="address">
+        /// The received frame's address byte.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when bits 1..3 can be read as the peer's receive window.
+        /// </returns>
+        private static bool AddressCarriesWindow(byte address)
+        {
+            return (address & 0x71) == 0x01;
         }
 
         /// <summary>
@@ -1420,6 +1506,7 @@ namespace RetroIO.Protocols.Xmsg.Live
             _sendVariable = 0;
             _receiveVariable = 0;
             _acknowledgeVariable = 0;
+            _peerWindow = MaxPeerWindow;   // a reset forgets the window; the next I/S frame tells us
             for (int i = 0; i < _txInfo.Length; i++)
             {
                 _txInfo[i] = null;
