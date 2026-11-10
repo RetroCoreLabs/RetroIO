@@ -49,6 +49,11 @@ namespace RetroIO.Protocols.X25.Runtime
         private const int EndpointTickMs = 250;
 
         private readonly Dictionary<object, X25Endpoint> _endpoints = new Dictionary<object, X25Endpoint>();
+
+        /// <summary>
+        /// Requests from services waiting to be sent, per local LCN. See <see cref="DeliverServiceOutput"/>.
+        /// </summary>
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<ushort, ServiceOutbox> _serviceOutboxes = new System.Collections.Concurrent.ConcurrentDictionary<ushort, ServiceOutbox>();
         private readonly Dictionary<ushort, (X25Endpoint Endpoint, ushort Lci)> _circuitByLocalLcn = new Dictionary<ushort, (X25Endpoint, ushort)>();
         private readonly Dictionary<X25Endpoint, Dictionary<ushort, ushort>> _localLcnByCircuit = new Dictionary<X25Endpoint, Dictionary<ushort, ushort>>();
         private Timer? _endpointTicker;
@@ -722,31 +727,136 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Translates a packet built by the old engine for an XOT-carried channel into the
-        /// corresponding operation on the endpoint's engine. Data and Clear are the only two that
-        /// mean anything; a Call Accepted was already sent by the endpoint when the call was
-        /// accepted, and flow control belongs to the engine alone.
+        /// Carries out a request from a built-in service (the TAD). See
+        /// <see cref="IProtocolRuntime.DeliverServiceOutput"/>.
         /// </summary>
-        private void ForwardOldLayerPacketToEndpoint(ushort localLcn, X25PacketEventArgs eventArgs)
+        /// <remarks>
+        /// <para>
+        /// A call with a module bound to its channel is a PAD client in this same process: the
+        /// module is given the packet the exchange would have been on a wire, as
+        /// <see cref="DeliverLocally"/> does for the other direction. Every other call is carried by
+        /// an XOT endpoint, and the request becomes an operation on that endpoint's one engine: the
+        /// engine numbers the packet, and the Q, M and D bits the service asked for go out with it.
+        /// A Call Accepted needs nothing there; the endpoint sent it when the call was accepted.
+        /// </para>
+        /// <para>
+        /// Requests of one call are queued and sent in order by one worker at a time, because a send
+        /// can wait for the window and must not run on the thread that delivers the acknowledgements
+        /// that open it - and a thread-pool item per request would let two of them overtake each
+        /// other.
+        /// </para>
+        /// </remarks>
+        public void DeliverServiceOutput(TadOutputEventArgs output)
         {
-            X25Packet packet = eventArgs.Packet;
-            switch (packet.PacketType)
+            bool bound;
+            lock (_routingLock)
             {
-                case X25PacketType.Data:
-                    // Off the routing lock: SendBlocking may wait for the window.
-                    ThreadPool.QueueUserWorkItem(_ => SendMappedData(localLcn, packet.Data, packet.Data.Length));
+                bound = _lcnBindings.ContainsKey(output.Lcn);
+            }
+
+            if (bound)
+            {
+                DeliverServiceOutputLocally(output);
+                return;
+            }
+
+            if (!TryCircuit(output.Lcn, out _, out _))
+            {
+                _logger.LogWarning("Service output {Kind} for LCN {LCN} dropped: no module is bound and no XOT circuit carries it", output.Kind, output.Lcn);
+                return;
+            }
+
+            if (output.Kind == TadOutputKind.CallAccepted)
+            {
+                return;
+            }
+
+            ServiceOutbox outbox = _serviceOutboxes.GetOrAdd(output.Lcn, _ => new ServiceOutbox());
+            bool startWorker;
+            lock (outbox.Gate)
+            {
+                outbox.Pending.Enqueue(output);
+                startWorker = !outbox.Draining;
+                outbox.Draining = true;
+            }
+
+            if (startWorker)
+            {
+                ThreadPool.QueueUserWorkItem(_ => DrainServiceOutbox(output.Lcn, outbox));
+            }
+        }
+
+        private void DrainServiceOutbox(ushort lcn, ServiceOutbox outbox)
+        {
+            while (true)
+            {
+                TadOutputEventArgs item;
+                lock (outbox.Gate)
+                {
+                    if (!outbox.Pending.TryDequeue(out TadOutputEventArgs? next))
+                    {
+                        outbox.Draining = false;
+                        return;
+                    }
+
+                    item = next;
+                }
+
+                if (item.Kind == TadOutputKind.Data)
+                {
+                    if (TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci))
+                    {
+                        endpoint.SendBlocking(lci, item.Data, XotSendTimeoutMs, item.QBit, item.MBit, item.DBit);
+                    }
+                }
+                else if (item.Kind == TadOutputKind.Clear)
+                {
+                    ClearMappedCall(lcn, item.Cause, item.Diagnostic);
+                    _serviceOutboxes.TryRemove(lcn, out _);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The requests of one call waiting to be sent, and whether a worker is draining them.
+        /// </summary>
+        private sealed class ServiceOutbox
+        {
+            public readonly object Gate = new object();
+            public readonly Queue<TadOutputEventArgs> Pending = new Queue<TadOutputEventArgs>();
+            public bool Draining;
+        }
+
+        /// <summary>
+        /// Gives a request from a service to the module bound to the channel, and to the packet
+        /// history, as the packet the exchange would have been on a wire.
+        /// </summary>
+        private void DeliverServiceOutputLocally(TadOutputEventArgs output)
+        {
+            byte[] built;
+            switch (output.Kind)
+            {
+                case TadOutputKind.CallAccepted:
+                    built = X25PacketBuilder.CreateCallAccepted(output.Lcn, null);
                     break;
-                case X25PacketType.ClearRequest:
-                    byte cause = packet.Data.Length > 0 ? packet.Data[0] : (byte)0;
-                    byte diag = packet.Data.Length > 1 ? packet.Data[1] : (byte)0;
-                    ThreadPool.QueueUserWorkItem(_ => ClearMappedCall(localLcn, cause, diag));
-                    break;
-                case X25PacketType.CallAccepted:
+                case TadOutputKind.Data:
+                    built = X25PacketBuilder.CreateDataPacket(output.Lcn, 0, 0, output.Data, output.MBit, output.QBit, output.DBit);
                     break;
                 default:
-                    _logger.LogDebug("Old-layer {Type} for XOT-carried LCN {LCN} dropped: the endpoint's engine owns that", packet.PacketType, localLcn);
+                    built = X25PacketBuilder.CreateClearRequest(output.Lcn, output.Cause, output.Diagnostic);
                     break;
             }
+
+            X25PacketEventArgs received = new X25PacketEventArgs
+            {
+                Packet = new X25Packet(built) { Direction = PacketDirection.Receive, LCN = output.Lcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow,
+                PacketId = GetNextFrameId(),
+            };
+
+            PacketHistory.FirePacketReceived(received);
+            RouteX25EventToBoundModule(output.Lcn, received);
         }
 
         /// <summary>

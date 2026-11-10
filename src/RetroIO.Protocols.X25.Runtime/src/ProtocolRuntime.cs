@@ -4422,15 +4422,6 @@ namespace RetroIO.Protocols.X25.Runtime
                     // the console-app clients built on this runtime). No concrete type-checking required.
                     module.OnX25Event(eventArgs);
                 }
-                else if (TryCircuit(lcn, out _, out _))
-                {
-                    // A packet the OLD engine built for a channel that an XOT endpoint carries. Until
-                    // 2026-09-06 it was rewritten with the remote LCN and pushed onto the connection
-                    // beside the endpoint's own traffic - two engines on one circuit. Now it is
-                    // translated into an operation on the endpoint's engine (data, clear), or dropped
-                    // when the endpoint already did it (Call Accepted).
-                    ForwardOldLayerPacketToEndpoint(lcn, eventArgs);
-                }
                 else
                 {
                     _logger.LogWarning("No module bound to LCN {LCN} for X.25 event {PacketType}", lcn, eventArgs.Packet.PacketType);
