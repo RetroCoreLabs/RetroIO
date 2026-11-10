@@ -49,6 +49,34 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         private const int IamChainLength = 2 + 2 + IamSystemNameSize + 1 + 4 + 2 + IamUserNameSize + 2;
 
         private bool _terminalSetupSent;
+
+        /// <summary>
+        /// The largest BDAT payload (the TAD length byte).
+        /// </summary>
+        private const int MaxBdat = 255;
+
+        /// <summary>
+        /// The host's break strategy from its BMMX (opcode 0x04): 0 every character ends a piece of
+        /// input, 1 control characters below 32 and DEL (SINTRAN's default, used until a BMMX
+        /// comes), negative none. Source: SINTRAN Monitor Calls, MON BRKM / InputString. Same rule
+        /// as libxmsg <c>tad/tad_asker.c</c> (e961a02).
+        /// </summary>
+        private int _breakStrategy = 1;
+
+        /// <summary>
+        /// The host has granted input (RFI) and the grant is not used yet.
+        /// </summary>
+        private bool _inputGranted;
+
+        /// <summary>
+        /// Typed bytes waiting for the next grant, oldest first.
+        /// </summary>
+        private byte[] _pending = new byte[1024];
+
+        /// <summary>
+        /// The number of bytes in <see cref="_pending"/>.
+        /// </summary>
+        private int _pendingLength;
         private string _ownSystemName;
         private string _userName = "SYSTEM";
 
@@ -261,18 +289,47 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         }
 
         /// <summary>
-        /// Builds a typed keystroke line to send to the host (the user pressed Enter).
+        /// Queues typed text for the host and returns the letter that may go now.
         /// </summary>
+        /// <remarks>
+        /// One BDAT carries typed bytes up to and including the first break character of the host's
+        /// break setting, and only after the host has granted input (RFI); the rest goes with later
+        /// grants, from <see cref="OnReceive"/>. MEASURED 2026-11-10 on the RetroServer hub: in
+        /// S3-CONFIG D100 sends BMMX strategy 0 and the real D102 asker sends the TDV key
+        /// ESC [ 4 8 _ as five one-byte BDATs, each after its own RFI; the whole key in one letter
+        /// is refused with BEL. At the command prompt (strategy 1) a line goes whole up to its CR.
+        /// Strategies 2 to 8 are not implemented: they are logged and input is not cut (BUGS.md).
+        /// </remarks>
         /// <param name="text">
-        /// The line the user typed.
+        /// The typed text, sent as 7-bit ASCII.
         /// </param>
         /// <returns>
-        /// The BDAT frame to transmit.
+        /// The BDAT frame to transmit now, or an empty list when the host has not granted input.
         /// </returns>
         public IReadOnlyList<XmsgFrame> SendLine(string text)
         {
-            return new List<XmsgFrame> { _client.BuildInput(text ?? string.Empty) };
+            byte[] ascii = System.Text.Encoding.ASCII.GetBytes(text ?? string.Empty);
+            if (_pendingLength + ascii.Length > _pending.Length)
+            {
+                Array.Resize(ref _pending, Math.Max(_pending.Length * 2, _pendingLength + ascii.Length));
+            }
+
+            Array.Copy(ascii, 0, _pending, _pendingLength, ascii.Length);
+            _pendingLength += ascii.Length;
+            List<XmsgFrame> outgoing = new List<XmsgFrame>(1);
+            SendPendingIfGranted(outgoing);
+            return outgoing;
         }
+
+        /// <summary>
+        /// Gets the number of typed bytes still waiting for a grant from the host.
+        /// </summary>
+        public int PendingInputLength => _pendingLength;
+
+        /// <summary>
+        /// Gets the host's break strategy as last set by its BMMX (1 until one comes).
+        /// </summary>
+        public int BreakStrategy => _breakStrategy;
 
         /// <summary>
         /// Builds the hang-up: a DCON to the host's session port. Call it when the user is done (after
@@ -299,6 +356,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         /// </param>
         private void DriveTerminalPhase(XmsgFrame frame, List<XmsgFrame> outgoing)
         {
+            TakeBreakSetting(frame);
             if (HasOpcode(frame, TadOp.Rese))
             {
                 Log?.Invoke("[asker] RESE -> RECO");
@@ -322,6 +380,95 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
                 // A host burst that grants input: answer with CERS (spec 22.6). The user may now type.
                 Log?.Invoke("[asker] host burst (RFI) -> CERS; input granted");
                 outgoing.Add(_client.BuildCers());
+                _inputGranted = true;
+                SendPendingIfGranted(outgoing);
+            }
+        }
+
+        /// <summary>
+        /// Sends one BDAT of waiting input when the host has granted input.
+        /// </summary>
+        /// <param name="outgoing">
+        /// The list to append the frame to.
+        /// </param>
+        private void SendPendingIfGranted(List<XmsgFrame> outgoing)
+        {
+            if (!_inputGranted || _pendingLength == 0)
+            {
+                return;
+            }
+
+            int take = Math.Min(_pendingLength, MaxBdat);
+            for (int i = 0; i < take; i++)
+            {
+                if (IsBreakCharacter(_pending[i]))
+                {
+                    take = i + 1;
+                    break;
+                }
+            }
+
+            outgoing.Add(_client.BuildInput(new ReadOnlySpan<byte>(_pending, 0, take)));
+            Array.Copy(_pending, take, _pending, 0, _pendingLength - take);
+            _pendingLength -= take;
+            _inputGranted = false; // one BDAT per grant
+        }
+
+        /// <summary>
+        /// Tells whether a typed character ends a piece of input under the host's break setting.
+        /// </summary>
+        /// <param name="c">
+        /// The typed byte.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the BDAT must end after this byte.
+        /// </returns>
+        private bool IsBreakCharacter(byte c)
+        {
+            int c7 = c & 0x7F;
+            switch (_breakStrategy)
+            {
+                case 0:
+                    return true;
+                case 1:
+                    return c7 < 32 || c7 == 127;
+                default:
+                    return false; // negative: none; 2..8: not implemented (logged in TakeBreakSetting)
+            }
+        }
+
+        /// <summary>
+        /// Takes the host's break setting from the BMMX messages of a frame (strategy byte, BRKMAX word).
+        /// </summary>
+        /// <param name="frame">
+        /// The received frame.
+        /// </param>
+        private void TakeBreakSetting(XmsgFrame frame)
+        {
+            if (frame.Tad == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<TadMessage> messages = frame.Tad.Messages;
+            for (int i = 0; i < messages.Count; i++)
+            {
+                if ((TadOp)messages[i].Opcode != TadOp.Bmmx || messages[i].Data.Length < 1)
+                {
+                    continue;
+                }
+
+                int strategy = (sbyte)messages[i].Data[0];
+                if (strategy == 9)
+                {
+                    continue; // MON BRKM: 9 changes only BRKMAX; the strategy in force stays
+                }
+
+                _breakStrategy = strategy;
+                if (strategy > 1)
+                {
+                    Log?.Invoke($"[asker] host break strategy {strategy} is not implemented; input is not cut");
+                }
             }
         }
 
