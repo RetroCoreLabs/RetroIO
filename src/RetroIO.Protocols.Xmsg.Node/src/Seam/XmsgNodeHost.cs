@@ -47,6 +47,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         private readonly XmsgCodec _codec;
         private readonly XmsgLayer _layer;
         private readonly XmsgServerHost _serverHost;
+        private readonly HostedNameTable _nameTable;
 
         /// <summary>
         /// Initialises the node on a link and registers its servers.
@@ -121,6 +122,12 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
 
             _layer.ServerHost = _serverHost;
 
+            // A running node answers LIST-NAMES out of the box: its own system, the systems it
+            // routes to and its registered servers. The table reads the server list on every
+            // question, so a server registered later is listed at once.
+            _nameTable = new HostedNameTable(nodeNumber, routingEntries, _serverHost);
+            _layer.NameTable = _nameTable;
+
             // UP wiring: a delivered link payload is classified, then (for XMSG) parsed by the
             // codec, which raises PacketReceived to the layer. An X.25-bound link would go
             // elsewhere here.
@@ -191,6 +198,15 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         public XmsgServerHost ServerHost
         {
             get { return _serverHost; }
+        }
+
+        /// <summary>
+        /// Gets the name table this node answers LIST-NAMES from, for example to change its own
+        /// system name.
+        /// </summary>
+        public HostedNameTable NameTable
+        {
+            get { return _nameTable; }
         }
 
         /// <summary>

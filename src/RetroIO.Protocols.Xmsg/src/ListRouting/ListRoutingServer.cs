@@ -148,7 +148,9 @@ namespace RetroIO.Protocols.Xmsg.ListRouting
         /// The routing table to consult.
         /// </param>
         /// <param name="flags1">
-        /// The SINTRAN Flags 1 word for the reply.
+        /// The SINTRAN Flags 1 word for the reply: the answering node's own next number towards the
+        /// asker, never the request's (VERIFIED: the 102-asks-100 capture answers <c>0x012B</c> at
+        /// <c>0x00F4</c>).
         /// </param>
         /// <param name="flags2">
         /// The SINTRAN Flags 2 frame-class word; defaults to the observed response value.

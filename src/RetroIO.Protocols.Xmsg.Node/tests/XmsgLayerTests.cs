@@ -141,16 +141,19 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             XmsgNode reference = new XmsgNode(103, 0x00);
             reference.AcknowledgeData = false;
             reference.RoutingTable = new InMemoryRoutingTable(entries);
-            XmsgFrame? refReply = reference.HandleFrame(XmsgFrame.Parse(reqInfo));
-            Assert.NotNull(refReply);
+            // The node answers with two frames: the ACK of the request, then the reply at the
+            // node's own next Flags 1 (no longer the request's number copied).
+            IReadOnlyList<XmsgFrame> refFrames = reference.HandleFrames(XmsgFrame.Parse(reqInfo));
+            Assert.Equal(2, refFrames.Count);
 
-            // Through the seam: the layer must produce byte-identical XSGSY reply bytes.
+            // Through the seam: the layer must produce byte-identical ACK and XSGSY reply bytes.
             (XmsgCodec codec, RecordingTransport transport, XmsgLayer layer) = BuildSeam(103);
             layer.RoutingTable = new InMemoryRoutingTable(entries);
             codec.ProcessBytes(reqInfo);
 
-            Assert.Single(transport.Sent);
-            Assert.Equal(refReply!.ToArray(), transport.Sent[0]);
+            Assert.Equal(2, transport.Sent.Count);
+            Assert.Equal(refFrames[0].ToArray(), transport.Sent[0]);
+            Assert.Equal(refFrames[1].ToArray(), transport.Sent[1]);
         }
     }
 }

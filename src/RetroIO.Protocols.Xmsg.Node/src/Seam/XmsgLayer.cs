@@ -226,6 +226,15 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         }
 
         /// <summary>
+        /// Gets or sets the name table that answers LIST-NAMES (XSGNI) requests.
+        /// </summary>
+        public ListNames.INameTable? NameTable
+        {
+            get { return _node.NameTable; }
+            set { _node.NameTable = value; }
+        }
+
+        /// <summary>
         /// Gets or sets the TAD terminal responder that answers connect-to sessions.
         /// </summary>
         public TadTerminalResponder? TadResponder
