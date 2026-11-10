@@ -230,5 +230,50 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             Assert.Equal(LapbLayerState.Connected, link.State);
             Assert.True(link.IsUp);
         }
+
+        /// <summary>
+        /// Our SABM is sent again on T1 until its UA arrives, even after we answered the peer's
+        /// SABM. Port of libxmsg extras/tests/test_lapb.c
+        /// <c>unanswered_sabm_is_resent_after_the_peer_sabm</c>, byte for byte.
+        /// </summary>
+        /// <remarks>
+        /// Measured 2026-11-09 on RetroCore D100: the SABMs crossed and D100 answered ours with an
+        /// RR instead of a UA. The peer's SABM used to stop T1 in every state, so our SABM was
+        /// never resent and the link stayed Connected but not up for good.
+        /// </remarks>
+        [Fact]
+        public void AnUnansweredSabmIsResentAfterThePeerSabm()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewLink(101, sent);
+
+            link.Connect(currentTicks: 0);
+
+            // The peer's SABM at 10 ms; we answer with UA and RR.
+            DeliverAt(link, 10, LinkAddress, SabmControl, 0x00, 0x64);
+
+            // D100 answers our SABM with an RR, not a UA.
+            DeliverAt(link, 20, 0x09, 0x01, 0x00, 0x64);
+            Assert.False(link.IsUp);
+            sent.Clear();
+
+            // T1 runs from the peer SABM at 10 ms, so nothing at 3009.
+            link.Tick(3009);
+            Assert.Empty(sent);
+
+            // At 3010 our SABM goes out again: 01 3F 00 65.
+            link.Tick(3010);
+            Assert.Single(sent);
+            Assert.Equal(new byte[] { 0x01, 0x3F, 0x00, 0x65 }, sent[0]);
+
+            // The UA to it brings the link up.
+            DeliverAt(link, 3050, LinkAddress, UaControl, 0x00, 0x64);
+            Assert.True(link.IsUp);
+            sent.Clear();
+
+            // T1 stopped by the UA: no more SABMs, no polls.
+            link.Tick(9000);
+            Assert.Empty(sent);
+        }
     }
 }
