@@ -216,6 +216,25 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         }
 
         /// <summary>
+        /// Builds a terminal-input frame from raw typed bytes, one BDAT, exactly as given.
+        /// </summary>
+        /// <param name="data">
+        /// The typed bytes (at most 255). The caller decides how input is cut into letters; see
+        /// <see cref="TadAskerSession.SendLine"/> for the host's break setting.
+        /// </param>
+        /// <returns>
+        /// The terminal-input frame.
+        /// </returns>
+        public XmsgFrame BuildInput(ReadOnlySpan<byte> data)
+        {
+            byte[] tad = new TadMessageBuilder().Bdat(data).Build();
+            return Assemble(controlService: TerminalDataControlService,
+                frameFlags: (byte)XmsgFrameFlags.DataA,
+                role: (byte)(XmsgSendOptions.WaitForTransfer | XmsgSendOptions.RoutedLetter),
+                sourcePort: _clientPort, destinationPort: _serverSessionPort, payload: tad);
+        }
+
+        /// <summary>
         /// Builds an ESCA (escape) control frame - sent once with the terminal-setup chain (spec 22.4).
         /// </summary>
         /// <returns>
