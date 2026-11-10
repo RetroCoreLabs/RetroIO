@@ -54,8 +54,8 @@ namespace RetroIO.Protocols.Xmsg.Node
 
         /// <summary>
         /// Optional routing table. When set, an incoming list-route (<c>XSGSY</c>) request
-        /// (<c>XMCSM 0x0100014B</c>) is answered with the byte-validated
-        /// <see cref="ListRoutingServer"/> reply instead of a secure ACK.
+        /// (<c>XMCSM 0x0100014B</c>) is secure-ACKed and answered from it with a
+        /// <see cref="ListRoutingServer"/> reply, whose Flags 1 is this node's own next outgoing number.
         /// </summary>
         public IRoutingTable? RoutingTable { get; set; }
 
@@ -94,6 +94,19 @@ namespace RetroIO.Protocols.Xmsg.Node
         private readonly ListRoutingServer _routingServer = new ListRoutingServer();
 
         private readonly ListNamesServer _namesServer = new ListNamesServer();
+
+        // How many XROUT answers (list-route and LIST-NAMES) are remembered for repeats. A handful,
+        // because a repeat follows its first copy closely. Not measured on a real machine; it only
+        // has to cover a resend.
+        private const int XroutAnswerMemory = 8;
+
+        // The Flags 1 each recent XROUT answer went out on, keyed by who asked, the request's own
+        // Flags 1 and the service. A REPEATED request (same peer, same Flags 1) is answered again at
+        // the SAME number, never a new one: real ND machines resend a datagram they think was lost,
+        // and a repeat that spent a second number would leave a gap the peer waits for. Same rule as
+        // libxmsg's route_answers (xmsg_node.c, xrout_reply_begin).
+        private readonly XroutAnswer[] _xroutAnswers = new XroutAnswer[XroutAnswerMemory];
+        private int _xroutAnswerNext;
 
         private readonly ushort _nodeNumber;
         private readonly Dictionary<string, ushort> _remoteNames;
@@ -357,6 +370,17 @@ namespace RetroIO.Protocols.Xmsg.Node
                 return AnswerListNames(incoming, NameTable);
             }
 
+            // LIST-ROUTE (XSGSY) is answered by the node itself in the same way: the ACK, then the
+            // reply at this node's own next Flags 1. VERIFIED: ListRoutingTests' capture answers
+            // request 0x012B at 0x00F4, and D100's li-rout accepts libxmsg doing the same live.
+            if (RoutingTable != null
+                && incoming.Header.Subtype == SintranPacketSubtype.Data
+                && incoming.SubHeader != null
+                && incoming.XmcsmWithBodyWord == ListRoutingServer.XmcsmXsgsyRequest)
+            {
+                return AnswerListRoute(incoming, RoutingTable);
+            }
+
             // FRAMEWORK SERVER DISPATCH (the replacement for the TadResponder path below): route server
             // traffic - XSLET connect letters and session data - to the registered servers, secure-ACKing
             // each via the closed-form model seeded from the link seed. Reachability, list-route (XSGSY)
@@ -507,8 +531,8 @@ namespace RetroIO.Protocols.Xmsg.Node
                 }
             }
 
-            // Fallback: the single-frame handler covers reachability, list-route (XSGSY) and the
-            // optional secure-ACK behaviour.
+            // Fallback: the single-frame handler covers reachability and the optional secure-ACK
+            // behaviour. List-route (XSGSY) is answered above, because it sends two frames.
             XmsgFrame? single = HandleFrame(incoming);
             if (single != null)
             {
@@ -561,12 +585,101 @@ namespace RetroIO.Protocols.Xmsg.Node
             _receiver.UseSessionAckModel(LearnLinkSeedOnce(incoming));
             result.Add(_receiver.ReceiveDataFrame(incoming, (SintranProtocolId)XmsgEnvelope.ChannelAnchor));
 
+            ushort flags1 = ChooseXroutReplyFlags1(incoming, ListNamesServer.XmcsmXsgniRequest);
+
+            result.Add(XmsgFrame.Parse(_namesServer.Handle(incoming, table, flags1)));
+            return result;
+        }
+
+        /// <summary>
+        /// Secure-ACKs a list-route (<c>XSGSY</c>) request and answers it from a routing table.
+        /// </summary>
+        /// <param name="incoming">
+        /// The request datagram.
+        /// </param>
+        /// <param name="table">
+        /// The routing table to answer from.
+        /// </param>
+        /// <returns>
+        /// The ACK, then the reply.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// The reply goes out with the ANSWERING node's own next Flags 1, not the request's. VERIFIED:
+        /// ListRoutingTests' capture (102 asking 100) answers request <c>0x012B</c> at <c>0x00F4</c>,
+        /// and libxmsg does the same and D100's li-rout accepts it live. This node used to copy the
+        /// request's number, built on a 103 capture where the two numbers happened to be equal
+        /// (both <c>0x0000</c>).
+        /// </para>
+        /// <para>
+        /// The reply's checksum is computed, never copied: word 6 is a sum over words 0-5, and a reply
+        /// that only swaps destination and source keeps the same sum, which is why the 103 capture
+        /// showed the same counter byte and protocol id on request and reply.
+        /// </para>
+        /// </remarks>
+        private IReadOnlyList<XmsgFrame> AnswerListRoute(XmsgFrame incoming, IRoutingTable table)
+        {
+            List<XmsgFrame> result = new List<XmsgFrame>(2);
+
+            // The same ACK as for LIST-NAMES and every other datagram.
+            _receiver.UseSessionAckModel(LearnLinkSeedOnce(incoming));
+            result.Add(_receiver.ReceiveDataFrame(incoming, (SintranProtocolId)XmsgEnvelope.ChannelAnchor));
+
+            ushort flags1 = ChooseXroutReplyFlags1(incoming, ListRoutingServer.XmcsmXsgsyRequest);
+
+            result.Add(XmsgFrame.Parse(_routingServer.Handle(incoming, table, flags1)));
+            return result;
+        }
+
+        /// <summary>
+        /// Picks the Flags 1 for an XROUT answer this node builds itself: the number the first answer
+        /// went out on when the request is a repeat, otherwise this node's own next number.
+        /// </summary>
+        /// <param name="incoming">
+        /// The request datagram.
+        /// </param>
+        /// <param name="service">
+        /// The request's XMCSM word, so a list-route and a LIST-NAMES request with the same number are
+        /// never taken for each other.
+        /// </param>
+        /// <returns>
+        /// The Flags 1 to stamp on the reply.
+        /// </returns>
+        /// <remarks>
+        /// With a <see cref="ServerHost"/> attached, a new number comes from the host's per-node count,
+        /// the same one every other frame to that node spends; without one, from
+        /// <see cref="NextDatagramSequence"/>. A repeat spends NO number. The memory holds the last
+        /// eight answers; a repeat older than that is answered as a new request.
+        /// </remarks>
+        private ushort ChooseXroutReplyFlags1(XmsgFrame incoming, uint service)
+        {
+            ushort peer = incoming.Header!.SourceNode;
+            ushort requestFlags1 = incoming.Header.Flags1;
+            for (int i = 0; i < _xroutAnswers.Length; i++)
+            {
+                ref XroutAnswer seen = ref _xroutAnswers[i];
+                if (seen.InUse && seen.Peer == peer && seen.RequestFlags1 == requestFlags1 && seen.Service == service)
+                {
+                    Log?.Invoke(
+                        "[xrout] repeat of request F1=0x" + requestFlags1.ToString("X4", System.Globalization.CultureInfo.InvariantCulture)
+                        + " from node " + peer.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + ": answered again at F1=0x" + seen.ReplyFlags1.ToString("X4", System.Globalization.CultureInfo.InvariantCulture));
+                    return seen.ReplyFlags1;
+                }
+            }
+
             ushort flags1 = ServerHost != null
                 ? ServerHost.AllocateOriginatedFlags1(incoming)
                 : NextDatagramSequence();
 
-            result.Add(XmsgFrame.Parse(_namesServer.Handle(incoming, table, flags1)));
-            return result;
+            ref XroutAnswer slot = ref _xroutAnswers[_xroutAnswerNext];
+            slot.InUse = true;
+            slot.Peer = peer;
+            slot.RequestFlags1 = requestFlags1;
+            slot.Service = service;
+            slot.ReplyFlags1 = flags1;
+            _xroutAnswerNext = (_xroutAnswerNext + 1) % _xroutAnswers.Length;
+            return flags1;
         }
 
         /// <summary>
@@ -594,8 +707,8 @@ namespace RetroIO.Protocols.Xmsg.Node
 
         /// <summary>
         /// Processes a received XMSG frame and returns the single frame to send in response, if
-        /// any (reachability reply, list-route reply, or secure ACK). Use
-        /// <see cref="HandleFrames"/> for paths that emit more than one frame.
+        /// any (reachability reply or secure ACK). Use <see cref="HandleFrames"/> for paths that
+        /// emit more than one frame, which include the list-route (XSGSY) and LIST-NAMES answers.
         /// </summary>
         /// <param name="incoming">
         /// The decoded received frame (its header selects the behaviour).
@@ -688,35 +801,10 @@ namespace RetroIO.Protocols.Xmsg.Node
                     return BuildReachabilityReply(incoming);
 
                 case SintranPacketSubtype.Data:
-                    // A list-route (XSGSY) request is answered from the routing table with the
-                    // byte-validated ListRoutingServer reply (this is the structurally correct
-                    // response, unlike a bare 0x03 ACK).
-                    if (RoutingTable != null
-                        && incoming.SubHeader != null
-                        && incoming.XmcsmWithBodyWord == ListRoutingServer.XmcsmXsgsyRequest)
-                    {
-                        // Match the real 103 XSGSY response (device-online capture): the reply carries
-                        // the SAME Flags1 as the request, so the asker can correlate it.
-                        //
-                        // The capture ALSO shows the response carrying the same counter byte and
-                        // Protocol ID as its request (req f1=0000/ctr=0x13 -> resp f1=0000/ctr=0x13),
-                        // and this used to echo both explicitly. That is not an echo - it is
-                        // arithmetic. Those two bytes are the halves of word 6, which is a SUM over
-                        // words 0-5. A reply differs from its request only by swapping destination
-                        // and source node, and swapping two addends does not change a sum, so the
-                        // computed checksum comes out identical on its own.
-                        //
-                        // So the reply is now built with the checksum COMPUTED (2026-08-06) and the
-                        // echo dropped. ListRoutingTests still rebuilds the captured response byte
-                        // for byte, which is the proof that the arithmetic explanation is the right
-                        // one.
-                        byte[] reply = _routingServer.Handle(
-                            incoming,
-                            RoutingTable,
-                            flags1: incoming.Header.Flags1);
-                        return XmsgFrame.Parse(reply);
-                    }
-
+                    // A list-route (XSGSY) request is answered in HandleFrames (AnswerListRoute):
+                    // the ACK and then the reply at this node's own Flags 1, two frames, which this
+                    // single-frame method cannot return. The reply used to be built here with the
+                    // request's Flags 1 copied, which real machines never do.
                     // Otherwise: the secure ACK echoes Flags 1 and swaps direction (section 6),
                     // but only when configured to respond. Against the LIVE kernel, injecting an
                     // unrequested 0x03 ACK crashed XMSG (XXPER), so observe-only returns null.
@@ -851,6 +939,19 @@ namespace RetroIO.Protocols.Xmsg.Node
 
             return name + " Flags2=0x" + flags2.ToString("X4", System.Globalization.CultureInfo.InvariantCulture)
                 + " (" + code.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
+        }
+
+        /// <summary>
+        /// One remembered XROUT answer: who asked, with which number and service, and the number the
+        /// answer went out on.
+        /// </summary>
+        private struct XroutAnswer
+        {
+            public bool InUse;
+            public ushort Peer;
+            public ushort RequestFlags1;
+            public uint Service;
+            public ushort ReplyFlags1;
         }
     }
 }

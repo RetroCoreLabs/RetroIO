@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.ListRouting;
 using RetroIO.Protocols.Xmsg.Node;
@@ -43,7 +44,10 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
                 new RoutingTableEntry(103, XroutConnectionType.Local, 103, 0, 0),
             });
 
-            XmsgFrame? reply = node.HandleFrame(request);
+            // HandleFrames, not HandleFrame: the answer is two frames, the ACK then the reply.
+            IReadOnlyList<XmsgFrame> sent = node.HandleFrames(request);
+            Assert.Equal(2, sent.Count);
+            XmsgFrame? reply = sent[1];
 
             _output.WriteLine("request : " + Convert.ToHexString(reqInfo));
             _output.WriteLine("reply   : " + (reply == null ? "null" : Convert.ToHexString(reply.ToArray())));
