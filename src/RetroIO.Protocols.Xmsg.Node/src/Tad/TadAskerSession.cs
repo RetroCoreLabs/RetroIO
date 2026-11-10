@@ -315,7 +315,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         /// are not implemented: they are logged and input is cut only at BRKMAX (BUGS.md).
         /// </remarks>
         /// <param name="text">
-        /// The typed text, sent as 7-bit ASCII.
+        /// The typed text, as 7-bit ASCII; bit 7 carries even parity unless <see cref="KeystrokeParity"/> is off.
         /// </param>
         /// <returns>
         /// The BDAT frame to transmit now, or an empty list when the host has not granted input.
@@ -334,6 +334,14 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             SendPendingIfGranted(outgoing);
             return outgoing;
         }
+
+        /// <summary>
+        /// Gets or sets whether typed bytes go out with even parity in bit 7. True by default, as the
+        /// real asker sends them. MEASURED: "sys" + CR goes as F3 F9 F3 8D (pcap-decode-sample.json),
+        /// and D102's CONNECT-TO sends the TDV key ESC [ 4 8 _ as 1B DB B4 B8 5F (RetroServer hub,
+        /// 2026-11-10). Same rule as libxmsg <c>keystroke_parity</c>. Set false to send bytes as given.
+        /// </summary>
+        public bool KeystrokeParity { get; set; } = true;
 
         /// <summary>
         /// Gets the number of typed bytes still waiting for a grant from the host.
@@ -427,10 +435,33 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
                 }
             }
 
-            outgoing.Add(_client.BuildInput(new ReadOnlySpan<byte>(_pending, 0, take)));
+            Span<byte> letter = stackalloc byte[MaxBdat];
+            for (int i = 0; i < take; i++)
+            {
+                letter[i] = KeystrokeParity ? EvenParity(_pending[i]) : _pending[i];
+            }
+
+            outgoing.Add(_client.BuildInput(letter.Slice(0, take)));
             Array.Copy(_pending, take, _pending, 0, _pendingLength - take);
             _pendingLength -= take;
             _inputGranted = false; // one BDAT per grant
+        }
+
+        /// <summary>
+        /// Gives a 7-bit character even parity in bit 7 (bit 7 set when the low seven bits hold an odd
+        /// number of ones), as libxmsg <c>tad_even_parity</c> does.
+        /// </summary>
+        /// <param name="c">
+        /// The typed byte; its bit 7 is replaced.
+        /// </param>
+        /// <returns>
+        /// The byte with even parity.
+        /// </returns>
+        private static byte EvenParity(byte c)
+        {
+            int c7 = c & 0x7F;
+            int ones = System.Numerics.BitOperations.PopCount((uint)c7);
+            return (byte)((ones & 1) != 0 ? c7 | 0x80 : c7);
         }
 
         /// <summary>
