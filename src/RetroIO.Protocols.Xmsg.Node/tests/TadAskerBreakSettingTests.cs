@@ -75,6 +75,27 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         }
 
         /// <summary>
+        /// S3-CONFIG's screen letter sets strategy 7 with BRKMAX 1 and a table of all ones (hub frame
+        /// 989, XMSGGW line 13:16:00.271), so the first byte of a key goes alone.
+        /// </summary>
+        [Fact]
+        public void Strategy7AllOnes_SendsOneByte()
+        {
+            TadAskerSession asker = new TadAskerSession(102, 100, 0x07EA, seed: 0x14, "D100");
+            asker.Start();
+            const string Chain = "0413070001FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00031107FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0200";
+            string frame = "2113000E0066006400760108DC9621009600006607EA00640985010800000"
+                + (Chain.Length / 2).ToString("X3") + Chain;
+            IReadOnlyList<XmsgFrame> grant = asker.OnReceive(Parse(frame));
+            Assert.Equal(7, asker.BreakStrategy);
+            Assert.Null(BdatOf(grant));
+
+            IReadOnlyList<XmsgFrame> first = asker.SendLine("\u001B[48_");
+            Assert.Equal(new byte[] { 0x1B }, BdatOf(first));
+            Assert.Equal(4, asker.PendingInputLength);
+        }
+
+        /// <summary>
         /// Parses one captured frame from hex.
         /// </summary>
         /// <param name="hex">
