@@ -252,6 +252,114 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_node.ActiveStitchCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// A burst of data one way with every packet echoed back the other way must all arrive. It
+        /// used to freeze the switch after a few packets.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The reader thread of a port held the port's lock while it handed a decoded packet to the
+        /// switch, and the switch sent it on by taking the lock of the other port. When a packet
+        /// arrived on each port at the same moment, each thread held one lock and waited for the other,
+        /// and no packet moved again; the switch wrote no error. A one-way test never meets it, so it
+        /// stayed hidden until a Cisco router was put on one side and a load tool on the other.
+        /// </para>
+        /// <para>
+        /// The far side echoes from its own thread, not from inside the receive callback, so that a
+        /// blocked echo cannot be mistaken for a blocked switch.
+        /// </para>
+        /// </remarks>
+        [Test]
+        [CancelAfter(60000)]
+        public void DataFlowingBothWaysAtOnce_DoesNotFreezeTheSwitch()
+        {
+            const int packets = 300;
+            const int size = 100;
+
+            System.Collections.Concurrent.ConcurrentQueue<byte[]> toEcho = new System.Collections.Concurrent.ConcurrentQueue<byte[]>();
+            X25Vc? calleeVc = null;
+            long echoesAtCaller = 0;
+            bool stopEcho = false;
+
+            using X25Client callee = Dial(_portB.BoundPort, "23420001");
+            callee.SetOnIncoming((c, vc) =>
+            {
+                Volatile.Write(ref calleeVc, vc);
+                c.Accept(vc);
+            });
+            callee.SetOnData((c, vc, data, length, q, m, d) =>
+            {
+                byte[] copy = new byte[length];
+                Buffer.BlockCopy(data, 0, copy, 0, length);
+                toEcho.Enqueue(copy);
+            });
+
+            Thread echoThread = new Thread(() =>
+            {
+                while (!Volatile.Read(ref stopEcho))
+                {
+                    if (!toEcho.TryPeek(out byte[]? next))
+                    {
+                        Thread.Sleep(1);
+                        continue;
+                    }
+
+                    X25Vc? vc = Volatile.Read(ref calleeVc);
+                    if (vc != null && callee.Send(vc, next, next.Length, false))
+                    {
+                        toEcho.TryDequeue(out _);
+                    }
+                    else
+                    {
+                        Thread.Sleep(1);
+                    }
+                }
+            })
+            { IsBackground = true, Name = "test-echo" };
+            echoThread.Start();
+
+            try
+            {
+                using X25Client caller = Dial(_portA.BoundPort, "23400001");
+                caller.SetOnData((c, vc, data, length, q, m, d) => Interlocked.Increment(ref echoesAtCaller));
+
+                WaitFor(() => _portA.PeerConnected && _portB.PeerConnected, 3000);
+                X25Vc? callerVc = caller.CallWait("23420001", 5000);
+                Assert.That(callerVc, Is.Not.Null, "the call should have been routed and accepted");
+
+                byte[] payload = new byte[size];
+                for (int i = 0; i < size; i++)
+                {
+                    payload[i] = (byte)i;
+                }
+
+                long deadline = Environment.TickCount64 + 20000;
+                int sent = 0;
+                while (sent < packets && Environment.TickCount64 < deadline)
+                {
+                    if (caller.Send(callerVc!, payload, size, false))
+                    {
+                        sent++;
+                    }
+                    else
+                    {
+                        Thread.Sleep(1);
+                    }
+                }
+
+                WaitFor(() => Interlocked.Read(ref echoesAtCaller) >= packets, 20000);
+
+                Assert.That(sent, Is.EqualTo(packets), "the caller should have been able to send every packet");
+                Assert.That(Interlocked.Read(ref echoesAtCaller), Is.EqualTo(packets),
+                    "every packet sent must come back; a count that stops short means the switch froze");
+            }
+            finally
+            {
+                Volatile.Write(ref stopEcho, true);
+                echoThread.Join(2000);
+            }
+        }
+
         [Test]
         public void ACallToAnAddressWithNoRoute_IsCleared()
         {
