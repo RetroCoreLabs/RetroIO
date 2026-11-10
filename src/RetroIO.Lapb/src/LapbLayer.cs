@@ -788,6 +788,16 @@ namespace RetroIO.Protocols.Xmsg.Live
                     _state = LapbLayerState.Connected;
                     StartT3(currentTicks);
                     StopT1();
+                    if (!_ourSabmAcked)
+                    {
+                        // Our own SABM is still unanswered, and the link is not up until it is.
+                        // Keep T1 running so it is sent again (OnT1Expiry, CONNECTED case).
+                        // Measured 2026-11-09 on RetroCore D100: its SABM crossed ours and it
+                        // answered ours with an RR instead of a UA. With T1 stopped here, as this
+                        // code used to do, nothing was ever resent and the link stayed Connected
+                        // but not up for good. Same rule as libxmsg lapb.c handle_unnumbered.
+                        StartT1(currentTicks);
+                    }
 
                     // The UA goes out only now, with the state already settled. It used to be sent
                     // first, before Reset() and before CONNECTED: on a real link the peer's next
@@ -828,6 +838,13 @@ namespace RetroIO.Protocols.Xmsg.Live
                     {
                         _state = LapbLayerState.Disconnected;
                         StopAllTimers();
+                    }
+                    else if (_state == LapbLayerState.Connected && Outstanding == 0)
+                    {
+                        // Already connected through the peer's SABM, and this late UA completes
+                        // our half. T1 was kept running only to resend our SABM; nothing else can
+                        // be outstanding before the link is up, so stop it here.
+                        StopT1();
                     }
 
                     break;
@@ -1040,7 +1057,13 @@ namespace RetroIO.Protocols.Xmsg.Live
             if (_acknowledgeVariable == _sendVariable)
             {
                 // Everything acknowledged: stop the retransmission timer, start the idle keepalive.
-                StopT1();
+                // While our own SABM is unanswered T1 belongs to it and keeps its deadline: an RR
+                // from the peer is no answer to a SABM (measured on D100 2026-11-09).
+                if (_ourSabmAcked)
+                {
+                    StopT1();
+                }
+
                 StartT3(currentTicks);
             }
             else
@@ -1265,6 +1288,17 @@ namespace RetroIO.Protocols.Xmsg.Live
             switch (_state)
             {
                 case LapbLayerState.Connected:
+                    if (!_ourSabmAcked)
+                    {
+                        // The peer's half is done, ours is not: send our SABM again. No I-frame
+                        // has gone out (the owner sends only once IsUp), so this resets nothing
+                        // in use. N2 still counts these resends; when it runs out the branch
+                        // above gives up and goes DISCONNECTED with no further SABM by default.
+                        SendUnnumbered(SabmBase, includeNode: true, pollFinal: true);
+                        RestartT1(currentTicks);
+                        return true;
+                    }
+
                     // Poll-first recovery (spec 5.1): RR with P=1; the peer's N(R)/REJ drives go-back-N.
                     EmitSupervisory(RrNibble, pollFinal: true);
                     RestartT1(currentTicks);
