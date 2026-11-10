@@ -207,6 +207,40 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         }
 
         /// <summary>
+        /// Takes this node's next outgoing Flags 1 number towards the sender of a datagram, for a
+        /// reply that the node itself builds rather than one of the registered servers.
+        /// </summary>
+        /// <param name="incoming">
+        /// The received datagram being answered; its sender names the link, and it teaches the
+        /// link's seed if none is known yet.
+        /// </param>
+        /// <returns>
+        /// The Flags 1 to stamp on the reply. The link's count advances and is saved.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="incoming"/> or its header is null.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no link to the sender exists and <paramref name="incoming"/> could not
+        /// create one.
+        /// </exception>
+        /// <remarks>
+        /// A reply is an ORIGINATED datagram and spends one of OUR numbers - see
+        /// <see cref="ChooseFlags1"/>. VERIFIED for XSGNI on 2026-11-10: D100 answered LIST-NAMES
+        /// request 0x0012 with its own 0x0011, 0x0013 with 0x0012, and so on.
+        /// </remarks>
+        public ushort AllocateOriginatedFlags1(XmsgFrame incoming)
+        {
+            if (incoming == null || incoming.Header == null)
+            {
+                throw new ArgumentNullException(nameof(incoming));
+            }
+
+            EnsureLink(incoming);
+            return ChooseFlags1(LinkFor(incoming.Header.SourceNode), XmsgAnsweredFlags1.None);
+        }
+
+        /// <summary>
         /// Drains every registered server's queued asynchronous output (tty inject / wall) into frames.
         /// The node calls this each pump cycle so queued text flushes to the remote clients.
         /// </summary>

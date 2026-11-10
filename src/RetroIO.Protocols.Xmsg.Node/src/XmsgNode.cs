@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 
+using RetroIO.Protocols.Xmsg.ListNames;
 using RetroIO.Protocols.Xmsg.ListRouting;
 using RetroIO.Protocols.Xmsg.Node.Services;
 using RetroIO.Protocols.Xmsg.Node.Tad;
@@ -59,6 +60,13 @@ namespace RetroIO.Protocols.Xmsg.Node
         public IRoutingTable? RoutingTable { get; set; }
 
         /// <summary>
+        /// Optional name table. When set, an incoming LIST-NAMES (<c>XSGNI</c>, XMCSM
+        /// <c>0x01000145</c>) request is secure-ACKed and answered from it with a
+        /// <see cref="ListNamesServer"/> reply, whose Flags 1 is this node's own next outgoing number.
+        /// </summary>
+        public INameTable? NameTable { get; set; }
+
+        /// <summary>
         /// Optional TAD terminal responder. When set, an incoming SYSTEM-TAD connect request
         /// (<c>XMCSM 0x04000041</c>) opens a simulated remote-machine terminal session, and
         /// subsequent terminal-data (BDAT) frames drive its menu.
@@ -84,6 +92,8 @@ namespace RetroIO.Protocols.Xmsg.Node
         public bool AcknowledgeTadFrames { get; set; } = false;
 
         private readonly ListRoutingServer _routingServer = new ListRoutingServer();
+
+        private readonly ListNamesServer _namesServer = new ListNamesServer();
 
         private readonly ushort _nodeNumber;
         private readonly Dictionary<string, ushort> _remoteNames;
@@ -337,6 +347,16 @@ namespace RetroIO.Protocols.Xmsg.Node
 
             incoming = rejoined;
 
+            // LIST-NAMES (XSGNI) is answered by the node itself, ahead of the server dispatch,
+            // because no registered server owns XROUT's port 0 for this service.
+            if (NameTable != null
+                && incoming.Header.Subtype == SintranPacketSubtype.Data
+                && incoming.SubHeader != null
+                && incoming.XmcsmWithBodyWord == ListNamesServer.XmcsmXsgniRequest)
+            {
+                return AnswerListNames(incoming, NameTable);
+            }
+
             // FRAMEWORK SERVER DISPATCH (the replacement for the TadResponder path below): route server
             // traffic - XSLET connect letters and session data - to the registered servers, secure-ACKing
             // each via the closed-form model seeded from the link seed. Reachability, list-route (XSGSY)
@@ -511,6 +531,41 @@ namespace RetroIO.Protocols.Xmsg.Node
                 }
             }
 
+            return result;
+        }
+
+        /// <summary>
+        /// Secure-ACKs a LIST-NAMES (<c>XSGNI</c>) request and answers it from a name table.
+        /// </summary>
+        /// <param name="incoming">
+        /// The request datagram.
+        /// </param>
+        /// <param name="table">
+        /// The name table to answer from.
+        /// </param>
+        /// <returns>
+        /// The ACK, then the reply.
+        /// </returns>
+        /// <remarks>
+        /// VERIFIED 2026-11-10 (D102 walking D100's table): every request is ACKed as usual, and the
+        /// reply then goes out with the ANSWERING node's own next Flags 1, not the request's. With a
+        /// <see cref="ServerHost"/> attached, that number comes from the host's per-node count, the
+        /// same one every other frame to that node spends; without one, from
+        /// <see cref="NextDatagramSequence"/>.
+        /// </remarks>
+        private IReadOnlyList<XmsgFrame> AnswerListNames(XmsgFrame incoming, INameTable table)
+        {
+            List<XmsgFrame> result = new List<XmsgFrame>(2);
+
+            // The ACK's word 6 is the header checksum, built the same way as the server path's.
+            _receiver.UseSessionAckModel(LearnLinkSeedOnce(incoming));
+            result.Add(_receiver.ReceiveDataFrame(incoming, (SintranProtocolId)XmsgEnvelope.ChannelAnchor));
+
+            ushort flags1 = ServerHost != null
+                ? ServerHost.AllocateOriginatedFlags1(incoming)
+                : NextDatagramSequence();
+
+            result.Add(XmsgFrame.Parse(_namesServer.Handle(incoming, table, flags1)));
             return result;
         }
 

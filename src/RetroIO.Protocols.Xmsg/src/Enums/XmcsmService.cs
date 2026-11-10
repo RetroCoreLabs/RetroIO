@@ -56,6 +56,18 @@ namespace RetroIO.Protocols.Xmsg
         /// XSGSY list-routing reply (<c>0x01000100</c>).
         /// </summary>
         XsgsyReply = 0x01000100u,
+
+        /// <summary>
+        /// XSGNI list-names request (<c>0x01000145</c>); the low byte <c>0x45</c> (69) is the XROUT XSGNI
+        /// "get next name" service code.
+        /// </summary>
+        /// <remarks>
+        /// VERIFIED 2026-11-10 on the COSMOS Ethernet hub: every request of a SINTRAN LIST-NAMES walk
+        /// (D102 asking D100) carries XMCSM <c>0x0100</c> and body word <c>0x0145</c>. The reply word is
+        /// <see cref="XsgsyReply"/>, because an XROUT reply carries service byte <c>0x00</c> whatever
+        /// was asked.
+        /// </remarks>
+        XsgniRequest = 0x01000145u,
     }
 
     /// <summary>

@@ -68,6 +68,13 @@
         "meaning": "the answer to that question",
         "status": "MEASURED",
         "evidence": "answered live by D100"
+      },
+      {
+        "name": "XsgniRequest",
+        "value": "0x01000145",
+        "meaning": "ask another machine's XROUT for the next name in its name table (LIST-NAMES); answered with the XsgsyReply word",
+        "status": "MEASURED",
+        "evidence": "COSMOS Ethernet hub capture 2026-11-10, D102 running LIST-NAMES against D100"
       }
     ],
     "csharp_enum": {
