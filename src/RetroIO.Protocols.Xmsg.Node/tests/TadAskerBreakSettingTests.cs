@@ -52,7 +52,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             Assert.Equal(4, asker.PendingInputLength);
 
             IReadOnlyList<XmsgFrame> second = asker.OnReceive(Parse(GrantStrategy0Again));
-            Assert.Equal(new byte[] { 0x5B }, BdatOf(second));
+            Assert.Equal(new byte[] { 0xDB }, BdatOf(second)); // '[' with even parity, as D102 sent it
             Assert.Equal(3, asker.PendingInputLength);
         }
 
@@ -70,8 +70,22 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             Assert.Null(BdatOf(grant));
 
             IReadOnlyList<XmsgFrame> line = asker.SendLine("SYSTEM\rmore");
-            Assert.Equal(System.Text.Encoding.ASCII.GetBytes("SYSTEM\r"), BdatOf(line));
+            // SYSTEM + CR with even parity, byte for byte as D102 sent it (hub frame 903, 11:55:05).
+            Assert.Equal(new byte[] { 0x53, 0x59, 0x53, 0xD4, 0xC5, 0x4D, 0x8D }, BdatOf(line));
             Assert.Equal(4, asker.PendingInputLength);
+        }
+
+        /// <summary>
+        /// With parity off the bytes go as given.
+        /// </summary>
+        [Fact]
+        public void ParityOff_SendsBytesAsGiven()
+        {
+            TadAskerSession asker = new TadAskerSession(102, 100, 0x07EA, seed: 0x14, "D100");
+            asker.KeystrokeParity = false;
+            asker.Start();
+            asker.OnReceive(Parse(GrantStrategy0));
+            Assert.Equal(new byte[] { 0x43 }, BdatOf(asker.SendLine("C"))); // 0xC3 with parity
         }
 
         /// <summary>
