@@ -205,8 +205,11 @@ namespace RetroIO.Protocols.Xmsg.Live
         // station that never sends a SABM has no outstanding direction to complete, which is the
         // table's "rx SABM in DISCONNECTED -> notify up" case. Only having a SABM in flight makes
         // our half something to wait for.
+        //
+        // Since 2026-11-10 only OUR half gates IsUp (see the comment there for the XHLIF proof), so
+        // the peer's half is no longer stored: a flag nothing reads would only invite someone to
+        // gate on it again.
         private bool _ourSabmAcked = true;
-        private bool _peerSabmAnswered;
 
         private int _sendVariable;      // V(S): next I-frame to send
         private int _receiveVariable;   // V(R): next in-sequence I-frame expected
@@ -360,6 +363,12 @@ namespace RetroIO.Protocols.Xmsg.Live
         /// Section 3.1 says the same thing in prose: the link is up when BOTH directions have
         /// completed a SABM -> UA exchange.
         /// </para>
+        /// <para>
+        /// Since 2026-11-10 the link is up once OUR SABM is answered, without the peer's SABM: the
+        /// real ND kernel (XHLIF) never sends one again once it has run on our UA, so the spec 3.1
+        /// reading left the link half up for good. Answering the peer's SABM while our own is
+        /// unanswered is still NOT up. See the comment in the getter.
+        /// </para>
         /// <para><b>Why it matters, measured 2026-08-19</b></para>
         /// <para>
         /// This layer used to expose only <see cref="State"/>, and the adapter above mapped
@@ -385,16 +394,25 @@ namespace RetroIO.Protocols.Xmsg.Live
         {
             get
             {
-                // The ND dialect is balanced: each station sends its own SABM and the link is up
-                // only when both exchanges are done (spec 3.1, above). ITU-T X.25 LAPB has one
-                // exchange: 2.4.4.1 says that on receiving the UA to its SABM the station "will
-                // reset its send and receive state variables V(S) and V(R) to zero ... and will
-                // consider that the data link is set up". Waiting for a SABM from the peer as well
-                // would leave a station that started the link down for ever, because the other end
-                // answers with a UA and never sends a SABM of its own.
-                bool peerHalfDone = IsItu || _peerSabmAnswered;
+                // Up once OUR SABM has been answered by UA, or we never sent one and answered the
+                // peer's (_ourSabmAcked starts true for that passive case). The peer's SABM is NOT
+                // also required, in either dialect.
+                //
+                // ITU-T X.25 LAPB has one exchange: 2.4.4.1 says that on receiving the UA to its
+                // SABM the station "will reset its send and receive state variables V(S) and V(R)
+                // to zero ... and will consider that the data link is set up".
+                //
+                // The ND dialect used to wait for both exchanges (spec 3.1, above). That was wrong
+                // against the real kernel. SINTRAN's link handler XHLIF (carved 2026-11-10, see
+                // NDInsight SINTRAN/XMSG/DOC/HDLC-LINK-BRINGUP-STATES-2026-11-10.md) goes CALLING
+                // -> CONNECT on SABM/UA and CONNECT -> RUN on any other frame, and in RUN it has no
+                // reason ever to send a SABM again. Live D100, 2026-11-09 23:52: our side rebooted,
+                // D100's own SABMs were lost, it took our UA, went to RUN and never sent another
+                // SABM, so a station waiting for one stayed half up for good.
+                //
+                // What must still wait is a station whose OWN SABM is unanswered: the 2026-08-19
+                // "sent too early" fault above. _ourSabmAcked covers exactly that case.
                 return _ourSabmAcked
-                    && peerHalfDone
                     && _state == LapbLayerState.Connected;
             }
         }
@@ -762,9 +780,9 @@ namespace RetroIO.Protocols.Xmsg.Live
                     // so the upper layer must not be told it may send. See IsUp for the
                     // measurement that this cost.
                     //
-                    // This completes the PEER's half only. Ours is _ourSabmAcked, and if a SABM of
-                    // ours is still in flight it stays false until its UA arrives.
-                    _peerSabmAnswered = true;
+                    // This completes the PEER's half only, which no longer gates IsUp. Ours is
+                    // _ourSabmAcked, and if a SABM of ours is still in flight it stays false until
+                    // its UA arrives.
 
                     Reset();
                     _state = LapbLayerState.Connected;

@@ -157,6 +157,59 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
         }
 
         /// <summary>
+        /// The UA answering our own SABM brings the link up on its own, with no SABM from the peer.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Live D100, 2026-11-09 23:52: the ND's own SABMs were lost while our side rebooted; then
+        /// our SABM got its UA (twice), we sent RR, the ND sent RR N(R)=0 and from then on was in
+        /// its RUN state with no reason ever to send a SABM. SINTRAN's link handler XHLIF goes
+        /// CALLING -> CONNECT on SABM/UA and CONNECT -> RUN on any other frame (NDInsight
+        /// SINTRAN/XMSG/DOC/HDLC-LINK-BRINGUP-STATES-2026-11-10.md). A station that waited for the
+        /// peer's SABM as well stayed half up for good.
+        /// </para>
+        /// <para>
+        /// Same sequence as libxmsg's test ua_to_our_sabm_alone_brings_the_link_up. We are node 100
+        /// (0x0064), the peer is node 102 (0x0066).
+        /// </para>
+        /// </remarks>
+        [Fact]
+        public void TheUaToOurSabmAloneBringsTheLinkUp()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = NewLink(100, sent);
+
+            link.Connect(currentTicks: 0);
+            sent.Clear();
+
+            // UA to our SABM: 01 73 00 66.
+            DeliverAt(link, 10, LinkAddress, UaControl, Node102Hi, Node102Lo);
+            Assert.Equal(LapbLayerState.Connected, link.State);
+            Assert.True(link.IsUp);
+
+            // The RR that moves an ND in CONNECT on to RUN: 09 01 00 64.
+            Assert.NotEmpty(sent);
+            Assert.Equal(new byte[] { 0x09, 0x01, 0x00, 0x64 }, sent[0]);
+            sent.Clear();
+
+            // The ND's second UA (its CALLING timer firing) changes nothing.
+            DeliverAt(link, 11, LinkAddress, UaControl, Node102Hi, Node102Lo);
+            Assert.True(link.IsUp);
+            Assert.Equal(0, link.SendVariable);
+            Assert.Equal(0, link.ReceiveVariable);
+
+            // RR N(R)=0 from the ND, now in RUN: 09 01 00 66.
+            DeliverAt(link, 12, 0x09, 0x01, Node102Hi, Node102Lo);
+            Assert.True(link.IsUp);
+            sent.Clear();
+
+            // An I-frame can now go out: I N(S)=0 N(R)=0.
+            link.SendInformation(new byte[] { 0xAB, 0xCD }, currentTicks: 13);
+            Assert.Single(sent);
+            Assert.Equal(new byte[] { 0x09, 0x00, 0xAB, 0xCD }, sent[0]);
+        }
+
+        /// <summary>
         /// A station that never sent a SABM comes up on the peer's SABM alone.
         /// </summary>
         /// <remarks>
