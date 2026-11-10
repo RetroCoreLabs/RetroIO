@@ -118,7 +118,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
         }
 
         [Fact]
-        public void NdStationThatSentTheSabm_IsStillNotUpOnTheUaAlone()
+        public void NdStationThatSentTheSabm_IsAlsoUpOnTheUaAlone()
         {
             List<byte[]> sent = new List<byte[]>();
             LapbLayer link = LapbTestKit.NewLink(0x0066, sent);   // ND dialect
@@ -126,8 +126,13 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             link.Connect(0);
             LapbTestKit.Deliver(link, LapbLayer.AddressLinkSetup, 0x73, LapbTestKit.Node100Hi, LapbTestKit.Node100Lo);
 
-            // ND spec 3.1: both directions must have completed a SABM -> UA exchange.
-            Assert.False(link.IsUp);
+            // Until 2026-11-10 this asserted NOT up, from the ND spec 3.1 reading that both
+            // directions must complete a SABM -> UA exchange. The real kernel (XHLIF) goes to RUN
+            // on our UA and never sends a SABM again (NDInsight
+            // SINTRAN/XMSG/DOC/HDLC-LINK-BRINGUP-STATES-2026-11-10.md), so the ND dialect is up on
+            // the UA alone, the same as ITU.
+            Assert.Equal(LapbLayerState.Connected, link.State);
+            Assert.True(link.IsUp);
         }
 
         [Fact]
