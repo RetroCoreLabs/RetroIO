@@ -48,11 +48,11 @@ namespace RetroIO.Protocols.X25.Tests
             string callingAddress = "100";
             byte[]? userData = null;
             var eventReceived = false;
-            X25PacketEventArgs? receivedEvent = null;
+            TadOutputEventArgs? receivedEvent = null;
 
-            void NotifyCallback(X25PacketEventArgs eventArgs)
+            void NotifyCallback(TadOutputEventArgs eventArgs)
             {
-                if (!eventReceived && eventArgs.Packet.PTI == 0x0F) // Only capture Call Accepted
+                if (!eventReceived && eventArgs.Kind == TadOutputKind.CallAccepted) // Only capture Call Accepted
                 {
                     eventReceived = true;
                     receivedEvent = eventArgs;
@@ -60,7 +60,7 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             // Act
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             var result = _localTadProtocol.HandleOutgoingCall(lcn, calledAddress, callingAddress, userData);
 
             // Assert
@@ -72,8 +72,8 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.True(eventReceived, "Should receive call accepted event");
             Assert.NotNull(receivedEvent);
-            Assert.Equal(lcn, receivedEvent.Packet.LCN);
-            Assert.Equal(0x0F, receivedEvent.Packet.PTI); // Call Accepted
+            Assert.Equal(lcn, receivedEvent.Lcn);
+            Assert.Equal(TadOutputKind.CallAccepted, receivedEvent.Kind);
         }
 
         [Fact]
@@ -85,10 +85,10 @@ namespace RetroIO.Protocols.X25.Tests
             string callingAddress = "100";
             byte[]? userData = null;
 
-            void NotifyCallback(X25PacketEventArgs eventArgs) { }
+            void NotifyCallback(TadOutputEventArgs eventArgs) { }
 
             // Act
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             var result = _localTadProtocol.HandleOutgoingCall(lcn, calledAddress, callingAddress, userData);
 
             // Assert
@@ -105,17 +105,17 @@ namespace RetroIO.Protocols.X25.Tests
             var responseReceived = false;
             string responseData = "";
 
-            void NotifyCallback(X25PacketEventArgs eventArgs)
+            void NotifyCallback(TadOutputEventArgs eventArgs)
             {
-                if ((eventArgs.Packet.PTI & 0x01) == 0) // Data packet (bit 0 = 0)
+                if (eventArgs.Kind == TadOutputKind.Data) // Data packet (bit 0 = 0)
                 {
                     responseReceived = true;
-                    responseData = System.Text.Encoding.ASCII.GetString(eventArgs.Packet.Data);
+                    responseData = System.Text.Encoding.ASCII.GetString(eventArgs.Data);
                 }
             }
 
             // First establish session
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
 
             // Act
@@ -136,11 +136,11 @@ namespace RetroIO.Protocols.X25.Tests
             var helpResponseReceived = false;
             string responseData = "";
 
-            void NotifyCallback(X25PacketEventArgs eventArgs)
+            void NotifyCallback(TadOutputEventArgs eventArgs)
             {
-                if ((eventArgs.Packet.PTI & 0x01) == 0) // Data packet (bit 0 = 0)
+                if (eventArgs.Kind == TadOutputKind.Data) // Data packet (bit 0 = 0)
                 {
-                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Packet.Data);
+                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Data);
                     if (data.Contains("Available commands:"))
                     {
                         helpResponseReceived = true;
@@ -150,7 +150,7 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             // First establish session
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
 
             // Act
@@ -173,11 +173,11 @@ namespace RetroIO.Protocols.X25.Tests
             var statusResponseReceived = false;
             string responseData = "";
 
-            void NotifyCallback(X25PacketEventArgs eventArgs)
+            void NotifyCallback(TadOutputEventArgs eventArgs)
             {
-                if ((eventArgs.Packet.PTI & 0x01) == 0) // Data packet (bit 0 = 0)
+                if (eventArgs.Kind == TadOutputKind.Data) // Data packet (bit 0 = 0)
                 {
-                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Packet.Data);
+                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Data);
                     if (data.Contains("Connection Status:"))
                     {
                         statusResponseReceived = true;
@@ -187,7 +187,7 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             // First establish session
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
 
             // Act
@@ -211,25 +211,25 @@ namespace RetroIO.Protocols.X25.Tests
             var clearRequestReceived = false;
             string responseData = "";
 
-            void NotifyCallback(X25PacketEventArgs eventArgs)
+            void NotifyCallback(TadOutputEventArgs eventArgs)
             {
-                if ((eventArgs.Packet.PTI & 0x01) == 0) // Data packet (bit 0 = 0)
+                if (eventArgs.Kind == TadOutputKind.Data) // Data packet (bit 0 = 0)
                 {
-                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Packet.Data);
+                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Data);
                     if (data.Contains("Goodbye!"))
                     {
                         goodbyeReceived = true;
                         responseData = data;
                     }
                 }
-                else if (eventArgs.Packet.PTI == 0x13) // Clear Request
+                else if (eventArgs.Kind == TadOutputKind.Clear) // Clear Request
                 {
                     clearRequestReceived = true;
                 }
             }
 
             // First establish session
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
 
             // Act
@@ -252,10 +252,10 @@ namespace RetroIO.Protocols.X25.Tests
             // Arrange
             ushort lcn = 1;
             
-            void NotifyCallback(X25PacketEventArgs eventArgs) { }
+            void NotifyCallback(TadOutputEventArgs eventArgs) { }
 
             // First establish session
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
             Assert.Equal(1, _localTadProtocol.GetActiveSessionsCount());
 
@@ -280,8 +280,8 @@ namespace RetroIO.Protocols.X25.Tests
             // Act - Create multiple sessions
             foreach (var (lcn, callingAddress) in sessions)
             {
-                void NotifyCallback(X25PacketEventArgs eventArgs) { }
-                _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+                void NotifyCallback(TadOutputEventArgs eventArgs) { }
+                _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
                 var result = _localTadProtocol.HandleOutgoingCall(lcn, "200", callingAddress, null);
                 Assert.True(result, $"Should handle call for LCN {lcn}");
             }
@@ -308,16 +308,16 @@ namespace RetroIO.Protocols.X25.Tests
             var welcomeMessageReceived = false;
             var eventOrder = new List<string>();
 
-            void NotifyCallback(X25PacketEventArgs eventArgs)
+            void NotifyCallback(TadOutputEventArgs eventArgs)
             {
-                if (eventArgs.Packet.PTI == 0x0F) // Call Accepted
+                if (eventArgs.Kind == TadOutputKind.CallAccepted) // Call Accepted
                 {
                     callAcceptedReceived = true;
                     eventOrder.Add("CallAccepted");
                 }
-                else if ((eventArgs.Packet.PTI & 0x01) == 0) // Data packet (bit 0 = 0) (welcome message)
+                else if (eventArgs.Kind == TadOutputKind.Data) // Data packet (bit 0 = 0) (welcome message)
                 {
-                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Packet.Data);
+                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Data);
                     if (data.Contains("X.25 TAD Loopback Echo Service"))
                     {
                         welcomeMessageReceived = true;
@@ -327,7 +327,7 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             // Act
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
 
             // Wait for both timers (100ms + 200ms + processing time)
@@ -348,17 +348,17 @@ namespace RetroIO.Protocols.X25.Tests
             ushort lcn = 1;
             var responses = new List<string>();
 
-            void NotifyCallback(X25PacketEventArgs eventArgs)
+            void NotifyCallback(TadOutputEventArgs eventArgs)
             {
-                if ((eventArgs.Packet.PTI & 0x01) == 0) // Data packet (bit 0 = 0)
+                if (eventArgs.Kind == TadOutputKind.Data) // Data packet (bit 0 = 0)
                 {
-                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Packet.Data);
+                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Data);
                     responses.Add(data);
                 }
             }
 
             // First establish session
-            _localTadProtocol.PacketGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
+            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
             _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
 
             // Act - Test different case variations
@@ -376,6 +376,86 @@ namespace RetroIO.Protocols.X25.Tests
             
             Assert.Equal(3, helpResponses); // 3 help commands in different cases
             Assert.Equal(3, statusResponses); // 3 status commands in different cases
+        }
+
+        /// <summary>
+        /// The X.29 SET that the TAD sends right after the call is accepted must be asked for with
+        /// the Q bit. Without it the PAD takes the message for text (a stray "~" in front of the
+        /// banner, and the PAD keeps echoing what is typed).
+        /// </summary>
+        [Fact]
+        public void X29SetIsRequestedWithTheQBit_TextIsNot()
+        {
+            var outputs = new List<TadOutputEventArgs>();
+            _localTadProtocol.OutputGenerated += (sender, e) => outputs.Add(e);
+
+            _localTadProtocol.HandleOutgoingCall(1, "200", "100", null);
+
+            TadOutputEventArgs? set = null;
+            for (int i = 0; i < outputs.Count; i++)
+            {
+                if (outputs[i].Kind == TadOutputKind.Data && outputs[i].QBit)
+                {
+                    set = outputs[i];
+                    break;
+                }
+            }
+
+            Assert.NotNull(set);
+            Assert.Equal(0x02, set.Data[0]); // X.29 message type: SET
+            Assert.False(set.MBit);
+
+            for (int i = 0; i < outputs.Count; i++)
+            {
+                if (!ReferenceEquals(outputs[i], set) && outputs[i].Kind == TadOutputKind.Data)
+                {
+                    Assert.False(outputs[i].QBit, "Text must not carry the Q bit");
+                }
+            }
+        }
+
+        /// <summary>
+        /// A message longer than one packet goes out as several packets with the M bit set on every
+        /// one but the last.
+        /// </summary>
+        [Fact]
+        public void LongTextIsSplitWithTheMBitOnAllButTheLastPacket()
+        {
+            var outputs = new List<TadOutputEventArgs>();
+            _localTadProtocol.OutputGenerated += (sender, e) => outputs.Add(e);
+            _localTadProtocol.HandleOutgoingCall(1, "200", "100", null);
+            outputs.Clear();
+
+            _localTadProtocol.HandleIncomingData(1, System.Text.Encoding.ASCII.GetBytes("HELP\r\n"));
+
+            // The first packet back is the echo of what was typed; the help text follows it.
+            var text = new List<TadOutputEventArgs>();
+            bool inHelp = false;
+            for (int i = 0; i < outputs.Count; i++)
+            {
+                if (outputs[i].Kind != TadOutputKind.Data)
+                {
+                    continue;
+                }
+
+                if (System.Text.Encoding.ASCII.GetString(outputs[i].Data).StartsWith("*** X.25 TAD Server Help"))
+                {
+                    inHelp = true;
+                }
+
+                if (inHelp)
+                {
+                    text.Add(outputs[i]);
+                }
+            }
+
+            Assert.True(text.Count >= 2, "The help text is longer than one 128-byte packet");
+            for (int i = 0; i < text.Count - 1; i++)
+            {
+                Assert.True(text[i].MBit, "All but the last packet of a message carry the M bit");
+            }
+
+            Assert.False(text[text.Count - 1].MBit);
         }
 
         public void Dispose()

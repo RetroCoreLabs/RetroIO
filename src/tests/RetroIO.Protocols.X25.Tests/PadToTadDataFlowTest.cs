@@ -33,7 +33,7 @@ namespace RetroIO.Protocols.X25.Tests
         private readonly ProtocolRuntime _runtime;
         private readonly LocalTadProtocol _localTadProtocol;
         private readonly PadClient _padClient;
-        private readonly List<X25PacketEventArgs> _receivedPackets;
+        private readonly List<TadOutputEventArgs> _receivedPackets;
         private readonly List<string> _tadReceivedMessages;
         
         public PadToTadDataFlowTest()
@@ -53,17 +53,17 @@ namespace RetroIO.Protocols.X25.Tests
             _padClient = _runtime.CreatePadClient("TestPAD");
             
             // Track packets and messages
-            _receivedPackets = new List<X25PacketEventArgs>();
+            _receivedPackets = new List<TadOutputEventArgs>();
             _tadReceivedMessages = new List<string>();
             
             // Subscribe to events
-            _localTadProtocol.PacketGenerated += OnTadPacketGenerated;
+            _localTadProtocol.OutputGenerated += OnTadPacketGenerated;
             _padClient.DataReceived += OnPadDataReceived;
         }
         
-        private void OnTadPacketGenerated(object? sender, X25PacketEventArgs e)
+        private void OnTadPacketGenerated(object? sender, TadOutputEventArgs e)
         {
-            _logger.LogDebug("[TEST] TAD generated packet: LCN={LCN}, PTI=0x{PTI:X2}", e.Packet.LCN, e.Packet.PTI);
+            _logger.LogDebug("[TEST] TAD generated packet: LCN={LCN}, kind={Kind}", e.Lcn, e.Kind);
             _receivedPackets.Add(e);
         }
         
@@ -186,7 +186,7 @@ namespace RetroIO.Protocols.X25.Tests
             var allResponseText = new StringBuilder();
             foreach (var pkt in _receivedPackets)
             {
-                string text = Encoding.ASCII.GetString(pkt.Packet.Data ?? Array.Empty<byte>());
+                string text = Encoding.ASCII.GetString(pkt.Data);
                 allResponseText.Append(text);
             }
             string fullResponse = allResponseText.ToString();

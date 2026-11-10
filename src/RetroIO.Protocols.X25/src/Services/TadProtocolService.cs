@@ -57,7 +57,7 @@ namespace RetroIO.Protocols.X25.Services
                 throw new ArgumentException("At least one local address must be specified", nameof(localAddresses));
                 
             // Subscribe to LocalTadProtocol events
-            _tadProtocol.PacketGenerated += OnTadPacketGenerated;
+            _tadProtocol.OutputGenerated += OnTadOutput;
                 
             _logger.LogInformation("TAD Protocol Service initialized for addresses: [{Addresses}]", 
                 string.Join(", ", _localAddresses));
@@ -158,24 +158,12 @@ namespace RetroIO.Protocols.X25.Services
         }
         
         /// <summary>
-        /// Handle LocalTadProtocol events and route to bound modules
+        /// Hand a request from the TAD to the runtime, which carries it out on the call's packet layer
         /// </summary>
-        private void OnTadPacketGenerated(object? sender, X25PacketEventArgs e)
+        private void OnTadOutput(object? sender, TadOutputEventArgs e)
         {
-            _logger.LogDebug("TAD protocol event: {PacketType}", e.Packet.PacketTypeId);
-            
-            // Fire X25Layer event to create history items
-            if (e.Direction == PacketDirection.Receive)
-            {
-                _runtime.PacketHistory.FirePacketReceived(e);
-            }
-            else
-            {
-                _runtime.PacketHistory.FirePacketTransmitted(e);
-            }
-            
-            // Also route event to bound module (PAD client) - needed for actual functionality
-            _runtime.RouteX25EventToBoundModule(e.Packet.LCN, e);
+            _logger.LogDebug("TAD output {Kind} on LCN {LCN}", e.Kind, e.Lcn);
+            _runtime.DeliverServiceOutput(e);
         }
         
         /// <summary>

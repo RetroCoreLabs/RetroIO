@@ -217,6 +217,21 @@ namespace RetroIO.Protocols.X25
         MappedSendOutcome SendMappedData(ushort lcn, byte[] data, int length);
 
         /// <summary>
+        /// Carries out a request from a built-in service (the TAD): data to the caller with its Q, M
+        /// and D bits, accepting the call, or clearing it.
+        /// </summary>
+        /// <param name="output">
+        /// What the service wants done.
+        /// </param>
+        /// <remarks>
+        /// A call carried by an XOT circuit goes through that circuit's packet-layer engine, which
+        /// numbers the packets; the requests of one call are sent in the order they were made. A
+        /// call with a module bound to its channel (a PAD client in this same process) is delivered
+        /// to that module. The service never builds a packet itself.
+        /// </remarks>
+        void DeliverServiceOutput(RetroIO.Protocols.X25.Models.TadOutputEventArgs output);
+
+        /// <summary>
         /// Binds a local protocol service to a logical channel.
         /// </summary>
         /// <param name="lcn">

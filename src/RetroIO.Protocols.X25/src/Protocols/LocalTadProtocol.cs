@@ -34,9 +34,11 @@ namespace RetroIO.Protocols.X25.Protocols
         private readonly string _localMachineId;
 
         /// <summary>
-        /// Event raised when LocalTadProtocol generates an X.25 packet for a PAD client
+        /// Raised when the TAD wants something done on a call: data sent to the PAD client, the call
+        /// accepted, or the call cleared. The packet layer that carries the call does it; the TAD
+        /// builds no packets and keeps no sequence numbers.
         /// </summary>
-        public event EventHandler<X25PacketEventArgs>? PacketGenerated;
+        public event EventHandler<TadOutputEventArgs>? OutputGenerated;
 
         /// <summary>
         /// Creates the local TAD protocol handler.
@@ -144,9 +146,6 @@ namespace RetroIO.Protocols.X25.Protocols
 
             try
             {
-                // Acknowledge received data by incrementing P(R)
-                session.RecvSequence = (byte)((session.RecvSequence + 1) & 0x07);
-
                 _logger.LogDebug("LocalTAD: Received {Length} bytes on LCN {LCN}", data.Length, lcn);
 
                 // Process each byte: echo back to terminal and buffer for line editing
@@ -285,30 +284,8 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         private void SendCallAccepted(LocalTadSession session)
         {
-            _logger.LogInformation("LocalTAD: Creating Call Accepted packet for LCN {LCN}", session.LCN);
-            
-            // Use proper X25PacketBuilder for accurate packet construction
-            var packetData = X25PacketBuilder.CreateCallAccepted(
-                lcn: session.LCN,
-                facilities: null
-            );
-
-            var callAcceptedPacket = new X25Packet(packetData);
-            callAcceptedPacket.Direction = PacketDirection.Receive;
-            callAcceptedPacket.Timestamp = DateTime.UtcNow;
-
-            var eventArgs = new X25PacketEventArgs
-            {
-                Packet = callAcceptedPacket,
-                Direction = PacketDirection.Receive,
-                Timestamp = DateTime.UtcNow
-            };
-
-            _logger.LogInformation("LocalTAD: Notifying PAD client with {PacketType} (PTI=0x{PTI:X2}) on LCN {LCN}", 
-                                 X25PacketTypeIdentifier.CallAccepted.GetDescription(),
-                                 (byte)X25PacketTypeIdentifier.CallAccepted, 
-                                 session.LCN);
-            RaisePacketGenerated(eventArgs);
+            _logger.LogInformation("LocalTAD: Accepting the call on LCN {LCN}", session.LCN);
+            RaiseOutput(new TadOutputEventArgs { Kind = TadOutputKind.CallAccepted, Lcn = session.LCN });
             _logger.LogDebug("LocalTAD: Sent Call Accepted on LCN {LCN}", session.LCN);
         }
 
@@ -336,27 +313,7 @@ namespace RetroIO.Protocols.X25.Protocols
         {
             if (rawData == null || rawData.Length == 0) return;
 
-            byte ps = session.SendSequence;
-            byte pr = session.RecvSequence;
-            session.SendSequence = (byte)((ps + 1) & 0x07);
-
-            var packetData = X25PacketBuilder.CreateDataPacket(
-                lcn: session.LCN,
-                ps: ps,
-                pr: pr,
-                userData: rawData
-            );
-
-            var dataPacket = new X25Packet(packetData);
-            dataPacket.Direction = PacketDirection.Receive;
-            dataPacket.Timestamp = DateTime.UtcNow;
-
-            RaisePacketGenerated(new X25PacketEventArgs
-            {
-                Packet = dataPacket,
-                Direction = PacketDirection.Receive,
-                Timestamp = DateTime.UtcNow
-            });
+            RaiseOutput(new TadOutputEventArgs { Kind = TadOutputKind.Data, Lcn = session.LCN, Data = rawData });
         }
 
         /// <summary>
@@ -379,30 +336,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 var chunk = new byte[chunkSize];
                 Array.Copy(allData, offset, chunk, 0, chunkSize);
 
-                byte ps = session.SendSequence;
-                byte pr = session.RecvSequence;
-                session.SendSequence = (byte)((ps + 1) & 0x07);
-
-                var packetData = X25PacketBuilder.CreateDataPacket(
-                    lcn: session.LCN,
-                    ps: ps,
-                    pr: pr,
-                    userData: chunk,
-                    mBit: moreData
-                );
-
-                var dataPacket = new X25Packet(packetData);
-                dataPacket.Direction = PacketDirection.Receive;
-                dataPacket.Timestamp = DateTime.UtcNow;
-
-                var eventArgs = new X25PacketEventArgs
-                {
-                    Packet = dataPacket,
-                    Direction = PacketDirection.Receive,
-                    Timestamp = DateTime.UtcNow
-                };
-
-                RaisePacketGenerated(eventArgs);
+                RaiseOutput(new TadOutputEventArgs { Kind = TadOutputKind.Data, Lcn = session.LCN, Data = chunk, MBit = moreData });
                 offset += chunkSize;
             }
 
@@ -415,27 +349,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         private void SendClearRequest(LocalTadSession session)
         {
-            // Use proper X25PacketBuilder for accurate clear request construction
-            var packetData = X25PacketBuilder.CreateClearRequest(
-                lcn: session.LCN,
-                clearingCause: 0x00, // Normal clearing
-                diagnosticCode: 0x00
-            );
-
-            var clearPacket = new X25Packet(packetData);
-            clearPacket.Direction = PacketDirection.Receive;
-            clearPacket.Timestamp = DateTime.UtcNow;
-
-            var eventArgs = new X25PacketEventArgs
-            {
-                Packet = clearPacket,
-                Direction = PacketDirection.Receive,
-                Timestamp = DateTime.UtcNow
-            };
-
-            RaisePacketGenerated(eventArgs);
-            _logger.LogDebug("LocalTAD: Sent {PacketType} on LCN {LCN}", 
-                           X25PacketTypeIdentifier.ClearRequest.GetDescription(), session.LCN);
+            // Normal clearing: cause 0, diagnostic 0.
+            RaiseOutput(new TadOutputEventArgs { Kind = TadOutputKind.Clear, Lcn = session.LCN, Cause = 0x00, Diagnostic = 0x00 });
+            _logger.LogDebug("LocalTAD: Cleared the call on LCN {LCN}", session.LCN);
             
             // Remove session
             lock (_sessionsLock)
@@ -446,11 +362,11 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Raise PacketGenerated event to notify service layer
+        /// Raise <see cref="OutputGenerated"/> to hand a request to the packet layer
         /// </summary>
-        private void RaisePacketGenerated(X25PacketEventArgs eventArgs)
+        private void RaiseOutput(TadOutputEventArgs eventArgs)
         {
-            PacketGenerated?.Invoke(this, eventArgs);
+            OutputGenerated?.Invoke(this, eventArgs);
         }
 
         /// <summary>
@@ -724,33 +640,9 @@ namespace RetroIO.Protocols.X25.Protocols
         {
             try
             {
-                // Create X.25 data packet with Q-bit set for X.29 control message
-                byte ps = session.SendSequence;
-                byte pr = session.RecvSequence;
-                session.SendSequence = (byte)((ps + 1) & 0x07);
-
-                var packetData = X25PacketBuilder.CreateDataPacket(
-                    lcn: session.LCN,
-                    ps: ps,
-                    pr: pr,
-                    userData: message,
-                    mBit: false,
-                    qBit: true, // Q-bit set for X.29 control message
-                    dBit: false
-                );
-
-                var packet = new X25Packet(packetData);
-                packet.Direction = PacketDirection.Transmit;
-                packet.Timestamp = DateTime.UtcNow;
-
-                var eventArgs = new X25PacketEventArgs
-                {
-                    Packet = packet,
-                    Direction = PacketDirection.Transmit,
-                    Timestamp = DateTime.UtcNow
-                };
-
-                RaisePacketGenerated(eventArgs);
+                // An X.29 control message travels in a data packet with the Q bit set. Without the
+                // bit the PAD takes it for text and prints it (a stray "~" for the SET above).
+                RaiseOutput(new TadOutputEventArgs { Kind = TadOutputKind.Data, Lcn = session.LCN, Data = message, QBit = true });
             }
             catch (Exception ex)
             {
@@ -932,9 +824,7 @@ namespace RetroIO.Protocols.X25.Protocols
         public DateTime StartTime { get; set; }
         public X3Parameters X3Parameters { get; set; } = new X3Parameters(); // X.3 parameters for this session
 
-        // X.25 modulo 8 sequence numbers for proper flow control
-        public byte SendSequence { get; set; } = 0;    // P(S) - next sequence number to send
-        public byte RecvSequence { get; set; } = 0;     // P(R) - next expected sequence from peer
+        // No P(S)/P(R) here: the packet layer that carries the call numbers its own packets.
 
         // Line buffer for accumulating characters until CR/LF
         public StringBuilder LineBuffer { get; } = new StringBuilder();
