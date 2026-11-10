@@ -309,6 +309,62 @@ namespace RetroIO.Protocols.Xmsg.Api.Node.Tests
             Assert.NotEqual(a.WirePort, b.WirePort);
         }
 
+        /// <summary>
+        /// A letter from the wire to a name a task claimed in the XROUT name table reaches that task,
+        /// whole: XSLET header first, the sender's data behind it.
+        /// </summary>
+        /// <remarks>
+        /// The frame is the captured connect letter's header and sub-header (frame 0 of the
+        /// connect-to capture, also in XroutLetterFramingTests), up to the letter at offset 28, with
+        /// a letter to <c>*CHAT</c> carrying a chat join behind it. Before 2026-11-10 the bridge
+        /// delivered a letter for port 0 to the kernel, which no task owns, and it was lost.
+        /// </remarks>
+        [Fact]
+        public void Inbound_LetterToAClaimedName_ReachesTheTaskWithItsHeader()
+        {
+            XmsgKernel kernel = new XmsgKernel(102, 0x1111, null);
+            XroutDirectory directory = new XroutDirectory();
+            XmsgKernelServer bridge = new XmsgKernelServer(kernel, "*KERNEL", 4) { Directory = directory };
+
+            XmsgPortNumber port;
+            kernel.OpenPort(out port);
+            XmsgMagicNumber mine;
+            kernel.ConvertPortToMagic(port, out mine);
+            Assert.Equal(XroutError.XRSOK, directory.RegisterName("*CHAT", kernel, mine));
+
+            Assert.True(bridge.AnswersName("*CHAT"));
+            Assert.False(bridge.AnswersName("*TADADM"));
+
+            byte[] join = { 1, 5, (byte)'R', (byte)'O', (byte)'N', (byte)'N', (byte)'Y', 0, 0 };
+            byte[] letter = XroutLetter.Build(0, "*CHAT", join);
+            byte[] head = FromHex("2113000E0066006700040400DA0D210086E400660000006702450400");
+            byte[] wire = new byte[head.Length + letter.Length];
+            head.CopyTo(wire, 0);
+            letter.CopyTo(wire, head.Length);
+
+            bridge.Handle(XmsgFrame.Parse(wire), new FakeTransport());
+
+            XmsgReceiveResult received = kernel.Receive(port, XmsgWaitOptions.None);
+            Assert.True(received.Received);
+            Assert.Equal(XmsgMessageType.XMROU, received.MessageType);
+            Assert.Equal(letter.Length, received.Length);
+            byte[] got = new byte[letter.Length];
+            int read;
+            kernel.Read(received.Message, got, 0, out read);
+            Assert.Equal(letter, got);
+        }
+
+        private static byte[] FromHex(string hex)
+        {
+            byte[] bytes = new byte[hex.Length / 2];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+            }
+
+            return bytes;
+        }
+
         private static XmsgFrame BuildFrame(XmsgMagicNumber from, XmsgMagicNumber to, byte[] payload)
         {
             XmsgFrame frame = new XmsgFrameBuilder()

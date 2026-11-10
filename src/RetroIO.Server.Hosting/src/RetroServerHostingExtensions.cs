@@ -96,27 +96,31 @@ public static class RetroServerHostingExtensions
         services.AddSingleton(firewallPersistence);
         services.AddSingleton(new FirewallRuleManager(firewallEngine, firewallPersistence));
 
+        // The limits and audit numbers come from security-config.json (defaults when it is missing).
+        Configuration.SecurityServerConfiguration security = ProtocolConfigurationLoader.ReadSettingsFile(
+            retroFsPath, ProtocolConfigurationLoader.SecurityConfigurationFileName, Configuration.SecurityServerConfiguration.GetDefault);
+
         string auditPath = Path.Combine(retroFsPath, "audit-logs");
         PathHelper.EnsureDirectory(auditPath);
         FileAuditLogger auditLogger = new FileAuditLogger(auditPath);
         SecurityEventEmitter securityEvents = new SecurityEventEmitter(
-            auditLogger, batchSize: 1000, flushInterval: TimeSpan.FromSeconds(5));
+            auditLogger, batchSize: security.AuditBatchSize, flushInterval: TimeSpan.FromSeconds(security.AuditFlushIntervalSeconds));
 
         services.AddSingleton(auditLogger);
         services.AddSingleton(securityEvents);
 
         RateLimitConfig rateLimitConfig = new RateLimitConfig
         {
-            PerUserRequestsPerSecond = 200,
-            PerUserMegabytesPerHour = 100,
-            SkipLimitsForAdmins = true,
-            PerIpRequestsPerSecond = 200,
-            PerIpMegabytesPerHour = 50,
-            ServerRequestsPerSecond = 1000,
-            ServerMegabytesPerHour = 10000,
+            PerUserRequestsPerSecond = security.PerUserRequestsPerSecond,
+            PerUserMegabytesPerHour = security.PerUserMegabytesPerHour,
+            SkipLimitsForAdmins = security.SkipLimitsForAdmins,
+            PerIpRequestsPerSecond = security.PerIpRequestsPerSecond,
+            PerIpMegabytesPerHour = security.PerIpMegabytesPerHour,
+            ServerRequestsPerSecond = security.ServerRequestsPerSecond,
+            ServerMegabytesPerHour = security.ServerMegabytesPerHour,
             StatePersistencePath = Path.Combine(retroFsPath, "ratelimit-state.json"),
-            PersistenceInterval = TimeSpan.FromMinutes(1),
-            RestoreStateOnStartup = true
+            PersistenceInterval = TimeSpan.FromSeconds(security.RateLimitSaveIntervalSeconds),
+            RestoreStateOnStartup = security.RestoreRateLimitStateOnStartup
         };
         InMemoryRateLimiter rateLimiter = new InMemoryRateLimiter(rateLimitConfig);
         services.AddSingleton(rateLimiter);

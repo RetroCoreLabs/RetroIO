@@ -3,6 +3,9 @@
 - name: API Reference
   href: api/
   topicHref: api/index.md
+- name: XMSG programs
+  href: xmsg/
+  topicHref: xmsg/index.md
 - name: Packages and guides
   href: packages/
   topicHref: packages/index.md

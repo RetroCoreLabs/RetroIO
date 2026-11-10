@@ -15,6 +15,8 @@ using RetroIO.Management.Api;
 using RetroIO.Protocols.DriveWire.Server;
 using RetroIO.Protocols.Econet.Server;
 using RetroIO.Protocols.Tnfs.Server;
+using RetroIO.Protocols.Xmsg.Hub.Server;
+using RetroIO.Protocols.Xmsg.Plugins.Server;
 using RetroIO.Server.Hosting;
 using RetroIO.Server.Hosting.Configuration;
 
@@ -72,7 +74,8 @@ public static class RetroServerComposition
         services.AddRetroSecurity(retroFsPath);
         services.AddRetroFileSystemBackend(configuration, retroFsPath);
 
-        if (opts.EnableTnfs)
+        // Both must be on: the host switch (code) and the Enabled switch in tnfs-config.json (the admin page).
+        if (opts.EnableTnfs && tnfsConfig.Enabled)
         {
             services.AddTnfsServer(o =>
             {
@@ -81,6 +84,10 @@ public static class RetroServerComposition
                 o.TcpPort = tnfsConfig.TcpPort;
                 o.EnableUdp = tnfsConfig.EnableUdp;
                 o.EnableTcp = tnfsConfig.EnableTcp;
+                o.MaxTcpConnections = tnfsConfig.MaxTcpConnections;
+                o.MaxSessions = tnfsConfig.MaxSessions;
+                o.MaxSessionsPerIP = tnfsConfig.MaxSessionsPerIP;
+                o.SessionTimeoutSeconds = tnfsConfig.SessionTimeoutSeconds;
             });
 
             if (opts.PrintBanners)
@@ -89,7 +96,8 @@ public static class RetroServerComposition
             }
         }
 
-        if (opts.EnableEconet)
+        // Both must be on: the host switch (code) and the Enabled switch in econet-config.json (the admin page).
+        if (opts.EnableEconet && econetConfig.Enabled)
         {
             // When econet-config declares Discs[], serve each as its own VFS mount (composite
             // backend). No-op otherwise, which leaves the shared single-root backend in place.
@@ -140,6 +148,75 @@ public static class RetroServerComposition
                 if (opts.PrintBanners)
                 {
                     ServerHostingBanners.PrintDriveWireConfiguration(driveWireConfig);
+                }
+            }
+        }
+
+        if (opts.EnableXmsgHub)
+        {
+            XmsgHubServerConfiguration hubConfig =
+                ProtocolConfigurationLoader.LoadXmsgHubConfiguration(retroFsPath, configuration);
+
+            if (hubConfig.Enabled)
+            {
+                services.AddXmsgHub(o =>
+                {
+                    o.Port = hubConfig.Port;
+                    o.BindAddress = hubConfig.BindAddress;
+                    o.Uplink = hubConfig.Uplink;
+                    o.CaptureFile = hubConfig.CaptureFile;
+                    o.FrameBufferSize = hubConfig.FrameBufferSize;
+                    o.LogBufferSize = hubConfig.LogBufferSize;
+                    o.StatusIntervalSeconds = hubConfig.StatusIntervalSeconds;
+                });
+
+                if (opts.PrintBanners)
+                {
+                    ServerHostingBanners.PrintXmsgHubConfiguration(hubConfig);
+                }
+            }
+        }
+
+        if (opts.EnableXmsgNode)
+        {
+            XmsgNodeServerConfiguration nodeConfig =
+                ProtocolConfigurationLoader.LoadXmsgNodeConfiguration(retroFsPath, configuration);
+
+            if (nodeConfig.Enabled)
+            {
+                services.AddXmsgNode(o =>
+                {
+                    // A number outside 1..65535 is left at zero, which the node refuses with a log line.
+                    o.SystemNumber = nodeConfig.SystemNumber > 0 && nodeConfig.SystemNumber <= ushort.MaxValue
+                        ? (ushort)nodeConfig.SystemNumber : (ushort)0;
+                    o.PeerSystemNumber = nodeConfig.PeerSystemNumber > 0 && nodeConfig.PeerSystemNumber <= ushort.MaxValue
+                        ? (ushort)nodeConfig.PeerSystemNumber : (ushort)0;
+                    o.Ethernet = nodeConfig.Ethernet;
+                    o.PluginBindAddress = nodeConfig.ProgramBindAddress;
+                    o.PluginPort = nodeConfig.ProgramPort;
+                    o.ProgramToken = nodeConfig.ProgramToken;
+
+                    // A level name that is not one of RetroServer's own is reported and the default kept,
+                    // never guessed at.
+                    Microsoft.Extensions.Logging.LogLevel programLevel;
+                    if (Enum.TryParse(nodeConfig.ProgramLogMinimum, true, out programLevel)
+                        && Enum.IsDefined(programLevel))
+                    {
+                        o.ProgramLogMinimum = programLevel;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"XMSG node: ProgramLogMinimum '{nodeConfig.ProgramLogMinimum}' is not a log level "
+                            + "(Trace, Debug, Information, Warning, Error, Critical, None); Information is used.");
+                    }
+                    o.Motd = nodeConfig.Motd;
+                    // The node's sequence and seed state lives under the data folder, never beside the exe.
+                    o.StateDirectory = System.IO.Path.Combine(retroFsPath, "xmsg");
+                });
+
+                if (opts.PrintBanners)
+                {
+                    ServerHostingBanners.PrintXmsgNodeConfiguration(nodeConfig);
                 }
             }
         }

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The COSMOS Ethernet hub: a virtual Ethernet segment that ND machines join over TCP, as a
+    library a program can host. RetroServer hosts it as a background service; xmsghub (the
+    RetroXmsg repository) runs it as a console program. Both use this one implementation.
+
+    It lived only inside xmsghub until 2026-11-10. It moved here so RetroServer can host it, switch
+    it on and off from its configuration, and show its log and the frames it carried.
+
+    The Ethernet package is referenced only to DECODE frames for the frame list (who sent to whom).
+    The hub itself repeats bytes and never interprets them.
+  -->
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Hub</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Hub</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Hub</RootNamespace>
+    <Description>The COSMOS Ethernet hub: a virtual Ethernet segment for ND machines over TCP, with hub chaining, pcap capture, a buffer of recent frames and a hosted service.</Description>
+    <PackageTags>retroio;xmsg;xmsg.hub;cosmos;ethernet</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ethernet\src\RetroIO.Protocols.Xmsg.Ethernet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

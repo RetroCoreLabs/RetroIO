@@ -79,7 +79,30 @@ namespace RetroIO.Protocols.Xmsg.Chat
         {
             if (directory == null) { throw new ArgumentNullException(nameof(directory)); }
 
-            XroutNameEntry[] all = directory.CopyNames();
+            return List(directory.CopyNames());
+        }
+
+        /// <summary>
+        /// Lists the chat rooms in a name table seen through the name-table interface.
+        /// </summary>
+        /// <param name="names">
+        /// The name table to read.
+        /// </param>
+        /// <returns>
+        /// One entry per room, with the SHORT name and the free-seat count.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="names"/> is null.
+        /// </exception>
+        public static IReadOnlyList<XroutNameEntry> List(IXroutNames names)
+        {
+            if (names == null) { throw new ArgumentNullException(nameof(names)); }
+
+            return List(names.CopyNames());
+        }
+
+        private static IReadOnlyList<XroutNameEntry> List(XroutNameEntry[] all)
+        {
             List<XroutNameEntry> rooms = new List<XroutNameEntry>();
 
             for (int i = 0; i < all.Length; i++)

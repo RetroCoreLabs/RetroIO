@@ -1,0 +1,208 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 1985-2026 Ronny Hansen
+// RetroCore Labs - https://github.com/RetroCoreLabs
+//
+// The connection between an XMSG node (RetroServer) and a plug-in server program.
+//
+// A plug-in is a program, in any language, that only runs server code: a chat server, a file
+// server, anything a SINTRAN machine reaches by name. It dials the node and keeps ONE two-way
+// stream open for its whole life. Closing the stream releases every port and name it held.
+//
+// THE BOUNDARY IS WHERE SINTRAN PUTS IT FOR ITS OWN TASKS. A plug-in never sees an XMSG frame. It
+// opens ports, claims names, sends from a port to a magic number and receives what arrives, the
+// calls of the COSMOS Programmer Guide (ND-60.164.3). Acknowledgements, sequence numbers, resends
+// and recovery stay in the node, once.
+//
+// Every request carries an id the plug-in chooses; the Result that answers it carries the same id.
+// Arrivals are not answers to anything and carry no id.
+//
+// Status numbers are the guide's own: an XMSG status (XmsgStatus: 1 = completed, negative = an
+// XMSG error such as XEIMA) for port and send calls, an XROUT status (XroutError: 0 = XRSOK) for
+// name calls. Decided 2026-11-10, see docs/XMSG-PLUGIN-SERVERS.md in the RetroServer repository.
+//
+// VERSIONING. Within this package (v1) the file only GROWS: new fields, new requests, new events,
+// new enum values. A field number is never reused or retyped; a removed field is "reserved". The
+// two sides tell each other what they can do in the Hello and its answer (protocol_revision and
+// features), and a program uses a newer request only when the node listed its feature. A request
+// the node does not know is answered with XEILF ("Unknown request."); an event a program does not
+// know must be ignored. A change that cannot be made by adding is a new package, v2, served next
+// to v1.
+
+syntax = "proto3";
+
+package retroio.xmsg.plugin.v1;
+
+option csharp_namespace = "RetroIO.Protocols.Xmsg.Plugins.Contracts";
+
+service XmsgPluginHost {
+  // One stream for the life of the plug-in. The first request must be a Hello.
+  rpc Connect(stream PluginRequest) returns (stream HostEvent);
+}
+
+message PluginRequest {
+  // Chosen by the plug-in, echoed in the Result. 0 is allowed but cannot be told apart.
+  uint32 id = 1;
+
+  oneof body {
+    Hello hello = 2;
+    OpenPort open_port = 3;
+    ClosePort close_port = 4;
+    RegisterName register_name = 5;
+    AdjustSeats adjust_seats = 6;
+    ClearName clear_name = 7;
+    Send send = 8;
+    SendLetter send_letter = 9;
+    // Feature "log". NOT answered: a log line gets no Result, so logging never waits on the node.
+    Log log = 10;
+  }
+}
+
+// First request on the stream.
+message Hello {
+  // What the plug-in calls itself, for logs and the admin page. Not an XMSG name.
+  string plugin_name = 1;
+  string version = 2;
+  // The secret RetroServer is configured with. When the node has a token set, a Hello without
+  // the same token is refused (XEPVR) and nothing else is accepted on the stream. Empty when the
+  // node runs without one (insecure mode).
+  string token = 3;
+  // The revision of this file the program was built with (see PROTOCOL_REVISION below). 0 from a
+  // program built before revisions existed.
+  uint32 protocol_revision = 4;
+  // What the program can do, by name. None are defined for programs yet; the field is here so it
+  // can be used without a new revision.
+  repeated string features = 5;
+}
+
+// The revision of this file. Raised by one each time something is added. The node and the program
+// each send theirs; neither refuses the other for being older or newer - features decide.
+//   1  2026-11-10  token, return_reason, protocol_revision, features, Log, NodeInfo.
+enum ProtocolRevision {
+  PROTOCOL_REVISION_UNSPECIFIED = 0;
+  PROTOCOL_REVISION_CURRENT = 1;
+}
+
+// How serious a log line is. THE SAME NAMES AND NUMBERS AS RetroServer's own log levels
+// (.NET Microsoft.Extensions.Logging.LogLevel), so a line keeps its level end to end and shows in
+// RetroServer's log view exactly as RetroServer's own lines do.
+enum LogLevel {
+  LOG_LEVEL_TRACE = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFORMATION = 2;
+  LOG_LEVEL_WARNING = 3;
+  LOG_LEVEL_ERROR = 4;
+  LOG_LEVEL_CRITICAL = 5;
+  // Only as a minimum level: nothing is logged.
+  LOG_LEVEL_NONE = 6;
+}
+
+// One log line from the program, kept by the node with its own log lines under the category
+// "XmsgProgram.<plugin_name>.<category>". Lines below the node's minimum level (NodeInfo.log_minimum)
+// are dropped by the node; a program should not send them.
+message Log {
+  LogLevel level = 1;
+  // The part of the program it came from, for example "Room" or "Startup". May be empty.
+  string category = 2;
+  string text = 3;
+  // When the program wrote it, in milliseconds since 1970-01-01 UTC. 0 means "use the arrival time".
+  int64 unix_time_ms = 4;
+  // An error's description and stack, when the line is about one. May be empty.
+  string exception = 5;
+}
+
+// What the node tells a program in the answer to its Hello.
+message NodeInfo {
+  // The node's revision of this file.
+  uint32 protocol_revision = 1;
+  // What the node can do, by name: "token", "returned-messages", "log".
+  repeated string features = 2;
+  // The lowest log level the node keeps from this program.
+  LogLevel log_minimum = 3;
+}
+
+// Opens a port on the node (XFOPN). The Result carries the port's magic number; the plug-in uses
+// that number from then on, in every call that names the port.
+message OpenPort {
+}
+
+// Closes a port the plug-in opened (XFCLS).
+message ClosePort {
+  uint32 magic = 1;
+}
+
+// Claims a name for one of the plug-in's ports. connection_port false is XSNAM (a plain named
+// port, seats ignored); true is XSCRS (a connection port with free connections, which XROUT spends
+// one of for every letter it forwards).
+message RegisterName {
+  string name = 1;
+  uint32 magic = 2;
+  bool connection_port = 3;
+  int32 seats = 4;
+  bool unique = 5;
+}
+
+// Adds to or takes from a connection port's free connections (XSNSP).
+message AdjustSeats {
+  string name = 1;
+  int32 delta = 2;
+}
+
+// Gives a name up.
+message ClearName {
+  string name = 1;
+}
+
+// Sends data from one of the plug-in's ports to a magic number (XFSND). flags are the XMSG send
+// options (XmsgSendFlags), for example secure.
+message Send {
+  uint32 from_magic = 1;
+  uint32 to_magic = 2;
+  bytes data = 3;
+  uint32 flags = 4;
+}
+
+// Sends a letter to a name (XSLET). The node puts the XSLET header in front of data, as XROUT does.
+message SendLetter {
+  string name = 1;
+  uint32 from_magic = 2;
+  bytes data = 3;
+}
+
+message HostEvent {
+  oneof body {
+    Result result = 1;
+    Arrived arrived = 2;
+  }
+}
+
+// The answer to one request.
+message Result {
+  uint32 answers_id = 1;
+  // XMSG status for port and send calls, XROUT status for name calls (see the top of this file).
+  int32 status = 2;
+  // The new port's magic number, for OpenPort; the node's system number, for Hello.
+  uint32 value = 3;
+  // Words for a person when something was refused.
+  string text = 4;
+  // Set only in the answer to a Hello that was accepted.
+  NodeInfo node = 5;
+}
+
+// A message arrived on one of the plug-in's ports.
+message Arrived {
+  // The plug-in's port it arrived on.
+  uint32 to_magic = 1;
+  // Who sent it, as the receiver would read it with XFMST.
+  uint32 from_magic = 2;
+  // The XMSG message type (XmsgMessageType): routed by XROUT (a letter, XSLET header first),
+  // normal, or high priority.
+  int32 message_type = 3;
+  // 4 is kept free: a receiver cannot read the secure option through the kernel calls, so it is not
+  // invented here.
+  reserved 4;
+  bytes data = 5;
+  // For a returned message (message_type XMTRE) only: why it came back, an XMSG error number
+  // (for example XEIMA, the port it was sent to is not open). from_magic then names the port the
+  // message could not reach, as on a SINTRAN machine. Zero for every other type.
+  int32 return_reason = 6;
+}

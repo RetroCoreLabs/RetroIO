@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Plugins.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Plugins.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- A real gRPC stream in memory: the node's service runs in a test server, the plug-in dials it. -->
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.Plugins.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Plugins.Client\src\RetroIO.Protocols.Xmsg.Plugins.Client.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Chat\src\RetroIO.Protocols.Xmsg.Chat.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hub\src\RetroIO.Protocols.Xmsg.Hub.csproj" />
+  </ItemGroup>
+
+</Project>

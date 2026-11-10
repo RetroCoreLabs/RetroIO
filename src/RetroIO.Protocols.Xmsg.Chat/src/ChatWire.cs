@@ -45,10 +45,39 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// change hidden inside a de-duplication.
         /// </remarks>
         public static void Send(
-            XmsgKernel kernel,
+            IXmsgKernel kernel,
             XmsgMagicNumber destination,
             XmsgPortNumber port,
             ChatMessage message)
+        {
+            Send(kernel, destination, port, message, XmsgSendFlags.None);
+        }
+
+        /// <summary>
+        /// Builds a chat message in a fresh buffer and sends it with the given send options.
+        /// </summary>
+        /// <param name="kernel">
+        /// The kernel the sending port belongs to.
+        /// </param>
+        /// <param name="destination">
+        /// Where it goes.
+        /// </param>
+        /// <param name="port">
+        /// The sending port.
+        /// </param>
+        /// <param name="message">
+        /// The message.
+        /// </param>
+        /// <param name="flags">
+        /// The send options; the server uses <see cref="XmsgSendFlags.Secure"/> so a message to a
+        /// member who has gone comes back (see <c>ChatServer.Poll</c>).
+        /// </param>
+        public static void Send(
+            IXmsgKernel kernel,
+            XmsgMagicNumber destination,
+            XmsgPortNumber port,
+            ChatMessage message,
+            XmsgSendFlags flags)
         {
             int size = message.ByteCount;
 
@@ -64,7 +93,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
 
             int written;
             kernel.Write(buffer, bytes, 0, false, out written);
-            kernel.Send(destination, port, XmsgSendFlags.None);
+            kernel.Send(destination, port, flags);
         }
     }
 }

@@ -53,12 +53,22 @@
     href: ../../RetroIO.Protocols.Xmsg.Ethernet/README.md
   - name: RetroIO.Protocols.Xmsg.Hdlc
     href: ../../RetroIO.Protocols.Xmsg.Hdlc/README.md
+  - name: RetroIO.Protocols.Xmsg.Hosting
+    href: ../../RetroIO.Protocols.Xmsg.Hosting/README.md
+  - name: RetroIO.Protocols.Xmsg.Hub
+    href: ../../RetroIO.Protocols.Xmsg.Hub/README.md
   - name: RetroIO.Protocols.Xmsg.Live
     href: ../../RetroIO.Protocols.Xmsg.Live/README.md
   - name: RetroIO.Protocols.Xmsg.Ndfs
     href: ../../RetroIO.Protocols.Xmsg.Ndfs/README.md
   - name: RetroIO.Protocols.Xmsg.Node
     href: ../../RetroIO.Protocols.Xmsg.Node/README.md
+  - name: RetroIO.Protocols.Xmsg.Plugins
+    href: ../../RetroIO.Protocols.Xmsg.Plugins/README.md
+  - name: RetroIO.Protocols.Xmsg.Plugins.Client
+    href: ../../RetroIO.Protocols.Xmsg.Plugins.Client/README.md
+  - name: RetroIO.Protocols.Xmsg.Plugins.Contracts
+    href: ../../RetroIO.Protocols.Xmsg.Plugins.Contracts/README.md
   - name: RetroIO.Protocols.Xmsg.Servers
     href: ../../RetroIO.Protocols.Xmsg.Servers/README.md
   - name: RetroIO.Protocols.Xmsg.Sync

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    For a C# plug-in server program: the gRPC connection to an XMSG node, and the XMSG kernel and
+    XROUT name calls a task-style server (the chat server) is written against, carried over it.
+    Design: docs/XMSG-PLUGIN-SERVERS.md in the RetroServer repository.
+  -->
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Plugins.Client</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Plugins.Client</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Plugins.Client</RootNamespace>
+    <Description>For C# XMSG plug-in server programs: the connection to the node, and the XMSG kernel and XROUT name calls carried over it.</Description>
+    <PackageTags>retroio;xmsg;xmsg.plugins;grpc</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" />
+    <!-- PluginLoggerProvider: a program's ordinary .NET log lines go to the node. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Plugins.Contracts\src\RetroIO.Protocols.Xmsg.Plugins.Contracts.csproj" />
+    <!-- The kernel and name-table interfaces, and the real kernel used for message buffers. Not the
+         node: a plug-in never runs one. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Api\src\RetroIO.Protocols.Xmsg.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

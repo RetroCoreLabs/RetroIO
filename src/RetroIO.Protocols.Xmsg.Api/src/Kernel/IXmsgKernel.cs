@@ -68,6 +68,15 @@ namespace RetroIO.Protocols.Xmsg.Api
     public interface IXmsgKernel
     {
         /// <summary>
+        /// Gets the number of the system this kernel runs on.
+        /// </summary>
+        /// <remarks>
+        /// Added 2026-11-10 so a task written against this interface (the chat server) can name
+        /// its own system without holding the in-process kernel class.
+        /// </remarks>
+        ushort SystemNumber { get; }
+
+        /// <summary>
         /// Opens a port and returns the identifier XMSG assigned to it (XFOPN).
         /// </summary>
         /// <param name="port">

@@ -23,7 +23,7 @@
   "build": {
     "content": [
       { "files": [ "api/**.yml", "api/index.md" ] },
-      { "files": [ "*.md", "toc.yml", "packages/toc.yml", "packages/index.md" ] },
+      { "files": [ "*.md", "toc.yml", "packages/toc.yml", "packages/index.md", "xmsg/*.md", "xmsg/toc.yml" ] },
       {
         "files": [
           "RetroIO.*/README.md",

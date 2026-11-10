@@ -1693,6 +1693,59 @@ namespace RetroIO.Protocols.Xmsg.Api
         }
 
         /// <summary>
+        /// Puts a returned message (XMTRE) on one of this kernel's ports: a message a port here sent
+        /// secure, which could not be delivered somewhere else and came back.
+        /// </summary>
+        /// <param name="destination">
+        /// The magic number of the port that sent it; it must name a port this kernel owns.
+        /// </param>
+        /// <param name="unreachable">
+        /// The magic number the message could not reach. The receiver reads it as the sender, as on a
+        /// SINTRAN machine (see <see cref="Undeliverable"/>).
+        /// </param>
+        /// <param name="userData">
+        /// The message's user data, as it was sent.
+        /// </param>
+        /// <param name="reason">
+        /// Why it came back; the receiver reads it as the receive status's extra word.
+        /// </param>
+        /// <returns>
+        /// A success status when the message was queued, or XEIMA when no such port is open.
+        /// </returns>
+        /// <remarks>
+        /// The counterpart of <see cref="Deliver(XmsgMagicNumber, XmsgMagicNumber, ReadOnlySpan{byte}, XmsgSendFlags)"/> for a return. A program connected to a node keeps
+        /// its buffers in a kernel of its own, and the return happened in the node's kernel; this is
+        /// how it reaches the program's port with its type, reason and sender intact.
+        /// </remarks>
+        public XmsgStatus DeliverReturned(
+            XmsgMagicNumber destination,
+            XmsgMagicNumber unreachable,
+            ReadOnlySpan<byte> userData,
+            XmsgError reason)
+        {
+            lock (_gate)
+            {
+                Port? target = FindByMagic(destination);
+                if (target == null)
+                {
+                    return XmsgStatus.Failure(XmsgError.XEIMA);
+                }
+
+                Buffer buffer = new Buffer(_nextMessageId++, userData.Length);
+                int written;
+                buffer.Data.Write(userData, 0, false, out written);
+                buffer.Sender = unreachable;
+                buffer.Secure = false;
+                buffer.Type = XmsgMessageType.XMTRE;
+                buffer.ReturnReason = (int)reason;
+
+                AddBuffer(buffer);
+                Enqueue(target, buffer);
+                return XmsgStatus.Completed;
+            }
+        }
+
+        /// <summary>
         /// Works out the type an arriving message is announced with.
         /// </summary>
         /// <param name="flags">
@@ -1749,25 +1802,56 @@ namespace RetroIO.Protocols.Xmsg.Api
             {
                 // A local system number with no such port open. A secure message comes back; a
                 // non-secure one is silently discarded and its buffer released.
-                return Undeliverable(buffer, source, XmsgError.XEIMA);
+                return Undeliverable(buffer, source, XmsgError.XEIMA, destination);
             }
 
             if (_sink == null)
             {
-                return Undeliverable(buffer, source, XmsgError.XENOS);
+                return Undeliverable(buffer, source, XmsgError.XENOS, destination);
             }
 
             XmsgStatus sent = _sink.Send(destination, buffer.Sender, buffer.Data.Data, flags);
             if (sent.IsError)
             {
-                return Undeliverable(buffer, source, sent.Error ?? XmsgError.XENOS);
+                return Undeliverable(buffer, source, sent.Error ?? XmsgError.XENOS, destination);
             }
 
             DropBuffer(buffer);
             return XmsgStatus.Completed;
         }
 
-        private XmsgStatus Undeliverable(Buffer buffer, Port source, XmsgError reason)
+        /// <summary>
+        /// Handles a message that could not be delivered: a secure one comes back to the sending port
+        /// as a returned message (XMTRE), a non-secure one is released.
+        /// </summary>
+        /// <param name="buffer">
+        /// The message.
+        /// </param>
+        /// <param name="source">
+        /// The sending port.
+        /// </param>
+        /// <param name="reason">
+        /// Why it could not be delivered; the receiver reads it as the returned message's status.
+        /// </param>
+        /// <param name="destination">
+        /// The magic number it was sent to.
+        /// </param>
+        /// <returns>
+        /// Completed for a secure message, otherwise the reason as a failure.
+        /// </returns>
+        /// <remarks>
+        /// <b>A RETURNED MESSAGE'S SENDER FIELD NAMES THE PORT IT COULD NOT REACH.</b> The COSMOS guide
+        /// does not say what the sender field holds on a returned message. MEASURED on D100,
+        /// 2026-08-18, by the SINTRAN chat server (NDInsight <c>SINTRAN/XMSG/SINTRAN-CHAT/CHATSV.PLNC</c>,
+        /// the note by its XMTRE branch): two members in a room, one killed, the other spoke; the
+        /// broadcast came back with status 16915 (XMXEIMA), and the magic number read from the returned
+        /// message was the DEAD MEMBER's - "it names slot 2", and slot 2 was reaped. Before 2026-11-10
+        /// this kernel left our own port in the field, so a server had no way to tell which member had
+        /// gone. Only the XEIMA case was measured; this applies the same rule to the other reasons a
+        /// send is refused here (no route, the link refused it), where the message was likewise
+        /// addressed to <paramref name="destination"/>.
+        /// </remarks>
+        private XmsgStatus Undeliverable(Buffer buffer, Port source, XmsgError reason, XmsgMagicNumber destination)
         {
             if (!buffer.Secure)
             {
@@ -1778,6 +1862,7 @@ namespace RetroIO.Protocols.Xmsg.Api
             buffer.Type = XmsgMessageType.XMTRE;
             buffer.ReturnReason = (int)reason;
             buffer.Secure = false;
+            buffer.Sender = destination;
             Enqueue(source, buffer);
             return XmsgStatus.Completed;
         }

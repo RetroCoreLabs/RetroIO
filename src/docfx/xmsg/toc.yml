@@ -1,0 +1,10 @@
+- name: XMSG programs
+  href: index.md
+- name: Building programs
+  href: programs-guide.md
+- name: Protocol reference
+  href: protocol-reference.md
+- name: Logging
+  href: logging.md
+- name: Versioning and extending
+  href: versioning.md

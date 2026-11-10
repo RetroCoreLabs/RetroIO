@@ -4,13 +4,69 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
 
 ## [Unreleased]
 
+### Added
+- RetroServer's own XMSG node (`XmsgNodeService`, in `RetroIO.Protocols.Xmsg.Plugins`): it joins an Ethernet segment, normally RetroServer's hub, and opens a gRPC port (default 127.0.0.1:5011) that client and server programs connect to. Settings in `xmsgnode-config.json` and `--XmsgNode:*`; off by default.
+- Programs connected to RetroServer can send log lines (`Log` request, `PluginLoggerProvider`); they are kept under the category `XmsgProgram.<name>` and filtered by `ProgramLogMinimum`.
+- The connection carries a protocol revision and a feature list both ways (`Hello.protocol_revision`, `NodeInfo`), so it can grow without breaking older programs.
+- Developer documents for XMSG programs: `docfx/xmsg/` (guide, protocol reference, logging, versioning).
+- `ChatClient(IXmsgKernel, IXroutNames, nickname)`, so a chat client can run on a connection to RetroServer.
+- **`RetroIO.Protocols.Xmsg.Hosting`**, a new package with everything a program needs to run an
+  XMSG node: the topology file, a node builder, the state-file names, the clean-shutdown steps (TAD
+  logouts, LAPB DISC), the restart announcer, the folder sync daemon and the file push and pull
+  drivers. It was internal code inside `xmsgrunner` (RetroXmsg); it moved so RetroServer and the
+  runner share one copy. The state files now go in a folder the caller names, not beside the exe.
+  The topology check also refuses a duplicate id or alias, a via chain naming an unknown node, an
+  unknown transport and a `self` that is not listed.
+- **`RetroIO.Protocols.Xmsg.Hub`**, a new package with the COSMOS Ethernet hub that ND machines
+  join over TCP. It was the `xmsghub` program in RetroXmsg; that program now uses this package.
+  New in the move: a listen address, counters per member, a buffer of recent frames (each kept
+  once, from its sender to the hub, with what the hub did with it), a buffer of log lines, a pcap
+  writer that writes to any stream, and `XmsgHubService`, a hosted service that reports `Failed`
+  instead of stopping its host when the port is taken.
+- RetroServer hosts the hub: `xmsghub-config.json` with the `XmsgHub:` keys, off by default
+  (`RetroServerOptions.EnableXmsgHub` leaves it out entirely). The management API has
+  `api/v1/xmsghub/` status, members, log, frames (JSON with the bytes) and `frames.pcap`, plus
+  settings to read and write. `ManagementApiClient` has a call for each. The server manager starts
+  and stops it with the other protocols.
+- **XMSG plug-in servers over gRPC**, three new packages. A plug-in is a separate program, in any
+  language, that runs only server code and dials the node over one two-way gRPC stream.
+  `RetroIO.Protocols.Xmsg.Plugins.Contracts` holds the `.proto` file. `RetroIO.Protocols.Xmsg.Plugins`
+  is the node's side: `PluginServerHost` does each request on the node's pump thread, and
+  `PluginConnectionService` is the gRPC service. `RetroIO.Protocols.Xmsg.Plugins.Client` is the C#
+  plug-in's side: `PluginConnection` gives the XMSG kernel and XROUT name calls carried over the
+  stream. The C# chat server runs on it, tested over a real in-memory gRPC stream.
+- `RetroIO.Protocols.Xmsg.Api`: `IXroutNames`, the XROUT name calls as an interface, and
+  `XroutDirectory.For(kernel)` for the in-process table. `IXmsgKernel.SystemNumber`. `XroutLetter`
+  builds and takes apart a letter. `XroutDirectory.ForwardLetter` forwards a letter that already
+  carries its header.
+- `RetroIO.Protocols.Xmsg.Node`: `IXmsgNameOwner`, so a bridge server can answer letters for names
+  in its own name table.
+- `RetroIO.Protocols.Xmsg.Chat`: `ChatServer(IXmsgKernel, IXroutNames)`, so the chat server runs
+  inside a node or as a plug-in.
+- `RetroIO.Protocols.Xmsg.Node`: `XmsgNodeHost.DeliverInboundOnPump`. When on, payloads from the
+  link are queued and handled inside `Pump()`, so a link that delivers on its own thread (the
+  Ethernet backends) no longer runs server code at the same time as the pump thread. Off by
+  default; the HDLC path is unchanged.
+
 ### Changed
+- `RetroIO.Protocols.Xmsg.Live`: `LapbLayerAdapter` and `EthernetLink` no longer write to the
+  console. Their lines (a refused send, a link failure, a shutdown handler that threw) go to the
+  new `Log` property, and are dropped when it is not set.
 - **SFTP mounts now check the server's host key and refuse an unknown one.** An existing `sftp://`
   mount that worked before stops working until you give it `?hostKey=SHA256:...` (the fingerprint
   from `ssh-keygen -lf`), or `?hostKeyCheck=accept-new` to remember the key on the first
   connection. `?hostKeyCheck=off` restores the old behaviour. See `RetroIO.Storage.Providers`.
 
 ### Fixed
+- A chat member whose program died kept its seat and nickname until the server restarted. The chat server now sends to members secure and removes a member when a message to it comes back, as the SINTRAN chat server does. The kernel's returned message now names the port it could not reach in its sender field (measured on D100), and the program connection carries returned messages (`Arrived.return_reason`).
+- `XmsgKernelServer` now sends and reads a task's port-to-port data as a SINTRAN task does on the wire: frame flags 0x82, role 0x84, XMCSM = the length, the data at offset 28, split into fragments when long. Measured from D100's own chat Welcome. It used a layout of its own before (offset 32, control service 0x01080000), which no machine was seen to use.
+- XMSG letters to a name. The node found the target server by scanning the frame for the first
+  text starting with `*`; it now reads the letter's name parameter (XSLET parameter 1, COSMOS guide
+  appendix B), so a name without a star can be reached. The in-process XROUT name table handed a
+  server the letter's data alone; it now hands over the whole letter with its XSLET header, as XROUT
+  does on a SINTRAN machine, and the chat server and the RR library find their data behind the
+  header, as the SINTRAN chat server does. A letter from the wire to a name a task claimed reached
+  nobody; with `XmsgKernelServer.Directory` set it now reaches that task.
 - `RetroIO.Storage.Ndfs`: **new files get a date.** The write paths stamped
   `ToNdDateOrUnset(DateTime.Now)`, which is 0 from 2014 on, so SINTRAN showed every file RetroIO
   wrote as created `?0, 1950`. New `NdDateTime.FitNdRange` and `NdDateTime.Now` move a date into

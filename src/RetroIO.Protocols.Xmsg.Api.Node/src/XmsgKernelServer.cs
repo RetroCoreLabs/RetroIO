@@ -35,7 +35,7 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
     /// letters and TAD sessions decoded elsewhere in this repo are unaffected - they are built by
     /// their own code paths.
     /// </remarks>
-    public sealed class XmsgKernelServer : IXmsgServer, IXmsgDatagramSink
+    public sealed class XmsgKernelServer : IXmsgServer, IXmsgDatagramSink, IXmsgNameOwner
     {
         private readonly XmsgKernel _kernel;
         private readonly List<XmsgFrame> _outbound;
@@ -46,7 +46,11 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         /// <summary>
         /// Where a datagram's trailer starts: 13-byte SINTRAN header plus 19-byte sub-header.
         /// </summary>
-        private const int TrailerOffset = 32;
+        /// <summary>
+        /// Where a message's data starts in a data frame, and where an XROUT letter starts: after the
+        /// SINTRAN header, the sub-header and the XMCSM word.
+        /// </summary>
+        private const int BodyOffset = 28;
 
         /// <summary>
         /// Initialises a bridge around a kernel.
@@ -111,7 +115,6 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             // It is drawn once per registration, so it stays the same for the life of this object.
             WirePort = new XmsgPortWordAllocator(wirePortSeed).Next(logicalPort);
 
-            ControlService = DefaultControlService;
             FrameFlags = DefaultFrameFlags;
             Role = DefaultRole;
         }
@@ -126,17 +129,16 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         public const ushort DefaultWirePortSeed = 0x2B67;
 
         /// <summary>
-        /// The XMCSM control word used for application traffic by default.
+        /// The sub-header frame-flags byte used by default: <see cref="XmsgFrameFlags.ControlBare"/>, 0x82.
         /// </summary>
         /// <remarks>
-        /// Chosen from the data-carrying frames in the captures. It is OUR choice for OUR traffic.
+        /// MEASURED. An ordinary port-to-port message from a SINTRAN task carries frame flags 0x82
+        /// and role 0x84: D100's own chat Welcome, captured off the wire (RetroXmsg
+        /// <c>ChatLoadRun.cs</c>), and every file-access message in the ND-to-ND capture. Until
+        /// 2026-11-10 this was 0x86 with control service 0x01080000 and the data at offset 32, a
+        /// layout of our own that no machine was seen to use.
         /// </remarks>
-        public const uint DefaultControlService = 0x01080000;
-
-        /// <summary>
-        /// The sub-header frame-flags byte used by default.
-        /// </summary>
-        public const byte DefaultFrameFlags = 0x86;
+        public const byte DefaultFrameFlags = (byte)XmsgFrameFlags.ControlBare;
 
         /// <summary>
         /// The sub-header role byte used by default.
@@ -152,6 +154,23 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         public XmsgKernel Kernel
         {
             get { return _kernel; }
+        }
+
+        /// <summary>
+        /// Gets or sets the XROUT name table the tasks on this kernel claim their names in, or null.
+        /// </summary>
+        /// <remarks>
+        /// With a table set, a letter from the wire to any name in it is handed to this server
+        /// (<see cref="AnswersName"/>) and forwarded whole, XSLET header first, to the task that
+        /// claimed the name - the same table the tasks' own letters to each other go through.
+        /// </remarks>
+        public XroutDirectory? Directory { get; set; }
+
+        /// <inheritdoc/>
+        public bool AnswersName(string name)
+        {
+            XroutDirectory? directory = Directory;
+            return directory != null && directory.Contains(name);
         }
 
         /// <summary>
@@ -222,10 +241,6 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             get { return int.MaxValue; }
         }
 
-        /// <summary>
-        /// Gets or sets the XMCSM control word stamped on outgoing application datagrams.
-        /// </summary>
-        public uint ControlService { get; set; }
 
         /// <summary>
         /// Gets or sets the frame-flags byte stamped on outgoing application datagrams.
@@ -237,45 +252,68 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         /// </summary>
         public byte Role { get; set; }
 
+
         /// <summary>
-        /// Extracts a datagram's raw trailer - the application payload - from its wire bytes.
+        /// Copies a letter frame's whole XROUT letter, from <see cref="BodyOffset"/> to the end.
+        /// </summary>
+        /// <param name="frame">
+        /// The letter frame.
+        /// </param>
+        /// <returns>
+        /// The letter: XSLET header, parameter blocks, then the sender's data.
+        /// </returns>
+        private static byte[] WholeLetter(XmsgFrame frame)
+        {
+            byte[]? raw = frame.RawBytes;
+            if (raw != null && raw.Length > BodyOffset)
+            {
+                byte[] letter = new byte[raw.Length - BodyOffset];
+                Array.Copy(raw, BodyOffset, letter, 0, letter.Length);
+                return letter;
+            }
+
+            // A frame built in memory has no raw bytes; its letter is the parsed body plus
+            // whatever followed the declared length.
+            return frame.GetBodyBytes();
+        }
+
+        /// <summary>
+        /// Takes an ordinary message's data out of a data frame.
         /// </summary>
         /// <param name="frame">
         /// The received frame.
         /// </param>
         /// <returns>
-        /// The payload bytes, or an empty array when the frame carries none.
+        /// The data, or an empty array when the frame carries none.
         /// </returns>
         /// <remarks>
-        /// The trailer starts at absolute offset 32: the 14-byte SINTRAN header, the 14-byte XMSG
-        /// sub-header, and the 4-byte XROUT header, whose big-endian length word (wire 30-31)
-        /// bounds it. The old model reached the same 32 by a wrong sum (13 + 19) and read that
-        /// same length byte as a sub-header "XMLEN". Falling back to the whole remainder when the
-        /// length overruns keeps a malformed frame from throwing here, and falling back to
-        /// TrailingBytes covers a frame that was constructed rather than received.
+        /// MEASURED, D100's own chat Welcome off the wire (RetroXmsg <c>ChatLoadRun.cs</c>):
+        /// <c>2113000E4E1F0064047F000A8BD2 21 00 82 84 4E1F 0211 0064 0632 000A ...</c> - XMCSM at wire
+        /// 26-27 is the data's length (0x000A, ten bytes), and the data starts at wire 28. The same rule
+        /// holds for every file-access message in the 2026-08-04 captures
+        /// (<see cref="IXmsgServerTransport.BuildFragmentedBodyDatagram"/>). A message that came in
+        /// fragments has been put back together by the node before it gets here, so XMCSM is the
+        /// whole length. A frame whose XMCSM claims more than it carries is cut to what it carries;
+        /// that is a damaged frame, not a convention.
         /// </remarks>
-        private static byte[] ExtractTrailer(XmsgFrame frame)
+        private static byte[] ExtractBody(XmsgFrame frame)
         {
-            byte[]? raw = frame.RawBytes;
-            if (raw == null || raw.Length <= TrailerOffset)
+            byte[] raw = frame.RawBytes ?? frame.ToArray();
+            if (raw.Length <= BodyOffset || frame.SubHeader == null)
             {
-                // A frame that was never serialised - one built in memory rather than parsed off
-                // the wire - has no raw bytes, so fall back to whatever the builder attached.
-                return frame.TrailingBytes ?? Array.Empty<byte>();
+                return Array.Empty<byte>();
             }
 
-            int available = raw.Length - TrailerOffset;
-            // Wire 30-31 is the XROUT declared length; its low byte is what used to be read as
-            // the sub-header's XMLEN, so this keeps the identical value.
-            int length = frame.SubHeader != null ? raw[TrailerOffset - 1] : available;
-            if (length > available || length < 0)
+            int available = raw.Length - BodyOffset;
+            int length = frame.SubHeader.Xmcsm;
+            if (length > available)
             {
                 length = available;
             }
 
-            byte[] payload = new byte[length];
-            Array.Copy(raw, TrailerOffset, payload, 0, length);
-            return payload;
+            byte[] body = new byte[length];
+            Array.Copy(raw, BodyOffset, body, 0, length);
+            return body;
         }
 
         /// <summary>
@@ -393,14 +431,29 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             // according to the XMCSM class - as an XROUT letter or a TAD chain - and only leaves
             // TrailingBytes populated when it could not. Application payload is opaque to all of
             // that, so reading the decoded view would silently deliver nothing.
-            byte[] payload = ExtractTrailer(incoming);
+            byte[] payload = ExtractBody(incoming);
 
             // The role byte is the send-option high byte, so the options the sender used come back
             // out of it - which is how a secure message stays secure across the wire.
             XmsgSendFlags flags = (XmsgSendFlags)XmsgOptionConversion.FromRoleByte(
                 (XmsgSendOptions)incoming.SubHeader.Role);
 
-            _kernel.Deliver(destination, sender, payload, flags);
+            XroutDirectory? directory = Directory;
+            if (incoming.SubHeader.DestinationPort == 0 && directory != null)
+            {
+                // A letter to a NAME (XSLET to port 0, the XROUT port). XROUT forwards the whole
+                // letter, header included, so the task gets exactly what a SINTRAN task gets
+                // (XroutLetter). The letter starts at frame offset 28: serial, service, length,
+                // the parameter blocks, then the sender's data (XroutLetterFramingTests).
+                //
+                // NOT DONE: when the name is unknown or full, a SINTRAN XROUT answers the sender
+                // with an XROUT error; this returns nothing. Listed in BUGS.md.
+                directory.ForwardLetter(sender, WholeLetter(incoming));
+            }
+            else
+            {
+                _kernel.Deliver(destination, sender, payload, flags);
+            }
 
             XmsgFrame[] result = _outbound.ToArray();
             _outbound.Clear();
@@ -484,8 +537,10 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         /// </returns>
         /// <remarks>
         /// The datagram is queued, not sent. Whichever of <see cref="Handle"/> or
-        /// <see cref="DrainPending"/> is called next returns it, once. It is stamped with <see cref="ControlService"/> and
-        /// <see cref="FrameFlags"/>, and built as a fresh message rather than an answer.
+        /// <see cref="DrainPending"/> is called next returns it, once. It is laid out as a SINTRAN task's
+        /// ordinary message is on the wire: the data at offset 28, its length as XMCSM,
+        /// <see cref="FrameFlags"/> (see <see cref="DefaultFrameFlags"/> for the measurement), split into
+        /// fragments when it is too long for one frame. It is built as a fresh message, not an answer.
         /// </remarks>
         public XmsgStatus Send(
             XmsgMagicNumber destination,
@@ -500,21 +555,31 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
                 return XmsgStatus.Failure(XmsgError.XENRU);
             }
 
-            XmsgSendOptions role = XmsgOptionConversion.ToRoleByte((XmsgOption)flags);
+            // SECURE IS NOT A WIRE BIT. It tells the SENDING machine to return the message (XMTRE)
+            // when it cannot be delivered; the frame itself does not carry it. MEASURED: CHATSV.PLNC
+            // sends every message with 2**XFSEC (its one xmpsend call), and D100's Welcome from that
+            // server came off the wire with role 0x84, no 0x02 bit (RetroXmsg ChatLoadRun.cs). The
+            // secure bit has never been seen set in any capture (see XmsgSendOptions.Secure).
+            // Not proven: that the capture was made with exactly that build of CHATSV; its notes
+            // date the secure change (2026-08-18) before the load run.
+            XmsgSendOptions role = XmsgOptionConversion.ToRoleByte((XmsgOption)(flags & ~XmsgSendFlags.Secure));
 
-            XmsgFrame frame = _transport.BuildDatagram(
+            IReadOnlyList<XmsgFrame> frames = _transport.BuildFragmentedBodyDatagram(
                 destination.SystemNumber,
                 destination.SystemNumber,
                 destination.PortWord,
                 sender.PortWord,
-                ControlService,
                 FrameFlags,
                 (byte)(role == XmsgSendOptions.None ? (XmsgSendOptions)Role : role),
                 userData.ToArray(),
                 // ORIGINATED: the API's Send is a fresh message, not an answer to a received one.
                 XmsgAnsweredFlags1.None);
 
-            _outbound.Add(frame);
+            for (int i = 0; i < frames.Count; i++)
+            {
+                _outbound.Add(frames[i]);
+            }
+
             return XmsgStatus.Completed;
         }
     }

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The toolkit every XMSG program shares - server, client and manager ("-mon") alike. First part: the
+    command framework (register a command with its parameters, SINTRAN abbreviations, generated help,
+    output lines). Plan: docs/PLAN-XMSG-X25.md in the RetroServer repository, "XMSG program toolkit".
+  -->
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Programs</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Programs</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Programs</RootNamespace>
+    <Description>What every XMSG program shares: commands with parameters, SINTRAN abbreviations and generated help.</Description>
+    <PackageTags>retroio;xmsg;commands</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

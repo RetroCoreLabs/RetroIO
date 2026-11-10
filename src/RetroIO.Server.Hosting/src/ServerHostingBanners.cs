@@ -120,6 +120,47 @@ public static class ServerHostingBanners
     }
 
     /// <summary>
+    /// Prints the COSMOS Ethernet hub settings in a box.
+    /// </summary>
+    /// <param name="config">
+    /// The settings to print.
+    /// </param>
+    public static void PrintXmsgHubConfiguration(XmsgHubServerConfiguration config)
+    {
+        ConsoleBox.Top();
+        ConsoleBox.Title("XMSG ETHERNET HUB CONFIGURATION");
+        ConsoleBox.Divider();
+        ConsoleBox.LabelValue("  Listen:          ", $"{config.BindAddress}:{config.Port}");
+        ConsoleBox.LabelValue("  Uplink:          ", string.IsNullOrWhiteSpace(config.Uplink) ? "none" : config.Uplink);
+        ConsoleBox.LabelValue("  Capture file:    ", string.IsNullOrWhiteSpace(config.CaptureFile) ? "none" : config.CaptureFile);
+        ConsoleBox.LabelValue("  Frames kept:     ", config.FrameBufferSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        ConsoleBox.Bottom();
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// Prints RetroServer's XMSG node settings in a box.
+    /// </summary>
+    /// <param name="config">
+    /// The settings to print.
+    /// </param>
+    public static void PrintXmsgNodeConfiguration(XmsgNodeServerConfiguration config)
+    {
+        ConsoleBox.Top();
+        ConsoleBox.Title("XMSG NODE CONFIGURATION");
+        ConsoleBox.Divider();
+        ConsoleBox.LabelValue("  System number:   ", config.SystemNumber.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        ConsoleBox.LabelValue("  Peer:            ", config.PeerSystemNumber.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        ConsoleBox.LabelValue("  Ethernet:        ", config.Ethernet);
+        ConsoleBox.LabelValue("  Programs:        ", $"{config.ProgramBindAddress}:{config.ProgramPort}");
+        // Never print the token itself; only whether one is set.
+        ConsoleBox.LabelValue("  Program logs:    ", config.ProgramLogMinimum + " and above");
+        ConsoleBox.LabelValue("  Program token:   ", string.IsNullOrEmpty(config.ProgramToken) ? "none (insecure mode)" : "set");
+        ConsoleBox.Bottom();
+        Console.WriteLine();
+    }
+
+    /// <summary>
     /// Prints the DriveWire server settings and drives in a box.
     /// </summary>
     /// <param name="config">

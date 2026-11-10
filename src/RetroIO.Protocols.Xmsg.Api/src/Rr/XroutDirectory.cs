@@ -68,6 +68,29 @@ namespace RetroIO.Protocols.Xmsg.Api
         }
 
         /// <summary>
+        /// Gives a view of this table for the tasks on one kernel: the name-table interface a
+        /// task-style server is written against.
+        /// </summary>
+        /// <param name="kernel">
+        /// The kernel whose ports the names will belong to.
+        /// </param>
+        /// <returns>
+        /// The view. Every call goes straight to this table.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="kernel"/> is null.
+        /// </exception>
+        public IXroutNames For(XmsgKernel kernel)
+        {
+            if (kernel == null)
+            {
+                throw new ArgumentNullException(nameof(kernel));
+            }
+
+            return new KernelNames(this, kernel);
+        }
+
+        /// <summary>
         /// Creates a connection port with a capacity, as the XSCRS service does.
         /// </summary>
         /// <param name="name">
@@ -194,7 +217,8 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// The magic number of the sending port, which the recipient will read from the message.
         /// </param>
         /// <param name="letter">
-        /// The letter body - whatever the two programs have agreed on, typically an identification.
+        /// The sender's own data - whatever the two programs have agreed on, typically an
+        /// identification. The XSLET header is put in front of it here.
         /// </param>
         /// <returns>
         /// <see cref="XroutError.XRSOK"/> when the letter was forwarded,
@@ -204,8 +228,113 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// <remarks>
         /// The letter is delivered with the FORWARD option so the recipient sees the original
         /// sender rather than XROUT - which is what lets the server answer the caller directly.
+        /// <para>
+        /// The recipient gets the WHOLE letter, XSLET header first and the data behind it, because
+        /// that is what XROUT forwards on a SINTRAN machine (see <see cref="XroutLetter"/>). The
+        /// server finds the data with <see cref="XroutLetter.UserDataOffset"/>. Until 2026-11-10 the
+        /// data was delivered alone.
+        /// </para>
         /// </remarks>
         public XroutError SendLetter(string name, XmsgMagicNumber sender, ReadOnlySpan<byte> letter)
+        {
+            if (name == null)
+            {
+                throw new ArgumentNullException(nameof(name));
+            }
+
+            // Serial 0: this in-process table has no request to echo it back on.
+            return Forward(name, sender, XroutLetter.Build(0, name, letter));
+        }
+
+        /// <summary>
+        /// Forwards a letter that already carries its XSLET header, as XROUT does with a letter that
+        /// arrived from another machine.
+        /// </summary>
+        /// <param name="sender">
+        /// The magic number of the sending port.
+        /// </param>
+        /// <param name="wholeLetter">
+        /// The letter exactly as it arrived: XSLET header, parameter blocks, then the data.
+        /// </param>
+        /// <returns>
+        /// As <see cref="SendLetter"/>; <see cref="XroutError.XRUNN"/> also when the letter carries
+        /// no name.
+        /// </returns>
+        /// <remarks>
+        /// The name is read from the letter itself, string parameter 1, and the letter is delivered
+        /// whole, header included - the server finds its data behind the header.
+        /// </remarks>
+        public XroutError ForwardLetter(XmsgMagicNumber sender, ReadOnlySpan<byte> wholeLetter)
+        {
+            string name;
+            if (!XroutLetter.TryReadName(wholeLetter, out name))
+            {
+                return XroutError.XRUNN;
+            }
+
+            return Forward(name, sender, wholeLetter.ToArray());
+        }
+
+        /// <summary>
+        /// Says whether a name is registered.
+        /// </summary>
+        /// <param name="name">
+        /// The name.
+        /// </param>
+        /// <returns>
+        /// True when the name is in the table.
+        /// </returns>
+        public bool Contains(string name)
+        {
+            return name != null && Find(name) != null;
+        }
+
+        /// <summary>
+        /// This table, seen from the tasks on one kernel.
+        /// </summary>
+        private sealed class KernelNames : IXroutNames
+        {
+            private readonly XroutDirectory _table;
+            private readonly XmsgKernel _kernel;
+
+            internal KernelNames(XroutDirectory table, XmsgKernel kernel)
+            {
+                _table = table;
+                _kernel = kernel;
+            }
+
+            public XroutError RegisterName(string name, XmsgMagicNumber magic)
+            {
+                return _table.RegisterName(name, _kernel, magic);
+            }
+
+            public XroutError RegisterConnectionPort(string name, XmsgMagicNumber magic, int maximumConnections, bool unique)
+            {
+                return _table.RegisterConnectionPort(name, _kernel, magic, maximumConnections, unique);
+            }
+
+            public XroutError AdjustFreeConnections(string name, int delta)
+            {
+                return _table.AdjustFreeConnections(name, delta);
+            }
+
+            public bool ClearName(string name)
+            {
+                return _table.ClearName(name);
+            }
+
+            public XroutError SendLetter(string name, XmsgMagicNumber sender, ReadOnlySpan<byte> letter)
+            {
+                return _table.SendLetter(name, sender, letter);
+            }
+
+            public XroutNameEntry[] CopyNames()
+            {
+                return _table.CopyNames();
+            }
+        }
+
+        private XroutError Forward(string name, XmsgMagicNumber sender, byte[] whole)
         {
             Entry? entry = Find(name);
             if (entry == null)
@@ -219,7 +348,7 @@ namespace RetroIO.Protocols.Xmsg.Api
             }
 
             XmsgStatus delivered = entry.Kernel.Deliver(
-                entry.Magic, sender, letter, XmsgSendFlags.Forward);
+                entry.Magic, sender, whole, XmsgSendFlags.Forward);
 
             if (delivered.IsError)
             {

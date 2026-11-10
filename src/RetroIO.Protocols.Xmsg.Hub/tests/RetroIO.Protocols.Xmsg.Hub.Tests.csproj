@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Hub.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Hub.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.Hub.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 152 frames, machine-to-hub direction, from the LIST-NAMES capture of 2026-11-10 (D102 asks D100). -->
+    <None Include="TestData\list-names-2026-11-10.hex" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

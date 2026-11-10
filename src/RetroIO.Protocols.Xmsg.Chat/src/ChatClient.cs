@@ -27,8 +27,8 @@ namespace RetroIO.Protocols.Xmsg.Chat
     /// </remarks>
     public sealed class ChatClient
     {
-        private readonly XmsgKernel _kernel;
-        private readonly XroutDirectory _directory;
+        private readonly IXmsgKernel _kernel;
+        private readonly IXroutNames _directory;
         // NOT readonly: a rename the server accepted changes it - see Poll. The chosen name at
         // construction is only the opening bid.
         private string _nickname;
@@ -59,15 +59,39 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// Thrown when <paramref name="nickname"/> is empty.
         /// </exception>
         public ChatClient(XmsgKernel kernel, XroutDirectory directory, string nickname)
+            : this(kernel, BindNames(kernel, directory), nickname)
+        {
+        }
+
+        /// <summary>
+        /// Initialises a chat client on any XMSG kernel and XROUT name calls - for example a
+        /// connection to RetroServer, whose node is the XMSG machine the client's port lives on.
+        /// </summary>
+        /// <param name="kernel">
+        /// The kernel this user's port belongs to.
+        /// </param>
+        /// <param name="names">
+        /// The XROUT calls used to post the join letter.
+        /// </param>
+        /// <param name="nickname">
+        /// The name to be known by in the room.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when any argument is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="nickname"/> is empty.
+        /// </exception>
+        public ChatClient(IXmsgKernel kernel, IXroutNames names, string nickname)
         {
             if (kernel == null)
             {
                 throw new ArgumentNullException(nameof(kernel));
             }
 
-            if (directory == null)
+            if (names == null)
             {
-                throw new ArgumentNullException(nameof(directory));
+                throw new ArgumentNullException(nameof(names));
             }
 
             if (nickname == null)
@@ -81,9 +105,36 @@ namespace RetroIO.Protocols.Xmsg.Chat
             }
 
             _kernel = kernel;
-            _directory = directory;
+            _directory = names;
             _nickname = nickname;
             _scratch = new byte[1024];
+        }
+
+        /// <summary>
+        /// Binds a name table to a local kernel, checking both first so a null reports the right name.
+        /// </summary>
+        /// <param name="kernel">
+        /// The local kernel.
+        /// </param>
+        /// <param name="directory">
+        /// The name table.
+        /// </param>
+        /// <returns>
+        /// The XROUT calls for tasks on <paramref name="kernel"/>.
+        /// </returns>
+        private static IXroutNames BindNames(XmsgKernel kernel, XroutDirectory directory)
+        {
+            if (kernel == null)
+            {
+                throw new ArgumentNullException(nameof(kernel));
+            }
+
+            if (directory == null)
+            {
+                throw new ArgumentNullException(nameof(directory));
+            }
+
+            return directory.For(kernel);
         }
 
         /// <summary>

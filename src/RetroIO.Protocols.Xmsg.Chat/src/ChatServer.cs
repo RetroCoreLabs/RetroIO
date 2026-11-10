@@ -35,8 +35,8 @@ namespace RetroIO.Protocols.Xmsg.Chat
     /// </remarks>
     public sealed class ChatServer
     {
-        private readonly XmsgKernel _kernel;
-        private readonly XroutDirectory _directory;
+        private readonly IXmsgKernel _kernel;
+        private readonly IXroutNames _directory;
 
         // THE RULES LIVE IN ChatRoom, not here. Who is in a room, which names are free and who
         // must be told what are identical for a port conversation and for somebody typing at a
@@ -94,6 +94,24 @@ namespace RetroIO.Protocols.Xmsg.Chat
         /// Thrown when either argument is null.
         /// </exception>
         public ChatServer(XmsgKernel kernel, XroutDirectory directory)
+            : this(kernel, BindNames(kernel, directory))
+        {
+        }
+
+        /// <summary>
+        /// Initialises a chat server on any XMSG kernel and XROUT name table: the in-process ones,
+        /// or a plug-in program's connection to RetroServer.
+        /// </summary>
+        /// <param name="kernel">
+        /// The kernel the server's port belongs to.
+        /// </param>
+        /// <param name="directory">
+        /// The name table to register the name with.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when either argument is null.
+        /// </exception>
+        public ChatServer(IXmsgKernel kernel, IXroutNames directory)
         {
             if (kernel == null)
             {
@@ -124,6 +142,36 @@ namespace RetroIO.Protocols.Xmsg.Chat
             _scratch = new byte[ChatMessageBufferSize];
             _name = string.Empty;
             _greeting = string.Empty;
+        }
+
+        /// <summary>
+        /// Ties an in-process name table to the kernel whose ports it will name.
+        /// </summary>
+        /// <param name="kernel">
+        /// The kernel.
+        /// </param>
+        /// <param name="directory">
+        /// The table.
+        /// </param>
+        /// <returns>
+        /// The table's view for that kernel.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when either argument is null.
+        /// </exception>
+        private static IXroutNames BindNames(XmsgKernel kernel, XroutDirectory directory)
+        {
+            if (kernel == null)
+            {
+                throw new ArgumentNullException(nameof(kernel));
+            }
+
+            if (directory == null)
+            {
+                throw new ArgumentNullException(nameof(directory));
+            }
+
+            return directory.For(kernel);
         }
 
         /// <summary>
@@ -308,7 +356,7 @@ namespace RetroIO.Protocols.Xmsg.Chat
             // Claim the name with NO seats, then add them one at a time - the sequence the real
             // servers use. Registering with the total up front would work here, but it would not be
             // what the machine does, and this class is meant to be readable next to a real capture.
-            XroutError claimed = _directory.RegisterConnectionPort(name, _kernel, _magic, 0, true);
+            XroutError claimed = _directory.RegisterConnectionPort(name, _magic, 0, true);
             if (claimed != XroutError.XRSOK)
             {
                 _kernel.ClosePort(_port);
@@ -371,8 +419,42 @@ namespace RetroIO.Protocols.Xmsg.Chat
                 _kernel.Read(arrived.Message, _scratch, 0, out read);
                 _kernel.ReleaseBuffer(arrived.Message);
 
+                // ONE OF OUR OWN MESSAGES CAME BACK: the member it was for has gone - their program
+                // ended, their terminal died - and the port is closed. Its sender field names that
+                // member (MEASURED on D100 2026-08-18, CHATSV.PLNC by its XMTRE branch: "it names
+                // slot 2"), so they leave the room exactly as with a Leave: the room is told and the
+                // seat comes back. Without this a dead member keeps the seat and the nickname until
+                // the server restarts. The body is our own message and is NOT decoded - it would
+                // read as the dead member saying what we said.
+                if (arrived.MessageType == XmsgMessageType.XMTRE)
+                {
+                    if (wasMember)
+                    {
+                        HandleLeave(sender);
+                    }
+
+                    handled++;
+                    continue;
+                }
+
+                // A letter XROUT forwarded still wears its XSLET header, and the chat message
+                // starts behind it, at 4 + the header's length word - the same rule as the PLANC
+                // server's receive loop (CHATSV.PLNC, "A LETTER ARRIVES WEARING ITS XROUT HEADER").
+                // A message sent port to port has no header. A letter with nothing behind the
+                // header carries no chat message; the seat it spent is settled below all the same.
+                int start = 0;
+                if (spentASeat)
+                {
+                    start = XroutLetter.UserDataOffset(new ReadOnlySpan<byte>(_scratch, 0, read));
+                    if (start < 0 || start > read)
+                    {
+                        start = read;
+                    }
+                }
+
                 ChatMessage message;
-                if (ChatMessage.TryDecode(new ReadOnlySpan<byte>(_scratch, 0, read), out message))
+                if (start < read
+                    && ChatMessage.TryDecode(new ReadOnlySpan<byte>(_scratch, start, read - start), out message))
                 {
                     Handle(sender, message);
                 }
@@ -1198,7 +1280,10 @@ namespace RetroIO.Protocols.Xmsg.Chat
         {
             // Shared with ChatClient.SendToServer - see ChatWire, which is where this sequence
             // lives now.
-            ChatWire.Send(_kernel, destination, _port, message);
+            // SECURE, as the SINTRAN server sends (CHATSV.PLNC, the note on sendFlags): a send to a
+            // port that has gone is accepted without complaint, so the only way to learn a member
+            // died is to have the message come back. Poll reaps them when it does.
+            ChatWire.Send(_kernel, destination, _port, message, XmsgSendFlags.Secure);
         }
 
         private void ReleaseSeat()

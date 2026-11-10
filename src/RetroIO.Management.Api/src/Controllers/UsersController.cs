@@ -51,38 +51,7 @@ public class UsersController : ControllerBase
             for (int i = 0; i < users.Length; i++)
             {
                 var user = users[i];
-                var userGroups = new List<string>();
-
-                for (int j = 0; j < user.Groups.Count; j++)
-                {
-                    var groupId = user.Groups[j];
-                    for (int k = 0; k < groups.Length; k++)
-                    {
-                        if (groups[k].GroupId == groupId)
-                        {
-                            userGroups.Add(groups[k].GroupName);
-                            break;
-                        }
-                    }
-                }
-
-                userDtos.Add(new UserDto
-                {
-                    UserId = user.UserId.ToString(),
-                    Username = user.Username,
-                    DisplayName = user.DisplayName,
-                    Email = user.Email,
-                    IsActive = user.IsActive,
-                    IsAdmin = user.IsAdmin,
-                    AllowTnfs = user.EffectiveAllowTnfs,
-                    AllowEconet = user.EffectiveAllowEconet,
-                    Groups = userGroups,
-                    CreatedAt = user.CreatedAt,
-                    LastLoginAt = user.LastLoginAt,
-                    LastLoginTnfsAt = user.LastLoginTnfsAt,
-                    LastLoginEconetAt = user.LastLoginEconetAt,
-                    LastFailedLoginAt = user.LastFailedLoginAt
-                });
+                userDtos.Add(ToDto(user, groups));
             }
 
             var response = new UserListResponse
@@ -108,6 +77,13 @@ public class UsersController : ControllerBase
     {
         try
         {
+            RetroGroup[] allGroups = await _idp.ListGroupsAsync();
+            string? groupProblem = ParseGroupIds(request.GroupIds, allGroups, out List<Guid> groupIds);
+            if (groupProblem != null)
+            {
+                return BadRequest(ApiResponse<UserDto>.Fail(groupProblem, "UNKNOWN_GROUP"));
+            }
+
             var userId = Guid.NewGuid();
             var newUser = new RetroUser
             {
@@ -118,28 +94,26 @@ public class UsersController : ControllerBase
                 Groups = new List<Guid>(),
                 IsActive = true,
                 IsAdmin = false,
-                AllowTnfs = true,
-                AllowEconet = false,
+                // The create form's boxes (RetroAdmin) were never sent until 2026-11-10; when a
+                // caller still sends nothing, the old defaults stand.
+                AllowTnfs = request.AllowTnfs ?? true,
+                AllowEconet = request.AllowEconet ?? false,
                 CreatedAt = DateTime.UtcNow
             };
 
             await _idp.CreateUserAsync(newUser);
             await _idp.SetPasswordAsync(userId, request.Password);
-            await _idp.SaveAsync();
 
-            var userDto = new UserDto
+            // Through the identity store, so the group's own member list is kept in step with the user's.
+            for (int i = 0; i < groupIds.Count; i++)
             {
-                UserId = newUser.UserId.ToString(),
-                Username = newUser.Username,
-                DisplayName = newUser.DisplayName,
-                Email = newUser.Email,
-                IsActive = newUser.IsActive,
-                IsAdmin = newUser.IsAdmin,
-                AllowTnfs = newUser.EffectiveAllowTnfs,
-                AllowEconet = newUser.EffectiveAllowEconet,
-                Groups = new List<string>(),
-                CreatedAt = newUser.CreatedAt
-            };
+                await _idp.AddUserToGroupAsync(userId, groupIds[i]);
+            }
+
+            await _idp.SaveAsync();
+            newUser = await _idp.GetUserAsync(userId) ?? newUser;
+
+            UserDto userDto = ToDto(newUser, allGroups);
 
             return Ok(ApiResponse<UserDto>.Ok(userDto, "User created successfully"));
         }
@@ -205,26 +179,41 @@ public class UsersController : ControllerBase
             if (request.AllowEconet.HasValue)
                 user.AllowEconet = request.AllowEconet.Value;
 
-            await _idp.UpdateUserAsync(user);
-            await _idp.SaveAsync();
-
-            var userDto = new UserDto
+            RetroGroup[] allGroups = await _idp.ListGroupsAsync();
+            List<Guid> wanted = new List<Guid>();
+            if (request.GroupIds != null)
             {
-                UserId = user.UserId.ToString(),
-                Username = user.Username,
-                DisplayName = user.DisplayName,
-                Email = user.Email,
-                IsActive = user.IsActive,
-                IsAdmin = user.IsAdmin,
-                AllowTnfs = user.EffectiveAllowTnfs,
-                AllowEconet = user.EffectiveAllowEconet,
-                Groups = new List<string>(),
-                CreatedAt = user.CreatedAt,
-                LastLoginAt = user.LastLoginAt,
-                LastLoginTnfsAt = user.LastLoginTnfsAt,
-                LastLoginEconetAt = user.LastLoginEconetAt,
-                LastFailedLoginAt = user.LastFailedLoginAt
-            };
+                string? groupProblem = ParseGroupIds(request.GroupIds, allGroups, out wanted);
+                if (groupProblem != null)
+                {
+                    return BadRequest(ApiResponse<UserDto>.Fail(groupProblem, "UNKNOWN_GROUP"));
+                }
+            }
+
+            await _idp.UpdateUserAsync(user);
+
+            if (request.GroupIds != null)
+            {
+                // Out of every group not wanted, then into every wanted one (adding twice is harmless).
+                Guid[] current = user.Groups.ToArray();
+                for (int i = 0; i < current.Length; i++)
+                {
+                    if (!wanted.Contains(current[i]))
+                    {
+                        await _idp.RemoveUserFromGroupAsync(guid, current[i]);
+                    }
+                }
+
+                for (int i = 0; i < wanted.Count; i++)
+                {
+                    await _idp.AddUserToGroupAsync(guid, wanted[i]);
+                }
+            }
+
+            await _idp.SaveAsync();
+            user = await _idp.GetUserAsync(guid) ?? user;
+
+            UserDto userDto = ToDto(user, allGroups);
 
             return Ok(ApiResponse<UserDto>.Ok(userDto, "User updated successfully"));
         }
@@ -268,5 +257,99 @@ public class UsersController : ControllerBase
             _logger.LogError(ex, "Error changing password for user {UserId}", userId);
             return StatusCode(500, ApiResponse<object>.Fail("Failed to change password"));
         }
+    }
+
+    /// <summary>
+    /// Reads a list of group ids and checks each one names a group that exists.
+    /// </summary>
+    /// <param name="ids">The ids as sent.</param>
+    /// <param name="groups">Every group.</param>
+    /// <param name="parsed">Receives the ids, without repeats.</param>
+    /// <returns>Null when all are good, else what is wrong.</returns>
+    private static string? ParseGroupIds(List<string>? ids, RetroGroup[] groups, out List<Guid> parsed)
+    {
+        parsed = new List<Guid>();
+        if (ids == null)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (!Guid.TryParse(ids[i], out Guid id))
+            {
+                return "\"" + ids[i] + "\" is not a group id.";
+            }
+
+            bool found = false;
+            for (int k = 0; k < groups.Length; k++)
+            {
+                if (groups[k].GroupId == id)
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                return "There is no group with id " + ids[i] + ".";
+            }
+
+            if (!parsed.Contains(id))
+            {
+                parsed.Add(id);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Builds the user as the API shows it, with group names and ids.
+    /// </summary>
+    /// <param name="user">The user.</param>
+    /// <param name="groups">Every group, to look the names up in.</param>
+    /// <returns>The DTO.</returns>
+    /// <remarks>
+    /// One builder for list, create and update. Before 2026-11-10 create and update each built their own and sent
+    /// an empty group list back.
+    /// </remarks>
+    private static UserDto ToDto(RetroUser user, RetroGroup[] groups)
+    {
+        List<string> names = new List<string>();
+        List<string> ids = new List<string>();
+        for (int j = 0; j < user.Groups.Count; j++)
+        {
+            Guid groupId = user.Groups[j];
+            for (int k = 0; k < groups.Length; k++)
+            {
+                if (groups[k].GroupId == groupId)
+                {
+                    names.Add(groups[k].GroupName);
+                    ids.Add(groupId.ToString());
+                    break;
+                }
+            }
+        }
+
+        return new UserDto
+        {
+            UserId = user.UserId.ToString(),
+            Username = user.Username,
+            DisplayName = user.DisplayName,
+            Email = user.Email,
+            IsActive = user.IsActive,
+            IsAdmin = user.IsAdmin,
+            AllowTnfs = user.EffectiveAllowTnfs,
+            AllowEconet = user.EffectiveAllowEconet,
+            Groups = names,
+            GroupIds = ids,
+            CreatedAt = user.CreatedAt,
+            LastLoginAt = user.LastLoginAt,
+            LastLoginTnfsAt = user.LastLoginTnfsAt,
+            LastLoginEconetAt = user.LastLoginEconetAt,
+            LastFailedLoginAt = user.LastFailedLoginAt
+        };
     }
 }

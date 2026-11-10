@@ -19,6 +19,7 @@ namespace RetroIO.Management.Api.Controllers;
 public class FirewallController : ControllerBase
 {
     private readonly FirewallEngine _firewall;
+    private readonly FirewallPersistence _persistence;
     private readonly ILogger<FirewallController> _logger;
 
     /// <summary>
@@ -27,13 +28,39 @@ public class FirewallController : ControllerBase
     /// <param name="firewall">
     /// The firewall engine to read and change.
     /// </param>
+    /// <param name="persistence">
+    /// The firewall-config.json file the server reads at start. Every change is written there.
+    /// </param>
     /// <param name="logger">
     /// The logger for error messages.
     /// </param>
-    public FirewallController(FirewallEngine firewall, ILogger<FirewallController> logger)
+    public FirewallController(FirewallEngine firewall, FirewallPersistence persistence, ILogger<FirewallController> logger)
     {
         _firewall = firewall;
+        _persistence = persistence;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Changes the running firewall AND writes the result to firewall-config.json.
+    /// </summary>
+    /// <param name="change">
+    /// The change.
+    /// </param>
+    /// <remarks>
+    /// Until 2026-11-10 every change here went to the running engine only, so rules, the on/off
+    /// switch and the default policy set from RetroAdmin were gone at the next start. The file is
+    /// written inside the engine's write lock, so two changes at once cannot save each other's
+    /// half-done state. If the write fails the exception reaches the caller's error answer; the
+    /// running engine then holds a change the file does not, and the answer says it failed.
+    /// </remarks>
+    private void ChangeAndSave(Action<FirewallConfiguration> change)
+    {
+        _firewall.UpdateConfiguration(config =>
+        {
+            change(config);
+            _persistence.SaveAsync(config).GetAwaiter().GetResult();
+        });
     }
 
     /// <summary>
@@ -74,7 +101,8 @@ public class FirewallController : ControllerBase
                     Rules = rules,
                     AllowedIpAddresses = new List<string>(config.AllowedIpAddresses),
                     BlockedIpAddresses = new List<string>(config.BlockedIpAddresses),
-                    AllowedNetworks = new List<string>(config.AllowedNetworks)
+                    AllowedNetworks = new List<string>(config.AllowedNetworks),
+                    CacheTTLSeconds = config.CacheTTLSeconds
                 };
             });
 
@@ -85,6 +113,52 @@ public class FirewallController : ControllerBase
             _logger.LogError(ex, "Error getting firewall configuration");
             return StatusCode(500, ApiResponse<FirewallConfigDto>.Fail("Internal server error"));
         }
+    }
+
+    /// <summary>
+    /// Changes the firewall's settings (not the rules) and writes them to firewall-config.json.
+    /// </summary>
+    /// <param name="request">
+    /// The fields to change; null ones are left as they are.
+    /// </param>
+    /// <returns>
+    /// The settings as they now are.
+    /// </returns>
+    [HttpPut("config")]
+    public ActionResult<ApiResponse<FirewallConfigDto>> UpdateConfig([FromBody] UpdateFirewallConfigRequest request)
+    {
+        FirewallPolicy policy = FirewallPolicy.Allow;
+        if (request.DefaultPolicy != null && !Enum.TryParse(request.DefaultPolicy, true, out policy))
+        {
+            return BadRequest(ApiResponse<FirewallConfigDto>.Fail("The default policy must be Allow or Deny."));
+        }
+
+        if (request.CacheTTLSeconds.HasValue && request.CacheTTLSeconds.Value < 0)
+        {
+            return BadRequest(ApiResponse<FirewallConfigDto>.Fail("The cache time cannot be negative."));
+        }
+
+        try
+        {
+            ChangeAndSave(config =>
+            {
+                if (request.Enabled.HasValue) config.Enabled = request.Enabled.Value;
+                if (request.DefaultPolicy != null) config.DefaultPolicy = policy;
+                if (request.AllowLocalhost.HasValue) config.AllowLocalhost = request.AllowLocalhost.Value;
+                if (request.AllowPrivateNetworks.HasValue) config.AllowPrivateNetworks = request.AllowPrivateNetworks.Value;
+                if (request.AllowedIpAddresses != null) config.AllowedIpAddresses = new List<string>(request.AllowedIpAddresses);
+                if (request.BlockedIpAddresses != null) config.BlockedIpAddresses = new List<string>(request.BlockedIpAddresses);
+                if (request.AllowedNetworks != null) config.AllowedNetworks = new List<string>(request.AllowedNetworks);
+                if (request.CacheTTLSeconds.HasValue) config.CacheTTLSeconds = request.CacheTTLSeconds.Value;
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating firewall settings");
+            return StatusCode(500, ApiResponse<FirewallConfigDto>.Fail("Failed to update the firewall settings: " + ex.Message));
+        }
+
+        return GetConfig();
     }
 
     /// <summary>
@@ -152,7 +226,7 @@ public class FirewallController : ControllerBase
                 CreatedAt = DateTime.UtcNow
             };
 
-            _firewall.UpdateConfiguration(config =>
+            ChangeAndSave(config =>
             {
                 config.Rules.Add(newRule);
             });
@@ -189,7 +263,7 @@ public class FirewallController : ControllerBase
             var guid = Guid.Parse(ruleId);
             bool found = false;
 
-            _firewall.UpdateConfiguration(config =>
+            ChangeAndSave(config =>
             {
                 for (int i = config.Rules.Count - 1; i >= 0; i--)
                 {
@@ -231,7 +305,7 @@ public class FirewallController : ControllerBase
             var guid = Guid.Parse(ruleId);
             FirewallRuleDto? updatedDto = null;
 
-            _firewall.UpdateConfiguration(config =>
+            ChangeAndSave(config =>
             {
                 for (int i = 0; i < config.Rules.Count; i++)
                 {
@@ -288,7 +362,7 @@ public class FirewallController : ControllerBase
     {
         try
         {
-            _firewall.UpdateConfiguration(config =>
+            ChangeAndSave(config =>
             {
                 config.Enabled = request.Enabled;
             });
@@ -310,7 +384,7 @@ public class FirewallController : ControllerBase
     {
         try
         {
-            _firewall.UpdateConfiguration(config =>
+            ChangeAndSave(config =>
             {
                 config.DefaultPolicy = Enum.Parse<FirewallPolicy>(request.Policy, true);
             });

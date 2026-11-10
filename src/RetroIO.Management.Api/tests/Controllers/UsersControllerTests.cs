@@ -98,6 +98,33 @@ public class UsersControllerTests
         Assert.That(response.Data!.Username, Is.EqualTo("newuser"));
     }
 
+    /// <summary>
+    /// The allow-TNFS and allow-Econet choices on the create form reach the new user. Until
+    /// 2026-11-10 the request had no such fields and every new user got TNFS yes, Econet no.
+    /// </summary>
+    [Test]
+    public async Task CreateUser_KeepsTheProtocolChoices()
+    {
+        RetroUser? made = null;
+        _mockIdp.Setup(x => x.CreateUserAsync(It.IsAny<RetroUser>(), It.IsAny<CancellationToken>()))
+            .Callback<RetroUser, CancellationToken>((u, _) => made = u)
+            .Returns(new ValueTask<Guid>(Guid.NewGuid()));
+        _mockIdp.Setup(x => x.SetPasswordAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(new ValueTask<bool>(true));
+        _mockIdp.Setup(x => x.SaveAsync(It.IsAny<CancellationToken>())).Returns(new ValueTask());
+
+        await _controller.CreateUser(new CreateUserRequest
+        {
+            Username = "beeb",
+            Password = "password123",
+            AllowTnfs = false,
+            AllowEconet = true,
+        });
+
+        Assert.That(made, Is.Not.Null);
+        Assert.That(made!.AllowTnfs, Is.False);
+        Assert.That(made.AllowEconet, Is.True);
+    }
+
     [Test]
     public async Task DeleteUser_ValidId_ReturnsOk()
     {

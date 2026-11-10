@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
+using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Hdlc;
 using RetroIO.Protocols.Xmsg.Node.Seam;   // ILink + seam types now live in the portable RetroIO.Protocols.Xmsg.Node half
 
@@ -100,6 +101,17 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         {
             get { return _clock.ElapsedMilliseconds; }
         }
+
+        /// <summary>
+        /// Gets or sets where this link writes its own diagnostic lines (a refused send, a link
+        /// failure, a shutdown handler that threw). Null discards them.
+        /// </summary>
+        /// <remarks>
+        /// This used to be the console. A link hosted inside a service has no console, and a
+        /// library writing to one bypasses the host's logging, so the caller decides where the
+        /// lines go: the runner passes <c>Console.WriteLine</c>, a service passes its logger.
+        /// </remarks>
+        public XmsgLogHandler? Log { get; set; }
 
         /// <summary>
         /// Occurs when the LAPB link delivers an in-order information field.
@@ -229,7 +241,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// </remarks>
         private void ReportLinkFailure(string reason)
         {
-            Console.WriteLine("[link] " + _linkId + " " + reason);
+            Log?.Invoke("[link] " + _linkId + " " + reason);
             SetStatus(LinkStatus.Stopped, reason);
         }
 
@@ -490,7 +502,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[link] {_linkId} a Stopping handler threw, continuing shutdown: {ex.Message}");
+                Log?.Invoke($"[link] {_linkId} a Stopping handler threw, continuing shutdown: {ex.Message}");
             }
         }
 
@@ -570,13 +582,13 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             // Contract: a not-Active link (or an empty payload) is a logged false, NEVER a throw.
             if (_status != LinkStatus.Active)
             {
-                Console.WriteLine($"[link] {_linkId} SendData refused: link not Active (status {_status})");
+                Log?.Invoke($"[link] {_linkId} SendData refused: link not Active (status {_status})");
                 return false;
             }
 
             if (payload.Length == 0)
             {
-                Console.WriteLine($"[link] {_linkId} SendData refused: empty payload");
+                Log?.Invoke($"[link] {_linkId} SendData refused: empty payload");
                 return false;
             }
 

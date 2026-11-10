@@ -13,6 +13,10 @@ namespace RetroIO.Management.Contracts;
 public class TnfsSettingsDto
 {
     /// <summary>
+    /// Gets or sets whether the TNFS server runs.
+    /// </summary>
+    public bool Enabled { get; set; }
+    /// <summary>
     /// Gets or sets the UDP port.
     /// </summary>
     public int UdpPort { get; set; }
@@ -29,9 +33,17 @@ public class TnfsSettingsDto
     /// </summary>
     public bool TcpEnabled { get; set; }
     /// <summary>
-    /// Gets or sets the maximum number of connections.
+    /// Gets or sets the most TCP connections open at one time.
     /// </summary>
     public int MaxConnections { get; set; }
+    /// <summary>
+    /// Gets or sets the most sessions open at one time.
+    /// </summary>
+    public int MaxSessions { get; set; }
+    /// <summary>
+    /// Gets or sets the most sessions one IP address may hold.
+    /// </summary>
+    public int MaxSessionsPerIP { get; set; }
     /// <summary>
     /// Gets or sets the session timeout in seconds.
     /// </summary>
@@ -47,6 +59,10 @@ public class TnfsSettingsDto
 /// </summary>
 public class UpdateTnfsSettingsRequest
 {
+    /// <summary>
+    /// Gets or sets whether the TNFS server runs, or null to keep the current value.
+    /// </summary>
+    public bool? Enabled { get; set; }
     /// <summary>
     /// Gets or sets the new UDP port, or null to keep the current one.
     /// </summary>
@@ -67,6 +83,14 @@ public class UpdateTnfsSettingsRequest
     /// Gets or sets the new maximum number of connections, or null to keep the current one.
     /// </summary>
     public int? MaxConnections { get; set; }
+    /// <summary>
+    /// Gets or sets the new most sessions open at one time, or null to keep the current one.
+    /// </summary>
+    public int? MaxSessions { get; set; }
+    /// <summary>
+    /// Gets or sets the new most sessions per IP address, or null to keep the current one.
+    /// </summary>
+    public int? MaxSessionsPerIP { get; set; }
     /// <summary>
     /// Gets or sets the new session timeout in seconds, or null to keep the current one.
     /// </summary>

@@ -6,6 +6,8 @@
 //
 
 using System;
+using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 using RetroIO.Protocols.Xmsg.Codec;
@@ -48,6 +50,11 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         private readonly XmsgLayer _layer;
         private readonly XmsgServerHost _serverHost;
         private readonly HostedNameTable _nameTable;
+
+        // Payloads a link delivered on its own thread, waiting for Pump() to process them on the
+        // pump thread. Only used when DeliverInboundOnPump is on. Each entry is a buffer rented
+        // from the shared pool and the number of valid bytes in it; Pump() returns the buffer.
+        private readonly ConcurrentQueue<InboundPayload> _inbound = new ConcurrentQueue<InboundPayload>();
 
         /// <summary>
         /// Initialises the node on a link and registers its servers.
@@ -168,6 +175,51 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         public bool IgnoreDatagramsForOtherNodes { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether payloads from the link are queued and processed
+        /// inside <see cref="Pump"/>, instead of at once on whatever thread the link delivered them.
+        /// Off by default.
+        /// </summary>
+        /// <remarks>
+        /// <para><b>Why this exists</b></para>
+        /// <para>
+        /// The node keeps its session and sequence state in plain fields with no lock. That is safe
+        /// only while ONE thread touches it. The HDLC adapter delivers payloads on its own loop
+        /// thread and raises <c>LoopTick</c> on the same thread, so there <see cref="Pump"/> and the
+        /// receive path never overlap. An Ethernet backend does not: it delivers from its own
+        /// receive thread while the caller's loop runs <see cref="Pump"/>, so a server's
+        /// <c>Handle</c> and its <c>DrainPending</c> could run at the same moment on two threads.
+        /// </para>
+        /// <para><b>Why not a lock</b></para>
+        /// <para>
+        /// The Ethernet link holds its own lock while it delivers a payload, and the node's send
+        /// path takes that same lock. A node lock taken on both sides would be taken in opposite
+        /// orders by the two threads, which can deadlock. Queuing has no such problem: the receive
+        /// thread only copies the bytes, and everything else runs on the pump thread.
+        /// </para>
+        /// <para><b>What it costs</b></para>
+        /// <para>
+        /// A reply now leaves on the next <see cref="Pump"/> instead of straight away, so it waits
+        /// at most one pump interval (20 ms in the runner and the daemon). The link-level
+        /// acknowledgement is sent by the link itself and is not delayed.
+        /// </para>
+        /// <para><b>Why it defaults to OFF</b></para>
+        /// <para>
+        /// The HDLC path has no thread problem and is verified working against a real D100. Off
+        /// keeps it byte for byte as it was. A caller whose link delivers on another thread turns
+        /// it on.
+        /// </para>
+        /// </remarks>
+        public bool DeliverInboundOnPump { get; set; }
+
+        /// <summary>
+        /// Gets the number of payloads queued for the next <see cref="Pump"/>.
+        /// </summary>
+        public int PendingInboundCount
+        {
+            get { return _inbound.Count; }
+        }
+
+        /// <summary>
         /// Gets the link this node speaks over.
         /// </summary>
         public ILink Link
@@ -224,6 +276,9 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         /// </remarks>
         public int Pump()
         {
+            // Inbound first, so a request that arrived since the last tick is answered on this one.
+            ProcessQueuedInbound();
+
             IReadOnlyList<XmsgFrame> pending = _serverHost.DrainPending();
             for (int i = 0; i < pending.Count; i++)
             {
@@ -412,6 +467,51 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         /// </param>
         private void OnPayloadReceived(ILink deliveringLink, byte[] payload, int length)
         {
+            if (DeliverInboundOnPump)
+            {
+                // Copy now: the link may reuse its buffer as soon as this call returns.
+                byte[] copy = ArrayPool<byte>.Shared.Rent(length);
+                Buffer.BlockCopy(payload, 0, copy, 0, length);
+                _inbound.Enqueue(new InboundPayload(deliveringLink, copy, length));
+                return;
+            }
+
+            ProcessPayload(deliveringLink, payload, length);
+        }
+
+        /// <summary>
+        /// Processes every payload queued by <see cref="OnPayloadReceived"/>, in arrival order, on
+        /// the calling thread, and returns each buffer to the pool.
+        /// </summary>
+        private void ProcessQueuedInbound()
+        {
+            while (_inbound.TryDequeue(out InboundPayload item))
+            {
+                try
+                {
+                    ProcessPayload(item.Link, item.Buffer, item.Length);
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(item.Buffer);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Classifies a payload and feeds XMSG traffic to the codec.
+        /// </summary>
+        /// <param name="deliveringLink">
+        /// The link that delivered the payload.
+        /// </param>
+        /// <param name="payload">
+        /// The payload buffer.
+        /// </param>
+        /// <param name="length">
+        /// The number of valid bytes.
+        /// </param>
+        private void ProcessPayload(ILink deliveringLink, byte[] payload, int length)
+        {
             ReadOnlySpan<byte> span = payload.AsSpan(0, length);
 
             // A datagram addressed to somebody else is not ours to answer. Only checked when the
@@ -448,6 +548,46 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
             }
 
             return SintranDatagramRelay.GetDestinationNode(span) != NodeNumber;
+        }
+
+        /// <summary>
+        /// One payload waiting in the inbound queue.
+        /// </summary>
+        private readonly struct InboundPayload
+        {
+            /// <summary>
+            /// Initialises the entry.
+            /// </summary>
+            /// <param name="link">
+            /// The link that delivered the payload.
+            /// </param>
+            /// <param name="buffer">
+            /// A pooled copy of the payload; longer than <paramref name="length"/>.
+            /// </param>
+            /// <param name="length">
+            /// The number of valid bytes in <paramref name="buffer"/>.
+            /// </param>
+            public InboundPayload(ILink link, byte[] buffer, int length)
+            {
+                Link = link;
+                Buffer = buffer;
+                Length = length;
+            }
+
+            /// <summary>
+            /// Gets the link that delivered the payload.
+            /// </summary>
+            public ILink Link { get; }
+
+            /// <summary>
+            /// Gets the pooled copy of the payload.
+            /// </summary>
+            public byte[] Buffer { get; }
+
+            /// <summary>
+            /// Gets the number of valid bytes in <see cref="Buffer"/>.
+            /// </summary>
+            public int Length { get; }
         }
     }
 }
