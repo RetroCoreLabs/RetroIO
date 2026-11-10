@@ -64,6 +64,18 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         private int _breakStrategy = 1;
 
         /// <summary>
+        /// The BMMX BRKMAX word: for strategies 3 and up the most bytes one BDAT may carry (MON BRKM,
+        /// "maximum number of characters before break"); 0 means no limit.
+        /// </summary>
+        private int _breakMax;
+
+        /// <summary>
+        /// A strategy 7 table of all ones (every character breaks). A table of all zeros breaks on
+        /// none; a mixed table needs the bit order, which is not known (BUGS.md).
+        /// </summary>
+        private bool _breakTableAll;
+
+        /// <summary>
         /// The host has granted input (RFI) and the grant is not used yet.
         /// </summary>
         private bool _inputGranted;
@@ -298,7 +310,9 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
         /// S3-CONFIG D100 sends BMMX strategy 0 and the real D102 asker sends the TDV key
         /// ESC [ 4 8 _ as five one-byte BDATs, each after its own RFI; the whole key in one letter
         /// is refused with BEL. At the command prompt (strategy 1) a line goes whole up to its CR.
-        /// Strategies 2 to 8 are not implemented: they are logged and input is not cut (BUGS.md).
+        /// S3-CONFIG's screen letter first sets strategy 7 with BRKMAX 1 and a table of all ones.
+        /// BRKMAX limits one BDAT for strategies 3 and up. Strategies 2 to 6, 8 and a mixed 7 table
+        /// are not implemented: they are logged and input is cut only at BRKMAX (BUGS.md).
         /// </remarks>
         /// <param name="text">
         /// The typed text, sent as 7-bit ASCII.
@@ -399,6 +413,11 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
             }
 
             int take = Math.Min(_pendingLength, MaxBdat);
+            if (_breakStrategy >= 3 && _breakMax != 0 && take > _breakMax)
+            {
+                take = _breakMax;
+            }
+
             for (int i = 0; i < take; i++)
             {
                 if (IsBreakCharacter(_pending[i]))
@@ -432,8 +451,10 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
                     return true;
                 case 1:
                     return c7 < 32 || c7 == 127;
+                case 7:
+                    return _breakTableAll;
                 default:
-                    return false; // negative: none; 2..8: not implemented (logged in TakeBreakSetting)
+                    return false; // negative: none; 2..6, 8 and a mixed 7 table: not implemented
             }
         }
 
@@ -458,16 +479,35 @@ namespace RetroIO.Protocols.Xmsg.Node.Tad
                     continue;
                 }
 
-                int strategy = (sbyte)messages[i].Data[0];
+                byte[] data = messages[i].Data;
+                int strategy = (sbyte)data[0];
+                _breakMax = data.Length >= 3 ? (data[1] << 8) | data[2] : 0;
                 if (strategy == 9)
                 {
                     continue; // MON BRKM: 9 changes only BRKMAX; the strategy in force stays
                 }
 
                 _breakStrategy = strategy;
-                if (strategy > 1)
+                _breakTableAll = false;
+                bool readable = strategy <= 1;
+                if (strategy == 7 && data.Length >= 19)
                 {
-                    Log?.Invoke($"[asker] host break strategy {strategy} is not implemented; input is not cut");
+                    // Only all ones or all zeros can be read: they need no bit order.
+                    bool ones = true;
+                    bool zeros = true;
+                    for (int j = 3; j < 19; j++)
+                    {
+                        ones &= data[j] == 0xFF;
+                        zeros &= data[j] == 0x00;
+                    }
+
+                    _breakTableAll = ones;
+                    readable = ones || zeros;
+                }
+
+                if (!readable)
+                {
+                    Log?.Invoke($"[asker] host break strategy {strategy} is not implemented; input is cut only at BRKMAX {_breakMax}");
                 }
             }
         }
