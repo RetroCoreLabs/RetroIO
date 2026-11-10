@@ -115,9 +115,9 @@
       {
         "name": "XSGNI",
         "value": 69,
-        "meaning": "tell me more about a registered name - who holds it and how much room it has",
-        "status": "INFERRED",
-        "evidence": "service table"
+        "meaning": "give me the first registered name at or after this magic number - its magic number, the name, and for a connection port its free connections. XMSG-COMMAND LIST-NAMES walks a whole table with it: start from 0, then the previous magic plus one, until the answer's parameter 1 is 0",
+        "status": "MEASURED",
+        "evidence": "COSMOS Ethernet hub capture 2026-11-10, D102 running LIST-NAMES against D100: 14 requests and 14 replies decoded byte for byte, 13 rows then the end form; rebuilt in ListNamesTests"
       },
       {
         "name": "XSRME",

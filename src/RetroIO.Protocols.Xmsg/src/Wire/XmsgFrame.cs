@@ -289,6 +289,7 @@ namespace RetroIO.Protocols.Xmsg
         /// dissector's LI ROUTING / XSLET handling):
         ///  - XMCSM <c>0x0100014B</c> or <c>0x01000100</c> - LI ROUTING (XSGSY) reply, an
         ///    XROUT letter of 4-byte parameter blocks.
+        ///  - XMCSM <c>0x01000145</c> - LIST-NAMES (XSGNI) request, an XROUT letter.
         ///  - XMCSM low byte <c>0x41</c> - XSLET (send letter), an XROUT letter.
         /// Letters are parsed with <see cref="XroutMessageFraming.BodyOnly"/>: on this transport
         /// the XROUT header is not on the wire.
@@ -308,6 +309,7 @@ namespace RetroIO.Protocols.Xmsg
 
             bool isLetter = xmcsm == (uint)XmcsmService.XsgsyRequest
                 || xmcsm == (uint)XmcsmService.XsgsyReply
+                || xmcsm == (uint)XmcsmService.XsgniRequest
                 || (xmcsm & 0xFFu) == XmcsmMask.XsletServiceLowByte;
 
             if (isLetter && trailer.Length >= XroutMessage.HeaderSize)
