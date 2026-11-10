@@ -105,7 +105,32 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </summary>
         private const byte CauseOutOfOrder = 0x09;
 
-        private readonly object _sync = new object();
+        // ONE lock for every port, not one per port.
+        //
+        // A port decodes a packet under its lock and, still inside that call, hands it to the switch,
+        // which sends it on by calling SendData on the OTHER port - and that takes the other port's
+        // lock. With a lock per port, two ports that each receive a packet at the same moment each hold
+        // their own lock and wait for the other's, and the switch stops for good with nothing in the log.
+        // (Found 2026-11-10 with a Cisco router on one side and x25traffic on the other; a stack dump of
+        // the frozen process showed both reader threads in
+        // OnLayerData -> SwitchCore.Forward -> XotSwitchPort.SendData, blocked on Monitor.Enter.)
+        //
+        // With a single shared lock there is nothing to wait for in a circle: the thread that holds it
+        // takes it again on the way into the other port (a lock can be taken again by its own thread),
+        // and the other reader waits its turn. The work done under the lock is decoding, routing and
+        // writing one packet, so one lock does not make the switch slower in any way that matters.
+        //
+        // The processing stays synchronous on purpose. The packet layer acknowledges received data only
+        // after the switch has dealt with it, and the switch relies on that to hold the sender back
+        // (RNR) when the far leg is full. Handing packets to another thread (tried first) lets the
+        // layer acknowledge at once, the sender is never slowed down, and the switch's hold queue
+        // overflows into a reset.
+        //
+        // Static: ports are created and started before they are attached to a switch node, so the lock
+        // cannot be chosen per node. Several switches in one process share it, which costs only waiting.
+        private static readonly object SharedSync = new object();
+
+        private readonly object _sync = SharedSync;
         private readonly PortConfig _config;
         private readonly ILogger _logger;
         private readonly X25Layer _layer;
