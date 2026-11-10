@@ -1546,6 +1546,16 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
                 }
             }
 
+            // Then the servers that carry a name table of their own (task-style servers behind a
+            // bridge). Own names first, so a registered server always wins over a bridged name.
+            for (int i = 0; i < _servers.Count; i++)
+            {
+                if (_servers[i] is IXmsgNameOwner owner && owner.AnswersName(name))
+                {
+                    return _servers[i];
+                }
+            }
+
             return null;
         }
 
@@ -1572,39 +1582,48 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         }
 
         /// <summary>
-        /// Extracts the target server name from an XSLET letter's trailer (the first <c>*</c>-prefixed
-        /// printable-ASCII run, for example <c>*TADADM</c>).
+        /// Reads the target server name of an XSLET letter: string parameter 1 of the letter,
+        /// for example <c>*TADADM</c>.
         /// </summary>
         /// <param name="incoming">
         /// The XSLET letter frame.
         /// </param>
         /// <returns>
-        /// The name including the leading <c>*</c>, or an empty string when none is found.
+        /// The name exactly as the letter carries it (a leading <c>*</c> is part of the name), or an
+        /// empty string when the letter has no string parameter 1.
         /// </returns>
+        /// <remarks>
+        /// COSMOS Programmer Guide appendix B section 3.4: XSLET takes IN parameter 1 = the port or
+        /// connection name and IN parameter 2 = the system name. The captured connect letter
+        /// <c>FF 07 2A "TADADM" 00 FE 04 "D102"</c> decodes to exactly those two
+        /// (XroutLetterFramingTests). Until 2026-11-10 this method scanned the whole serialised frame
+        /// for the first printable run starting with <c>*</c>, so a <c>*</c> earlier in the bytes picked
+        /// the wrong server, and a name without a <c>*</c> could never be found at all.
+        /// </remarks>
         private static string ExtractLetterName(XmsgFrame incoming)
         {
-            // The target name (for example *TADADM) is an ASCII run in the letter body. A parsed XSLET
-            // letter decodes into Body (whose ToArray does not round-trip the name) while a freshly-built
-            // one carries it in TrailingBytes - so scan the FULL serialized frame, which is byte-identical
-            // for both and always contains the letter. The header/sub-header carry no leading-'*' run, so
-            // the first '*'-prefixed run is the server name.
-            byte[] bytes = incoming.ToArray();
-            System.Text.StringBuilder run = new System.Text.StringBuilder();
-            for (int i = 0; i <= bytes.Length; i++)
+            XroutMessage? letter = incoming.Body;
+            if (letter == null)
             {
-                byte b = i < bytes.Length ? bytes[i] : (byte)0x00;
-                if (b >= 0x20 && b <= 0x7E)
+                // A letter built in memory, never parsed off the wire, carries its letter in
+                // TrailingBytes, in the same header-and-blocks form the frame parser reads.
+                byte[] raw = incoming.TrailingBytes ?? Array.Empty<byte>();
+                if (raw.Length < XroutMessage.HeaderSize)
                 {
-                    run.Append((char)b);
-                    continue;
+                    return string.Empty;
                 }
 
-                if (run.Length >= 2 && run[0] == '*')
-                {
-                    return run.ToString();
-                }
+                letter = XroutMessage.Parse(raw, XroutMessageFraming.WithHeader);
+            }
 
-                run.Clear();
+            IReadOnlyList<XroutParameter> parameters = letter.Parameters;
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                XroutParameter parameter = parameters[i];
+                if (parameter.ParameterNumber == 1 && parameter.IsString)
+                {
+                    return parameter.AsText();
+                }
             }
 
             return string.Empty;

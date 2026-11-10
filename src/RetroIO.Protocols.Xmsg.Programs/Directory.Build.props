@@ -1,0 +1,4 @@
+<Project>
+  <!-- Family props for projects that came from the xmsg tree. Imports the repo props first. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+</Project>

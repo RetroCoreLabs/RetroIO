@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The gRPC contract between an XMSG node (RetroServer) and a plug-in server program, generated
+    from xmsg_plugin.proto. Both sides reference this: RetroIO.Protocols.Xmsg.Plugins (the node's
+    side) and RetroIO.Protocols.Xmsg.Plugins.Client (a C# plug-in's side). A plug-in in another
+    language generates its own code from the same .proto file.
+  -->
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Plugins.Contracts</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Plugins.Contracts</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Plugins.Contracts</RootNamespace>
+    <Description>The gRPC contract for XMSG plug-in server programs: the .proto file and the C# code generated from it.</Description>
+    <PackageTags>retroio;xmsg;xmsg.plugins;grpc</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- The generated code has no XML comments of its own. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Core.Api" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="xmsg_plugin.proto" GrpcServices="Both" />
+    <!-- Shipped in the package so a plug-in in another language can generate its own code. -->
+    <None Include="xmsg_plugin.proto" Pack="true" PackagePath="proto\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

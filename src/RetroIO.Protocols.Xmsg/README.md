@@ -109,10 +109,12 @@ flowchart TB
     APINODE["Xmsg.Api.Node<br/>the kernel as a server"]
     NODE["Xmsg.Node<br/>sessions, sequences, relay, TAD"]
     SERVERS["Xmsg.Servers<br/>TAD terminal server, FA file server"]
+    HOSTING["Xmsg.Hosting<br/>run a node: topology, builder, state, shutdown, sync"]
 
     HDLC["Xmsg.Hdlc<br/>pcap to LAPB frames"]
     LIVE["Xmsg.Live<br/>a live node over a byte duplex"]
     ETH["Xmsg.Ethernet<br/>ND link layer over Ethernet"]
+    HUB["Xmsg.Hub<br/>the Ethernet hub machines join over TCP"]
 
     CHAT["Xmsg.Chat"]
     SYNC["Xmsg.Sync<br/>folder synchronisation daemon"]
@@ -123,7 +125,11 @@ flowchart TB
     APINODE --> API
     NODE --> WIRE
     SERVERS --> NODE
+    HOSTING --> SERVERS
+    HOSTING --> LIVE
+    HOSTING --> SYNC
     HDLC --> WIRE
+    HUB --> ETH
     LIVE --> NODE
     ETH --> NODE
     CHAT --> API
@@ -137,7 +143,7 @@ flowchart TB
     classDef app  fill:#2196F3,stroke:#1565C0,stroke-width:2px,color:#fff
 
     class WIRE core
-    class API,APINODE,NODE,SERVERS ok
+    class API,APINODE,NODE,SERVERS,HOSTING ok
     class HDLC,LIVE,ETH sock
     class CHAT,SYNC,NDFS,DIAG app
 ```
@@ -149,6 +155,8 @@ flowchart TB
 | [`.Xmsg.Api.Node`](../RetroIO.Protocols.Xmsg.Api.Node/README.md) | Expose the kernel as a server |
 | [`.Xmsg.Node`](../RetroIO.Protocols.Xmsg.Node/README.md) | Run a node: sessions, sequences, relay, TAD sessions |
 | [`.Xmsg.Servers`](../RetroIO.Protocols.Xmsg.Servers/README.md) | Answer `connect-to`; serve files |
+| [`.Xmsg.Hosting`](../RetroIO.Protocols.Xmsg.Hosting/README.md) | Run a node in a program or a service: topology, state files, clean shutdown, sync |
+| [`.Xmsg.Hub`](../RetroIO.Protocols.Xmsg.Hub/README.md) | The COSMOS Ethernet hub: a shared segment over TCP, hub chaining, pcap capture, recent frames, a hosted service |
 | [`.Xmsg.Hdlc`](../RetroIO.Protocols.Xmsg.Hdlc/README.md) | Turn a pcapng capture into LAPB frames |
 | [`.Xmsg.Live`](../RetroIO.Protocols.Xmsg.Live/README.md) | Run a live node over a TCP bridge or serial |
 | [`.Xmsg.Ethernet`](../RetroIO.Protocols.Xmsg.Ethernet/README.md) | Carry ND datagrams over Ethernet |

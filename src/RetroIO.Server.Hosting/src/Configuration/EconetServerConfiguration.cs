@@ -17,6 +17,13 @@ namespace RetroIO.Server.Hosting.Configuration;
 public sealed class EconetServerConfiguration
 {
     /// <summary>
+    /// Gets or sets whether the Econet server runs. Added 2026-11-10 as the per-protocol switch in its own file, like
+    /// DriveWire and the XMSG services have. A file written before then has no such key and reads as true, so an
+    /// existing install keeps running as it did. (Phase 6 of the plan turns every protocol off by default.)
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the root directory of the served files.
     /// </summary>
     public string RootDirectory { get; set; } = string.Empty;

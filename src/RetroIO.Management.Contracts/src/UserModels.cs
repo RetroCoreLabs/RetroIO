@@ -64,6 +64,10 @@ public class UserDto
     /// </summary>
     public List<string> Groups { get; set; } = new();
     /// <summary>
+    /// Gets or sets the ids of the groups the user belongs to, in the same order as <see cref="Groups"/>.
+    /// </summary>
+    public List<string> GroupIds { get; set; } = new();
+    /// <summary>
     /// Gets or sets when the account was created.
     /// </summary>
     public DateTime CreatedAt { get; set; }
@@ -107,9 +111,21 @@ public class CreateUserRequest
     /// </summary>
     public string? Email { get; set; }
     /// <summary>
-    /// Gets or sets the names of the groups to add the user to.
+    /// Gets or sets the ids of the groups to put the user in (Ronny 2026-11-10: ids, not names, so a group can be
+    /// renamed without touching its members). An unknown id refuses the whole request. Until 2026-11-10 this list
+    /// was called Groups, held names, and the server threw it away.
     /// </summary>
-    public List<string> Groups { get; set; } = new();
+    public List<string> GroupIds { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets whether the user may use TNFS. Null means the server's default (yes).
+    /// </summary>
+    public bool? AllowTnfs { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the user may use Econet. Null means the server's default (no).
+    /// </summary>
+    public bool? AllowEconet { get; set; }
 }
 
 /// <summary>
@@ -137,6 +153,11 @@ public class UpdateUserRequest
     /// Gets or sets whether the user may use Econet, or null to keep the current value.
     /// </summary>
     public bool? AllowEconet { get; set; }
+    /// <summary>
+    /// Gets or sets the ids of every group the user should be in, or null to keep the membership as it is. The user is
+    /// taken out of any group not listed. An unknown id refuses the whole request.
+    /// </summary>
+    public List<string>? GroupIds { get; set; }
 }
 
 /// <summary>

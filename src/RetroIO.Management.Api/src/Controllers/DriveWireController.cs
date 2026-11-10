@@ -9,6 +9,9 @@ using Microsoft.AspNetCore.Mvc;
 using RetroIO.Management.Contracts;
 using RetroIO.Protocols.DriveWire.Drives;
 using RetroIO.Protocols.DriveWire.Server;
+using RetroIO.Server.Hosting;
+using RetroIO.Server.Hosting.Configuration;
+using RetroIO.Storage.Utilities;
 
 namespace RetroIO.Management.Api.Controllers;
 
@@ -24,6 +27,7 @@ namespace RetroIO.Management.Api.Controllers;
 public class DriveWireController : ControllerBase
 {
     private readonly DriveWireServerService? _server;
+    private readonly string _retroFsPath;
 
     /// <summary>
     /// Creates the controller.
@@ -31,9 +35,13 @@ public class DriveWireController : ControllerBase
     /// <param name="server">
     /// The DriveWire server, or null when none runs in this process.
     /// </param>
-    public DriveWireController(DriveWireServerService? server = null)
+    /// <param name="retroFsPath">
+    /// The data folder holding drivewire-config.json; null (what DI does) means the real one. Tests pass a temp folder.
+    /// </param>
+    public DriveWireController(DriveWireServerService? server = null, string? retroFsPath = null)
     {
         _server = server;
+        _retroFsPath = retroFsPath ?? PathHelper.GetRetroFSPath();
     }
 
     /// <summary>
@@ -116,5 +124,111 @@ public class DriveWireController : ControllerBase
         if (uptime.TotalMinutes >= 1)
             return $"{(int)uptime.TotalMinutes}m {uptime.Seconds}s";
         return $"{uptime.Seconds}s";
+    }
+
+    /// <summary>
+    /// Gets the DriveWire settings as stored in drivewire-config.json (what applies at the next start).
+    /// </summary>
+    /// <returns>
+    /// The settings.
+    /// </returns>
+    [HttpGet("settings")]
+    public ActionResult<ApiResponse<DriveWireSettingsDto>> GetSettings()
+    {
+        DriveWireServerConfiguration config = ProtocolConfigurationLoader.ReadSettingsFile(
+            _retroFsPath, ProtocolConfigurationLoader.DriveWireConfigurationFileName, DriveWireServerConfiguration.GetDefault);
+        return Ok(ApiResponse<DriveWireSettingsDto>.Ok(ToDto(config)));
+    }
+
+    /// <summary>
+    /// Writes the DriveWire settings to drivewire-config.json. They apply after RetroServer restarts.
+    /// </summary>
+    /// <param name="request">
+    /// The settings; every field is written.
+    /// </param>
+    /// <returns>
+    /// The settings as saved, or why they were refused.
+    /// </returns>
+    [HttpPut("settings")]
+    public ActionResult<ApiResponse<DriveWireSettingsDto>> PutSettings([FromBody] DriveWireSettingsDto request)
+    {
+        if (request == null)
+        {
+            return BadRequest(ApiResponse<DriveWireSettingsDto>.Fail("No settings were sent."));
+        }
+
+        if (request.Port < 1 || request.Port > 65535)
+        {
+            return BadRequest(ApiResponse<DriveWireSettingsDto>.Fail("Port must be 1 to 65535."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.BindAddress) || !System.Net.IPAddress.TryParse(request.BindAddress.Trim(), out _))
+        {
+            return BadRequest(ApiResponse<DriveWireSettingsDto>.Fail("'" + request.BindAddress + "' is not an IP address."));
+        }
+
+        if (request.TransactionTimeoutMilliseconds < 1)
+        {
+            return BadRequest(ApiResponse<DriveWireSettingsDto>.Fail("The transaction time limit must be at least 1 ms."));
+        }
+
+        DriveWireServerConfiguration config = new DriveWireServerConfiguration
+        {
+            Enabled = request.Enabled,
+            Port = request.Port,
+            BindAddress = request.BindAddress.Trim(),
+            TransactionTimeoutMilliseconds = request.TransactionTimeoutMilliseconds,
+            NamedObjectDirectory = string.IsNullOrWhiteSpace(request.NamedObjectDirectory) ? null : request.NamedObjectDirectory.Trim(),
+            PrintDirectory = string.IsNullOrWhiteSpace(request.PrintDirectory) ? null : request.PrintDirectory.Trim(),
+        };
+
+        List<DriveWireDriveSettingDto> drives = request.Drives ?? new List<DriveWireDriveSettingDto>();
+        for (int i = 0; i < drives.Count; i++)
+        {
+            DriveWireDriveSettingDto drive = drives[i];
+            if (drive.Drive < 0 || drive.Drive > 255)
+            {
+                return BadRequest(ApiResponse<DriveWireSettingsDto>.Fail("Drive " + drive.Drive + ": a drive number is 0 to 255."));
+            }
+
+            if (string.IsNullOrWhiteSpace(drive.Path))
+            {
+                return BadRequest(ApiResponse<DriveWireSettingsDto>.Fail("Drive " + drive.Drive + " has no image file."));
+            }
+
+            for (int j = 0; j < i; j++)
+            {
+                if (drives[j].Drive == drive.Drive)
+                {
+                    return BadRequest(ApiResponse<DriveWireSettingsDto>.Fail("Drive " + drive.Drive + " is listed twice."));
+                }
+            }
+
+            config.Drives.Add(new DriveWireDriveConfiguration { Drive = drive.Drive, Path = drive.Path.Trim(), ReadOnly = drive.ReadOnly });
+        }
+
+        ProtocolConfigurationLoader.SaveSettingsFile(_retroFsPath, ProtocolConfigurationLoader.DriveWireConfigurationFileName, config);
+        return Ok(ApiResponse<DriveWireSettingsDto>.Ok(ToDto(config)));
+    }
+
+    private static DriveWireSettingsDto ToDto(DriveWireServerConfiguration config)
+    {
+        DriveWireSettingsDto dto = new DriveWireSettingsDto
+        {
+            Enabled = config.Enabled,
+            Port = config.Port,
+            BindAddress = config.BindAddress,
+            TransactionTimeoutMilliseconds = config.TransactionTimeoutMilliseconds,
+            NamedObjectDirectory = config.NamedObjectDirectory,
+            PrintDirectory = config.PrintDirectory,
+        };
+
+        for (int i = 0; i < config.Drives.Count; i++)
+        {
+            DriveWireDriveConfiguration drive = config.Drives[i];
+            dto.Drives.Add(new DriveWireDriveSettingDto { Drive = drive.Drive, Path = drive.Path, ReadOnly = drive.ReadOnly });
+        }
+
+        return dto;
     }
 }

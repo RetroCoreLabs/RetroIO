@@ -20,6 +20,7 @@ public class FirewallControllerTests
     private FirewallEngine _firewall = null!;
     private Mock<ILogger<FirewallController>> _mockLogger = null!;
     private FirewallController _controller = null!;
+    private string _file = null!;
 
     [SetUp]
     public void SetUp()
@@ -33,7 +34,94 @@ public class FirewallControllerTests
         };
         _firewall = new FirewallEngine(config);
         _mockLogger = new Mock<ILogger<FirewallController>>();
-        _controller = new FirewallController(_firewall, _mockLogger.Object);
+        _file = Path.Combine(Path.GetTempPath(), "firewall-test-" + Guid.NewGuid().ToString("N") + ".json");
+        _controller = new FirewallController(_firewall, new FirewallPersistence(_file), _mockLogger.Object);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        File.Delete(_file);
+    }
+
+    /// <summary>
+    /// A rule created through the API is in firewall-config.json, so it survives a restart. Until
+    /// 2026-11-10 it lived in the running engine only.
+    /// </summary>
+    [Test]
+    public void CreateRule_IsWrittenToTheFile()
+    {
+        _controller.CreateRule(new CreateFirewallRuleRequest
+        {
+            Name = "Kept",
+            IPCondition = "192.168.1.100",
+            Action = "Allow",
+            Priority = 100,
+            Enabled = true,
+        });
+
+        FirewallConfiguration? saved = new FirewallPersistence(_file).Load();
+        Assert.That(saved, Is.Not.Null);
+        Assert.That(saved!.Rules.Count, Is.EqualTo(1));
+        Assert.That(saved.Rules[0].Name, Is.EqualTo("Kept"));
+    }
+
+    /// <summary>
+    /// Every firewall setting can be changed in one call, lands in the file, and is read back.
+    /// </summary>
+    [Test]
+    public void UpdateConfig_ChangesEverySetting_AndWritesTheFile()
+    {
+        _controller.UpdateConfig(new UpdateFirewallConfigRequest
+        {
+            Enabled = false,
+            DefaultPolicy = "deny",
+            AllowLocalhost = false,
+            AllowPrivateNetworks = false,
+            AllowedIpAddresses = new List<string> { "10.0.0.5" },
+            BlockedIpAddresses = new List<string> { "203.0.113.9" },
+            AllowedNetworks = new List<string> { "192.168.1.0/24" },
+            CacheTTLSeconds = 30,
+        });
+
+        FirewallConfiguration saved = new FirewallPersistence(_file).Load()!;
+        Assert.That(saved.Enabled, Is.False);
+        Assert.That(saved.DefaultPolicy, Is.EqualTo(FirewallPolicy.Deny));
+        Assert.That(saved.AllowLocalhost, Is.False);
+        Assert.That(saved.AllowPrivateNetworks, Is.False);
+        Assert.That(saved.AllowedIpAddresses, Is.EqualTo(new[] { "10.0.0.5" }));
+        Assert.That(saved.BlockedIpAddresses, Is.EqualTo(new[] { "203.0.113.9" }));
+        Assert.That(saved.AllowedNetworks, Is.EqualTo(new[] { "192.168.1.0/24" }));
+        Assert.That(saved.CacheTTLSeconds, Is.EqualTo(30));
+
+        ApiResponse<FirewallConfigDto> read = (ApiResponse<FirewallConfigDto>)((OkObjectResult)_controller.GetConfig().Result!).Value!;
+        Assert.That(read.Data!.CacheTTLSeconds, Is.EqualTo(30));
+    }
+
+    /// <summary>
+    /// A policy that is neither Allow nor Deny is refused and nothing is written.
+    /// </summary>
+    [Test]
+    public void UpdateConfig_WithAnUnknownPolicy_IsRefused()
+    {
+        ActionResult<ApiResponse<FirewallConfigDto>> result = _controller.UpdateConfig(new UpdateFirewallConfigRequest { DefaultPolicy = "maybe" });
+
+        Assert.That(result.Result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(File.Exists(_file), Is.False);
+    }
+
+    /// <summary>
+    /// Switching the firewall off and changing the default policy are written to the file too.
+    /// </summary>
+    [Test]
+    public void SetEnabledAndPolicy_AreWrittenToTheFile()
+    {
+        _controller.SetEnabled(new SetFirewallEnabledRequest { Enabled = false });
+        _controller.SetDefaultPolicy(new SetFirewallPolicyRequest { Policy = "Deny" });
+
+        FirewallConfiguration? saved = new FirewallPersistence(_file).Load();
+        Assert.That(saved!.Enabled, Is.False);
+        Assert.That(saved.DefaultPolicy, Is.EqualTo(FirewallPolicy.Deny));
     }
 
     [Test]

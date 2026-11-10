@@ -36,6 +36,24 @@ public sealed class RetroServerOptions
     public bool EnableDriveWire { get; set; } = true;
 
     /// <summary>
+    /// Host the COSMOS Ethernet hub (XMSG over Ethernet) for ND machines. Default true.
+    /// </summary>
+    /// <remarks>
+    /// The hub also has its own switch, Enabled in xmsghub-config.json (or XmsgHub:Enabled), which is OFF by default; both
+    /// must be on. This one exists so a host can leave the hub out entirely.
+    /// </remarks>
+    public bool EnableXmsgHub { get; set; } = true;
+
+    /// <summary>
+    /// Host RetroServer's own XMSG node, which client and server programs connect to. Default true.
+    /// </summary>
+    /// <remarks>
+    /// The node also has its own switch, Enabled in xmsgnode-config.json (or XmsgNode:Enabled), which is OFF by default;
+    /// both must be on.
+    /// </remarks>
+    public bool EnableXmsgNode { get; set; } = true;
+
+    /// <summary>
     /// Serve the management API and its SignalR hub. Default true.
     /// </summary>
     public bool EnableManagementApi { get; set; } = true;

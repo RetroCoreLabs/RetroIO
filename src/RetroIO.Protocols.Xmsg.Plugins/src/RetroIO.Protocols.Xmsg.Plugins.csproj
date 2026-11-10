@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The node's side of XMSG plug-in servers: a plug-in program dials the node over gRPC, and this
+    turns its requests into XMSG kernel and XROUT calls on the node's pump thread. The design is in
+    docs/XMSG-PLUGIN-SERVERS.md in the RetroServer repository (decided 2026-11-10).
+  -->
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Plugins</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Plugins</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Plugins</RootNamespace>
+    <Description>The XMSG node's side of plug-in server programs connected over gRPC.</Description>
+    <PackageTags>retroio;xmsg;xmsg.plugins;grpc</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- XmsgNodeService runs its own small Kestrel host for the gRPC port (HTTP/2 only). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Grpc.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Plugins.Contracts\src\RetroIO.Protocols.Xmsg.Plugins.Contracts.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Api.Node\src\RetroIO.Protocols.Xmsg.Api.Node.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hosting\src\RetroIO.Protocols.Xmsg.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

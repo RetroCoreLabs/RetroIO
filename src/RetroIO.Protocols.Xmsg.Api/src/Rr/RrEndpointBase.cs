@@ -369,32 +369,47 @@ namespace RetroIO.Protocols.Xmsg.Api
             returned = received.MessageType == XmsgMessageType.XMTRE;
             sender = Kernel.GetMessageStatus(received.Message).Sender;
 
-            byte[] header = new byte[HeaderSize];
-            if (!Kernel.ReadHeader(received.Message, header).IsError)
+            // Read the whole message once, then take it apart in memory. A letter XROUT forwarded
+            // (a connect request) still wears its XSLET header, and the RR message starts behind
+            // it, at 4 + the header's length word (see XroutLetter). That start can be odd, and a
+            // kernel read rounds an odd displacement up to the next word, so the PLANC chat server
+            // does the same as this: read it all, then slide (CHATSV.PLNC receive loop). A message
+            // sent port to port has no letter header.
+            XmsgMessageStatus status = Kernel.GetMessageStatus(received.Message);
+            byte[] whole = new byte[status.Length > 0 ? status.Length : 0];
+            int wholeRead = 0;
+            if (whole.Length > 0)
             {
-                kind = (RrMessageKind)header[0];
-                connection = (header[2] << 8) | header[3];
-                peerReference = (header[4] << 8) | header[5];
+                Kernel.Read(received.Message, whole, 0, out wholeRead);
+            }
+
+            int skip = 0;
+            if (received.MessageType == XmsgMessageType.XMROU)
+            {
+                skip = XroutLetter.UserDataOffset(new ReadOnlySpan<byte>(whole, 0, wholeRead));
+                if (skip < 0 || skip > wholeRead)
+                {
+                    skip = wholeRead;
+                }
+            }
+
+            if (wholeRead - skip >= HeaderSize)
+            {
+                kind = (RrMessageKind)whole[skip];
+                connection = (whole[skip + 2] << 8) | whole[skip + 3];
+                peerReference = (whole[skip + 4] << 8) | whole[skip + 5];
                 if (returned)
                 {
                     int own = peerReference;
                     peerReference = connection;
                     connection = own;
                 }
-            }
 
-            XmsgMessageStatus status = Kernel.GetMessageStatus(received.Message);
-            int payloadLength = status.Length - HeaderSize;
-            if (payloadLength > 0)
-            {
-                payload = new byte[payloadLength];
-                int read;
-                Kernel.Read(received.Message, payload, HeaderSize, out read);
-                if (read != payloadLength)
+                int payloadLength = wholeRead - skip - HeaderSize;
+                if (payloadLength > 0)
                 {
-                    byte[] trimmed = new byte[read];
-                    Array.Copy(payload, trimmed, read);
-                    payload = trimmed;
+                    payload = new byte[payloadLength];
+                    Array.Copy(whole, skip + HeaderSize, payload, 0, payloadLength);
                 }
             }
 

@@ -1,5 +1,6 @@
 # Packs every packable RetroIO project into the local folder feed as 0.1.0-local.<timestamp>.
-# The app repos reference 0.1.0-local.* so a fresh timestamp is always picked up and the NuGet cache never serves a stale DLL.
+# The app repos reference 0.1.0-local.*, but a floating version is chosen at RESTORE and a plain build does not choose again:
+# after packing, restore the app with `dotnet restore --force-evaluate`, or it keeps building against the previous pack (found 2026-11-10).
 param([string]$Feed = '', [switch]$Clean)
 $ErrorActionPreference = 'Stop'
 # $root is src: the solution lives there, one level above this eng folder.

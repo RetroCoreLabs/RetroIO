@@ -41,7 +41,7 @@ public static class TnfsServerExtensions
         services.AddSingleton<SessionManager>(sp =>
             new SessionManager(
                 sp.GetRequiredService<ILogger<SessionManager>>(),
-                TimeSpan.FromSeconds(Protocol.TnfsConstants.SESSION_TIMEOUT),
+                TimeSpan.FromSeconds(options.SessionTimeoutSeconds),
                 options.MaxSessionsPerIP,
                 options.MaxSessions));
 
@@ -172,4 +172,9 @@ public class TnfsServerOptions
     /// Gets or sets the most sessions one IP address may hold (default: 4096, the reference daemon's MAX_SESSIONS_PER_IP).
     /// </summary>
     public int MaxSessionsPerIP { get; set; } = Protocol.TnfsConstants.MAX_SESSIONS_PER_IP;
+
+    /// <summary>
+    /// Gets or sets how long a session may be idle before it is dropped, in seconds (default: 600, SESSION_TIMEOUT).
+    /// </summary>
+    public int SessionTimeoutSeconds { get; set; } = Protocol.TnfsConstants.SESSION_TIMEOUT;
 }

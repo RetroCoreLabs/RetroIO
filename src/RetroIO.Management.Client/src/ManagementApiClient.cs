@@ -547,6 +547,28 @@ public sealed class ManagementApiClient : IDisposable
     // ============================ firewall ============================
 
     /// <summary>
+    /// Gets the firewall's settings and rules.
+    /// </summary>
+    /// <returns>
+    /// Settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<FirewallConfigDto>?> GetFirewallConfigAsync() =>
+        GetAsync<FirewallConfigDto>("get firewall settings", "/api/v1/firewall/config");
+
+    /// <summary>
+    /// Changes the firewall's settings (not the rules); the server writes them to firewall-config.json.
+    /// </summary>
+    /// <param name="request">
+    /// The fields to change; null ones are left as they are.
+    /// </param>
+    /// <returns>
+    /// The settings as they now are, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<FirewallConfigDto>?> UpdateFirewallConfigAsync(UpdateFirewallConfigRequest request) =>
+        PutAsync<UpdateFirewallConfigRequest, FirewallConfigDto>("update firewall settings",
+            "/api/v1/firewall/config", request);
+
+    /// <summary>
     /// Lists firewall rules.
     /// </summary>
     /// <returns>
@@ -620,6 +642,223 @@ public sealed class ManagementApiClient : IDisposable
     /// </returns>
     public Task<ApiResponse<EconetSessionsResponse>?> GetEconetSessionsAsync() =>
         GetAsync<EconetSessionsResponse>("get Econet sessions", "/api/v1/econet/sessions");
+
+    // ============================ XMSG Ethernet hub ============================
+
+    /// <summary>
+    /// Gets the COSMOS Ethernet hub's state and counters.
+    /// </summary>
+    /// <returns>
+    /// Status envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgHubStatusResponse>?> GetXmsgHubStatusAsync() =>
+        GetAsync<XmsgHubStatusResponse>("get XMSG hub status", "/api/v1/xmsghub/status");
+
+    /// <summary>
+    /// Gets the members joined to the hub.
+    /// </summary>
+    /// <returns>
+    /// Members envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgHubMembersResponse>?> GetXmsgHubMembersAsync() =>
+        GetAsync<XmsgHubMembersResponse>("get XMSG hub members", "/api/v1/xmsghub/members");
+
+    /// <summary>
+    /// Gets the hub's log lines after a given line number.
+    /// </summary>
+    /// <param name="after">
+    /// The last line number already held; 0 for all lines the hub still keeps.
+    /// </param>
+    /// <param name="limit">
+    /// The most lines to return.
+    /// </param>
+    /// <returns>
+    /// Log envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgHubLogResponse>?> GetXmsgHubLogAsync(long after = 0, int limit = 1000) =>
+        GetAsync<XmsgHubLogResponse>("get XMSG hub log", $"/api/v1/xmsghub/log?after={after}&limit={limit}");
+
+    /// <summary>
+    /// Gets the frames the hub carried after a given frame number, with their bytes.
+    /// </summary>
+    /// <param name="after">
+    /// The last frame number already held; 0 for all frames the hub still keeps.
+    /// </param>
+    /// <param name="limit">
+    /// The most frames to return.
+    /// </param>
+    /// <param name="system">
+    /// Only frames from or to this system number; 0 for all.
+    /// </param>
+    /// <returns>
+    /// Frames envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgHubFramesResponse>?> GetXmsgHubFramesAsync(long after = 0, int limit = 500, int system = 0) =>
+        GetAsync<XmsgHubFramesResponse>("get XMSG hub frames", $"/api/v1/xmsghub/frames?after={after}&limit={limit}&system={system}");
+
+    /// <summary>
+    /// Downloads the frames the hub still keeps as a pcap file.
+    /// </summary>
+    /// <param name="system">
+    /// Only frames from or to this system number; 0 for all.
+    /// </param>
+    /// <returns>
+    /// The file's bytes, or null when the request failed or the hub is not hosted.
+    /// </returns>
+    public async Task<byte[]?> DownloadXmsgHubPcapAsync(int system = 0)
+    {
+        try
+        {
+            using HttpResponseMessage response = await _httpClient
+                .GetAsync($"/api/v1/xmsghub/frames.pcap?system={system}")
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                RequestFailed?.Invoke(
+                    "download XMSG hub frames",
+                    new HttpRequestException($"The server answered {(int)response.StatusCode} {response.ReasonPhrase}."));
+                return null;
+            }
+
+            return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            RequestFailed?.Invoke("download XMSG hub frames", ex);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            RequestFailed?.Invoke("download XMSG hub frames", ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the hub settings saved on the server.
+    /// </summary>
+    /// <returns>
+    /// Settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgHubSettingsDto>?> GetXmsgHubSettingsAsync() =>
+        GetAsync<XmsgHubSettingsDto>("get XMSG hub settings", "/api/v1/xmsghub/settings");
+
+    /// <summary>
+    /// Saves the hub settings on the server. They take effect when the server is restarted.
+    /// </summary>
+    /// <param name="settings">
+    /// Every setting.
+    /// </param>
+    /// <returns>
+    /// The saved settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgHubSettingsDto>?> UpdateXmsgHubSettingsAsync(XmsgHubSettingsDto settings) =>
+        PutAsync<XmsgHubSettingsDto, XmsgHubSettingsDto>("update XMSG hub settings", "/api/v1/xmsghub/settings", settings);
+
+    /// <summary>
+    /// Gets the DriveWire settings saved on the server (drivewire-config.json).
+    /// </summary>
+    /// <returns>
+    /// Settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<DriveWireSettingsDto>?> GetDriveWireSettingsAsync() =>
+        GetAsync<DriveWireSettingsDto>("get DriveWire settings", "/api/v1/drivewire/settings");
+
+    /// <summary>
+    /// Saves the DriveWire settings on the server. They take effect when the server is restarted.
+    /// </summary>
+    /// <param name="settings">
+    /// Every setting.
+    /// </param>
+    /// <returns>
+    /// The saved settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<DriveWireSettingsDto>?> UpdateDriveWireSettingsAsync(DriveWireSettingsDto settings) =>
+        PutAsync<DriveWireSettingsDto, DriveWireSettingsDto>("update DriveWire settings", "/api/v1/drivewire/settings", settings);
+
+    /// <summary>
+    /// Gets RetroServer's XMSG node settings (xmsgnode-config.json). The program token is never sent; only whether one is set.
+    /// </summary>
+    /// <returns>
+    /// Settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgNodeSettingsDto>?> GetXmsgNodeSettingsAsync() =>
+        GetAsync<XmsgNodeSettingsDto>("get XMSG node settings", "/api/v1/xmsgnode/settings");
+
+    /// <summary>
+    /// Saves RetroServer's XMSG node settings. They take effect when the server is restarted.
+    /// </summary>
+    /// <param name="settings">
+    /// Every setting; <see cref="XmsgNodeSettingsDto.NewProgramToken"/> null keeps the token, empty removes it.
+    /// </param>
+    /// <returns>
+    /// The saved settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<XmsgNodeSettingsDto>?> UpdateXmsgNodeSettingsAsync(XmsgNodeSettingsDto settings) =>
+        PutAsync<XmsgNodeSettingsDto, XmsgNodeSettingsDto>("update XMSG node settings", "/api/v1/xmsgnode/settings", settings);
+
+    /// <summary>
+    /// Gets the traffic limits and audit log settings (security-config.json).
+    /// </summary>
+    /// <returns>
+    /// Settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<SecuritySettingsDto>?> GetSecuritySettingsAsync() =>
+        GetAsync<SecuritySettingsDto>("get security settings", "/api/v1/security/settings");
+
+    /// <summary>
+    /// Saves the traffic limits and audit log settings. They take effect when the server is restarted.
+    /// </summary>
+    /// <param name="settings">
+    /// Every setting.
+    /// </param>
+    /// <returns>
+    /// The saved settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<SecuritySettingsDto>?> UpdateSecuritySettingsAsync(SecuritySettingsDto settings) =>
+        PutAsync<SecuritySettingsDto, SecuritySettingsDto>("update security settings", "/api/v1/security/settings", settings);
+
+    /// <summary>
+    /// Gets the mounted volumes list (mounts.json). Passwords are never sent.
+    /// </summary>
+    /// <returns>
+    /// The list envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<List<MountDto>>?> GetMountsAsync() =>
+        GetAsync<List<MountDto>>("get mounted volumes", "/api/v1/mounts");
+
+    /// <summary>
+    /// Replaces the mounted volumes list. It takes effect when the server is restarted.
+    /// </summary>
+    /// <param name="mounts">
+    /// Every volume; <see cref="MountDto.NewPassword"/> null keeps a stored password, empty removes it.
+    /// </param>
+    /// <returns>
+    /// The saved list envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<List<MountDto>>?> UpdateMountsAsync(List<MountDto> mounts) =>
+        PutAsync<List<MountDto>, List<MountDto>>("update mounted volumes", "/api/v1/mounts", mounts);
+
+    /// <summary>
+    /// Gets RetroServer's start-up settings (appsettings.json). The Azure connection string is never sent.
+    /// </summary>
+    /// <returns>
+    /// Settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<StartupSettingsDto>?> GetStartupSettingsAsync() =>
+        GetAsync<StartupSettingsDto>("get start-up settings", "/api/v1/startup");
+
+    /// <summary>
+    /// Saves RetroServer's start-up settings. They take effect when the server is restarted.
+    /// </summary>
+    /// <param name="settings">
+    /// Every setting.
+    /// </param>
+    /// <returns>
+    /// The saved settings envelope, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<StartupSettingsDto>?> UpdateStartupSettingsAsync(StartupSettingsDto settings) =>
+        PutAsync<StartupSettingsDto, StartupSettingsDto>("update start-up settings", "/api/v1/startup", settings);
 
     /// <summary>
     /// Gets the TNFS sessions currently mounted.

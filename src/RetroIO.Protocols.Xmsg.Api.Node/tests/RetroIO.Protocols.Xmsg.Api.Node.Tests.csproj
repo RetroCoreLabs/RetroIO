@@ -22,6 +22,8 @@
          framing and de-framing rather than handing raw datagrams straight across. -->
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Live\src\RetroIO.Protocols.Xmsg.Live.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hdlc\src\RetroIO.Protocols.Xmsg.Hdlc.csproj" />
+    <!-- The chat server, for the test that a SINTRAN join off the wire is answered with a welcome. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Chat\src\RetroIO.Protocols.Xmsg.Chat.csproj" />
   </ItemGroup>
 
 </Project>

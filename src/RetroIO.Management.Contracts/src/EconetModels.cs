@@ -108,6 +108,27 @@ public class EconetSessionInfo
 public class EconetSettingsDto
 {
     /// <summary>
+    /// Gets or sets whether the Econet file server runs.
+    /// </summary>
+    public bool Enabled { get; set; }
+    /// <summary>
+    /// Gets or sets which byte of a client's IP address is its station number (0 to 3; the default 3 is the last).
+    /// </summary>
+    public byte AunStationOctetIndex { get; set; }
+    /// <summary>
+    /// Gets or sets the reply format for every machine not listed in <see cref="WireProfileOverrides"/>:
+    /// <c>LaterFS</c> (ANFS / DNFS 3.60) or <c>Classic1983</c>.
+    /// </summary>
+    public string WireProfile { get; set; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the machines that get another reply format than the default.
+    /// </summary>
+    public List<EconetWireProfileOverrideDto> WireProfileOverrides { get; set; } = new();
+    /// <summary>
+    /// Gets or sets the discs, each from its own storage. Empty: the discs are the folders under the root folder.
+    /// </summary>
+    public List<EconetDiscDto> Discs { get; set; } = new();
+    /// <summary>
     /// Gets or sets the UDP port.
     /// </summary>
     public int UdpPort { get; set; }
@@ -142,6 +163,26 @@ public class EconetSettingsDto
 /// </summary>
 public class UpdateEconetSettingsRequest
 {
+    /// <summary>
+    /// Gets or sets whether the Econet file server runs, or null to keep the current value.
+    /// </summary>
+    public bool? Enabled { get; set; }
+    /// <summary>
+    /// Gets or sets which byte of a client's IP address is its station number, or null to keep it.
+    /// </summary>
+    public byte? AunStationOctetIndex { get; set; }
+    /// <summary>
+    /// Gets or sets the default reply format (<c>LaterFS</c> or <c>Classic1983</c>), or null to keep it.
+    /// </summary>
+    public string? WireProfile { get; set; }
+    /// <summary>
+    /// Gets or sets the whole list of per-machine reply formats, or null to keep it.
+    /// </summary>
+    public List<EconetWireProfileOverrideDto>? WireProfileOverrides { get; set; }
+    /// <summary>
+    /// Gets or sets the whole disc list, or null to keep it. An empty list goes back to one folder per disc.
+    /// </summary>
+    public List<EconetDiscDto>? Discs { get; set; }
     /// <summary>
     /// Gets or sets the new UDP port, or null to keep the current one.
     /// </summary>
@@ -283,4 +324,67 @@ public class EconetActivityResponse
     /// Most recent file transfers, newest first.
     /// </summary>
     public List<EconetFileTransferEntryDto> Transfers { get; set; } = new();
+}
+
+/// <summary>
+/// One machine that is served another reply format than the default.
+/// </summary>
+public class EconetWireProfileOverrideDto
+{
+    /// <summary>
+    /// Gets or sets the machine's network number.
+    /// </summary>
+    public byte Net { get; set; }
+
+    /// <summary>
+    /// Gets or sets the machine's station number.
+    /// </summary>
+    public byte Station { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reply format: <c>LaterFS</c> or <c>Classic1983</c>.
+    /// </summary>
+    public string Profile { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One Econet disc served from its own storage: either a storage given here (provider and address) or a volume from
+/// the mounted volumes list (mounts.json), never both.
+/// </summary>
+public class EconetDiscDto
+{
+    /// <summary>
+    /// Gets or sets the disc number, from 0.
+    /// </summary>
+    public int Index { get; set; }
+
+    /// <summary>
+    /// Gets or sets the disc name the BBC sees.
+    /// </summary>
+    public string AcornName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the folder name in the root, or null for the number followed by the name.
+    /// </summary>
+    public string? DirName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the storage kind (native or tnfs; the server does not take ftp or sftp for a disc yet), or null when <see cref="MountRef"/> is used.
+    /// </summary>
+    public string? Provider { get; set; }
+
+    /// <summary>
+    /// Gets or sets the storage address, or null when <see cref="MountRef"/> is used.
+    /// </summary>
+    public string? Uri { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the disc refuses writes.
+    /// </summary>
+    public bool ReadOnly { get; set; }
+
+    /// <summary>
+    /// Gets or sets the id of a volume in mounts.json, or null when <see cref="Provider"/> and <see cref="Uri"/> are used.
+    /// </summary>
+    public string? MountRef { get; set; }
 }

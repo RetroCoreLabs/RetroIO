@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Everything a program needs to RUN an XMSG node, as opposed to the protocol itself: the
+    topology file, the node builder, the state files, the clean-shutdown steps, the restart
+    announcer, the folder sync daemon and the one-shot push and pull drivers.
+
+    All of it lived as internal code inside xmsgrunner (the RetroXmsg repository) until
+    2026-11-09. It moved here so a long-running service (RetroServer) and the runner use one
+    implementation instead of two that drift apart.
+  -->
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Xmsg.Hosting</PackageId>
+    <AssemblyName>RetroIO.Protocols.Xmsg.Hosting</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Xmsg.Hosting</RootNamespace>
+    <Description>Running an XMSG node: topology, node builder, state files, clean shutdown, restart announcer, folder sync daemon and file push/pull drivers.</Description>
+    <PackageTags>retroio;xmsg;xmsg.hosting</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg\src\RetroIO.Protocols.Xmsg.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Api\src\RetroIO.Protocols.Xmsg.Api.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Node\src\RetroIO.Protocols.Xmsg.Node.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Live\src\RetroIO.Protocols.Xmsg.Live.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ndfs\src\RetroIO.Protocols.Xmsg.Ndfs.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Servers\src\RetroIO.Protocols.Xmsg.Servers.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Sync\src\RetroIO.Protocols.Xmsg.Sync.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

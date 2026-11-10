@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    retro-chat-server: the C# chat server as a program: it connects to RetroServer, claims *CHAT there and serves the rooms.
+    A sample of an XMSG program that connects to RetroServer, which is the XMSG machine. The chat
+    logic is in RetroIO.Protocols.Xmsg.Chat; this is the settings file and the loop around it.
+    Moved here from the RetroXmsg repository on 2026-11-10, so the samples build and test with the
+    library they show. Design: docs/XMSG-PLUGIN-SERVERS.md in the RetroServer repository.
+  -->
+  <PropertyGroup>
+    <AssemblyName>retro-chat-server</AssemblyName>
+    <RootNamespace>RetroIO.Samples.ChatServer</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Chat\src\RetroIO.Protocols.Xmsg.Chat.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Plugins.Client\src\RetroIO.Protocols.Xmsg.Plugins.Client.csproj" />
+  </ItemGroup>
+
+</Project>

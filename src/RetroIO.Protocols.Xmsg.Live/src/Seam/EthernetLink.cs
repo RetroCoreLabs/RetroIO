@@ -7,6 +7,7 @@
 
 using System;
 
+using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Ethernet;
 using RetroIO.Protocols.Xmsg.Node.Seam;   // ILink + seam types live in the portable RetroIO.Protocols.Xmsg.Node half
 
@@ -95,6 +96,17 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// A subscriber that keeps the payload must copy it inside the callback.
         /// </remarks>
         public event LinkPayloadReceived? PayloadReceived;
+
+        /// <summary>
+        /// Gets or sets where this link writes its own diagnostic lines (a refused send, a link
+        /// failure, a shutdown handler that threw). Null discards them.
+        /// </summary>
+        /// <remarks>
+        /// This used to be the console. A link hosted inside a service has no console, and a
+        /// library writing to one bypasses the host's logging, so the caller decides where the
+        /// lines go: the runner passes <c>Console.WriteLine</c>, a service passes its logger.
+        /// </remarks>
+        public XmsgLogHandler? Log { get; set; }
 
         /// <summary>
         /// Occurs when the link status changes (actual transitions only).
@@ -433,6 +445,25 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         public event NdStaleAcknowledgement? StaleAcknowledgement;
 
         /// <summary>
+        /// Gets how many datagrams are parked, waiting for room in the peer's send window.
+        /// </summary>
+        /// <remarks>
+        /// A host stopping the link reads this to let the last frames out before it disposes the
+        /// link: a datagram still parked when the link goes is never sent. The HDLC adapter has the
+        /// same need and meets it with its own bounded final flush.
+        /// </remarks>
+        public int QueuedDatagrams
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _linkLayer.QueuedDatagrams;
+                }
+            }
+        }
+
+        /// <summary>
         /// The window state at the moment of the most recent park.
         /// </summary>
         /// <remarks>
@@ -465,14 +496,14 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         /// </param>
         /// <returns>
         /// <c>true</c> when the datagram was sent or parked; <c>false</c> when the link is not Active,
-        /// the payload is empty (both written to the console), or the link layer refused it.
+        /// the payload is empty (both written to <see cref="Log"/>), or the link layer refused it.
         /// </returns>
         public bool SendData(ReadOnlySpan<byte> payload)
         {
             // Contract: a not-Active link (or an empty payload) is a logged false, NEVER a throw.
             if (_status != LinkStatus.Active)
             {
-                Console.WriteLine(
+                Log?.Invoke(
                     $"[link] {_name} SendData refused: link not Active (status {_status}"
                     + (_linkLayer.HasLearnedPeer ? ")" : ", peer not heard from yet)"));
                 return false;
@@ -480,7 +511,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
 
             if (payload.Length == 0)
             {
-                Console.WriteLine($"[link] {_name} SendData refused: empty payload");
+                Log?.Invoke($"[link] {_name} SendData refused: empty payload");
                 return false;
             }
 

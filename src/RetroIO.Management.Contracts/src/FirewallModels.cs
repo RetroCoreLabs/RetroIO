@@ -44,6 +44,58 @@ public class FirewallConfigDto
     /// Gets or sets the networks that are allowed.
     /// </summary>
     public List<string> AllowedNetworks { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets how long, in seconds, a decision for one address is remembered.
+    /// </summary>
+    public int CacheTTLSeconds { get; set; }
+}
+
+/// <summary>
+/// A change to the firewall's settings (everything but the rules, which have their own calls).
+/// A field left null is not changed.
+/// </summary>
+public class UpdateFirewallConfigRequest
+{
+    /// <summary>
+    /// Gets or sets whether the firewall checks connections at all.
+    /// </summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets what happens to an address no rule names: <c>Allow</c> or <c>Deny</c>.
+    /// </summary>
+    public string? DefaultPolicy { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this computer (127.0.0.1, ::1) is always let in.
+    /// </summary>
+    public bool? AllowLocalhost { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether private networks (10.x, 172.16-31.x, 192.168.x) are always let in.
+    /// </summary>
+    public bool? AllowPrivateNetworks { get; set; }
+
+    /// <summary>
+    /// Gets or sets the addresses always let in; replaces the whole list.
+    /// </summary>
+    public List<string>? AllowedIpAddresses { get; set; }
+
+    /// <summary>
+    /// Gets or sets the addresses always refused; replaces the whole list.
+    /// </summary>
+    public List<string>? BlockedIpAddresses { get; set; }
+
+    /// <summary>
+    /// Gets or sets the networks (CIDR, for example 192.168.1.0/24) always let in; replaces the whole list.
+    /// </summary>
+    public List<string>? AllowedNetworks { get; set; }
+
+    /// <summary>
+    /// Gets or sets how long, in seconds, a decision for one address is remembered.
+    /// </summary>
+    public int? CacheTTLSeconds { get; set; }
 }
 
 /// <summary>

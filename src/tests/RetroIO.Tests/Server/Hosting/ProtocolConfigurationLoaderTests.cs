@@ -207,6 +207,141 @@ public sealed class ProtocolConfigurationLoaderTests
     }
 
     [Test]
+    public void LoadXmsgHubConfiguration_MissingFile_GivesTheHubOff_OnPort5010_ThisComputerOnly_AndIsCreated()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            Console.SetOut(new StringWriter());
+            XmsgHubServerConfiguration result =
+                ProtocolConfigurationLoader.LoadXmsgHubConfiguration(tempPath, new ConfigurationBuilder().Build());
+            Console.SetOut(originalOut);
+
+            Assert.That(result.Enabled, Is.False, "a new protocol starts switched off");
+            Assert.That(result.Port, Is.EqualTo(5010), "the port of the standalone xmsghub");
+            Assert.That(result.BindAddress, Is.EqualTo("127.0.0.1"));
+            Assert.That(result.Uplink, Is.Null);
+            Assert.That(result.CaptureFile, Is.Null);
+            Assert.That(result.FrameBufferSize, Is.EqualTo(4096));
+            Assert.That(File.Exists(Path.Combine(tempPath, "xmsghub-config.json")), Is.True);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
+    public void LoadXmsgNodeConfiguration_MissingFile_GivesTheNodeOff_WithNoNumbers_AndIsCreated()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            Console.SetOut(new StringWriter());
+            XmsgNodeServerConfiguration result =
+                ProtocolConfigurationLoader.LoadXmsgNodeConfiguration(tempPath, new ConfigurationBuilder().Build());
+            Console.SetOut(originalOut);
+
+            Assert.That(result.Enabled, Is.False, "a new protocol starts switched off");
+            Assert.That(result.SystemNumber, Is.EqualTo(0), "no system number is made up");
+            Assert.That(result.PeerSystemNumber, Is.EqualTo(0));
+            Assert.That(result.Ethernet, Is.EqualTo("tcp:127.0.0.1:5010"), "RetroServer's own hub");
+            Assert.That(result.ProgramBindAddress, Is.EqualTo("127.0.0.1"));
+            Assert.That(result.ProgramPort, Is.EqualTo(5011));
+            Assert.That(result.ProgramLogMinimum, Is.EqualTo("Information"));
+            Assert.That(File.Exists(Path.Combine(tempPath, "xmsgnode-config.json")), Is.True);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
+    public void LoadXmsgNodeConfiguration_FileThenOverrides()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(tempPath, "xmsgnode-config.json"),
+                "{ \"Enabled\": true, \"SystemNumber\": 19998, \"PeerSystemNumber\": 100 }");
+            IConfiguration config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["XmsgNode:PeerSystemNumber"] = "102",
+                    ["XmsgNode:ProgramPort"] = "5099",
+                    ["XmsgNode:Ethernet"] = "tcp:10.0.0.1:5010",
+                    ["XmsgNode:ProgramLogMinimum"] = "Debug",
+                })
+                .Build();
+
+            XmsgNodeServerConfiguration result = ProtocolConfigurationLoader.LoadXmsgNodeConfiguration(tempPath, config);
+
+            Assert.That(result.Enabled, Is.True);
+            Assert.That(result.SystemNumber, Is.EqualTo(19998));
+            Assert.That(result.PeerSystemNumber, Is.EqualTo(102));
+            Assert.That(result.ProgramPort, Is.EqualTo(5099));
+            Assert.That(result.Ethernet, Is.EqualTo("tcp:10.0.0.1:5010"));
+            Assert.That(result.ProgramLogMinimum, Is.EqualTo("Debug"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
+    public void LoadXmsgHubConfiguration_FileThenOverrides_AndTheFileIsNotRewritten()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            string file = Path.Combine(tempPath, "xmsghub-config.json");
+            string json = "{ \"Enabled\": true, \"Port\": 5020, \"CaptureFile\": \"a.pcap\" }";
+            File.WriteAllText(file, json);
+            IConfiguration config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["XmsgHub:Port"] = "5030",
+                    ["XmsgHub:BindAddress"] = "0.0.0.0",
+                    ["XmsgHub:Uplink"] = "far:5010",
+                    ["XmsgHub:FrameBufferSize"] = "10",
+                })
+                .Build();
+
+            XmsgHubServerConfiguration result = ProtocolConfigurationLoader.LoadXmsgHubConfiguration(tempPath, config);
+
+            Assert.That(result.Enabled, Is.True);
+            Assert.That(result.Port, Is.EqualTo(5030));
+            Assert.That(result.BindAddress, Is.EqualTo("0.0.0.0"));
+            Assert.That(result.Uplink, Is.EqualTo("far:5010"));
+            Assert.That(result.CaptureFile, Is.EqualTo("a.pcap"));
+            Assert.That(result.FrameBufferSize, Is.EqualTo(10));
+            Assert.That(File.ReadAllText(file), Is.EqualTo(json));
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
     public void LoadEconetConfiguration_ParsesDiscsAndWireProfileFromJson()
     {
         // Exercises the REAL loader (System.Text.Json, default options) over a representative
