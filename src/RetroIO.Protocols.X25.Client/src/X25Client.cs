@@ -319,6 +319,82 @@ namespace RetroIO.Protocols.X25.Client
         }
 
         /// <summary>
+        /// Waits until the peer has acknowledged every data packet sent on a circuit, or the time
+        /// runs out, or the circuit is cleared.
+        /// </summary>
+        /// <param name="vc">
+        /// The circuit to wait on.
+        /// </param>
+        /// <param name="timeoutMs">
+        /// The longest wait, in milliseconds.
+        /// </param>
+        /// <returns>
+        /// True when every packet sent has been acknowledged (V(A) has reached V(S)). False when the
+        /// time ran out or the circuit is gone or being cleared.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// X.25 section 4.5 lets the network discard data sent just before a clear, so a service that
+        /// says goodbye and clears at once may never be heard. Waiting for the peer's acknowledgement
+        /// (its P(R)) before the clear means the peer's packet layer has the packet. It is not a
+        /// delivery confirmation to the user: that is the D bit, which not every peer honours.
+        /// </para>
+        /// <para>
+        /// The wait spins and yields for the first moments, because an acknowledgement usually comes
+        /// back in well under a millisecond, and only then sleeps: a <c>Thread.Sleep(1)</c> lasts about
+        /// 15 ms on Windows.
+        /// </para>
+        /// </remarks>
+        public bool WaitForAcknowledgement(X25Vc vc, int timeoutMs)
+        {
+            X25Layer x25 = RequireLayer();
+
+            if (vc == null)
+            {
+                throw new ArgumentNullException(nameof(vc));
+            }
+
+            long deadline = Environment.TickCount64 + timeoutMs;
+            int spins = 0;
+            while (true)
+            {
+                lock (_lock)
+                {
+                    // A circuit that is gone, or is being cleared, will never be acknowledged. (The
+                    // engine keeps a cleared circuit in its table until the clear is confirmed, so
+                    // being in the table is not enough.)
+                    if (!x25.Circuits.TryGetValue(vc.Lcn, out RetroIO.Protocols.X25.PacketLayer.X25Vc? circuit)
+                        || circuit.State == X25VcState.Ready
+                        || circuit.State == X25VcState.ClearRequest
+                        || circuit.State == X25VcState.ClearIndication)
+                    {
+                        return false;
+                    }
+
+                    // Packets sent but not yet acknowledged: V(S) - V(A), modulo 8.
+                    if (((circuit.SendSeq - circuit.AckedSeq) & 0x07) == 0)
+                    {
+                        return true;
+                    }
+                }
+
+                if (Environment.TickCount64 >= deadline)
+                {
+                    return false;
+                }
+
+                if (++spins < 2000)
+                {
+                    Thread.Yield();
+                }
+                else
+                {
+                    Thread.Sleep(1);
+                }
+            }
+        }
+
+        /// <summary>
         /// Sends a text string on a circuit (Q-bit clear), encoded as UTF-8.
         /// </summary>
         /// <param name="vc">
