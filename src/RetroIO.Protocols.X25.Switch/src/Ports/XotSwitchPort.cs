@@ -99,6 +99,8 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// The packet type octet of a Call Request.
         /// </summary>
         private const byte CallRequestType = 0x0B;
+        private const byte ClearRequestType = 0x13;
+        private const byte ClearConfirmationType = 0x17;
 
         /// <summary>
         /// The clearing cause reported for a circuit whose connection was lost: out of order.
@@ -156,6 +158,11 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// writes in answer to a packet that has no circuit yet goes back out on it.
         /// </summary>
         private XotConnection? _currentInbound;
+
+        /// <summary>
+        /// Calls refused for want of a free channel, for the log. Read and written with the lock held.
+        /// </summary>
+        private long _callsRefused;
 
         /// <summary>
         /// The connection just dialled for the call being placed, until the call has a channel.
@@ -1310,12 +1317,31 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             ReadOnlySpan<byte> forEngine = frame;
             if (wire != 0)
             {
-                bool isCallRequest = frame.Length >= 3 && frame[2] == CallRequestType;
-                if (MapInbound(connection, wire, isCallRequest, out ushort channel) && channel != wire)
+                byte packetType = frame.Length >= 3 ? frame[2] : (byte)0;
+
+                // A channel this port refused a call on belongs to no circuit the engine knows; the
+                // few packets the caller can still send on it are answered here.
+                if (connection.Refused.Contains(wire))
                 {
-                    byte[] renumbered = frame.ToArray();
-                    SetChannel(renumbered, channel);
-                    forEngine = renumbered;
+                    AnswerOnRefusedChannel(connection, wire, packetType);
+                    return;
+                }
+
+                bool isCallRequest = packetType == CallRequestType;
+                if (MapInbound(connection, wire, isCallRequest, out ushort channel))
+                {
+                    if (channel != wire)
+                    {
+                        byte[] renumbered = frame.ToArray();
+                        SetChannel(renumbered, channel);
+                        forEngine = renumbered;
+                    }
+                }
+                else if (isCallRequest)
+                {
+                    // MapInbound only fails a Call Request when every channel of the port is in use.
+                    RefuseCall(connection, wire);
+                    return;
                 }
             }
 
@@ -1328,6 +1354,59 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 _currentInbound = null;
             }
+        }
+
+        /// <summary>
+        /// Clears a call the port has no channel for, with cause 5, network congestion (X.25 Table
+        /// 5-7), on the channel number the caller used.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The port renumbers a caller's channels into its own range, so a call that finds the range
+        /// full has a channel number the engine does not know. Handed to the engine, the packet was
+        /// answered with a Diagnostic on channel 0 (Table C.1: a channel outside every configured range
+        /// is unassigned, diagnostic 36). A Diagnostic is not an answer to a call: the caller ignores
+        /// it and waits for the call to be accepted or cleared, and the call just hangs. The caller
+        /// is told, as X.25 has it, that the network cannot take the call now.
+        /// </para>
+        /// <para>
+        /// The channel is remembered in <see cref="XotConnection.Refused"/> until the caller confirms
+        /// the clear, so its Clear Confirmation (or a Clear Request of its own, if it gives up first)
+        /// does not reach the engine as a packet on an unassigned channel.
+        /// </para>
+        /// </remarks>
+        private void RefuseCall(XotConnection connection, ushort wire)
+        {
+            // A caller that sends thousands of calls at a full port would otherwise write a line each.
+            _callsRefused++;
+            if (_callsRefused == 1 || _callsRefused % 100 == 0)
+            {
+                _logger.LogWarning("Port {Id}: no free channel for a call on channel {Wire}; cleared with network congestion ({Count} refused so far)", Id, wire, _callsRefused);
+            }
+
+            connection.Refused.Add(wire);
+            Counters.IncrementCallsCleared();
+            SendOnConnection(connection, X25PacketBuilder.CreateClearRequest(wire, X25Cause.NetworkCongestion, 0));
+        }
+
+        /// <summary>
+        /// Answers a packet on a channel this port refused a call on.
+        /// </summary>
+        private void AnswerOnRefusedChannel(XotConnection connection, ushort wire, byte packetType)
+        {
+            if (packetType == ClearConfirmationType)
+            {
+                connection.Refused.Remove(wire);
+            }
+            else if (packetType == ClearRequestType)
+            {
+                // The caller cleared first: both ends have now said clear.
+                connection.Refused.Remove(wire);
+                SendOnConnection(connection, X25PacketBuilder.CreateClearConfirmation(wire));
+            }
+
+            // Anything else (a second Call Request, data) is a packet on a channel in clear
+            // indication state and is dropped, as X.25 has the network do.
         }
 
         private void OnFramingFailed(XotConnection connection, string reason)
@@ -1364,6 +1443,14 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 SetChannel(onWire, wire);
             }
 
+            return SendOnConnection(connection, onWire);
+        }
+
+        /// <summary>
+        /// Writes one finished packet to a connection, and counts and shows it. The lock is held.
+        /// </summary>
+        private X25SendResult SendOnConnection(XotConnection connection, byte[] onWire)
+        {
             try
             {
                 connection.Codec.SendFrame(onWire);
@@ -1523,6 +1610,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             /// Gets the channels of the circuits this connection carries, as the engine knows them.
             /// </summary>
             public List<ushort> Circuits { get; } = new List<ushort>();
+
+            /// <summary>
+            /// Gets the channel numbers (as the caller numbers them) of calls the port refused for
+            /// want of a free channel and whose clearing the caller has not yet confirmed.
+            /// </summary>
+            public HashSet<ushort> Refused { get; } = new HashSet<ushort>();
         }
 
         /// <summary>
