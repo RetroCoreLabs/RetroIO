@@ -65,6 +65,35 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// After data is sent, <see cref="X25Client.WaitForAcknowledgement"/> returns true once the peer
+        /// has acknowledged it, and returns false for a circuit that has been cleared.
+        /// </summary>
+        [Test]
+        public void WaitForAcknowledgement_TrueOnceThePeerHasAcknowledged_FalseAfterAClear()
+        {
+            using LoopbackX25Peer peer = new LoopbackX25Peer();
+            using X25Client client = new X25Client { ServiceName = "test-client" };
+
+            client.Open(new X25ClientConfig
+            {
+                Host = "127.0.0.1",
+                Port = (ushort)peer.Port,
+                LocalAddress = "100",
+                Framing = X25ClientFraming.Xot
+            }, NullLogger.Instance);
+
+            ClientVc? vc = client.CallWait("200", 3000);
+            Assert.That(vc, Is.Not.Null);
+
+            Assert.That(client.SendText(vc!, "PING"), Is.True);
+            Assert.That(client.WaitForAcknowledgement(vc!, 3000), Is.True,
+                "the peer's packet layer acknowledges the packet it received");
+
+            client.Clear(vc!, 0, 0);
+            Assert.That(client.WaitForAcknowledgement(vc!, 200), Is.False, "a cleared circuit has nothing to wait for");
+        }
+
+        /// <summary>
         /// Clearing a connected circuit is confirmed by the peer and the client's clear callback fires.
         /// </summary>
         [Test]
