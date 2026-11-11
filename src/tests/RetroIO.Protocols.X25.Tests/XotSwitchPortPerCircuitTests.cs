@@ -435,10 +435,17 @@ namespace RetroIO.Protocols.X25.Tests
 
         /// <summary>
         /// A peer that puts several circuits on one connection is served while the port has channels;
-        /// a call beyond the port's channels is refused with a Diagnostic, and the others stay up.
+        /// a call beyond the port's channels is cleared with cause 5 (network congestion), and the
+        /// others stay up.
         /// </summary>
+        /// <remarks>
+        /// This used to expect a Diagnostic (type 0xF1). A Diagnostic is not an answer to a Call
+        /// Request: a caller waits for the call to be accepted or cleared, so the refused call hung
+        /// (found with x25traffic, which sent 200 calls to a port of 64 channels and heard nothing for
+        /// 136 of them). X.25 Table 5-7 has the network clear the call with cause 5, network congestion.
+        /// </remarks>
         [Test]
-        public void ACallOnOneConnection_WithNoChannelLeft_GetsADiagnostic()
+        public void ACallOnOneConnection_WithNoChannelLeft_IsClearedWithNetworkCongestion()
         {
             using XotSwitchPort dce = NewDce(channels: 2);
             int incoming = 0;
@@ -454,7 +461,15 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(WaitFor(() => Volatile.Read(ref incoming) == 2), Is.True, "two circuits fit in a port of two channels");
 
             peer.Send(X25PacketBuilder.CreateCallRequest(9, Called, Calling));
-            Assert.That(peer.WaitForPacket(0xF1, out _), Is.True, "the third call should be refused with a Diagnostic; received: " + peer.Dump());
+            Assert.That(peer.WaitForPacket(0x13, out byte[] clear), Is.True, "the third call should be cleared; received: " + peer.Dump());
+            Assert.That(clear[1], Is.EqualTo(9), "the clear is on the channel the caller used");
+            Assert.That(clear[3], Is.EqualTo(0x05), "cause 5: network congestion");
+            Assert.That(peer.Dump(), Does.Not.Contain("F1"), "no Diagnostic is written for the refused call");
+
+            // The caller confirms the clear; the port takes it without answering it as a stray packet.
+            peer.Send(X25PacketBuilder.CreateClearConfirmation(9));
+            Thread.Sleep(200);
+            Assert.That(peer.Dump(), Does.Not.Contain("F1"), "the caller's clear confirmation is not answered with a Diagnostic");
             Assert.That(Volatile.Read(ref incoming), Is.EqualTo(2), "the third call never reached the switch");
             Assert.That(dce.ConnectionCount, Is.EqualTo(1));
         }
