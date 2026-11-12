@@ -281,11 +281,9 @@ namespace RetroIO.Protocols.X25.Modules
 
             _logger.LogInformation("PAD Client disconnecting from {RemoteAddress}", _remoteAddress);
             
-            // Send invitation to clear (X.29 protocol)
-            var inviteMessage = _x29Protocol.CreateInvitationToClear();
-            SendX29Message(inviteMessage);
-            
-            // Also send proper X.25 Clear Request to properly clean up the call
+            // The X.29 "invitation to clear" PAD message goes from the HOST to the PAD (X.29 3.2.1: it
+            // asks the PAD to clear). A PAD never sends it, so it is not sent here: the PAD just clears.
+            // Send the X.25 Clear Request to clean up the call
             _logger.LogDebug("PAD sending X.25 Clear Request on LCN {LCN}", _currentLCN);
             _transport.ClearCall(_currentLCN, 0, 0);
             
@@ -357,6 +355,12 @@ namespace RetroIO.Protocols.X25.Modules
         }
 
         /// <summary>
+        /// True when the last character handed to the PAD was a CR, so that an LF straight after it
+        /// is known to be the second half of a CR LF pair.
+        /// </summary>
+        private bool _lastKeyWasCr;
+
+        /// <summary>
         /// Process single character input by delegating to X.28 terminal interface
         /// X.28 handles both command mode (when disconnected) and data transfer mode (when connected)
         /// </summary>
@@ -376,7 +380,11 @@ namespace RetroIO.Protocols.X25.Modules
                     // All character echoing and responses now handled via X28 events
                     // No need to manually handle echo here anymore
 
-                    if (ch == '\n')
+                    // A line ends on CR (X.28 4.15: a terminal sends CR alone). An LF right after a CR is
+                    // the second half of a CR LF pair and must not print a second prompt.
+                    bool endOfLine = ch == '\r' || (ch == '\n' && !_lastKeyWasCr);
+                    // While a call is being set up the prompt waits: COM or CLR comes first.
+                    if (endOfLine && _state != PadState.Connecting)
                     {
                         if ((_x28Protocol.CurrentMode == X28.PadMode.Command) || (_x28Protocol.CurrentMode == X28.PadMode.Escape))
                         {
@@ -384,6 +392,8 @@ namespace RetroIO.Protocols.X25.Modules
                         }
                     }
                 }
+
+                _lastKeyWasCr = ch == '\r';
                 
                 return true;
             }
@@ -459,6 +469,9 @@ namespace RetroIO.Protocols.X25.Modules
             _logger.LogInformation("PAD connection established to {RemoteAddress} on LCN {LCN}",
                                  _remoteAddress, _currentLCN);
 
+            // X.28 service signal COM: the call is connected.
+            OnDataReceived("COM\r\n");
+
             StartIdleTimer();
             OnConnectionStateChanged(PadConnectionState.Connected, "Call accepted");
         }
@@ -509,6 +522,10 @@ namespace RetroIO.Protocols.X25.Modules
         {
             _logger.LogInformation("PAD connection cleared by remote on LCN {LCN}", lcn);
             HandleDisconnection();
+
+            // The far end (or the network) cleared the call: tell the terminal, and give the prompt back.
+            OnDataReceived("\r\nCLR\r\n");
+            SendPrompt();
 
             var reason = "Remote disconnect";
             OnConnectionStateChanged(PadConnectionState.Disconnected, reason);
@@ -929,7 +946,12 @@ namespace RetroIO.Protocols.X25.Modules
                         if (command.Arguments.Count > 0)
                         {
                             string address = command.Arguments[0];
-                            Connect(address, LocalAddress);
+                            if (!Connect(address, LocalAddress))
+                            {
+                                // The call never left: no route, or the link to the next node is down.
+                                // The terminal must be told, or it waits for a connection forever.
+                                OnDataReceived("CLR  (the call could not be placed: no route, or the link is down)\r\n");
+                            }
                         }
                         break;
                         

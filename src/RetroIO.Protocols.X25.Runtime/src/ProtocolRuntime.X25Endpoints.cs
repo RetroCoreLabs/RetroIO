@@ -119,7 +119,21 @@ namespace RetroIO.Protocols.X25.Runtime
                     RestartTimeoutMs = (int)_config.X25.T20Timeout.TotalMilliseconds,
                 };
 
-                X25Endpoint endpoint = new X25Endpoint(name, send, config, _logger);
+                // An XOT circuit has no LAPB or HDLC under it, so the serial path's packet events never
+                // fire for it. Record what it sends here, the one place every outgoing packet passes.
+                // The record is made BEFORE the send: the peer's answer can arrive on another thread
+                // before the send returns, and the history must show the request first.
+                Func<byte[], bool> sendAndRecord = send;
+                if (connection is XotServerConnection || connection is XotClientTransport)
+                {
+                    sendAndRecord = bytes =>
+                    {
+                        RecordXotPacket(bytes, Direction.TX);
+                        return send(bytes);
+                    };
+                }
+
+                X25Endpoint endpoint = new X25Endpoint(name, sendAndRecord, config, _logger);
                 endpoint.Layer.IncomingCall += OnEndpointIncomingCall;
                 endpoint.Layer.CallConnected += OnEndpointCallConnected;
                 endpoint.Layer.DataReceived += OnEndpointData;
@@ -349,7 +363,89 @@ namespace RetroIO.Protocols.X25.Runtime
                 return;
             }
 
+            RecordXotPacket(packet, Direction.RX);
             endpoint.Receive(packet);
+        }
+
+        /// <summary>
+        /// Puts one packet of an XOT circuit in the history (what the packet window shows) and in the
+        /// X.25 counters (what the status window shows).
+        /// </summary>
+        /// <param name="packet">
+        /// The X.25 packet, without the XOT header.
+        /// </param>
+        /// <param name="direction">
+        /// TX for a packet we send, RX for one we received.
+        /// </param>
+        /// <remarks>
+        /// The serial path records its packets from the engine's own events and counts them in
+        /// <c>OnX25PacketReceived</c>. XOT has no such events, so before this the packet window and
+        /// the X.25 counters stayed empty for every XOT call (found 2026-11-11: a call to R1 worked
+        /// and both windows showed zero). A packet too short to be an X.25 packet is not recorded;
+        /// the engine rejects it on its own.
+        /// </remarks>
+        private void RecordXotPacket(byte[] packet, Direction direction)
+        {
+            if (packet == null || packet.Length < 3)
+            {
+                return;
+            }
+
+            X25Packet parsed;
+            try
+            {
+                parsed = new X25Packet(packet);
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+
+            long id = GetNextFrameId();
+            X25HistoryItem item = new X25HistoryItem(direction, parsed, id);
+            AddPacketWithChainTracking(id, "X25", direction);
+            AddToHistory(item);
+
+            lock (_statsLock)
+            {
+                bool received = direction == Direction.RX;
+                if (received)
+                {
+                    _currentStats.X25.PacketsReceived++;
+                }
+                else
+                {
+                    _currentStats.X25.PacketsTransmitted++;
+                }
+
+                switch (parsed.PacketType)
+                {
+                    case X25PacketType.Data:
+                        if (received)
+                        {
+                            _currentStats.X25.DataPacketsReceived++;
+                        }
+                        else
+                        {
+                            _currentStats.X25.DataPacketsTransmitted++;
+                        }
+
+                        break;
+                    case X25PacketType.CallRequest:
+                        if (received)
+                        {
+                            _currentStats.X25.CallRequestsReceived++;
+                        }
+                        else
+                        {
+                            _currentStats.X25.CallRequestsTransmitted++;
+                        }
+
+                        break;
+                }
+
+                StatisticsUpdated?.Invoke(this, _currentStats.Clone());
+            }
         }
 
         /// <summary>

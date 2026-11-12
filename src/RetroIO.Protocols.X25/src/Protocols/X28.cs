@@ -129,6 +129,10 @@ namespace RetroIO.Protocols.X25.Protocols
             /// Command text "DATA": return to data transfer mode.
             /// </summary>
             public const string DATA = "DATA";      // Return to data transfer mode
+            /// <summary>
+            /// Command text "HELP": list the commands.
+            /// </summary>
+            public const string HELP = "HELP";      // List the commands
         }
 
         // Events for terminal interface - PROPER ARCHITECTURE
@@ -261,10 +265,22 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Process character in command mode
         /// </summary>
+        private bool _lastCommandCharWasCr;
+
         private bool ProcessCommandModeCharacter(char c)
         {
             // Handle special characters
-            if (c == '\n')
+            // X.28 4.15: a terminal ends a command line with CR alone. An LF straight after a CR
+            // (a terminal that sends CR LF) belongs to the same line end and is dropped.
+            if (c == '\n' && _lastCommandCharWasCr)
+            {
+                _lastCommandCharWasCr = false;
+                return true;
+            }
+
+            _lastCommandCharWasCr = c == '\r';
+
+            if (c == '\n' || c == '\r')
             {
                 // Fire immediate newline echo
                 CharacterEcho?.Invoke(this, new CharacterEchoEventArgs('\r', EchoType.Normal));
@@ -368,8 +384,14 @@ namespace RetroIO.Protocols.X25.Protocols
                 case "DATA":
                     command.Verb = Commands.DATA;
                     break;
+
+                case "HELP":
+                case "H":
+                case "?":
+                    command.Verb = Commands.HELP;
+                    break;
             }
-            
+
             return command;
         }
 
@@ -411,8 +433,31 @@ namespace RetroIO.Protocols.X25.Protocols
                 Commands.RESET => HandleResetCommand(command),
                 Commands.INTERRUPT => HandleInterruptCommand(command),
                 Commands.DATA => HandleDataCommand(command),
+                Commands.HELP => HandleHelpCommand(),
                 _ => HandleInvalidCommand(command.Verb)
             };
+        }
+
+        /// <summary>
+        /// Handle HELP: list the commands this PAD understands, exactly the ones it implements.
+        /// </summary>
+        private CommandResult HandleHelpCommand()
+        {
+            string text =
+                "PAD commands:\r\n" +
+                "  CALL <address>   place a call (C <address>)\r\n" +
+                "  CLR              clear the call (CLEAR)\r\n" +
+                "  STAT             show the PAD state\r\n" +
+                "  PAR [n ...]      read X.3 parameters (all if none are named)\r\n" +
+                "  SET n:v [n:v]    set X.3 parameters\r\n" +
+                "  PROF <name>      set a parameter profile\r\n" +
+                "  RESET            reset the virtual circuit\r\n" +
+                "  INT              send an interrupt\r\n" +
+                "  DATA             return to the call\r\n" +
+                "  HELP             this list\r\n" +
+                "In a call, press Ctrl+P (the PAD escape, X.3 parameter 1) to get to these commands.\r\n";
+            CommandResponse?.Invoke(this, new CommandResponseEventArgs(text, ResponseType.Success));
+            return CommandResult.Success;
         }
 
         /// <summary>
@@ -437,9 +482,11 @@ namespace RetroIO.Protocols.X25.Protocols
             // DON'T switch mode here - let the connection success/failure determine the mode
             // Mode will be switched by PadClient.HandleCallAccepted() when connection is actually established
             
-            // Fire immediate "COM" response - this is critical for proper timing
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs("COM\r\n", ResponseType.Success, isImmediate: true));
-            
+            // No "COM" here. X.28 prints the service signal COM when the call is CONNECTED, that is when
+            // the far end has accepted it. Printing it at the request made the window claim a
+            // connection that did not exist (2026-11-11: COM with no switch running at all).
+            // PadClient.NotifyCallAccepted prints COM.
+
             _logger?.LogInformation("X.28: Call request to {Address}", command.Address);
             return CommandResult.Success;
         }
