@@ -125,10 +125,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public bool ReassemblyQBit { get; set; }
 
         /// <summary>
-        /// Largest complete packet sequence this engine will reassemble before treating the sender
-        /// as broken. An engine limit, not a clause: X.25 puts no bound on a sequence.
+        /// Size at which a partly joined complete packet sequence is handed to the consumer as a part
+        /// (with "more follows"). It is the size of one hand-over, not a limit on the sequence: X.25
+        /// (4.3.4, 4.3.5) puts no bound on a sequence and names no reset for a long one.
         /// </summary>
-        public const int MaxReassembly = 65536;
+        public const int MaxMessagePart = 65536;
 
         /// <summary>
         /// Forgets any partly sent message and any partly received sequence.

@@ -169,10 +169,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
     public delegate void X25InterruptConfirmed(X25Layer layer, ushort lci);
 
     /// <summary>
-    /// Raised once per complete packet sequence (X.25 4.3.5): the user data of every category A
+    /// Raised for a complete packet sequence (X.25 4.3.5): the user data of every category A
     /// packet (full, M=1, D=0) and the category B packet that ends the sequence, joined in order.
     /// A single packet with M=0 is a sequence of one. <see cref="X25DataReceived"/> still fires for
     /// every packet; an application that wants messages listens here instead.
+    /// X.25 sets no bound on the length of a sequence, so a very long one is handed on in parts:
+    /// every part but the last has <c>moreData</c> true, the last has it false.
     /// </summary>
     /// <param name="layer">
     /// The layer.
@@ -186,7 +188,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
     /// <param name="qBit">
     /// The qualifier bit, the same in every packet of the sequence (4.3.3).
     /// </param>
-    public delegate void X25MessageReceived(X25Layer layer, ushort lci, byte[] data, bool qBit);
+    /// <param name="moreData">
+    /// True when this is a part and more of the same complete packet sequence follows; false for
+    /// a whole sequence or the last part of one.
+    /// </param>
+    public delegate void X25MessageReceived(X25Layer layer, ushort lci, byte[] data, bool qBit, bool moreData);
 
     /// <summary>
     /// Raised when a circuit that could not send may be able to now: the peer acknowledged
