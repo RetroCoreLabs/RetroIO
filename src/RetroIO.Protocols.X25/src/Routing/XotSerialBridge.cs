@@ -109,8 +109,8 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         private static BridgeMode DetermineBridgeMode(TransportType type1, TransportType type2)
         {
-            bool is1XOT = type1 == TransportType.XOT_Client || type1 == TransportType.XOT_Server;
-            bool is2XOT = type2 == TransportType.XOT_Client || type2 == TransportType.XOT_Server;
+            bool is1XOT = type1 == TransportType.XOT_Client || type1 == TransportType.XOT_Server || type1 == TransportType.XOT_Peer;
+            bool is2XOT = type2 == TransportType.XOT_Client || type2 == TransportType.XOT_Server || type2 == TransportType.XOT_Peer;
             bool is1Serial = type1 == TransportType.Serial;
             bool is2Serial = type2 == TransportType.Serial;
 

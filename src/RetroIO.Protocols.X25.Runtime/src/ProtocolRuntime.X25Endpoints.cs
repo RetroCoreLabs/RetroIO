@@ -60,7 +60,7 @@ namespace RetroIO.Protocols.X25.Runtime
 
         /// <summary>
         /// Test seam: called on the placing thread after the engine has taken an outgoing XOT call
-        /// and its lock is released, before <see cref="PlaceCallViaEndpoint"/> returns.
+        /// and its lock is released, before <see cref="PlaceCallOnEndpoint"/> returns.
         /// </summary>
         /// <remarks>
         /// From that point on the connection's reader thread is free to feed the engine the peer's
@@ -77,7 +77,7 @@ namespace RetroIO.Protocols.X25.Runtime
         /// The endpoint for a connection, created on first use.
         /// </summary>
         /// <param name="connection">
-        /// The connection object the transport reports: an <see cref="XotClientTransport"/> (one
+        /// The connection object the transport reports: an <see cref="XotPeerLink"/> (one
         /// connection each) or an <see cref="XotServerConnection"/>.
         /// </param>
         /// <param name="name">
@@ -98,6 +98,20 @@ namespace RetroIO.Protocols.X25.Runtime
         /// </param>
         private X25Endpoint EndpointFor(object connection, string name, Func<byte[], bool> send, bool isDte, ushort lciBase = 1, ushort lciCount = 4095)
         {
+            // An XOT connection uses the window and packet size of ITS entry when the entry sets them (the peer's own
+            // settings, Cisco's "profile"); otherwise the X.25 section of the configuration.
+            byte windowSize = _config.X25.DefaultPacketWindowSize;
+            int packetSize = _config.X25.MaxPacketSize;
+            if (connection is XotPeerLink || connection is XotServerConnection)
+            {
+                XotInterfaceConfig? entry = FindXotEntry(name);
+                if (entry != null)
+                {
+                    windowSize = entry.RequestedWindowSize ?? windowSize;
+                    packetSize = entry.RequestedPacketSize ?? packetSize;
+                }
+            }
+
             lock (_routingLock)
             {
                 if (_endpoints.TryGetValue(connection, out X25Endpoint? existing))
@@ -111,8 +125,8 @@ namespace RetroIO.Protocols.X25.Runtime
                     IsDte = isDte,
                     LciBase = lciBase,
                     LciCount = lciCount,
-                    DefaultWindowSize = _config.X25.DefaultPacketWindowSize,
-                    DefaultPacketSize = _config.X25.MaxPacketSize,
+                    DefaultWindowSize = windowSize,
+                    DefaultPacketSize = (ushort)packetSize,
                     CallRequestTimeoutMs = (int)_config.X25.T21Timeout.TotalMilliseconds,
                     ResetRequestTimeoutMs = (int)_config.X25.T22Timeout.TotalMilliseconds,
                     ClearRequestTimeoutMs = (int)_config.X25.T23Timeout.TotalMilliseconds,
@@ -124,7 +138,7 @@ namespace RetroIO.Protocols.X25.Runtime
                 // The record is made BEFORE the send: the peer's answer can arrive on another thread
                 // before the send returns, and the history must show the request first.
                 Func<byte[], bool> sendAndRecord = send;
-                if (connection is XotServerConnection || connection is XotClientTransport)
+                if (connection is XotServerConnection || connection is XotPeerLink)
                 {
                     sendAndRecord = bytes =>
                     {
@@ -134,6 +148,10 @@ namespace RetroIO.Protocols.X25.Runtime
                 }
 
                 X25Endpoint endpoint = new X25Endpoint(name, sendAndRecord, config, _logger);
+
+                // A connection WE dialled over XOT may be answered on another channel number than the call used
+                // (RFC 1613 section 6); see X25Endpoint.TranslatesChannels. A peer link carries one circuit.
+                endpoint.TranslatesChannels = connection is XotPeerLink dialledLink && dialledLink.Dialed;
                 endpoint.Layer.IncomingCall += OnEndpointIncomingCall;
                 endpoint.Layer.CallConnected += OnEndpointCallConnected;
                 endpoint.Layer.DataReceived += OnEndpointData;
@@ -174,6 +192,20 @@ namespace RetroIO.Protocols.X25.Runtime
         private X25Endpoint EndpointForLink(ILink link)
         {
             return FindEndpoint(link) ?? EndpointFor(link, link.Name, payload => _linkManager.SendViaLink(link.Name, payload), isDte: true);
+        }
+
+        private XotInterfaceConfig? FindXotEntry(string name)
+        {
+            List<XotInterfaceConfig>? entries = _config.Routing?.XotInterfaces;
+            for (int i = 0; entries != null && i < entries.Count; i++)
+            {
+                if (string.Equals(entries[i].Name, name, StringComparison.Ordinal))
+                {
+                    return entries[i];
+                }
+            }
+
+            return null;
         }
 
         private X25Endpoint? FindEndpoint(object connection)
@@ -346,16 +378,14 @@ namespace RetroIO.Protocols.X25.Runtime
             byte[] packet = data.Length == e.Length ? data : data.AsSpan(0, e.Length).ToArray();
 
             X25Endpoint? endpoint;
-            if (e.Connection is XotServerConnection serverConnection)
+            if (e.Connection is XotPeerLink peerLink)
+            {
+                endpoint = FindEndpoint(peerLink) ?? PeerEndpointFor(peerLink);
+            }
+            else if (e.Connection is XotServerConnection serverConnection)
             {
                 endpoint = FindEndpoint(serverConnection)
                     ?? EndpointFor(serverConnection, (sender as ITransportInterface)?.Name ?? "xot-server", serverConnection.SendPacket, isDte: false);
-            }
-            else if (sender is XotClientTransport client)
-            {
-                endpoint = FindEndpoint(client)
-                    ?? EndpointFor(client, client.Name, client.SendPacket, isDte: true,
-                        client.InterfaceConfig?.LciBase ?? (ushort)1, client.InterfaceConfig?.LciCount ?? (ushort)16);
             }
             else
             {
@@ -493,28 +523,57 @@ namespace RetroIO.Protocols.X25.Runtime
         // ------------------------------------------------------------------ calls
 
         /// <summary>
-        /// Places an outgoing call over a dialled XOT connection: the endpoint restarts the link the
-        /// first time (X.25 4.1; the engine holds the Call Request until the Restart Confirmation),
-        /// then places the call. The engine picks the logical channel; the runtime's local LCN
-        /// (<see cref="X25CallRequest.SourceLcn"/>) is mapped onto it.
+        /// The engine for one connection of an XOT peer entry. A connection we dialled is a DTE
+        /// (it places the call); one the peer opened is answered as the DCE, the same as an accepted
+        /// connection of an XOT server entry. Each connection carries one circuit (RFC 1613 section 5),
+        /// so each has its own engine.
         /// </summary>
-        private bool PlaceCallViaEndpoint(XotClientTransport transport, X25CallRequest request)
+        private X25Endpoint PeerEndpointFor(XotPeerLink link)
         {
-            X25Endpoint endpoint = FindEndpoint(transport)
-                ?? EndpointFor(transport, transport.Name, transport.SendPacket, isDte: true,
-                    transport.InterfaceConfig?.LciBase ?? (ushort)1, transport.InterfaceConfig?.LciCount ?? (ushort)16);
+            if (link.Dialed)
+            {
+                XotPeerConfig cfg = link.Owner.Config;
+                return EndpointFor(link, link.Owner.Name, link.SendPacket, isDte: true, cfg.LciBase, cfg.LciCount);
+            }
 
+            return EndpointFor(link, link.Owner.Name, link.SendPacket, isDte: false);
+        }
+
+        /// <summary>
+        /// Places an outgoing call on a connection a peer entry has just opened for it.
+        /// </summary>
+        private bool PlaceCallViaPeerLink(XotPeerTransport transport, XotPeerLink link, X25CallRequest request)
+        {
+            X25Endpoint endpoint = FindEndpoint(link) ?? PeerEndpointFor(link);
+            return PlaceCallOnEndpoint(endpoint, transport, transport.Name, request);
+        }
+
+        /// <summary>
+        /// A connection of an XOT peer ended: its engine is dropped and any circuit still on it is
+        /// reported cleared.
+        /// </summary>
+        private void OnXotPeerConnectionClosed(object? sender, XotPeerLink link)
+        {
+            DropEndpoint(link);
+        }
+
+        private bool PlaceCallOnEndpoint(X25Endpoint endpoint, ITransportInterface transport, string name, X25CallRequest request)
+        {
             ushort lci;
             lock (endpoint.Sync)
             {
-                if (!endpoint.RestartSent)
-                {
-                    endpoint.RestartSent = true;
-                    endpoint.Layer.Restart(0, 0);
-                }
-
+                // No Restart is sent here. RFC 1613 section 6.4: Restart, Restart Confirm, DTE Reject, Diagnostic and
+                // the registration packets "MUST NOT be sent over the TCP connection" and are silently discarded
+                // when received; an XOT circuit has no link under it to restart. The engine used to send one and hold
+                // the Call Request until it was confirmed (X.25 4.1.1, T20 = 180 s), which left every call to a peer
+                // that sends no confirmation (x25emu, measured 2026-11-12) waiting for ever. The switch port
+                // (XotSwitchPort) and X25Client already behave this way.
                 byte[]? cud = request.CallUserData.Length == 0 ? null : request.CallUserData;
                 lci = endpoint.Layer.PlaceCall(request.CalledAddress, request.CallingAddress, cud);
+                if (lci != 0)
+                {
+                    endpoint.NoteCallPlaced(lci);
+                }
 
                 // Map the local LCN BEFORE this lock is released. The moment it is, the
                 // connection's reader thread may feed the engine the peer's Call Connected (or a
@@ -531,7 +590,7 @@ namespace RetroIO.Protocols.X25.Runtime
 
             if (lci == 0)
             {
-                _logger.LogWarning("XOT call to {Called} via {Name} refused by the packet layer", request.CalledAddress, transport.Name);
+                _logger.LogWarning("XOT call to {Called} via {Name} refused by the packet layer", request.CalledAddress, name);
                 return false;
             }
 
@@ -539,7 +598,7 @@ namespace RetroIO.Protocols.X25.Runtime
 
             request.UsedTransport = transport;
             _logger.LogInformation("XOT call to {Called} placed on {Name} channel {Lci} (local LCN {Local})",
-                request.CalledAddress, transport.Name, lci, request.SourceLcn);
+                request.CalledAddress, name, lci, request.SourceLcn);
             return true;
         }
 
@@ -610,7 +669,7 @@ namespace RetroIO.Protocols.X25.Runtime
             Services.IProtocolService? service = FindServiceForLcn(localLcn);
             if (service != null)
             {
-                service.HandleData(localLcn, userData);
+                service.HandleData(localLcn, userData, qBit);
                 return;
             }
 
@@ -645,13 +704,35 @@ namespace RetroIO.Protocols.X25.Runtime
         private void OnEndpointCleared(X25Layer layer, ushort lci, byte cause, byte diagnostic)
         {
             X25Endpoint? endpoint = EndpointOf(layer);
-            if (endpoint == null || !TryLocalLcn(endpoint, lci, out ushort localLcn))
+            if (endpoint == null)
+            {
+                return;
+            }
+
+            // The engine reports Cleared inside its lock, so Sync is already held here.
+            endpoint.ForgetCircuit(lci);
+            if (!TryLocalLcn(endpoint, lci, out ushort localLcn))
             {
                 return;
             }
 
             UnmapCircuit(localLcn);
             DeliverCleared(localLcn, cause, diagnostic);
+            CloseDialledLinkAfterClear(endpoint);
+        }
+
+        /// <summary>
+        /// A connection we dialled for one call is closed once its circuit is cleared (RFC 1613
+        /// section 5 lets an end keep a connection open, but one connection per circuit that is never
+        /// closed would leak). It is closed on another thread: this runs inside the engine's lock.
+        /// A connection the peer opened is left to the peer to close.
+        /// </summary>
+        private void CloseDialledLinkAfterClear(X25Endpoint endpoint)
+        {
+            if (ConnectionOf(endpoint) is XotPeerLink link && link.Dialed)
+            {
+                ThreadPool.QueueUserWorkItem(_ => link.CloseGracefully());
+            }
         }
 
         /// <summary>
@@ -1042,6 +1123,11 @@ namespace RetroIO.Protocols.X25.Runtime
             if (connection is ITransportInterface t)
             {
                 return t;
+            }
+
+            if (connection is XotPeerLink peerLink)
+            {
+                return peerLink.Owner;
             }
 
             if (connection is XotServerConnection sc)

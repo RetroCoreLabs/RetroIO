@@ -24,6 +24,7 @@ namespace RetroIO.Protocols.X25.Transport
         private readonly XotClientConfig _config;
         private XotInterfaceConfig? _interfaceConfig;
         private readonly object _connectionLock = new object();
+        private readonly object _connectGate = new object();
         private readonly ManualResetEvent _restartConfirmReceived = new ManualResetEvent(false);
         private readonly ManualResetEvent _switchRestartSettled = new ManualResetEvent(false);
         private TransportStatus _status = TransportStatus.Stopped;
@@ -294,6 +295,14 @@ namespace RetroIO.Protocols.X25.Transport
             return _statistics;
         }
 
+        /// <summary>
+        /// Sets the call, byte and error counters of this transport back to zero.
+        /// </summary>
+        public void ResetStatistics()
+        {
+            _statistics.ResetCounters();
+        }
+
 #pragma warning disable CS0067 // Event required by interface, not used in this implementation
         /// <summary>
         /// Required by the interface for incoming calls. A client transport never raises it, on purpose.
@@ -338,9 +347,33 @@ namespace RetroIO.Protocols.X25.Transport
                 }
             }
 
+            // Only one thread connects at a time. Without this gate, calls placed at the same moment each saw "no
+            // connection yet", each opened a TCP connection, and the last one replaced the others in the table: the
+            // replaced connections stayed open for ever, outside the table, so Stop() could not close them
+            // (found against the real router R1, 2026-11-13). The thread that waits here finds the connection the
+            // first thread made.
+            lock (_connectGate)
+            {
+                lock (_connectionLock)
+                {
+                    if (_connections.ContainsKey(ipAddress))
+                    {
+                        _logger.LogDebug("XOT connection to {IpAddress} already exists", ipAddress);
+                        return true;
+                    }
+                }
+
+                return ConnectLocked(ipAddress, port);
+            }
+        }
+
+        private bool ConnectLocked(string ipAddress, int port)
+        {
             try
             {
-                _logger.LogInformation("Establishing XOT connection to {IpAddress}:{Port}", ipAddress, port);
+                // A client link opens its TCP connection only when a call needs it, and does not retry by
+                // itself: after a failure the next attempt is made by the next call.
+                _logger.LogInformation("XOT client {Name}: opening TCP connection to {IpAddress}:{Port} (a call needs it)", Name, ipAddress, port);
 
                 var connection = new XotConnection(_logger, ipAddress, port);
 
@@ -357,19 +390,24 @@ namespace RetroIO.Protocols.X25.Transport
                         _connections[ipAddress] = connection;
                     }
                     
-                    _logger.LogInformation("XOT connection to {IpAddress} established", ipAddress);
+                    _statistics.LastConnectedUtc = DateTime.UtcNow;
+                    _logger.LogInformation("XOT client {Name}: TCP connection to {IpAddress}:{Port} is up", Name, ipAddress, port);
                     return true;
                 }
                 else
                 {
-                    _logger.LogWarning("Failed to establish XOT connection to {IpAddress}", ipAddress);
                     _statistics.ConnectionErrors++;
+                    _statistics.LastError = connection.LastError.Length > 0 ? connection.LastError : "could not connect";
+                    _statistics.LastFailureUtc = DateTime.UtcNow;
+                    _logger.LogWarning("XOT client {Name}: could not connect to {IpAddress}:{Port}: {Reason}. No automatic retry: the next try is made when the next call needs this link", Name, ipAddress, port, _statistics.LastError);
                     return false;
                 }
             }
             catch (Exception ex)
             {
                 _statistics.ConnectionErrors++;
+                _statistics.LastError = ex.Message;
+                _statistics.LastFailureUtc = DateTime.UtcNow;
                 _logger.LogError(ex, "Error connecting to XOT gateway {IpAddress}", ipAddress);
                 return false;
             }
@@ -476,7 +514,16 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 if (_connections.Remove(remoteAddress))
                 {
-                    _logger.LogInformation("XOT client {Name} connection to {RemoteAddress} closed", Name, remoteAddress);
+                    // Closed while the transport is running: the peer or the network ended it.
+                    if (_status == TransportStatus.Active || _status == TransportStatus.Connected)
+                    {
+                        _statistics.Disconnects++;
+                        _logger.LogWarning("XOT client {Name}: connection to {RemoteAddress} closed by the peer or the network. It is opened again when the next call needs it", Name, remoteAddress);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("XOT client {Name} connection to {RemoteAddress} closed", Name, remoteAddress);
+                    }
                 }
             }
         }
@@ -552,6 +599,11 @@ namespace RetroIO.Protocols.X25.Transport
             _remotePort = remotePort;
         }
 
+        /// <summary>
+        /// Gets the reason the last <see cref="Connect"/> failed, in words; empty if it has not failed.
+        /// </summary>
+        public string LastError { get; private set; } = string.Empty;
+
         public bool Connect(int timeoutMs)
         {
             try
@@ -565,6 +617,7 @@ namespace RetroIO.Protocols.X25.Transport
                 
                 if (!success)
                 {
+                    LastError = "no answer in " + timeoutMs + " ms";
                     _logger.LogWarning("XOT connection timeout to {Address}:{Port}", _remoteAddress, _remotePort);
                     _tcpClient?.Close();
                     return false;
@@ -583,7 +636,8 @@ namespace RetroIO.Protocols.X25.Transport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to establish XOT connection to {Address}:{Port}", _remoteAddress, _remotePort);
+                LastError = ex.Message;
+                _logger.LogDebug(ex, "Failed to establish XOT connection to {Address}:{Port}", _remoteAddress, _remotePort);
                 _tcpClient?.Close();
                 return false;
             }

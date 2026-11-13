@@ -143,7 +143,7 @@ caller on one address range.
 | PAD and TAD | `PadClient`, `TadServer`, `LocalTadProtocol`, `IPadTransport`, `RuntimePadTransport` |
 | Triple-X | `X3`, `X3Parameters` (all 22), `X28`, `X29`, `X29Messages` |
 | Addressing | `X121`, `X121AddressInfo` |
-| XOT | `XotClientTransport`, `XotServerTransport`, `XotSerialBridge`, `XotInterfaceConfig` |
+| XOT | `XotClientTransport`, `XotServerTransport`, `XotPeerTransport` (dials per call and accepts, mode `Both`), `XotListenerRegistry` (one listening socket per port), `XotSerialBridge`, `XotInterfaceConfig` |
 | Routing | `X25Router`, `X25Route`, `X25RoutingLayer` |
 | Services | `IProtocolService`, `ProtocolServiceRegistry`, `X25ProtocolDetectionService` |
 | History and statistics | `X25PacketHistory`, `HistoryManager`, `UnifiedPacketInfo`, the per-layer `*Statistics` |

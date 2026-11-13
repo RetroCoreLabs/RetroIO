@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.X25.Transport
     /// XOT Server transport interface for inbound X.25 over TCP connections
     /// Implements RFC 1613 (X.25 over TCP) listener for incoming XOT connections
     /// </summary>
-    public class XotServerTransport : ITransportInterface
+    public class XotServerTransport : ITransportInterface, IXotListenerClient
     {
         private readonly ILogger _logger;
         private readonly XotServerConfig _config;
@@ -156,16 +156,26 @@ namespace RetroIO.Protocols.X25.Transport
                 _logger.LogInformation("Starting XOT server transport {Name} on {Address}:{Port}", 
                                      Name, _config.ListenAddress, _config.ListenPort);
 
-                // Parse listen address
-                var listenAddress = IPAddress.Parse(_config.ListenAddress);
-                _tcpListener = new TcpListener(listenAddress, _config.ListenPort);
                 _cancellationTokenSource = new CancellationTokenSource();
 
-                // Start listening
-                _tcpListener.Start();
+                if (_config.Listeners != null)
+                {
+                    // Shared port: the registry keeps the one listening socket and hands this server
+                    // every connection no peer entry claims (see XotListenerRegistry).
+                    _config.Listeners.Join(_config.ListenAddress, _config.ListenPort, this);
+                }
+                else
+                {
+                    // Parse listen address
+                    var listenAddress = IPAddress.Parse(_config.ListenAddress);
+                    _tcpListener = new TcpListener(listenAddress, _config.ListenPort);
 
-                // Start accepting connections in background
-                new Thread(() => AcceptConnectionsLoop(_cancellationTokenSource.Token)) { IsBackground = true }.Start();
+                    // Start listening
+                    _tcpListener.Start();
+
+                    // Start accepting connections in background
+                    new Thread(() => AcceptConnectionsLoop(_cancellationTokenSource.Token)) { IsBackground = true }.Start();
+                }
 
                 SetStatus(TransportStatus.Active, "XOT server listening for connections");
                 _statistics.StartTime = DateTime.UtcNow;
@@ -201,6 +211,7 @@ namespace RetroIO.Protocols.X25.Transport
                 // Stop accepting new connections
                 _cancellationTokenSource?.Cancel();
                 _tcpListener?.Stop();
+                _config.Listeners?.Leave(this);
 
                 // Close all client connections
                 lock (_clientLock)
@@ -234,6 +245,14 @@ namespace RetroIO.Protocols.X25.Transport
             _statistics.CurrentStatus = _status;
             _statistics.ActiveConnections = _clientConnections.Count;
             return _statistics;
+        }
+
+        /// <summary>
+        /// Sets the call, byte and error counters of this transport back to zero.
+        /// </summary>
+        public void ResetStatistics()
+        {
+            _statistics.ResetCounters();
         }
 
         /// <summary>
@@ -272,31 +291,10 @@ namespace RetroIO.Protocols.X25.Transport
 
                     _logger.LogInformation("XOT server {Name} accepted connection from {ClientEndpoint}", Name, clientEndpoint);
 
-                    // Check connection limit
-                    lock (_clientLock)
+                    if (!AdoptClient(tcpClient, clientEndpoint, cancellationToken))
                     {
-                        if (_clientConnections.Count >= _config.MaxConnections)
-                        {
-                            _logger.LogWarning("XOT server {Name} connection limit reached ({Max}), rejecting {ClientEndpoint}", 
-                                             Name, _config.MaxConnections, clientEndpoint);
-                            tcpClient.Close();
-                            continue;
-                        }
+                        continue;
                     }
-
-                    // Create connection handler
-                    var connection = new XotServerConnection(_logger, tcpClient, clientEndpoint);
-                    connection.IncomingCall += OnClientIncomingCall;
-                    connection.ConnectionClosed += OnClientConnectionClosed;
-                    connection.DataReceived += OnClientDataReceived;
-
-                    lock (_clientLock)
-                    {
-                        _clientConnections[clientEndpoint] = connection;
-                    }
-
-                    // Start handling this connection
-                    new Thread(() => connection.HandleConnectionLoop(cancellationToken)) { IsBackground = true }.Start();
                 }
                 catch (ObjectDisposedException)
                 {
@@ -314,6 +312,58 @@ namespace RetroIO.Protocols.X25.Transport
             }
 
             _logger.LogDebug("XOT server {Name} stopped accepting connections", Name);
+        }
+
+
+        // IXotListenerClient: an old-style server takes every address, so it is never "unlisted".
+        IPAddress? IXotListenerClient.PeerAddress => null;
+
+        bool IXotListenerClient.RefuseUnlisted => false;
+
+        void IXotListenerClient.OnConnection(TcpClient client, IPAddress remote, bool listed)
+        {
+            string endpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+            _logger.LogInformation("XOT server {Name} accepted connection from {ClientEndpoint}", Name, endpoint);
+            AdoptClient(client, endpoint, _cancellationTokenSource?.Token ?? CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Takes over one accepted TCP connection: checks the limit, wires the events and starts its
+        /// reader thread. Used by the own accept loop and by the shared listener.
+        /// </summary>
+        /// <returns>False when the connection was refused (limit reached).</returns>
+        private bool AdoptClient(TcpClient tcpClient, string clientEndpoint, CancellationToken cancellationToken)
+        {
+            // Check connection limit
+            lock (_clientLock)
+            {
+                if (_clientConnections.Count >= _config.MaxConnections)
+                {
+                    _logger.LogWarning("XOT server {Name} connection limit reached ({Max}), rejecting {ClientEndpoint}",
+                                     Name, _config.MaxConnections, clientEndpoint);
+                    tcpClient.Close();
+                    return false;
+                }
+            }
+
+            // Create connection handler
+            var connection = new XotServerConnection(_logger, tcpClient, clientEndpoint);
+            connection.IncomingCall += OnClientIncomingCall;
+            connection.ConnectionClosed += OnClientConnectionClosed;
+            connection.DataReceived += OnClientDataReceived;
+            connection.PacketSent += OnClientPacketSent;
+
+            lock (_clientLock)
+            {
+                _clientConnections[clientEndpoint] = connection;
+            }
+
+            _statistics.LastConnectedUtc = DateTime.UtcNow;
+            _logger.LogInformation("XOT server {Name}: connection from {ClientEndpoint} is up", Name, clientEndpoint);
+
+            // Start handling this connection
+            new Thread(() => connection.HandleConnectionLoop(cancellationToken)) { IsBackground = true }.Start();
+            return true;
         }
 
         /// <summary>
@@ -372,10 +422,31 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 if (_clientConnections.Remove(clientEndpoint))
                 {
+                    if (_status == TransportStatus.Active || _status == TransportStatus.Connected)
+                    {
+                        _statistics.Disconnects++;
+                    }
+
                     _logger.LogInformation("XOT server {Name} client connection closed: {ClientEndpoint}", Name, clientEndpoint);
                 }
             }
         }
+
+        /// <summary>
+        /// Counts the bytes of a packet written to a client connection. Until 2026-11-12 only the bytes
+        /// received were counted, so the Status window showed 0 bytes sent for an XOT listener that had
+        /// answered thousands of packets (found by a burst test). The lock is there because several
+        /// client connections write at the same time and a plain += would lose counts.
+        /// </summary>
+        private void OnClientPacketSent(object? sender, int length)
+        {
+            lock (_bytesSentLock)
+            {
+                _statistics.BytesTransmitted += length;
+            }
+        }
+
+        private readonly object _bytesSentLock = new object();
 
         /// <summary>
         /// Handle data received from client connection
@@ -486,6 +557,14 @@ namespace RetroIO.Protocols.X25.Transport
         /// Optional description
         /// </summary>
         public string Description { get; set; } = string.Empty;
+
+        /// <summary>
+        /// When set, the server does not open its own listening socket: it joins the shared listener
+        /// for its port, so several XOT entries (server and peer) can use the same port. It then
+        /// takes every connection no other entry claims by source address, as it always did. When null
+        /// (the default) the server opens its own socket, as before.
+        /// </summary>
+        public XotListenerRegistry? Listeners { get; set; }
     }
 
     /// <summary>
@@ -530,6 +609,10 @@ namespace RetroIO.Protocols.X25.Transport
         /// Raised when data arrives on the connection.
         /// </summary>
         public event EventHandler<TransportDataEventArgs>? DataReceived;
+        /// <summary>
+        /// Raised after a packet was written to the connection; the argument is the packet length in bytes.
+        /// </summary>
+        public event EventHandler<int>? PacketSent;
 
         /// <summary>
         /// Handle XOT packets from this client connection
@@ -593,6 +676,14 @@ namespace RetroIO.Protocols.X25.Transport
                         Connection = this,
                     });
                 }
+            }
+            catch (Exception ex) when (IsPeerGone(ex))
+            {
+                // The far end went away without a clean TCP close (a program that exits while packets are
+                // still on the way makes the network stack reset the connection). That is what a peer
+                // leaving looks like, not a fault of this program: it was logged as an Error with a stack
+                // trace each time a command-line tool finished (found by a burst test on 2026-11-12).
+                _logger.LogWarning("XOT connection from {ClientEndpoint} was reset by the far end: {Reason}", _clientEndpoint, ex.GetBaseException().Message);
             }
             catch (Exception ex)
             {
@@ -702,13 +793,35 @@ namespace RetroIO.Protocols.X25.Transport
                 }
 
                 _logger.LogDebug("Sent XOT packet ({Length} bytes) to {ClientEndpoint}", x25Packet.Length, _clientEndpoint);
+                PacketSent?.Invoke(this, x25Packet.Length);
                 return true;
+            }
+            catch (Exception ex) when (IsPeerGone(ex))
+            {
+                _logger.LogWarning("XOT packet not sent to {ClientEndpoint}: the far end has reset the connection ({Reason})", _clientEndpoint, ex.GetBaseException().Message);
+                return false;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending XOT packet to {ClientEndpoint}", _clientEndpoint);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// True when the exception is the far end resetting or dropping the TCP connection.
+        /// </summary>
+        private static bool IsPeerGone(Exception ex)
+        {
+            Exception inner = ex.GetBaseException();
+            if (inner is System.Net.Sockets.SocketException socket)
+            {
+                return socket.SocketErrorCode == System.Net.Sockets.SocketError.ConnectionReset
+                    || socket.SocketErrorCode == System.Net.Sockets.SocketError.ConnectionAborted
+                    || socket.SocketErrorCode == System.Net.Sockets.SocketError.Shutdown;
+            }
+
+            return false;
         }
 
         /// <summary>

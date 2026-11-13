@@ -32,7 +32,7 @@ before adding anything new to it.
   `x25 route`, so a configuration from a real router translates.
 - Declaring **known hosts** — which machines are reachable through which interface or gateway,
   including multi-hop.
-- Binding permanent virtual circuits (`PvcBinding`, `PvcDefinition`).
+- Binding permanent virtual circuits (`PvcBinding`).
 - Driving a GUI: `PacketDisplayManager` filters and collapses the packet list, and
   `PacketDisplayUpdateEventArgs` carries real-time updates with relationship visibility.
 - Running without hardware: the serial port has a mock mode (`MockSerialEventArgs`).
@@ -52,7 +52,7 @@ before adding anything new to it.
 
 ```mermaid
 flowchart TB
-    CONF["RuntimeConfig<br/>LapbConfig, X25Config, TimerConfig,<br/>LoggingConfig, X25RoutingConfig, SintranConfig"]
+    CONF["RuntimeConfig<br/>LapbConfig, X25Config, TimerConfig,<br/>LoggingConfig, X25RoutingConfig"]
     RT["ProtocolRuntime<br/>timers, routing, history"]
     TM["TimerManager<br/>named timers, thread-safe"]
     HM["HistoryManager<br/>packets + relationships"]
@@ -117,10 +117,10 @@ flowchart LR
 | The runtime | `ProtocolRuntime`, `RuntimeConfig`, `TimerManager` |
 | Physical layer | `PhysicalLayer`, `PhysicalLayerConfig`, `PhysicalLayerStatistics`, `StationType` |
 | Serial | `SerialTransport`, `SerialTransportConfig`, `SerialInterfaceConfig`, `MockSerialEventArgs`, `SerialLapbLink`, `SerialX25LinkOptions`, `SerialX25LinkRole` |
-| Configuration | `LapbConfig`, `X25Config`, `TimerConfig`, `LoggingConfig`, `SintranConfig` |
+| Configuration | `LapbConfig`, `X25Config`, `TimerConfig`, `LoggingConfig` |
 | Routing configuration | `X25RoutingConfig`, `X25RouteEntry`, `RouteType`, `TcpLapbInterfaceConfig` |
 | Reachability | `KnownHostEntry`, `HostReachability` |
-| Permanent circuits | `PvcBinding`, `PvcDefinition` |
+| Permanent circuits | `PvcBinding` |
 | GUI support | `PacketDisplayManager`, `PacketDisplayItem`, `PacketDisplayStatistics`, `PacketDisplayUpdateEventArgs` |
 
 ## A note before extending it

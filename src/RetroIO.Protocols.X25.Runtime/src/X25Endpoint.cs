@@ -53,6 +53,22 @@ namespace RetroIO.Protocols.X25.Runtime
         private bool _windowIsOpen;
         private volatile bool _linkUp = true;
 
+        // RFC 1613 section 6: the logical channel number in an XOT packet "has no significance and has arbitrary
+        // values", and a forwarding end "MUST set the packet's logical channel number to that used on the outgoing
+        // interface". So a peer may answer our Call Request on another number than the one we sent it on (x25emu
+        // does: a call placed on channel 16 is answered on channel 1). For a connection WE dialled, the calls placed
+        // and not yet answered, and the number the peer chose for each answered one, are kept here (always under
+        // Sync); the peer's number is turned into ours on the way in and back on the way out.
+        private readonly System.Collections.Generic.List<ushort> _awaitingAnswer = new System.Collections.Generic.List<ushort>();
+        private readonly System.Collections.Generic.Dictionary<ushort, ushort> _wireToLocal = new System.Collections.Generic.Dictionary<ushort, ushort>();
+        private readonly System.Collections.Generic.Dictionary<ushort, ushort> _localToWire = new System.Collections.Generic.Dictionary<ushort, ushort>();
+
+        /// <summary>
+        /// Gets or sets whether the channel number the peer answers on is translated to ours. True for a
+        /// connection we dialled over XOT; left false for links that have real channel numbers (LAPB, serial).
+        /// </summary>
+        public bool TranslatesChannels { get; set; }
+
         /// <summary>
         /// Creates an endpoint over a connection.
         /// </summary>
@@ -94,8 +110,8 @@ namespace RetroIO.Protocols.X25.Runtime
         public object Sync { get; } = new object();
 
         /// <summary>
-        /// True once the runtime has issued the Restart Request that brings a dialled link to a known
-        /// state (X.25 4.1). Set under <see cref="Sync"/>.
+        /// Not used any more: the runtime sends no Restart Request over XOT (RFC 1613 section 6.4), so
+        /// nothing sets this. Kept so existing callers still compile.
         /// </summary>
         public bool RestartSent { get; set; }
 
@@ -121,8 +137,108 @@ namespace RetroIO.Protocols.X25.Runtime
         {
             lock (Sync)
             {
-                Layer.ProcessPacket(packet);
+                Layer.ProcessPacket(TranslateInbound(packet));
             }
+        }
+
+        /// <summary>
+        /// Remembers a call we placed on <paramref name="lci"/> and have no answer for yet. Call with Sync held.
+        /// </summary>
+        /// <param name="lci">The channel number the call was placed on.</param>
+        public void NoteCallPlaced(ushort lci)
+        {
+            if (TranslatesChannels)
+            {
+                _awaitingAnswer.Add(lci);
+            }
+        }
+
+        /// <summary>
+        /// Forgets what is kept for a circuit that has ended. Call with Sync held.
+        /// </summary>
+        /// <param name="lci">The channel number of the circuit, as the engine knows it.</param>
+        public void ForgetCircuit(ushort lci)
+        {
+            _awaitingAnswer.Remove(lci);
+            if (_localToWire.TryGetValue(lci, out ushort wire))
+            {
+                _localToWire.Remove(lci);
+                _wireToLocal.Remove(wire);
+            }
+        }
+
+        /// <summary>
+        /// Turns the channel number the peer used into the one our call has, when the peer answered on another
+        /// number. Called with Sync held.
+        /// </summary>
+        /// <remarks>
+        /// A packet on a channel we know nothing about is the answer to our call (Call Accepted, or a Clear for it)
+        /// only when exactly one call of ours is waiting for an answer: then that number is bound to that call.
+        /// With several calls waiting there is no way to tell whose answer it is, so it goes on unchanged.
+        /// </remarks>
+        private byte[] TranslateInbound(byte[] packet)
+        {
+            if (!TranslatesChannels || packet.Length < 3)
+            {
+                return packet;
+            }
+
+            ushort wire = (ushort)(((packet[0] & 0x0F) << 8) | packet[1]);
+            if (wire == 0)
+            {
+                return packet;
+            }
+
+            if (!_wireToLocal.TryGetValue(wire, out ushort local))
+            {
+                bool answer = packet[2] == 0x0F || packet[2] == 0x13;
+                if (!answer || _awaitingAnswer.Contains(wire) || _awaitingAnswer.Count != 1)
+                {
+                    return packet;
+                }
+
+                local = _awaitingAnswer[0];
+                _wireToLocal[wire] = local;
+                _localToWire[local] = wire;
+            }
+
+            if (packet[2] == 0x0F)
+            {
+                _awaitingAnswer.Remove(local);
+            }
+
+            if (local == wire)
+            {
+                return packet;
+            }
+
+            byte[] copy = (byte[])packet.Clone();
+            copy[0] = (byte)((copy[0] & 0xF0) | (local >> 8));
+            copy[1] = (byte)(local & 0xFF);
+            return copy;
+        }
+
+        /// <summary>
+        /// Turns our channel number into the one the peer chose for the call, if it chose another. The engine calls
+        /// the sink with Sync already held.
+        /// </summary>
+        private byte[] TranslateOutbound(byte[] packet)
+        {
+            if (!TranslatesChannels || packet.Length < 3 || _localToWire.Count == 0)
+            {
+                return packet;
+            }
+
+            ushort local = (ushort)(((packet[0] & 0x0F) << 8) | packet[1]);
+            if (local == 0 || !_localToWire.TryGetValue(local, out ushort wire) || wire == local)
+            {
+                return packet;
+            }
+
+            byte[] copy = (byte[])packet.Clone();
+            copy[0] = (byte)((copy[0] & 0xF0) | (wire >> 8));
+            copy[1] = (byte)(wire & 0xFF);
+            return copy;
         }
 
         /// <summary>
@@ -318,7 +434,7 @@ namespace RetroIO.Protocols.X25.Runtime
 
                 try
                 {
-                    return _owner._send(packet.ToArray()) ? X25SendResult.Sent : X25SendResult.Refused;
+                    return _owner._send(_owner.TranslateOutbound(packet.ToArray())) ? X25SendResult.Sent : X25SendResult.Refused;
                 }
                 catch (Exception ex)
                 {

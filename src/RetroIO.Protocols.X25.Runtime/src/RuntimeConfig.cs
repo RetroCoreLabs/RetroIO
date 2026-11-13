@@ -45,11 +45,6 @@ namespace RetroIO.Protocols.X25.Runtime
         public X25RoutingConfig Routing { get; set; } = new();
 
         /// <summary>
-        /// SINTRAN protocol configuration
-        /// </summary>
-        public SintranConfig Sintran { get; set; } = new();
-
-        /// <summary>
         /// Timer configuration
         /// </summary>
         public TimerConfig Timers { get; set; } = new();
@@ -63,6 +58,12 @@ namespace RetroIO.Protocols.X25.Runtime
         /// XOT-to-Serial bridge configuration for high-performance pass-through mode
         /// </summary>
         public XotSerialBridgeConfig Bridge { get; set; } = new();
+
+        /// <summary>
+        /// Telnet PAD: a TCP port where an ordinary terminal program gets an X.28 PAD. Off by default; the
+        /// section may be left out of a configuration file.
+        /// </summary>
+        public TelnetPadConfig TelnetPad { get; set; } = new();
 
         /// <summary>
         /// Create default runtime configuration with example routing setup
@@ -844,93 +845,6 @@ namespace RetroIO.Protocols.X25.Runtime
 
         /// <summary>
         /// Description for this PVC binding
-        /// </summary>
-        public string Description { get; set; } = string.Empty;
-    }
-
-    /// <summary>
-    /// SINTRAN protocol configuration
-    /// </summary>
-    public class SintranConfig
-    {
-        /// <summary>
-        /// Standard PVC definitions for SINTRAN protocols
-        /// </summary>
-        public List<PvcDefinition> StandardPvcs { get; set; } = new List<PvcDefinition>();
-
-        /// <summary>
-        /// Local SINTRAN system ID
-        /// </summary>
-        public string LocalSintranId { get; set; } = "200";
-
-        /// <summary>
-        /// Remote SINTRAN system ID
-        /// </summary>
-        public string RemoteSintranId { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Automatically establish PVCs at startup
-        /// </summary>
-        public bool AutoEstablishPvcs { get; set; } = true;
-
-        /// <summary>
-        /// Enable SINTRAN routing protocol handler
-        /// </summary>
-        public bool EnableRoutingProtocol { get; set; } = true;
-
-        /// <summary>
-        /// Enable SINTRAN XMSG protocol handler
-        /// </summary>
-        public bool EnableXmsgProtocol { get; set; } = true;
-
-        /// <summary>
-        /// Enable SINTRAN file transfer protocol handler
-        /// </summary>
-        public bool EnableFileProtocol { get; set; } = true;
-
-        /// <summary>
-        /// PVC establishment timeout in milliseconds
-        /// </summary>
-        public int PvcEstablishmentTimeout { get; set; } = 5000;
-    }
-
-    /// <summary>
-    /// PVC definition for SINTRAN protocols
-    /// </summary>
-    public class PvcDefinition
-    {
-        /// <summary>
-        /// Logical Channel Number (LCN) for this PVC
-        /// </summary>
-        public ushort Lcn { get; set; }
-
-        /// <summary>
-        /// Protocol type (ROUTING, XMSG, FILE)
-        /// </summary>
-        public string Protocol { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Called address for PVC establishment
-        /// </summary>
-        public string CalledAddress { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Calling address for PVC establishment
-        /// </summary>
-        public string CallingAddress { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Call User Data for service identification
-        /// </summary>
-        public byte[] CallUserData { get; set; } = new byte[0];
-
-        /// <summary>
-        /// Enable this PVC
-        /// </summary>
-        public bool Enabled { get; set; } = true;
-
-        /// <summary>
-        /// Description for this PVC definition
         /// </summary>
         public string Description { get; set; } = string.Empty;
     }

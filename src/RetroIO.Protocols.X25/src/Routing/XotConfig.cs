@@ -31,12 +31,14 @@ namespace RetroIO.Protocols.X25
         public bool Enabled { get; set; } = true;
 
         /// <summary>
-        /// XOT mode (Client, Server)
+        /// XOT mode (Client, Server, Both)
         /// </summary>
         public XotMode Mode { get; set; } = XotMode.Client;
 
         /// <summary>
-        /// Remote IP address (for client mode)
+        /// Remote IP address (for client mode). In Both mode this is the peer: the address we dial
+        /// when a call is routed to this entry, and the source address an incoming connection is
+        /// matched against.
         /// </summary>
         public string? RemoteIPAddress { get; set; }
 
@@ -59,9 +61,25 @@ namespace RetroIO.Protocols.X25
         public ushort LciCount { get; set; } = 16;
 
         /// <summary>
-        /// Local listening port (for server mode, default 1998)
+        /// Local listening port (for server mode, default 1998). In Both mode this is the port we
+        /// accept the peer on. Several Server and Both entries may use the same port: they share one
+        /// listening socket (see <see cref="Transport.XotListenerRegistry"/>).
         /// </summary>
         public int LocalPort { get; set; } = 1998;
+
+        /// <summary>
+        /// Both mode only: when true, a connection that comes from an IP address that no entry
+        /// on the same local port lists as its peer is refused, with a warning in the log. When false
+        /// (the default) such a connection is accepted as an unlisted peer and handled with the
+        /// default settings.
+        /// </summary>
+        /// <remarks>
+        /// RFC 1613 has no authentication, so the source IP address is all there is to go on, and
+        /// everybody behind one NAT router shares one address. If any entry on a port sets this, the
+        /// whole port refuses unlisted addresses: a port has one listening socket, and the answer
+        /// for a connection that belongs to no entry cannot depend on which entry is asked.
+        /// </remarks>
+        public bool AllowOnlyListedPeers { get; set; } = false;
 
         /// <summary>
         /// Remote X.25 machine ID reachable through this XOT connection
@@ -69,26 +87,28 @@ namespace RetroIO.Protocols.X25
         public string RemoteMachineId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Packet-layer window to REQUEST in the call request's flow control facility.
+        /// Window size to REQUEST in the Call Request's flow control facility for calls over this entry, 1 to 7; null uses the
+        /// X.25 section of the configuration. This is the peer's own setting (a Cisco "profile").
         /// </summary>
         /// <remarks>
         /// This is a proposal, not the window we then use. What we actually use is whatever comes
         /// back in the call accepted packet, and X.25 6.12 says a called DTE may lower it. Only when
         /// the peer sends no window size facility at all do we fall back - and then to 2, the
-        /// standard default (X.25 6.10), never to this number.
+        /// standard default (X.25 6.10), never to this number. For a connection the peer opened, a call
+        /// that carries no size facility uses this number; one that does is accepted as asked.
         /// <para>
-        /// 7 is the widest a modulo 8 circuit can carry (X.25 7.3.1.2) and is what the C reference
-        /// switches are configured for, so proposing it costs nothing against a peer that wants
-        /// less: it will say so.
+        /// 7 is the widest a modulo 8 circuit can carry (X.25 7.3.1.2). A value that cannot work (outside 1 to 7)
+        /// refuses the entry when the runtime starts; it is never changed to something else.
         /// </para>
         /// </remarks>
-        public byte RequestedWindowSize { get; set; } = 7;
+        public byte? RequestedWindowSize { get; set; }
 
         /// <summary>
-        /// Maximum user data field length to REQUEST, in octets. Negotiated the same way as
+        /// Maximum user data field length to REQUEST, in octets, for calls over this entry: a power of two from 16 to 4096;
+        /// null uses the X.25 section of the configuration. Negotiated the same way as
         /// <see cref="RequestedWindowSize"/>.
         /// </summary>
-        public int RequestedPacketSize { get; set; } = 128;
+        public int? RequestedPacketSize { get; set; }
 
         /// <summary>
         /// TCP keepalive settings (equivalent to Cisco tcp-keepalives)
@@ -134,7 +154,17 @@ namespace RetroIO.Protocols.X25
         /// <summary>
         /// XOT server - accepts incoming XOT connections
         /// </summary>
-        Server
+        Server,
+
+        /// <summary>
+        /// XOT peer: ONE entry that dials out when a call is routed to it and also accepts incoming
+        /// connections from the same peer. RFC 1613 has no client and server roles: whichever end
+        /// has a call to make opens a new TCP connection (one per virtual circuit, section 5) to the
+        /// other end's port 1998, and sends the Call Request on it (section 6.1). This is how Cisco
+        /// routers behave, so one entry per peer is the natural fit. Added last, so the numbers of
+        /// Client (0) and Server (1) in existing configuration files do not change.
+        /// </summary>
+        Both
     }
 
     /// <summary>

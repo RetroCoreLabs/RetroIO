@@ -83,6 +83,11 @@ namespace RetroIO.Protocols.X25.Transport
         TransportStatistics GetStatistics();
 
         /// <summary>
+        /// Sets the call, byte and error counters back to zero. Status and start time are kept.
+        /// </summary>
+        void ResetStatistics();
+
+        /// <summary>
         /// Event fired when an incoming call is received
         /// </summary>
         event EventHandler<X25CallRequest>? IncomingCall;
@@ -117,7 +122,12 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// XOT server (inbound X.25 over TCP listener)
         /// </summary>
-        XOT_Server
+        XOT_Server,
+
+        /// <summary>
+        /// XOT peer: dials out per call and accepts incoming connections (RFC 1613 has no roles)
+        /// </summary>
+        XOT_Peer
     }
 
     /// <summary>
@@ -279,5 +289,47 @@ namespace RetroIO.Protocols.X25.Transport
         /// Gets or sets the number of protocol errors.
         /// </summary>
         public int ProtocolErrors { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many TCP connections went away since the transport started, whether the
+        /// peer closed them or the network dropped them. A connection closed because the transport is
+        /// being stopped is not counted.
+        /// </summary>
+        public int Disconnects { get; set; }
+
+        /// <summary>
+        /// Gets or sets the reason the last connect failed, in words (for example "connection refused");
+        /// empty if none has. It is not cleared when a later connect works.
+        /// </summary>
+        public string LastError { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the time (UTC) a TCP connection was last made, or null if none has been.
+        /// </summary>
+        public DateTime? LastConnectedUtc { get; set; }
+
+        /// <summary>
+        /// Gets or sets the time (UTC) a connect last failed, or null if none has.
+        /// </summary>
+        public DateTime? LastFailureUtc { get; set; }
+
+        /// <summary>
+        /// Sets the call, byte and error counters back to zero. The name, type, status, start time and
+        /// the number of connections open now describe the transport as it is and are left alone.
+        /// </summary>
+        public void ResetCounters()
+        {
+            OutboundCallsAttempted = 0;
+            OutboundCallsSucceeded = 0;
+            InboundCallsReceived = 0;
+            InboundCallsAccepted = 0;
+            InboundCallsRejected = 0;
+            BytesTransmitted = 0;
+            BytesReceived = 0;
+            ConnectionErrors = 0;
+            TimeoutErrors = 0;
+            ProtocolErrors = 0;
+            Disconnects = 0;
+        }
     }
 }
