@@ -144,6 +144,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 }
             }
 
+            lock (session.DataLock)
             try
             {
                 _logger.LogDebug("LocalTAD: Received {Length} bytes on LCN {LCN}", data.Length, lcn);
@@ -582,6 +583,84 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// Handle an X.29 control message (a data packet with the Q bit set) from the PAD.
+        /// PARAMETER INDICATION and SET PARAMETERS update this session's copy of the X.3 parameters, so
+        /// the host side shows what the PAD really has. READ PARAMETERS and SET AND READ PARAMETERS are
+        /// answered with a PARAMETER INDICATION.
+        /// </summary>
+        public void HandleX29Message(ushort lcn, byte[] data)
+        {
+            LocalTadSession? session;
+            lock (_sessionsLock)
+            {
+                if (!_sessions.TryGetValue(lcn, out session))
+                {
+                    _logger.LogWarning("LocalTAD: X.29 message on LCN {LCN} with no session", lcn);
+                    return;
+                }
+            }
+
+            RetroIO.Protocols.X25.Models.X29Message message = X29Messages.ParseMessage(data);
+            if (!message.IsValid)
+            {
+                _logger.LogWarning("LocalTAD: empty X.29 message on LCN {LCN}", lcn);
+                return;
+            }
+
+            _logger.LogDebug("LocalTAD: X.29 {Message} on LCN {LCN}", message, lcn);
+
+            switch (message.Type)
+            {
+                case X29Messages.PARAMETER_INDICATION:
+                case X29Messages.SET_PARAMETERS:
+                case X29Messages.SET_AND_READ_PARAMETERS:
+                    foreach (KeyValuePair<byte, byte> pair in message.Parameters)
+                    {
+                        lock (_sessionsLock)
+                        {
+                            session.X3Parameters.SetParameter(pair.Key, pair.Value);
+                        }
+                    }
+
+                    if (message.Type == X29Messages.SET_AND_READ_PARAMETERS)
+                    {
+                        goto case X29Messages.READ_PARAMETERS;
+                    }
+
+                    break;
+
+                case X29Messages.READ_PARAMETERS:
+                    Dictionary<byte, byte> answer = new Dictionary<byte, byte>();
+                    lock (_sessionsLock)
+                    {
+                        if (message.ParameterNumbers.Count == 0)
+                        {
+                            answer = session.X3Parameters.GetAllParameters();
+                        }
+                        else
+                        {
+                            for (int i = 0; i < message.ParameterNumbers.Count; i++)
+                            {
+                                byte n = message.ParameterNumbers[i];
+                                answer[n] = session.X3Parameters.GetParameter(n);
+                            }
+                        }
+                    }
+
+                    if (answer.Count > 0)
+                    {
+                        SendX29Message(session, X29Messages.CreateParameterIndication(answer));
+                    }
+
+                    break;
+
+                default:
+                    // INVITATION TO CLEAR, INDICATION OF BREAK, ERROR: nothing to record on the host side.
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Get X.3 parameters for a specific session by session ID
         /// </summary>
         public Dictionary<byte, byte>? GetSessionX3Parameters(string sessionId)
@@ -828,6 +907,11 @@ namespace RetroIO.Protocols.X25.Protocols
 
         // Line buffer for accumulating characters until CR/LF
         public StringBuilder LineBuffer { get; } = new StringBuilder();
+
+        // Held while data for this call is processed. Data for one call can arrive on more than one thread at once (seen against
+        // x25emu with a fast stream), and the StringBuilder above is not safe for that: unguarded, ToString threw "Index was out of
+        // range (chunkLength)" and the line was lost.
+        public object DataLock { get; } = new object();
 
         // Original parameter values for password mode restoration
         public byte OriginalEcho { get; set; } = 1;      // Default echo enabled

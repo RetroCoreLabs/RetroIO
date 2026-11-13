@@ -37,7 +37,6 @@ namespace RetroIO.Protocols.X25.Modules
         private string _remoteAddress = "";
         private readonly StringBuilder _inputBuffer = new StringBuilder();
         private readonly StringBuilder _outputBuffer = new StringBuilder();
-        private System.Threading.Timer? _idleTimer;
         
         // Configuration
         /// <summary>
@@ -190,7 +189,7 @@ namespace RetroIO.Protocols.X25.Modules
         /// Handled packet types:
         ///  - Call Accepted goes to <see cref="NotifyCallAccepted"/>.
         ///  - Data goes to <see cref="DeliverData"/> with its Q bit.
-        ///  - Clear Request goes to <see cref="DeliverClear"/>.
+        ///  - Clear Request goes to <see cref="DeliverClear(ushort, byte, byte)"/>.
         ///  - Interrupt goes to <see cref="DeliverInterrupt"/>.
         /// Other packet types are only logged. An exception thrown while handling a packet is
         /// logged and not passed on.
@@ -218,7 +217,13 @@ namespace RetroIO.Protocols.X25.Modules
                         DeliverData(args.Packet.LCN, args.Packet.Data, args.Packet.QBit);
                         break;
                     case X25PacketType.ClearRequest:
-                        DeliverClear(args.Packet.LCN);
+                        {
+                            // Clear packet: cause in Data[0], diagnostic in Data[1] (absent = 0).
+                            var cd = args.Packet.Data;
+                            byte clearCause = cd != null && cd.Length > 0 ? cd[0] : (byte)0;
+                            byte clearDiag = cd != null && cd.Length > 1 ? cd[1] : (byte)0;
+                            DeliverClear(args.Packet.LCN, clearCause, clearDiag);
+                        }
                         break;
                     case X25PacketType.Interrupt:
                         DeliverInterrupt(args.Packet.LCN);
@@ -265,36 +270,57 @@ namespace RetroIO.Protocols.X25.Modules
             if (!success)
             {
                 _state = PadState.Disconnected;
+                ResetX3ToDefaults();
                 _logger.LogError("Failed to initiate X.25 call to {RemoteAddress}", remoteAddress);
             }
 
             return success;
         }
-
         /// <summary>
-        /// Disconnect from remote server
+        /// Disconnect from remote server. The terminal is told "CLR CONF" (X.28: the PAD confirms the
+        /// clear the person asked for) and gets the "PAD> " prompt back.
         /// </summary>
         public void Disconnect()
         {
+            if (ClearCallFromTerminal())
+            {
+                SendPrompt();
+            }
+        }
+
+        /// <summary>
+        /// Clears the call at the person's request and tells the terminal "CLR CONF". Returns false when
+        /// there was no call to clear. It does not write the prompt: a caller that is in the middle of a
+        /// typed line (the CLR command) gets its prompt when the line ends.
+        /// </summary>
+        private bool ClearCallFromTerminal()
+        {
             if (_currentLCN == 0 || _state == PadState.Disconnected)
-                return;
+                return false;
 
             _logger.LogInformation("PAD Client disconnecting from {RemoteAddress}", _remoteAddress);
-            
+
+            // The PAD is put back to "no call" and command mode BEFORE the clear goes out. If the built-in
+            // TAD server answers the clear on the same call stack, at once, with a clear event for this
+            // very channel; if the PAD still thought the call was up, it would take that echo for a clear
+            // from the far end, print "CLR DTE", draw a second prompt and report the disconnect twice.
+            var clearedLCN = _currentLCN;
+            _state = PadState.Disconnected;
+            _currentLCN = 0;
+
+            // Switch X.28 protocol back to command mode
+            _x28Protocol.SwitchToCommandMode();
+            ResetX3ToDefaults();
+
             // The X.29 "invitation to clear" PAD message goes from the HOST to the PAD (X.29 3.2.1: it
             // asks the PAD to clear). A PAD never sends it, so it is not sent here: the PAD just clears.
             // Send the X.25 Clear Request to clean up the call
-            _logger.LogDebug("PAD sending X.25 Clear Request on LCN {LCN}", _currentLCN);
-            _transport.ClearCall(_currentLCN, 0, 0);
-            
-            _state = PadState.Disconnected;
-            var clearedLCN = _currentLCN;
-            _currentLCN = 0;
-            
-            // Switch X.28 protocol back to command mode
-            _x28Protocol.SwitchToCommandMode();
-            
+            _logger.LogDebug("PAD sending X.25 Clear Request on LCN {LCN}", clearedLCN);
+            _transport.ClearCall(clearedLCN, 0, 0);
+
+            OnDataReceived("\r\nCLR CONF\r\n");
             OnConnectionStateChanged(PadConnectionState.Disconnected, "User initiated");
+            return true;
         }
 
         /// <summary>
@@ -369,7 +395,16 @@ namespace RetroIO.Protocols.X25.Modules
             try
             {
                 char ch = (char)character;
-                
+
+                // Was this line typed in command mode? Read BEFORE the character is processed. The
+                // prompt at the end of a line belongs to a line that was a PAD command. A line typed in
+                // a call is data for the host, and the host may answer it by clearing the call (typing
+                // QUIT at the built-in TAD does): the clear arrives while this very character is still
+                // being processed, the clear handler already prints the prompt, and the PAD is back in
+                // command mode when this method looks again. Looking only afterwards printed a second
+                // prompt ("PAD> PAD> ") after a host clear but not after the user's own CLR.
+                bool wasInCommandMode = _x28Protocol.CurrentMode == X28.PadMode.Command || _x28Protocol.CurrentMode == X28.PadMode.Escape;
+
                 // Always delegate character processing to X.28 protocol
                 // X.28 will handle command mode when disconnected and data transfer mode when connected
                 bool processed = _x28Protocol.ProcessCharacter(ch);
@@ -384,7 +419,7 @@ namespace RetroIO.Protocols.X25.Modules
                     // the second half of a CR LF pair and must not print a second prompt.
                     bool endOfLine = ch == '\r' || (ch == '\n' && !_lastKeyWasCr);
                     // While a call is being set up the prompt waits: COM or CLR comes first.
-                    if (endOfLine && _state != PadState.Connecting)
+                    if (endOfLine && wasInCommandMode && _state != PadState.Connecting)
                     {
                         if ((_x28Protocol.CurrentMode == X28.PadMode.Command) || (_x28Protocol.CurrentMode == X28.PadMode.Escape))
                         {
@@ -414,9 +449,10 @@ namespace RetroIO.Protocols.X25.Modules
 
             if (_state == PadState.DataTransfer)
             {
-                // Send X.29 SET PARAMETERS message
+                // The user changed a parameter of this PAD: tell the host with an X.29 PARAMETER INDICATION
+                // (PAD to host). A SET PARAMETERS message goes the other way, from host to PAD.
                 var parameters = new Dictionary<byte, byte> { [parameterNumber] = value };
-                var message = _x29Protocol.CreateSetParameters(parameters);
+                var message = _x29Protocol.CreateParameterIndication(parameters);
                 SendX29Message(message);
             }
 
@@ -472,7 +508,6 @@ namespace RetroIO.Protocols.X25.Modules
             // X.28 service signal COM: the call is connected.
             OnDataReceived("COM\r\n");
 
-            StartIdleTimer();
             OnConnectionStateChanged(PadConnectionState.Connected, "Call accepted");
         }
 
@@ -494,7 +529,6 @@ namespace RetroIO.Protocols.X25.Modules
             if (data == null || data.Length == 0)
                 return;
 
-            RestartIdleTimer();
 
             if (qBit)
             {
@@ -520,11 +554,34 @@ namespace RetroIO.Protocols.X25.Modules
         /// </param>
         public void DeliverClear(ushort lcn)
         {
-            _logger.LogInformation("PAD connection cleared by remote on LCN {LCN}", lcn);
+            DeliverClear(lcn, "CLR");
+        }
+
+        /// <summary>
+        /// Delivers a remote clear with its cause and diagnostic; the terminal sees the X.28 signal
+        /// <c>CLR &lt;mnemonic&gt; C:&lt;cause&gt; D:&lt;diagnostic&gt;</c>.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical channel that was cleared.
+        /// </param>
+        /// <param name="cause">
+        /// Cause octet of the clear packet.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic octet of the clear packet.
+        /// </param>
+        public void DeliverClear(ushort lcn, byte cause, byte diagnostic)
+        {
+            DeliverClear(lcn, X28.ClearSignal(cause, diagnostic));
+        }
+
+        private void DeliverClear(ushort lcn, string signal)
+        {
+            _logger.LogInformation("PAD connection cleared by remote on LCN {LCN}: {Signal}", lcn, signal);
             HandleDisconnection();
 
             // The far end (or the network) cleared the call: tell the terminal, and give the prompt back.
-            OnDataReceived("\r\nCLR\r\n");
+            OnDataReceived("\r\n" + signal + "\r\n");
             SendPrompt();
 
             var reason = "Remote disconnect";
@@ -567,6 +624,24 @@ namespace RetroIO.Protocols.X25.Modules
                         foreach (var param in message.Parameters)
                         {
                             _x3Protocol.SetParameter(param.Key, param.Value);
+                        }
+                        break;
+
+                    case (byte)X29MessageType.SetParameters:
+                    case (byte)X29MessageType.SetAndReadParameters:
+                    case (byte)X29MessageType.ReadParameters:
+                        {
+                            // X.29 3.2: the HOST changes (SET) or asks for (READ) the PAD's OWN X.3 parameters.
+                            // The PAD applies them to the parameters it really uses, so that for example the
+                            // host's SET with echo (parameter 2) = 0 makes the PAD stop echoing what the person
+                            // types (the host then echoes it); without this every typed line showed twice.
+                            // READ and SET AND READ are answered with a PARAMETER INDICATION (X.29 3.2.5), and
+                            // a value the PAD cannot take is answered with an ERROR message (X.29 3.2.7).
+                            byte[]? answer = _x29Protocol.ProcessControlMessage(message, _x3Protocol);
+                            if (answer != null)
+                            {
+                                SendX29Message(answer);
+                            }
                         }
                         break;
 
@@ -635,19 +710,15 @@ namespace RetroIO.Protocols.X25.Modules
             if (_currentLCN == 0 || _state != PadState.DataTransfer)
                 return;
 
-            // Send as X.25 data packet with Q-bit set
-            var packet = X25PacketBuilder.CreateDataPacket(
-                _currentLCN,
-                0, // PS
-                0, // PR  
-                messageData,
-                false, // M-bit
-                true,  // Q-bit (qualified/control data)
-                false  // D-bit
-            );
+            // Send as an X.25 data packet with the Q bit set (qualified data = control message).
+            bool sent = _transport.SendData(_currentLCN, messageData, false, true, false);
+            if (!sent)
+            {
+                _logger.LogWarning("PAD could not send X.29 message ({Length} bytes) on LCN {LCN}", messageData.Length, _currentLCN);
+                return;
+            }
 
-            // TODO: Send via ProtocolRuntime
-            _logger.LogDebug("PAD sending X.29 message: {Length} bytes", messageData.Length);
+            _logger.LogDebug("PAD sent X.29 message: {Length} bytes", messageData.Length);
         }
 
         /// <summary>
@@ -655,56 +726,39 @@ namespace RetroIO.Protocols.X25.Modules
         /// </summary>
         private void HandleDisconnection()
         {
-            StopIdleTimer();
             _state = PadState.Disconnected;
             _currentLCN = 0;
             _inputBuffer.Clear();
             _outputBuffer.Clear();
-            
+
             // Switch X.28 protocol back to command mode
             _x28Protocol.SwitchToCommandMode();
+
+            ResetX3ToDefaults();
         }
 
         /// <summary>
-        /// Start idle timer
+        /// Puts the whole X.3 parameter table back to its default values. Called whenever a call ends,
+        /// whichever way it ended (the host cleared, the person cleared, Disconnect, the call failed),
+        /// and nothing is sent to the host: the call is over.
         /// </summary>
-        private void StartIdleTimer()
+        /// <remarks>
+        /// The rule is the user's: after a call the PAD always goes back to the defaults, never to
+        /// what the host set. The built-in TAD sets parameter 2 (echo) to 0 at the start of a call and
+        /// the PAD obeys it; if that stayed, the next call to a plain host would show nothing the person
+        /// types. This also drops a parameter the person changed on purpose before the call.
+        /// </remarks>
+        private void ResetX3ToDefaults()
         {
-            if (_x3Protocol.GetParameter(X3.ParameterNumber.IDLE_TIMER) == 0)
-                return;
-
-            var timeoutMs = _x3Protocol.GetParameter(X3.ParameterNumber.IDLE_TIMER) * 20; // 20ms units
-            _idleTimer = new System.Threading.Timer(OnIdleTimeout, null, timeoutMs, Timeout.Infinite);
+            _x3Protocol.SetDefaultProfile();
+            OnParametersChanged();
         }
 
-        /// <summary>
-        /// Restart idle timer
-        /// </summary>
-        private void RestartIdleTimer()
-        {
-            if (_idleTimer == null) return;
-            
-            var timeoutMs = _x3Protocol.GetParameter(X3.ParameterNumber.IDLE_TIMER) * 20;
-            _idleTimer.Change(timeoutMs, Timeout.Infinite);
-        }
-
-        /// <summary>
-        /// Stop idle timer
-        /// </summary>
-        private void StopIdleTimer()
-        {
-            _idleTimer?.Dispose();
-            _idleTimer = null;
-        }
-
-        /// <summary>
-        /// Handle idle timeout
-        /// </summary>
-        private void OnIdleTimeout(object? state)
-        {
-            _logger.LogInformation("PAD idle timeout - disconnecting");
-            System.Threading.ThreadPool.QueueUserWorkItem((_) => Disconnect());
-        }
+        // X.3 parameter 4 (idle timer delay) is a DATA FORWARDING timer: when the person stops typing for
+        // that long, the characters collected so far are sent to the host. X28 does that. It never ends
+        // the call. This class used to run a second timer from the same parameter that cleared the call
+        // when it ran out, so SET 4:10 followed by a new CALL dropped the call 0.2 s after it was
+        // answered, and the window went back to PAD> without anyone pressing Disconnect.
 
 
         /// <summary>
@@ -957,7 +1011,7 @@ namespace RetroIO.Protocols.X25.Modules
                         
                     case "CLR":
                     case "CLEAR":
-                        Disconnect();
+                        ClearCallFromTerminal();
                         break;
                         
                     case "SET":
@@ -1036,6 +1090,7 @@ namespace RetroIO.Protocols.X25.Modules
                 _logger.LogInformation("PAD Client received X.25 reset: cause={Cause}, diagnostic={Diagnostic}", cause, diagnostic);
                 OnConnectionStateChanged(PadConnectionState.Disconnected, $"Reset: {cause}/{diagnostic}");
                 _state = PadState.Disconnected;
+                ResetX3ToDefaults();
             }
         }
 
@@ -1050,6 +1105,7 @@ namespace RetroIO.Protocols.X25.Modules
                 OnConnectionStateChanged(PadConnectionState.Disconnected, $"Cleared: {cause}/{diagnostic}");
                 _state = PadState.Disconnected;
                 _currentLCN = 0;
+                ResetX3ToDefaults();
             }
         }
 
@@ -1150,11 +1206,10 @@ namespace RetroIO.Protocols.X25.Modules
         #region IDisposable
 
         /// <summary>
-        /// Stops the idle timer, unsubscribes from the X.28 and X.3 events and clears the input and output buffers.
+        /// Unsubscribes from the X.28 and X.3 events and clears the input and output buffers.
         /// </summary>
         public void Dispose()
         {
-            StopIdleTimer();
             
             // Unsubscribe from X.28 events
             if (_x28Protocol != null)
@@ -1198,6 +1253,22 @@ namespace RetroIO.Protocols.X25.Modules
         {
             SendPrompt();
             
+        }
+
+        /// <summary>
+        /// Writes the "PAD> " prompt again when the PAD is waiting for a command, so a terminal that
+        /// has just wiped its screen shows the person where to type. Nothing is written while a call
+        /// is being set up or while data is passing (the prompt then belongs to the host, which the
+        /// PAD cannot redraw), so it is safe to call at any time.
+        /// </summary>
+        public void RedrawPrompt()
+        {
+            bool waitingForCommand = _state == PadState.Disconnected
+                && (_x28Protocol.CurrentMode == X28.PadMode.Command || _x28Protocol.CurrentMode == X28.PadMode.Escape);
+            if (waitingForCommand)
+            {
+                SendPrompt();
+            }
         }
 
         void SendPrompt()

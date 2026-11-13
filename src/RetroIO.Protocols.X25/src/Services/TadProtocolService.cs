@@ -139,6 +139,21 @@ namespace RetroIO.Protocols.X25.Services
         {
             _tadProtocol.HandleIncomingData(lcn, data);
         }
+
+        /// <summary>
+        /// Handle data received on established connection, keeping the Q bit: a qualified packet is an
+        /// X.29 control message from the PAD and must not be treated as text.
+        /// </summary>
+        public void HandleData(ushort lcn, byte[] data, bool qBit)
+        {
+            if (qBit)
+            {
+                _tadProtocol.HandleX29Message(lcn, data);
+                return;
+            }
+
+            _tadProtocol.HandleIncomingData(lcn, data);
+        }
         
         /// <summary>
         /// Handle call clearing
