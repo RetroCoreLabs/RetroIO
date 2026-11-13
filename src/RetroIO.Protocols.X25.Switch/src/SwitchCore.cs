@@ -135,7 +135,6 @@ namespace RetroIO.Protocols.X25.Switch
             if (!_node.Config.Routing.TryLookup(calledAddress, inPort.Id, out int outPortId))
             {
                 inPort.ClearCall(inLci, CauseNotObtainable, 0);
-                inPort.Counters.IncrementCallsCleared();
                 return;
             }
 
@@ -143,7 +142,6 @@ namespace RetroIO.Protocols.X25.Switch
             if (outPort == null)
             {
                 inPort.ClearCall(inLci, CauseNotObtainable, 0);
-                inPort.Counters.IncrementCallsCleared();
                 return;
             }
 
@@ -152,7 +150,6 @@ namespace RetroIO.Protocols.X25.Switch
             if (outLci == 0)
             {
                 inPort.ClearCall(inLci, CauseNotObtainable, 0);
-                inPort.Counters.IncrementCallsCleared();
                 return;
             }
 
@@ -472,7 +469,6 @@ namespace RetroIO.Protocols.X25.Switch
                 ISwitchPort farPort = isIngress ? stitch.OutPort : stitch.InPort;
                 ushort farLci = isIngress ? stitch.OutLci : stitch.InLci;
                 farPort.ClearCall(farLci, CauseOutOfOrder, 0);
-                farPort.Counters.IncrementCallsCleared();
 
                 WriteCdr(stitch, CauseOutOfOrder, 0);
                 AccountForCallClear(stitch);
@@ -585,9 +581,7 @@ namespace RetroIO.Protocols.X25.Switch
 
             DiscardQueues(stitch);
             stitch.InPort.ClearCall(stitch.InLci, cause, diagnostic);
-            stitch.InPort.Counters.IncrementCallsCleared();
             stitch.OutPort.ClearCall(stitch.OutLci, cause, diagnostic);
-            stitch.OutPort.Counters.IncrementCallsCleared();
 
             WriteCdr(stitch, cause, diagnostic);
             AccountForCallClear(stitch);
@@ -597,6 +591,9 @@ namespace RetroIO.Protocols.X25.Switch
 
         private void OnCallCleared(ISwitchPort port, ushort lci, byte cause, byte diagnostic)
         {
+            // The leg's channel is free again (the engine reports this once per call, whoever ended it, and a clear this
+            // switch asked for comes back here as well). That is the one place a clear is counted: counting
+            // it at the places that ask for a clear counted most clears twice. See PortCounters.
             port.Counters.IncrementCallsCleared();
 
             // Locate the stitch from either side and clear its peer.
