@@ -84,6 +84,57 @@ namespace RetroIO.Protocols.X25.Switch
         public uint SerialBaud { get; set; } = 9600;
 
         /// <summary>
+        /// Serial data bits, 7 or 8 (HDLC-serial transport only). The default is 8.
+        /// </summary>
+        public int SerialDataBits { get; set; } = 8;
+
+        /// <summary>
+        /// Serial parity: <c>none</c>, <c>odd</c> or <c>even</c> (HDLC-serial transport only). The default is <c>none</c>.
+        /// </summary>
+        public string SerialParity { get; set; } = "none";
+
+        /// <summary>
+        /// Serial stop bits, 1 or 2 (HDLC-serial transport only). The default is 1.
+        /// </summary>
+        public int SerialStopBits { get; set; } = 1;
+
+        /// <summary>
+        /// Serial flow control: <c>rtscts</c> (hardware RTS/CTS) or <c>none</c> (HDLC-serial transport only).
+        /// The default is <c>rtscts</c>, the same default the C emulator has.
+        /// </summary>
+        public string SerialFlow { get; set; } = "rtscts";
+
+        /// <summary>
+        /// LAPB T1, the retransmission and poll timer, in milliseconds (HDLC transports). Zero means the
+        /// default, 3000.
+        /// </summary>
+        public int LapbT1Ms { get; set; }
+
+        /// <summary>
+        /// LAPB T2, the longest an acknowledgement of a received frame may be held back, in milliseconds
+        /// (HDLC transports). Zero means no delay: every frame is acknowledged at once. When set it must be
+        /// less than T1.
+        /// </summary>
+        public int LapbT2Ms { get; set; }
+
+        /// <summary>
+        /// LAPB T3, the idle keepalive timer, in milliseconds (HDLC transports). Zero means the default, 30000.
+        /// </summary>
+        public int LapbT3Ms { get; set; }
+
+        /// <summary>
+        /// LAPB N2, the most times a frame is sent again before the link is declared failed (HDLC
+        /// transports). Zero means the default, 10.
+        /// </summary>
+        public int LapbN2 { get; set; }
+
+        /// <summary>
+        /// LAPB window k, the most unacknowledged frames in flight (HDLC transports), 1 to 7. Zero means the
+        /// default, 7.
+        /// </summary>
+        public int LapbK { get; set; }
+
+        /// <summary>
         /// Start of the local X.121 address range reachable on this port.
         /// </summary>
         public string AddrRangeStart { get; set; } = string.Empty;

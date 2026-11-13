@@ -97,6 +97,19 @@ namespace RetroIO.Link
         /// Gets or sets the number of errors.
         /// </summary>
         public long Errors { get; set; }
+
+        /// <summary>
+        /// Sets the byte, frame and error counters back to zero. The name, type, status and start time
+        /// describe the link itself and are left alone.
+        /// </summary>
+        public void ResetCounters()
+        {
+            BytesTransmitted = 0;
+            BytesReceived = 0;
+            FramesTransmitted = 0;
+            FramesReceived = 0;
+            Errors = 0;
+        }
     }
 
     /// <summary>
@@ -197,6 +210,11 @@ namespace RetroIO.Link
         /// Get current link statistics
         /// </summary>
         LinkStatistics GetStatistics();
+
+        /// <summary>
+        /// Sets the byte, frame and error counters back to zero. Status and start time are kept.
+        /// </summary>
+        void ResetStatistics();
 
         /// <summary>
         /// Raised when an opaque payload is received on this link (protocol classification happens above).

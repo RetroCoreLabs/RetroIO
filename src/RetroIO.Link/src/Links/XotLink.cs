@@ -319,6 +319,15 @@ namespace RetroIO.Link
         }
 
         /// <summary>
+        /// Sets the byte, frame and error counters of this link, and of its LAPB station, back to zero.
+        /// </summary>
+        public void ResetStatistics()
+        {
+            _statistics.ResetCounters();
+            _lapbInstance?.ResetStatistics();
+        }
+
+        /// <summary>
         /// Raised when a payload is received on this link.
         /// </summary>
         /// <remarks>

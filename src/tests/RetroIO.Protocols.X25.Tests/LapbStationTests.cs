@@ -275,6 +275,45 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(stats.RejectionsSent, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// ResetStatistics sets every counter, including the ones kept inside the LAPB layer, back to
+        /// zero while the link stays up with its sequence variables; counting then starts again.
+        /// </summary>
+        [Test]
+        public void ResetStatistics_ZeroesTheCounters_KeepsTheLinkAndItsSequenceNumbers()
+        {
+            using LapbStation station = NewStation();
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+            station.SendData(new byte[] { 1 });
+            station.SendData(new byte[] { 2 });
+            station.SendData(new byte[] { 3 });
+            station.ReceiveFrame(new byte[] { AddressA, (byte)(0x09 | (1 << 5)) }, 2);
+            LapbStatistics before = station.GetStatistics();
+            Assert.That(before.Retransmissions, Is.EqualTo(2), "set-up: two frames were sent again");
+            Assert.That(before.RejectionsReceived, Is.EqualTo(1), "set-up: one REJ arrived");
+            Assert.That(before.IFramesSent, Is.GreaterThan(0), "set-up: I frames were counted");
+            byte vsBefore = before.VS;
+
+            station.ResetStatistics();
+
+            LapbStatistics after = station.GetStatistics();
+            Assert.That(after.Retransmissions, Is.EqualTo(0));
+            Assert.That(after.RejectionsReceived, Is.EqualTo(0));
+            Assert.That(after.RejectionsSent, Is.EqualTo(0));
+            Assert.That(after.T1Timeouts, Is.EqualTo(0));
+            Assert.That(after.T2Timeouts, Is.EqualTo(0));
+            Assert.That(after.IFramesSent, Is.EqualTo(0));
+            Assert.That(after.IFramesReceived, Is.EqualTo(0));
+            Assert.That(after.SFramesReceived, Is.EqualTo(0));
+            Assert.That(after.VS, Is.EqualTo(vsBefore), "the send sequence number is state, not a counter");
+            Assert.That(station.State, Is.EqualTo(LapbState.DataTransfer), "the link must stay up");
+
+            // Counting starts again from zero: a second REJ is the first one counted.
+            station.ReceiveFrame(new byte[] { AddressA, (byte)(0x09 | (1 << 5)) }, 2);
+            Assert.That(station.GetStatistics().RejectionsReceived, Is.EqualTo(1));
+        }
+
         [Test]
         public void Statistics_AGapInTheReceivedFrames_CountsOneRejectionSentNotOnePerFrame()
         {
@@ -391,6 +430,55 @@ namespace RetroIO.Protocols.X25.Tests
             using LapbStation station = NewStation();
             Assert.DoesNotThrow(() => station.ReceiveFrame(new byte[] { 0x01 }, 1));
             Assert.That(Sent().Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// The deadlock found against x25emu over the HDLC trunk (2026-11-13). The reader thread was inside
+        /// <see cref="LapbStation.ReceiveFrame"/> and its DataReceived handler (the X.25 endpoint) waited for the endpoint lock;
+        /// a sender thread held that endpoint lock and called <see cref="LapbStation.SendData"/>, which waited for the
+        /// station lock the reader still held. Neither could go on, the link stopped answering and the peer dropped it.
+        /// A handler must therefore run OUTSIDE the station lock.
+        /// </summary>
+        [Test]
+        public void AHandlerOfReceivedData_RunsOutsideTheStationLock_SoASenderHoldingItsOwnLockCanStillSend()
+        {
+            using LapbStation station = NewStation();
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);
+
+            object endpointLock = new object();
+            using ManualResetEventSlim senderHoldsItsLock = new ManualResetEventSlim(false);
+            using ManualResetEventSlim handlerRunning = new ManualResetEventSlim(false);
+            bool handlerGotItsLock = false;
+            station.DataReceived += (s, d) =>
+            {
+                // Like X25Endpoint.Receive: needs the endpoint lock. Wait until the sender really holds it.
+                handlerRunning.Set();
+                senderHoldsItsLock.Wait(5000);
+                lock (endpointLock)
+                {
+                    handlerGotItsLock = true;
+                }
+            };
+
+            bool senderSent = false;
+            System.Threading.Tasks.Task sender = System.Threading.Tasks.Task.Run(() =>
+            {
+                lock (endpointLock)
+                {
+                    senderHoldsItsLock.Set();
+                    // The handler is now (about to be) waiting for endpointLock; the send needs the station lock.
+                    handlerRunning.Wait(5000);
+                    senderSent = station.SendData(new byte[] { 1, 2, 3 });
+                }
+            });
+
+            System.Threading.Tasks.Task reader = System.Threading.Tasks.Task.Run(() =>
+                station.ReceiveFrame(new byte[] { AddressA, IControl(ns: 0, nr: 0), 0xAA }, 3));
+
+            Assert.That(System.Threading.Tasks.Task.WaitAll(new[] { sender, reader }, 10000), Is.True, "the sender and the reader deadlocked");
+            Assert.That(senderSent, Is.True);
+            Assert.That(handlerGotItsLock, Is.True);
         }
     }
 }

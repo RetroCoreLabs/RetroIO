@@ -216,6 +216,14 @@ namespace RetroIO.Link
             return _statistics;
         }
 
+        /// <summary>
+        /// Sets the byte, frame and error counters of this link back to zero.
+        /// </summary>
+        public void ResetStatistics()
+        {
+            _statistics.ResetCounters();
+        }
+
         // IFrameTransport: the codec hands framed bytes down to the transport through here.
         void IFrameTransport.Send(ReadOnlySpan<byte> bytes)
         {

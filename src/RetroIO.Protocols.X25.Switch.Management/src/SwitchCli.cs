@@ -536,6 +536,25 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 sb.Append("mode = ").Append(pc.Mode == PortMode.Dte ? "dte" : "dce").Append(eol);
                 sb.Append("host = ").Append(pc.Host).Append(eol);
                 sb.Append("port = ").Append(pc.Port).Append(eol);
+                if (pc.Transport == PortTransport.HdlcSerial)
+                {
+                    // The serial line settings; the loader reads them back under these names.
+                    sb.Append("device = ").Append(pc.SerialDevice).Append(eol);
+                    sb.Append("baud = ").Append(pc.SerialBaud).Append(eol);
+                    sb.Append("databits = ").Append(pc.SerialDataBits).Append(eol);
+                    sb.Append("parity = ").Append(pc.SerialParity).Append(eol);
+                    sb.Append("stopbits = ").Append(pc.SerialStopBits).Append(eol);
+                    sb.Append("flow = ").Append(pc.SerialFlow).Append(eol);
+                }
+                if (pc.Transport != PortTransport.Xot)
+                {
+                    // Zero means "use the default", so only a value that was set is written back.
+                    if (pc.LapbT1Ms > 0) { sb.Append("lapb_t1 = ").Append(pc.LapbT1Ms).Append(eol); }
+                    if (pc.LapbT2Ms > 0) { sb.Append("lapb_t2 = ").Append(pc.LapbT2Ms).Append(eol); }
+                    if (pc.LapbT3Ms > 0) { sb.Append("lapb_t3 = ").Append(pc.LapbT3Ms).Append(eol); }
+                    if (pc.LapbN2 > 0) { sb.Append("lapb_n2 = ").Append(pc.LapbN2).Append(eol); }
+                    if (pc.LapbK > 0) { sb.Append("lapb_k = ").Append(pc.LapbK).Append(eol); }
+                }
                 sb.Append("packet_size = ").Append(pc.DefaultPacketSize).Append(eol);
                 sb.Append("window_size = ").Append(pc.DefaultWindowSize).Append(eol);
                 sb.Append("max_packet_size = ").Append(pc.MaxPacketSize).Append(eol);

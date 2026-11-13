@@ -81,10 +81,12 @@ flowchart TB
     CORE["SwitchCore<br/>the engine"]
     IPORT["ISwitchPort<br/>transport-agnostic"]
     XOT["XotSwitchPort<br/>real XOT over TCP"]
+    HDLC["HdlcTcpSwitchPort, HdlcSerialSwitchPort<br/>LAPB over 0x7E HDLC framing"]
     LOOP["LoopbackSwitchPort<br/>in memory, for tests"]
 
     CORE --> IPORT
     IPORT --> XOT
+    IPORT --> HDLC
     IPORT --> LOOP
 
     classDef core fill:#009688,stroke:#00695C,stroke-width:2px,color:#fff
@@ -93,7 +95,7 @@ flowchart TB
 
     class CORE core
     class IPORT core
-    class XOT ok
+    class XOT,HDLC ok
     class LOOP test
 ```
 
@@ -108,6 +110,9 @@ flowchart TB
 | `SwitchNode` | The runtime state — config, ports, stitches, accounts, uptime |
 | `VcStitch` | The mapping that ties an ingress circuit to an egress one |
 | `ISwitchPort` | A port, independent of its transport |
+| `SwitchPortFactory` | The one place that turns a `PortConfig` into a port by its `Transport` (`xot`, `hdlc-tcp`/`hdlc-ppp`, `hdlc-serial`). A transport it cannot run throws `NotSupportedException` naming the port and the transport; it never runs the port as something else. Use `SwitchPortFactory.Create(config, logger)` instead of `new XotSwitchPort(...)` |
+| `HdlcTcpSwitchPort`, `HdlcSerialSwitchPort` | A trunk as a leased line: X.25 over LAPB over 0x7E byte-stuffed HDLC framing (CRC-16 FCS), on one TCP connection or on a serial device. Both derive from `HdlcSwitchPortBase`, which holds the framing, a `LapbStation`, the X.25 layer and the restart after the link comes up. `GetLinkSnapshot()` gives the link counters (link ups, link resets, frames, retransmissions, REJ, FCS errors, wire bytes). See "Trunk transports" below |
+| `IMonitoredSwitchPort` | What a monitor reads from a port that has a line: `PacketCaptured`, connection counts, `LastError`, `RedialDelay`. Implemented by `XotSwitchPort` and the HDLC ports |
 | `XotSwitchPort`, `LoopbackSwitchPort` | A real one and a test one. `XotSwitchPort` also shows a monitor what crosses it: `PacketCaptured` (every packet, both directions), the byte totals in `PortCounters`, and `ConnectAttempts`, `LastConnectedMs` and `LastDisconnectedMs`, counted as the C emulator counts them. It takes an optional `ILogger`, and a listening port binds the address in `PortConfig.Host` |
 | `SwitchConfig`, `SwitchConfigLoader` | The parsed configuration, and the INI loader with its defaults |
 | `PortConfig`, `PortType`, `PortTransport`, `PortMode` | One port's configuration. `PortMode`: `1 = DTE`, `0 = DCE` |
@@ -121,3 +126,22 @@ flowchart TB
 `PortConfig` follows the switch configuration specification: window size **2**, packet size **128**,
 LCI base **1** and count **16**, TCP port **1998**. A configuration that omits a field gets these,
 so a file shorter than you expect is not necessarily incomplete.
+
+## Trunk transports
+
+`transport` in a `[port.N]` section chooses the family. Both ends of a trunk must use the same one.
+
+| `transport` | Port class | Notes |
+|---|---|---|
+| `xot` (default when the key is missing) | `XotSwitchPort` | RFC 1613, one TCP connection per call, for routers such as a Cisco |
+| `hdlc-tcp`, `hdlc-ppp` (same thing) | `HdlcTcpSwitchPort` | A DCE port listens, a DTE port dials (and redials every 2 s) and sends the SABM |
+| `hdlc-serial` | `HdlcSerialSwitchPort` | `device`, `baud`, `databits`, `parity`, `stopbits`, `flow`; both ends send a SABM; the device is opened again every 2 s if it goes away |
+
+A written transport that is none of these makes `SwitchConfigLoader` throw `InvalidDataException`. The HDLC ports
+also read `lapb_t1`, `lapb_t2`, `lapb_t3`, `lapb_n2` and `lapb_k` (defaults T1 3000 ms, T2 0, T3 30000 ms, N2 10,
+K 7; modulo 8 only). Values that cannot work are refused when the port is made, naming the port and the key.
+`HdlcSerialSwitchPort` has a second constructor that takes the function that opens the line, so a test can give it
+an in-memory stream in place of a UART. The real serial device is not exercised by the tests in this repository.
+
+The link layer is `LapbStation` from `RetroIO.Link`, over `LapbLayer`. `LapbLayer` counts `LinkResets` (a SABM or an
+FRMR received on a link that was up, and our own re-establish after N2 tries) and raises `OnLinkReset`.

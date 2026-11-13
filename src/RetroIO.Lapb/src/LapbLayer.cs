@@ -230,6 +230,10 @@ namespace RetroIO.Protocols.Xmsg.Live
         // Event counters for the link statistics. They count real events only and are never reset
         // by a re-connect: they describe the life of this layer object.
         private long _retransmissions;
+
+        // How many times the sequence numbers were reset on a link that was up or being set up: a SABM
+        // from the peer while connected, our own re-establish after N2 ran out, and a re-establish after an FRMR.
+        private long _linkResets;
         private long _rejectionsSent;
         private long _rejectionsReceived;
         private long _t1Timeouts;
@@ -458,6 +462,31 @@ namespace RetroIO.Protocols.Xmsg.Live
         }
 
         /// <summary>
+        /// Gets how many times the link's sequence numbers were reset while the link was up or being set up: a SABM
+        /// from the peer arriving on a connected link, this side's own re-establish after N2 ran out, and a
+        /// re-establish after the peer answered with an FRMR.
+        /// </summary>
+        /// <remarks>
+        /// Each one throws away every frame in flight, so whatever sits above the link has lost data and has to start
+        /// again (a switch restarts its X.25 layer). The ordinary first set-up of a link is not counted.
+        /// </remarks>
+        public long LinkResets
+        {
+            get { return _linkResets; }
+        }
+
+        /// <summary>
+        /// Represents the method that is told the link's sequence numbers were reset (see <see cref="LinkResets"/>).
+        /// </summary>
+        public delegate void LinkWasReset();
+
+        /// <summary>
+        /// Occurs when the sequence numbers of a connected or connecting link are reset. Raised after the
+        /// layer has settled into its new state.
+        /// </summary>
+        public event LinkWasReset? OnLinkReset;
+
+        /// <summary>
         /// Gets the number of I-frames sent again after a REJ from the peer (go-back-N). Each resent
         /// frame counts once.
         /// </summary>
@@ -526,6 +555,22 @@ namespace RetroIO.Protocols.Xmsg.Live
         public long T1Timeouts
         {
             get { return _t1Timeouts; }
+        }
+
+        /// <summary>
+        /// Sets the event counters back to zero: retransmissions, REJ frames sent and received, T1 and
+        /// T2 time-outs and window waits. The link state, the sequence variables and the frames waiting to
+        /// be sent are not touched, so this can be called while the link is up.
+        /// </summary>
+        public void ResetCounters()
+        {
+            _retransmissions = 0;
+            _linkResets = 0;
+            _rejectionsSent = 0;
+            _rejectionsReceived = 0;
+            _t1Timeouts = 0;
+            _t2Timeouts = 0;
+            _windowWaits = 0;
         }
 
         /// <summary>
@@ -748,6 +793,15 @@ namespace RetroIO.Protocols.Xmsg.Live
         }
 
         /// <summary>
+        /// Counts a reset of the link's sequence numbers and tells the owner.
+        /// </summary>
+        private void NoteLinkReset()
+        {
+            _linkResets++;
+            OnLinkReset?.Invoke();
+        }
+
+        /// <summary>
         /// Handles a received unnumbered frame (SABM / UA / DISC / DM / FRMR).
         /// </summary>
         /// <param name="frame">
@@ -766,6 +820,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                     // received mid-session is a legitimate reset, NOT an error (the highest-risk ND
                     // deviation): stay connected.
                     CaptureNode(frame.Info);
+                    bool resetWhileUp = _state == LapbLayerState.Connected;
 
                     // "notify up" PER THE STATE TABLE, which differs by the state we came FROM:
                     //
@@ -810,6 +865,11 @@ namespace RetroIO.Protocols.Xmsg.Live
                     // Push the peer to the RUN phase: it advances only once it receives an RR from us
                     // (spec 3.4 idle keepalive; live-necessary against the ND kernel).
                     EmitSupervisory(RrNibble, pollFinal: false);
+                    if (resetWhileUp)
+                    {
+                        NoteLinkReset();
+                    }
+
                     break;
 
                 case LapbUnnumberedKind.Ua:
@@ -885,6 +945,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                         _retry = 0;
                         _state = LapbLayerState.SabmSent;
                         StartT1(currentTicks);
+                        NoteLinkReset();
                     }
 
                     break;
@@ -1259,6 +1320,7 @@ namespace RetroIO.Protocols.Xmsg.Live
                     _retry = 0;
                     _state = LapbLayerState.SabmSent;
                     StartT1(currentTicks);
+                    NoteLinkReset();
                 }
                 else
                 {
