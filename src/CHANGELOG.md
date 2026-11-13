@@ -5,6 +5,10 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
 ## [Unreleased]
 
 ### Added
+- Trunks as leased lines in `RetroIO.Protocols.X25.Switch`: `HdlcTcpSwitchPort` (`transport = hdlc-tcp`, alias `hdlc-ppp`) and `HdlcSerialSwitchPort` (`transport = hdlc-serial`) carry X.25 over LAPB over 0x7E byte-stuffed HDLC framing on a TCP connection or a serial device, with DCE and DTE roles, redial, X.25 restart after the link comes up, and link counters (`HdlcSwitchPortBase.GetLinkSnapshot()`: link ups, link resets, frames, retransmissions, REJ, FCS errors, wire bytes). New port keys: `device`, `baud`, `databits`, `parity`, `stopbits`, `flow`, `lapb_t1`, `lapb_t2`, `lapb_t3`, `lapb_n2`, `lapb_k`. The real serial device is not exercised by the tests (no virtual serial pair was available); the serial port is tested over an in-memory line.
+- `SwitchPortFactory.Create(PortConfig, ILogger)`: the one place that turns a port configuration into a port by its transport. A transport it cannot run throws `NotSupportedException` naming the port and the transport. `IMonitoredSwitchPort`: the monitor view of a port with a line (`PacketCaptured`, connection counts, `LastError`), implemented by `XotSwitchPort` and the HDLC ports.
+- `LapbLayer.LinkResets` and `OnLinkReset` (also `LapbStation.LinkReset` and `LapbStatistics.LinkResets`): count of times a link that was up was reset (SABM or FRMR received, or set up again after N2 tries).
+- A telnet PAD in `RetroIO.Protocols.X25.Runtime` (`TelnetPadServer`, switched by the new `RuntimeConfig.TelnetPad` section: `Enabled`, `Port`, `BindAddress`, `MaxSessions`; off by default, loopback and port 2323). Every telnet connection gets its own `PadClient` and acts as an X.28 terminal. `ProtocolRuntime.TelnetPadStatus` says off, listening (with the session count) or failed with the reason (for example port in use); a failed listen never stops the runtime. `ProtocolRuntime.ApplyTelnetPadConfig()` restarts it after a settings change.
 - RetroServer's own XMSG node (`XmsgNodeService`, in `RetroIO.Protocols.Xmsg.Plugins`): it joins an Ethernet segment, normally RetroServer's hub, and opens a gRPC port (default 127.0.0.1:5011) that client and server programs connect to. Settings in `xmsgnode-config.json` and `--XmsgNode:*`; off by default.
 - Programs connected to RetroServer can send log lines (`Log` request, `PluginLoggerProvider`); they are kept under the category `XmsgProgram.<name>` and filtered by `ProgramLogMinimum`.
 - The connection carries a protocol revision and a feature list both ways (`Hello.protocol_revision`, `NodeInfo`), so it can grow without breaking older programs.
@@ -49,6 +53,7 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   default; the HDLC path is unchanged.
 
 ### Changed
+- `SwitchConfigLoader` now throws `InvalidDataException` for a `transport` value it does not know (it was read as XOT). A missing `transport` key still means XOT. `x25switch` and the Desktop built-in switch build their ports through `SwitchPortFactory` and stop with a message naming the port and the transport when one cannot be run, instead of running every port as XOT.
 - `RetroIO.Protocols.Xmsg.Live`: `LapbLayerAdapter` and `EthernetLink` no longer write to the
   console. Their lines (a refused send, a link failure, a shutdown handler that threw) go to the
   new `Log` property, and are dropped when it is not set.
@@ -58,6 +63,7 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   connection. `?hostKeyCheck=off` restores the old behaviour. See `RetroIO.Storage.Providers`.
 
 ### Fixed
+- `XotSwitchPort`: a call placed on a connection the port dialled for it now connects when the peer answers on another channel number than the Call Request used (RFC 1613 section 6: the number has no significance). x25emu does this (a call sent on channel 16 is answered on channel 1); the port cleared such a call at once with diagnostic 20. The peer's number is bound to the one call of that connection, and our Clear and data go out on it.
 - A chat member whose program died kept its seat and nickname until the server restarted. The chat server now sends to members secure and removes a member when a message to it comes back, as the SINTRAN chat server does. The kernel's returned message now names the port it could not reach in its sender field (measured on D100), and the program connection carries returned messages (`Arrived.return_reason`).
 - `XmsgKernelServer` now sends and reads a task's port-to-port data as a SINTRAN task does on the wire: frame flags 0x82, role 0x84, XMCSM = the length, the data at offset 28, split into fragments when long. Measured from D100's own chat Welcome. It used a layout of its own before (offset 32, control service 0x01080000), which no machine was seen to use.
 - XMSG letters to a name. The node found the target server by scanning the frame for the first
