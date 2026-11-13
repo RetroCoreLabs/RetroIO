@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using RetroIO.Link;
 using RetroIO.Link.Framing;
 using RetroIO.Protocols.X25.PacketLayer;
+using Leg = RetroIO.Protocols.X25.Client.X25ClientLeg;
 
 namespace RetroIO.Protocols.X25.Client
 {
@@ -36,16 +37,26 @@ namespace RetroIO.Protocols.X25.Client
     /// </remarks>
     public sealed class X25Client : IDisposable
     {
+        // First channel number given to a circuit on a connection opened for one call. The first connection (the one
+        // Open makes) keeps the packet layer's own numbers, 1 to NumVcs, as before.
+        private const ushort FirstExtraLcn = 4096;
+
         private readonly object _lock = new object();
-        private readonly Dictionary<ushort, X25Vc> _vcs = new Dictionary<ushort, X25Vc>();
         private readonly Dictionary<ushort, ManualResetEventSlim> _connectWaiters = new Dictionary<ushort, ManualResetEventSlim>();
         private readonly ManualResetEventSlim _shutdown = new ManualResetEventSlim(false);
 
+        // RFC 1613 section 5: a separate TCP connection is used for each circuit. Every connection has its own
+        // transport, framing codec and packet layer (a Leg). The first leg is the one Open makes; it carries the calls
+        // that arrive and the first call placed. Each further call placed gets a new leg of its own, which is closed
+        // when its circuit is cleared. All legs are guarded by _lock.
+        private readonly List<Leg> _legs = new List<Leg>();
+        private readonly HashSet<ushort> _extraLcns = new HashSet<ushort>();
+        private ushort _nextExtraLcn = FirstExtraLcn;
+        private Leg? _primary;
+        private int _legCounter;
+
         private ILogger _logger = NullLogger.Instance;
         private X25ClientConfig _config = new X25ClientConfig();
-        private TcpLinkTransport? _transport;
-        private XotFrameCodec? _codec;
-        private X25Layer? _x25;
         private Timer? _tick;
         private bool _disposed;
 
@@ -62,7 +73,7 @@ namespace RetroIO.Protocols.X25.Client
         /// <summary>
         /// True once the client is open and its transport is connected.
         /// </summary>
-        public bool IsOpen => _transport != null && _transport.IsOpen;
+        public bool IsOpen => _primary != null && _primary.Transport.IsOpen;
 
         /// <summary>
         /// The X.121 address this client uses as the calling address on every call it places.
@@ -108,47 +119,29 @@ namespace RetroIO.Protocols.X25.Client
             _config = config;
             _logger = logger ?? NullLogger.Instance;
 
-            string name = string.IsNullOrWhiteSpace(ServiceName) ? "x25client" : ServiceName;
-
-            // Transport: connect out to the switch (never listen for the console tools).
-            _transport = new TcpLinkTransport(_logger, name, isServer: false, config.Host, config.Port);
-
-            // Framing: XOT length-prefixed frames over the TCP byte stream.
-            _codec = new XotFrameCodec(name, new FrameSink(_transport));
-
-            // Packet layer: the state machine, sending down through the codec.
-            X25Config x25config = new X25Config
+            // The first connection: transport, XOT framing and packet layer. It carries the calls that arrive and
+            // the first call placed; every further call placed opens a connection of its own (see Call).
+            Leg first = CreateLeg(isPrimary: true, config.NumVcs == 0 ? (ushort)1 : config.NumVcs);
+            lock (_lock)
             {
-                LocalAddress = config.LocalAddress,
-                IsDte = config.IsDte,
-                LciBase = 1,
-                LciCount = config.NumVcs == 0 ? (ushort)1 : config.NumVcs,
-                DefaultPacketSize = config.PacketSize,
-                DefaultWindowSize = config.WindowSize == 0 ? (byte)2 : config.WindowSize
-            };
-            _x25 = new X25Layer(new PacketSink(_codec), x25config);
+                _primary = first;
+                _legs.Add(first);
+            }
 
-            // Wire the seam: transport bytes -> codec -> whole packets -> layer; layer up-events -> callbacks.
-            _transport.DataReceived += OnTransportBytes;
-            _codec.FrameReceived += OnFrame;
-            _x25.IncomingCall += OnLayerIncomingCall;
-            _x25.CallConnected += OnLayerCallConnected;
-            _x25.DataReceived += OnLayerData;
-            _x25.Cleared += OnLayerCleared;
-
-            if (!_transport.Open())
+            if (!first.Transport.Open())
             {
                 throw new InvalidOperationException(
                     $"X25Client could not connect to {config.Host}:{config.Port}.");
             }
 
-            // X.25 packet-layer initialisation: send a Restart Request so the peer resets its virtual
-            // circuits before we place any call. Some switches require this handshake on a fresh XOT
-            // session and will ignore calls placed before it.
-            lock (_lock)
-            {
-                _x25.Restart(0, 0);
-            }
+            // No Restart Request is sent. RFC 1613 section 6.4: Restart, Restart Confirm, DTE Reject, Diagnostic and the
+            // registration packets "MUST NOT be sent over the TCP connection", and a peer that receives one "MUST"
+            // silently discard it, so nobody answers. The layer holds every call while its own Restart is unanswered
+            // (X.25 4.1.1), so sending one made the first call wait for an answer that never comes (180 seconds), which
+            // is exactly what happened against x25emu. The circuit is up when the TCP connection is. Measured against
+            // x25emu (2026-11-12): a Call Request on a fresh connection is answered at once with Call Accepted, and a
+            // Restart Request is never answered. This used to send a Restart here on the belief that some switches
+            // ignore a call placed before it; a switch that does is not speaking XOT.
 
             // Pump the layer's protocol timers (call/clear/reset timeouts) on a light periodic tick.
             _tick = new Timer(OnTick, null, 250, 250);
@@ -213,18 +206,84 @@ namespace RetroIO.Protocols.X25.Client
         /// </returns>
         public X25Vc? Call(string calledAddress, byte[]? callUserData = null)
         {
-            X25Layer x25 = RequireLayer();
+            RequireOpen();
 
+            // RFC 1613 section 5: one TCP connection for each circuit. The first call placed uses the connection
+            // Open made (nothing has used it for a call yet); every other call opens a connection of its own.
+            Leg? leg = null;
             lock (_lock)
             {
-                ushort lci = x25.PlaceCall(calledAddress ?? string.Empty, _config.LocalAddress, callUserData);
-                if (lci == 0)
+                Leg? first = _primary;
+                if (first != null && !first.CallPlaced && first.Vcs.Count == 0)
                 {
+                    first.CallPlaced = true;
+                    leg = first;
+                }
+            }
+
+            if (leg == null)
+            {
+                // A new connection takes one circuit: the packet layer on it needs one channel.
+                leg = CreateLeg(isPrimary: false, 1);
+                bool connected;
+                try
+                {
+                    connected = leg.Transport.Open();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "X25Client: could not open a connection for a call to {Called}", calledAddress);
+                    connected = false;
+                }
+
+                if (!connected)
+                {
+                    CloseLeg(leg);
                     return null;
                 }
 
-                X25Vc vc = new X25Vc(lci, calledAddress ?? string.Empty, _config.LocalAddress, incoming: false);
-                _vcs[lci] = vc;
+                lock (_lock)
+                {
+                    leg.CallPlaced = true;
+                    _legs.Add(leg);
+                }
+            }
+
+            lock (_lock)
+            {
+                ushort lci = leg.Layer.PlaceCall(calledAddress ?? string.Empty, _config.LocalAddress, callUserData);
+                if (lci == 0)
+                {
+                    if (!leg.IsPrimary)
+                    {
+                        _legs.Remove(leg);
+                        ThreadPool.QueueUserWorkItem(_ => CloseLeg(leg));
+                    }
+
+                    return null;
+                }
+
+                X25Vc vc = new X25Vc(leg.IsPrimary ? lci : AllocateExtraLcn(), calledAddress ?? string.Empty, _config.LocalAddress, incoming: false);
+                vc.Leg = leg;
+                vc.LegLci = lci;
+                leg.Vcs[lci] = vc;
+                leg.AwaitingAnswer.Add(lci);
+
+                // The connection may have been dropped by the peer before the call was registered (a port with no room
+                // for another connection closes it at once): the call can never be answered.
+                if (leg.Dead || !leg.Transport.IsOpen)
+                {
+                    leg.Vcs.Remove(lci);
+                    ReleaseExtraLcn(vc);
+                    if (!leg.IsPrimary)
+                    {
+                        _legs.Remove(leg);
+                        ThreadPool.QueueUserWorkItem(_ => CloseLeg(leg));
+                    }
+
+                    return null;
+                }
+
                 return vc;
             }
         }
@@ -288,12 +347,21 @@ namespace RetroIO.Protocols.X25.Client
         /// <param name="qBit">
         /// X.25 Qualifier bit.
         /// </param>
+        /// <param name="mBit">
+        /// X.25 More-data bit (section 4.3): this packet is followed by more of the same message. Only a
+        /// full packet may carry it unless <paramref name="dBit"/> is also set (4.3.3); the caller
+        /// builds the chain, one call per packet, M set on all but the last.
+        /// </param>
+        /// <param name="dBit">
+        /// X.25 Delivery-confirmation bit (section 4.4.1.4): the peer's acknowledgement of this packet
+        /// then means the remote user has received it, not just the network.
+        /// </param>
         /// <returns>
         /// True if the data was accepted for transmission (state and window permitting).
         /// </returns>
-        public bool Send(X25Vc vc, byte[] data, int length = -1, bool qBit = false)
+        public bool Send(X25Vc vc, byte[] data, int length = -1, bool qBit = false, bool mBit = false, bool dBit = false)
         {
-            X25Layer x25 = RequireLayer();
+            X25Layer x25 = LayerOf(vc);
 
             if (vc == null)
             {
@@ -314,7 +382,34 @@ namespace RetroIO.Protocols.X25.Client
 
             lock (_lock)
             {
-                return x25.SendData(vc.Lcn, payload, qBit, false, false);
+                return x25.SendData(vc.LegLci, payload, qBit, mBit, dBit);
+            }
+        }
+
+        /// <summary>
+        /// The largest data field, in bytes, that can be sent on a circuit (the packet size negotiated for
+        /// the sending direction).
+        /// </summary>
+        /// <param name="vc">
+        /// The circuit.
+        /// </param>
+        /// <returns>
+        /// The packet size in bytes, or 0 when the circuit is not known to the packet layer.
+        /// </returns>
+        public int GetPacketSizeOut(X25Vc vc)
+        {
+            X25Layer x25 = LayerOf(vc);
+
+            if (vc == null)
+            {
+                throw new ArgumentNullException(nameof(vc));
+            }
+
+            lock (_lock)
+            {
+                return x25.Circuits.TryGetValue(vc.LegLci, out RetroIO.Protocols.X25.PacketLayer.X25Vc? circuit)
+                    ? circuit.PacketSizeOut
+                    : 0;
             }
         }
 
@@ -347,7 +442,7 @@ namespace RetroIO.Protocols.X25.Client
         /// </remarks>
         public bool WaitForAcknowledgement(X25Vc vc, int timeoutMs)
         {
-            X25Layer x25 = RequireLayer();
+            X25Layer x25 = LayerOf(vc);
 
             if (vc == null)
             {
@@ -363,7 +458,7 @@ namespace RetroIO.Protocols.X25.Client
                     // A circuit that is gone, or is being cleared, will never be acknowledged. (The
                     // engine keeps a cleared circuit in its table until the clear is confirmed, so
                     // being in the table is not enough.)
-                    if (!x25.Circuits.TryGetValue(vc.Lcn, out RetroIO.Protocols.X25.PacketLayer.X25Vc? circuit)
+                    if (!x25.Circuits.TryGetValue(vc.LegLci, out RetroIO.Protocols.X25.PacketLayer.X25Vc? circuit)
                         || circuit.State == X25VcState.Ready
                         || circuit.State == X25VcState.ClearRequest
                         || circuit.State == X25VcState.ClearIndication)
@@ -443,7 +538,7 @@ namespace RetroIO.Protocols.X25.Client
         /// </param>
         public void Clear(X25Vc vc, byte cause = 0, byte diagnostic = 0)
         {
-            X25Layer x25 = RequireLayer();
+            X25Layer x25 = LayerOf(vc);
 
             if (vc == null)
             {
@@ -452,8 +547,9 @@ namespace RetroIO.Protocols.X25.Client
 
             lock (_lock)
             {
-                x25.ClearCall(vc.Lcn, cause, diagnostic);
-                _vcs.Remove(vc.Lcn);
+                x25.ClearCall(vc.LegLci, cause, diagnostic);
+                vc.Leg!.Vcs.Remove(vc.LegLci);
+                ReleaseExtraLcn(vc);
             }
 
             vc.Connected = false;
@@ -479,9 +575,8 @@ namespace RetroIO.Protocols.X25.Client
         }
 
         /// <summary>
-        /// Releases the client: lets <see cref="Run"/> return, stops the tick timer, closes and
-        /// disposes the transport, and drops the codec and the packet layer. Calling it again does
-        /// nothing.
+        /// Releases the client: lets <see cref="Run"/> return, stops the tick timer, and closes every
+        /// connection with its framing codec and packet layer. Calling it again does nothing.
         /// </summary>
         public void Dispose()
         {
@@ -495,80 +590,202 @@ namespace RetroIO.Protocols.X25.Client
 
             _tick?.Dispose();
             _tick = null;
-            _transport?.Close();
-            _transport?.Dispose();
-            _transport = null;
-            _codec = null;
-            _x25 = null;
+
+            Leg[] legs;
+            lock (_lock)
+            {
+                legs = _legs.ToArray();
+                _legs.Clear();
+                _primary = null;
+            }
+
+            for (int i = 0; i < legs.Length; i++)
+            {
+                CloseLeg(legs[i]);
+            }
+        }
+
+        // ---- Connections (legs): one transport + codec + packet layer each ----
+
+        /// <summary>
+        /// Builds a connection (not yet opened): transport, XOT framing and packet layer, with the seam wired.
+        /// </summary>
+        private Leg CreateLeg(bool isPrimary, ushort circuits)
+        {
+            string name = string.IsNullOrWhiteSpace(ServiceName) ? "x25client" : ServiceName;
+            if (!isPrimary)
+            {
+                name += "#" + Interlocked.Increment(ref _legCounter);
+            }
+
+            // Transport: connect out to the switch (never listen for the console tools).
+            TcpLinkTransport transport = new TcpLinkTransport(_logger, name, isServer: false, _config.Host, _config.Port);
+
+            // Framing: XOT length-prefixed frames over the TCP byte stream.
+            XotFrameCodec codec = new XotFrameCodec(name, new FrameSink(transport));
+
+            Leg leg = new Leg(isPrimary, transport, codec);
+
+            // Packet layer: the state machine, sending down through the codec.
+            X25Config x25config = new X25Config
+            {
+                LocalAddress = _config.LocalAddress,
+                IsDte = _config.IsDte,
+                LciBase = 1,
+                LciCount = circuits,
+                DefaultPacketSize = _config.PacketSize,
+                DefaultWindowSize = _config.WindowSize == 0 ? (byte)2 : _config.WindowSize
+            };
+            leg.Layer = new X25Layer(new PacketSink(codec, leg), x25config);
+
+            // Wire the seam: transport bytes -> codec -> whole packets -> layer; layer up-events -> callbacks.
+            transport.DataReceived += (linkId, bytes) => codec.ProcessBytes(bytes);
+            transport.Closed += (linkId, reason) => OnLegClosed(leg, reason);
+            codec.FrameReceived += (linkId, frame) => OnFrame(leg, frame);
+            leg.Layer.IncomingCall += (layer, lci, called, calling, userData) => OnLayerIncomingCall(leg, lci, called, calling, userData);
+            leg.Layer.CallConnected += (layer, lci) => OnLayerCallConnected(leg, lci);
+            leg.Layer.DataReceived += (layer, lci, data, length, q, m, d) => OnLayerData(leg, lci, data, length, q, m, d);
+            leg.Layer.Cleared += (layer, lci, cause, diagnostic) => OnLayerCleared(leg, lci, cause, diagnostic);
+            return leg;
+        }
+
+        /// <summary>
+        /// Closes a connection's transport. Safe to call more than once.
+        /// </summary>
+        private static void CloseLeg(Leg leg)
+        {
+            leg.Closing = true;
+            try
+            {
+                leg.Transport.Close();
+                leg.Transport.Dispose();
+            }
+            catch (Exception)
+            {
+                // Already closed or closing: nothing more to release.
+            }
+        }
+
+        /// <summary>
+        /// A channel number for a circuit on a connection opened for one call. Called with the lock held.
+        /// </summary>
+        private ushort AllocateExtraLcn()
+        {
+            for (int tries = 0; tries < 65536; tries++)
+            {
+                ushort candidate = _nextExtraLcn;
+                _nextExtraLcn = _nextExtraLcn == ushort.MaxValue ? FirstExtraLcn : (ushort)(_nextExtraLcn + 1);
+                if (_extraLcns.Add(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            throw new InvalidOperationException("X25Client has no free circuit number.");
         }
 
         // ---- Seam wiring: transport -> codec -> layer (all on the transport read thread) ----
 
-        private void OnTransportBytes(string linkId, ReadOnlySpan<byte> bytes)
+        private void OnFrame(Leg leg, ReadOnlySpan<byte> frame)
         {
-            _codec?.ProcessBytes(bytes);
+            lock (_lock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                leg.Layer.ProcessPacket(leg.TranslateInbound(frame));
+            }
         }
 
-        private void OnFrame(string linkId, ReadOnlySpan<byte> frame)
+        /// <summary>
+        /// The TCP connection of a leg dropped (the peer closed it or refused to keep it). Every circuit on it is gone:
+        /// each is reported cleared with cause 9, out of order, so a caller waiting for an answer is not left hanging.
+        /// </summary>
+        private void OnLegClosed(Leg leg, string reason)
         {
-            X25Layer? x25 = _x25;
-            if (x25 == null)
+            if (leg.Closing)
             {
                 return;
             }
 
             lock (_lock)
             {
-                x25.ProcessPacket(frame);
+                if (_disposed || leg.Dead)
+                {
+                    return;
+                }
+
+                leg.Dead = true;
+                _logger.LogDebug("X25Client: a connection dropped ({Reason}) with {Count} circuit(s) on it", reason, leg.Vcs.Count);
+                ushort[] numbers = new ushort[leg.Vcs.Count];
+                leg.Vcs.Keys.CopyTo(numbers, 0);
+                for (int i = 0; i < numbers.Length; i++)
+                {
+                    OnLayerCleared(leg, numbers[i], X25Cause.OutOfOrder, 0);
+                }
+
+                if (!leg.IsPrimary && leg.Vcs.Count == 0)
+                {
+                    _legs.Remove(leg);
+                    ThreadPool.QueueUserWorkItem(_ => CloseLeg(leg));
+                }
             }
         }
 
         private void OnTick(object? state)
         {
-            X25Layer? x25 = _x25;
-            if (x25 == null)
-            {
-                return;
-            }
-
             lock (_lock)
             {
-                x25.Tick(Environment.TickCount64);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                long now = Environment.TickCount64;
+                for (int i = 0; i < _legs.Count; i++)
+                {
+                    _legs[i].Layer.Tick(now);
+                }
             }
         }
 
         // ---- Layer up-events mapped to application callbacks ----
 
-        private void OnLayerIncomingCall(X25Layer layer, ushort lci, string calledAddress, string callingAddress, byte[] callUserData)
+        private void OnLayerIncomingCall(Leg leg, ushort lci, string calledAddress, string callingAddress, byte[] callUserData)
         {
             // Track the circuit, let the application accept it (which sets AcceptRequested), then either
             // accept or reject on the layer. This runs under the frame lock, so layer calls are safe.
-            X25Vc vc = new X25Vc(lci, calledAddress, callingAddress, incoming: true);
-            _vcs[lci] = vc;
+            X25Vc vc = new X25Vc(leg.IsPrimary ? lci : AllocateExtraLcn(), calledAddress, callingAddress, incoming: true);
+            vc.Leg = leg;
+            vc.LegLci = lci;
+            leg.Vcs[lci] = vc;
 
             _onIncoming?.Invoke(this, vc);
 
             if (vc.AcceptRequested)
             {
                 vc.Connected = true;
-                layer.AcceptCall(lci);
+                leg.Layer.AcceptCall(lci);
             }
             else
             {
-                _vcs.Remove(lci);
-                layer.ClearCall(lci, 0, 0);
+                leg.Vcs.Remove(lci);
+                ReleaseExtraLcn(vc);
+                leg.Layer.ClearCall(lci, 0, 0);
             }
         }
 
-        private void OnLayerCallConnected(X25Layer layer, ushort lci)
+        private void OnLayerCallConnected(Leg leg, ushort lci)
         {
-            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            if (!leg.Vcs.TryGetValue(lci, out X25Vc? vc))
             {
                 return;
             }
 
             vc.Connected = true;
-            if (_connectWaiters.TryGetValue(lci, out ManualResetEventSlim? waiter))
+            if (_connectWaiters.TryGetValue(vc.Lcn, out ManualResetEventSlim? waiter))
             {
                 waiter.Set();
             }
@@ -576,9 +793,9 @@ namespace RetroIO.Protocols.X25.Client
             _onConnected?.Invoke(this, vc);
         }
 
-        private void OnLayerData(X25Layer layer, ushort lci, byte[] data, int length, bool qBit, bool mBit, bool dBit)
+        private void OnLayerData(Leg leg, ushort lci, byte[] data, int length, bool qBit, bool mBit, bool dBit)
         {
-            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            if (!leg.Vcs.TryGetValue(lci, out X25Vc? vc))
             {
                 return;
             }
@@ -586,18 +803,35 @@ namespace RetroIO.Protocols.X25.Client
             _onData?.Invoke(this, vc, data, length, qBit, mBit, dBit);
         }
 
-        private void OnLayerCleared(X25Layer layer, ushort lci, byte cause, byte diagnostic)
+        private void OnLayerCleared(Leg leg, ushort lci, byte cause, byte diagnostic)
         {
-            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            // A connection opened for one call ends with its circuit (RFC 1613 section 5). The close runs on a
+            // pool thread: this handler is on the connection's own read thread.
+            X25Vc? vc;
+            if (leg.Vcs.TryGetValue(lci, out vc))
+            {
+                leg.Vcs.Remove(lci);
+            }
+
+            if (!leg.IsPrimary && leg.Vcs.Count == 0)
+            {
+                _legs.Remove(leg);
+                ThreadPool.QueueUserWorkItem(_ => CloseLeg(leg));
+            }
+
+            if (vc == null)
             {
                 return;
             }
 
-            _vcs.Remove(lci);
+            ReleaseExtraLcn(vc);
+            leg.AwaitingAnswer.Remove(lci);
+            leg.ForgetChannel(lci);
+
             vc.Connected = false;
 
             // Wake any CallWait blocked on this channel so it returns promptly on a rejecting clear.
-            if (_connectWaiters.TryGetValue(lci, out ManualResetEventSlim? waiter))
+            if (_connectWaiters.TryGetValue(vc.Lcn, out ManualResetEventSlim? waiter))
             {
                 waiter.Set();
             }
@@ -605,15 +839,34 @@ namespace RetroIO.Protocols.X25.Client
             _onClear?.Invoke(this, vc, cause, diagnostic);
         }
 
-        private X25Layer RequireLayer()
+        private void ReleaseExtraLcn(X25Vc vc)
         {
-            X25Layer? x25 = _x25;
-            if (x25 == null)
+            if (vc.Leg != null && !vc.Leg.IsPrimary)
+            {
+                _extraLcns.Remove(vc.Lcn);
+            }
+        }
+
+        private void RequireOpen()
+        {
+            if (_primary == null)
             {
                 throw new InvalidOperationException("X25Client is not open.");
             }
+        }
 
-            return x25;
+        /// <summary>
+        /// The packet layer of the connection that carries a circuit.
+        /// </summary>
+        private X25Layer LayerOf(X25Vc vc)
+        {
+            if (vc == null)
+            {
+                throw new ArgumentNullException(nameof(vc));
+            }
+
+            RequireOpen();
+            return vc.Leg?.Layer ?? throw new InvalidOperationException("The circuit does not belong to this client.");
         }
 
         /// <summary>
@@ -623,6 +876,7 @@ namespace RetroIO.Protocols.X25.Client
         private sealed class PacketSink : IX25PacketSink
         {
             private readonly XotFrameCodec _codec;
+            private readonly Leg _leg;
 
             /// <summary>
             /// Creates the sink over a framing codec.
@@ -630,9 +884,13 @@ namespace RetroIO.Protocols.X25.Client
             /// <param name="codec">
             /// The codec that frames and sends packets.
             /// </param>
-            internal PacketSink(XotFrameCodec codec)
+            /// <param name="leg">
+            /// The connection whose channel-number translation is applied to every packet sent.
+            /// </param>
+            internal PacketSink(XotFrameCodec codec, Leg leg)
             {
                 _codec = codec;
+                _leg = leg;
             }
 
             /// <summary>
@@ -655,7 +913,7 @@ namespace RetroIO.Protocols.X25.Client
             {
                 try
                 {
-                    _codec.SendFrame(packet);
+                    _codec.SendFrame(_leg.TranslateOutbound(packet));
                     return X25SendResult.Sent;
                 }
                 catch (Exception)

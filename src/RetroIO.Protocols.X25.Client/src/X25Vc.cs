@@ -56,6 +56,17 @@ namespace RetroIO.Protocols.X25.Client
         internal bool AcceptRequested { get; set; }
 
         /// <summary>
+        /// The connection that carries this circuit. A circuit has a connection of its own (RFC 1613 section 5), so
+        /// <see cref="Lcn"/> is the client's own number and <see cref="LegLci"/> the number on that connection.
+        /// </summary>
+        internal X25ClientLeg? Leg { get; set; }
+
+        /// <summary>
+        /// The channel number of this circuit in the packet layer of its connection.
+        /// </summary>
+        internal ushort LegLci { get; set; }
+
+        /// <summary>
         /// Creates a virtual-circuit handle.
         /// </summary>
         /// <param name="lcn">
