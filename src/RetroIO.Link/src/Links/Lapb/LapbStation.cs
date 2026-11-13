@@ -30,8 +30,11 @@ namespace RetroIO.Link.Lapb
     /// <para>
     /// The engine is single-threaded by design and this class is what makes that safe here: every
     /// entry point - frames from the transport's reader thread, sends from application threads, and
-    /// the tick timer - goes through <see cref="_sync"/>. Events are raised inside that lock, so a
-    /// handler must not block or call back into the same station.
+    /// the tick timer - goes through <see cref="_sync"/>. The upward events (received data, state changes,
+    /// link failure, link reset) are queued while the lock is held and raised AFTER it is released, in order, by the thread that
+    /// caused them (or by the thread already raising events). A handler may therefore take its own locks and call back into the
+    /// station. Raised inside the lock, they deadlocked against an X.25 endpoint that holds its own lock while it sends
+    /// (found against x25emu over the HDLC trunk, 2026-11-13).
     /// </para>
     /// <para>
     /// The engine speaks ITU-T X.25 clause 2 here (<see cref="LapbVariant.Itu"/>), because these
@@ -64,6 +67,11 @@ namespace RetroIO.Link.Lapb
 
         private LapbState _state = LapbState.Disconnected;
         private bool _disposed;
+
+        // Upward events waiting to be raised outside _sync. Guarded by _deferredLock, which is held only for a queue operation.
+        private readonly object _deferredLock = new object();
+        private readonly Queue<Action> _deferred = new Queue<Action>();
+        private bool _raising;
 
         /// <summary>
         /// Creates a station over a link.
@@ -124,6 +132,7 @@ namespace RetroIO.Link.Lapb
             _lapb.OnTransmit += OnEngineTransmit;
             _lapb.OnInformation += OnEngineInformation;
             _lapb.OnLinkFailure += OnEngineLinkFailure;
+            _lapb.OnLinkReset += OnEngineLinkReset;
 
             _statistics.WindowSize = windowSize;
             _ticker = new Timer(OnTick, null, TickIntervalMs, TickIntervalMs);
@@ -195,6 +204,13 @@ namespace RetroIO.Link.Lapb
         public event EventHandler<string>? ErrorOccurred;
 
         /// <summary>
+        /// Raised when the link's sequence numbers were reset while the link was up or being set up: the peer
+        /// sent a SABM on a connected link, or this side re-established after N2 ran out or an FRMR. Every frame
+        /// in flight is gone, so whatever uses the link has to start again. Raised after the station's lock is released (see the class remarks).
+        /// </summary>
+        public event EventHandler? LinkReset;
+
+        /// <summary>
         /// Starts link set-up: sends SABM and waits for the UA.
         /// </summary>
         public void Connect()
@@ -204,6 +220,8 @@ namespace RetroIO.Link.Lapb
                 _lapb.Connect(Now);
                 SyncState();
             }
+
+            RaiseDeferred();
         }
 
         /// <summary>
@@ -216,6 +234,8 @@ namespace RetroIO.Link.Lapb
                 _lapb.Disconnect(Now);
                 SyncState();
             }
+
+            RaiseDeferred();
         }
 
         /// <summary>
@@ -232,17 +252,24 @@ namespace RetroIO.Link.Lapb
         /// </returns>
         public bool SendData(ReadOnlySpan<byte> data, bool pollFinal = false)
         {
-            lock (_sync)
+            try
             {
-                if (_state != LapbState.DataTransfer)
+                lock (_sync)
                 {
-                    _logger.LogWarning("LAPB[{Link}]: cannot send - not connected", _linkName);
-                    return false;
-                }
+                    if (_state != LapbState.DataTransfer)
+                    {
+                        _logger.LogWarning("LAPB[{Link}]: cannot send - not connected", _linkName);
+                        return false;
+                    }
 
-                _lapb.SendInformation(data, Now);
-                SyncState();
-                return true;
+                    _lapb.SendInformation(data, Now);
+                    SyncState();
+                    return true;
+                }
+            }
+            finally
+            {
+                RaiseDeferred();
             }
         }
 
@@ -294,6 +321,8 @@ namespace RetroIO.Link.Lapb
                 _lapb.OnFrameReceived(frame, Now);
                 SyncState();
             }
+
+            RaiseDeferred();
         }
 
         /// <summary>
@@ -312,7 +341,21 @@ namespace RetroIO.Link.Lapb
                 _statistics.RejectionsReceived = _lapb.RejectionsReceived;
                 _statistics.T1Timeouts = _lapb.T1Timeouts;
                 _statistics.T2Timeouts = _lapb.T2Timeouts;
+                _statistics.LinkResets = _lapb.LinkResets;
                 return _statistics;
+            }
+        }
+
+        /// <summary>
+        /// Sets the station's event counters, and those of its LAPB layer, back to zero. The link state and
+        /// the sequence variables are not touched, so this can be called while the link is up.
+        /// </summary>
+        public void ResetStatistics()
+        {
+            lock (_sync)
+            {
+                _lapb.ResetCounters();
+                _statistics.ResetCounters();
             }
         }
 
@@ -339,6 +382,7 @@ namespace RetroIO.Link.Lapb
                 SyncState();
             }
 
+            RaiseDeferred();
             _logger.LogInformation("LAPB[{Link}]: station reset", _linkName);
         }
 
@@ -375,6 +419,8 @@ namespace RetroIO.Link.Lapb
                     _lapb.Tick(Now);
                     SyncState();
                 }
+
+                RaiseDeferred();
             }
             catch (Exception ex)
             {
@@ -438,19 +484,26 @@ namespace RetroIO.Link.Lapb
 
         private void OnEngineInformation(ReadOnlyMemory<byte> info)
         {
-            DataReceived?.Invoke(this, info.ToArray());
+            byte[] copy = info.ToArray();
+            Defer(() => DataReceived?.Invoke(this, copy));
         }
 
         private void OnEngineLinkFailure(string reason)
         {
             _logger.LogError("LAPB[{Link}]: link failure - {Reason}", _linkName, reason);
-            ErrorOccurred?.Invoke(this, reason);
+            Defer(() => ErrorOccurred?.Invoke(this, reason));
+        }
+
+        private void OnEngineLinkReset()
+        {
+            _logger.LogWarning("LAPB[{Link}]: link reset (sequence numbers back to zero, frames in flight lost)", _linkName);
+            Defer(() => LinkReset?.Invoke(this, EventArgs.Empty));
         }
 
         /// <summary>
         /// Maps the engine's state onto the link layer's three-state view and raises
         /// <see cref="StateChanged"/> when it moves. Called after every entry into the engine,
-        /// inside the lock.
+        /// inside the lock; the event is queued and raised after the lock is released.
         /// </summary>
         private void SyncState()
         {
@@ -470,11 +523,63 @@ namespace RetroIO.Link.Lapb
             LapbState previous = _state;
             _state = mapped;
             _logger.LogInformation("LAPB[{Link}]: {Old} -> {New}", _linkName, previous, mapped);
-            StateChanged?.Invoke(this, new LapbStateChangedEventArgs
+            LapbStateChangedEventArgs change = new LapbStateChangedEventArgs
             {
                 OldState = previous,
                 NewState = mapped,
-            });
+            };
+            Defer(() => StateChanged?.Invoke(this, change));
+        }
+
+        /// <summary>
+        /// Queues an upward event to be raised after the station lock is released. Called with the lock held.
+        /// </summary>
+        private void Defer(Action raise)
+        {
+            lock (_deferredLock)
+            {
+                _deferred.Enqueue(raise);
+            }
+        }
+
+        /// <summary>
+        /// Raises the queued events, in order, outside <see cref="_sync"/>. When another thread is already raising events this
+        /// returns at once and that thread raises these too: waiting here could block a caller that holds a lock the other thread's
+        /// handler needs, which is the deadlock this exists to prevent.
+        /// </summary>
+        private void RaiseDeferred()
+        {
+            lock (_deferredLock)
+            {
+                if (_raising)
+                {
+                    return;
+                }
+
+                _raising = true;
+            }
+
+            while (true)
+            {
+                Action? next;
+                lock (_deferredLock)
+                {
+                    if (!_deferred.TryDequeue(out next))
+                    {
+                        _raising = false;
+                        return;
+                    }
+                }
+
+                try
+                {
+                    next();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "LAPB[{Link}]: an event handler failed", _linkName);
+                }
+            }
         }
 
         private void CountFrame(byte control, bool received)

@@ -116,14 +116,30 @@ namespace RetroIO.Protocols.X25.Switch
                 {
                     pc.Transport = PortTransport.HdlcSerial;
                 }
+                else if (transport == null || transport == "xot")
+                {
+                    // No transport key means XOT, the default.
+                    pc.Transport = PortTransport.Xot;
+                }
                 else
                 {
-                    // "xot" and anything unrecognised both default to XOT.
-                    pc.Transport = PortTransport.Xot;
+                    // A transport that is written but not one we know is refused. It used to fall back to XOT,
+                    // which turned a typo into a port that silently ran the wrong protocol.
+                    throw new InvalidDataException("[" + section + "] transport = " + transport
+                        + " is not a transport this switch knows (xot, hdlc-tcp, hdlc-ppp, hdlc-serial)");
                 }
 
                 pc.SerialDevice = ini.GetString(section, "device", string.Empty);
                 pc.SerialBaud = (uint)ini.GetInt(section, "baud", 9600);
+                pc.SerialDataBits = ini.GetInt(section, "databits", 8);
+                pc.SerialParity = ini.GetString(section, "parity", "none");
+                pc.SerialStopBits = ini.GetInt(section, "stopbits", 1);
+                pc.SerialFlow = ini.GetString(section, "flow", "rtscts");
+                pc.LapbT1Ms = ini.GetInt(section, "lapb_t1", 0);
+                pc.LapbT2Ms = ini.GetInt(section, "lapb_t2", 0);
+                pc.LapbT3Ms = ini.GetInt(section, "lapb_t3", 0);
+                pc.LapbN2 = ini.GetInt(section, "lapb_n2", 0);
+                pc.LapbK = ini.GetInt(section, "lapb_k", 0);
                 pc.Mode = ini.Get(section, "mode") == "dte" ? PortMode.Dte : PortMode.Dce;
                 pc.Host = ini.GetString(section, "host", string.Empty);
                 pc.Port = (ushort)ini.GetInt(section, "port", 1998);

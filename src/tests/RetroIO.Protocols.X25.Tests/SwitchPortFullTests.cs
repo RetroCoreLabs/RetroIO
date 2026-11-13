@@ -106,51 +106,77 @@ namespace RetroIO.Protocols.X25.Tests
             using X25Client callee = Dial(_portB.BoundPort, "23420001");
             callee.SetOnIncoming((c, vc) => c.Accept(vc));
 
-            using X25Client caller = Dial(_portA.BoundPort, "23400001");
-            List<byte> causes = new List<byte>();
-            caller.SetOnClear((c, vc, cause, diag) =>
-            {
-                lock (gate)
-                {
-                    causes.Add(cause);
-                }
-            });
-
+            // The caller is a bare TCP connection with XOT frames, because X25Client now opens one connection for
+            // each call (RFC 1613 section 5) and this test is about many circuits on ONE connection: the port
+            // has three channels and the connection asks for five.
+            using System.Net.Sockets.TcpClient raw = new System.Net.Sockets.TcpClient();
+            raw.Connect(System.Net.IPAddress.Loopback, _portA.BoundPort);
+            System.Net.Sockets.NetworkStream stream = raw.GetStream();
             WaitFor(() => _portA.PeerConnected && _portB.PeerConnected, 3000);
 
-            List<ClientVc> circuits = new List<ClientVc>();
             for (int i = 0; i < Calls; i++)
             {
-                ClientVc? vc = caller.Call("23420001");
-                Assert.That(vc, Is.Not.Null, "the client should be able to send call " + i);
-                circuits.Add(vc!);
+                byte[] packet = RetroIO.Protocols.X25.Models.X25PacketBuilder.CreateCallRequest((ushort)(i + 1), "23420001", "23400001");
+                byte[] frame = new byte[4 + packet.Length];
+                frame[2] = (byte)(packet.Length >> 8);
+                frame[3] = (byte)packet.Length;
+                Array.Copy(packet, 0, frame, 4, packet.Length);
+                stream.Write(frame, 0, frame.Length);
             }
 
-            WaitFor(() =>
-            {
-                lock (gate)
-                {
-                    return causes.Count >= Calls - Channels;
-                }
-            }, 3000);
-
+            // Read what the port answers: Call Accepted (0x0F) for the calls it took, Clear Request (0x13) with
+            // its cause for the others.
+            List<byte> causes = new List<byte>();
             int connected = 0;
-            for (int i = 0; i < circuits.Count; i++)
+            long readDeadline = Environment.TickCount64 + 3000;
+            stream.ReadTimeout = 200;
+            byte[] header = new byte[4];
+            while (Environment.TickCount64 < readDeadline && connected + causes.Count < Calls)
             {
-                if (circuits[i].Connected)
+                try
                 {
-                    connected++;
+                    if (stream.Read(header, 0, 4) < 4)
+                    {
+                        break;
+                    }
+
+                    int length = (header[2] << 8) | header[3];
+                    byte[] body = new byte[length];
+                    int got = 0;
+                    while (got < length)
+                    {
+                        int n = stream.Read(body, got, length - got);
+                        if (n <= 0)
+                        {
+                            break;
+                        }
+
+                        got += n;
+                    }
+
+                    if (body[2] == 0x0F)
+                    {
+                        connected++;
+                    }
+                    else if (body[2] == 0x13)
+                    {
+                        causes.Add(body[3]);
+                        // Confirm the clear, as a caller does.
+                        byte[] confirm = { 0, 0, 0, 3, (byte)(0x10 | (body[0] & 0x0F)), body[1], 0x17 };
+                        stream.Write(confirm, 0, confirm.Length);
+                    }
+                }
+                catch (System.IO.IOException)
+                {
+                    // read timeout: try again until the deadline
                 }
             }
 
-            lock (gate)
+            Assert.That(connected, Is.EqualTo(Channels), "the port has three channels");
+            Assert.That(causes.Count, Is.EqualTo(Calls - Channels), "each call over the limit must be cleared, not left hanging");
+            for (int i = 0; i < causes.Count; i++)
             {
-                Assert.That(connected, Is.EqualTo(Channels), "the port has three channels");
-                Assert.That(causes.Count, Is.EqualTo(Calls - Channels), "each call over the limit must be cleared, not left hanging");
-                for (int i = 0; i < causes.Count; i++)
-                {
-                    Assert.That(causes[i], Is.EqualTo(0x05), "cause 5: network congestion");
-                }
+                Assert.That(causes[i], Is.EqualTo(0x05), "cause 5: network congestion");
             }
 
             // Let the caller's clear confirmations arrive, then check the port answered none of them

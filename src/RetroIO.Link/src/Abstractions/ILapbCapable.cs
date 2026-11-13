@@ -80,6 +80,31 @@ namespace RetroIO.Link
         /// Gets or sets the number of T2 timer expiries.
         /// </summary>
         public long T2Timeouts { get; set; }
+        /// <summary>
+        /// Gets or sets how many times the link's sequence numbers were reset while it was up or being set up
+        /// (a SABM from the peer on a connected link, or a re-establish after N2 ran out or an FRMR).
+        /// </summary>
+        public long LinkResets { get; set; }
+
+        /// <summary>
+        /// Sets every event counter back to zero. The sequence variables, the window size and the
+        /// unacknowledged count describe the link as it is now, so they are left alone.
+        /// </summary>
+        public void ResetCounters()
+        {
+            IFramesSent = 0;
+            IFramesReceived = 0;
+            SFramesSent = 0;
+            SFramesReceived = 0;
+            UFramesSent = 0;
+            UFramesReceived = 0;
+            Retransmissions = 0;
+            RejectionsSent = 0;
+            RejectionsReceived = 0;
+            T1Timeouts = 0;
+            T2Timeouts = 0;
+            LinkResets = 0;
+        }
     }
 
     /// <summary>
