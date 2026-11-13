@@ -584,8 +584,19 @@ namespace RetroIO.Protocols.X25.Protocols
                     return ProcessReadParameters(message, x3Parameters);
                     
                 case (byte)X29MessageType.SetAndReadParameters:
-                    ProcessSetParameters(message, x3Parameters);
-                    return ProcessReadParameters(message, x3Parameters);
+                    {
+                        // X.29: the answer carries the parameters named in the message, with their values
+                        // after the SET (not all 22), or an ERROR when a value could not be taken.
+                        byte[]? setError = ProcessSetParameters(message, x3Parameters);
+                        if (setError != null)
+                        {
+                            return setError;
+                        }
+
+                        return message.Parameters.Count == 0
+                            ? ProcessReadParameters(message, x3Parameters)
+                            : CreateParameterIndication(x3Parameters.GetParameters(new List<byte>(message.Parameters.Keys)));
+                    }
                     
                 case (byte)X29MessageType.InvitationToClear:
                 case (byte)X29MessageType.IndicationOfBreak:

@@ -263,6 +263,63 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// Builds the X.28 clear indication service signal for an X.25 clear cause, for example
+        /// <c>CLR OCC C:1 D:0</c>.
+        /// </summary>
+        /// <param name="cause">
+        /// The cause octet of the X.25 Clear Indication packet.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The diagnostic octet of the packet (decimal in the signal).
+        /// </param>
+        /// <returns>
+        /// The signal text without line ends.
+        /// </returns>
+        /// <remarks>
+        /// Format: X.28 (12/97) 3.5.17.1: "CLR" SP, then the cause mnemonic, then " C:" and the decimal
+        /// cause, then " D:" and the decimal diagnostic. The mnemonics are the ones in X.28 Table 6. Table 6
+        /// has no column of X.25 cause numbers (it points to X.96, which was not available), so the
+        /// pairing below is made by the wording of the X.25 cause table (Table 5-7, X.25 10/96) and
+        /// the Table 6 text, except DTE and ERR, which Annex A.2 ties to a cause. A cause that has no
+        /// Table 6 mnemonic with the same wording (21 ROA out of order) is printed without a mnemonic,
+        /// as the format makes the cause field optional, rather than with a guessed one.
+        /// </remarks>
+        public static string ClearSignal(byte cause, byte diagnostic)
+        {
+            // Cause 128-255 (bit 8 set) is "DTE originated" with the DTE's own code in the low bits.
+            string? mnemonic;
+            if ((cause & 0x80) != 0)
+            {
+                mnemonic = "DTE";
+            }
+            else
+            {
+                switch (cause)
+                {
+                    case 0x00: mnemonic = "DTE"; break;   // DTE originated
+                    case 0x01: mnemonic = "OCC"; break;   // Number busy
+                    case 0x03: mnemonic = "INV"; break;   // Invalid facility request
+                    case 0x05: mnemonic = "NC"; break;    // Network congestion
+                    case 0x09: mnemonic = "DER"; break;   // Out of order
+                    case 0x0B: mnemonic = "NA"; break;    // Access barred
+                    case 0x0D: mnemonic = "NP"; break;    // Not obtainable
+                    case 0x11: mnemonic = "RPE"; break;   // Remote procedure error
+                    case 0x13: mnemonic = "ERR"; break;   // Local procedure error
+                    case 0x19: mnemonic = "RNA"; break;   // Reverse charging acceptance not subscribed
+                    case 0x21: mnemonic = "ID"; break;    // Incompatible destination
+                    case 0x29: mnemonic = "FNA"; break;   // Fast select acceptance not subscribed
+                    case 0x39: mnemonic = "SA"; break;    // Ship absent
+                    default: mnemonic = null; break;
+                }
+            }
+
+            string number = (cause & 0x80) != 0 ? "0" : cause.ToString();
+            return mnemonic == null
+                ? $"CLR C:{number} D:{diagnostic}"
+                : $"CLR {mnemonic} C:{number} D:{diagnostic}";
+        }
+
+        /// <summary>
         /// Process character in command mode
         /// </summary>
         private bool _lastCommandCharWasCr;

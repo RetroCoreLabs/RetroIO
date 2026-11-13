@@ -458,6 +458,69 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.False(text[text.Count - 1].MBit);
         }
 
+        /// <summary>A logger that only counts the Error entries, so a test can see an exception the protocol caught and logged.</summary>
+        private sealed class ErrorCountingLogger : ILogger
+        {
+            private int _errors;
+
+            public int Errors => Volatile.Read(ref _errors);
+
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel >= LogLevel.Error)
+                {
+                    Interlocked.Increment(ref _errors);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Data for ONE call can arrive on more than one thread at once (measured against x25emu: a 2000-packet stream and the
+        /// call's other traffic). The line buffer is a StringBuilder, which is not safe for that; unguarded it threw
+        /// "Index was out of range ... chunkLength" from StringBuilder.ToString and the TAD logged an Error.
+        /// </summary>
+        [Fact]
+        public void DataForOneCall_ArrivingOnSeveralThreadsAtOnce_DoesNotCorruptTheLineBuffer()
+        {
+            ErrorCountingLogger counter = new ErrorCountingLogger();
+            LocalTadProtocol tad = new LocalTadProtocol(counter, "200");
+            tad.OutputGenerated += (sender, args) => { };
+            Assert.True(tad.HandleOutgoingCall(1, "200", "100", null));
+
+            // 60 printable characters, a CR, then 60 more: every packet appends, reads and clears the line buffer.
+            byte[] data = new byte[121];
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = (byte)('a' + (i % 26));
+            }
+
+            data[60] = 0x0D;
+
+            Thread[] threads = new Thread[6];
+            for (int t = 0; t < threads.Length; t++)
+            {
+                threads[t] = new Thread(() =>
+                {
+                    for (int i = 0; i < 20000; i++)
+                    {
+                        tad.HandleIncomingData(1, data);
+                    }
+                });
+                threads[t].Start();
+            }
+
+            for (int t = 0; t < threads.Length; t++)
+            {
+                threads[t].Join();
+            }
+
+            Assert.Equal(0, counter.Errors);
+        }
+
         public void Dispose()
         {
             // LocalTadProtocol doesn't implement IDisposable, but if it did, we'd dispose it here

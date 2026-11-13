@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.X25.Modules
     /// This is the "interfaces down" half of the PAD seam: the PAD state machine calls these methods to
     /// drive the wire, while received events are delivered back to it through its public delivery methods
     /// (<see cref="PadClient.NotifyCallAccepted"/>, <see cref="PadClient.DeliverData"/>,
-    /// <see cref="PadClient.DeliverClear"/>, <see cref="PadClient.DeliverInterrupt"/>). Two send methods
+    /// <see cref="PadClient.DeliverClear(ushort, byte, byte)"/>, <see cref="PadClient.DeliverInterrupt"/>). Two send methods
     /// are kept because the PAD forwards ordinary terminal data and qualified X.29 data through distinct
     /// paths in the runtime implementation.
     /// </remarks>

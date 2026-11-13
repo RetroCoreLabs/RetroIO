@@ -77,6 +77,28 @@ namespace RetroIO.Protocols.X25.Services
         /// Data received
         /// </param>
         void HandleData(ushort lcn, byte[] data);
+
+        /// <summary>
+        /// Handle data received on an established call, with the qualifier (Q) bit of the data packet.
+        /// A packet with the Q bit set carries a control message (X.29 for a PAD), not user text.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical Channel Number
+        /// </param>
+        /// <param name="data">
+        /// Data received
+        /// </param>
+        /// <param name="qBit">
+        /// True if the packet had the Q bit set.
+        /// </param>
+        /// <remarks>
+        /// The default passes the data on as ordinary data, which is what a service that does not use
+        /// control messages has always done. A service that understands them overrides this.
+        /// </remarks>
+        void HandleData(ushort lcn, byte[] data, bool qBit)
+        {
+            HandleData(lcn, data);
+        }
         
         /// <summary>
         /// Handle call clearing
