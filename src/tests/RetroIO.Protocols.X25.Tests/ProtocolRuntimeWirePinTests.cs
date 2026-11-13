@@ -63,6 +63,12 @@ namespace RetroIO.Protocols.X25.Tests
         public bool AutoAccept = true;
 
         /// <summary>
+        /// When not zero, the channel number the fake answers (and sends everything else) on, whatever number the
+        /// Call Request used. RFC 1613 section 6: the number "has no significance"; x25emu answers on its own.
+        /// </summary>
+        public ushort AnswerChannel;
+
+        /// <summary>
         /// Answer a Restart Request with a Restart Confirmation, as a real DCE does (X.25 4.1.1).
         /// </summary>
         public bool ConfirmRestart = true;
@@ -194,7 +200,7 @@ namespace RetroIO.Protocols.X25.Tests
                     }
                     else if (pti == 0x0B)
                     {
-                        Lcn = (ushort)(((packet[0] & 0x0F) << 8) | packet[1]);
+                        Lcn = AnswerChannel != 0 ? AnswerChannel : (ushort)(((packet[0] & 0x0F) << 8) | packet[1]);
                         CallSeen.Set();
                         if (AutoAccept)
                         {
@@ -286,6 +292,87 @@ namespace RetroIO.Protocols.X25.Tests
 
         private static string Hex(byte[] b) => BitConverter.ToString(b).Replace('-', ' ');
 
+        // ------------------------------------------------------------------ per-entry sizes
+
+        private static ProtocolRuntime CreateRuntimeWithTwoEntries(RecordingXotDce a, RecordingXotDce b, byte? windowA, int? packetA, byte? windowB, int? packetB)
+        {
+            RuntimeConfig config = new RuntimeConfig();
+            config.X25.LocalMachineId = "23430200";
+            config.TestMode = true;
+            config.Routing.XotInterfaces.Add(new XotInterfaceConfig
+            {
+                Name = "XOT_A", Enabled = true, Mode = XotMode.Client, RemoteIPAddress = "127.0.0.1", RemotePort = a.Port,
+                RemoteMachineId = "fake", RequestedWindowSize = windowA, RequestedPacketSize = packetA
+            });
+            config.Routing.XotInterfaces.Add(new XotInterfaceConfig
+            {
+                Name = "XOT_B", Enabled = true, Mode = XotMode.Both, LocalPort = 0, RemoteIPAddress = "127.0.0.1", RemotePort = b.Port,
+                RemoteMachineId = "fake", RequestedWindowSize = windowB, RequestedPacketSize = packetB
+            });
+            config.Routing.RoutingTable.Add(new X25RouteEntry { Name = "ToA", X121AddressPattern = "2342.*", Type = RetroIO.Protocols.X25.Runtime.RouteType.Interface, Destination = "XOT_A", Priority = 100, Enabled = true });
+            config.Routing.RoutingTable.Add(new X25RouteEntry { Name = "ToB", X121AddressPattern = "2343.*", Type = RetroIO.Protocols.X25.Runtime.RouteType.Interface, Destination = "XOT_B", Priority = 100, Enabled = true });
+            return new ProtocolRuntime(NullLogger.Instance, config);
+        }
+
+        /// <summary>
+        /// Each XOT entry has its own window and packet size (Cisco calls this the profile of a peer). The Call Request on
+        /// the connection made for each entry carries that entry's sizes: entry A asks for window 3 and 256-byte packets
+        /// (facilities 42 08 08 43 03 03), entry B for window 5 and 64-byte packets (42 06 06 43 05 05). Both kinds of
+        /// entry, Client and Both, are covered.
+        /// </summary>
+        [Test]
+        public void TwoEntries_WithDifferentSizes_EachCallRequestCarriesItsOwnSizes()
+        {
+            using RecordingXotDce a = new RecordingXotDce();
+            using RecordingXotDce b = new RecordingXotDce();
+            using ProtocolRuntime runtime = CreateRuntimeWithTwoEntries(a, b, 3, 256, 5, 64);
+            PadClient padA = runtime.CreatePadClient("padA");
+            PadClient padB = runtime.CreatePadClient("padB");
+            padA.Connect("23420001", CALLING_ADDRESS);
+            padB.Connect("23430001", CALLING_ADDRESS);
+            Assert.That(a.CallSeen.Wait(10000), Is.True, "entry A saw no Call Request");
+            Assert.That(b.CallSeen.Wait(10000), Is.True, "entry B saw no Call Request");
+
+            Assert.That(Hex(X25PacketParser.ParsePacket(a.At(0)).Facilities), Is.EqualTo("42 08 08 43 03 03"), Hex(a.At(0)));
+            Assert.That(Hex(X25PacketParser.ParsePacket(b.At(0)).Facilities), Is.EqualTo("42 06 06 43 05 05"), Hex(b.At(0)));
+            padA.Disconnect();
+            padB.Disconnect();
+        }
+
+        /// <summary>
+        /// An entry that sets no size uses the X.25 section of the configuration (here window 2, packet 128).
+        /// </summary>
+        [Test]
+        public void AnEntryWithNoSizes_UsesTheGlobalSettings()
+        {
+            using RecordingXotDce a = new RecordingXotDce();
+            using RecordingXotDce b = new RecordingXotDce();
+            using ProtocolRuntime runtime = CreateRuntimeWithTwoEntries(a, b, null, null, 4, null);
+            PadClient padA = runtime.CreatePadClient("padA");
+            PadClient padB = runtime.CreatePadClient("padB");
+            padA.Connect("23420001", CALLING_ADDRESS);
+            padB.Connect("23430001", CALLING_ADDRESS);
+            Assert.That(a.CallSeen.Wait(10000), Is.True);
+            Assert.That(b.CallSeen.Wait(10000), Is.True);
+
+            Assert.That(Hex(X25PacketParser.ParsePacket(a.At(0)).Facilities), Is.EqualTo("42 07 07 43 02 02"), "no sizes set: the global 2 and 128");
+            Assert.That(Hex(X25PacketParser.ParsePacket(b.At(0)).Facilities), Is.EqualTo("42 07 07 43 04 04"), "only the window set: the packet size stays global");
+            padA.Disconnect();
+            padB.Disconnect();
+        }
+
+        /// <summary>
+        /// A size that cannot work is refused, not changed: the entry is not created and the reason is logged.
+        /// </summary>
+        [Test]
+        public void ASizeThatCannotWork_RefusesTheEntry()
+        {
+            using RecordingXotDce a = new RecordingXotDce();
+            using RecordingXotDce b = new RecordingXotDce();
+            using ProtocolRuntime runtime = CreateRuntimeWithTwoEntries(a, b, 9, 100, 5, 64);
+            Assert.That(runtime.TransportInterfaces.ContainsKey("XOT_A"), Is.False, "window 9 and packet 100 must refuse the entry");
+            Assert.That(runtime.TransportInterfaces.ContainsKey("XOT_B"), Is.True, "the other entry is not touched");
+        }
         // ------------------------------------------------------------------ call setup
 
         [Test]
@@ -295,12 +382,12 @@ namespace RetroIO.Protocols.X25.Tests
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
             using PadClient pad = ConnectPad(runtime, dce, "PinCall");
 
-            // Two packets on connect: the Restart Request, then - once it is confirmed - the Call
-            // Request. Since Phase C1c (2026-09-06) the one engine picks the channel: as a DTE it
-            // takes the highest of the interface's range (X.25 Annex A note 6), 16 by default, where
-            // the old runtime always sent its local LCN 1.
-            Assert.That(dce.Count, Is.GreaterThanOrEqualTo(2));
-            byte[] call = dce.At(1);
+            // The Call Request is the first packet on the connection: RFC 1613 6.4 says a Restart is not
+            // sent over XOT (see the test below). Since Phase C1c (2026-09-06) the one engine picks the
+            // channel: as a DTE it takes the highest of the interface's range (X.25 Annex A note 6), 16
+            // by default, where the old runtime always sent its local LCN 1.
+            Assert.That(dce.Count, Is.GreaterThanOrEqualTo(1));
+            byte[] call = dce.At(0);
             X25PacketInfo info = X25PacketParser.ParsePacket(call);
 
             Assert.That(info.PacketType, Is.EqualTo(X25PacketType.CallRequest), Hex(call));
@@ -347,27 +434,56 @@ namespace RetroIO.Protocols.X25.Tests
             pad.Disconnect();
         }
 
+        /// <summary>
+        /// No Restart Request is sent over an XOT connection, and the Call Request goes out at once even though
+        /// the far end never answers a restart.
+        /// </summary>
+        /// <remarks>
+        /// RFC 1613 section 6.4: Restart, Restart Confirm, DTE Reject, Diagnostic and the registration packets
+        /// "MUST NOT be sent over the TCP connection" and are silently discarded when received. There is no
+        /// link under an XOT circuit to restart. Measured against x25emu (2026-11-12): it sends no Restart
+        /// Confirmation, so the old behaviour (send a Restart, hold the call until it is confirmed, T20 =
+        /// 180 s) left every call to it waiting for ever.
+        /// </remarks>
         [Test]
-        public void RestartRequest_IsSentOnLinkUp_AndTheCallWaitsForItsConfirmation()
+        public void NoRestartRequest_IsSentOverXot_AndTheCallRequestGoesAtOnce()
         {
             using RecordingXotDce dce = new RecordingXotDce();
             dce.ConfirmRestart = false;
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
-            using PadClient pad = runtime.CreatePadClient("PinRestart");
+            using PadClient pad = runtime.CreatePadClient("PinNoRestart");
             pad.Connect(CALLED_ADDRESS, CALLING_ADDRESS);
 
-            // FIXED 2026-09-06 (Phase C1c); the old transport sent the Restart Request, waited up to
-            // 3 s for a confirmation and then sent the Call Request anyway. X.25 4.1.1: no call
-            // set-up packet in state r2. The engine holds the call until the Restart Confirmation.
-            Assert.That(dce.WaitFor(() => dce.Count >= 1, 3000), Is.True, "no Restart Request");
-            Assert.That(Hex(dce.At(0)), Is.EqualTo("10 00 FB 00 00"));
-            Thread.Sleep(1000);
-            Assert.That(dce.CountOf(X25PacketType.CallRequest), Is.EqualTo(0), "the Call Request must wait for the Restart Confirmation");
-
-            dce.Send(new byte[] { 0x10, 0x00, 0xFF });
-            Assert.That(dce.WaitFor(() => dce.CountOf(X25PacketType.CallRequest) == 1, 3000), Is.True, "released by the confirmation");
+            Assert.That(dce.WaitFor(() => dce.CountOf(X25PacketType.CallRequest) == 1, 3000), Is.True, "the Call Request never went out");
+            Assert.That(X25PacketParser.ParsePacket(dce.At(0)).PacketType, Is.EqualTo(X25PacketType.CallRequest), Hex(dce.At(0)));
+            Assert.That(dce.CountOf(X25PacketType.RestartRequest), Is.EqualTo(0), "no Restart over XOT");
 
             pad.Disconnect();
+        }
+
+        /// <summary>
+        /// A peer that answers on another channel number than the call used (RFC 1613 section 6, x25emu does it):
+        /// the call connects, later packets use the peer's number, and the clear goes out on it too.
+        /// </summary>
+        [Test]
+        public void ACallAnsweredOnAnotherChannel_Connects_AndLaterPacketsUseThePeersChannel()
+        {
+            using RecordingXotDce dce = new RecordingXotDce();
+            dce.AnswerChannel = 1;
+            using ProtocolRuntime runtime = CreateRuntime(dce.Port);
+            using PadClient pad = ConnectPad(runtime, dce, "PinChannel");
+            int before = dce.Count;
+            Assert.That(X25PacketParser.ParsePacket(dce.At(0)).LCN, Is.EqualTo(16), "the call was placed on 16, so 1 is another number");
+
+            Assert.That(pad.SendText("AB"), Is.True);
+            Assert.That(dce.WaitFor(() => dce.Count >= before + 1, 3000), Is.True);
+            X25PacketInfo data = X25PacketParser.ParsePacket(dce.At(before));
+            Assert.That(data.PacketType, Is.EqualTo(X25PacketType.Data), Hex(dce.At(before)));
+            Assert.That(data.LCN, Is.EqualTo(1), "data must use the channel the peer answered on");
+
+            pad.Disconnect();
+            Assert.That(dce.WaitFor(() => dce.CountOf(X25PacketType.ClearRequest) == 1, 3000), Is.True);
+            Assert.That(X25PacketParser.ParsePacket(dce.At(dce.Count - 1)).LCN, Is.EqualTo(1), "the clear must use the peer's channel");
         }
 
         // ------------------------------------------------------------------ data

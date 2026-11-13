@@ -206,6 +206,15 @@ namespace RetroIO.Protocols.X25.Runtime
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _config = config ?? throw new ArgumentNullException(nameof(config));
 
+            // The size of the packet history is a setting (RuntimeConfig.HistoryCapacity, "HistoryCapacity" in
+            // the configuration file, a field in the Desktop configuration window). It was read, saved and
+            // shown, but never applied: the engine kept 100 packets whatever the file said. Found by a burst
+            // test on 2026-11-12, where the window held far more rows than the engine and the file said 500.
+            if (config.HistoryCapacity > 0)
+            {
+                _historyCapacity = config.HistoryCapacity;
+            }
+
             // Initialize timer manager
             _timerManager = new Services.TimerManager(logger);
 
@@ -259,6 +268,14 @@ namespace RetroIO.Protocols.X25.Runtime
             // Initialize built-in PAD/TAD services
             InitializeBuiltinServices();
 
+            // The telnet PAD (off unless the configuration enables it). A failed listen is reported
+            // through TelnetPadStatus and never stops the runtime from starting.
+            ApplyTelnetPadConfig();
+
+            // The start time MUST be set before the first statistics update: that update computes
+            // Uptime = now - start time, and with the start time still unset it reported about 17.7 million
+            // hours until the next update, five seconds later.
+            _startTime = DateTime.UtcNow;
             // Update initial statistics after all layers are initialized
             UpdateStatistics();
 
@@ -277,7 +294,6 @@ namespace RetroIO.Protocols.X25.Runtime
                 }
             });
 
-            _startTime = DateTime.UtcNow;
             _logger.LogInformation("[ProtocolRuntime] Protocol runtime initialized and started successfully");
 
             StateChanged?.Invoke(this, new RuntimeStateChangedEventArgs(
@@ -678,7 +694,7 @@ namespace RetroIO.Protocols.X25.Runtime
                         var linkConfig = new XotLinkConfig
                         {
                             Name = xotConfig.Name,
-                            Mode = xotConfig.Mode == XotMode.Server ? TcpMode.Server : TcpMode.Client,
+                            Mode = xotConfig.Mode == XotMode.Server ? TcpMode.Server : TcpMode.Client, // Both is mapped to Client: this older LinkManager path has no peer mode
                             RemoteAddress = xotConfig.RemoteIPAddress ?? "127.0.0.1",
                             Port = xotConfig.Mode == XotMode.Server ? xotConfig.LocalPort : xotConfig.RemotePort,
                             RemoteMachineId = xotConfig.RemoteMachineId,
@@ -849,6 +865,45 @@ namespace RetroIO.Protocols.X25.Runtime
             {
                 return _currentStats.Clone();
             }
+        }
+
+        /// <summary>
+        /// Sets every statistics counter back to zero: the runtime-wide HDLC, LAPB, X.25 and XOT totals, the
+        /// counters of each link (and of its LAPB station) and of each transport interface.
+        /// </summary>
+        /// <remarks>
+        /// Only counters are reset. What describes the situation now is kept: the LAPB and X.25 state words,
+        /// the number of active virtual circuits, whether the XOT TCP connection is up, the uptime, and each
+        /// link's sequence variables. The packet history is a separate thing and is not cleared here. The
+        /// statistics-updated event is raised once afterwards so a window shows the zeros at once.
+        /// Counters that other threads add to without a lock can lose one count that arrives during the reset.
+        /// </remarks>
+        public void ResetStatistics()
+        {
+            lock (_statsLock)
+            {
+                StatisticsSnapshot previous = _currentStats;
+                StatisticsSnapshot fresh = new();
+                fresh.LAPB.CurrentState = previous.LAPB.CurrentState;
+                fresh.X25.CurrentState = previous.X25.CurrentState;
+                fresh.X25.ActiveVirtualCircuits = previous.X25.ActiveVirtualCircuits;
+                fresh.XOT.TcpConnected = previous.XOT.TcpConnected;
+                _currentStats = fresh;
+            }
+
+            ILink[] links = _linkManager.GetAllLinks();
+            for (int i = 0; i < links.Length; i++)
+            {
+                links[i].ResetStatistics();
+            }
+
+            foreach (KeyValuePair<string, ITransportInterface> transport in TransportInterfaces)
+            {
+                transport.Value.ResetStatistics();
+            }
+
+            // Fills Uptime and the counts that are read from live state, and raises StatisticsUpdated.
+            UpdateStatistics();
         }
 
         /// <summary>
@@ -1255,10 +1310,13 @@ namespace RetroIO.Protocols.X25.Runtime
                     _logger.LogInformation("Creating XOT transport interface: {Name} ({Mode})",
                                          xotConfig.Name, xotConfig.Mode);
 
+                    ValidateXotSizes(xotConfig);
+
                     ITransportInterface xotTransport = xotConfig.Mode switch
                     {
                         XotMode.Client => CreateXotClientTransport(xotConfig),
                         XotMode.Server => CreateXotServerTransport(xotConfig),
+                        XotMode.Both => CreateXotPeerTransport(xotConfig),
                         _ => throw new ArgumentException($"Unknown XOT mode: {xotConfig.Mode}")
                     };
 
@@ -1269,6 +1327,11 @@ namespace RetroIO.Protocols.X25.Runtime
                     xotTransport.IncomingCall += OnTransportIncomingCall;
                     xotTransport.StatusChanged += OnTransportStatusChanged;
                     xotTransport.DataReceived += OnXotDataReceived;
+                    if (xotTransport is XotPeerTransport peerTransport)
+                    {
+                        // A peer opens one connection per call; when one ends its engine goes with it.
+                        peerTransport.ConnectionClosed += OnXotPeerConnectionClosed;
+                    }
 
                     _logger.LogInformation("XOT transport interface created: {Name}", xotConfig.Name);
                 }
@@ -1280,24 +1343,54 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Create XOT client transport from configuration
+        /// Refuses an entry whose own window or packet size cannot work: it is reported by name and the entry is not created,
+        /// never changed to another value.
         /// </summary>
-        private ITransportInterface CreateXotClientTransport(XotInterfaceConfig xotConfig)
+        private static void ValidateXotSizes(XotInterfaceConfig entry)
         {
-            var clientConfig = new XotClientConfig
+            if (entry.RequestedWindowSize.HasValue && (entry.RequestedWindowSize.Value < 1 || entry.RequestedWindowSize.Value > 7))
             {
-                Name = xotConfig.Name,
-                SourceAddress = "0.0.0.0",
-                ConnectTimeout = xotConfig.ConnectTimeoutMs > 0 ? xotConfig.ConnectTimeoutMs : 30000,
-                KeepAliveInterval = xotConfig.KeepAliveIntervalSeconds > 0 ? xotConfig.KeepAliveIntervalSeconds : 60
-            };
+                throw new ArgumentException("XOT entry " + entry.Name + ": window size " + entry.RequestedWindowSize.Value + " is not between 1 and 7");
+            }
 
-            var transport = new XotClientTransport(_logger, clientConfig);
-            transport.SetInterfaceConfig(xotConfig);
-            transport.PacketLayerPlaceCall = PlaceCallViaEndpoint;
-            return transport;
+            if (entry.RequestedPacketSize.HasValue)
+            {
+                int size = entry.RequestedPacketSize.Value;
+                bool powerOfTwo = size >= 16 && size <= 4096 && (size & (size - 1)) == 0;
+                if (!powerOfTwo)
+                {
+                    throw new ArgumentException("XOT entry " + entry.Name + ": packet size " + size + " is not a power of two from 16 to 4096");
+                }
+            }
         }
 
+        /// <summary>
+        /// Create the transport of a "Client" entry: it only dials, and opens a NEW TCP connection for each call
+        /// (RFC 1613 section 5), the same way the peer entry does, with its own X.25 engine on each connection.
+        /// </summary>
+        /// <remarks>
+        /// Until 2026-11-13 a Client entry kept one connection per remote address and sent every call over it. The
+        /// real Cisco router refuses that: when a second Call Request arrives on a connection that carries a call it
+        /// clears the first call (cause 19, diagnostic 23) and never answers the second.
+        /// </remarks>
+        private ITransportInterface CreateXotClientTransport(XotInterfaceConfig xotConfig)
+        {
+            XotPeerConfig peerConfig = new XotPeerConfig
+            {
+                Name = xotConfig.Name,
+                PeerAddress = xotConfig.RemoteIPAddress,
+                PeerPort = xotConfig.RemotePort,
+                ConnectTimeoutMs = xotConfig.ConnectTimeoutMs > 0 ? xotConfig.ConnectTimeoutMs : 30000,
+                TcpKeepalive = xotConfig.TcpKeepalive,
+                LciBase = xotConfig.LciBase,
+                LciCount = xotConfig.LciCount,
+                DialOnly = true
+            };
+
+            XotPeerTransport transport = new XotPeerTransport(_logger, peerConfig);
+            transport.PacketLayerPlaceCall = PlaceCallViaPeerLink;
+            return transport;
+        }
         /// <summary>
         /// Create XOT server transport from configuration
         /// </summary>
@@ -1308,10 +1401,44 @@ namespace RetroIO.Protocols.X25.Runtime
                 Name = xotConfig.Name,
                 ListenAddress = "0.0.0.0", // Listen on all interfaces
                 ListenPort = xotConfig.LocalPort,
-                MaxConnections = 100 // Default value since MaxConnections doesn't exist in XotInterfaceConfig
+                MaxConnections = 100, // Default value since MaxConnections doesn't exist in XotInterfaceConfig
+                Listeners = _xotListeners // shares the port with any XOT peer entry on it
             };
 
             return new XotServerTransport(_logger, serverConfig);
+        }
+
+        /// <summary>
+        /// The listening sockets of the XOT entries of this runtime: one socket per local port, shared
+        /// by every server and peer entry on that port.
+        /// </summary>
+        private XotListenerRegistry? _xotListenersField;
+
+        private XotListenerRegistry _xotListeners => _xotListenersField ??= new XotListenerRegistry(_logger);
+
+        /// <summary>
+        /// Create the XOT peer transport (mode Both): dials out per call and accepts from the peer.
+        /// </summary>
+        private ITransportInterface CreateXotPeerTransport(XotInterfaceConfig xotConfig)
+        {
+            XotPeerConfig peerConfig = new XotPeerConfig
+            {
+                Name = xotConfig.Name,
+                PeerAddress = xotConfig.RemoteIPAddress,
+                PeerPort = xotConfig.RemotePort,
+                ListenAddress = "0.0.0.0",
+                ListenPort = xotConfig.LocalPort,
+                ConnectTimeoutMs = xotConfig.ConnectTimeoutMs > 0 ? xotConfig.ConnectTimeoutMs : 5000,
+                TcpKeepalive = xotConfig.TcpKeepalive,
+                AllowOnlyListedPeers = xotConfig.AllowOnlyListedPeers,
+                LciBase = xotConfig.LciBase,
+                LciCount = xotConfig.LciCount,
+                Listeners = _xotListeners
+            };
+
+            XotPeerTransport transport = new XotPeerTransport(_logger, peerConfig);
+            transport.PacketLayerPlaceCall = PlaceCallViaPeerLink;
+            return transport;
         }
 
         /// <summary>
@@ -3180,7 +3307,7 @@ namespace RetroIO.Protocols.X25.Runtime
                     if (sessionService != null)
                     {
                         _logger.LogDebug("Routing outgoing data to service {ServiceName} for LCN {LCN}", sessionService.ServiceName, lcn);
-                        sessionService.HandleData(lcn, data);
+                        sessionService.HandleData(lcn, data, qBit);
                     }
                     else
                     {
@@ -4543,6 +4670,7 @@ namespace RetroIO.Protocols.X25.Runtime
         /// </summary>
         public void Dispose()
         {
+            StopTelnetPad();
             DisposeEndpoints();
             lock (_stateLock)
             {

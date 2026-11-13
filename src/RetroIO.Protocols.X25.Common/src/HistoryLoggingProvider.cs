@@ -38,6 +38,12 @@ namespace RetroIO.Protocols.X25.Common
         }
 
         /// <summary>
+        /// Gets the number of entries the provider keeps. A window that shows the log must not hold
+        /// more than this, or it grows without limit while the provider drops the old ones.
+        /// </summary>
+        public int MaxEntries => _maxEntries;
+
+        /// <summary>
         /// Creates a logger for a category that writes into this provider.
         /// </summary>
         /// <param name="categoryName">

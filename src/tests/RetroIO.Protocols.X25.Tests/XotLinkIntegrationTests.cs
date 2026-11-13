@@ -6,6 +6,9 @@
 //
 
 using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
@@ -27,6 +30,28 @@ namespace RetroIO.Protocols.X25.Tests
     [TestFixture]
     public class XotLinkIntegrationTests
     {
+        // Each test names its port with a number that is only a label. The real port is one the operating
+        // system hands out when the test asks, so a program already using a fixed port on the machine
+        // cannot make a test fail (it did: port 55326, socket error 10048). The server and client of one
+        // test pass the same label and get the same port.
+        private static readonly Dictionary<int, int> LabelledPorts = new Dictionary<int, int>();
+
+        private static int PortFor(int label)
+        {
+            lock (LabelledPorts)
+            {
+                if (!LabelledPorts.TryGetValue(label, out int port))
+                {
+                    TcpListener probe = new TcpListener(IPAddress.Loopback, 0);
+                    probe.Start();
+                    port = ((IPEndPoint)probe.LocalEndpoint).Port;
+                    probe.Stop();
+                    LabelledPorts[label] = port;
+                }
+                return port;
+            }
+        }
+
         private ILogger _logger = null!;
         private ILoggerFactory _loggerFactory = null!;
 
@@ -57,7 +82,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55321,
+                Port = PortFor(55321),
                 RemoteMachineId = "REMOTE"
             };
 
@@ -79,7 +104,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55322,
+                Port = PortFor(55322),
                 RemoteMachineId = "SERVER"
             };
 
@@ -88,7 +113,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55322,
+                Port = PortFor(55322),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT"
             };
@@ -116,7 +141,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55328,
+                Port = PortFor(55328),
                 RemoteMachineId = "SERVER",
                 UseLapbFraming = true,
                 IsPrimary = false // Server waits for SABM
@@ -127,7 +152,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55328,
+                Port = PortFor(55328),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 UseLapbFraming = true,
@@ -185,7 +210,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55323,
+                Port = PortFor(55323),
                 RemoteMachineId = "SERVER",
                 UseLapbFraming = true,
                 IsPrimary = false
@@ -196,7 +221,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55323,
+                Port = PortFor(55323),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 UseLapbFraming = true,
@@ -258,7 +283,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55324,
+                Port = PortFor(55324),
                 RemoteMachineId = "SERVER",
                 UseLapbFraming = true,
                 IsPrimary = false
@@ -269,7 +294,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55324,
+                Port = PortFor(55324),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 UseLapbFraming = true,
@@ -352,7 +377,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55325,
+                Port = PortFor(55325),
                 RemoteMachineId = "SERVER",
                 UseLapbFraming = true,
                 IsPrimary = false
@@ -363,7 +388,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55325,
+                Port = PortFor(55325),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 UseLapbFraming = true,
@@ -427,7 +452,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55326,
+                Port = PortFor(55326),
                 RemoteMachineId = "SERVER",
                 UseLapbFraming = true,
                 IsPrimary = false
@@ -438,7 +463,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55326,
+                Port = PortFor(55326),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 UseLapbFraming = true,
@@ -507,7 +532,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotTest",
                 Mode = TcpMode.Server,
-                Port = 55327,
+                Port = PortFor(55327),
                 RemoteMachineId = "TEST"
             };
 
@@ -527,7 +552,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotTest",
                 Mode = TcpMode.Server,
-                Port = 55329,
+                Port = PortFor(55329),
                 RemoteMachineId = "TEST",
                 UseLapbFraming = true
             };
@@ -553,7 +578,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotTest",
                 Mode = TcpMode.Server,
-                Port = 55330,
+                Port = PortFor(55330),
                 RemoteMachineId = "TEST",
                 UseLapbFraming = true
             };
@@ -583,7 +608,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55340,
+                Port = PortFor(55340),
                 RemoteMachineId = "SERVER",
                 UseLapbFraming = false // RFC 1613 mode
             };
@@ -593,7 +618,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55340,
+                Port = PortFor(55340),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 UseLapbFraming = false // RFC 1613 mode
@@ -641,7 +666,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotServer0",
                 Mode = TcpMode.Server,
-                Port = 55341,
+                Port = PortFor(55341),
                 RemoteMachineId = "SERVER",
                 UseLapbFraming = false
             };
@@ -651,7 +676,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "XotClient0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 55341,
+                Port = PortFor(55341),
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 UseLapbFraming = false
@@ -702,7 +727,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "XotTest",
                 Mode = TcpMode.Server,
-                Port = 55342,
+                Port = PortFor(55342),
                 RemoteMachineId = "TEST",
                 UseLapbFraming = false // RFC 1613 mode
             };

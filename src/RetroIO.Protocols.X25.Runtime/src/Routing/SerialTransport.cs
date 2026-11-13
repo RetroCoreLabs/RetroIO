@@ -284,6 +284,14 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         }
 
         /// <summary>
+        /// Sets the call, byte and error counters of this transport back to zero.
+        /// </summary>
+        public void ResetStatistics()
+        {
+            _statistics.ResetCounters();
+        }
+
+        /// <summary>
         /// Raised when an incoming call is received.
         /// </summary>
         /// <remarks>
