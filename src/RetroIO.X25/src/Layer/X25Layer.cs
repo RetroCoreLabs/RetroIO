@@ -723,6 +723,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// Collects category A packets (full, M=1, D=0) and delivers the whole sequence once the
         /// category B packet that ends it arrives. The Q-bit consistency rule (4.3.3) has already
         /// been applied by the caller, before the packet was acknowledged.
+        /// <para>
+        /// What X.25 (ITU-T X.25 10/96) says, as read from the text: 4.3.4 lets a DTE use the M bit to
+        /// "indicate a sequence of more than one packet"; 4.3.5 defines the complete packet sequence and says
+        /// a source DTE's sequence is "always delivered to the destination DTE as a single complete packet
+        /// sequence"; Table 4-1 shows the packets arrive with the M bit kept. No clause makes the receiving
+        /// DTE join the packets into one block, and none bounds the length of a sequence or names a reset
+        /// for a long one. The only reset for size is 4.3.2: one packet whose data field is longer than the
+        /// agreed maximum (local procedure error, diagnostic 39). So this method is a convenience: it
+        /// joins packets for the consumer, and when the part reaches <see cref="X25Vc.MaxMessagePart"/> it
+        /// hands it on with <c>moreData</c> true and carries on. Every packet is also given to
+        /// <see cref="X25LayerBase.DataReceived"/> with its own M bit as it arrives.
+        /// </para>
         /// </summary>
         private void Reassemble(X25Vc vc, byte[] payload, bool qBit, bool mBit, bool dBit)
         {
@@ -736,11 +748,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     vc.ReassemblyQBit = qBit;
                 }
 
-                if (vc.Reassembly.Length + payload.Length > X25Vc.MaxReassembly)
+                // X.25 4.3.4 and 4.3.5 give a complete packet sequence no upper length and name no reset
+                // for a long one. When the part collected so far has reached its size, hand it on with
+                // "more follows" and go on collecting; the sequence itself is not cut and nothing is reset.
+                if (vc.Reassembly.Length + payload.Length > X25Vc.MaxMessagePart && vc.Reassembly.Length > 0)
                 {
-                    vc.ClearSequences();
-                    ResetForProcedureError(vc, X25Diagnostic.PacketTooLong);
-                    return;
+                    byte[] part = vc.Reassembly.ToArray();
+                    vc.Reassembly.SetLength(0);
+                    RaiseMessageReceived(vc.Lci, part, qBit, moreData: true);
                 }
 
                 vc.Reassembly.Write(payload, 0, payload.Length);
@@ -749,14 +764,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             if (vc.Reassembly == null)
             {
-                RaiseMessageReceived(vc.Lci, payload, qBit);
+                RaiseMessageReceived(vc.Lci, payload, qBit, moreData: false);
                 return;
             }
 
             vc.Reassembly.Write(payload, 0, payload.Length);
             byte[] message = vc.Reassembly.ToArray();
             vc.ClearSequences();
-            RaiseMessageReceived(vc.Lci, message, qBit);
+            RaiseMessageReceived(vc.Lci, message, qBit, moreData: false);
         }
 
         // ------------------------------------------------------------------ interrupts (X.25 4.4.2)

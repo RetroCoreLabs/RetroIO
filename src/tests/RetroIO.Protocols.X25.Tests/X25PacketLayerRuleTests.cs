@@ -1247,7 +1247,7 @@ namespace RetroIO.Protocols.X25.Tests
             ushort lci = ConnectOutgoing();   // 128 in
             List<byte[]> messages = new List<byte[]>();
             int packets = 0;
-            _layer.MessageReceived += (l, c, d, q) => messages.Add(d);
+            _layer.MessageReceived += (l, c, d, q, more) => messages.Add(d);
             _layer.DataReceived += (l, c, d, n, q, m, db) => packets++;
 
             byte[] a = Filled(128, 1);
@@ -1267,6 +1267,58 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_sink.CountOfType(X25PacketType.RR), Is.EqualTo(3), "every packet is acknowledged as it arrives");
         }
 
+        /// <summary>
+        /// X.25 4.3.4 and 4.3.5 put no bound on a complete packet sequence and name no reset for a long one (the only reset
+        /// for data size is a single packet longer than the agreed maximum, 4.3.2). A router's PAD answers a fast stream with
+        /// an endless run of full packets with M=1; measured 2026-11-13 the engine used to reset the circuit (cause 0,
+        /// diagnostic 39) after 64 KB of such a run. 100 000 full packets must now go through with no reset, every byte
+        /// handed on in order.
+        /// </summary>
+        [Test]
+        public void R21_AnEndlessSequenceOfFullPackets_IsNeverReset_AndEveryByteIsHandedOn()
+        {
+            ushort lci = ConnectOutgoing();   // 128 in
+            long handedOn = 0;
+            long wrongBytes = 0;
+            int parts = 0;
+            int partsWithMore = 0;
+            bool lastHadMore = false;
+            _layer.MessageReceived += (l, c, d, q, more) =>
+            {
+                parts++;
+                partsWithMore += more ? 1 : 0;
+                lastHadMore = more;
+                for (int i = 0; i < d.Length; i++)
+                {
+                    if (d[i] != (byte)((handedOn + i) / 128 % 251))
+                    {
+                        wrongBytes++;
+                    }
+                }
+
+                handedOn += d.Length;
+            };
+
+            const int Packets = 100000;
+            for (int n = 0; n < Packets; n++)
+            {
+                byte[] full = new byte[128];
+                Array.Fill(full, (byte)(n % 251));
+                _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, (byte)(n & 7), 0, full, mBit: true));
+            }
+
+            Assert.That(_sink.CountOfType(X25PacketType.ResetRequest), Is.EqualTo(0), "no reset for a long sequence: X.25 names none");
+            byte[] last = new byte[10];
+            Array.Fill(last, (byte)(Packets % 251));
+            _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, (byte)(Packets & 7), 0, last, mBit: false));
+
+            Assert.That(handedOn, Is.EqualTo((long)Packets * 128 + 10), "every byte of the sequence reaches the consumer");
+            Assert.That(wrongBytes, Is.EqualTo(0), "in order, unchanged");
+            Assert.That(parts, Is.GreaterThan(100), "12.8 MB handed on in parts of about 64 KB");
+            Assert.That(partsWithMore, Is.EqualTo(parts - 1), "every part but the last says more follows");
+            Assert.That(lastHadMore, Is.False, "the part that ends the sequence says so");
+        }
+
         [Test]
         public void R21_APartialPacketWithMSet_EndsTheSequence()
         {
@@ -1274,7 +1326,7 @@ namespace RetroIO.Protocols.X25.Tests
             // category B and the network delivers it with M=0 - the sequence is over.
             ushort lci = ConnectOutgoing();
             List<byte[]> messages = new List<byte[]>();
-            _layer.MessageReceived += (l, c, d, q) => messages.Add(d);
+            _layer.MessageReceived += (l, c, d, q, more) => messages.Add(d);
 
             _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 0, 0, Filled(128, 1), mBit: true));
             _layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(lci, 1, 0, Filled(5, 1), mBit: true));
@@ -1288,7 +1340,7 @@ namespace RetroIO.Protocols.X25.Tests
         {
             ushort lci = ConnectOutgoing();
             List<byte[]> messages = new List<byte[]>();
-            _layer.MessageReceived += (l, c, d, q) => messages.Add(d);
+            _layer.MessageReceived += (l, c, d, q, more) => messages.Add(d);
 
             _layer.ProcessPacket(Data(lci, 0, 0, length: 4));
 
@@ -1321,7 +1373,7 @@ namespace RetroIO.Protocols.X25.Tests
             pair.B.Target = a;
             b.IncomingCall += (l, c, called, calling, cud) => l.AcceptCall(c);
             byte[]? got = null;
-            b.MessageReceived += (l, c, d, q) => got = d;
+            b.MessageReceived += (l, c, d, q, more) => got = d;
 
             ushort lci = a.PlaceCall("2");
             Assert.That(a.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));

@@ -73,7 +73,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public event X25InterruptConfirmed? InterruptConfirmed;
 
         /// <summary>
-        /// Raised once per complete packet sequence with the reassembled user data.
+        /// Raised for a complete packet sequence with the joined user data: once when the sequence is
+        /// shorter than <see cref="X25Vc.MaxMessagePart"/>, otherwise once per part, every part but
+        /// the last with <c>moreData</c> true.
         /// </summary>
         public event X25MessageReceived? MessageReceived;
 
@@ -265,9 +267,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// <summary>
         /// Raises <see cref="MessageReceived"/>.
         /// </summary>
-        protected void RaiseMessageReceived(ushort lci, byte[] data, bool qBit)
+        protected void RaiseMessageReceived(ushort lci, byte[] data, bool qBit, bool moreData)
         {
-            MessageReceived?.Invoke((X25Layer)this, lci, data, qBit);
+            MessageReceived?.Invoke((X25Layer)this, lci, data, qBit, moreData);
         }
 
         /// <summary>
