@@ -78,7 +78,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// and a port that cannot start.
     /// </para>
     /// </remarks>
-    public sealed class XotSwitchPort : ISwitchPort, IDisposable
+    public sealed class XotSwitchPort : IMonitoredSwitchPort, IDisposable
     {
         /// <summary>
         /// How often the packet layer's timers are given the time.
@@ -100,6 +100,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </summary>
         private const byte CallRequestType = 0x0B;
         private const byte ClearRequestType = 0x13;
+        private const byte CallAcceptedType = 0x0F;
         private const byte ClearConfirmationType = 0x17;
 
         /// <summary>
@@ -130,7 +131,10 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         //
         // Static: ports are created and started before they are attached to a switch node, so the lock
         // cannot be chosen per node. Several switches in one process share it, which costs only waiting.
-        private static readonly object SharedSync = new object();
+        //
+        // The lock itself now lives in PortLock, so the HDLC ports share it with this one: a switch can have
+        // XOT and HDLC ports side by side and a packet can cross from one kind to the other.
+        private static readonly object SharedSync = PortLock.Shared;
 
         private readonly object _sync = SharedSync;
         private readonly PortConfig _config;
@@ -152,6 +156,11 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private int _connectAttempts;
         private long _lastConnectedMs;
         private long _lastDisconnectedMs;
+        private int _connectFailures;
+        private int _failuresSinceUp;
+        private int _disconnects;
+        private long _lastFailureMs;
+        private string _lastError = string.Empty;
 
         /// <summary>
         /// The connection a packet came in on, while the engine is working on it. Anything the engine
@@ -343,6 +352,35 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// away; 0 if none has.
         /// </summary>
         public long LastDisconnectedMs => Interlocked.Read(ref _lastDisconnectedMs);
+
+        /// <summary>
+        /// Gets how many dials failed since the port started (the peer refused, did not answer in time,
+        /// or the name did not resolve). A DCE port never dials, so this stays 0 for it.
+        /// </summary>
+        public int ConnectFailures => Volatile.Read(ref _connectFailures);
+
+        /// <summary>
+        /// Gets how many connections went away since the port started, whether the peer closed them or
+        /// the network dropped them.
+        /// </summary>
+        public int Disconnects => Volatile.Read(ref _disconnects);
+
+        /// <summary>
+        /// Gets the reason the last dial failed, in words (for example "connection refused"); empty if no
+        /// dial has failed. It is not cleared when a later dial works: read it together with
+        /// <see cref="PeerConnected"/>.
+        /// </summary>
+        public string LastError => Volatile.Read(ref _lastError);
+
+        /// <summary>
+        /// Gets the time, as <see cref="Environment.TickCount64"/>, at which a dial last failed; 0 if none has.
+        /// </summary>
+        public long LastFailureMs => Interlocked.Read(ref _lastFailureMs);
+
+        /// <summary>
+        /// Gets how long a DTE port waits after a failed dial before it dials again, in milliseconds.
+        /// </summary>
+        public int RedialDelay => RedialDelayMs;
 
         /// <summary>
         /// Gets how many connections the port has open now.
@@ -870,6 +908,14 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             try
             {
                 Interlocked.Increment(ref _connectAttempts);
+
+                // Only the first try after the port started or after a connection was up is logged at
+                // Information level: the retries that follow every two seconds would fill the log.
+                if (Volatile.Read(ref _failuresSinceUp) == 0)
+                {
+                    _logger.LogInformation("Port {Id} ({Mode} {Type}): dialling {Host}:{Port} ({Why})", Id, _config.Mode, _config.Type, _config.Host, _config.Port, why);
+                }
+
                 client = new TcpClient();
                 Task connect = client.ConnectAsync(_config.Host, _config.Port);
                 if (!connect.Wait(DialTimeoutMs))
@@ -880,9 +926,24 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
             catch (Exception ex)
             {
-                // A peer that is down is ordinary and is retried, so this is not worth a line at the
-                // default level every two seconds.
-                _logger.LogDebug("Port {Id}: dial to {Host}:{Port} {Why} failed ({Reason})", Id, _config.Host, _config.Port, why, ex.InnerException?.Message ?? ex.Message);
+                string reason = ex.InnerException?.Message ?? ex.Message;
+                Interlocked.Increment(ref _connectFailures);
+                int inARow = Interlocked.Increment(ref _failuresSinceUp);
+                Interlocked.Exchange(ref _lastFailureMs, Environment.TickCount64);
+                Volatile.Write(ref _lastError, reason);
+
+                // A peer that is down is ordinary and is retried every RedialDelayMs, so only the first
+                // failure and then every fifteenth (about every 30 seconds) is a warning; the rest are Debug.
+                if (inARow == 1 || inARow % 15 == 0)
+                {
+                    _logger.LogWarning("Port {Id} ({Mode} {Type}): dial to {Host}:{Port} ({Why}) failed: {Reason}. Failure {Count} in a row; the next try is in {Delay} seconds, and then every {Delay} seconds until it connects",
+                        Id, _config.Mode, _config.Type, _config.Host, _config.Port, why, reason, inARow, RedialDelayMs / 1000, RedialDelayMs / 1000);
+                }
+                else
+                {
+                    _logger.LogDebug("Port {Id}: dial to {Host}:{Port} {Why} failed ({Reason}), failure {Count} in a row", Id, _config.Host, _config.Port, why, reason, inARow);
+                }
+
                 client?.Close();
                 return null;
             }
@@ -928,7 +989,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
 
             Interlocked.Exchange(ref _lastConnectedMs, Environment.TickCount64);
-            _logger.LogInformation("Port {Id} ({Mode} {Type}): connection up ({How}, connection {Conn})", Id, _config.Mode, _config.Type, how, connection.Number);
+            int failedBefore = Interlocked.Exchange(ref _failuresSinceUp, 0);
+            _logger.LogInformation("Port {Id} ({Mode} {Type}): connection up ({How}, connection {Conn}){After}", Id, _config.Mode, _config.Type, how, connection.Number,
+                failedBefore > 0 ? " after " + failedBefore + " failed dial(s)" : string.Empty);
 
             connection.Reader = new Thread(() => ReadUntilClosed(connection)) { IsBackground = true, Name = "XotSwitchPort" + Id + "." + connection.Number };
             connection.Reader.Start();
@@ -1029,7 +1092,19 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
 
             Interlocked.Exchange(ref _lastDisconnectedMs, Environment.TickCount64);
-            _logger.LogInformation("Port {Id} ({Mode} {Type}): connection down ({Reason}, connection {Conn})", Id, _config.Mode, _config.Type, reason, connection.Number);
+            Interlocked.Increment(ref _disconnects);
+
+            // A connection that goes away while the port is meant to be running is a fault, so a warning;
+            // one closed because the port is stopping is ordinary. A DTE port dials again by itself.
+            if (_running)
+            {
+                _logger.LogWarning("Port {Id} ({Mode} {Type}): connection down ({Reason}, connection {Conn}){Retry}", Id, _config.Mode, _config.Type, reason, connection.Number,
+                    _config.Mode == PortMode.Dte && !anyLeft ? "; dialling again in " + RedialDelayMs / 1000 + " seconds" : string.Empty);
+            }
+            else
+            {
+                _logger.LogInformation("Port {Id} ({Mode} {Type}): connection down ({Reason}, connection {Conn})", Id, _config.Mode, _config.Type, reason, connection.Number);
+            }
 
             // The circuits that were on this connection are gone with it. Nothing is written to them -
             // nobody is there to answer - and the switch clears the far leg of each.
@@ -1128,6 +1203,10 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// <param name="isCallRequest">
         /// True when the packet is a Call Request, the only packet that starts a circuit.
         /// </param>
+        /// <param name="packetType">
+        /// The packet type octet. A Call Accepted or Clear Request on an unknown channel is the answer to the call dialled
+        /// for this connection, and the peer's channel number is bound to that call.
+        /// </param>
         /// <param name="channel">
         /// The channel for the engine.
         /// </param>
@@ -1135,11 +1214,31 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// True if the packet belongs to a circuit that has a route; false for a packet that starts
         /// nothing and belongs to no circuit, which the engine will refuse.
         /// </returns>
-        private bool MapInbound(XotConnection connection, ushort wireChannel, bool isCallRequest, out ushort channel)
+        private bool MapInbound(XotConnection connection, ushort wireChannel, bool isCallRequest, byte packetType, out ushort channel)
         {
             if (_inbound.TryGetValue(InboundKey(connection, wireChannel), out channel))
             {
                 return true;
+            }
+
+            // RFC 1613 section 6: the channel number in an XOT packet "has no significance and has arbitrary values", and a
+            // forwarding end sets it to the number of its own outgoing interface. So the answer to a call we dialled a
+            // connection for may come back on another number than our Call Request went out on (x25emu answers a call sent on
+            // channel 16 with a Call Accepted on channel 1). A connection dialled for one call carries one circuit, so a
+            // Call Accepted or a Clear Request on an unknown channel can only belong to that circuit: bind the peer's number to it.
+            if (!isCallRequest && (packetType == CallAcceptedType || packetType == ClearRequestType)
+                && connection.DialledForCall && connection.Circuits.Count == 1)
+            {
+                ushort only = connection.Circuits[0];
+
+                if (_routes.TryGetValue(only, out CircuitRoute? route) && route.Connection == connection)
+                {
+                    _inbound.Remove(InboundKey(connection, route.WireChannel));
+                    _routes[only] = new CircuitRoute(connection, wireChannel);
+                    _inbound[InboundKey(connection, wireChannel)] = only;
+                    channel = only;
+                    return true;
+                }
             }
 
             channel = wireChannel;
@@ -1307,6 +1406,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             // engine then refuses still appears in the monitor and in the byte total, as it crossed
             // the wire.
             Counters.AddBytesIn(frame.Length);
+            Counters.IncrementAllPacketsIn();
             PortPacketCaptured? tap = PacketCaptured;
             if (tap != null)
             {
@@ -1328,7 +1428,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 }
 
                 bool isCallRequest = packetType == CallRequestType;
-                if (MapInbound(connection, wire, isCallRequest, out ushort channel))
+                if (MapInbound(connection, wire, isCallRequest, packetType, out ushort channel))
                 {
                     if (channel != wire)
                     {
@@ -1384,7 +1484,10 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _logger.LogWarning("Port {Id}: no free channel for a call on channel {Wire}; cleared with network congestion ({Count} refused so far)", Id, wire, _callsRefused);
             }
 
+            // This call never reaches the engine or the switch core, so nobody else will count it: it arrived, and it
+            // ends here (see PortCounters).
             connection.Refused.Add(wire);
+            Counters.IncrementCallsIn();
             Counters.IncrementCallsCleared();
             SendOnConnection(connection, X25PacketBuilder.CreateClearRequest(wire, X25Cause.NetworkCongestion, 0));
         }
@@ -1454,7 +1557,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             try
             {
                 connection.Codec.SendFrame(onWire);
-                Counters.IncrementPacketsOut();
+                Counters.IncrementAllPacketsOut();
                 Counters.AddBytesOut(onWire.Length);
 
                 // Only a packet that was written is shown and counted as sent.
@@ -1476,7 +1579,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         private void OnLayerIncomingCall(X25Layer layer, ushort lci, string called, string calling, byte[] cud)
         {
-            Counters.IncrementCallsIn();
+            // Not counted here: SwitchCore counts the call when it gets this event (see PortCounters).
             _logger.LogInformation("Port {Id}: incoming call {Calling} -> {Called} LCI={Lci}", Id, calling, called, lci);
             IncomingCall?.Invoke(this, lci, called, calling, cud);
         }
@@ -1489,13 +1592,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         private void OnLayerData(X25Layer layer, ushort lci, byte[] data, int length, bool qBit, bool mBit, bool dBit)
         {
-            Counters.IncrementPacketsIn();
+            // Not counted here: SwitchCore counts the data packet when it gets this event (see PortCounters).
             DataReceived?.Invoke(this, lci, data, length, qBit, mBit, dBit);
         }
 
         private void OnLayerCleared(X25Layer layer, ushort lci, byte cause, byte diagnostic)
         {
-            Counters.IncrementCallsCleared();
+            // Not counted here: SwitchCore counts the clear when it gets this event (see PortCounters).
             _logger.LogInformation("Port {Id}: clear LCI={Lci} cause={Cause} diag={Diag}", Id, lci, cause, diagnostic);
 
             // The circuit is over, so it gives up its route. A connection this port dialled for the
