@@ -487,5 +487,138 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(WaitFor(() => dce.ConnectionCount == 3), Is.True, "connections: " + dce.ConnectionCount);
         }
+        /// <summary>
+        /// RFC 1613 section 6: the channel number in an XOT packet "has no significance and has arbitrary values". A peer such as
+        /// x25emu answers a call on a connection dialled for it on ITS OWN channel number (our call went out on channel 16, the
+        /// Call Accepted came back on channel 1). The call must still be connected, and the data and the clear must follow on
+        /// the channel the peer chose. Found 2026-11-13 against x25emu: the port's packet layer answered the Call Accepted
+        /// with Clear Request, diagnostic 20, and the call died.
+        /// </summary>
+        [Test]
+        public void ADiallingPort_ConnectsTheCall_WhenThePeerAnswersOnAnotherChannelNumber()
+        {
+            TcpListener listener = new TcpListener(System.Net.IPAddress.Loopback, 0);
+            listener.Start();
+            int peerPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+            List<byte[]> seen = new List<byte[]>();
+            bool stop = false;
+            Thread accept = new Thread(() =>
+            {
+                while (!stop)
+                {
+                    TcpClient connection;
+                    try
+                    {
+                        connection = listener.AcceptTcpClient();
+                    }
+                    catch (Exception)
+                    {
+                        return;
+                    }
+
+                    NetworkStream stream = connection.GetStream();
+                    XotFrameCodec codec = new XotFrameCodec("answering-peer", new RawSink(stream));
+                    codec.FrameReceived += (id, frame) =>
+                    {
+                        byte[] copy = frame.ToArray();
+                        lock (seen)
+                        {
+                            seen.Add(copy);
+                        }
+
+                        if (copy.Length >= 3 && copy[2] == 0x0B)
+                        {
+                            // Answer on channel 1, whatever channel the call came in on.
+                            codec.SendFrame(X25PacketBuilder.CreateCallAccepted(1, null));
+                        }
+                    };
+                    Thread read = new Thread(() =>
+                    {
+                        byte[] buffer = new byte[4096];
+                        try
+                        {
+                            while (true)
+                            {
+                                int n = stream.Read(buffer, 0, buffer.Length);
+                                if (n <= 0)
+                                {
+                                    break;
+                                }
+
+                                codec.ProcessBytes(new ReadOnlySpan<byte>(buffer, 0, n));
+                            }
+                        }
+                        catch (Exception)
+                        {
+                        }
+                    }) { IsBackground = true };
+                    read.Start();
+                }
+            }) { IsBackground = true };
+            accept.Start();
+            try
+            {
+                using XotSwitchPort dte = new XotSwitchPort(new PortConfig { Id = 1, Mode = PortMode.Dte, Host = "127.0.0.1", Port = (ushort)peerPort, LciBase = 1, LciCount = 16 });
+                int connected = 0;
+                dte.CallConnected += (port, lci) => Interlocked.Increment(ref connected);
+                Assert.That(dte.Start(), Is.True);
+                Assert.That(WaitFor(() => dte.PeerConnected), Is.True);
+                ushort lci = dte.PlaceCall(Called, Calling, null);
+                Assert.That(lci, Is.Not.EqualTo(0));
+                Assert.That(WaitFor(() => Volatile.Read(ref connected) == 1), Is.True, "the call was not connected; the peer saw: " + Dump(seen));
+
+                // Our clear goes out on the channel the peer chose, not on ours.
+                dte.ClearCall(lci, 0, 0);
+                Assert.That(WaitFor(() =>
+                {
+                    lock (seen)
+                    {
+                        for (int i = 0; i < seen.Count; i++)
+                        {
+                            if (seen[i].Length >= 3 && seen[i][2] == 0x13)
+                            {
+                                return seen[i][1] == 1;
+                            }
+                        }
+                    }
+
+                    return false;
+                }), Is.True, "the clear should use the peer's channel 1; the peer saw: " + Dump(seen));
+            }
+            finally
+            {
+                stop = true;
+                listener.Stop();
+            }
+        }
+
+        private static string Dump(List<byte[]> packets)
+        {
+            lock (packets)
+            {
+                List<string> lines = new List<string>();
+                for (int i = 0; i < packets.Count; i++)
+                {
+                    lines.Add(BitConverter.ToString(packets[i]));
+                }
+
+                return string.Join(" | ", lines);
+            }
+        }
+
+        private sealed class RawSink : IFrameTransport
+        {
+            private readonly NetworkStream _stream;
+
+            public RawSink(NetworkStream stream)
+            {
+                _stream = stream;
+            }
+
+            public void Send(ReadOnlySpan<byte> bytes)
+            {
+                _stream.Write(bytes);
+            }
+        }
     }
 }
