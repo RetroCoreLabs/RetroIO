@@ -42,9 +42,10 @@ namespace RetroIO.Link.Framing
     public sealed class HdlcFrameCodec : FrameCodecBase, IDisposable
     {
         /// <summary>
-        /// Maximum de-framed payload size in bytes (X.25 max packet plus LAPB overhead).
+        /// Maximum de-framed payload size in bytes (no FCS here): LAPB address 1 + control 2 (modulo 128) + the largest
+        /// X.25 packet 4100 (header 4 + 4096 data octets) = 4103.
         /// </summary>
-        public const int FrameMaxPayload = 4096;
+        public const int FrameMaxPayload = 4103;
 
         /// <summary>
         /// The framing policy this codec drives the shared engine with: RFC 1662 transmit escaping,

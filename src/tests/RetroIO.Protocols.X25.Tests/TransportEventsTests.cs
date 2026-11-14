@@ -362,12 +362,12 @@ namespace RetroIO.Protocols.X25.Tests
         /// <summary>
         /// Four header octets that are not a XOT header end the decoding of that connection: the call
         /// that follows is not reported, an error is logged, and the raw bytes still reach DataReceived.
-        /// The four cases are a version other than 0, a length under 3, a length of 4097 and the
+        /// The four cases are a version other than 0, a length under 3, a length of 4101 (one over the largest legal packet, 4100) and the
         /// length 0.
         /// </summary>
         [TestCase(1, 20)]
         [TestCase(0, 2)]
-        [TestCase(0, 4097)]
+        [TestCase(0, 4101)]
         [TestCase(0, 0)]
         public void PhysicalLayer_StopsDecodingXot_AfterABadHeader(int version, int length)
         {
@@ -440,18 +440,20 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
-        /// A frame of the largest legal length (4096 octets) is read as one frame, so the Call Request
-        /// that follows it is still found.
+        /// A frame of the largest legal length (4100 octets: a header of 4 and 4096 data octets) is read as one frame, so
+        /// the Call Request that follows it is still found. 4096 and 4099 are tried too.
         /// </summary>
-        [Test]
-        public void PhysicalLayer_AcceptsAFrameOf4096Octets_AndFindsTheCallAfterIt()
+        [TestCase(4096)]
+        [TestCase(4099)]
+        [TestCase(4100)]
+        public void PhysicalLayer_AcceptsAFrameOfTheLargestLegalLength_AndFindsTheCallAfterIt(int frameLength)
         {
             PhysicalLayer layer = StartTcpPhysicalLayer(out int port);
             try
             {
                 List<PhysicalLayerCallEventArgs> calls = new List<PhysicalLayerCallEventArgs>();
                 layer.IncomingCall += (s, e) => { lock (calls) { calls.Add(e); } };
-                byte[] big = new byte[4096];
+                byte[] big = new byte[frameLength];
                 big[0] = 0x10;
                 big[1] = 0x01;
                 big[2] = 0x00;   // a Data packet
@@ -465,7 +467,7 @@ namespace RetroIO.Protocols.X25.Tests
                 {
                     client.GetStream().Write(all, 0, all.Length);
 
-                    Assert.That(WaitUntil(() => { lock (calls) { return calls.Count == 1; } }), Is.True, "the call behind a 4096 octet frame was lost");
+                    Assert.That(WaitUntil(() => { lock (calls) { return calls.Count == 1; } }), Is.True, "the call behind a frame of " + frameLength + " octets was lost");
                     Assert.That(calls[0].CalledAddress, Is.EqualTo("2003"));
                 }
             }

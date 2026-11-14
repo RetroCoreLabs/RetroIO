@@ -382,7 +382,7 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         private void RelaySerialToXot(ReadOnlySpan<byte> x25Packet)
         {
-            if (x25Packet.Length == 0 || x25Packet.Length > 4096)
+            if (x25Packet.Length == 0 || x25Packet.Length > 4100)
             {
                 Interlocked.Increment(ref _errors);
                 return;
@@ -429,7 +429,7 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         private void RelayXotToSerial(ReadOnlySpan<byte> xotPacket)
         {
-            if (xotPacket.Length == 0 || xotPacket.Length > 4096)
+            if (xotPacket.Length == 0 || xotPacket.Length > 4100)
             {
                 Interlocked.Increment(ref _errors);
                 return;
@@ -465,7 +465,7 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         private void RelaySerialToSerial(ReadOnlySpan<byte> x25Packet)
         {
-            if (x25Packet.Length == 0 || x25Packet.Length > 4096)
+            if (x25Packet.Length == 0 || x25Packet.Length > 4100)
             {
                 Interlocked.Increment(ref _errors);
                 return;
@@ -500,7 +500,7 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         private void RelayXotToXot(ReadOnlySpan<byte> xotPacket)
         {
-            if (xotPacket.Length < 4 || xotPacket.Length > 4096)
+            if (xotPacket.Length < 4 || xotPacket.Length > 4100)
             {
                 Interlocked.Increment(ref _errors);
                 return;

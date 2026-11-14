@@ -153,7 +153,10 @@ namespace RetroIO.Link.Hdlc
         public static HdlcFramerOptions X25 { get; } = new HdlcFramerOptions
         {
             SendAccm = AccmAllControlOctets,
-            MaxFrameLength = 4096,
+            // The largest LAPB frame X.25 can need, FCS included, transparency not: address 1 + control 2 (modulo 128)
+            // + packet header 4 (modulo 128) + 4096 data octets (the largest packet size, X.25 clause 4.3.2) + FCS 2
+            // = 4105. With modulo 8 it is 4103.
+            MaxFrameLength = 4105,
         };
 
         /// <summary>

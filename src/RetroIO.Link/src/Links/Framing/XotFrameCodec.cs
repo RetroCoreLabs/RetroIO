@@ -37,9 +37,11 @@ namespace RetroIO.Link.Framing
         private const int Version = 0x0000;
 
         /// <summary>
-        /// Maximum payload (X.25 packet) size in bytes.
+        /// Maximum payload (X.25 packet) size in bytes: the largest data packet, a header of 4 octets (modulo 128; 3 for
+        /// modulo 8) and 4096 data octets (X.25 clause 4.3.2 lists 4096 as the largest user data field length).
+        /// RFC 1613 asks for a legal X.25 packet length; before 2026-11-14 this was 4096, which refused a full-size packet.
         /// </summary>
-        public const int FrameMaxPayload = 4096;
+        public const int FrameMaxPayload = 4100;
 
         /// <summary>
         /// The shortest legal payload: a whole X.25 packet is at least three octets.

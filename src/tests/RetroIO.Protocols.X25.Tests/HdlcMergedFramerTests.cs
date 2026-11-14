@@ -359,6 +359,42 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(decoder.Statistics.FcsErrors, Is.EqualTo(0), "an abort must not be counted as an FCS error");
         }
 
+        /// <summary>
+        /// The largest LAPB frame X.25 can need is carried whole by the X.25 policy. A data packet of the largest user data
+        /// size (4096 octets, X.25 clause 4.3.2) is, with FCS: address 1 + control 1 + header 3 + 4096 + FCS 2 = 4103
+        /// octets for modulo 8, and address 1 + control 2 + header 4 + 4096 + FCS 2 = 4105 for modulo 128. One octet more is
+        /// refused as overlong. Before 2026-11-14 the limit was 4096 and a full-size packet was discarded.
+        /// </summary>
+        [TestCase(4103, true)]
+        [TestCase(4105, true)]
+        [TestCase(4106, false)]
+        public void X25Policy_CarriesTheLargestPacketFrame_AndRefusesOneOctetMore(int lengthWithFcs, bool accepted)
+        {
+            HdlcFramerOptions options = HdlcFramerOptions.X25;
+            byte[] body = new byte[lengthWithFcs - 2];
+            for (int i = 0; i < body.Length; i++)
+            {
+                // A pattern with many flag and escape octets, so the frame is longer on the wire than in memory.
+                body[i] = (i % 5) == 0 ? (byte)0x7E : ((i % 7) == 0 ? (byte)0x7D : (byte)i);
+            }
+
+            byte[] wire = HdlcEncoder.Encode(body, options);
+            using HdlcDecoder decoder = new HdlcDecoder(options);
+            List<HdlcDecodeStatus> statuses = new List<HdlcDecodeStatus>();
+            List<byte[]> frames = DecodeAll(decoder, wire, statuses);
+
+            if (accepted)
+            {
+                Assert.That(frames.Count, Is.EqualTo(1), "a frame of " + lengthWithFcs + " octets with FCS was not delivered");
+                Assert.That(StripFcs(frames[0]), Is.EqualTo(body), "the frame changed");
+            }
+            else
+            {
+                Assert.That(statuses, Does.Contain(HdlcDecodeStatus.Overlong));
+                Assert.That(frames.Count, Is.EqualTo(0));
+            }
+        }
+
         [Test]
         public void MergedDecoder_OverlongFrame_IsDiscardedAndTheLinkResyncs()
         {

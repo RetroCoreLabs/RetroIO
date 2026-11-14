@@ -51,7 +51,7 @@ namespace RetroIO.Link
         // XOT header constants
         private const ushort XOT_VERSION = 0x0000; // Version 0
         private const int XOT_HEADER_SIZE = 4;
-        private const int MAX_XOT_PACKET_SIZE = 4096;
+        private const int MAX_XOT_PACKET_SIZE = 4100;
 
         // Receive buffers for XOT framing
         private readonly byte[] _receiveBuffer = new byte[MAX_XOT_PACKET_SIZE];

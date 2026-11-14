@@ -715,7 +715,7 @@ namespace RetroIO.Protocols.X25.Runtime.Layers
         /// Longest X.25 packet a XOT frame may carry. The same limit the XOT client and server
         /// transports apply.
         /// </summary>
-        private const int MaxXotPacketLength = 4096;
+        private const int MaxXotPacketLength = 4100;
 
         /// <summary>
         /// Adds freshly read TCP bytes to the pending XOT bytes, cuts out every whole frame, and
