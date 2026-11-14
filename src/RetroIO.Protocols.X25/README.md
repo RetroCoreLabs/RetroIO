@@ -26,7 +26,7 @@ packet through HDLC, LAPB and X.25 under a single id, and the statistics each la
 - **Be a terminal**: `PadClient` with X.3 parameters, X.28 commands and X.29 remote control.
 - **Answer terminals**: `TadServer`, including a built-in loopback echo on address 200 for testing.
 - **Route calls** Cisco-style: `X25Router` matches X.121 patterns with priority and failover.
-- **Speak XOT** in both directions: `XotClientTransport` and `XotServerTransport` (RFC 1613).
+- **Speak XOT** (RFC 1613): `XotPeerTransport` dials per call and accepts, and `XotClientTransport` dials out. In the other packages the switch speaks XOT through `XotSwitchPort` and `X25Client` through its XOT framing. `XotServerTransport` does not work yet: its `AcceptCall` and `RejectCall` throw `NotSupportedException`.
 - **Bridge at speed**: `XotSerialBridge` passes traffic XOT-to-serial, XOT-to-XOT or
   serial-to-serial, bypassing the routing layer for throughput.
 - **Validate and parse addresses**: `X121` implements the international numbering plan.

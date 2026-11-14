@@ -14,6 +14,8 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 ## Open
 
+The first entries were written on 2026-10-18; later entries carry their own date. Where an entry in the S group says a method "throws", it used to report success and was changed to throw (see the Fixed section); it still does not do the job.
+
 ### R - the code is wrong and the right answer is clear
 
 | Where | What |
@@ -32,6 +34,7 @@ real specification before anyone touches it, **I** the interface comment is prob
 
 | Where | What |
 |---|---|
+| `RetroIO.Protocols.X25` `XotServerTransport.AcceptCall` and `RejectCall` (2026-11-14) | Both throw `NotSupportedException`: the class does not remember which TCP connection a call came in on, so it cannot send Call Accepted or Clear Request back. This is the ONLY part of XOT that is missing. XOT itself works and carries real traffic through `XotSwitchPort`, `XotPeerTransport` and the `X25Client` XOT framing (tested against a Cisco router); `XotClientTransport` is not affected |
 | `RetroIO.Protocols.X25.Runtime` `SerialTransport.IncomingCall` | The event is still never raised, on purpose like `XotClientTransport.IncomingCall`: a serial Call Request is now taken apart by `SerialLapbLink` and raised and answered once through the line's own X.25 engine (`ProtocolRuntime.OnEndpointIncomingCall`), so raising the transport event too would route it twice |
 | `RetroIO.Protocols.X25.Runtime` serial port opening | `PhysicalLayer.InitializeSerialPorts` and `PhysicalLayer.Start` are called by nothing in production, and the runtime constructor starts its transports first, so a serial transport configured through `RuntimeConfig` ends in Error ("interface not active"). It needs a decision on who owns the port |
 | `RetroIO.Protocols.X25.Runtime` `SerialTransport.PlaceCall`, `AcceptCall`, `RejectCall` | Still throw; outgoing serial calls are not built (incoming calls are answered by the line's X.25 engine) |
