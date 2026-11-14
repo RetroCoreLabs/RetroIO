@@ -544,6 +544,35 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </returns>
         public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
         {
+            return PlaceCallWith(calledAddress, callingAddress, callUserData, null);
+        }
+
+        /// <inheritdoc/>
+        public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters requested)
+        {
+            return PlaceCallWith(calledAddress, callingAddress, callUserData, requested);
+        }
+
+        /// <inheritdoc/>
+        public bool TryGetCallParameters(ushort lci, out X25CallParameters parameters)
+        {
+            lock (_sync)
+            {
+                return _layer.TryGetCallParameters(lci, out parameters);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void AcceptCall(ushort lci, X25CallParameters agreed)
+        {
+            lock (_sync)
+            {
+                _layer.AcceptCall(lci, agreed);
+            }
+        }
+
+        private ushort PlaceCallWith(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters? requested)
+        {
             XotConnection? dialled = null;
 
             if (_config.Mode != PortMode.Dce)
@@ -582,7 +611,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _pendingDial = dialled;
                 try
                 {
-                    lci = _layer.PlaceCall(calledAddress, callingAddress, callUserData);
+                    lci = requested.HasValue
+                        ? _layer.PlaceCall(calledAddress, callingAddress, callUserData, requested.Value)
+                        : _layer.PlaceCall(calledAddress, callingAddress, callUserData);
                 }
                 finally
                 {

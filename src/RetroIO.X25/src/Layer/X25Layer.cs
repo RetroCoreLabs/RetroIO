@@ -173,6 +173,38 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </returns>
         public ushort PlaceCall(string calledAddress, string? callingAddress = null, byte[]? callUserData = null)
         {
+            return PlaceCall(
+                calledAddress,
+                callingAddress,
+                callUserData,
+                new X25CallParameters(_config.DefaultWindowSize, _config.DefaultWindowSize, _config.DefaultPacketSize, _config.DefaultPacketSize));
+        }
+
+        /// <summary>
+        /// Places an outgoing call that asks for the given window and packet sizes, and returns its logical channel, or 0
+        /// if no channel is free.
+        /// </summary>
+        /// <remarks>
+        /// A switch uses this to pass on what the calling side asked for instead of asking for its own defaults. The Call
+        /// Connected that answers states what the call runs with, and <see cref="TryGetCallParameters"/> then returns it.
+        /// </remarks>
+        /// <param name="calledAddress">
+        /// Destination X.121 address.
+        /// </param>
+        /// <param name="callingAddress">
+        /// Origin X.121 address; the configured local address is used when null or empty.
+        /// </param>
+        /// <param name="callUserData">
+        /// Optional call user data.
+        /// </param>
+        /// <param name="requested">
+        /// The window and packet sizes to ask for, "out" being the direction this end sends in.
+        /// </param>
+        /// <returns>
+        /// The allocated logical channel, or 0 on failure.
+        /// </returns>
+        public ushort PlaceCall(string calledAddress, string? callingAddress, byte[]? callUserData, X25CallParameters requested)
+        {
             ushort lci = AllocateLci();
             if (lci == 0)
             {
@@ -186,10 +218,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 CalledAddress = calledAddress,
                 CallingAddress = calling,
                 CallUserData = callUserData ?? Array.Empty<byte>(),
-                WindowSizeOut = _config.DefaultWindowSize,
-                WindowSizeIn = _config.DefaultWindowSize,
-                PacketSizeOut = _config.DefaultPacketSize,
-                PacketSizeIn = _config.DefaultPacketSize,
+                WindowSizeOut = requested.WindowSizeOut,
+                WindowSizeIn = requested.WindowSizeIn,
+                PacketSizeOut = requested.PacketSizeOut,
+                PacketSizeIn = requested.PacketSizeIn,
                 TimerExpiryMs = Now() + _config.CallRequestTimeoutMs
             };
             _vcs[lci] = vc;
@@ -226,9 +258,39 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </returns>
         public bool AcceptCall(ushort lci)
         {
+            return AcceptCall(lci, null);
+        }
+
+        /// <summary>
+        /// Accepts an incoming call with the window and packet sizes the call was agreed to run with.
+        /// </summary>
+        /// <remarks>
+        /// A switch uses this to give the caller the values the far end agreed to in its Call Connected (X.25 6.12 and 7.2.2.1:
+        /// the answer states what was agreed). Without values, the call runs as it was asked for.
+        /// </remarks>
+        /// <param name="lci">
+        /// Logical channel of the incoming call.
+        /// </param>
+        /// <param name="agreed">
+        /// The values to run with, "out" being the direction this end sends in; null accepts what was asked.
+        /// </param>
+        /// <returns>
+        /// True when the Call Accepted left; false when there was no incoming call on the channel or the link refused it.
+        /// </returns>
+        public bool AcceptCall(ushort lci, X25CallParameters? agreed)
+        {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc) || vc.State != X25VcState.CallIncoming)
             {
                 return false;
+            }
+
+            if (agreed.HasValue)
+            {
+                vc.WindowSizeOut = agreed.Value.WindowSizeOut;
+                vc.WindowSizeIn = agreed.Value.WindowSizeIn;
+                vc.PacketSizeOut = agreed.Value.PacketSizeOut;
+                vc.PacketSizeIn = agreed.Value.PacketSizeIn;
+                vc.PeerSentFacilities = true;
             }
 
             // X.25 7.2.2.1: when the caller asked for flow control values the answer states what was
@@ -262,6 +324,34 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
+            return true;
+        }
+
+        /// <summary>
+        /// Returns the window and packet sizes a circuit runs with, or asks for while the call is being set up.
+        /// </summary>
+        /// <remarks>
+        /// For an incoming call these are what the caller asked for. For an outgoing call, once it is connected, they are
+        /// what the far end agreed to in its Call Connected.
+        /// </remarks>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <param name="parameters">
+        /// The values, "out" being the direction this end sends in; default when there is no such circuit.
+        /// </param>
+        /// <returns>
+        /// True when the circuit exists.
+        /// </returns>
+        public bool TryGetCallParameters(ushort lci, out X25CallParameters parameters)
+        {
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                parameters = default;
+                return false;
+            }
+
+            parameters = new X25CallParameters(vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn);
             return true;
         }
 
@@ -1278,7 +1368,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // The flow control request goes in every Call Request. RFC 1613 6.1 makes it a MUST over
             // XOT; over plain X.25 it is how the peer learns what we want instead of silently applying
             // its own defaults (7.2.2.1). Until 2026-09-06 the facility length octet was always zero.
-            byte[] facilities = X25Facilities.ForRequest(_config.DefaultWindowSize, _config.DefaultPacketSize).Encode();
+            // "From calling" is the direction we send in. The values are the circuit's own: the defaults for a call an
+            // application placed, what the calling side asked for for a call a switch relays.
+            byte[] facilities = new X25Facilities
+            {
+                HasPacketSize = true,
+                PacketSizeFromCalled = vc.PacketSizeIn,
+                PacketSizeFromCalling = vc.PacketSizeOut,
+                HasWindowSize = true,
+                WindowFromCalled = vc.WindowSizeIn,
+                WindowFromCalling = vc.WindowSizeOut,
+            }.Encode();
 
             // T21 is armed before the send: a Call Connected arriving synchronously inside Send
             // cancels it, and arming it afterwards would leave a timer running on a connected call.

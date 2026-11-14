@@ -6,6 +6,7 @@
 //
 
 using System;
+using RetroIO.Protocols.X25.PacketLayer;
 
 namespace RetroIO.Protocols.X25.Switch.Ports
 {
@@ -124,6 +125,69 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// The logical channel to accept.
         /// </param>
         void AcceptCall(ushort lci);
+
+        /// <summary>
+        /// Places an outgoing call that asks for the given window and packet sizes.
+        /// </summary>
+        /// <remarks>
+        /// The switch passes on what the calling side asked for (X.25 6.9 and 6.12 negotiate end to end). A port that does
+        /// not carry these values places the call as <see cref="PlaceCall(string, string, byte[])"/> does.
+        /// </remarks>
+        /// <param name="calledAddress">
+        /// Destination X.121 address.
+        /// </param>
+        /// <param name="callingAddress">
+        /// Originating X.121 address.
+        /// </param>
+        /// <param name="callUserData">
+        /// Optional call user data.
+        /// </param>
+        /// <param name="requested">
+        /// The values to ask for, "out" being the direction this port sends in.
+        /// </param>
+        /// <returns>
+        /// The allocated logical channel, or 0 if the call could not be placed.
+        /// </returns>
+        ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters requested)
+        {
+            return PlaceCall(calledAddress, callingAddress, callUserData);
+        }
+
+        /// <summary>
+        /// Returns the window and packet sizes a call on a logical channel runs with.
+        /// </summary>
+        /// <remarks>
+        /// For an incoming call these are what the caller asked for; for a placed call that has been connected, what the far
+        /// end agreed to. A port that does not carry these values returns false.
+        /// </remarks>
+        /// <param name="lci">
+        /// The logical channel.
+        /// </param>
+        /// <param name="parameters">
+        /// The values, "out" being the direction this port sends in.
+        /// </param>
+        /// <returns>
+        /// True when the port knows the values.
+        /// </returns>
+        bool TryGetCallParameters(ushort lci, out X25CallParameters parameters)
+        {
+            parameters = default;
+            return false;
+        }
+
+        /// <summary>
+        /// Accepts an incoming call with the window and packet sizes the call was agreed to run with.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel to accept.
+        /// </param>
+        /// <param name="agreed">
+        /// The values to run with, "out" being the direction this port sends in.
+        /// </param>
+        void AcceptCall(ushort lci, X25CallParameters agreed)
+        {
+            AcceptCall(lci);
+        }
 
         /// <summary>
         /// Sends data on an established circuit.

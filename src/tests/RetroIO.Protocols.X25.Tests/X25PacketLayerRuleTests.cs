@@ -1360,6 +1360,48 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(83));
         }
 
+        /// <summary>
+        /// A call placed with its own window and packet sizes asks for them in the Call Request, the called side sees what was
+        /// asked (in its own terms, the directions swapped), and what it accepts with is what the caller runs with once the
+        /// call is connected. This is how a switch passes the negotiation of X.25 6.9 and 6.12 from one side of a call to the
+        /// other instead of asking for its own defaults on the onward leg.
+        /// </summary>
+        [Test]
+        public void R21_AskedAndAgreedWindowAndPacketSizes_ReachTheOtherEndOfTheCall()
+        {
+            X25Config cfgA = new X25Config { LocalAddress = "1", LciBase = 1, LciCount = 4, IsDte = true };
+            X25Config cfgB = new X25Config { LocalAddress = "2", LciBase = 1, LciCount = 4, IsDte = false };
+            LoopSinkPair pair = new LoopSinkPair();
+            X25Layer a = new X25Layer(pair.A, cfgA);
+            X25Layer b = new X25Layer(pair.B, cfgB);
+            pair.A.Target = b;
+            pair.B.Target = a;
+
+            X25CallParameters seenAtB = default;
+            b.IncomingCall += (l, c, called, calling, cud) =>
+            {
+                l.TryGetCallParameters(c, out seenAtB);
+
+                // Accept with a smaller packet size and window than asked: 512 and 3 in the called end's sending direction.
+                l.AcceptCall(c, new X25CallParameters(3, 4, 512, 1024));
+            };
+
+            // A asks to send with window 4 and 1024-octet packets, and to receive with window 5 and 2048-octet packets.
+            ushort lci = a.PlaceCall("2", null, null, new X25CallParameters(4, 5, 1024, 2048));
+
+            Assert.That(a.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            Assert.That(seenAtB.WindowSizeOut, Is.EqualTo(5), "B sends with the window A receives with");
+            Assert.That(seenAtB.WindowSizeIn, Is.EqualTo(4));
+            Assert.That(seenAtB.PacketSizeOut, Is.EqualTo(2048));
+            Assert.That(seenAtB.PacketSizeIn, Is.EqualTo(1024));
+
+            Assert.That(a.TryGetCallParameters(lci, out X25CallParameters agreedAtA), Is.True);
+            Assert.That(agreedAtA.WindowSizeOut, Is.EqualTo(4), "what B accepted as its receiving window");
+            Assert.That(agreedAtA.WindowSizeIn, Is.EqualTo(3));
+            Assert.That(agreedAtA.PacketSizeOut, Is.EqualTo(1024));
+            Assert.That(agreedAtA.PacketSizeIn, Is.EqualTo(512));
+        }
+
         [Test]
         public void R21_ARoundTripThroughTwoLayers_DeliversTheMessageWhole()
         {
