@@ -8,8 +8,7 @@ packet layer into one object: open it, place calls on it, send on them, close it
 ## Why you need it
 
 Writing an X.25 application from the packet layer up means repeating the same dozen steps in the
-same order every time — open a transport, initialise framing, configure the packet layer, do the
-restart handshake, then loop reading and dispatching. Done five times, that produced five subtly
+same order every time — open a transport, initialise framing, configure the packet layer, then loop reading and dispatching. Done five times, that produced five subtly
 different versions, and the differences were all bugs.
 
 This is that sequence written once. It is also what makes the console tools small: `x25echo`,
@@ -72,8 +71,8 @@ sequenceDiagram
     participant P as The peer
 
     A->>C: new X25Client(config), Open()
-    C->>P: connect, then RESTART
-    P-->>C: RESTART CONFIRM
+    C->>P: connect (TCP)
+    Note over C,P: no Restart is sent over XOT (RFC 1613 section 6.4)
     A->>C: Call("23420001")
     C->>P: CALL REQUEST
     P-->>C: CALL CONNECTED
