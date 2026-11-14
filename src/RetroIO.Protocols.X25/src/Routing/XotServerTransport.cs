@@ -623,7 +623,7 @@ namespace RetroIO.Protocols.X25.Transport
 
             try
             {
-                var buffer = new byte[4096];
+                var buffer = new byte[4100];
 
                 while (!cancellationToken.IsCancellationRequested && _tcpClient.Connected)
                 {
@@ -651,9 +651,9 @@ namespace RetroIO.Protocols.X25.Transport
                         break;
                     }
 
-                    if (length > 4096 || length < 3)
+                    if (length > 4100 || length < 3)
                     {
-                        _logger.LogError("XOT length {Length} from {ClientEndpoint} is not a legal X.25 packet length (3..4096) - closing the connection",
+                        _logger.LogError("XOT length {Length} from {ClientEndpoint} is not a legal X.25 packet length (3..4100) - closing the connection",
                             length, _clientEndpoint);
                         break;
                     }

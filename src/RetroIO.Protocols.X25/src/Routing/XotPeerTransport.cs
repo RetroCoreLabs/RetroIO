@@ -301,9 +301,9 @@ namespace RetroIO.Protocols.X25.Transport
                         break;
                     }
 
-                    if (length > 4096 || length < 3)
+                    if (length > 4100 || length < 3)
                     {
-                        _logger.LogError("XOT peer {Name}: length {Length} from {Remote} is not a legal X.25 packet length (3..4096) - closing the connection", _owner.Name, length, RemoteText);
+                        _logger.LogError("XOT peer {Name}: length {Length} from {Remote} is not a legal X.25 packet length (3..4100) - closing the connection", _owner.Name, length, RemoteText);
                         break;
                     }
 

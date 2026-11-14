@@ -513,7 +513,7 @@ namespace RetroIO.Protocols.X25.Tests
             List<string> failures = new List<string>();
             receiver.FramingFailed += (linkId, reason) => failures.Add(reason);
 
-            // 0x2000 = 8192, twice the 4096-octet maximum.
+            // 0x2000 = 8192, about twice the 4100-octet maximum.
             receiver.ProcessBytes(new byte[] { 0x00, 0x00, 0x20, 0x00 });
 
             Assert.That(failures.Count, Is.EqualTo(1));
@@ -539,6 +539,44 @@ namespace RetroIO.Protocols.X25.Tests
 
                 Assert.That(failures.Count, Is.EqualTo(1), $"length {length} must be refused");
             }
+        }
+
+        /// <summary>
+        /// The largest legal XOT length is the largest X.25 packet: 4 header octets (modulo 128) and 4096 data octets,
+        /// 4100. It crosses; 4101 is refused. Before 2026-11-14 the limit was 4096 and a full-size data packet closed the
+        /// connection.
+        /// </summary>
+        [TestCase(4099)]
+        [TestCase(4100)]
+        public void Xot_TheLargestX25PacketCrosses(int length)
+        {
+            CapturingTransport sink = new CapturingTransport();
+            XotFrameCodec sender = new XotFrameCodec("A", sink);
+            XotFrameCodec receiver = new XotFrameCodec("B", new CapturingTransport());
+            byte[] payload = new byte[length];
+            for (int i = 0; i < payload.Length; i++)
+            {
+                payload[i] = (byte)(i * 31);
+            }
+
+            List<byte[]> received = RoundTrip(sender, sink, receiver, payload);
+
+            Assert.That(received.Count, Is.EqualTo(1));
+            Assert.That(received[0], Is.EqualTo(payload));
+        }
+
+        [Test]
+        public void Xot_OneOctetOverTheLargestPacket_IsRefused()
+        {
+            XotFrameCodec sender = new XotFrameCodec("A", new CapturingTransport());
+            XotFrameCodec receiver = new XotFrameCodec("B", new CapturingTransport());
+            List<string> failures = new List<string>();
+            receiver.FramingFailed += (linkId, reason) => failures.Add(reason);
+
+            Assert.Throws<ArgumentException>(() => sender.SendFrame(new byte[4101]));
+            receiver.ProcessBytes(new byte[] { 0x00, 0x00, 0x10, 0x05 });   // length 4101
+
+            Assert.That(failures.Count, Is.EqualTo(1));
         }
 
         [Test]
