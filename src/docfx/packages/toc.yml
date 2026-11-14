@@ -63,12 +63,14 @@
     href: ../../RetroIO.Protocols.Xmsg.Ndfs/README.md
   - name: RetroIO.Protocols.Xmsg.Node
     href: ../../RetroIO.Protocols.Xmsg.Node/README.md
-  - name: RetroIO.Protocols.Xmsg.Plugins
-    href: ../../RetroIO.Protocols.Xmsg.Plugins/README.md
   - name: RetroIO.Protocols.Xmsg.Plugins.Client
     href: ../../RetroIO.Protocols.Xmsg.Plugins.Client/README.md
   - name: RetroIO.Protocols.Xmsg.Plugins.Contracts
     href: ../../RetroIO.Protocols.Xmsg.Plugins.Contracts/README.md
+  - name: RetroIO.Protocols.Xmsg.Plugins
+    href: ../../RetroIO.Protocols.Xmsg.Plugins/README.md
+  - name: RetroIO.Protocols.Xmsg.Programs
+    href: ../../RetroIO.Protocols.Xmsg.Programs/README.md
   - name: RetroIO.Protocols.Xmsg.Servers
     href: ../../RetroIO.Protocols.Xmsg.Servers/README.md
   - name: RetroIO.Protocols.Xmsg.Sync
