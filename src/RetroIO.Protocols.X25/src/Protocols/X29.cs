@@ -926,7 +926,12 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </returns>
         public byte[] CreatePadCallUserData()
         {
-            // According to X.25 spec: PAD CUD = 0x01000000 (X.29 PAD identifier)
+            // X.29 clause 4.2 (call user data format), 4.2.1 (protocol identifier format): the call user data starts
+            // with four octets, the protocol identifier. Octets 2 to 4 are all zero (verified against the 1992 text of
+            // Recommendation X.29, clause 4.2.1). The first octet 01 (the value that names the PAD) could not be
+            // read in that text; it is from measured behaviour: a Cisco router's PAD refuses a call without
+            // 01 00 00 00 and accepts it with. Not verified against the standard text.
+            // Every PAD call places this automatically (PadClient.Connect); no option switches it on.
             _logger?.LogDebug("X.29: Created PAD Call User Data");
             return new byte[] { 0x01, 0x00, 0x00, 0x00 };
         }
