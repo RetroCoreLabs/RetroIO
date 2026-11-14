@@ -527,6 +527,38 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         }
 
         /// <inheritdoc/>
+        public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters requested)
+        {
+            lock (_sync)
+            {
+                if (!_linkUp)
+                {
+                    return 0;
+                }
+
+                return _layer.PlaceCall(calledAddress, callingAddress, callUserData, requested);
+            }
+        }
+
+        /// <inheritdoc/>
+        public bool TryGetCallParameters(ushort lci, out X25CallParameters parameters)
+        {
+            lock (_sync)
+            {
+                return _layer.TryGetCallParameters(lci, out parameters);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void AcceptCall(ushort lci, X25CallParameters agreed)
+        {
+            lock (_sync)
+            {
+                _layer.AcceptCall(lci, agreed);
+            }
+        }
+
+        /// <inheritdoc/>
         public void AcceptCall(ushort lci)
         {
             lock (_sync)

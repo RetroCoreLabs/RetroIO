@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using RetroIO.Protocols.X25.PacketLayer;
 using RetroIO.Protocols.X25.Switch.Model;
 using RetroIO.Protocols.X25.Switch.Ports;
 
@@ -146,7 +147,22 @@ namespace RetroIO.Protocols.X25.Switch
             }
 
             // Place the onward call; a zero LCI means the egress port could not initiate it.
-            ushort outLci = outPort.PlaceCall(calledAddress, callingAddress, callUserData);
+            // X.25 6.9 and 6.12: the window and packet size of a call are negotiated end to end. The onward Call Request
+            // asks for what the caller asked for (the directions swapped: what the caller sends, the callee receives),
+            // limited to the largest packet the egress port is set up for. Asking for the switch's own defaults here made
+            // the caller think it had the sizes it asked for while the callee ran with others, and the first big packet
+            // reset the call.
+            ushort outLci;
+            if (inPort.TryGetCallParameters(inLci, out X25CallParameters asked))
+            {
+                X25CallParameters toAsk = asked.Swapped().WithPacketSizeAtMost(outPort.Config.MaxPacketSize);
+                outLci = outPort.PlaceCall(calledAddress, callingAddress, callUserData, toAsk);
+            }
+            else
+            {
+                outLci = outPort.PlaceCall(calledAddress, callingAddress, callUserData);
+            }
+
             if (outLci == 0)
             {
                 inPort.ClearCall(inLci, CauseNotObtainable, 0);
@@ -181,7 +197,17 @@ namespace RetroIO.Protocols.X25.Switch
             }
 
             stitch.Active = true;
-            stitch.InPort.AcceptCall(stitch.InLci);
+
+            // The Call Accepted to the caller states what the far end agreed to in its Call Connected (X.25 7.2.2.1), with
+            // the directions swapped back.
+            if (stitch.OutPort.TryGetCallParameters(stitch.OutLci, out X25CallParameters agreed))
+            {
+                stitch.InPort.AcceptCall(stitch.InLci, agreed.Swapped());
+            }
+            else
+            {
+                stitch.InPort.AcceptCall(stitch.InLci);
+            }
         }
 
         private void OnDataReceived(ISwitchPort port, ushort lci, byte[] data, int length, bool qBit, bool mBit, bool dBit)
