@@ -141,7 +141,7 @@ A written transport that is none of these makes `SwitchConfigLoader` throw `Inva
 also read `lapb_t1`, `lapb_t2`, `lapb_t3`, `lapb_n2` and `lapb_k` (defaults T1 3000 ms, T2 0, T3 30000 ms, N2 10,
 K 7; modulo 8 only). Values that cannot work are refused when the port is made, naming the port and the key.
 `HdlcSerialSwitchPort` has a second constructor that takes the function that opens the line, so a test can give it
-an in-memory stream in place of a UART. The real serial device is not exercised by the tests in this repository.
+an in-memory stream in place of a UART. The real serial device is not exercised by the tests in this repository; the RetroX25 repository tests it on two real USB serial ports (`SerialHdlcLoopbackTests`, which skip themselves without the ports).
 
 The link layer is `LapbStation` from `RetroIO.Link`, over `LapbLayer`. `LapbLayer` counts `LinkResets` (a SABM or an
 FRMR received on a link that was up, and our own re-establish after N2 tries) and raises `OnLinkReset`.
