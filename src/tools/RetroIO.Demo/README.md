@@ -14,7 +14,7 @@ An interactive console application that mounts a disk image, lists it, reads a f
 
 Two uses, and they are different audiences.
 
-**As a reader**: it is the shortest path from "RetroIO has forty-four packages" to "this is how you open an image
+**As a reader**: it is the shortest path from "RetroIO has fifty-one packages" to "this is how you open an image
 and read a file". The library is big; this shows the five calls you actually need.
 
 **As a user**: it is a quick way to look inside an image without a file manager. Mount it, see the directory,

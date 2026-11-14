@@ -4,7 +4,7 @@
 
 **XMSG** — the Norsk Data inter-process and inter-machine messaging system that SINTRAN III and COSMOS are
 built on. This package is the wire layer: the frame format, the codec, and the decoded vocabulary of every
-service, function, error and status code. It is also the index for the twelve-package XMSG family.
+service, function, error and status code. It is also the index for the eighteen-package XMSG family.
 
 ## Why you need it
 
@@ -150,7 +150,7 @@ flowchart TB
 
 | Package | Reach for it when you want to |
 |---|---|
-| `Protocols.Xmsg` | Parse or build a frame; look up a code | this file |
+| `Protocols.Xmsg` (this file) | Parse or build a frame; look up a code |
 | [`.Xmsg.Api`](../RetroIO.Protocols.Xmsg.Api/README.md) | Call XMSG the way a SINTRAN task would; RR-LIB; XROUT |
 | [`.Xmsg.Api.Node`](../RetroIO.Protocols.Xmsg.Api.Node/README.md) | Expose the kernel as a server |
 | [`.Xmsg.Node`](../RetroIO.Protocols.Xmsg.Node/README.md) | Run a node: sessions, sequences, relay, TAD sessions |
@@ -164,6 +164,10 @@ flowchart TB
 | [`.Xmsg.Sync`](../RetroIO.Protocols.Xmsg.Sync/README.md) | Synchronise folders with a SINTRAN machine |
 | [`.Xmsg.Ndfs`](../RetroIO.Protocols.Xmsg.Ndfs/README.md) | SINTRAN directory entries and a file store |
 | [`.Xmsg.Diagnostics`](../RetroIO.Protocols.Xmsg.Diagnostics/README.md) | Dump a frame, or round-trip it through JSON |
+| [`.Xmsg.Plugins`](../RetroIO.Protocols.Xmsg.Plugins/README.md) | Let separate plug-in server programs, in any language, use the node over gRPC |
+| [`.Xmsg.Plugins.Client`](../RetroIO.Protocols.Xmsg.Plugins.Client/README.md) | Write a C# plug-in server program that connects to a node |
+| [`.Xmsg.Plugins.Contracts`](../RetroIO.Protocols.Xmsg.Plugins.Contracts/README.md) | The gRPC contract (`.proto` and generated code) between a node and a plug-in server |
+| [`.Xmsg.Programs`](../RetroIO.Protocols.Xmsg.Programs/README.md) | The toolkit every XMSG program shares: command framework and the machinery around it |
 
 ## Contents, by area
 

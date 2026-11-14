@@ -1,6 +1,6 @@
 # RetroIO
 
-Storage, filesystems and communications for retro computing: forty-four NuGet packages that read
+Storage, filesystems and communications for retro computing: fifty-one NuGet packages that read
 and write the disk formats, and speak the network protocols, of machines built between roughly 1975
 and 1995. The source, the issues and the releases are on
 [GitHub](https://github.com/RetroCoreLabs/RetroIO).
