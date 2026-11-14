@@ -125,10 +125,11 @@ the tests report green against stale code.
 | `src/tests/` | Test projects that span several packages and so belong to none of them |
 | `src/tools/` | Dev-only applications, never shipped as packages |
 | `src/eng/` | Shared MSBuild files (`src/eng/build/`), the package icon, and the dev scripts |
-| `DOC` | Junction to the NDInsight XMSG research notes the protocol code cites — not RetroIO's own docs |
-| `demo/test-images` | Junction to the disk-image test corpus |
+| `src/DOC` | A tracked folder of **copies** of the public part of the NDInsight XMSG research notes (protocol registry, captured file-server traffic) that the XMSG tests read. The source of truth is NDInsight; see `src/DOC/README.md` |
+| `src/tests/demo/test-images` | The disk-image test corpus. Not in git (listed in `.gitignore`); `src/eng/fetch-test-images.ps1` downloads it |
 
-Both junctions are created by `src/eng/setup-test-data.ps1` and are in `.gitignore`.
+`src/eng/setup-test-data.ps1` makes directory junctions too, but it puts them **beside** the
+repositories, one level above this one, never inside it.
 
 The repository root holds only `README.md`, `LICENSE` and the GitHub files. The solution, the shared
 build settings (`Directory.*.props`), `global.json`, `nuget.config` and `build.ps1` live in `src/`,
