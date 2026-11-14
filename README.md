@@ -1,7 +1,7 @@
 # RetroIO
 
 **Storage, filesystems and communications for retro computing** — the library half of
-[RetroCore Labs](https://github.com/RetroCoreLabs). Forty-four NuGet packages that read and write
+[RetroCore Labs](https://github.com/RetroCoreLabs). Fifty-one NuGet packages that read and write
 the disk formats, and speak the network protocols, of machines built between roughly 1975 and 1995.
 
 [![build](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/build.yml/badge.svg)](https://github.com/RetroCoreLabs/RetroIO/actions/workflows/build.yml)
@@ -56,12 +56,12 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 ## Status
 
 Version `0.1.0`, published to the local folder feed as `0.1.0-local.<timestamp>`. Nothing is
-on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
+on nuget.org yet, and `src/CHANGELOG.md` has only an `[Unreleased]` section so far.
 
-- **Forty-four packages.** Nothing in `src/` has a `Main` - the library and application split is
+- **Fifty-one packages.** Nothing in `src/` has a `Main` - the library and application split is
   enforced by the layout, not by convention. A clean restore and build give no warnings, and the
   GitHub build and test run is green.
-- **Thirteen test projects.** The X.25 packet layer and the C emulator `x25emu` read the
+- **Eighteen test projects.** The X.25 packet layer and the C emulator `x25emu` read the
   **same** conformance vectors, so a disagreement between the two implementations is a
   failing test rather than an argument.
 - **Not yet measured:** throughput of any driver or protocol. No performance number is
@@ -157,7 +157,7 @@ flowchart TB
         DriveWire["Protocols.DriveWire"]
         Econet["Protocols.Econet"]
         X25["Protocols.X25.*<br/>ten packages"]
-        Xmsg["Protocols.Xmsg.*<br/>twelve packages"]
+        Xmsg["Protocols.Xmsg.*<br/>eighteen packages"]
     end
 
     subgraph LINK["Link layer - shared by the wire protocols"]
@@ -217,7 +217,7 @@ flowchart TB
 | `RetroIO.Protocols.DriveWire` | DriveWire 4: Dragon and CoCo disk images served as virtual drives over TCP, for an emulator's Becker port | [README](src/RetroIO.Protocols.DriveWire/README.md) |
 | `RetroIO.Protocols.Econet` | Acorn Econet over AUN, including a Level-3 file server and its `*` commands | [README](src/RetroIO.Protocols.Econet/README.md) |
 | **X.25 — ten packages** | Packet layer, client, switch, routing, monitor, NMC, SINTRAN, runtime | [family index](src/RetroIO.Protocols.X25/README.md) |
-| **XMSG — twelve packages** | The ND messaging system: codec, kernel API, file access, chat, sync, Ethernet, node | [family index](src/RetroIO.Protocols.Xmsg/README.md) |
+| **XMSG — eighteen packages** | The ND messaging system: codec, kernel API, file access, chat, sync, Ethernet, node | [family index](src/RetroIO.Protocols.Xmsg/README.md) |
 
 ### Link layer
 
@@ -264,13 +264,13 @@ the library honest: if an app needs a type that is not public, the package is wr
 
 ```mermaid
 flowchart LR
-    RIO["RetroIO<br/>44 packages"]
+    RIO["RetroIO<br/>51 packages"]
     PACK["src\eng\publish-local.ps1"]
     FEED["../localfeed<br/>0.1.0-local.&lt;stamp&gt;"]
 
     SRV["RetroServer<br/>daemon + RetroAdmin"]
     CMD["RetroCommander<br/>file manager"]
-    X25["RetroX25<br/>ten X.25 apps"]
+    X25["RetroX25<br/>nine X.25 apps"]
     XMSG["RetroXmsg<br/>hub + runner"]
 
     RIO --> PACK --> FEED
@@ -295,14 +295,14 @@ the first publish. That is expected and is not a broken build.
 
 ## How it is tested
 
-Thirteen test projects and one shared-fixture project. Most live beside the package they test, in `src/<Package>/tests/`; the ones
-that span packages live in `tests/`.
+Eighteen test projects and one shared-fixture project. Sixteen live beside the package they test, in `src/<Package>/tests/`; the two
+that span packages live in `src/tests/`.
 
 | Project | Covers |
 |---|---|
 | `src/RetroIO.Storage.Local/tests` | The format drivers, against real disk images |
-| `src/RetroIO.Management.Api/tests` | The REST API and the hub |
-| `src/RetroIO.Protocols.Xmsg/tests` and eight more `Xmsg.*` | The XMSG codec, kernel API, chat, Ethernet, live, NDFS, node, sync |
+| `src/RetroIO.Management.Api/tests` and `src/RetroIO.Protocols.DriveWire/tests` | The REST API and the hub; the DriveWire server |
+| `src/RetroIO.Protocols.Xmsg/tests` and twelve more `Xmsg.*` (Api, Api.Node, Chat, Ethernet, Hosting, Hub, Live, Ndfs, Node, Plugins, Programs, Sync) | The XMSG codec, kernel API, chat, Ethernet, hosting, hub, live, NDFS, node, plug-ins, programs, sync |
 | `src/tests/RetroIO.Protocols.X25.Tests` | The X.25 stack across packages |
 | `src/tests/RetroIO.Tests` | Everything that belongs to no single package |
 | `src/tests/RetroIO.Protocols.Xmsg.TestSupport` | Shared fixtures, not a test project itself |
