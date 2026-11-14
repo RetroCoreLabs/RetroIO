@@ -36,6 +36,13 @@ before adding anything new to it.
 - Driving a GUI: `PacketDisplayManager` filters and collapses the packet list, and
   `PacketDisplayUpdateEventArgs` carries real-time updates with relationship visibility.
 - Running without hardware: the serial port has a mock mode (`MockSerialEventArgs`).
+- **A telnet PAD.** `TelnetPadServer` listens for telnet connections and gives each one its own
+  `PadClient`, so a person with a telnet program can act as an X.28 terminal on the network. It is
+  switched by `RuntimeConfig.TelnetPad` (`Enabled`, `Port`, `BindAddress`, `MaxSessions`). It is off
+  by default, listens on `127.0.0.1` port 2323, and has no login, so bind it wider only on purpose.
+  `ProtocolRuntime.TelnetPadStatus` says off, listening or failed (for example port in use), and a
+  failed listen does not stop the runtime. `ProtocolRuntime.ApplyTelnetPadConfig()` applies a changed
+  setting.
 
 ## Prerequisites
 
