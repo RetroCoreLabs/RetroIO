@@ -41,8 +41,10 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 - **Read and write vintage disk images** — NDFS, D64/T64/TAP/CRT/PRG/P00, DragonDOS, FAT12/16/32,
   V7, FFS, ADFS and more — without knowing their on-disk layouts.
 - **Serve files to a real 8-bit machine** over **TNFS**, or to a BBC Micro over **Econet/AUN**.
-- **Build an X.25 network**: packet layer, LAPB, a switching engine, routing, monitoring. XOT (X.25
-  over TCP) is **not implemented yet** - see [Known problems](#known-problems).
+- **Build an X.25 network**: packet layer, LAPB, a switching engine, routing, monitoring, and XOT
+  (X.25 over TCP, RFC 1613). XOT carries real traffic through `XotSwitchPort`, `XotPeerTransport`
+  and the `X25Client` framing, and is tested against a Cisco router. One part is missing: the
+  incoming-call answer in `XotServerTransport` (see [Known problems](#known-problems)).
 - **Talk to a SINTRAN machine** with **XMSG** — file access, chat, the XROUT name service, the
   request/response library, and the kernel API a SINTRAN task would have called.
 - **Put a management API on any of it** — REST plus SignalR push, with users, groups and a firewall.
@@ -69,8 +71,10 @@ on nuget.org yet, and `CHANGELOG.md` has one entry: the first import.
 
 Found by a read-only review on 2026-10-15. Each one is a real defect, not a plan.
 
-- **XOT is not implemented.** The XOT classes in the X.25 routing code count statistics and report
-  success without sending anything. Do not rely on them.
+- **`XotServerTransport` cannot answer a call.** `AcceptCall` and `RejectCall` throw
+  `NotSupportedException`, because the class does not remember which TCP connection a call came in
+  on. The rest of XOT works: use `XotSwitchPort`, `XotPeerTransport` or `X25Client` for XOT traffic.
+  Listed in `src/BUGS.md`.
 - **Part of the SINTRAN PVC server guesses.** `SintranPvcServer` chooses a route from the first byte
   of the call user data (`0x01`, `0x02`, `0x03`, `0xDD`). That rule was not taken from a capture, and
   the source comment says so.
@@ -221,7 +225,7 @@ flowchart TB
 |---|---|---|
 | `RetroIO.Hdlc` | HDLC framing: flags, transparency, frame check sequence | [README](src/RetroIO.Hdlc/README.md) |
 | `RetroIO.Lapb` | LAPB, the X.25 data link layer, with both dialects | [README](src/RetroIO.Lapb/README.md) |
-| `RetroIO.Link` | Links as a concept: serial and TCP-LAPB behind one interface (XOT is not implemented yet) | [README](src/RetroIO.Link/README.md) |
+| `RetroIO.Link` | Links as a concept: serial and TCP-LAPB behind one interface (`XotLink` carries XOT) | [README](src/RetroIO.Link/README.md) |
 
 ### Cross-cutting
 
