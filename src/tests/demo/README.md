@@ -1,5 +1,12 @@
 # X.25 C# demo network
 
+> **This copy does not work in RetroIO.** It is a leftover of the demo from before the code was split
+> into libraries and applications. `demo.ps1` and `demo.sh` start programs from `apps/X25Emulator.*`,
+> `crossenv-test.ps1` runs `Tests/X25Emulator.Tests.csproj`, and this file points to
+> `docs/X25_ADDRESSES.md`. None of those exist in this repository. The working demo is in the
+> RetroX25 repository, folder `src/demo`. Only the ignored `test-images` folder here is still in use
+> (by the tests). The text below describes the old layout.
+
 A self-contained demo of three chained C# switches with an echo service, so you can
 place a call end-to-end, watch it in the Avalonia monitor GUI, and drive the
 management CLIs.
