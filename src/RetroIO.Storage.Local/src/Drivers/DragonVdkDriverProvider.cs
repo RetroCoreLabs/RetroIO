@@ -21,6 +21,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public override string FileSystemType => "DragonDOS";
 
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".vdk" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+
         /// <summary>
         /// Gets the human-readable description of the Dragon VDK image format.
         /// </summary>
@@ -40,8 +47,7 @@ namespace RetroIO.Storage.Local.Drivers
             float confidence = 0.0f;
 
             // 1. Check file extension
-            string ext = hints.FileExtension.ToLowerInvariant();
-            if (ext == ".vdk")
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.3f;
             }

@@ -38,6 +38,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public override string FileSystemType => "FFS";
 
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".ffs", ".ufs", ".img", ".dsk" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+
         /// <summary>
         /// Gets the human-readable description of the Berkeley Fast File System format.
         /// </summary>
@@ -57,8 +64,7 @@ namespace RetroIO.Storage.Local.Drivers
             float confidence = 0.0f;
 
             // 1. Check file extension (weak signal)
-            string ext = hints.FileExtension.ToLowerInvariant();
-            if (ext == ".ffs" || ext == ".ufs" || ext == ".img" || ext == ".dsk")
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.05f;  // Very weak signal (many formats use these extensions)
             }

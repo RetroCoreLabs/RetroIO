@@ -19,6 +19,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public override string FileSystemType => "DragonDOS-DMK";
 
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".dmk" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+
         /// <summary>
         /// Gets the description of the provider.
         /// </summary>
@@ -38,7 +45,7 @@ namespace RetroIO.Storage.Local.Drivers
         {
             float confidence = 0.0f;
 
-            if (hints.FileExtension.ToLowerInvariant() == ".dmk")
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.4f;
             }

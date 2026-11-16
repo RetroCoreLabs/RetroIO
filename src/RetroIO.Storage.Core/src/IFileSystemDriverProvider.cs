@@ -31,6 +31,19 @@ namespace RetroIO.Storage.Core
         int RequiredHeaderBytes => 512;
 
         /// <summary>
+        /// Gets the file extensions this format is normally stored under, lower case with the
+        /// leading dot (for example ".d64").
+        /// </summary>
+        /// <remarks>
+        /// This is the ONE list for the format: the provider's own detection uses it as its
+        /// extension signal, and programs use it to know which files to offer or to link to
+        /// themselves in the operating system. An extension is only a hint - detection still
+        /// reads the file. Empty when the format has no usual extension. The default is empty so
+        /// providers written outside this library keep compiling.
+        /// </remarks>
+        System.Collections.Generic.IReadOnlyList<string> FileExtensions => System.Array.Empty<string>();
+
+        /// <summary>
         /// Analyzes detection hints to determine confidence that the file matches this filesystem format.
         /// Factory reads the file ONCE and provides the same hints to all drivers for efficiency.
         /// HeaderBytes will contain at least RequiredHeaderBytes bytes (or entire file if smaller).

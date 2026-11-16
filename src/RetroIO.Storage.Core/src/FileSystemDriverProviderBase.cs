@@ -50,6 +50,41 @@ namespace RetroIO.Storage.Core
         public virtual int RequiredHeaderBytes => 512;
 
         /// <summary>
+        /// Gets the file extensions this format is normally stored under, lower case with the
+        /// leading dot (for example ".d64"). Default is empty.
+        /// </summary>
+        /// <remarks>
+        /// Override with the format's list, and use <see cref="HasKnownFileExtension"/> in
+        /// <see cref="DetectConfidence"/> so detection and this list can never disagree.
+        /// </remarks>
+        public virtual System.Collections.Generic.IReadOnlyList<string> FileExtensions => Array.Empty<string>();
+
+        /// <summary>
+        /// Checks whether the file being detected has one of <see cref="FileExtensions"/>
+        /// (case does not matter).
+        /// </summary>
+        /// <param name="hints">
+        /// Detection hints for the file
+        /// </param>
+        /// <returns>
+        /// True when the file's extension is in <see cref="FileExtensions"/>
+        /// </returns>
+        protected bool HasKnownFileExtension(DetectionHints hints)
+        {
+            System.Collections.Generic.IReadOnlyList<string> extensions = FileExtensions;
+            string fileExtension = hints.FileExtension;
+            for (int i = 0; i < extensions.Count; i++)
+            {
+                if (string.Equals(fileExtension, extensions[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Analyzes detection hints to determine confidence that the file matches this filesystem format.
         /// Default implementation returns 0.0 (no detection).
         /// Override to provide detection logic.
