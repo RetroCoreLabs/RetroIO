@@ -21,6 +21,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public override string FileSystemType => "PC-Floppy";
 
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".img", ".ima", ".vfd", ".flp" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+
         /// <summary>
         /// Gets the human-readable description of the PC floppy image formats.
         /// </summary>
@@ -40,8 +47,7 @@ namespace RetroIO.Storage.Local.Drivers
             float confidence = 0.0f;
 
             // 1. Check file extension
-            string ext = hints.FileExtension.ToLowerInvariant();
-            if (ext == ".img" || ext == ".ima" || ext == ".vfd" || ext == ".flp")
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.2f;
             }

@@ -20,6 +20,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the file system type identifier of this provider: <c>P00</c>.
         /// </summary>
         public override string FileSystemType => "P00";
+
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".p00" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
         /// <summary>
         /// Gets the human-readable description of the PC64 P00 program container format.
         /// </summary>
@@ -51,7 +58,7 @@ namespace RetroIO.Storage.Local.Drivers
                 return 0.0f; // without the signature it is not a P00
             }
 
-            if (hints.FileExtension.Equals(".p00", StringComparison.OrdinalIgnoreCase))
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.25f;
             }

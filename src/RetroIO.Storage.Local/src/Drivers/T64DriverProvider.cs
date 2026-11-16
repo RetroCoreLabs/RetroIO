@@ -24,6 +24,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public override string FileSystemType => "T64";
 
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".t64" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+
         /// <summary>
         /// Gets the human-readable description of the Commodore T64 tape archive format.
         /// </summary>
@@ -38,7 +45,7 @@ namespace RetroIO.Storage.Local.Drivers
             float confidence = 0.0f;
 
             // 1. Check file extension (weak signal, fast)
-            if (hints.FileExtension.Equals(".t64", StringComparison.OrdinalIgnoreCase))
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.3f;
             }

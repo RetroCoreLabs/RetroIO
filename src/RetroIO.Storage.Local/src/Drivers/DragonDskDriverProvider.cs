@@ -22,6 +22,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public override string FileSystemType => "DragonDOS-DSK";
 
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".dsk", ".jvc" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+
         /// <summary>
         /// Gets the human-readable description of the Dragon DSK and JVC image formats.
         /// </summary>
@@ -42,8 +49,7 @@ namespace RetroIO.Storage.Local.Drivers
             float confidence = 0.0f;
 
             // 1. Check file extension
-            string ext = hints.FileExtension.ToLowerInvariant();
-            if (ext == ".dsk" || ext == ".jvc")
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.3f;
             }

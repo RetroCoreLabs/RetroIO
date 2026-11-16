@@ -404,6 +404,42 @@ namespace RetroIO.Storage.Local
         }
 
         /// <summary>
+        /// Gets every file extension the registered providers know, each listed once, lower case
+        /// with the leading dot, sorted (for example ".d64", ".d81", ".img").
+        /// </summary>
+        /// <remarks>
+        /// Built from each provider's <see cref="IFileSystemDriverProvider.FileExtensions"/>, the same
+        /// list its detection uses. Several formats can share one extension (".img" is used by PC
+        /// floppies, BSD and FFS); detection reads the file to tell them apart.
+        /// </remarks>
+        /// <returns>
+        /// The known extensions; empty when no provider lists any
+        /// </returns>
+        public string[] GetKnownFileExtensions()
+        {
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> result = new List<string>();
+
+            Dictionary<string, IFileSystemDriverProvider>.Enumerator enumerator = _providers.GetEnumerator();
+            while (enumerator.MoveNext())
+            {
+                IReadOnlyList<string> extensions = enumerator.Current.Value.FileExtensions;
+                for (int i = 0; i < extensions.Count; i++)
+                {
+                    string extension = extensions[i].ToLowerInvariant();
+                    if (seen.Add(extension))
+                    {
+                        result.Add(extension);
+                    }
+                }
+            }
+            enumerator.Dispose();
+
+            result.Sort(StringComparer.Ordinal);
+            return result.ToArray();
+        }
+
+        /// <summary>
         /// Gets the maximum header bytes required by all registered providers.
         /// </summary>
         private int GetMaxRequiredHeaderBytes()

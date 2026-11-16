@@ -21,6 +21,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the file system type identifier of this provider: <c>PRG</c>.
         /// </summary>
         public override string FileSystemType => "PRG";
+
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".prg" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
         /// <summary>
         /// Gets the human-readable description of the Commodore PRG program file format.
         /// </summary>
@@ -52,7 +59,7 @@ namespace RetroIO.Storage.Local.Drivers
                 return 0.0f;
             }
             // PRG has no content signature — the extension is the only reliable hint.
-            if (hints.FileExtension.Equals(".prg", StringComparison.OrdinalIgnoreCase))
+            if (HasKnownFileExtension(hints))
             {
                 return 0.6f;
             }

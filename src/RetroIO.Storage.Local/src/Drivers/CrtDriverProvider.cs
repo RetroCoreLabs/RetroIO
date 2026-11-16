@@ -19,6 +19,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the file system type identifier of this provider: <c>CRT</c>.
         /// </summary>
         public override string FileSystemType => "CRT";
+
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".crt" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
         /// <summary>
         /// Gets the human-readable description of the Commodore CRT cartridge format.
         /// </summary>
@@ -48,7 +55,7 @@ namespace RetroIO.Storage.Local.Drivers
             {
                 return 0.0f;
             }
-            if (hints.FileExtension.Equals(".crt", StringComparison.OrdinalIgnoreCase))
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.25f;
             }

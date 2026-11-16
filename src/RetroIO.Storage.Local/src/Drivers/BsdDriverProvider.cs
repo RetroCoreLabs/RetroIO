@@ -36,6 +36,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// </summary>
         public override string FileSystemType => "V7";
 
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".bsd", ".img", ".dsk" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+
         /// <summary>
         /// Gets the human-readable description of the UNIX V7 format.
         /// </summary>
@@ -50,8 +57,7 @@ namespace RetroIO.Storage.Local.Drivers
             float confidence = 0.0f;
 
             // 1. Check file extension (weak signal)
-            string ext = hints.FileExtension.ToLowerInvariant();
-            if (ext == ".bsd" || ext == ".img" || ext == ".dsk")
+            if (HasKnownFileExtension(hints))
             {
                 confidence += 0.05f;  // Very weak signal (many formats use these extensions)
             }

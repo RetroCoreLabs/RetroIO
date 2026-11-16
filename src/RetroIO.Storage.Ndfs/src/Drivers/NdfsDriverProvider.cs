@@ -17,7 +17,12 @@ namespace RetroIO.Storage.Ndfs.Drivers
     /// </summary>
     public sealed class NdfsDriverProvider : FileSystemDriverProviderBase
     {
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] SupportedExtensions = { ".nd", ".ndfs", ".nord", ".ndf" };
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => SupportedExtensions;
 
         /// <summary>
         /// Gets the filesystem type identifier this provider handles.
@@ -63,8 +68,7 @@ namespace RetroIO.Storage.Ndfs.Drivers
                 return 0.0f;
 
             // Check extension first for confidence boost
-            bool hasNdfsExtension = Array.Exists(SupportedExtensions,
-                ext => string.Equals(hints.FileExtension, ext, StringComparison.OrdinalIgnoreCase));
+            bool hasNdfsExtension = HasKnownFileExtension(hints);
 
             // Check if we have enough header data
             if (hints.HeaderBytes == null || hints.HeaderBytes.Length < NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE)
