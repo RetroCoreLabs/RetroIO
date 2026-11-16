@@ -5,6 +5,9 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
+using System.Collections.Generic;
+
 namespace RetroIO.Storage.Core
 {
     /// <summary>
@@ -41,7 +44,7 @@ namespace RetroIO.Storage.Core
         /// reads the file. Empty when the format has no usual extension. The default is empty so
         /// providers written outside this library keep compiling.
         /// </remarks>
-        System.Collections.Generic.IReadOnlyList<string> FileExtensions => System.Array.Empty<string>();
+        IReadOnlyList<string> FileExtensions => Array.Empty<string>();
 
         /// <summary>
         /// Analyzes detection hints to determine confidence that the file matches this filesystem format.

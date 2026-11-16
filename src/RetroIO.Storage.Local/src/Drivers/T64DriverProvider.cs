@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using RetroIO.Storage.Core;
@@ -19,17 +20,22 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class T64DriverProvider : FileSystemDriverProviderBase
     {
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".t64" };
+
         /// <summary>
         /// Gets the file system type identifier of this provider: <c>T64</c>.
         /// </summary>
         public override string FileSystemType => "T64";
 
-        // The one extension list for this format: detection below uses it, and programs read it
-        // through FileExtensions (for example to link these files to themselves).
-        private static readonly string[] KnownExtensions = { ".t64" };
-
-        /// <inheritdoc/>
-        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+        /// <summary>
+        /// Gets the extensions this format is stored under: .t64.
+        /// </summary>
+        /// <remarks>
+        /// Detection uses the same list as its extension signal.
+        /// </remarks>
+        public override IReadOnlyList<string> FileExtensions => KnownExtensions;
 
         /// <summary>
         /// Gets the human-readable description of the Commodore T64 tape archive format.

@@ -5,6 +5,8 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
+using System.Collections.Generic;
 using RetroIO.Storage.Core;
 
 namespace RetroIO.Storage.Local.Drivers
@@ -14,17 +16,22 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonDmkDriverProvider : FileSystemDriverProviderBase
     {
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".dmk" };
+
         /// <summary>
         /// Gets the name of the file system type this provider handles.
         /// </summary>
         public override string FileSystemType => "DragonDOS-DMK";
 
-        // The one extension list for this format: detection below uses it, and programs read it
-        // through FileExtensions (for example to link these files to themselves).
-        private static readonly string[] KnownExtensions = { ".dmk" };
-
-        /// <inheritdoc/>
-        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+        /// <summary>
+        /// Gets the extensions this format is stored under: .dmk.
+        /// </summary>
+        /// <remarks>
+        /// Detection uses the same list as its extension signal.
+        /// </remarks>
+        public override IReadOnlyList<string> FileExtensions => KnownExtensions;
 
         /// <summary>
         /// Gets the description of the provider.
