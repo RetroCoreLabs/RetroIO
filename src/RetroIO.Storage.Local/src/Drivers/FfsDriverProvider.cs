@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.FFS.Core;
@@ -33,17 +34,22 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class FfsDriverProvider : FileSystemDriverProviderBase
     {
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".ffs", ".ufs", ".img", ".dsk" };
+
         /// <summary>
         /// Gets the file system type identifier of this provider: <c>FFS</c>.
         /// </summary>
         public override string FileSystemType => "FFS";
 
-        // The one extension list for this format: detection below uses it, and programs read it
-        // through FileExtensions (for example to link these files to themselves).
-        private static readonly string[] KnownExtensions = { ".ffs", ".ufs", ".img", ".dsk" };
-
-        /// <inheritdoc/>
-        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+        /// <summary>
+        /// Gets the extensions this format is stored under: .ffs, .ufs, .img, .dsk.
+        /// </summary>
+        /// <remarks>
+        /// Detection uses the same list as its extension signal.
+        /// </remarks>
+        public override IReadOnlyList<string> FileExtensions => KnownExtensions;
 
         /// <summary>
         /// Gets the human-readable description of the Berkeley Fast File System format.

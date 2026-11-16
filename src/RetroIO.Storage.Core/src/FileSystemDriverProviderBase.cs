@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace RetroIO.Storage.Core
@@ -57,32 +58,7 @@ namespace RetroIO.Storage.Core
         /// Override with the format's list, and use <see cref="HasKnownFileExtension"/> in
         /// <see cref="DetectConfidence"/> so detection and this list can never disagree.
         /// </remarks>
-        public virtual System.Collections.Generic.IReadOnlyList<string> FileExtensions => Array.Empty<string>();
-
-        /// <summary>
-        /// Checks whether the file being detected has one of <see cref="FileExtensions"/>
-        /// (case does not matter).
-        /// </summary>
-        /// <param name="hints">
-        /// Detection hints for the file
-        /// </param>
-        /// <returns>
-        /// True when the file's extension is in <see cref="FileExtensions"/>
-        /// </returns>
-        protected bool HasKnownFileExtension(DetectionHints hints)
-        {
-            System.Collections.Generic.IReadOnlyList<string> extensions = FileExtensions;
-            string fileExtension = hints.FileExtension;
-            for (int i = 0; i < extensions.Count; i++)
-            {
-                if (string.Equals(fileExtension, extensions[i], StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        public virtual IReadOnlyList<string> FileExtensions => Array.Empty<string>();
 
         /// <summary>
         /// Analyzes detection hints to determine confidence that the file matches this filesystem format.
@@ -107,5 +83,30 @@ namespace RetroIO.Storage.Core
         /// New filesystem driver instance
         /// </returns>
         public abstract IFileSystemDriver CreateDriver();
+
+        /// <summary>
+        /// Checks whether the file being detected has one of <see cref="FileExtensions"/>
+        /// (case does not matter).
+        /// </summary>
+        /// <param name="hints">
+        /// Detection hints for the file
+        /// </param>
+        /// <returns>
+        /// True when the file's extension is in <see cref="FileExtensions"/>
+        /// </returns>
+        protected bool HasKnownFileExtension(DetectionHints hints)
+        {
+            IReadOnlyList<string> extensions = FileExtensions;
+            string fileExtension = hints.FileExtension;
+            for (int i = 0; i < extensions.Count; i++)
+            {
+                if (string.Equals(fileExtension, extensions[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

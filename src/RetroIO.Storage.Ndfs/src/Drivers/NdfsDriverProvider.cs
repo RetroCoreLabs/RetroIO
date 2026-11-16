@@ -5,6 +5,8 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
+using System.Collections.Generic;
 using System.Text;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Ndfs.BlockDevices;
@@ -21,8 +23,13 @@ namespace RetroIO.Storage.Ndfs.Drivers
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] SupportedExtensions = { ".nd", ".ndfs", ".nord", ".ndf" };
 
-        /// <inheritdoc/>
-        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => SupportedExtensions;
+        /// <summary>
+        /// Gets the extensions this format is stored under: .nd, .ndfs, .nord, .ndf.
+        /// </summary>
+        /// <remarks>
+        /// Detection uses the same list as its extension signal.
+        /// </remarks>
+        public override IReadOnlyList<string> FileExtensions => SupportedExtensions;
 
         /// <summary>
         /// Gets the filesystem type identifier this provider handles.

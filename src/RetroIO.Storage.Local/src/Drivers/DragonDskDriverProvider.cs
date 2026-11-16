@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using RetroIO.Storage.Core;
 
 namespace RetroIO.Storage.Local.Drivers
@@ -17,17 +18,22 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonDskDriverProvider : FileSystemDriverProviderBase
     {
+        // The one extension list for this format: detection below uses it, and programs read it
+        // through FileExtensions (for example to link these files to themselves).
+        private static readonly string[] KnownExtensions = { ".dsk", ".jvc" };
+
         /// <summary>
         /// Gets the file system type identifier of this provider: <c>DragonDOS-DSK</c>.
         /// </summary>
         public override string FileSystemType => "DragonDOS-DSK";
 
-        // The one extension list for this format: detection below uses it, and programs read it
-        // through FileExtensions (for example to link these files to themselves).
-        private static readonly string[] KnownExtensions = { ".dsk", ".jvc" };
-
-        /// <inheritdoc/>
-        public override System.Collections.Generic.IReadOnlyList<string> FileExtensions => KnownExtensions;
+        /// <summary>
+        /// Gets the extensions this format is stored under: .dsk, .jvc.
+        /// </summary>
+        /// <remarks>
+        /// Detection uses the same list as its extension signal.
+        /// </remarks>
+        public override IReadOnlyList<string> FileExtensions => KnownExtensions;
 
         /// <summary>
         /// Gets the human-readable description of the Dragon DSK and JVC image formats.
