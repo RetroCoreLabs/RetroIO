@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.PacketLayer;
 using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Runtime.Transport;
 using RetroIO.Protocols.X25.Transport;
@@ -83,7 +84,7 @@ namespace RetroIO.Protocols.X25.Tests
         /// Builds a runtime with one mock serial interface, starts it, and captures every byte the
         /// runtime writes to the line.
         /// </summary>
-        private void Build(SerialX25LinkOptions? options)
+        private void Build(SerialX25LinkOptions? options, bool answerAutomatically = true)
         {
             SerialInterfaceConfig serial = new SerialInterfaceConfig
             {
@@ -91,6 +92,7 @@ namespace RetroIO.Protocols.X25.Tests
                 PortName = "MOCK" + MockPort,
                 RemoteMachineId = "REMOTE1",
                 X25Link = options,
+                AnswerIncomingCallsAutomatically = answerAutomatically,
             };
 
             RuntimeConfig config = new RuntimeConfig { TestMode = true };
@@ -696,6 +698,119 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(_transport.PlaceCall(new X25CallRequest("300", LocalMachineId)), Is.False);
             Assert.That(SentFrames(), Is.Empty);
+        }
+
+        // ------------------------------------------------------------------ waiting for the program's answer (2026-11-17)
+        //
+        // X.25 4.1.4: "The called DTE shall indicate its acceptance of the call by transferring across
+        // the DTE/DCE interface a call accepted packet specifying the same logical channel as that of
+        // the incoming call packet. This places the specified logical channel in the data transfer
+        // state (p4). If the called DTE does not accept the call by a call accepted packet or does not
+        // reject it by a clear request packet as described in 4.1.7 within time-out T11 (see Annex D),
+        // the DCE will consider it as a procedure error from the called DTE and will clear the virtual
+        // call according to the procedure described in 4.1.8." Table D.1: T11 = 180 s, on expiry a
+        // clear indication with local procedure error # 49.
+
+        [Test]
+        public void TheDefault_IsToAnswerAutomatically()
+        {
+            Assert.That(new SerialInterfaceConfig().AnswerIncomingCallsAutomatically, Is.True,
+                "nothing that works today may change: a line answers by itself unless told to wait");
+        }
+
+        /// <summary>
+        /// Brings the link up and sends a Call Request on channel 5 to a line that waits for the
+        /// program. Returns the call the transport offered.
+        /// </summary>
+        private X25CallRequest OfferACallOnChannel5()
+        {
+            Build(Dce(), answerAutomatically: false);
+            List<X25CallRequest> offered = new List<X25CallRequest>();
+            _transport.IncomingCall += (s, e) => offered.Add(e);
+
+            Inject(Frame(AddressB, Sabm));
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+
+            Assert.That(offered.Count, Is.EqualTo(1), "a waiting line must offer the call to the program once");
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "no Call Accepted may go out before the program answers");
+            Assert.That(CountPacketsOfType(0x13), Is.EqualTo(0), "no Clear Request may go out before the program answers");
+            Assert.That(offered[0].CalledAddress, Is.EqualTo(LocalMachineId));
+            Assert.That(offered[0].CallingAddress, Is.EqualTo(CallingAddress));
+            return offered[0];
+        }
+
+        private PacketLayer.X25Vc Channel5()
+        {
+            X25Endpoint? endpoint = _runtime.EndpointForTest(_transport);
+            Assert.That(endpoint, Is.Not.Null, "the line's X.25 engine must exist");
+            return endpoint!.Layer.Circuits[5];
+        }
+
+        private byte[] LastPacketOfType(byte pti)
+        {
+            byte[]? found = null;
+            List<byte[]> packets = SentInformationPackets();
+            for (int i = 0; i < packets.Count; i++)
+            {
+                if (packets[i].Length > 2 && packets[i][2] == pti)
+                {
+                    found = packets[i];
+                }
+            }
+
+            Assert.That(found, Is.Not.Null, "no packet of type 0x" + pti.ToString("X2") + " was sent");
+            return found!;
+        }
+
+        [Test]
+        public void WaitMode_AcceptCall_SendsCallAccepted_AndTheChannelIsInDataTransfer()
+        {
+            X25CallRequest call = OfferACallOnChannel5();
+            Assert.That(Channel5().State, Is.EqualTo(PacketLayer.X25VcState.CallIncoming), "the call waits in p3");
+
+            bool accepted = _transport.AcceptCall(call);
+
+            Assert.That(accepted, Is.True);
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1), "exactly one Call Accepted (type 0x0F, Table 5-1)");
+            Assert.That(LastPacketOfType(0x0F)[1], Is.EqualTo((byte)5), "on the channel of the incoming call");
+            Assert.That(Channel5().State, Is.EqualTo(PacketLayer.X25VcState.DataTransfer), "4.1.4: the channel enters p4");
+            Assert.That(_transport.AcceptCall(call), Is.False, "a call can be answered once");
+        }
+
+        [Test]
+        public void WaitMode_RejectCall_SendsAClearRequestWithTheGivenCause()
+        {
+            X25CallRequest call = OfferACallOnChannel5();
+
+            bool rejected = _transport.RejectCall(call, X25Cause.AccessBarred);
+
+            Assert.That(rejected, Is.True);
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "a refused call is never accepted");
+            byte[] clear = LastPacketOfType(0x13);
+            Assert.That(clear[1], Is.EqualTo((byte)5), "on the channel of the incoming call");
+            Assert.That(clear[3], Is.EqualTo(X25Cause.AccessBarred), "the cause the program gave (Table 5-7: 0x0B access barred)");
+            Assert.That(clear[4], Is.EqualTo((byte)0), "diagnostic 0");
+            Assert.That(Channel5().State, Is.EqualTo(PacketLayer.X25VcState.ClearRequest), "4.1.7: the channel is clearing (p6)");
+        }
+
+        [Test]
+        public void WaitMode_NoAnswer_IsClearedWhenT11RunsOut()
+        {
+            X25CallRequest call = OfferACallOnChannel5();
+            X25Endpoint endpoint = _runtime.EndpointForTest(_transport)!;
+
+            // Short of T11 nothing happens. The engine's clock is driven by hand through Tick.
+            endpoint.Tick(Environment.TickCount64 + 170_000);
+            Assert.That(CountPacketsOfType(0x13), Is.EqualTo(0), "T11 is 180 s (Table D.1); it has not run out");
+
+            endpoint.Tick(Environment.TickCount64 + 181_000);
+
+            byte[] clear = LastPacketOfType(0x13);
+            Assert.That(clear[1], Is.EqualTo((byte)5));
+            Assert.That(clear[3], Is.EqualTo(X25Cause.ClearingLocalProcedureError), "Table D.1: local procedure error (this line is the DCE)");
+            Assert.That(clear[4], Is.EqualTo(X25Diagnostic.TimeExpiredCall), "Table D.1: # 49");
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0));
+            Assert.That(_transport.AcceptCall(call), Is.False, "a call cleared at T11 can no longer be accepted");
         }
 
         // ------------------------------------------------------------------ the data link on its own

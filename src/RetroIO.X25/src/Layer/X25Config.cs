@@ -51,6 +51,22 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public int CallRequestTimeoutMs { get; set; } = 200000;
 
         /// <summary>
+        /// Time an incoming call may wait for its answer (T11) in milliseconds. X.25 Table D.1 (DCE
+        /// time-outs): T11 = 180 s, started when the DCE issues an incoming call (state p3), ended when
+        /// a call accepted, clear request or call request is received; on expiry the call is cleared
+        /// with local procedure error # 49. X.25 4.1.4 gives the rule it enforces: a call neither
+        /// accepted nor refused within T11 is a procedure error of the called DTE and is cleared.
+        /// </summary>
+        /// <remarks>
+        /// Table D.1 is a DCE table. At a DTE X.25 gives the called side no timer of its own (the DCE
+        /// across the interface runs T11); this engine applies the same limit at a DTE too, so an
+        /// incoming call nobody answers never holds its channel for ever when the far end does not
+        /// time it out. A DTE that clears there sends a plain Clear Request (cause 0, DTE originated),
+        /// which X.25 4.1.7 allows at any time in p3.
+        /// </remarks>
+        public int IncomingCallTimeoutMs { get; set; } = 180000;
+
+        /// <summary>
         /// Reset-request timer (T22) duration in milliseconds.
         /// </summary>
         public int ResetRequestTimeoutMs { get; set; } = 180000;

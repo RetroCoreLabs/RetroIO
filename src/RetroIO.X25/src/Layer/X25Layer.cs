@@ -144,6 +144,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public long CallTimeouts { get; private set; }
 
         /// <summary>
+        /// Incoming calls that were neither accepted nor cleared in time and were cleared by this
+        /// engine (T11 expired, X.25 4.1.4 and Table D.1).
+        /// </summary>
+        public long IncomingCallTimeouts { get; private set; }
+
+        /// <summary>
         /// Reset Requests that were never confirmed through every retransmission (T22).
         /// </summary>
         public long ResetTimeouts { get; private set; }
@@ -1284,6 +1290,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     case X25VcState.CallRequest:
                         OnT21Expired(vc, nowMs);
                         break;
+                    case X25VcState.CallIncoming:
+                        OnT11Expired(vc, nowMs);
+                        break;
                     case X25VcState.ResetRequest:
                         OnT22Expired(vc, nowMs);
                         break;
@@ -1335,6 +1344,21 @@ namespace RetroIO.Protocols.X25.PacketLayer
         private void OnT21Expired(X25Vc vc, long nowMs)
         {
             CallTimeouts++;
+            BeginClear(vc, ProcedureErrorCause(), X25Diagnostic.TimeExpiredCall, nowMs);
+            ReportCleared(vc, vc.Cause, vc.Diagnostic);
+        }
+
+        /// <summary>
+        /// T11 (p3), X.25 4.1.4 and Table D.1: an incoming call neither accepted nor cleared within
+        /// T11 is "a procedure error from the called DTE" and the call is cleared - at a DCE with a
+        /// clear indication, "local procedure error # 49". The cause comes from
+        /// <see cref="ProcedureErrorCause"/> (local procedure error at a DCE, 0 at a DTE, see
+        /// <see cref="X25Config.IncomingCallTimeoutMs"/>) and the diagnostic is 49, time expired for
+        /// incoming call. The application was offered the call, so it is told the call is gone.
+        /// </summary>
+        private void OnT11Expired(X25Vc vc, long nowMs)
+        {
+            IncomingCallTimeouts++;
             BeginClear(vc, ProcedureErrorCause(), X25Diagnostic.TimeExpiredCall, nowMs);
             ReportCleared(vc, vc.Cause, vc.Diagnostic);
         }
@@ -1616,6 +1640,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.OtherFacilities = requested.PassThrough;
             vc.ClearFacilities = System.Array.Empty<byte>();
 
+            // T11 (Table D.1) runs from the moment the call is offered until it is answered. It is
+            // armed BEFORE the offer: an owner that answers inside the event (AcceptCall or ClearCall)
+            // stops it there, and one that answers later stops it then. Until 2026-11-17 there was
+            // no T11 at all, so a call nobody answered sat in p3 for ever.
+            vc.TimerExpiryMs = Now() + _config.IncomingCallTimeoutMs;
             RaiseIncomingCall(lci, info.CalledAddress, info.CallingAddress, info.CallUserData);
         }
 

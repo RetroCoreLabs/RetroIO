@@ -9,7 +9,6 @@ using System;
 
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
-using RetroIO.Protocols.X25.Sintran;
 namespace RetroIO.Protocols.X25.Runtime.Models
 {
     /// <summary>

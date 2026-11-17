@@ -38,7 +38,6 @@ using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Runtime.Transport;
-using RetroIO.Protocols.X25.Sintran;
 using RetroIO.Protocols.X25.Transport;
 
 namespace RetroIO.Protocols.X25.Tests

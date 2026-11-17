@@ -118,6 +118,17 @@ namespace RetroIO.Protocols.X25
         public System.Collections.Generic.List<string> AcceptedX121Ranges { get; set; } = new System.Collections.Generic.List<string>();
 
         /// <summary>
+        /// Server mode: how an incoming call on one of this entry's connections is answered. True
+        /// (the default): the runtime answers at once - Call Accepted when a local service takes the
+        /// call, a Clear Request when none does. False: the call is offered to the program through
+        /// the server transport's <c>IncomingCall</c> event and waits for <c>AcceptCall</c> or
+        /// <c>RejectCall</c>; a call not answered within T11 (X.25 4.1.4, Table D.1: 180 s) is
+        /// cleared by the connection's X.25 engine. Passed on to
+        /// <see cref="Transport.XotServerConfig.AnswerIncomingCallsAutomatically"/>.
+        /// </summary>
+        public bool AnswerIncomingCallsAutomatically { get; set; } = true;
+
+        /// <summary>
         /// TCP keepalive settings (equivalent to Cisco tcp-keepalives)
         /// </summary>
         public bool TcpKeepalive { get; set; } = true;

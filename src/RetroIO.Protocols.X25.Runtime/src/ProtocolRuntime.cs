@@ -23,8 +23,6 @@ using RetroIO.Protocols.X25.Runtime.Layers;
 using RetroIO.Protocols.X25.Runtime.Models;
 using RetroIO.Protocols.X25.Runtime.Transport;
 using RetroIO.Protocols.X25.Services;
-using RetroIO.Protocols.X25.Sintran;
-using RetroIO.Protocols.X25.Sintran.Services;
 using RetroIO.Protocols.X25.Transport;
 
 namespace RetroIO.Protocols.X25.Runtime
@@ -132,9 +130,6 @@ namespace RetroIO.Protocols.X25.Runtime
         // Local XMSG protocol handler
         private readonly LocalXMSGProtocol _localXmsgProtocol;
 
-        // SINTRAN PVC server for SINTRAN-specific protocols
-        private readonly SintranPvcServer _sintranPvcServer;
-
         // Protocol detection service
         private readonly Services.X25ProtocolDetectionService _protocolDetection;
         private readonly Services.ProtocolServiceRegistry _protocolServices;
@@ -161,10 +156,6 @@ namespace RetroIO.Protocols.X25.Runtime
         // PAD client lifecycle management
         private readonly Dictionary<string, Modules.PadClient> _padClients = new();
         private int _padClientIdCounter = 0;
-
-        // SINTRAN TAD client lifecycle management
-        private readonly Dictionary<string, RetroIO.Protocols.X25.Sintran.SintranTadClient> _sintranTadClients = new();
-        private int _sintranTadClientIdCounter = 0;
 
         // History ring buffer
         private readonly Queue<HistoryItem> _historyBuffer = new();
@@ -232,10 +223,6 @@ namespace RetroIO.Protocols.X25.Runtime
 
             // Initialize local XMSG protocol handler
             _localXmsgProtocol = new LocalXMSGProtocol(logger, config.X25.LocalMachineId);
-
-            // Initialize SINTRAN PVC server
-            _sintranPvcServer = new SintranPvcServer(logger);
-            _sintranPvcServer.Initialize();  // Initialize terminal ID pool and handlers
 
             // Initialize protocol detection service
             _protocolDetection = new Services.X25ProtocolDetectionService(logger);
@@ -1474,10 +1461,16 @@ namespace RetroIO.Protocols.X25.Runtime
                 ListenPort = xotConfig.LocalPort,
                 MaxConnections = 100, // Default value since MaxConnections doesn't exist in XotInterfaceConfig
                 AcceptedX121Ranges = new List<string>(xotConfig.AcceptedX121Ranges),
+                AnswerIncomingCallsAutomatically = xotConfig.AnswerIncomingCallsAutomatically,
                 Listeners = _xotListeners // shares the port with any XOT peer entry on it
             };
 
-            return new XotServerTransport(_logger, serverConfig);
+            // The program's answer to a call offered by a waiting entry goes to the X.25 engine of the
+            // connection the call came in on (ProtocolRuntime.X25Endpoints.cs, AcceptOfferedCall).
+            XotServerTransport transport = new XotServerTransport(_logger, serverConfig);
+            transport.PacketLayerAcceptCall = AcceptOfferedCall;
+            transport.PacketLayerRejectCall = RejectOfferedCall;
+            return transport;
         }
 
         /// <summary>
@@ -1523,6 +1516,15 @@ namespace RetroIO.Protocols.X25.Runtime
 
             try
             {
+                // A call offered to the program by an entry that waits for its answer (see
+                // OnEndpointIncomingCall) arrives here too; the program answers it through the
+                // transport's AcceptCall / RejectCall, so there is nothing to do and nothing wrong.
+                if ((sender is XotServerTransport xotServer && !xotServer.AnswerIncomingCallsAutomatically)
+                    || (sender is SerialTransport serial && !serial.AnswerIncomingCallsAutomatically))
+                {
+                    return;
+                }
+
                 // A transport that owns an X25Endpoint never gets here: its call is decoded by its
                 // own engine and routed by OnEndpointIncomingCall, which answers through the engine.
                 // What is left is a transport with no engine, and there is no way to answer a call
@@ -1819,7 +1821,8 @@ namespace RetroIO.Protocols.X25.Runtime
                 BaudRate = serialConfig.BaudRate,
                 LocalX121Address = serialConfig.RemoteMachineId,
                 Description = serialConfig.Description,
-                X25Link = serialConfig.X25Link
+                X25Link = serialConfig.X25Link,
+                AnswerIncomingCallsAutomatically = serialConfig.AnswerIncomingCallsAutomatically
             };
 
             return new SerialTransport(_logger, this, transportConfig);
@@ -2927,7 +2930,8 @@ namespace RetroIO.Protocols.X25.Runtime
                 {
                     byte protocolId = _linkProtocolDetector.ExtractSintranProtocolId(payload, length);
 
-                    // TODO: Route SINTRAN frame to the SINTRAN PVC server.
+                    // No handler takes a SINTRAN-framed payload here: the "SINTRAN PVC server" this
+                    // once pointed at modelled traffic that does not exist and was removed 2026-11-17.
                     _logger.LogInformation("LinkManager: SINTRAN frame from {LinkName} (Protocol: 0x{ProtocolId:X2}) - routing not yet implemented",
                         link.Name, protocolId);
                     return;
@@ -3076,17 +3080,10 @@ namespace RetroIO.Protocols.X25.Runtime
                 var tadServer = new Modules.TadServer(_logger, this);
                 RegisterModule(tadServer);
 
-                // Register SINTRAN PVC server for SINTRAN system protocols
-                RegisterModule(_sintranPvcServer);
-
-                // NOTE: Packet routing for SINTRAN PVC server is now handled by SintranTadProtocolService
-                // which subscribes to PacketGenerated and properly handles direction flipping + history creation
-
                 // Note: TAD server routing is now handled by centralized routing system
                 // The RoutingConfigExample shows how to configure LocalTAD route
 
                 _logger.LogInformation("[Services] Initialized built-in TAD server for address 200");
-                _logger.LogInformation("[Services] Initialized SINTRAN PVC server for SINTRAN protocols");
             }
             catch (Exception ex)
             {
@@ -3124,14 +3121,6 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Get access to the SINTRAN PVC server for SINTRAN protocol handling
-        /// </summary>
-        public SintranPvcServer GetSintranPvcServer()
-        {
-            return _sintranPvcServer;
-        }
-
-        /// <summary>
         /// Get access to the protocol detection service
         /// </summary>
         public Services.X25ProtocolDetectionService GetProtocolDetectionService()
@@ -3160,17 +3149,16 @@ namespace RetroIO.Protocols.X25.Runtime
                 var tadService = new Services.TadProtocolService(_logger, _localTadProtocol, this, localMachineId);
                 _protocolServices.RegisterService(tadService);
 
-                // Register SINTRAN TAD protocol service for addresses 100, 101, 102
-                // These addresses are used for SINTRAN terminal connections with automatic terminal ID assignment
-                var sintranTadService = new RetroIO.Protocols.X25.Sintran.Services.SintranTadProtocolService(_logger, _sintranPvcServer, this, "100", "101", "102");
-                _protocolServices.RegisterService(sintranTadService);
+                // Until 2026-11-17 a "SINTRAN TAD" service was registered here for addresses 100, 101
+                // and 102 (package RetroIO.Protocols.X25.Sintran). It modelled SINTRAN traffic over X.25
+                // that does not exist - SINTRAN over X.25 is X.29 PAD/TAD (the TAD service above) or
+                // XMSG's own TAD (the RetroIO XMSG node) - and was removed with its package.
 
                 // Register XMSG protocol service for the local machine ID
                 var xmsgService = new Services.XmsgProtocolService(_logger, _localXmsgProtocol, localMachineId);
                 _protocolServices.RegisterService(xmsgService);
 
                 _logger.LogInformation("Registered protocol services for local machine ID '{LocalMachineId}'", localMachineId);
-                _logger.LogInformation("Registered SINTRAN TAD service for addresses: 100, 101, 102");
             }
             catch (Exception ex)
             {
@@ -3246,81 +3234,6 @@ namespace RetroIO.Protocols.X25.Runtime
                 var keys = new string[_padClients.Count];
                 int i = 0;
                 foreach (var key in _padClients.Keys)
-                {
-                    keys[i++] = key;
-                }
-                return keys;
-            }
-        }
-
-        /// <summary>
-        /// Create and register a SINTRAN TAD client for outbound connections
-        /// </summary>
-        public RetroIO.Protocols.X25.Sintran.SintranTadClient CreateSintranTadClient(string name = "SintranTadClient")
-        {
-            var tadClient = new RetroIO.Protocols.X25.Sintran.SintranTadClient(_logger, this, name);
-            tadClient.Name = name;
-            RegisterModule(tadClient);
-            return tadClient;
-        }
-
-        /// <summary>
-        /// Create a managed SINTRAN TAD client with unique ID
-        /// </summary>
-        public string CreateManagedSintranTadClient(string? name = null)
-        {
-            lock (_routingLock)
-            {
-                var clientId = $"SINTRAN_TAD_{++_sintranTadClientIdCounter}";
-                var clientName = name ?? clientId;
-                var tadClient = new RetroIO.Protocols.X25.Sintran.SintranTadClient(_logger, this, clientName);
-                tadClient.Name = clientName;
-                RegisterModule(tadClient);
-                _sintranTadClients[clientId] = tadClient;
-                _logger.LogInformation("Created managed SINTRAN TAD client {ClientId} with name {ClientName}", clientId, clientName);
-                return clientId;
-            }
-        }
-
-        /// <summary>
-        /// Get a managed SINTRAN TAD client by ID
-        /// </summary>
-        public RetroIO.Protocols.X25.Sintran.SintranTadClient? GetSintranTadClient(string clientId)
-        {
-            lock (_routingLock)
-            {
-                return _sintranTadClients.TryGetValue(clientId, out var tadClient) ? tadClient : null;
-            }
-        }
-
-        /// <summary>
-        /// Dispose a managed SINTRAN TAD client
-        /// </summary>
-        public bool DisposeSintranTadClient(string clientId)
-        {
-            lock (_routingLock)
-            {
-                if (_sintranTadClients.TryGetValue(clientId, out var tadClient))
-                {
-                    tadClient.Dispose();
-                    _sintranTadClients.Remove(clientId);
-                    _logger.LogInformation("Disposed managed SINTRAN TAD client {ClientId}", clientId);
-                    return true;
-                }
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Get all managed SINTRAN TAD client IDs
-        /// </summary>
-        public string[] GetSintranTadClientIds()
-        {
-            lock (_routingLock)
-            {
-                var keys = new string[_sintranTadClients.Count];
-                int i = 0;
-                foreach (var key in _sintranTadClients.Keys)
                 {
                     keys[i++] = key;
                 }
@@ -3424,17 +3337,6 @@ namespace RetroIO.Protocols.X25.Runtime
                     {
                         _logger.LogDebug("Found TAD service for PAD client on LCN {LCN}", lcn);
                         return tadService;
-                    }
-                }
-
-                // For SINTRAN TAD clients (which connect to SINTRAN TAD services), find the SINTRAN_TAD service
-                if (module is RetroIO.Protocols.X25.Sintran.SintranTadClient)
-                {
-                    var sintranTadService = _protocolServices.GetService("SINTRAN_TAD");
-                    if (sintranTadService != null)
-                    {
-                        _logger.LogDebug("Found SINTRAN_TAD service for SintranTadClient on LCN {LCN}", lcn);
-                        return sintranTadService;
                     }
                 }
 
@@ -4617,7 +4519,7 @@ namespace RetroIO.Protocols.X25.Runtime
                         eventArgs.Packet.PacketType, lcn, module.Name);
 
                     // OnX25Event is a first-class member of IProtocolModule, so dispatch polymorphically
-                    // to ANY bound module (PadClient, SintranTadClient, and app-provided modules such as
+                    // to ANY bound module (PadClient and app-provided modules such as
                     // the console-app clients built on this runtime). No concrete type-checking required.
                     module.OnX25Event(eventArgs);
                 }
@@ -4755,17 +4657,6 @@ namespace RetroIO.Protocols.X25.Runtime
 
                 // Stop all transport interfaces
                 StopTransportInterfaces();
-
-                // Shutdown SINTRAN PVC server
-                try
-                {
-                    _sintranPvcServer?.Shutdown();
-                    _logger.LogInformation("SINTRAN PVC server shut down successfully");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error shutting down SINTRAN PVC server");
-                }
 
                 // Stop all LAPB timers
                 StopT1Timer();

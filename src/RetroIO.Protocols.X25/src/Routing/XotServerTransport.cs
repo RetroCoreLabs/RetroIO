@@ -87,52 +87,110 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Always throws, because answering a call with a Call Accepted packet is not implemented.
+        /// Gets a value telling how incoming calls are answered: true (the default) when the runtime
+        /// answers them at once, false when each call is offered through <see cref="IncomingCall"/>
+        /// and waits for <see cref="AcceptCall"/> or <see cref="RejectCall"/>.
+        /// </summary>
+        public bool AnswerIncomingCallsAutomatically => _config.AnswerIncomingCallsAutomatically;
+
+        /// <summary>
+        /// Set by the runtime that owns this transport: hands a program's "accept" to the X.25
+        /// engine of the connection the call arrived on. Null while no runtime owns the transport.
         /// </summary>
         /// <remarks>
-        /// The transport does not track which TCP connection a call arrived on, so it cannot send a
-        /// Call Accepted packet back to the caller. Earlier code counted the call as accepted and
-        /// returned <c>true</c> without sending anything; that hid the missing mechanism.
+        /// The engine lives in the runtime package, which this package does not reference; the same
+        /// pattern as <c>XotPeerTransport.PacketLayerPlaceCall</c>.
+        /// </remarks>
+        public Func<X25CallRequest, bool>? PacketLayerAcceptCall { get; set; }
+
+        /// <summary>
+        /// Set by the runtime that owns this transport: hands a program's "refuse, with this cause"
+        /// to the X.25 engine of the connection the call arrived on. Null while no runtime owns it.
+        /// </summary>
+        public Func<X25CallRequest, byte, bool>? PacketLayerRejectCall { get; set; }
+
+        /// <summary>
+        /// Accepts an incoming call that was offered through <see cref="IncomingCall"/>.
+        /// </summary>
+        /// <remarks>
+        /// X.25 4.1.4: "The called DTE shall indicate its acceptance of the call by transferring ...
+        /// a call accepted packet specifying the same logical channel as that of the incoming call
+        /// packet. This places the specified logical channel in the data transfer state (p4)." The
+        /// answer goes to the X.25 engine of the connection the call came in on, which sends the
+        /// Call Accepted. The runtime first gives the call to the local service its route names,
+        /// the same as it does for a call it answers automatically; a call no service takes is
+        /// cleared instead (cause 0x0D, not obtainable) and false is returned. Until 2026-11-17 this
+        /// method threw <see cref="NotSupportedException"/>; before that it sent nothing and
+        /// returned true.
         /// </remarks>
         /// <param name="callRequest">
-        /// The call request that would be accepted.
+        /// The call exactly as it was raised by <see cref="IncomingCall"/>.
         /// </param>
         /// <returns>
-        /// Never returns.
+        /// True when the Call Accepted went out; false when the call is not (or no longer) waiting
+        /// for an answer - already answered, cleared by the caller, or timed out by T11 - or when no
+        /// service took it.
         /// </returns>
-        /// <exception cref="NotSupportedException">
-        /// Always thrown: accepting an incoming call on the XOT server transport is not implemented.
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="callRequest"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no runtime owns this transport, so no X.25 engine can send the answer.
         /// </exception>
         public bool AcceptCall(X25CallRequest callRequest)
         {
-            throw new NotSupportedException(
-                "XotServerTransport.AcceptCall is not implemented: the server transport cannot send a Call Accepted packet to the calling XOT connection.");
+            ArgumentNullException.ThrowIfNull(callRequest);
+            Func<X25CallRequest, bool> accept = PacketLayerAcceptCall
+                ?? throw new InvalidOperationException("XOT server transport " + Name + " has no X.25 engine to answer with: it is not owned by a protocol runtime.");
+            return accept(callRequest);
         }
 
         /// <summary>
-        /// Always throws, because clearing a call with a Clear Request packet is not implemented.
+        /// Refuses an incoming call that was offered through <see cref="IncomingCall"/>.
         /// </summary>
         /// <remarks>
-        /// The transport does not track which TCP connection a call arrived on, so it cannot send a
-        /// Clear Request packet with the cause code back to the caller. Earlier code counted the call
-        /// as rejected and returned <c>true</c> without sending anything; that hid the missing mechanism.
+        /// X.25 4.1.4 and 4.1.7: the called DTE refuses a call with a clear request packet. The
+        /// answer goes to the X.25 engine of the connection the call came in on, which sends the
+        /// Clear Request with <paramref name="cause"/> and diagnostic 0. Until 2026-11-17 this method
+        /// threw <see cref="NotSupportedException"/>; before that it sent nothing and returned true.
         /// </remarks>
         /// <param name="callRequest">
-        /// The call request that would be rejected.
+        /// The call exactly as it was raised by <see cref="IncomingCall"/>.
         /// </param>
         /// <param name="cause">
-        /// The clear cause code that would be sent.
+        /// The clearing cause to send (X.25 Table 5-7), for example 0x0B for access barred.
         /// </param>
         /// <returns>
-        /// Never returns.
+        /// True when the Clear Request went out; false when the call is not (or no longer) waiting
+        /// for an answer.
         /// </returns>
-        /// <exception cref="NotSupportedException">
-        /// Always thrown: rejecting an incoming call on the XOT server transport is not implemented.
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="callRequest"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no runtime owns this transport, so no X.25 engine can send the answer.
         /// </exception>
         public bool RejectCall(X25CallRequest callRequest, byte cause)
         {
-            throw new NotSupportedException(
-                "XotServerTransport.RejectCall is not implemented: the server transport cannot send a Clear Request packet to the calling XOT connection.");
+            ArgumentNullException.ThrowIfNull(callRequest);
+            Func<X25CallRequest, byte, bool> reject = PacketLayerRejectCall
+                ?? throw new InvalidOperationException("XOT server transport " + Name + " has no X.25 engine to answer with: it is not owned by a protocol runtime.");
+            return reject(callRequest, cause);
+        }
+
+        /// <summary>
+        /// Offers an incoming call to the program through <see cref="IncomingCall"/>. Called by the
+        /// runtime when this entry waits for the program's answer
+        /// (<see cref="AnswerIncomingCallsAutomatically"/> false).
+        /// </summary>
+        /// <param name="callRequest">
+        /// The call; the program passes this same object back to <see cref="AcceptCall"/> or
+        /// <see cref="RejectCall"/>.
+        /// </param>
+        public void OfferIncomingCall(X25CallRequest callRequest)
+        {
+            _statistics.InboundCallsReceived++;
+            IncomingCall?.Invoke(this, callRequest);
         }
 
         /// <summary>
@@ -255,19 +313,22 @@ namespace RetroIO.Protocols.X25.Transport
             _statistics.ResetCounters();
         }
 
-#pragma warning disable CS0067 // Event required by interface, not used in this implementation
         /// <summary>
-        /// Required by the interface for incoming calls. The server transport never raises it.
+        /// Raised for an incoming call that waits for the program's answer
+        /// (<see cref="AnswerIncomingCallsAutomatically"/> false); never raised for an entry that
+        /// answers automatically.
         /// </summary>
         /// <remarks>
         /// Every packet from a client connection, a Call Request included, is raised through
         /// <see cref="DataReceived"/> and decoded by the X.25 engine the runtime keeps for that
-        /// connection (since 2026-09-06); the runtime raises and answers the call there, and applies
-        /// <see cref="XotServerConfig.AcceptedX121Ranges"/> through <see cref="AcceptsX121Address"/>.
-        /// The old handler that raised this event was never reached and was removed 2026-11-17.
+        /// connection (since 2026-09-06); the runtime applies
+        /// <see cref="XotServerConfig.AcceptedX121Ranges"/> through <see cref="AcceptsX121Address"/>
+        /// first, then either answers the call itself or offers it here through
+        /// <see cref="OfferIncomingCall"/>. The handler answers with <see cref="AcceptCall"/> or
+        /// <see cref="RejectCall"/>, inside the event or later; a call not answered within T11
+        /// (X.25 4.1.4, Table D.1: 180 s) is cleared by the engine.
         /// </remarks>
         public event EventHandler<X25CallRequest>? IncomingCall;
-#pragma warning restore CS0067
         /// <summary>
         /// Raised when the transport status changes, with the old status, the new status and the
         /// reason.
@@ -534,6 +595,14 @@ namespace RetroIO.Protocols.X25.Transport
         /// X.121 address patterns we accept calls for
         /// </summary>
         public List<string> AcceptedX121Ranges { get; set; } = new List<string>();
+
+        /// <summary>
+        /// True (the default): the runtime answers every incoming call at once. False: each call is
+        /// offered through <see cref="XotServerTransport.IncomingCall"/> and waits for the program's
+        /// <see cref="XotServerTransport.AcceptCall"/> or <see cref="XotServerTransport.RejectCall"/>,
+        /// until T11 (X.25 4.1.4, Table D.1: 180 s) runs out.
+        /// </summary>
+        public bool AnswerIncomingCallsAutomatically { get; set; } = true;
 
         /// <summary>
         /// Connection timeout in milliseconds

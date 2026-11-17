@@ -159,7 +159,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
         /// <summary>
         /// Absolute millisecond expiry of the active per-circuit timer, or 0 when no timer is armed.
-        /// The applicable timer depends on the state: call-request (T21), reset-request (T22),
+        /// The applicable timer depends on the state: call-request (T21), incoming call (T11), reset-request (T22),
         /// clear-request (T23).
         /// </summary>
         public long TimerExpiryMs { get; set; }

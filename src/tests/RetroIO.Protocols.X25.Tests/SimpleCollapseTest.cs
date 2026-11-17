@@ -14,7 +14,6 @@ using RetroIO.Protocols.X25;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Runtime.Models;
-using RetroIO.Protocols.X25.Sintran;
 using Xunit.Abstractions;
 
 namespace RetroIO.Protocols.X25.Tests

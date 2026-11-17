@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Runtime.Models;
-using RetroIO.Protocols.X25.Sintran;
 
 using RetroIO.Protocols.X25.Transport;
 namespace RetroIO.Protocols.X25.Runtime.Transport
@@ -123,50 +122,79 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         }
 
         /// <summary>
-        /// Always throws, because answering a call with a Call Accepted packet is not implemented.
+        /// Gets a value telling how incoming calls are answered: true (the default) when the runtime
+        /// answers them at once, false when each call is offered through <see cref="IncomingCall"/>
+        /// and waits for <see cref="AcceptCall"/> or <see cref="RejectCall"/>.
+        /// </summary>
+        public bool AnswerIncomingCallsAutomatically => _config.AnswerIncomingCallsAutomatically;
+
+        /// <summary>
+        /// Accepts an incoming call that was offered through <see cref="IncomingCall"/>.
         /// </summary>
         /// <remarks>
-        /// Earlier code logged "Would accept", counted the call as accepted and returned <c>true</c>
-        /// without sending anything on the serial link; that hid the missing mechanism.
+        /// X.25 4.1.4: "The called DTE shall indicate its acceptance of the call by transferring ...
+        /// a call accepted packet specifying the same logical channel as that of the incoming call
+        /// packet. This places the specified logical channel in the data transfer state (p4)." The
+        /// answer goes to this line's X.25 engine, which sends the Call Accepted in a LAPB I frame.
+        /// The runtime first gives the call to the local service its route names, the same as for a
+        /// call it answers automatically; a call no service takes is cleared instead (cause 0x0D, not
+        /// obtainable) and false is returned. Until 2026-11-17 this method threw
+        /// <see cref="NotSupportedException"/>; before that it logged "Would accept" and sent nothing.
         /// </remarks>
         /// <param name="callRequest">
-        /// The call request that would be accepted.
+        /// The call exactly as it was raised by <see cref="IncomingCall"/>.
         /// </param>
         /// <returns>
-        /// Never returns.
+        /// True when the Call Accepted went out; false when the call is not (or no longer) waiting
+        /// for an answer - already answered, cleared by the caller, or timed out by T11 - or when no
+        /// service took it.
         /// </returns>
-        /// <exception cref="NotSupportedException">
-        /// Always thrown: accepting an incoming call on the serial transport is not implemented.
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="callRequest"/> is null.
         /// </exception>
         public bool AcceptCall(X25CallRequest callRequest)
         {
-            throw new NotSupportedException(
-                "SerialTransport.AcceptCall is not implemented: no Call Accepted packet is put on the serial link.");
+            ArgumentNullException.ThrowIfNull(callRequest);
+            return _runtime.AcceptOfferedCall(callRequest);
         }
 
         /// <summary>
-        /// Always throws, because clearing a call with a Clear Request packet is not implemented.
+        /// Refuses an incoming call that was offered through <see cref="IncomingCall"/>.
         /// </summary>
         /// <remarks>
-        /// Earlier code logged "Would reject", counted the call as rejected and returned <c>true</c>
-        /// without sending anything on the serial link; that hid the missing mechanism.
+        /// X.25 4.1.4 and 4.1.7: the called DTE refuses a call with a clear request packet. The
+        /// answer goes to this line's X.25 engine, which sends the Clear Request with
+        /// <paramref name="cause"/> and diagnostic 0 in a LAPB I frame. Until 2026-11-17 this method
+        /// threw <see cref="NotSupportedException"/>; before that it logged "Would reject" and sent
+        /// nothing.
         /// </remarks>
         /// <param name="callRequest">
-        /// The call request that would be rejected.
+        /// The call exactly as it was raised by <see cref="IncomingCall"/>.
         /// </param>
         /// <param name="cause">
-        /// The clear cause code that would be sent.
+        /// The clearing cause to send (X.25 Table 5-7), for example 0x0B for access barred.
         /// </param>
         /// <returns>
-        /// Never returns.
+        /// True when the Clear Request went out; false when the call is not (or no longer) waiting
+        /// for an answer.
         /// </returns>
-        /// <exception cref="NotSupportedException">
-        /// Always thrown: rejecting an incoming call on the serial transport is not implemented.
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="callRequest"/> is null.
         /// </exception>
         public bool RejectCall(X25CallRequest callRequest, byte cause)
         {
-            throw new NotSupportedException(
-                "SerialTransport.RejectCall is not implemented: no Clear Request packet is put on the serial link.");
+            ArgumentNullException.ThrowIfNull(callRequest);
+            return _runtime.RejectOfferedCall(callRequest, cause);
+        }
+
+        /// <summary>
+        /// Offers an incoming call to the program through <see cref="IncomingCall"/>. Called by the
+        /// runtime when this line waits for the program's answer
+        /// (<see cref="AnswerIncomingCallsAutomatically"/> false).
+        /// </summary>
+        internal void OfferIncomingCall(X25CallRequest callRequest)
+        {
+            OnRuntimeIncomingCall(this, callRequest);
         }
 
         /// <summary>
@@ -296,28 +324,28 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         }
 
         /// <summary>
-        /// Raised when an incoming call is received.
+        /// Raised for an incoming call that waits for the program's answer
+        /// (<see cref="AnswerIncomingCallsAutomatically"/> false); never raised on a line that
+        /// answers automatically.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// This class never raises it, on purpose, the same as <c>XotClientTransport</c>. A Call
-        /// Request on a serial line is carried inside a LAPB I frame. When
+        /// A Call Request on a serial line is carried inside a LAPB I frame. When
         /// <see cref="SerialTransportConfig.X25Link"/> is set, this transport takes the line apart
         /// (HDLC framing, frame check sequence, LAPB) and raises <see cref="X25PacketReceived"/> with each
         /// X.25 packet. The runtime feeds those to the one X.25 engine it keeps for this line; the
-        /// engine decodes the Call Request, raises the incoming call once, the runtime routes it
-        /// once, and the engine puts the Call Accepted or the Clear Request back through
-        /// <see cref="SendPacket"/>.
+        /// engine decodes the Call Request and raises the incoming call once.
         /// </para>
         /// <para>
-        /// Raising this event as well would hand the same call to the router a second time, and the
-        /// runtime has no way to answer a call that comes in through this event (it has no engine
-        /// to answer with). The raw bytes are still reported through <see cref="DataReceived"/>.
+        /// On a line that answers automatically the runtime routes the call itself and the engine
+        /// puts the Call Accepted or the Clear Request back through <see cref="SendPacket"/>; this
+        /// event is not raised, so nothing routes the call twice. On a line that waits, the call is
+        /// offered here; the handler answers with <see cref="AcceptCall"/> or <see cref="RejectCall"/>,
+        /// inside the event or later, and a call not answered within T11 (X.25 4.1.4, Table D.1:
+        /// 180 s) is cleared by the engine.
         /// </para>
         /// </remarks>
-#pragma warning disable CS0067 // Required by the interface; see the remarks above for why it is not raised.
         public event EventHandler<X25CallRequest>? IncomingCall;
-#pragma warning restore CS0067
         /// <summary>
         /// Raised each time the transport status changes.
         /// </summary>
@@ -621,6 +649,14 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         /// which are not the same thing, and the X.25 text assigns no meaning to "primary".
         /// </remarks>
         public SerialX25LinkOptions? X25Link { get; set; }
+
+        /// <summary>
+        /// True (the default): the runtime answers every incoming call at once. False: each call is
+        /// offered through <see cref="SerialTransport.IncomingCall"/> and waits for the program's
+        /// <see cref="SerialTransport.AcceptCall"/> or <see cref="SerialTransport.RejectCall"/>,
+        /// until T11 (X.25 4.1.4, Table D.1: 180 s) runs out.
+        /// </summary>
+        public bool AnswerIncomingCallsAutomatically { get; set; } = true;
 
         /// <summary>
         /// Optional description of this interface
