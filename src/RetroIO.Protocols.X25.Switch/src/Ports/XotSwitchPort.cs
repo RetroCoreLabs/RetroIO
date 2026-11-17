@@ -1513,10 +1513,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             // RFC 1613 section 6: the channel number in an XOT packet "has no significance and has arbitrary values", and a
             // forwarding end sets it to the number of its own outgoing interface. So the answer to a call we dialled a
             // connection for may come back on another number than our Call Request went out on (x25emu answers a call sent on
-            // channel 16 with a Call Accepted on channel 1). A connection dialled for one call carries one circuit, so a
-            // Call Accepted or a Clear Request on an unknown channel can only belong to that circuit: bind the peer's number to it.
+            // channel 16 with a Call Accepted on channel 1). A connection carries one circuit (section 5), so a Call Accepted
+            // or a Clear Request on an unknown channel can only belong to that circuit: bind the peer's number to it.
+            //
+            // This holds whoever opened the connection. Until 2026-11-17 it was done only for a connection this port had
+            // dialled (DialledForCall); on a listening port, where a call goes out on a connection the peer opened, the
+            // acceptance was dropped and answered with a clear (diagnostic 20). Seen with SINTRAN's PAD calling x25emu's
+            // x25tadsrv, whose client renumbers every arriving call to channel 1.
             if (!isCallRequest && (packetType == CallAcceptedType || packetType == ClearRequestType)
-                && connection.DialledForCall && connection.Circuits.Count == 1)
+                && connection.Circuits.Count == 1)
             {
                 ushort only = connection.Circuits[0];
 
