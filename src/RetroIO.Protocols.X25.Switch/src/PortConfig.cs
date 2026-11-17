@@ -34,6 +34,18 @@ namespace RetroIO.Protocols.X25.Switch
         public PortMode Mode { get; set; } = PortMode.Dce;
 
         /// <summary>
+        /// Which end opens the TCP connection of an <c>hdlc-tcp</c> port (key <c>tcp = listen | dial</c>).
+        /// The default follows <see cref="Mode"/>: DCE listens, DTE dials. See <see cref="PortTcpRole"/>.
+        /// </summary>
+        public PortTcpRole TcpRole { get; set; } = PortTcpRole.FromMode;
+
+        /// <summary>
+        /// True when this port listens for its TCP connection, false when it dials: <see cref="TcpRole"/> when
+        /// it is set, otherwise the X.25 role decides (DCE listens).
+        /// </summary>
+        public bool TcpListens => TcpRole == PortTcpRole.FromMode ? Mode == PortMode.Dce : TcpRole == PortTcpRole.Listen;
+
+        /// <summary>
         /// Remote host (DTE mode) or bind address (DCE mode).
         /// </summary>
         public string Host { get; set; } = string.Empty;

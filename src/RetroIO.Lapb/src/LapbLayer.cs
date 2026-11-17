@@ -932,6 +932,18 @@ namespace RetroIO.Protocols.Xmsg.Live
                     {
                         _state = LapbLayerState.Disconnected;
                         StopAllTimers();
+
+                        if (IsItu)
+                        {
+                            // X.25 2.4.4.1: a DM answering our SABM refuses it, and that answers it. No
+                            // SABM of ours is outstanding any more, so a SABM the peer sends next sets
+                            // the link up on our UA alone. Left false, the peer's SABM was answered and
+                            // the link came up, and then T1 sent our old SABM again into it 3 s later
+                            // (x25switch against SINTRAN K's X.25 link, port 2362, 2026-11-16).
+                            // The ND dialect is left as it was: nothing measured says how an ND
+                            // station treats this.
+                            _ourSabmAcked = true;
+                        }
                     }
 
                     break;
@@ -1350,6 +1362,18 @@ namespace RetroIO.Protocols.Xmsg.Live
             switch (_state)
             {
                 case LapbLayerState.Connected:
+                    if (!_ourSabmAcked && IsItu)
+                    {
+                        // ITU: we are here because the peer's SABM crossed ours and was answered
+                        // (2.4.5.11.1, the same command sent by both stations). The rule is to enter
+                        // the information transfer phase "after receiving the UA response or after
+                        // timeout of T1" - not to send the SABM again. Both ends already reset their
+                        // state variables on the SABM/UA that did go through.
+                        _ourSabmAcked = true;
+                        StopT1();
+                        return true;
+                    }
+
                     if (!_ourSabmAcked)
                     {
                         // The peer's half is done, ours is not: send our SABM again. No I-frame

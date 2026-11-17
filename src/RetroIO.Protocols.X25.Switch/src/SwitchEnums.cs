@@ -50,6 +50,33 @@ namespace RetroIO.Protocols.X25.Switch
     }
 
     /// <summary>
+    /// Which end of an <c>hdlc-tcp</c> port opens the TCP connection (configuration key <c>tcp</c>).
+    /// </summary>
+    /// <remarks>
+    /// The TCP connection is the emulated cable. Which end plugs it in has nothing to do with the X.25 role:
+    /// a DTE can wait for the cable as well as a DCE can. Until 2026-11-16 the role decided it (DCE listened,
+    /// DTE dialled), so a DTE port could not be used against an emulator that also dials - the SINTRAN K X.25
+    /// option on RetroCore, whose link only accepts replies addressed the DTE way, was the case that needed it.
+    /// </remarks>
+    public enum PortTcpRole
+    {
+        /// <summary>
+        /// Follow the X.25 role: a DCE port listens, a DTE port dials. What every port did before this setting.
+        /// </summary>
+        FromMode = 0,
+
+        /// <summary>
+        /// Listen on <c>host:port</c> and take the peer's connection.
+        /// </summary>
+        Listen = 1,
+
+        /// <summary>
+        /// Dial <c>host:port</c>, and dial again when the connection is lost.
+        /// </summary>
+        Dial = 2,
+    }
+
+    /// <summary>
     /// The X.25 role a port takes (<c>1 = DTE</c>, <c>0 = DCE</c>).
     /// </summary>
     public enum PortMode
