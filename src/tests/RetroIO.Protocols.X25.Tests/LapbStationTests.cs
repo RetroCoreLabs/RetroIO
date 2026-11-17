@@ -205,6 +205,26 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(seen.Direction, Is.EqualTo(FrameDirection.Receive));
         }
 
+        /// <summary>
+        /// The station reports data transfer only when the engine says the link is up. Until
+        /// 2026-11-16 it reported it as soon as the engine was connected: with our SABM crossing the
+        /// peer's, the switch sent its X.25 Restart Request before the link was set up (X.25
+        /// 2.4.5.11.1: enter information transfer on the UA to our SABM, or when T1 runs out).
+        /// </summary>
+        [Test]
+        public void CrossingSabms_DataTransferOnlyOnceTheUaToOursArrives()
+        {
+            using LapbStation station = NewStation();
+
+            station.Connect();
+            station.ReceiveFrame(new byte[] { AddressA, 0x3F }, 2);   // the peer's SABM crosses ours
+
+            Assert.That(station.State, Is.EqualTo(LapbState.Connecting));
+
+            station.ReceiveFrame(new byte[] { AddressB, 0x73 }, 2);   // the UA to ours
+            Assert.That(station.State, Is.EqualTo(LapbState.DataTransfer));
+        }
+
         [Test]
         public void AnIncomingSabm_IsAnsweredAndBringsTheLinkUp()
         {

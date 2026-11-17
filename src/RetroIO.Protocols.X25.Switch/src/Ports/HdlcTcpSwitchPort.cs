@@ -26,15 +26,19 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// class only gets the TCP connection, the way the XOT port does:
     /// </para>
     /// <list type="bullet">
-    /// <item><description>A DCE port listens on <c>host:port</c> (the host is the address to bind; empty means every
+    /// <item><description>Which end opens the TCP connection is <see cref="PortConfig.TcpListens"/>: the <c>tcp</c>
+    /// setting (<c>listen</c> or <c>dial</c>) when it is written, otherwise the X.25 role (DCE listens, DTE dials).
+    /// The TCP connection is only the emulated cable; the X.25 role is separate.</description></item>
+    /// <item><description>A listening port listens on <c>host:port</c> (the host is the address to bind; empty means every
     /// address; port 0 lets the system choose, which tests use) and takes the peer's connection when it comes. It
     /// carries one link, so a new connection replaces the old one: the old one may be half dead, and a peer that
     /// restarted must not be shut out by its own earlier connection.</description></item>
-    /// <item><description>A DTE port dials <c>host:port</c>. When the dial fails, or the connection is lost, it
+    /// <item><description>A dialling port dials <c>host:port</c>. When the dial fails, or the connection is lost, it
     /// dials again every <see cref="HdlcSwitchPortBase.RedialDelay"/> milliseconds, with the same log lines as the
     /// XOT port: a warning for the first failure and every fifteenth, a line when the connection is up, a warning
     /// when it goes down that says when the next try is.</description></item>
-    /// <item><description>The end that dials sends the SABM. The end that listens waits for it.</description></item>
+    /// <item><description>The DTE end sends the SABM when the line comes up; the DCE end waits for it. This follows
+    /// the X.25 role, not the TCP direction.</description></item>
     /// </list>
     /// <para>
     /// Both ends of a trunk must use the same transport family: an <c>hdlc-tcp</c> port cannot talk to an
@@ -54,7 +58,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// Creates the port. Nothing happens on the network until <see cref="HdlcSwitchPortBase.Start"/>.
         /// </summary>
         /// <param name="config">
-        /// The port's configuration. <c>Mode</c> decides whether it listens (DCE) or dials (DTE); <c>Host</c> and
+        /// The port's configuration. <c>TcpListens</c> decides whether it listens or dials; <c>Host</c> and
         /// <c>Port</c> say where; the LAPB values and the channel range are read by the base class.
         /// </param>
         /// <param name="logger">
@@ -66,7 +70,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         }
 
         /// <summary>
-        /// The port the listener actually bound to. Zero until a DCE port has started.
+        /// The port the listener actually bound to. Zero until a listening port has started.
         /// </summary>
         public ushort BoundPort { get; private set; }
 
@@ -76,7 +80,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// <inheritdoc/>
         protected override void OpenLine()
         {
-            if (PortSettings.Mode == PortMode.Dce)
+            if (PortSettings.TcpListens)
             {
                 TcpListener listener = new TcpListener(ParseBindAddress(PortSettings.Host), PortSettings.Port);
                 listener.Start();
@@ -89,7 +93,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 if (string.IsNullOrEmpty(PortSettings.Host))
                 {
-                    throw new InvalidDataException("a DTE hdlc-tcp port dials out, so it needs 'host =' in its configuration");
+                    throw new InvalidDataException("a dialling hdlc-tcp port needs 'host =' in its configuration");
                 }
 
                 Logger.LogInformation("Port {Id} ({Mode} {Type}, HDLC over TCP): dialling {Host}:{Port}",
@@ -119,7 +123,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// <inheritdoc/>
         protected override string RetryText()
         {
-            return PortSettings.Mode == PortMode.Dce ? string.Empty : "; dialling again in " + RedialDelay / 1000 + " seconds";
+            return PortSettings.TcpListens ? string.Empty : "; dialling again in " + RedialDelay / 1000 + " seconds";
         }
 
         /// <inheritdoc/>
@@ -129,7 +133,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 try
                 {
-                    if (PortSettings.Mode == PortMode.Dce)
+                    if (PortSettings.TcpListens)
                     {
                         AcceptOne();
                     }

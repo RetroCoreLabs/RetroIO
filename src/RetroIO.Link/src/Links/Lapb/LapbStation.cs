@@ -507,9 +507,14 @@ namespace RetroIO.Link.Lapb
         /// </summary>
         private void SyncState()
         {
+            // Connected is not yet data transfer while our own SABM is still waiting for its UA
+            // (the engine's IsUp). X.25 2.4.5.11.1: with crossing SABMs a station enters information
+            // transfer on the UA to its SABM or when T1 runs out. Mapping plain Connected to
+            // DataTransfer let the switch send its X.25 Restart Request before the link was set up
+            // (port 2362 against SINTRAN K, 2026-11-16).
             LapbState mapped = _lapb.State switch
             {
-                LapbLayerState.Connected => LapbState.DataTransfer,
+                LapbLayerState.Connected => _lapb.IsUp ? LapbState.DataTransfer : LapbState.Connecting,
                 LapbLayerState.SabmSent => LapbState.Connecting,
                 LapbLayerState.DiscSent => LapbState.Disconnecting,
                 _ => LapbState.Disconnected,

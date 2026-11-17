@@ -141,6 +141,27 @@ namespace RetroIO.Protocols.X25.Switch
                 pc.LapbN2 = ini.GetInt(section, "lapb_n2", 0);
                 pc.LapbK = ini.GetInt(section, "lapb_k", 0);
                 pc.Mode = ini.Get(section, "mode") == "dte" ? PortMode.Dte : PortMode.Dce;
+
+                // Which end plugs in the emulated cable (hdlc-tcp only). Not written = follow the X.25 role.
+                string tcpRole = ini.GetString(section, "tcp", string.Empty);
+                if (tcpRole.Length == 0)
+                {
+                    pc.TcpRole = PortTcpRole.FromMode;
+                }
+                else if (tcpRole == "listen")
+                {
+                    pc.TcpRole = PortTcpRole.Listen;
+                }
+                else if (tcpRole == "dial")
+                {
+                    pc.TcpRole = PortTcpRole.Dial;
+                }
+                else
+                {
+                    // Refused like an unknown transport: a typo must not quietly pick a direction.
+                    throw new InvalidDataException("[" + section + "] tcp = " + tcpRole
+                        + " is not one of: listen, dial");
+                }
                 pc.Host = ini.GetString(section, "host", string.Empty);
                 pc.Port = (ushort)ini.GetInt(section, "port", 1998);
                 pc.DefaultPacketSize = (ushort)ini.GetInt(section, "packet_size", 128);
