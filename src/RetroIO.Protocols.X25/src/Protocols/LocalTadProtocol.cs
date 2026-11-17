@@ -106,13 +106,14 @@ namespace RetroIO.Protocols.X25.Protocols
                 //                   DEL/CAN/DC2, ETX/EOT, HT/LF/VT/FF and the other control characters
                 //                   (everything except flag 1, the alphanumerics; X3.DataForwardingFlag.ALL_CONTROL)
                 //   Param 4  = 1: Idle timer = 50ms (fast char-by-char forwarding)
-                //   Param 14 = 0: Editing off (TAD handles editing)
+                //   Param 15 = 0: Editing off (TAD handles editing). X.3 section 3 numbers editing 15; until 2026-11-17
+                //                 this sent 14, which is padding after line feed, so editing was never turned off.
                 SendX29Message(session, new byte[] {
                     0x02,        // X.29 SET message type
                     0x02, 0x00,  // Param 2 (echo) = off (TAD echoes)
                     0x03, 0x7E,  // Param 3 (forwarding) = all chars
                     0x04, 0x01,  // Param 4 (idle timer) = 50ms
-                    0x0E, 0x00   // Param 14 (editing) = off (TAD edits)
+                    0x0F, 0x00   // Param 15 (editing) = off (TAD edits)
                 });
 
                 // Send welcome message immediately
@@ -147,6 +148,12 @@ namespace RetroIO.Protocols.X25.Protocols
             lock (session.DataLock)
             try
             {
+                if (session.Quitting)
+                {
+                    // QUIT was typed and the PAD has been invited to clear; the call is going.
+                    return;
+                }
+
                 _logger.LogDebug("LocalTAD: Received {Length} bytes on LCN {LCN}", data.Length, lcn);
 
                 // Process each byte: echo back to terminal and buffer for line editing
@@ -184,6 +191,11 @@ namespace RetroIO.Protocols.X25.Protocols
 
                         _logger.LogInformation("LocalTAD: *** LINE *** LCN {LCN}: '{Line}'", lcn, line);
                         ProcessCommand(session, line);
+                        if (session.Quitting)
+                        {
+                            // Nothing after QUIT in the same packet is answered.
+                            return;
+                        }
                     }
                     else if (b == 0x08 || b == 0x7F) // Backspace or DEL
                     {
@@ -242,8 +254,13 @@ namespace RetroIO.Protocols.X25.Protocols
                 case "QUIT":
                 case "EXIT":
                 case "BYE":
+                    // Goodbye, then an X.29 INVITATION TO CLEAR (Q bit) after it; the PAD clears once it has delivered
+                    // everything. Clearing here instead, as until 2026-11-17, lets the clear overtake the goodbye:
+                    // SINTRAN's X.29 PAD (KBS-PAD-GATE) then counted the goodbye packets, did not print them, and
+                    // printed them at the start of the NEXT call. HandleCallClear ends the session when the PAD clears.
                     SendGoodbyeMessage(session);
-                    SendClearRequest(session);
+                    SendX29Message(session, X29Messages.CreateInvitationToClear());
+                    session.Quitting = true;
                     break;
 
                 case "X29":
@@ -922,6 +939,10 @@ namespace RetroIO.Protocols.X25.Protocols
         /// parameters from before the first entry and must not be saved again.
         /// </summary>
         public bool PasswordModeActive { get; set; }
+
+        // QUIT was typed: the goodbye and an X.29 invitation to clear have gone out, and further input is ignored until the
+        // PAD clears the call.
+        public bool Quitting { get; set; }
         public byte OriginalEditing { get; set; } = X3Parameters.DefaultValue.EDITING; // Default editing (simple profile: off)
 
         public void Dispose()

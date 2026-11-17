@@ -202,48 +202,55 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.Contains("Echo service active", responseData);
         }
 
+        /// <summary>
+        /// QUIT says goodbye and then sends an X.29 INVITATION TO CLEAR after the text, and does not clear the call
+        /// itself; the session ends when the PAD clears.
+        /// </summary>
+        /// <remarks>
+        /// Until 2026-11-17 the service cleared at once. A clear may overtake data still in transit, and SINTRAN's X.29
+        /// PAD (KBS-PAD-GATE) then lost the goodbye: it counted the packets, did not print them, and printed them at the
+        /// start of the NEXT call. The PAD clears only after it has delivered everything (X.29 INVITATION TO CLEAR).
+        /// </remarks>
         [Fact]
         public void TestHandleIncomingData_QuitCommand()
         {
-            // Arrange
             ushort lcn = 1;
-            var goodbyeReceived = false;
-            var clearRequestReceived = false;
-            string responseData = "";
+            var outputs = new List<TadOutputEventArgs>();
+            _localTadProtocol.OutputGenerated += (sender, e) => outputs.Add(e);
+            _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
+            outputs.Clear();
 
-            void NotifyCallback(TadOutputEventArgs eventArgs)
+            _localTadProtocol.HandleIncomingData(lcn, System.Text.Encoding.ASCII.GetBytes("QUIT\r\n"));
+
+            int goodbye = -1;
+            int invite = -1;
+            for (int i = 0; i < outputs.Count; i++)
             {
-                if (eventArgs.Kind == TadOutputKind.Data) // Data packet (bit 0 = 0)
+                Assert.NotEqual(TadOutputKind.Clear, outputs[i].Kind);
+                if (outputs[i].Kind == TadOutputKind.Data && !outputs[i].QBit
+                    && System.Text.Encoding.ASCII.GetString(outputs[i].Data).Contains("Goodbye!"))
                 {
-                    var data = System.Text.Encoding.ASCII.GetString(eventArgs.Data);
-                    if (data.Contains("Goodbye!"))
-                    {
-                        goodbyeReceived = true;
-                        responseData = data;
-                    }
+                    goodbye = i;
                 }
-                else if (eventArgs.Kind == TadOutputKind.Clear) // Clear Request
+
+                if (outputs[i].Kind == TadOutputKind.Data && outputs[i].QBit && outputs[i].Data.Length == 1 && outputs[i].Data[0] == 0x01)
                 {
-                    clearRequestReceived = true;
+                    invite = i;
                 }
             }
 
-            // First establish session
-            _localTadProtocol.OutputGenerated += (sender, eventArgs) => NotifyCallback(eventArgs);
-            _localTadProtocol.HandleOutgoingCall(lcn, "200", "100", null);
+            Assert.True(goodbye >= 0, "Should receive goodbye message");
+            Assert.True(invite > goodbye, "the invitation to clear must come after the goodbye");
+            Assert.Equal(1, _localTadProtocol.GetActiveSessionsCount());
 
-            // Act
-            var quitBytes = System.Text.Encoding.ASCII.GetBytes("QUIT\r\n");
-            _localTadProtocol.HandleIncomingData(lcn, quitBytes);
+            // Typing after QUIT is ignored while the call goes.
+            outputs.Clear();
+            _localTadProtocol.HandleIncomingData(lcn, System.Text.Encoding.ASCII.GetBytes("HELP\r\n"));
+            Assert.Empty(outputs);
 
-            // Wait for timer to fire (500ms delay for clear request)
-            Thread.Sleep(700);
-
-            // Assert
-            Assert.True(goodbyeReceived, "Should receive goodbye message");
-            Assert.Contains("Goodbye!", responseData);
-            Assert.True(clearRequestReceived, "Should receive clear request after delay");
-            Assert.Equal(0, _localTadProtocol.GetActiveSessionsCount()); // Session should be cleared
+            // The PAD clears; the session ends.
+            _localTadProtocol.HandleCallClear(lcn);
+            Assert.Equal(0, _localTadProtocol.GetActiveSessionsCount());
         }
 
         [Fact]
@@ -404,6 +411,10 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.NotNull(set);
             Assert.Equal(0x02, set.Data[0]); // X.29 message type: SET
             Assert.False(set.MBit);
+
+            // Editing off is X.3 parameter 15 (X.3 section 3; 14 is padding after line feed). Until 2026-11-17 the SET
+            // carried 14 under the comment "editing".
+            Assert.Equal(new byte[] { 0x02, 0x02, 0x00, 0x03, 0x7E, 0x04, 0x01, 0x0F, 0x00 }, set.Data);
 
             for (int i = 0; i < outputs.Count; i++)
             {

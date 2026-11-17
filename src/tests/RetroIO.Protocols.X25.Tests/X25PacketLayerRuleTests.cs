@@ -488,6 +488,33 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(cleared, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// X.25 3.3.2 and Table C.2 column r3: a DCE whose Restart Indication is unconfirmed ignores every packet but a
+        /// restart. A Call Request there is discarded - not offered to the application - and nothing is sent; after
+        /// the confirmation calls are taken again. Seen 2026-11-17: SINTRAN's COSMOS X.25 sends its first Call Request
+        /// before its Restart Confirmation, the switch routed it, and SINTRAN cleared it on confirming.
+        /// </summary>
+        [Test]
+        public void R6_DceAwaitingRestartConfirmation_DiscardsACallRequest()
+        {
+            _config = new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, IsDte = false };
+            _layer = new X25Layer(_sink, _config);
+            int incoming = 0;
+            _layer.IncomingCall += (l, lci, called, calling, cud) => incoming++;
+            _layer.Restart();
+            _sink.Sent.Clear();
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(1, RemoteAddress, LocalAddress));
+
+            Assert.That(incoming, Is.EqualTo(0));
+            Assert.That(_sink.Sent, Is.Empty);
+            Assert.That(_layer.RestartOutstanding, Is.True);
+
+            _layer.ProcessPacket(X25PacketBuilder.CreateRestartConfirmation());
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(1, RemoteAddress, LocalAddress));
+            Assert.That(incoming, Is.EqualTo(1));
+        }
+
         [Test]
         public void R6_RestartCollision_CompletesBothRestartsWithNoConfirmation()
         {

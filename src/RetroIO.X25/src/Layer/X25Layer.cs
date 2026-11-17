@@ -1042,6 +1042,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 }
             }
 
+            // Table C.2, column r3 (DCE restart indication): while our Restart Indication is unconfirmed the DCE
+            // "will ignore all packets except for restart request and DTE restart confirmation" (3.3.2) - every
+            // packet on an assigned channel is DISCARD, a Call Request included. Until 2026-11-17 a call that
+            // SINTRAN's COSMOS X.25 sent before its Restart Confirmation was routed on, and SINTRAN cleared it
+            // the moment it confirmed: the first call after every switch start failed. An unassigned channel
+            // is still Table C.1 (any state), checked below. Annex C gives the DCE's actions only, so a DTE
+            // (state r2 for it) is left as it was.
+            if (!_config.IsDte && _restartOutstanding && IsAssigned(lci))
+            {
+                return Discard();
+            }
+
             // Table C.2, last rows: a restart packet on a nonzero channel is ERROR # 41 on that
             // channel; an undefined type on an assigned channel is ERROR # 33.
             if (type == X25PacketType.RestartRequest || type == X25PacketType.RestartConfirmation)
