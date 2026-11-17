@@ -12,6 +12,7 @@ using NUnit.Framework;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Runtime.Transport;
+using RetroIO.Protocols.X25.Transport;
 
 namespace RetroIO.Protocols.X25.Tests
 {
@@ -106,15 +107,34 @@ namespace RetroIO.Protocols.X25.Tests
                 }
             };
 
-            _runtime.PhysicalLayer.InitializeSerialPorts(config.Routing.SerialInterfaces);
-            Assert.That(_runtime.PhysicalLayer.Start(), Is.True, "the mock serial port must start");
             _transport = (SerialTransport)_runtime.TransportInterfaces[InterfaceName];
 
-            // The runtime constructor tries to start its transports before any host can open the
-            // physical layer's serial ports, so this one is in Error with "interface not active".
-            // A host that opens the ports afterwards has to restart it, as done here. (Nothing in
-            // the runtime calls InitializeSerialPorts; see the report for this change.)
-            _transport.Stop();
+            if (options != null && options.IsComplete)
+            {
+                // Since 2026-11-17 the runtime opens a line with complete X25Link options itself and
+                // starts its transport inside the constructor (SerialPortOwnershipTests). The capture
+                // above can only be attached after the constructor, so a SABM sent at that start
+                // would not be seen. The transport is stopped and started again so the capture sees
+                // the start-up from its first byte. The stop itself may send a DISC (a side that sent
+                // a SABM is no longer disconnected, SerialLapbLink.Stop), so what the stop wrote is
+                // dropped from the capture before the new start.
+                Assert.That(_transport.Status, Is.EqualTo(TransportStatus.Active), "the runtime must have opened the line and started the transport");
+                _transport.Stop();
+                lock (_lock)
+                {
+                    _written.Clear();
+                }
+            }
+            else
+            {
+                // A line without complete X25Link options belongs to the link manager, so the
+                // runtime does not open it. These tests drive the serial transport on such a line
+                // on its own, with no link manager link, so the port is opened here by hand.
+                _runtime.PhysicalLayer.InitializeSerialPorts(config.Routing.SerialInterfaces);
+                Assert.That(_runtime.PhysicalLayer.Start(), Is.True, "the mock serial port must start");
+                _transport.Stop();
+            }
+
             Assert.That(_transport.Start(), Is.True, "the serial transport must start");
         }
 
