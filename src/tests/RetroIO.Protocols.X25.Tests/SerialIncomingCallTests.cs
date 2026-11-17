@@ -609,6 +609,75 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_transport.IsLinkUp, Is.False);
         }
 
+        // ------------------------------------------------------------------ the outgoing call (2026-11-17)
+
+        [Test]
+        public void PlaceCall_SendsACallRequestInAnIFrame_AndACallConnectedBringsTheCircuitUp()
+        {
+            Build(Dte());
+            X25Endpoint? placedOn = null;
+            ushort placedLci = 0;
+            _runtime.CallPlacedOnEndpointForTest = (endpoint, lci) =>
+            {
+                placedOn = endpoint;
+                placedLci = lci;
+            };
+
+            // The DCE brings the link up: SABM with P=1 and address A (a command from the DCE, 2.4.2).
+            Inject(Frame(AddressA, Sabm));
+            Assert.That(_transport.IsLinkUp, Is.True);
+
+            bool placed = _transport.PlaceCall(new X25CallRequest("300", LocalMachineId));
+
+            Assert.That(placed, Is.True, "the line's engine must take the call");
+            Assert.That(placedOn, Is.Not.Null, "the call must be placed through the line's X.25 engine");
+
+            // One Call Request (type 0x0B, Table 5-1) in an I frame; the DTE's command carries address B (2.4.2).
+            Assert.That(CountPacketsOfType(0x0B), Is.EqualTo(1), "exactly one Call Request must go out");
+            List<byte[]> frames = SentFrames();
+            byte[]? callFrame = null;
+            for (int i = 0; i < frames.Count; i++)
+            {
+                if ((frames[i][1] & 0x01) == 0 && frames[i].Length > 4 && frames[i][4] == 0x0B)
+                {
+                    callFrame = frames[i];
+                }
+            }
+
+            Assert.That(callFrame, Is.Not.Null);
+            Assert.That(callFrame![0], Is.EqualTo(AddressB), "an I frame from the DTE is a command with address B");
+            ushort lcn = (ushort)(((callFrame[2] & 0x0F) << 8) | callFrame[3]);
+            Assert.That(lcn, Is.EqualTo(placedLci));
+
+            // The DCE answers with Call Connected (GFI 0x1, the channel, type 0x0F, Table 5-1), written
+            // out here as bytes, in an I frame N(S)=0 that acknowledges our I frame (N(R)=1).
+            byte[] callConnected = new byte[] { (byte)(0x10 | (lcn >> 8)), (byte)(lcn & 0xFF), 0x0F };
+            Inject(Frame(AddressA, IControl(0, 1), callConnected));
+
+            Assert.That(placedOn!.Layer.Circuits[placedLci].State, Is.EqualTo(PacketLayer.X25VcState.DataTransfer),
+                "4.1.3: on Call Connected the calling DTE's channel enters data transfer");
+        }
+
+        [Test]
+        public void PlaceCall_WhileTheDataLinkIsDown_IsRefusedAndSendsNothing()
+        {
+            Build(Dte());
+
+            bool placed = _transport.PlaceCall(new X25CallRequest("300", LocalMachineId));
+
+            Assert.That(placed, Is.False, "with no data link there is nothing to carry a Call Request");
+            Assert.That(SentFrames(), Is.Empty);
+        }
+
+        [Test]
+        public void PlaceCall_WithNoX25LinkConfigured_IsRefused()
+        {
+            Build(null);
+
+            Assert.That(_transport.PlaceCall(new X25CallRequest("300", LocalMachineId)), Is.False);
+            Assert.That(SentFrames(), Is.Empty);
+        }
+
         // ------------------------------------------------------------------ the data link on its own
 
         [Test]

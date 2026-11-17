@@ -86,9 +86,26 @@ namespace RetroIO.Link.Framing
                             _inEscape = false;
                             break;
                         }
-                        RaiseFrameReceived(_rxBuffer.AsSpan(0, _rxLen));
+                        // Copy the frame out and clear the receive state BEFORE handing it over. A
+                        // listener may answer at once, and over an in-process wire that answer's reply
+                        // comes back into this same codec inside RaiseFrameReceived. With the buffer
+                        // still holding this frame, the reply's leading END handed this frame over a
+                        // second time, and the reply's bytes overwrote the buffer the listener was still
+                        // reading (found 2026-11-17: one SABM answered twice in CodecLinkEndToEndTests).
+                        int frameLength = _rxLen;
+                        byte[] frameCopy = ArrayPool<byte>.Shared.Rent(frameLength);
+                        _rxBuffer.AsSpan(0, frameLength).CopyTo(frameCopy);
                         _rxLen = 0;
                         _inEscape = false;
+                        try
+                        {
+                            RaiseFrameReceived(frameCopy.AsSpan(0, frameLength));
+                        }
+                        finally
+                        {
+                            ArrayPool<byte>.Shared.Return(frameCopy);
+                        }
+
                         break;
 
                     case Esc:

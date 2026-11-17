@@ -5,7 +5,9 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
 using System.Collections.Generic;
+using RetroIO.Protocols.Xmsg.Hdlc;
 using Xunit;
 
 namespace RetroIO.Protocols.Xmsg.Live.Tests
@@ -107,6 +109,89 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
 
             Assert.True(link.IsUp);
             Assert.Equal(0, CountSabms(sent));
+        }
+
+        [Fact]
+        public void CrossingSabms_NoRrIsSentWhileOurSabmIsUnanswered()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = LapbTestKit.NewLink(0x0066, sent, ItuDte());
+
+            link.Connect(0);
+            LapbTestKit.DeliverAt(link, 100, FromDceCommand, 0x3F);    // the peer's SABM crosses ours
+
+            // X.25 2.4.4.1: frames other than UA and DM "will be sent only after the data link is
+            // set up and if no outstanding SABM ... exists". Our SABM is outstanding, so the UA is
+            // the only answer: SABM, UA and nothing more.
+            Assert.Equal(2, sent.Count);
+            Assert.True(IsSabm(sent[0]));
+            Assert.Equal(new byte[] { LapbLayer.AddressItuA, 0x73 }, sent[1]);
+        }
+
+        /// <summary>
+        /// Two ITU stations joined back to back with a wire that delivers each frame at once, inside the
+        /// send (as an in-process codec bridge does): a DTE's SABM brings the link up on both and the
+        /// exchange ends. Found 2026-11-17: the first version of the unsolicited-UA reset made the two
+        /// stations answer each other for ever (stack overflow in CodecLinkEndToEndTests).
+        /// </summary>
+        [Fact]
+        public void BackToBackStations_ASabmBringsTheLinkUp_AndTheExchangeEnds()
+        {
+            LapbLayer dte = new LapbLayer(0, ItuDte());
+            LapbLayer dce = new LapbLayer(0, new LapbOptions(variant: LapbVariant.Itu, isDte: false));
+            List<string> wire = new List<string>();
+            int depth = 0;
+
+            void Wire(LapbLayer to, string from, byte[] body)
+            {
+                wire.Add(from + " " + BitConverter.ToString(body));
+                depth++;
+                if (depth > 20)
+                {
+                    throw new InvalidOperationException("the stations never stop answering each other: " + string.Join(" | ", wire));
+                }
+
+                byte[] frame = new byte[body.Length + 2];
+                Array.Copy(body, frame, body.Length);
+                to.OnFrameReceived(LapbFrame.FromCapture(frame), 0);
+                depth--;
+            }
+
+            dte.OnTransmit += delegate (byte[] body) { Wire(dce, "DTE", body); };
+            dce.OnTransmit += delegate (byte[] body) { Wire(dte, "DCE", body); };
+
+            dte.Connect(0);
+
+            Assert.True(dte.IsUp, string.Join(" | ", wire));
+            Assert.True(dce.IsUp, string.Join(" | ", wire));
+            Assert.Equal(0L, dte.LinkResets);
+            Assert.Equal(0L, dce.LinkResets);
+        }
+
+        [Fact]
+        public void UnsolicitedUaWhileConnected_StartsTheLinkResetting()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = LapbTestKit.NewLink(0x0066, sent, ItuDte());
+
+            link.Connect(0);
+            LapbTestKit.DeliverAt(link, 100, FromDceResponse, 0x73);   // the UA to our SABM: link up
+            Assert.True(link.IsUp);
+            sent.Clear();
+
+            // A second UA, with no SABM or DISC of ours outstanding: X.25 2.4.7.3 says the station
+            // "may either initiate the data link resetting procedures itself ... or return a DM
+            // response". We take the first: a new SABM, and the link counts a reset.
+            LapbTestKit.DeliverAt(link, 200, FromDceResponse, 0x73);
+
+            Assert.Equal(1, CountSabms(sent));
+            Assert.Equal(1L, link.LinkResets);
+            Assert.False(link.IsUp);
+
+            // The peer accepts the SABM: the link is up again.
+            LapbTestKit.DeliverAt(link, 300, FromDceResponse, 0x73);
+            Assert.True(link.IsUp);
+            Assert.Equal(1L, link.LinkResets);
         }
     }
 }

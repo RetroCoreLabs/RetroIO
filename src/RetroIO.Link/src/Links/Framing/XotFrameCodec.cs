@@ -178,14 +178,19 @@ namespace RetroIO.Link.Framing
             RaiseFramingFailed(reason);
         }
 
-        // Parses and delivers every complete frame currently in the staging buffer, then compacts.
+        // Parses and delivers every complete frame currently in the staging buffer. Each frame is
+        // copied out and removed from the buffer BEFORE it is handed over: a listener may answer at
+        // once, and over an in-process wire the reply comes back into this codec inside
+        // RaiseFrameReceived. With the frame still in the buffer, that nested call parsed from the
+        // start again and handed the same frame over a second time, and the reply's bytes could
+        // land over the frame being read (found 2026-11-17, same pattern as the SlipFrameCodec fix;
+        // test Xot_AFrameArrivingDuringTheHandOver_...).
         private void DrainFrames()
         {
-            int offset = 0;
-            while (_rxLen - offset >= HeaderSize)
+            while (!_failed && _rxLen >= HeaderSize)
             {
-                int version = (_rx[offset] << 8) | _rx[offset + 1];
-                int length = (_rx[offset + 2] << 8) | _rx[offset + 3];
+                int version = (_rx[0] << 8) | _rx[1];
+                int length = (_rx[2] << 8) | _rx[3];
 
                 if (version != Version)
                 {
@@ -202,24 +207,31 @@ namespace RetroIO.Link.Framing
                 }
 
                 int frameSize = HeaderSize + length;
-                if (_rxLen - offset < frameSize)
+                if (_rxLen < frameSize)
                 {
                     // Header present but payload incomplete -- wait for more bytes.
                     break;
                 }
 
-                RaiseFrameReceived(_rx.AsSpan(offset + HeaderSize, length));
-                offset += frameSize;
-            }
+                byte[] frameCopy = ArrayPool<byte>.Shared.Rent(length);
+                _rx.AsSpan(HeaderSize, length).CopyTo(frameCopy);
 
-            if (offset > 0)
-            {
-                int remain = _rxLen - offset;
+                // Compact now, so the buffer holds only what follows this frame.
+                int remain = _rxLen - frameSize;
                 if (remain > 0)
                 {
-                    _rx.AsSpan(offset, remain).CopyTo(_rx.AsSpan(0));
+                    _rx.AsSpan(frameSize, remain).CopyTo(_rx.AsSpan(0));
                 }
                 _rxLen = remain;
+
+                try
+                {
+                    RaiseFrameReceived(frameCopy.AsSpan(0, length));
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(frameCopy);
+                }
             }
         }
     }

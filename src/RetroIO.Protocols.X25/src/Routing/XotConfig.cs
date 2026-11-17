@@ -111,6 +111,13 @@ namespace RetroIO.Protocols.X25
         public int? RequestedPacketSize { get; set; }
 
         /// <summary>
+        /// Server mode: regular expressions for the called addresses this entry accepts calls for.
+        /// A call to any other address is cleared with cause 0x0B (access barred). Empty (the
+        /// default) accepts every address. Passed on to <see cref="Transport.XotServerConfig.AcceptedX121Ranges"/>.
+        /// </summary>
+        public System.Collections.Generic.List<string> AcceptedX121Ranges { get; set; } = new System.Collections.Generic.List<string>();
+
+        /// <summary>
         /// TCP keepalive settings (equivalent to Cisco tcp-keepalives)
         /// </summary>
         public bool TcpKeepalive { get; set; } = true;

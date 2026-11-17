@@ -95,27 +95,31 @@ namespace RetroIO.Protocols.X25.Runtime.Transport
         public TransportStatus Status => _status;
 
         /// <summary>
-        /// Always throws, because the serial send path of this transport is not implemented.
+        /// Places an outgoing call on this serial line through the line's own X.25 engine.
         /// </summary>
         /// <remarks>
-        /// The old LAPB send over the serial link was retired and nothing replaced it in this class:
-        /// serial output belongs to the links of the newer stack. Earlier code built a Call Request
-        /// packet on a fixed LCN 1, reported it to the packet history as transmitted, sent nothing, and
-        /// returned <c>true</c>. That hid the missing send path, so the call now fails loudly.
+        /// The runtime keeps one X.25 engine per serial line (the one that also answers incoming
+        /// calls), and the call goes through it the same way an XOT call goes through its
+        /// connection's engine: the engine picks the channel, sends the Call Request in a LAPB I frame
+        /// and takes the peer's Call Connected or Clear Indication. Until 2026-11-17 this method threw
+        /// <see cref="NotSupportedException"/>; before that it built a packet, sent nothing and
+        /// returned <c>true</c>.
         /// </remarks>
         /// <param name="callRequest">
-        /// The X.25 call request that would be placed.
+        /// The X.25 call request to place.
         /// </param>
         /// <returns>
-        /// Never returns.
+        /// <c>true</c> when the engine took the call (the Call Request went out, or is held by the
+        /// engine until its own restart is confirmed, X.25 4.1.1); <c>false</c> when no X.25 data link
+        /// is configured, the data link is not set up, or the engine has no free channel.
         /// </returns>
-        /// <exception cref="NotSupportedException">
-        /// Always thrown: placing a call on the serial transport is not implemented.
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="callRequest"/> is null.
         /// </exception>
         public bool PlaceCall(X25CallRequest callRequest)
         {
-            throw new NotSupportedException(
-                "SerialTransport.PlaceCall is not implemented: the serial send path was retired and no Call Request is put on the serial link.");
+            ArgumentNullException.ThrowIfNull(callRequest);
+            return _runtime.PlaceCallOnSerial(this, callRequest);
         }
 
         /// <summary>

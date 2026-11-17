@@ -98,7 +98,24 @@ namespace RetroIO.Link.Framing
 
                 if (status == HdlcDecodeStatus.FrameComplete)
                 {
-                    RaiseFrameReceived(_decoder.Frame);
+                    // Hand over a COPY, not the decoder's own buffer. The decoder has already reset
+                    // its state for the next frame, but Frame is a view into its assembly buffer. A
+                    // listener may answer at once, and over an in-process wire the reply comes back
+                    // into this codec inside RaiseFrameReceived and is assembled into that same buffer,
+                    // over the frame the listener is still reading (found 2026-11-17, same pattern as
+                    // the SlipFrameCodec fix; test Hdlc_AFrameArrivingDuringTheHandOver_...).
+                    ReadOnlySpan<byte> decoded = _decoder.Frame;
+                    int frameLength = decoded.Length;
+                    byte[] frameCopy = ArrayPool<byte>.Shared.Rent(frameLength);
+                    decoded.CopyTo(frameCopy);
+                    try
+                    {
+                        RaiseFrameReceived(frameCopy.AsSpan(0, frameLength));
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(frameCopy);
+                    }
                 }
 
                 // Runt, Overlong and Aborted are discarded here, as they were before. The decoder

@@ -54,6 +54,110 @@ namespace RetroIO.Protocols.X25.Tests
 
         // ---- SLIP ----
 
+        /// <summary>
+        /// A frame that arrives while the codec is still handing over the previous one (a listener that
+        /// answers at once over an in-process wire, as CodecLinkEndToEndTests does) is a frame of its own.
+        /// Found 2026-11-17: the codec cleared its buffer only after the listener returned, so the nested
+        /// frame's leading END handed the FIRST frame over a second time (B answered one SABM twice).
+        /// </summary>
+        [Test]
+        public void Slip_AFrameArrivingDuringTheHandOver_IsNotMixedWithTheOneBeingHandedOver()
+        {
+            CapturingTransport sink = new CapturingTransport();
+            SlipFrameCodec sender = new SlipFrameCodec("A", sink);
+            SlipFrameCodec receiver = new SlipFrameCodec("B", new CapturingTransport());
+
+            sender.SendFrame(new byte[] { 0x01, 0x02 });
+            byte[] second = sink.Last;
+            sender.SendFrame(new byte[] { 0x11, 0x12, 0x13 });
+            byte[] nested = sink.Last;
+
+            List<byte[]> received = new List<byte[]>();
+            receiver.FrameReceived += (linkId, frame) =>
+            {
+                received.Add(frame.ToArray());
+                if (received.Count == 1)
+                {
+                    receiver.ProcessBytes(nested);
+                }
+            };
+
+            receiver.ProcessBytes(second);
+
+            Assert.That(received.Count, Is.EqualTo(2));
+            Assert.That(received[0], Is.EqualTo(new byte[] { 0x01, 0x02 }));
+            Assert.That(received[1], Is.EqualTo(new byte[] { 0x11, 0x12, 0x13 }));
+        }
+
+        // The same hand-over check for the HDLC codec (2026-11-17). Here the listener feeds the reply
+        // BEFORE it reads the frame it was given, as a station that answers at once and then logs what
+        // it got would: the frame it is reading must still be the first one, not bytes of the reply
+        // written over it.
+        [Test]
+        public void Hdlc_AFrameArrivingDuringTheHandOver_IsNotMixedWithTheOneBeingHandedOver()
+        {
+            CapturingTransport sink = new CapturingTransport();
+            HdlcFrameCodec sender = new HdlcFrameCodec("A", sink);
+            HdlcFrameCodec receiver = new HdlcFrameCodec("B", new CapturingTransport());
+
+            sender.SendFrame(new byte[] { 0x01, 0x02 });
+            byte[] first = sink.Last;
+            sender.SendFrame(new byte[] { 0x11, 0x12, 0x13 });
+            byte[] nested = sink.Last;
+
+            List<byte[]> received = new List<byte[]>();
+            int calls = 0;
+            receiver.FrameReceived += (linkId, frame) =>
+            {
+                calls++;
+                if (calls == 1)
+                {
+                    receiver.ProcessBytes(nested);
+                }
+
+                received.Add(frame.ToArray());
+            };
+
+            receiver.ProcessBytes(first);
+
+            Assert.That(received.Count, Is.EqualTo(2));
+            Assert.That(received[0], Is.EqualTo(new byte[] { 0x11, 0x12, 0x13 }), "the nested frame is handed over inside the first call");
+            Assert.That(received[1], Is.EqualTo(new byte[] { 0x01, 0x02 }), "the first frame must survive the nested one");
+        }
+
+        // The same hand-over check for the XOT codec (2026-11-17).
+        [Test]
+        public void Xot_AFrameArrivingDuringTheHandOver_IsNotMixedWithTheOneBeingHandedOver()
+        {
+            CapturingTransport sink = new CapturingTransport();
+            XotFrameCodec sender = new XotFrameCodec("A", sink);
+            XotFrameCodec receiver = new XotFrameCodec("B", new CapturingTransport());
+
+            sender.SendFrame(new byte[] { 0x10, 0x01, 0x0F });
+            byte[] first = sink.Last;
+            sender.SendFrame(new byte[] { 0x10, 0x01, 0x13, 0x00 });
+            byte[] nested = sink.Last;
+
+            List<byte[]> received = new List<byte[]>();
+            int calls = 0;
+            receiver.FrameReceived += (linkId, frame) =>
+            {
+                calls++;
+                if (calls == 1)
+                {
+                    receiver.ProcessBytes(nested);
+                }
+
+                received.Add(frame.ToArray());
+            };
+
+            receiver.ProcessBytes(first);
+
+            Assert.That(received.Count, Is.EqualTo(2));
+            Assert.That(received[0], Is.EqualTo(new byte[] { 0x10, 0x01, 0x13, 0x00 }), "the nested frame is handed over inside the first call");
+            Assert.That(received[1], Is.EqualTo(new byte[] { 0x10, 0x01, 0x0F }), "the first frame must survive the nested one");
+        }
+
         [Test]
         public void Slip_RoundTrip_BasicPayload()
         {

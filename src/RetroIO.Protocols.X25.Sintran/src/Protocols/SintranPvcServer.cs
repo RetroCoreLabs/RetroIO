@@ -30,6 +30,12 @@ namespace RetroIO.Protocols.X25.Sintran
         // Channels with an interrupt sent and not yet confirmed. X.25 allows one at a time per channel.
         // Guarded by _handlersLock.
         private readonly HashSet<ushort> _unconfirmedInterrupts = new HashSet<ushort>();
+
+        // Packet sequence numbers per channel, modulo 8 (X.25 10/96 4.4.1.1): V(S) is the P(S) of our
+        // next data packet, V(R) the P(S) we expect next from the peer, which our data packets carry as
+        // P(R) (4.4.1.3). Both start at 0 when the channel enters the data transfer state and again
+        // after a reset (4.4.3). Index 0 is V(S), index 1 is V(R). Guarded by _handlersLock.
+        private readonly Dictionary<ushort, byte[]> _sequence = new Dictionary<ushort, byte[]>();
         private bool _initialized = false;
 
         // Terminal ID management for TAD protocol (auto-assignment)
@@ -133,6 +139,7 @@ namespace RetroIO.Protocols.X25.Sintran
                 }
                 _pvcHandlers.Clear();
                 _unconfirmedInterrupts.Clear();
+                _sequence.Clear();
             }
 
             _initialized = false;
@@ -176,8 +183,9 @@ namespace RetroIO.Protocols.X25.Sintran
                     _pvcHandlers.Remove(lcn);
                 }
 
-                // A cleared channel has no interrupt outstanding any more.
+                // A cleared channel has no interrupt outstanding any more, and no sequence numbers.
                 _unconfirmedInterrupts.Remove(lcn);
+                _sequence.Remove(lcn);
             }
         }
 
@@ -290,6 +298,9 @@ namespace RetroIO.Protocols.X25.Sintran
             lock (_handlersLock)
             {
                 _pvcHandlers[lcn] = handler;
+
+                // The call enters the data transfer state: both sequence numbers start at 0 (4.4.1.1).
+                _sequence[lcn] = new byte[2];
                 handler.ResponseReady += (sender, responseArgs) => HandleHandlerResponse(responseArgs);
 
                 // Assign terminal ID if this is a TAD handler
@@ -302,6 +313,7 @@ namespace RetroIO.Protocols.X25.Sintran
 
                         // Remove handler from dictionary before rejecting call
                         _pvcHandlers.Remove(lcn);
+                        _sequence.Remove(lcn);
 
                         SendCallClear(lcn, 0x01, 0x00); // Number busy
                         handler.Dispose();
@@ -338,6 +350,24 @@ namespace RetroIO.Protocols.X25.Sintran
             {
                 if (_pvcHandlers.TryGetValue(lcn, out var handler))
                 {
+                    // The peer's packet carries its P(S) in bits 4 to 2 of octet 3 (modulo 8). In
+                    // sequence, V(R) moves on by one, so our next P(R) acknowledges it (4.4.1.3).
+                    // A packet out of sequence is a local procedure error for which X.25 4.4.1.3 says
+                    // the circuit is reset; this server does not do that yet (BUGS.md), it logs it
+                    // and leaves V(R) where it is.
+                    if (_sequence.TryGetValue(lcn, out byte[]? seq) && args.Packet.FullPacket.Length >= 3)
+                    {
+                        int ps = (args.Packet.FullPacket[2] >> 1) & 0x07;
+                        if (ps == seq[1])
+                        {
+                            seq[1] = (byte)((seq[1] + 1) & 0x07);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("SintranPvcServer: Data packet with P(S) {PS} on LCN {LCN}, expected {VR} - out of sequence", ps, lcn, seq[1]);
+                        }
+                    }
+
                     try
                     {
                         _logger.LogDebug("SintranPvcServer: Forwarding data to {Protocol} handler on LCN {LCN}", 
@@ -377,6 +407,16 @@ namespace RetroIO.Protocols.X25.Sintran
         {
             var lcn = args.Packet.LCN;
             _logger.LogInformation("SintranPvcServer: Reset request received on LCN {LCN}", lcn);
+
+            // X.25 4.4.3: a reset sets both sequence numbers of the channel back to 0.
+            lock (_handlersLock)
+            {
+                if (_sequence.TryGetValue(lcn, out byte[]? seq))
+                {
+                    seq[0] = 0;
+                    seq[1] = 0;
+                }
+            }
             
             // Send reset confirmation
             SendResetConfirmation(lcn);
@@ -408,9 +448,10 @@ namespace RetroIO.Protocols.X25.Sintran
         /// Both the protocol handlers' responses and <see cref="SendX25Data"/> go through here.
         /// </summary>
         /// <remarks>
-        /// The packet carries P(S) = 0 and P(R) = 0 every time. This server keeps no send window and no
-        /// sequence counters (the "simplified sequencing for PVC" that the handler responses always
-        /// had), so numbering the packets is left to whatever layer puts them on the wire.
+        /// The packet carries the channel's V(S) as P(S) and V(R) as P(R), modulo 8 (X.25 10/96 4.4.1.1,
+        /// 4.4.1.3), and V(S) then goes up by one. Until 2026-11-17 every packet carried 0 and 0. The
+        /// send window is not enforced: a packet is sent even when its P(S) is outside the window the
+        /// peer has opened (see BUGS.md).
         /// </remarks>
         /// <param name="lcn">
         /// The logical channel number.
@@ -423,10 +464,22 @@ namespace RetroIO.Protocols.X25.Sintran
         /// </param>
         private void EmitDataPacket(ushort lcn, byte[] userData, DateTime timestamp)
         {
+            byte ps = 0;
+            byte pr = 0;
+            lock (_handlersLock)
+            {
+                if (_sequence.TryGetValue(lcn, out byte[]? seq))
+                {
+                    ps = seq[0];
+                    pr = seq[1];
+                    seq[0] = (byte)((seq[0] + 1) & 0x07);
+                }
+            }
+
             var packetData = X25PacketBuilder.CreateDataPacket(
                 lcn: lcn,
-                ps: 0, // Simplified sequencing for PVC
-                pr: 0,
+                ps: ps,
+                pr: pr,
                 userData: userData
             );
 
@@ -796,8 +849,9 @@ namespace RetroIO.Protocols.X25.Sintran
         /// The packet is raised through <see cref="PacketGenerated"/>, the same way the responses of
         /// the protocol handlers are. The bytes are sent as they are: this method does not know the
         /// SINTRAN protocol of the channel, so the caller builds any protocol framing. The packet
-        /// has P(S) and P(R) set to 0, and its size is not checked against the size negotiated for
-        /// the circuit, because this server keeps neither a send window nor the negotiated size; see
+        /// carries the channel's own P(S) and P(R). Its size is not checked against the size negotiated
+        /// for the circuit, and the send window is not enforced, because this server keeps neither the
+        /// negotiated size nor the window; see
         /// <see cref="EmitDataPacket"/>.
         /// </remarks>
         /// <param name="lcn">

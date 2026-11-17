@@ -1034,8 +1034,11 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _logger.LogInformation("Port {Id} ({Mode} {Type}, HDLC over {Medium}): LAPB link up; restarting X.25",
                     Id, _config.Mode, _config.Type, _mediumName);
 
-                // X.25 4.1: the packet layer restarts whenever the link layer has come up.
-                _layer.Restart();
+                // X.25 4.1: the packet layer restarts whenever the link layer has come up. X.25 4.6.5: "When the out of
+                // order condition is recovered ... the DCE will send a restart indication packet with the cause 'Network
+                // operational'". Until 2026-11-17 this sent cause 0, which Table 5-9 does not give a DCE. On a DTE port
+                // the engine turns it into 0, "DTE originated" (Table 5-9 note a).
+                _layer.Restart(X25Cause.RestartingNetworkOperational);
                 return;
             }
 

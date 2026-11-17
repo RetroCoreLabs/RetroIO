@@ -255,11 +255,19 @@ namespace RetroIO.Protocols.X25.Transport
             _statistics.ResetCounters();
         }
 
+#pragma warning disable CS0067 // Event required by interface, not used in this implementation
         /// <summary>
-        /// Raised when a client connection reports an incoming call for an X.121 address this
-        /// server accepts.
+        /// Required by the interface for incoming calls. The server transport never raises it.
         /// </summary>
+        /// <remarks>
+        /// Every packet from a client connection, a Call Request included, is raised through
+        /// <see cref="DataReceived"/> and decoded by the X.25 engine the runtime keeps for that
+        /// connection (since 2026-09-06); the runtime raises and answers the call there, and applies
+        /// <see cref="XotServerConfig.AcceptedX121Ranges"/> through <see cref="AcceptsX121Address"/>.
+        /// The old handler that raised this event was never reached and was removed 2026-11-17.
+        /// </remarks>
         public event EventHandler<X25CallRequest>? IncomingCall;
+#pragma warning restore CS0067
         /// <summary>
         /// Raised when the transport status changes, with the old status, the new status and the
         /// reason.
@@ -348,7 +356,6 @@ namespace RetroIO.Protocols.X25.Transport
 
             // Create connection handler
             var connection = new XotServerConnection(_logger, tcpClient, clientEndpoint);
-            connection.IncomingCall += OnClientIncomingCall;
             connection.ConnectionClosed += OnClientConnectionClosed;
             connection.DataReceived += OnClientDataReceived;
             connection.PacketSent += OnClientPacketSent;
@@ -367,9 +374,6 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Handle incoming call from client connection
-        /// </summary>
-        /// <summary>
         /// True when the connection belongs to this server.
         /// </summary>
         public bool Owns(XotServerConnection connection)
@@ -386,31 +390,6 @@ namespace RetroIO.Protocols.X25.Transport
             }
 
             return false;
-        }
-
-        private void OnClientIncomingCall(object? sender, X25CallRequest callRequest)
-        {
-            _statistics.InboundCallsReceived++;
-            
-            _logger.LogDebug("XOT server {Name} received incoming call from {CallingAddress} to {CalledAddress}", 
-                           Name, callRequest.CallingAddress, callRequest.CalledAddress);
-
-            // Check if we accept calls for this X.121 address
-            if (AcceptsX121Address(callRequest.CalledAddress))
-            {
-                // Forward to routing system
-                IncomingCall?.Invoke(this, callRequest);
-            }
-            else
-            {
-                _logger.LogWarning("XOT server {Name} rejecting call to unaccepted X.121 address: {CalledAddress}", 
-                                 Name, callRequest.CalledAddress);
-                
-                // RejectCall is not implemented, so the clear (access barred, 0x0B) cannot be sent.
-                // Say so in the log and drop the call here instead of throwing on the receive thread.
-                _logger.LogError("XOT server {Name} cannot send a Clear Request (cause 0x0B) for call to {CalledAddress}: not implemented, call dropped",
-                                 Name, callRequest.CalledAddress);
-            }
         }
 
         /// <summary>
@@ -469,14 +448,22 @@ namespace RetroIO.Protocols.X25.Transport
         /// Check if we accept calls for specified X.121 address.
         /// If no patterns are configured, accepts all addresses.
         /// </summary>
-        private bool AcceptsX121Address(string x121Address)
+        /// <remarks>
+        /// Called by the runtime (ProtocolRuntime.OnEndpointIncomingCall), where a call on one of this
+        /// server's connections arrives through the connection's own X.25 engine; a refused call is
+        /// cleared there with cause 0x0B (access barred).
+        /// </remarks>
+        /// <param name="x121Address">The called address of the incoming call.</param>
+        /// <returns>True when the address matches a pattern, or no pattern is set.</returns>
+        public bool AcceptsX121Address(string x121Address)
         {
             // No patterns configured = accept all
             if (_config.AcceptedX121Ranges.Count == 0)
                 return true;
 
-            foreach (var pattern in _config.AcceptedX121Ranges)
+            for (int i = 0; i < _config.AcceptedX121Ranges.Count; i++)
             {
+                string pattern = _config.AcceptedX121Ranges[i];
                 try
                 {
                     var regex = new System.Text.RegularExpressions.Regex(pattern);
@@ -598,10 +585,6 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Raised when a call request arrives on the connection.
-        /// </summary>
-        public event EventHandler<X25CallRequest>? IncomingCall;
-        /// <summary>
         /// Raised when the connection closes; the argument is the client endpoint text.
         /// </summary>
         public event EventHandler<string>? ConnectionClosed;
@@ -693,59 +676,6 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 Close();
                 ConnectionClosed?.Invoke(this, _clientEndpoint);
-            }
-        }
-
-        /// <summary>
-        /// Process received X.25 packet - parse type and dispatch
-        /// </summary>
-        private void ProcessX25Packet(byte[] packetData)
-        {
-            try
-            {
-                if (packetData.Length < 3)
-                {
-                    _logger.LogWarning("X.25 packet too short ({Length} bytes) from {ClientEndpoint}", packetData.Length, _clientEndpoint);
-                    return;
-                }
-
-                byte pti = packetData[2];
-
-                if (pti == 0xFB) // Restart Request
-                {
-                    _logger.LogInformation("X.25 RESTART REQUEST from {ClientEndpoint} - sending RESTART CONFIRM", _clientEndpoint);
-
-                    // Build Restart Confirm packet: GFI=0x10|LCG=0, LCN=0x00, PTI=0xFF
-                    var restartConfirm = new byte[] { 0x10, 0x00, 0xFF };
-                    SendPacket(restartConfirm);
-                }
-                else if (pti == 0x0B) // Call Request
-                {
-                    var callRequest = new X25CallRequest(packetData);
-                    // Store the LCN from the packet for response routing
-                    byte gfi = packetData[0];
-                    byte lcnLow = packetData[1];
-                    ushort lcn = (ushort)(((gfi & 0x0F) << 8) | lcnLow);
-                    callRequest.SourceLcn = lcn;
-
-                    _logger.LogInformation("X.25 CALL REQUEST from {ClientEndpoint}: calling={CallingAddress} -> called={CalledAddress} LCN={LCN}",
-                                         _clientEndpoint, callRequest.CallingAddress, callRequest.CalledAddress, lcn);
-
-                    // Store reference to this connection for sending responses back
-                    callRequest.SourceConnection = this;
-
-                    IncomingCall?.Invoke(this, callRequest);
-                }
-                else
-                {
-                    _logger.LogDebug("X.25 packet type 0x{PTI:X2} from {ClientEndpoint}", pti, _clientEndpoint);
-                    // Data, Clear, RR etc. are handled via the DataReceived event
-                    // fired in HandleConnectionLoop (before ProcessX25Packet is called)
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing X.25 packet from {ClientEndpoint}", _clientEndpoint);
             }
         }
 
