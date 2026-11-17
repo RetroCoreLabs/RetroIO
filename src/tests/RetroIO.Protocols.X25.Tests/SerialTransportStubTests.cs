@@ -52,14 +52,15 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(transport.GetStatistics().InboundCallsRejected, Is.EqualTo(0), "a call that was not cleared must not be counted as rejected");
         }
 
+        // PlaceCall is built since 2026-11-17 (through the line's X.25 engine, see
+        // SerialIncomingCallTests.PlaceCall_*). A transport with no X.25 data link must refuse it, not
+        // report success.
         [Test]
-        public void PlaceCall_IsNotImplemented_AndSaysSo()
+        public void PlaceCall_WithNoDataLink_IsRefused()
         {
             SerialTransport transport = NewTransport();
 
-            NotSupportedException? ex = Assert.Throws<NotSupportedException>(() => transport.PlaceCall(NewCall()));
-
-            Assert.That(ex!.Message, Does.Contain("not implemented"));
+            Assert.That(transport.PlaceCall(NewCall()), Is.False);
             Assert.That(transport.GetStatistics().OutboundCallsSucceeded, Is.EqualTo(0), "a call that was not sent must not be counted as succeeded");
         }
     }

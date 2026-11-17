@@ -48,6 +48,16 @@ namespace RetroIO.Protocols.X25.Tests
         /// </summary>
         private void EstablishCircuit(ushort lcn)
         {
+            EstablishCircuit(lcn, out _);
+        }
+
+        /// <summary>
+        /// Opens a circuit and reports how many data packets the channel's handler sent while it was
+        /// set up (the routing handler answers at once). Those packets use the first send sequence
+        /// numbers of the channel.
+        /// </summary>
+        private void EstablishCircuit(ushort lcn, out int dataPacketsAtSetUp)
+        {
             byte[] call = X25PacketBuilder.CreateCallRequest(lcn, "500", "100", null, Array.Empty<byte>());
             _server.OnX25Event(new X25PacketEventArgs
             {
@@ -56,7 +66,20 @@ namespace RetroIO.Protocols.X25.Tests
                 Timestamp = DateTime.UtcNow
             });
             Assert.That(_server.GetActiveHandlers().ContainsKey(lcn), Is.True, "the call must have created a handler for the circuit");
-            lock (_sent) { _sent.Clear(); }
+            lock (_sent)
+            {
+                dataPacketsAtSetUp = 0;
+                for (int i = 0; i < _sent.Count; i++)
+                {
+                    if (_sent[i].Packet.PacketType == X25PacketType.Data && _sent[i].Packet.LCN == lcn)
+                    {
+                        Assert.That((_sent[i].Packet.FullPacket[2] >> 1) & 0x07, Is.EqualTo(dataPacketsAtSetUp & 0x07), "P(S) of a data packet sent at set-up");
+                        dataPacketsAtSetUp++;
+                    }
+                }
+
+                _sent.Clear();
+            }
         }
 
         private X25PacketEventArgs LastSent()
@@ -178,20 +201,104 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
-        /// The Data packet has the header the builder gives for P(S) 0 and P(R) 0, and its time stamp
-        /// is the one in the event.
+        /// The Data packet has the header the builder gives for the channel's next P(S) (after the
+        /// packets its handler sent at set-up) and P(R) 0 (nothing received yet), and its time stamp is
+        /// the one in the event. Until 2026-11-17 this pinned P(S) 0 on every packet.
         /// </summary>
         [Test]
-        public void SendX25Data_PutsTheBytesOfADataPacketWithSequenceNumbersZero()
+        public void SendX25Data_PutsTheBytesOfADataPacketWithTheChannelsSequenceNumbers()
         {
-            EstablishCircuit(Lcn);
+            EstablishCircuit(Lcn, out int first);
             byte[] payload = new byte[] { 0x01, 0x02, 0x03 };
 
             _server.SendX25Data(Lcn, payload);
 
             X25PacketEventArgs sent = LastSent();
-            Assert.That(sent.Packet.FullPacket, Is.EqualTo(X25PacketBuilder.CreateDataPacket(Lcn, 0, 0, payload)));
+            Assert.That(sent.Packet.FullPacket, Is.EqualTo(X25PacketBuilder.CreateDataPacket(Lcn, (byte)(first & 0x07), 0, payload)));
             Assert.That(sent.Packet.Timestamp, Is.EqualTo(sent.Timestamp));
+        }
+
+        private static int SendSequenceOf(X25PacketEventArgs sent) => (sent.Packet.FullPacket[2] >> 1) & 0x07;
+
+        private static int ReceiveSequenceOf(X25PacketEventArgs sent) => (sent.Packet.FullPacket[2] >> 5) & 0x07;
+
+        private void ReceiveData(ushort lcn, byte ps, byte pr, byte[] payload)
+        {
+            _server.OnX25Event(new X25PacketEventArgs
+            {
+                Packet = new X25Packet(X25PacketBuilder.CreateDataPacket(lcn, ps, pr, payload)) { LCN = lcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow
+            });
+        }
+
+        /// <summary>
+        /// X.25 (10/96) 4.4.1.1: each data packet carries P(S); it is 0 for the first data packet after
+        /// the circuit enters the data transfer state, and goes up by one (modulo 8) for each next one,
+        /// on each channel and direction separately.
+        /// </summary>
+        [Test]
+        public void SendX25Data_CountsTheSendSequenceUpPerChannel()
+        {
+            EstablishCircuit(Lcn, out int first);
+            EstablishCircuit(8, out int firstOn8);
+
+            for (int i = 0; i < 10; i++)
+            {
+                _server.SendX25Data(Lcn, new byte[] { (byte)i });
+                Assert.That(SendSequenceOf(LastSent()), Is.EqualTo((first + i) & 0x07), "P(S) of packet " + i + " on channel 7");
+            }
+
+            _server.SendX25Data(8, new byte[] { 0x41 });
+            Assert.That(SendSequenceOf(LastSent()), Is.EqualTo(firstOn8 & 0x07), "channel 8 has its own count");
+        }
+
+        /// <summary>
+        /// X.25 (10/96) 4.4.1.2/4.4.1.3: P(R) is the P(S) the sender expects next, so after the peer's data
+        /// packets 0 and 1 our next data packet carries P(R) = 2.
+        /// </summary>
+        [Test]
+        public void SendX25Data_CarriesTheReceiveSequence_OfTheDataTheChannelReceived()
+        {
+            EstablishCircuit(Lcn);
+
+            ReceiveData(Lcn, 0, 0, new byte[] { 0x41 });
+            ReceiveData(Lcn, 1, 0, new byte[] { 0x42 });
+            lock (_sent) { _sent.Clear(); }
+
+            _server.SendX25Data(Lcn, new byte[] { 0x43 });
+            Assert.That(ReceiveSequenceOf(LastSent()), Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// X.25 (10/96) 4.4.3: after a reset both sequence numbers start again at 0; a new call on the
+        /// same channel starts at 0 as well.
+        /// </summary>
+        [Test]
+        public void SendSequence_StartsAgainAtZero_AfterAResetAndOnANewCall()
+        {
+            EstablishCircuit(Lcn, out int first);
+            _server.SendX25Data(Lcn, new byte[] { 1 });
+            _server.SendX25Data(Lcn, new byte[] { 2 });
+            Assert.That(SendSequenceOf(LastSent()), Is.EqualTo((first + 1) & 0x07));
+            ReceiveData(Lcn, 0, 0, new byte[] { 0x41 });
+
+            _server.OnX25Event(new X25PacketEventArgs
+            {
+                Packet = new X25Packet(X25PacketBuilder.CreateResetRequest(Lcn, 0, 0)) { LCN = Lcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow
+            });
+            _server.SendX25Data(Lcn, new byte[] { 3 });
+            Assert.That(SendSequenceOf(LastSent()), Is.EqualTo(0), "P(S) after the reset");
+            Assert.That(ReceiveSequenceOf(LastSent()), Is.EqualTo(0), "P(R) after the reset");
+
+            _server.SendX25Data(Lcn, new byte[] { 4 });
+            _server.OnX25Clear(Lcn, 0, 0);
+            lock (_sent) { _sent.Clear(); }
+            EstablishCircuit(Lcn, out int firstAgain);
+            _server.SendX25Data(Lcn, new byte[] { 5 });
+            Assert.That(SendSequenceOf(LastSent()), Is.EqualTo(firstAgain & 0x07), "P(S) on a new call starts again");
         }
 
         /// <summary>

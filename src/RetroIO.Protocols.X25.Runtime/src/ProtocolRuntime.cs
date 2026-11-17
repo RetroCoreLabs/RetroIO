@@ -1402,6 +1402,7 @@ namespace RetroIO.Protocols.X25.Runtime
                 ListenAddress = "0.0.0.0", // Listen on all interfaces
                 ListenPort = xotConfig.LocalPort,
                 MaxConnections = 100, // Default value since MaxConnections doesn't exist in XotInterfaceConfig
+                AcceptedX121Ranges = new List<string>(xotConfig.AcceptedX121Ranges),
                 Listeners = _xotListeners // shares the port with any XOT peer entry on it
             };
 

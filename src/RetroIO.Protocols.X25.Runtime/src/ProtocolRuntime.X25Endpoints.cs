@@ -503,9 +503,54 @@ namespace RetroIO.Protocols.X25.Runtime
             }
 
             byte[] packet = data.Length == e.Length ? data : data.AsSpan(0, e.Length).ToArray();
-            X25Endpoint endpoint = FindEndpoint(serial)
+            SerialEndpointFor(serial).Receive(packet);
+        }
+
+        /// <summary>
+        /// The one X.25 engine of a serial line, created on first use. Incoming packets
+        /// (<see cref="OnSerialPacketReceived"/>) and outgoing calls (<see cref="PlaceCallOnSerial"/>)
+        /// both use it, so a line has one restart state and one channel range (X.25 clause 4).
+        /// </summary>
+        /// <param name="serial">
+        /// A serial transport whose <see cref="SerialTransport.LinkRole"/> is set.
+        /// </param>
+        private X25Endpoint SerialEndpointFor(SerialTransport serial)
+        {
+            return FindEndpoint(serial)
                 ?? EndpointFor(serial, serial.Name, serial.SendPacket, isDte: serial.LinkRole == SerialX25LinkRole.Dte);
-            endpoint.Receive(packet);
+        }
+
+        /// <summary>
+        /// Places an outgoing call on a serial line through the line's own X.25 engine, the same way
+        /// <see cref="PlaceCallViaPeerLink"/> does for an XOT connection.
+        /// </summary>
+        /// <remarks>
+        /// The Call Request goes out in a LAPB I frame through <see cref="SerialTransport.SendPacket"/>;
+        /// the peer's Call Connected or Clear Indication comes back through
+        /// <see cref="OnSerialPacketReceived"/> into the same engine. A call is refused while the line
+        /// runs no X.25 (no complete link options) or its data link is not set up: X.25 2.4.4.1 lets
+        /// information frames go only once the link is set up, so there is nothing to carry the call.
+        /// Unlike XOT, the restart rules of X.25 4.1.1 apply here unchanged: while the engine's own
+        /// Restart Request is unconfirmed, the engine holds the call and sends it after the restart.
+        /// </remarks>
+        /// <param name="serial">
+        /// The serial transport the call is placed on.
+        /// </param>
+        /// <param name="request">
+        /// The call to place.
+        /// </param>
+        /// <returns>
+        /// True when the engine took the call; false when the line cannot carry it now.
+        /// </returns>
+        internal bool PlaceCallOnSerial(SerialTransport serial, X25CallRequest request)
+        {
+            if (serial.LinkRole == null || !serial.IsLinkUp)
+            {
+                _logger.LogWarning("Serial call to {Called} via {Name} refused: the X.25 data link is not up", request.CalledAddress, serial.Name);
+                return false;
+            }
+
+            return PlaceCallOnEndpoint(SerialEndpointFor(serial), serial, serial.Name, request);
         }
 
         /// <summary>
@@ -590,14 +635,14 @@ namespace RetroIO.Protocols.X25.Runtime
 
             if (lci == 0)
             {
-                _logger.LogWarning("XOT call to {Called} via {Name} refused by the packet layer", request.CalledAddress, name);
+                _logger.LogWarning("Call to {Called} via {Name} refused by the packet layer", request.CalledAddress, name);
                 return false;
             }
 
             CallPlacedOnEndpointForTest?.Invoke(endpoint, lci);
 
             request.UsedTransport = transport;
-            _logger.LogInformation("XOT call to {Called} placed on {Name} channel {Lci} (local LCN {Local})",
+            _logger.LogInformation("Call to {Called} placed on {Name} channel {Lci} (local LCN {Local})",
                 request.CalledAddress, name, lci, request.SourceLcn);
             return true;
         }
@@ -611,11 +656,26 @@ namespace RetroIO.Protocols.X25.Runtime
                 return;
             }
 
+            ITransportInterface? transport = TransportOf(connection);
+
+            // An XOT server entry may list the called addresses it takes calls for. This is where a call
+            // on one of its connections really arrives (through the connection's own X.25 engine), so the
+            // list is applied here. A call to any other address is cleared with cause 0x0B, access barred
+            // (X.25 Table 5-7). Until 2026-11-17 the list was read only by XotServerTransport's own
+            // incoming-call handler, which nothing called, so it had no effect.
+            if (connection is XotServerConnection && transport is XotServerTransport xotServer && !xotServer.AcceptsX121Address(called))
+            {
+                _logger.LogWarning("Incoming call to {Called} on {Name} refused: the XOT server entry does not accept that address - clearing (access barred)",
+                    called, endpoint.Name);
+                layer.ClearCall(lci, X25Cause.AccessBarred, X25Diagnostic.None);
+                return;
+            }
+
             X25CallRequest request = new X25CallRequest(called, calling, null, cud)
             {
                 SourceLcn = lci,
                 SourceConnection = connection,
-                UsedTransport = TransportOf(connection),
+                UsedTransport = transport,
             };
 
             // The routing layer allocates the local LCN, maps the circuit and binds the service, but

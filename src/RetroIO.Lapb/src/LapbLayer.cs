@@ -868,7 +868,15 @@ namespace RetroIO.Protocols.Xmsg.Live
 
                     // Push the peer to the RUN phase: it advances only once it receives an RR from us
                     // (spec 3.4 idle keepalive; live-necessary against the ND kernel).
-                    EmitSupervisory(RrNibble, pollFinal: false);
+                    // ITU dialect: not while our own SABM is unanswered. X.25 2.4.4.1: frames other
+                    // than UA and DM "will be sent only after the data link is set up and if no
+                    // outstanding SABM ... exists". The ND dialect keeps the RR, which the ND
+                    // bring-up needs.
+                    if (!IsItu || _ourSabmAcked)
+                    {
+                        EmitSupervisory(RrNibble, pollFinal: false);
+                    }
+
                     if (resetWhileUp)
                     {
                         NoteLinkReset();
@@ -885,7 +893,21 @@ namespace RetroIO.Protocols.Xmsg.Live
                     // time we were no longer in SABM_SENT. Honouring it only there would leave the
                     // link permanently half-up and never usable, which is how the first version of
                     // this fix failed its own tests.
+                    bool uaWasSolicited = !_ourSabmAcked;
                     _ourSabmAcked = true;
+
+                    if (IsItu && _state == LapbLayerState.Connected && !uaWasSolicited)
+                    {
+                        // An unsolicited UA: no SABM of ours was outstanding (our own was answered
+                        // already). X.25 2.4.7.3: "the DCE may either initiate the data link
+                        // resetting procedures itself ... or return a DM response". We reset: a new
+                        // SABM, exactly as Connect sends it, and the reset is counted. ITU only; the
+                        // ND dialect ignores it as before, nothing measured says what an ND
+                        // station does here (same split as the DM case below).
+                        Connect(currentTicks);
+                        NoteLinkReset();
+                        break;
+                    }
 
                     if (_state == LapbLayerState.SabmSent)
                     {

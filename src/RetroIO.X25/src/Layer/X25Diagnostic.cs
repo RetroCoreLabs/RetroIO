@@ -230,6 +230,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte InvalidFacilityRequest = 0x03;
 
         /// <summary>
+        /// 00001011 - Access barred (Table 5-7; the row between Invalid facility request and Local
+        /// procedure error, bits read 8 to 1 out of the interleaved columns).
+        /// </summary>
+        public const byte AccessBarred = 0x0B;
+
+        /// <summary>
+        /// Restarting cause 00000111 "Network operational" (X.25 Table 5-9). A DCE sends it in the Restart Indication
+        /// when an out of order condition is recovered, for example when the link comes up again (X.25 4.6.5).
+        /// </summary>
+        public const byte RestartingNetworkOperational = 0x07;
+
+        /// <summary>
         /// 00001101 - Not obtainable (Table 5-7).
         /// </summary>
         public const byte NotObtainable = 0x0D;
