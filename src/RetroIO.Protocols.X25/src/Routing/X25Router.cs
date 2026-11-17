@@ -117,10 +117,12 @@ namespace RetroIO.Protocols.X25.Transport
                 throw new ArgumentNullException(nameof(transportInterface));
 
             _interfaces[transportInterface.Name] = transportInterface;
-            
-            // Subscribe to incoming call events
-            transportInterface.IncomingCall += OnIncomingCall;
-            
+
+            // The router does not listen to the transport's IncomingCall event. That event is the
+            // offer to the program, and it is raised only after the router passed the call: the
+            // runtime asks AnswerIncomingCall first (decided by Ronny, 2026-11-17). Hearing the event
+            // as well made the router refuse calls the program was still deciding on.
+
             _logger.LogInformation("X.25 transport interface registered: {InterfaceName} ({Type})", 
                                   transportInterface.Name, transportInterface.Type);
         }
@@ -132,7 +134,6 @@ namespace RetroIO.Protocols.X25.Transport
         {
             if (_interfaces.TryGetValue(interfaceName, out var transportInterface))
             {
-                transportInterface.IncomingCall -= OnIncomingCall;
                 _interfaces.Remove(interfaceName);
                 
                 _logger.LogInformation("X.25 transport interface unregistered: {InterfaceName}", interfaceName);
@@ -306,37 +307,67 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Handle incoming X.25 call request from transport interface
+        /// Answers an incoming call first, before anyone else hears of it: a call with no inbound
+        /// route is refused at once on the transport it came in on, with cause 0x0B (access barred,
+        /// X.25 Table 5-7); a call with a route is left alone, for the program or the local service.
         /// </summary>
-        private void OnIncomingCall(object? sender, X25CallRequest callRequest)
+        /// <remarks>
+        /// <para>
+        /// X.25 4.1.4: a called DTE that does not accept a call refuses it "by a clear request packet
+        /// as described in 4.1.7". The refusal goes through
+        /// <see cref="ITransportInterface.RejectCall"/>, so the X.25 engine of the line the call came
+        /// in on sends the Clear Request on the channel of the call.
+        /// </para>
+        /// <para>
+        /// Decided by Ronny, 2026-11-17: the router answers first. The runtime calls this method for
+        /// every incoming call before it offers the call to the program (a line that waits for the
+        /// program's answer) or routes it to a local service (a line that answers by itself). The
+        /// router no longer listens to the transport's IncomingCall event, which is the offer to the
+        /// program; when it did, it refused calls the program had been given and was deciding on.
+        /// Until 2026-11-17 the refusal here only wrote a log line and nothing went on the wire.
+        /// </para>
+        /// <para>
+        /// The router does not accept a call. A routed call is accepted by whoever owns it next.
+        /// </para>
+        /// </remarks>
+        /// <param name="callRequest">
+        /// The call, as the transport will hand it to the program.
+        /// </param>
+        /// <param name="sourceInterface">
+        /// The transport the call came in on; a refusal is sent through it.
+        /// </param>
+        /// <returns>
+        /// True when an inbound route matches the called address and the call may go on; false when
+        /// the call was refused.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="callRequest"/> or <paramref name="sourceInterface"/> is null.
+        /// </exception>
+        public bool AnswerIncomingCall(X25CallRequest callRequest, ITransportInterface sourceInterface)
         {
-            _logger.LogInformation("Processing incoming call from X.121 address: {CallingAddress} to {CalledAddress}", 
-                                  callRequest.CallingAddress, callRequest.CalledAddress);
+            ArgumentNullException.ThrowIfNull(callRequest);
+            ArgumentNullException.ThrowIfNull(sourceInterface);
 
-            var routes = FindRoutes(callRequest.CalledAddress, RouteDirection.Inbound, callRequest.CallUserData);
-            
+            _logger.LogInformation("Processing incoming call from X.121 address: {CallingAddress} to {CalledAddress} on {Interface}",
+                                  callRequest.CallingAddress, callRequest.CalledAddress, sourceInterface.Name);
+
+            List<X25Route> routes = FindRoutes(callRequest.CalledAddress, RouteDirection.Inbound, callRequest.CallUserData);
             if (routes.Count == 0)
             {
-                _logger.LogWarning("No route found for incoming call to X.121 address: {CalledAddress}", 
+                _logger.LogWarning("No route found for incoming call to X.121 address: {CalledAddress} - refusing it (access barred)",
                                   callRequest.CalledAddress);
-                
-                // Send call clear with appropriate cause
-                RejectCall(callRequest, 0x0B); // Access barred
-                return;
+                RejectCall(callRequest, sourceInterface, AccessBarredCause);
+                return false;
             }
 
-            // For incoming calls, we typically accept and route to local application
-            // This would integrate with the existing module routing system
-            _logger.LogInformation("Incoming call accepted via route: {RouteName}", routes[0].Name);
-
-            // Fire event for application-level routing (existing module system)
-            IncomingCallRouted?.Invoke(this, new IncomingCallRoutedEventArgs
-            {
-                CallRequest = callRequest,
-                Route = routes[0],
-                SourceInterface = sender as ITransportInterface
-            });
+            _logger.LogInformation("Incoming call to {CalledAddress} passed by route: {RouteName}", callRequest.CalledAddress, routes[0].Name);
+            return true;
         }
+
+        /// <summary>
+        /// X.25 Table 5-7, clearing cause "access barred" (0 0 0 0 1 0 1 1).
+        /// </summary>
+        private const byte AccessBarredCause = 0x0B;
 
         #endregion
 
@@ -474,30 +505,27 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Reject an incoming call with specified cause
+        /// Refuses an incoming call with the given cause, through the transport it came in on: that
+        /// transport's X.25 engine sends the Clear Request (X.25 4.1.7) on the call's channel.
         /// </summary>
-        private void RejectCall(X25CallRequest callRequest, byte cause)
+        private void RejectCall(X25CallRequest callRequest, ITransportInterface sourceInterface, byte cause)
         {
             _logger.LogInformation("Rejecting call from {CallingAddress} to {CalledAddress} with cause 0x{Cause:X2}",
                                   callRequest.CallingAddress, callRequest.CalledAddress, cause);
 
-            // TODO: Implement call rejection
-            // TODO: Send X.25 Clear Request packet with cause code
-            // OPEN (BUGS.md, 2026-11-17): this sends nothing. Passing the refusal to the transport was tried and
-            // undone: the router hears the same IncomingCall as the program in "wait for an answer" mode, so with no
-            // route it refused calls before the program could answer them.
+            if (!sourceInterface.RejectCall(callRequest, cause))
+            {
+                _logger.LogWarning("Transport {Interface} did not send the Clear Request for the call to {CalledAddress}",
+                                  sourceInterface.Name, callRequest.CalledAddress);
+            }
         }
 
         #endregion
 
-        #region Events
-
-        /// <summary>
-        /// Fired when an incoming call has been successfully routed
-        /// </summary>
-        public event EventHandler<IncomingCallRoutedEventArgs>? IncomingCallRouted;
-
-        #endregion
+        // The IncomingCallRouted event that stood here was removed on 2026-11-17. It was raised only
+        // from the router's own handler of the transport's IncomingCall event, which is gone: the
+        // router now answers a call when the runtime asks it (AnswerIncomingCall), and nothing
+        // subscribed to the event.
 
         #region Statistics and Diagnostics
 
@@ -548,25 +576,6 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// Event args for incoming call routing events
-    /// </summary>
-    public class IncomingCallRoutedEventArgs : EventArgs
-    {
-        /// <summary>
-        /// Gets or sets the call request that was routed.
-        /// </summary>
-        public required X25CallRequest CallRequest { get; set; }
-        /// <summary>
-        /// Gets or sets the route the call was matched to.
-        /// </summary>
-        public required X25Route Route { get; set; }
-        /// <summary>
-        /// Gets or sets the interface the call came in on, or null.
-        /// </summary>
-        public ITransportInterface? SourceInterface { get; set; }
     }
 
     /// <summary>

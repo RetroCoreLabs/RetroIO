@@ -680,26 +680,57 @@ namespace RetroIO.Protocols.X25.Runtime
                 UsedTransport = transport,
             };
 
-            // An entry set to wait for the program's answer: the call is offered through the
-            // transport's IncomingCall event and stays in p3 until the program calls AcceptCall or
-            // RejectCall (AcceptOfferedCall / RejectOfferedCall below), or until the engine's T11 runs
-            // out and clears it (X.25 4.1.4, Table D.1: 180 s). The call is remembered BEFORE it is
-            // offered, because a handler may answer inside the event. Nothing is routed yet: a local
-            // service that took the call now could start sending before the call is accepted.
-            if (connection is XotServerConnection && transport is XotServerTransport waitingXot && !waitingXot.AnswerIncomingCallsAutomatically)
+            // The router answers first (decided by Ronny, 2026-11-17). On an XOT server entry and on
+            // a serial line the router is asked before anyone else hears of the call: a call with no
+            // inbound route is refused at once with cause 0x0B, access barred (X.25 4.1.4 and 4.1.7,
+            // Table 5-7), and only a call it passes goes on - offered to the program on an entry that
+            // waits for the program's answer, or routed to the local service on one that answers by
+            // itself. The order is fixed here, in one place: the program's offer (the transport's
+            // IncomingCall event) is raised below, after the router passed the call, so it does not
+            // depend on who subscribed to an event first.
+            //
+            // The router refuses through the transport's RejectCall, which comes back to
+            // RejectOfferedCall and the engine of this connection. That needs the call in the list of
+            // calls waiting for an answer, so it is remembered BEFORE the router is asked - which also
+            // covers a program handler that answers inside the event.
+            bool waitsForProgram = (transport is XotServerTransport waitingXot && connection is XotServerConnection && !waitingXot.AnswerIncomingCallsAutomatically)
+                || (connection is SerialTransport waitingSerial && !waitingSerial.AnswerIncomingCallsAutomatically);
+            bool screenedByRouter = (connection is XotServerConnection && transport is XotServerTransport) || connection is SerialTransport;
+            if (screenedByRouter)
             {
                 RememberOfferedCall(request, endpoint, lci);
-                _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} offered to the program; it waits for an answer", called, endpoint.Name, lci);
-                waitingXot.OfferIncomingCall(request);
-                return;
-            }
+                if (!_x25Router.AnswerIncomingCall(request, transport!))
+                {
+                    // RejectOfferedCall has taken the call out of the list when the Clear Request
+                    // went out. If it did not go out (the channel was cleared meanwhile), the entry
+                    // is dropped here so the call cannot be answered later.
+                    TakeOfferedCall(request);
+                    return;
+                }
 
-            if (connection is SerialTransport waitingSerial && !waitingSerial.AnswerIncomingCallsAutomatically)
-            {
-                RememberOfferedCall(request, endpoint, lci);
-                _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} offered to the program; it waits for an answer", called, endpoint.Name, lci);
-                waitingSerial.OfferIncomingCall(request);
-                return;
+                // An entry set to wait for the program's answer: the call is offered through the
+                // transport's IncomingCall event and stays in p3 until the program calls AcceptCall or
+                // RejectCall (AcceptOfferedCall / RejectOfferedCall below), or until the engine's T11
+                // runs out and clears it (X.25 4.1.4, Table D.1: 180 s). Nothing is routed yet: a
+                // local service that took the call now could start sending before the call is
+                // accepted.
+                if (waitsForProgram)
+                {
+                    _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} offered to the program; it waits for an answer", called, endpoint.Name, lci);
+                    if (transport is XotServerTransport offerXot)
+                    {
+                        offerXot.OfferIncomingCall(request);
+                    }
+                    else
+                    {
+                        ((SerialTransport)connection).OfferIncomingCall(request);
+                    }
+
+                    return;
+                }
+
+                // A line that answers by itself: the call is no longer waiting for the program.
+                TakeOfferedCall(request);
             }
 
             // The routing layer allocates the local LCN, maps the circuit and binds the service, but
