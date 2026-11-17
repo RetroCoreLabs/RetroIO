@@ -873,8 +873,8 @@ namespace RetroIO.Protocols.X25.Tests
         // ------------------------------------------------------------------ the router answers first (2026-11-17)
         //
         // Decided by Ronny, 2026-11-17: the router answers an incoming call first. A call it has no
-        // inbound route for is refused at once with a Clear Request, cause 0x0B access barred (X.25
-        // 4.1.4 and 4.1.7, Table 5-7), on the line it came in on; only a call it has a route for is
+        // inbound route for is refused at once with a Clear Request, cause 0x0D not obtainable, diagnostic
+        // 67 (X.25 4.1.4 and 4.1.7, Table C.1 row 24; it was 0x0B access barred until 2026-11-18), on the line it came in on; only a call it has a route for is
         // offered to the program (wait mode) or answered by the local service (automatic mode).
 
         private int CountClearsOn(byte lcn)
@@ -908,7 +908,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void WaitMode_NoRoute_IsClearedWithAccessBarred_AndNotOfferedToTheProgram()
+        public void WaitMode_NoRoute_IsClearedWithNotObtainable_AndNotOfferedToTheProgram()
         {
             Build(Dce(), answerAutomatically: false, withRoute: false);
             int offered = 0;
@@ -918,14 +918,14 @@ namespace RetroIO.Protocols.X25.Tests
             Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
 
             byte[] clear = TheClearOn(5);
-            Assert.That(clear[3], Is.EqualTo(X25Cause.AccessBarred), "no inbound route: Table 5-7, 0x0B access barred");
-            Assert.That(clear[4], Is.EqualTo((byte)0), "diagnostic 0");
+            Assert.That(clear[3], Is.EqualTo(X25Cause.NotObtainable), "no inbound route: Table C.1 row 24, 0x0D not obtainable");
+            Assert.That(clear[4], Is.EqualTo(X25Diagnostic.InvalidCalledAddress), "Table C.1 row 24: # 67");
             Assert.That(offered, Is.EqualTo(0), "the router refused it; the program must not be offered the call");
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0));
         }
 
         [Test]
-        public void AutomaticMode_NoRoute_IsClearedWithAccessBarred()
+        public void AutomaticMode_NoRoute_IsClearedWithNotObtainable()
         {
             Build(Dce(), answerAutomatically: true, withRoute: false);
             Inject(Frame(AddressB, Sabm));
@@ -935,18 +935,20 @@ namespace RetroIO.Protocols.X25.Tests
             Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
 
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "a call with no route must not be accepted");
-            Assert.That(TheClearOn(5)[3], Is.EqualTo(X25Cause.AccessBarred));
+            Assert.That(TheClearOn(5)[3], Is.EqualTo(X25Cause.NotObtainable));
+            Assert.That(TheClearOn(5)[4], Is.EqualTo(X25Diagnostic.InvalidCalledAddress), "Table C.1 row 24: # 67");
         }
 
         [Test]
-        public void AutomaticMode_ACallToAnUnroutedAddress_IsClearedWithAccessBarred()
+        public void AutomaticMode_ACallToAnUnroutedAddress_IsClearedWithNotObtainable()
         {
             Build(Dce());
             Inject(Frame(AddressB, Sabm));
 
             Inject(Frame(AddressB, IControl(0, 0), CallRequest(6, "999")));
 
-            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.AccessBarred), "the router refuses it, not the service lookup (0x0D)");
+            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.NotObtainable), "Table C.1 row 24");
+            Assert.That(TheClearOn(6)[4], Is.EqualTo(X25Diagnostic.InvalidCalledAddress), "the router refuses it with # 67");
         }
 
         [Test]
@@ -975,7 +977,7 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Channel 6 has no route: the router refuses it.
             Inject(Frame(AddressB, IControl(0, 0), CallRequest(6, "999")));
-            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.AccessBarred));
+            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.NotObtainable));
             Assert.That(offered.Count, Is.EqualTo(0));
             int framesBefore = SentFrames().Count;
 
@@ -1008,7 +1010,7 @@ namespace RetroIO.Protocols.X25.Tests
             Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
             Inject(Frame(AddressB, IControl(1, 0), CallRequest(6, "999")));
 
-            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.AccessBarred), "the call with no route is refused at once");
+            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.NotObtainable), "the call with no route is refused at once");
             Assert.That(offered.Count, Is.EqualTo(1), "only the routed call is offered");
             Assert.That(offered[0].SourceLcn, Is.EqualTo((ushort)5));
             Assert.That(offered[0].CalledAddress, Is.EqualTo(LocalMachineId));

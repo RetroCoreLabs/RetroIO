@@ -51,6 +51,10 @@ namespace RetroIO.Protocols.X25.Tests
             _egress = new LoopbackSwitchPort(new PortConfig { Id = 1, LciBase = 1 });
             _node.AddPort(_ingress);
             _node.AddPort(_egress);
+
+            // Both lines up: the switch's router forwards a call only to a port in service (SwitchCallRouter).
+            _ingress.Start();
+            _egress.Start();
             _core = new SwitchCore(_node);
         }
 
