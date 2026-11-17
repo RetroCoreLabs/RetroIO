@@ -7,6 +7,7 @@
 
 using System;
 using System.Globalization;
+using System.IO;
 using System.Text;
 using RetroIO.Protocols.X25.Routing;
 using RetroIO.Protocols.X25.Switch.Model;
@@ -127,9 +128,21 @@ namespace RetroIO.Protocols.X25.Switch.Management
             {
                 return "Debug logging disabled" + Eol;
             }
+            if (cmd.StartsWith("show x25 invoice", StringComparison.Ordinal))
+            {
+                return ShowInvoice(cmd.Substring(16).Trim());
+            }
             if (cmd.StartsWith("show x25 account", StringComparison.Ordinal))
             {
                 return ShowAccount();
+            }
+            if (cmd.StartsWith("x25 account add ", StringComparison.Ordinal))
+            {
+                return AccountAdd(cmd.Substring(16));
+            }
+            if (cmd.StartsWith("x25 account del ", StringComparison.Ordinal))
+            {
+                return AccountDel(cmd.Substring(16).Trim());
             }
             if (cmd.StartsWith("reload", StringComparison.Ordinal))
             {
@@ -344,25 +357,144 @@ namespace RetroIO.Protocols.X25.Switch.Management
             return sb.ToString();
         }
 
+        /// <summary>
+        /// <c>x25 account add NAME range START END</c> or <c>x25 account add NAME nui NUI</c>: the same commands as x25emu.
+        /// An account is reached by a line (an address range) or by a network user identifier (X.25 6.21), one of the
+        /// two, as in an <c>[account.N]</c> section. Saved by <c>write memory</c>.
+        /// </summary>
+        private string AccountAdd(string args)
+        {
+            string[] w = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            bool range = w.Length == 4 && w[1] == "range";
+            bool nui = w.Length == 3 && w[1] == "nui";
+            if (!range && !nui)
+            {
+                return "Usage: x25 account add <name> range <start> <end>" + Eol +
+                       "       x25 account add <name> nui <nui>" + Eol;
+            }
+
+            AccountConfig a = range
+                ? new AccountConfig { Name = w[0], AddrStart = w[2], AddrEnd = w[3] }
+                : new AccountConfig { Name = w[0], Nui = w[2] };
+            if (!_node.AddAccount(a))
+            {
+                return "Error: an account named " + w[0] + " already exists" + Eol;
+            }
+
+            return "Account " + w[0] + " added" + Eol;
+        }
+
+        /// <summary>
+        /// <c>x25 account del NAME</c>. Refused while a call or PVC is billed to the account: its traffic would go on being
+        /// counted on an account no read-out shows. (A call here holds the account itself, so unlike x25emu the accounts
+        /// after it are not affected.)
+        /// </summary>
+        private string AccountDel(string name)
+        {
+            System.Collections.Generic.List<VcStitch> stitches = _node.SnapshotStitches();
+            for (int i = 0; i < stitches.Count; i++)
+            {
+                VcStitch s = stitches[i];
+                if ((s.PayingAccount != null && s.PayingAccount.Name == name) || (s.CalledAccount != null && s.CalledAccount.Name == name))
+                {
+                    return "Error: a call or PVC is billed to " + name + "; clear it first" + Eol;
+                }
+            }
+
+            return _node.RemoveAccount(name) == null
+                ? "Error: no account named " + name + Eol
+                : "Account " + name + " removed" + Eol;
+        }
+
+        /// <summary>
+        /// The wall clock <c>show x25 invoice</c> takes "this month" from when no month is given; the system clock by
+        /// default, set by a test.
+        /// </summary>
+        public Func<DateTimeOffset> WallClock { get; set; } = () => DateTimeOffset.UtcNow;
+
+        // show x25 invoice <account> [yyyy-mm]: the account's bill for a month, worked out from the call record file
+        // (cdr_file) with the price list (tariff_file). Both are read when the command runs. The bill is the shared one in
+        // RetroIO.Protocols.X25.Switch.Billing, the same the RetroX25 bill window shows.
+        private string ShowInvoice(string args)
+        {
+            SwitchConfig c = _node.Config;
+            if (args.Length == 0)
+            {
+                return "Usage: show x25 invoice <account> [yyyy-mm]" + Eol;
+            }
+
+            if (c.CdrFile.Length == 0 || c.TariffFile.Length == 0)
+            {
+                return "Error: a bill needs cdr_file and tariff_file in [switch]" + Eol;
+            }
+
+            string account = args;
+            int year = 0;
+            int month = 0;
+            int space = args.LastIndexOf(' ');
+            string last = space < 0 ? args : args.Substring(space + 1);
+            if (last.Length == 7 && last[4] == '-'
+                && int.TryParse(last.AsSpan(0, 4), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out year)
+                && int.TryParse(last.AsSpan(5, 2), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out month))
+            {
+                if (month < 1 || month > 12 || space < 0)
+                {
+                    return "Usage: show x25 invoice <account> [yyyy-mm]" + Eol;
+                }
+
+                account = args.Substring(0, space).Trim();
+            }
+
+            Billing.Tariff tariff;
+            System.Collections.Generic.List<Cdr> records;
+            try
+            {
+                tariff = Billing.Tariff.Load(c.TariffFile);
+                records = File.Exists(c.CdrFile) ? Billing.CdrReader.ReadFile(c.CdrFile) : new System.Collections.Generic.List<Cdr>();
+            }
+            catch (Exception e) when (e is IOException || e is InvalidDataException || e is UnauthorizedAccessException)
+            {
+                // A file that cannot be read, or a bad price or record line, is reported to the person at the console and
+                // no bill is printed: never a bill that quietly leaves something out. (InvalidDataException is not an
+                // IOException in .NET, so it is named.)
+                return "Error: " + e.Message + Eol;
+            }
+
+            if (month == 0)
+            {
+                DateTimeOffset local = WallClock().ToOffset(TimeSpan.FromMinutes(tariff.UtcOffsetMinutes));
+                year = local.Year;
+                month = local.Month;
+            }
+
+            Billing.Invoice inv = Billing.InvoiceBuilder.Build(tariff, records, account, year, month);
+            return Billing.InvoiceText.Format(inv, c.Name).Replace("\n", Eol);
+        }
+
         private string ShowAccount()
         {
+            // The same layout as x25emu's `show x25 account` (PLAN B1c: one read-out in both switches). "Reached by" is the
+            // address range or "nui <identifier>" (X.25 6.21); Up is the account's calls up now; Segs are the charging
+            // segments (D.12), which are not bytes divided by 64, because a part-used segment counts whole.
             StringBuilder sb = new StringBuilder();
-            sb.Append("Name             AddrRange            Calls    Pkts       Bytes      Duration").Append(Eol);
-            sb.Append("---------------- -------------------- -------- ---------- ---------- --------").Append(Eol);
-            if (_node.Accounts.Count == 0)
+            sb.Append("Name             Reached by           Up Calls    Pkts       Segs       Duration").Append(Eol);
+            sb.Append("---------------- -------------------- -- -------- ---------- ---------- --------").Append(Eol);
+            System.Collections.Generic.IReadOnlyList<SwitchAccount> accounts = _node.Accounts;
+            if (accounts.Count == 0)
             {
                 sb.Append("(no accounts configured)").Append(Eol);
                 return sb.ToString();
             }
-            for (int i = 0; i < _node.Accounts.Count; i++)
+            for (int i = 0; i < accounts.Count; i++)
             {
-                SwitchAccount a = _node.Accounts[i];
-                string range = a.AddrStart + "-" + a.AddrEnd;
+                SwitchAccount a = accounts[i];
+                string reached = a.Nui.Length > 0 ? "nui " + a.Nui : a.AddrStart + "-" + a.AddrEnd;
                 sb.Append(Pad(a.Name, -16)).Append(' ')
-                  .Append(Pad(range, -20)).Append(' ')
+                  .Append(Pad(reached, -20)).Append(' ')
+                  .Append(Pad(a.CallsActive.ToString(CultureInfo.InvariantCulture), 2)).Append(' ')
                   .Append(Pad(a.CallsMade.ToString(CultureInfo.InvariantCulture), 4)).Append('/').Append(Pad(a.CallsReceived.ToString(CultureInfo.InvariantCulture), -3)).Append(' ')
                   .Append(Pad(a.PacketsSent.ToString(CultureInfo.InvariantCulture), 5)).Append('/').Append(Pad(a.PacketsReceived.ToString(CultureInfo.InvariantCulture), -4)).Append(' ')
-                  .Append(Pad(a.BytesSent.ToString(CultureInfo.InvariantCulture), 5)).Append('/').Append(Pad(a.BytesReceived.ToString(CultureInfo.InvariantCulture), -4)).Append(' ')
+                  .Append(Pad(a.SegmentsSent.ToString(CultureInfo.InvariantCulture), 5)).Append('/').Append(Pad(a.SegmentsReceived.ToString(CultureInfo.InvariantCulture), -4)).Append(' ')
                   .Append((a.TotalDurationMs / 1000).ToString(CultureInfo.InvariantCulture)).Append('s').Append(Eol);
             }
             return sb.ToString();
@@ -507,9 +639,27 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 return "Usage: write memory <filename>" + Eol;
             }
 
+            // The same rule as x25emu: a bare name, written into the configuration folder. It handed the name straight to
+            // the file system, so a management session could write the configuration over any file the process could
+            // write. A path is refused rather than resolved (resolving invites a race between the check and the open),
+            // and on Windows a ':' names a drive or a stream, so it is a path too.
+            if (fname[0] == '.')
+            {
+                return "Error: a name may not start with a dot" + Eol;
+            }
+            if (fname.IndexOf('/') >= 0 || fname.IndexOf('\\') >= 0 || fname.IndexOf(':') >= 0)
+            {
+                return "Error: a name may not contain a path" + Eol;
+            }
+            string dir = _node.Config.ConfigDir;
+            if (dir.Length == 0)
+            {
+                return "Error: this switch has no configuration folder (config_dir) to write into" + Eol;
+            }
+
             try
             {
-                System.IO.File.WriteAllText(fname, RenderConfig("\n"));
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, fname), RenderConfig("\n"));
             }
             catch (System.Exception)
             {
@@ -526,7 +676,21 @@ namespace RetroIO.Protocols.X25.Switch.Management
             sb.Append("[switch]").Append(eol);
             sb.Append("dnic = ").Append(c.Dnic).Append(eol);
             sb.Append("max_hops = ").Append(c.MaxHops).Append(eol);
-            sb.Append("mgmt_port = ").Append(c.MgmtPort).Append(eol).Append(eol);
+            sb.Append("mgmt_port = ").Append(c.MgmtPort).Append(eol);
+            // Every other [switch] key the loader reads: a switch started from its own saved file must be the same switch.
+            sb.Append("monitor_port = ").Append(c.MonitorPort).Append(eol);
+            sb.Append("mgmt_open = ").Append(c.MgmtOpen ? 1 : 0).Append(eol);
+            sb.Append("pvc_record_minutes = ").Append(c.PvcRecordMinutes).Append(eol);
+            sb.Append("segment_size = ").Append(c.SegmentSize).Append(eol);
+            AppendIfSet(sb, "name", c.Name, eol);
+            AppendIfSet(sb, "location", c.Location, eol);
+            AppendIfSet(sb, "coordinates", c.Coordinates, eol);
+            AppendIfSet(sb, "contact", c.Contact, eol);
+            AppendIfSet(sb, "mgmt_addr", c.MgmtAddr, eol);
+            AppendIfSet(sb, "cdr_file", c.CdrFile, eol);
+            AppendIfSet(sb, "tariff_file", c.TariffFile, eol);
+            AppendIfSet(sb, "config_dir", c.ConfigDir, eol);
+            sb.Append(eol);
             for (int j = 0; j < c.Ports.Count; j++)
             {
                 PortConfig pc = c.Ports[j];
@@ -569,12 +733,76 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 {
                     sb.Append("addr_end = ").Append(pc.AddrRangeEnd).Append(eol);
                 }
+                // Which end opens the emulated cable (hdlc-tcp); not written means "follow the X.25 role".
+                if (pc.TcpRole == PortTcpRole.Listen)
+                {
+                    sb.Append("tcp = listen").Append(eol);
+                }
+                else if (pc.TcpRole == PortTcpRole.Dial)
+                {
+                    sb.Append("tcp = dial").Append(eol);
+                }
+                // The permanent channels (X.25 Annex A) and the XOT PVC setup (RFC 1613 6.5).
+                if (pc.PvcCount > 0)
+                {
+                    sb.Append("pvc_base = ").Append(pc.PvcBase).Append(eol);
+                    sb.Append("pvc_count = ").Append(pc.PvcCount).Append(eol);
+                }
+                AppendIfSet(sb, "iface_name", pc.InterfaceName, eol);
+                if (pc.XotPvcInitiator)
+                {
+                    sb.Append("xot_pvc_role = initiator").Append(eol);
+                }
+                // Network user identification (X.25 6.21).
+                if (pc.NuiRequired)
+                {
+                    sb.Append("nui_required = yes").Append(eol);
+                }
+                AppendIfSet(sb, "default_nui", pc.DefaultNui, eol);
+                // The charging information facility by subscription (X.25 6.22).
+                if (pc.ChargingInfo)
+                {
+                    sb.Append("charging_info = yes").Append(eol);
+                }
+                AppendIfSet(sb, "peer_name", pc.PeerName, eol);
+                AppendIfSet(sb, "peer_monitor_host", pc.PeerMonitorHost, eol);
+                if (pc.PeerMonitorPort > 0)
+                {
+                    sb.Append("peer_monitor_port = ").Append(pc.PeerMonitorPort).Append(eol);
+                }
+                AppendIfSet(sb, "peer_mgmt_addr", pc.PeerMgmtAddr, eol);
                 sb.Append(eol);
             }
+            // The permanent circuits as [pvc.N], which is what the loader reads. Written as [route.N] type = pvc they came
+            // back as nothing (the route loader skips that type), so the circuits were gone after a restart.
+            for (int j = 0; j < c.Pvcs.Count; j++)
+            {
+                PvcConfig p = c.Pvcs[j];
+                sb.Append("[pvc.").Append(j).Append(']').Append(eol);
+                sb.Append("src_port = ").Append(p.SourcePort).Append(eol);
+                sb.Append("src_lci = ").Append(p.SourceLci).Append(eol);
+                sb.Append("dst_port = ").Append(p.DestPort).Append(eol);
+                sb.Append("dst_lci = ").Append(p.DestLci).Append(eol);
+                AppendIfSet(sb, "account", p.Account, eol);
+                AppendIfSet(sb, "remote_host", p.RemoteHost, eol);
+                AppendIfSet(sb, "remote_iface", p.RemoteInterface, eol);
+                if (p.RemoteLci > 0)
+                {
+                    sb.Append("remote_lci = ").Append(p.RemoteLci).Append(eol);
+                }
+                sb.Append(eol);
+            }
+            // The routes, numbered one after another without the PVCs: the loader reads [pvc.N] after the routes, and it
+            // finds a route's backup_port by the route's place in the table, so the numbering must be that place.
+            int routeNo = 0;
             for (int j = 0; j < c.Routing.Routes.Count; j++)
             {
                 X121Route r = c.Routing.Routes[j];
-                sb.Append("[route.").Append(j).Append(']').Append(eol);
+                if (r.Type == X121RouteType.Pvc)
+                {
+                    continue;
+                }
+                sb.Append("[route.").Append(routeNo++).Append(']').Append(eol);
                 sb.Append("type = ").Append(RouteTypeLabel(r.Type)).Append(eol);
                 sb.Append("port = ").Append(r.DestPort).Append(eol);
                 if (r.Address.Length > 0)
@@ -593,6 +821,10 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 {
                     sb.Append("hunt_group = ").Append(r.HuntGroupId).Append(eol);
                 }
+                if (r.BackupPort >= 0)
+                {
+                    sb.Append("backup_port = ").Append(r.BackupPort).Append(eol);
+                }
                 sb.Append(eol);
             }
             for (int j = 0; j < c.Routing.HuntGroups.Count; j++)
@@ -610,7 +842,46 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 }
                 sb.Append(eol).Append(eol);
             }
+            // The accounts, as the loader reads them. Without them a configuration written from the console billed nobody
+            // once the switch was started from it again (the same defect x25emu had until 2026-11-16).
+            for (int j = 0; j < c.Accounts.Count; j++)
+            {
+                AccountConfig a = c.Accounts[j];
+                sb.Append("[account.").Append(j).Append(']').Append(eol);
+                sb.Append("name = ").Append(a.Name).Append(eol);
+                if (a.AddrStart.Length > 0)
+                {
+                    sb.Append("addr_start = ").Append(a.AddrStart).Append(eol);
+                }
+                if (a.AddrEnd.Length > 0)
+                {
+                    sb.Append("addr_end = ").Append(a.AddrEnd).Append(eol);
+                }
+                if (a.Nui.Length > 0)
+                {
+                    sb.Append("nui = ").Append(a.Nui).Append(eol);
+                }
+                sb.Append(eol);
+            }
+            // The console users. The loader reads the password as plain text, so it is written the same way: a saved file
+            // must be kept as private as the one it came from.
+            for (int j = 0; j < c.Users.Count; j++)
+            {
+                UserConfig u = c.Users[j];
+                sb.Append("[user.").Append(j).Append(']').Append(eol);
+                sb.Append("name = ").Append(u.Name).Append(eol);
+                AppendIfSet(sb, "password", u.Password, eol);
+                sb.Append("level = ").Append(u.Level).Append(eol).Append(eol);
+            }
             return sb.ToString();
+        }
+
+        private static void AppendIfSet(StringBuilder sb, string key, string value, string eol)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                sb.Append(key).Append(" = ").Append(value).Append(eol);
+            }
         }
 
         private static string Help()
@@ -634,6 +905,9 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 "  debug x25 trace     - Enable trace logging (hex dumps)\r\n" +
                 "  no debug            - Disable debug logging\r\n" +
                 "  show x25 account    - Display account statistics\r\n" +
+                "  show x25 invoice <account> [yyyy-mm] - The account's bill for a month\r\n" +
+                "  x25 account add NAME range START END | nui NUI - Add an account\r\n" +
+                "  x25 account del NAME - Remove an account (refused while it bills a call)\r\n" +
                 "  quit                - Disconnect\r\n";
         }
 

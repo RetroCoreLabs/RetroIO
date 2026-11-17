@@ -56,7 +56,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "Server0",
                 Mode = TcpMode.Server,
-                Port = 54321,
+                Port = 0,
                 RemoteMachineId = "REMOTE"
             };
 
@@ -78,7 +78,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "Server0",
                 Mode = TcpMode.Server,
-                Port = 54322,
+                Port = 0,
                 RemoteMachineId = "SERVER"
             };
 
@@ -87,7 +87,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Client0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 54322,
+                Port = 0, // set from server.BoundPort once it listens
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT"
             };
@@ -97,10 +97,10 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Act
             server.Start();
-            Thread.Sleep(100); // Allow server to start listening
+            clientConfig.Port = server.BoundPort;
 
             client.Start();
-            Thread.Sleep(500); // Allow connection to establish
+            SpinWait.SpinUntil(() => client.Status == LinkStatus.Active, 5000);
 
             // Assert
             Assert.That(server.Status, Is.EqualTo(LinkStatus.Active));
@@ -115,7 +115,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "Server0",
                 Mode = TcpMode.Server,
-                Port = 54323,
+                Port = 0,
                 RemoteMachineId = "SERVER",
                 T1TimeoutMs = 1000,
                 T2TimeoutMs = 500
@@ -126,7 +126,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Client0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 54323,
+                Port = 0, // set from server.BoundPort once it listens
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 T1TimeoutMs = 1000,
@@ -144,14 +144,14 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Act
             server.Start();
-            Thread.Sleep(100);
+            clientConfig.Port = server.BoundPort;
 
             client.Start();
-            Thread.Sleep(500); // Allow TCP connection
+            SpinWait.SpinUntil(() => client.Status == LinkStatus.Active, 5000);
 
             // Initiate LAPB connection from client
             client.Connect();
-            Thread.Sleep(1000); // Allow LAPB handshake
+            SpinWait.SpinUntil(() => client.LapbState == LapbState.DataTransfer && server.LapbState == LapbState.DataTransfer, 5000);
 
             // Assert
             Assert.That(client.LapbState, Is.EqualTo(LapbState.DataTransfer));
@@ -170,7 +170,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "Server0",
                 Mode = TcpMode.Server,
-                Port = 54324,
+                Port = 0,
                 RemoteMachineId = "SERVER",
                 T1TimeoutMs = 1000,
                 T2TimeoutMs = 500
@@ -181,7 +181,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Client0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 54324,
+                Port = 0, // set from server.BoundPort once it listens
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 T1TimeoutMs = 1000,
@@ -202,13 +202,13 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Act - Start and connect
             server.Start();
-            Thread.Sleep(100);
+            clientConfig.Port = server.BoundPort;
 
             client.Start();
-            Thread.Sleep(500);
+            SpinWait.SpinUntil(() => client.Status == LinkStatus.Active, 5000);
 
             client.Connect();
-            Thread.Sleep(1000);
+            SpinWait.SpinUntil(() => client.LapbState == LapbState.DataTransfer && server.LapbState == LapbState.DataTransfer, 5000);
 
             // Verify LAPB is connected
             Assert.That(client.LapbState, Is.EqualTo(LapbState.DataTransfer), "Client LAPB should be connected");
@@ -240,7 +240,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "Server0",
                 Mode = TcpMode.Server,
-                Port = 54325,
+                Port = 0,
                 RemoteMachineId = "SERVER",
                 T1TimeoutMs = 1000,
                 T2TimeoutMs = 0
@@ -251,7 +251,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Client0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 54325,
+                Port = 0, // set from server.BoundPort once it listens
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT",
                 T1TimeoutMs = 1000,
@@ -263,11 +263,11 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Act - Connect
             server.Start();
-            Thread.Sleep(100);
+            clientConfig.Port = server.BoundPort;
             client.Start();
-            Thread.Sleep(500);
+            SpinWait.SpinUntil(() => client.Status == LinkStatus.Active, 5000);
             client.Connect();
-            Thread.Sleep(1000);
+            SpinWait.SpinUntil(() => client.LapbState == LapbState.DataTransfer && server.LapbState == LapbState.DataTransfer, 5000);
 
             // Get initial sequence numbers
             var (initialVS, _, _) = client.GetSequenceNumbers();
@@ -278,13 +278,14 @@ namespace RetroIO.Protocols.X25.Tests
             client.SendData(x25Packet);
             client.SendData(x25Packet);
 
-            Thread.Sleep(100);
+            // Wait for the three frames to have gone out rather than sleeping a fixed time.
+            byte expectedVS = (byte)((initialVS + 3) % 8);
+            SpinWait.SpinUntil(() => client.GetSequenceNumbers().Item1 == expectedVS, 5000);
 
             // Get final sequence numbers
             var (finalVS, _, _) = client.GetSequenceNumbers();
 
             // Assert - V(S) should have incremented by 3
-            byte expectedVS = (byte)((initialVS + 3) % 8);
             Assert.That(finalVS, Is.EqualTo(expectedVS), "V(S) should increment for each I-frame sent");
         }
 
@@ -300,7 +301,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Name = "Server0",
                 Mode = TcpMode.Server,
-                Port = 54326,
+                Port = 0,
                 RemoteMachineId = "SERVER"
             };
 
@@ -309,7 +310,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Client0",
                 Mode = TcpMode.Client,
                 RemoteAddress = "127.0.0.1",
-                Port = 54326,
+                Port = 0, // set from server.BoundPort once it listens
                 ConnectTimeoutMs = 5000,
                 RemoteMachineId = "CLIENT"
             };
@@ -319,16 +320,16 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Act
             server.Start();
-            Thread.Sleep(100);
+            clientConfig.Port = server.BoundPort;
             client.Start();
-            Thread.Sleep(500);
+            SpinWait.SpinUntil(() => client.Status == LinkStatus.Active, 5000);
             client.Connect();
-            Thread.Sleep(1000);
+            SpinWait.SpinUntil(() => client.LapbState == LapbState.DataTransfer && server.LapbState == LapbState.DataTransfer, 5000);
 
             // Send a packet
             byte[] x25Packet = new byte[] { 0x10, 0x01, 0x00, 0x42 };
             client.SendData(x25Packet);
-            Thread.Sleep(500);
+            SpinWait.SpinUntil(() => server.GetLapbStatistics().IFramesReceived > 0, 5000);
 
             // Get statistics
             var clientStats = client.GetLapbStatistics();

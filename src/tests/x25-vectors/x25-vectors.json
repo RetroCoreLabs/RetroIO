@@ -278,6 +278,31 @@
       "status": "pass"
     },
     {
+      "id": "pkt-clear-request-extended-charging",
+      "spec": "X.25 5.2.4.2: extended format = cause, diagnostic, address block (5.2.1), facility length, facilities; Table 7-2: segment count C2 (class D, length octet); 7.3.8.3: 4 octets BCD sent to the DTE, 4 received, per tariff period",
+      "build": { "type": "ClearRequest", "lcn": 1, "cause": 0, "diag": 0, "facilitiesHex": "C2 08 00 00 00 12 00 00 00 34" },
+      "hex": "10 01 13 00 00 00 0A C2 08 00 00 00 12 00 00 00 34",
+      "parse": { "type": "ClearRequest", "lcn": 1, "cause": 0, "diag": 0, "facilitiesHex": "C2 08 00 00 00 12 00 00 00 34" },
+      "status": "pass",
+      "note": "Added 2026-11-16. Before then the C# builder wrote the facility length straight after the diagnostic (no address block) and the parser guessed whether that octet was a facility length."
+    },
+    {
+      "id": "pkt-clear-request-extended-cud-no-facilities",
+      "spec": "X.25 5.2.4.2: when the extended format is used the address lengths and facility length MUST be present (here 00 and 00); 5.2.4.2.4 clear user data follows",
+      "build": { "type": "ClearRequest", "lcn": 1, "cause": 0, "diag": 0, "cudHex": "41 42" },
+      "hex": "10 01 13 00 00 00 00 41 42",
+      "parse": { "type": "ClearRequest", "lcn": 1, "cause": 0, "diag": 0, "facilitiesHex": "", "cudHex": "41 42" },
+      "status": "pass"
+    },
+    {
+      "id": "pkt-dce-clear-confirmation-extended-charging",
+      "spec": "X.25 5.2.5, Figure 5-7: extended DCE clear confirmation = address block, facility length, facilities; used only with charging information (6.22). Table 7-2: call duration C1 (class D); 7.3.8.4: days, hours, minutes, seconds, BCD",
+      "build": { "type": "ClearConfirmation", "lcn": 1, "facilitiesHex": "C1 04 00 01 23 45" },
+      "hex": "10 01 17 00 06 C1 04 00 01 23 45",
+      "parse": { "type": "ClearConfirmation", "lcn": 1, "facilitiesHex": "C1 04 00 01 23 45" },
+      "status": "pass"
+    },
+    {
       "id": "pkt-data-ps3-pr5-m1",
       "spec": "X.25 5.3.1: octet 3 = P(R) bits 8-6, M bit 5, P(S) bits 4-2, bit 1 = 0",
       "build": { "type": "Data", "lcn": 1, "ps": 3, "pr": 5, "m": true, "dataHex": "AA BB" },

@@ -647,6 +647,13 @@ namespace RetroIO.Link
                         break;
                     }
                 }
+                catch (Exception)
+                {
+                    // Stop() closed the socket under a connect or a read in progress. The link is
+                    // being stopped, so the thread ends; letting the exception out of the thread
+                    // killed the process (the same defect as TcpLapbLink, found 2026-11-16).
+                    break;
+                }
             }
         }
 

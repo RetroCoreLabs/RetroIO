@@ -355,9 +355,89 @@ namespace RetroIO.Protocols.X25.Protocols
             
             // Add to command buffer
             _commandBuffer.Append(c);
-            
-            // Echo character (always echo in command mode)
+
+            // X.28 5.2 NOTE 1: "The characters that follow the characters <ID> (i.e. the <NUI string>) should not be
+            // echoed." The two letters ID themselves are echoed; everything after them on the line is not.
+            if (IsNuiOnLine(_commandBuffer, _commandBuffer.Length - 1) || IsInNuiFacilityRequest(_commandBuffer, _commandBuffer.Length - 1))
+            {
+                return true;
+            }
+
+            // Echo character (in command mode everything else is echoed)
             CharacterEcho?.Invoke(this, new CharacterEchoEventArgs(c, EchoType.Normal));
+            return true;
+        }
+
+        /// <summary>
+        /// The NUI this terminal user gave with the NUI ON command (X.28 5.2, <c>ID</c> followed by the NUI), or null.
+        /// "This identification will apply for all subsequent calls until either the access path is disconnected or a
+        /// NUI OFF PAD command signal is received by the PAD."
+        /// </summary>
+        public string? Nui { get; private set; }
+
+        /// <summary>
+        /// Gives the NUI as if the user had typed <c>ID</c> and the NUI - for a PAD started with a NUI already known
+        /// (x25emu's <c>x25pad -n</c>). The same rules as the command: the discarded characters are taken out, and a NUI
+        /// with a character that may not be in one, an empty one, or <c>OFF</c> is refused.
+        /// </summary>
+        /// <param name="raw">The NUI as given.</param>
+        /// <returns>False, and the NUI unchanged, when it is refused.</returns>
+        public bool SetNui(string raw)
+        {
+            if (!TryReadNui(raw, out string nui) || nui.Length == 0 || string.Equals(nui, "OFF", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            Nui = nui;
+            return true;
+        }
+
+        /// <summary>
+        /// True when the character at <paramref name="index"/> of a command line comes after a leading <c>ID</c>, so it
+        /// is part of a NUI and is not echoed.
+        /// </summary>
+        private static bool IsNuiOnLine(System.Text.StringBuilder line, int index)
+        {
+            int start = 0;
+            while (start < line.Length && line[start] == ' ')
+            {
+                start++;
+            }
+
+            return index >= start + 2 && line.Length >= start + 2
+                && char.ToUpperInvariant(line[start]) == 'I' && char.ToUpperInvariant(line[start + 1]) == 'D';
+        }
+
+        /// <summary>
+        /// Reads a NUI string by X.28 3.5.15.1.1: characters in columns 2 to 7 of IA5, except SP, DEL, '-', ',' and '+';
+        /// "Characters in columns 0 and 1, except 0/13 (CR), and characters 7/15 (DEL), and 2/0 (SP) may be included
+        /// during the transmission of the NUI string but will not form part of the NUI string and will be discarded."
+        /// </summary>
+        /// <param name="raw">What followed <c>ID</c>, as typed.</param>
+        /// <param name="nui">The NUI, the discarded characters taken out.</param>
+        /// <returns>False when a character that may not be in a NUI is present.</returns>
+        public static bool TryReadNui(string raw, out string nui)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(raw.Length);
+            for (int i = 0; i < raw.Length; i++)
+            {
+                char ch = raw[i];
+                if (ch < 0x20 || ch == ' ' || ch == (char)0x7F)
+                {
+                    continue;
+                }
+
+                if (ch > 0x7E || ch == '-' || ch == ',' || ch == '+')
+                {
+                    nui = string.Empty;
+                    return false;
+                }
+
+                sb.Append(ch);
+            }
+
+            nui = sb.ToString();
             return true;
         }
 
@@ -366,11 +446,29 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         private void ProcessCommandLine()
         {
-            string commandLine = _commandBuffer.ToString().Trim().ToUpper();
+            string typed = _commandBuffer.ToString().Trim();
+            string commandLine = typed.ToUpper();
             _commandBuffer.Clear();
-            
+
             if (string.IsNullOrEmpty(commandLine))
                 return;
+
+            // X.28 5.2: NUI ON is <ID><NUI string>, NUI OFF is <IDOFF>. Handled before the word parser: the NUI is not
+            // split on spaces (SP is discarded inside it) and keeps its case, and it is never written to the log.
+            if (commandLine.StartsWith("ID", StringComparison.Ordinal))
+            {
+                HandleNuiCommand(typed.Substring(2));
+                return;
+            }
+
+            // X.28 3.5.15: a selection with a facility request block, "<facility request>[,<facility request>...]-" then
+            // the address, typed bare or after CALL. Read from the line as typed so a NUI keeps its case; never logged.
+            int blockAt = SelectionBlockStart(typed);
+            if (blockAt >= 0 && typed.IndexOf('-', blockAt) > blockAt)
+            {
+                HandleSelectionWithFacilities(typed.Substring(blockAt));
+                return;
+            }
                 
             _logger?.LogDebug("X.28: Processing command: {Command}", commandLine);
             
@@ -493,6 +591,134 @@ namespace RetroIO.Protocols.X25.Protocols
                 Commands.HELP => HandleHelpCommand(),
                 _ => HandleInvalidCommand(command.Verb)
             };
+        }
+
+        /// <summary>
+        /// Where a selection's facility request block starts in a command line, or -1: after an optional <c>CALL </c> or
+        /// <c>C </c>, a line whose first character is the NUI facility request code <c>N</c> (X.28 Table 4: 4/14). Only N
+        /// is recognised as the start of a block; it is the only facility request this PAD implements.
+        /// </summary>
+        private static int SelectionBlockStart(string line)
+        {
+            int at = 0;
+            while (at < line.Length && line[at] == ' ')
+            {
+                at++;
+            }
+
+            if (line.Length - at > 5 && string.Compare(line, at, "CALL ", 0, 5, StringComparison.OrdinalIgnoreCase) == 0)
+            {
+                at += 5;
+            }
+            else if (line.Length - at > 2 && (line[at] == 'C' || line[at] == 'c') && line[at + 1] == ' ')
+            {
+                at += 2;
+            }
+
+            while (at < line.Length && line[at] == ' ')
+            {
+                at++;
+            }
+
+            return at < line.Length && line[at] == 'N' ? at : -1;
+        }
+
+        /// <summary>
+        /// A selection with a facility request block (X.28 3.5.15): the requests before the <c>-</c>, separated by
+        /// <c>,</c>, then the address. N gives the call's NUI (3.5.15.1.1). Any other request, or a NUI that cannot be
+        /// read, is answered ERR and no call is made - a facility the user asked for is never silently left out.
+        /// </summary>
+        /// <param name="selection">The selection, from the block's first character.</param>
+        private void HandleSelectionWithFacilities(string selection)
+        {
+            int dash = selection.IndexOf('-');
+            string block = selection.Substring(0, dash);
+            string address = selection.Substring(dash + 1).Trim();
+            string? nui = null;
+            string[] requests = block.Split(',');
+            for (int i = 0; i < requests.Length; i++)
+            {
+                string request = requests[i];
+                if (request.Length < 2 || request[0] != 'N' || !TryReadNui(request.Substring(1), out string read) || read.Length == 0)
+                {
+                    CommandResponse?.Invoke(this, new CommandResponseEventArgs("ERR\r\n", ResponseType.Error));
+                    return;
+                }
+
+                nui = read;
+            }
+
+            X28Command command = new X28Command
+            {
+                Verb = Commands.CALL,
+                Arguments = new List<string> { address },
+                OriginalLine = "CALL " + address,
+                Address = address,
+                CallNui = nui,
+            };
+
+            if (ProcessPadCommand(command) == CommandResult.Success)
+            {
+                CommandReceived?.Invoke(this, new X28CommandEventArgs(command));
+            }
+        }
+
+        /// <summary>
+        /// True when the character at <paramref name="index"/> is inside an N facility request of a selection being typed,
+        /// after the N: X.28 3.5.15.1.1 NOTE 1, the PAD "should turn off the echo ... for the duration of the NUI facility
+        /// request". The request ends at <c>,</c> or <c>-</c>, which are echoed.
+        /// </summary>
+        private static bool IsInNuiFacilityRequest(System.Text.StringBuilder line, int index)
+        {
+            string text = line.ToString();
+            int at = SelectionBlockStart(text);
+            if (at < 0 || index <= at)
+            {
+                return false;
+            }
+
+            int end = text.IndexOf('-', at);
+            if (end >= 0 && index >= end)
+            {
+                return false;
+            }
+
+            // Walk back to the start of this request.
+            int start = index;
+            while (start > at && text[start - 1] != ',')
+            {
+                start--;
+            }
+
+            char c = text[index];
+            return text[start] == 'N' && index > start && c != ',' && c != '-';
+        }
+
+        /// <summary>
+        /// NUI ON (<c>ID</c> and a NUI) and NUI OFF (<c>IDOFF</c>), X.28 5.2. X.28 defines no service signal in answer to
+        /// either, so a good one is answered with nothing; one that cannot be read gets the error signal ERR.
+        /// </summary>
+        /// <param name="rest">What followed <c>ID</c> on the line, as typed.</param>
+        private void HandleNuiCommand(string rest)
+        {
+            if (string.Equals(rest.Trim(), "OFF", StringComparison.OrdinalIgnoreCase))
+            {
+                // "NOTE 2 - The character sequence <OFF> is not permitted as the NUI string": so IDOFF is always NUI OFF.
+                Nui = null;
+                _logger?.LogInformation("X.28: NUI off");
+                return;
+            }
+
+            // "<NUI string> is optional"; with it omitted, "the PAD may request additional user input" - this PAD has no
+            // prompting, so ID alone is refused rather than guessed at.
+            if (!TryReadNui(rest, out string nui) || nui.Length == 0)
+            {
+                CommandResponse?.Invoke(this, new CommandResponseEventArgs("ERR\r\n", ResponseType.Error));
+                return;
+            }
+
+            Nui = nui;
+            _logger?.LogInformation("X.28: NUI on ({Length} characters)", nui.Length);
         }
 
         /// <summary>
@@ -1126,6 +1352,11 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Gets or sets the called address of a call command, or null.
         /// </summary>
         public string? Address { get; set; }
+        /// <summary>
+        /// Gets or sets the NUI given for this one call in its facility request block (<c>N&lt;nui&gt;-&lt;address&gt;</c>,
+        /// X.28 3.5.15.1.1), or null. It is used instead of the one given with <c>ID</c>.
+        /// </summary>
+        public string? CallNui { get; set; }
         /// <summary>
         /// Gets or sets the profile name of a profile command, or null.
         /// </summary>

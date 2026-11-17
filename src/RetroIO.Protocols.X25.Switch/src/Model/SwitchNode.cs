@@ -19,7 +19,10 @@ namespace RetroIO.Protocols.X25.Switch.Model
         private readonly object _stitchLock = new object();
         private readonly List<VcStitch> _stitches = new List<VcStitch>();
         private readonly List<ISwitchPort> _ports = new List<ISwitchPort>();
-        private readonly List<SwitchAccount> _accounts = new List<SwitchAccount>();
+        // Replaced whole, never changed in place: the core reads it from its port threads while the console adds or
+        // removes an account, so a reader that took the array once sees one consistent table.
+        private volatile SwitchAccount[] _accounts = System.Array.Empty<SwitchAccount>();
+        private readonly object _accountsLock = new object();
 
         /// <summary>
         /// The switch's configuration.
@@ -34,7 +37,84 @@ namespace RetroIO.Protocols.X25.Switch.Model
         /// <summary>
         /// The switch's accounts.
         /// </summary>
+        /// <remarks>
+        /// The table as it is now. A caller that looks at more than one entry takes it once into a local, because the
+        /// console may replace it in between (<see cref="AddAccount"/>, <see cref="RemoveAccount"/>).
+        /// </remarks>
         public IReadOnlyList<SwitchAccount> Accounts => _accounts;
+
+        /// <summary>
+        /// Adds an account while the switch runs, to the runtime table and to <see cref="Config"/> so a saved
+        /// configuration keeps it. Refused when the name is taken.
+        /// </summary>
+        /// <param name="config">The account.</param>
+        /// <returns>True when added; false when an account of that name exists.</returns>
+        public bool AddAccount(AccountConfig config)
+        {
+            lock (_accountsLock)
+            {
+                SwitchAccount[] now = _accounts;
+                for (int i = 0; i < now.Length; i++)
+                {
+                    if (string.Equals(now[i].Name, config.Name, System.StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+                }
+
+                SwitchAccount[] next = new SwitchAccount[now.Length + 1];
+                now.CopyTo(next, 0);
+                next[now.Length] = new SwitchAccount(config);
+                Config.Accounts.Add(config);
+                _accounts = next;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes an account while the switch runs, from the runtime table and from <see cref="Config"/>.
+        /// </summary>
+        /// <remarks>
+        /// A call already billed to it holds the account itself, so its traffic is still counted there, on an account no
+        /// read-out shows any more; the caller refuses the removal while the account has calls up.
+        /// </remarks>
+        /// <param name="name">The account's name.</param>
+        /// <returns>The removed account, or null when there is none of that name.</returns>
+        public SwitchAccount? RemoveAccount(string name)
+        {
+            lock (_accountsLock)
+            {
+                SwitchAccount[] now = _accounts;
+                int at = -1;
+                for (int i = 0; i < now.Length; i++)
+                {
+                    if (string.Equals(now[i].Name, name, System.StringComparison.Ordinal))
+                    {
+                        at = i;
+                    }
+                }
+
+                if (at < 0)
+                {
+                    return null;
+                }
+
+                SwitchAccount[] next = new SwitchAccount[now.Length - 1];
+                System.Array.Copy(now, 0, next, 0, at);
+                System.Array.Copy(now, at + 1, next, at, now.Length - at - 1);
+                for (int i = 0; i < Config.Accounts.Count; i++)
+                {
+                    if (string.Equals(Config.Accounts[i].Name, name, System.StringComparison.Ordinal))
+                    {
+                        Config.Accounts.RemoveAt(i);
+                        break;
+                    }
+                }
+
+                _accounts = next;
+                return now[at];
+            }
+        }
 
         /// <summary>
         /// Timestamp (milliseconds) when the switch started, used to compute uptime.
@@ -50,10 +130,13 @@ namespace RetroIO.Protocols.X25.Switch.Model
         public SwitchNode(SwitchConfig config)
         {
             Config = config;
-            for (int i = 0; i < config.Accounts.Count; i++)
+            SwitchAccount[] accounts = new SwitchAccount[config.Accounts.Count];
+            for (int i = 0; i < accounts.Length; i++)
             {
-                _accounts.Add(new SwitchAccount(config.Accounts[i]));
+                accounts[i] = new SwitchAccount(config.Accounts[i]);
             }
+
+            _accounts = accounts;
         }
 
         /// <summary>
@@ -109,7 +192,13 @@ namespace RetroIO.Protocols.X25.Switch.Model
         /// </returns>
         public VcStitch CreateStitch(ISwitchPort inPort, ushort inLci, ISwitchPort outPort, ushort outLci)
         {
-            VcStitch stitch = new VcStitch(inPort, inLci, outPort, outLci) { Active = true };
+            int segment = Config.SegmentSize;
+            VcStitch stitch = new VcStitch(inPort, inLci, outPort, outLci)
+            {
+                Active = true,
+                SegmentsForward = new SegmentCounter(segment),
+                SegmentsReverse = new SegmentCounter(segment),
+            };
             lock (_stitchLock)
             {
                 _stitches.Add(stitch);

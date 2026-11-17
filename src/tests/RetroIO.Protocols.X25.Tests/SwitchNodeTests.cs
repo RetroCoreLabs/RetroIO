@@ -54,6 +54,9 @@ namespace RetroIO.Protocols.X25.Tests
             public void AcceptCall(ushort lci) { }
             public PortSendResult SendData(ushort lci, ReadOnlySpan<byte> data, bool qBit, bool mBit, bool dBit) => PortSendResult.Sent;
             public void ClearCall(ushort lci, byte cause, byte diagnostic) { }
+            public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities) { }
+            public byte[] GetClearFacilities(ushort lci) => Array.Empty<byte>();
+            public Func<ushort, byte[]?>? ClearConfirmationFacilities { get; set; }
             public void ResetCircuit(ushort lci, byte cause, byte diagnostic) { }
             public void SendInterrupt(ushort lci, byte[] userData) { }
             public void SetLocalBusy(ushort lci, bool busy) { }

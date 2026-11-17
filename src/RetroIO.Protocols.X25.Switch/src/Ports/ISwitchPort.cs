@@ -231,6 +231,21 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         void ResetCircuit(ushort lci, byte cause, byte diagnostic);
 
         /// <summary>
+        /// Creates a permanent virtual circuit on a channel of this port (X.25 4.2): in data transfer from the start, with
+        /// the port's default window and packet size, never set up or cleared.
+        /// </summary>
+        /// <param name="lci">
+        /// The channel, one of the port's PVC channels.
+        /// </param>
+        /// <returns>
+        /// True when the circuit exists; false when this kind of port cannot hold a PVC (the default).
+        /// </returns>
+        bool AddPvc(ushort lci)
+        {
+            return false;
+        }
+
+        /// <summary>
         /// Sends an interrupt on a circuit (X.25 4.3.2), past the flow control of the data it
         /// overtakes.
         /// </summary>
@@ -272,5 +287,41 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// Diagnostic code.
         /// </param>
         void ClearCall(ushort lci, byte cause, byte diagnostic);
+
+        /// <summary>
+        /// Clears a circuit with a Clear Request that carries a facility field (X.25 5.2.4.2, the extended format): what
+        /// the other leg's clear carried, passed on by the switch (PLAN B1).
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to clear.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        /// <param name="facilities">
+        /// The facility field, byte for byte; empty sends the basic format.
+        /// </param>
+        void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities);
+
+        /// <summary>
+        /// Gets the facility field of the clear that ended the last call on a channel, for the switch to pass to the other
+        /// leg. Read it when <see cref="CallCleared"/> is raised; a new call on the channel empties it.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <returns>
+        /// The field byte for byte, or empty.
+        /// </returns>
+        byte[] GetClearFacilities(ushort lci);
+
+        /// <summary>
+        /// Asked for the facility field of the DCE Clear Confirmation when the DTE on this port clears a call: the
+        /// charging answer (X.25 5.2.5, 6.22). Null, or a result that is null or empty, sends the basic confirmation.
+        /// </summary>
+        System.Func<ushort, byte[]?>? ClearConfirmationFacilities { get; set; }
     }
 }

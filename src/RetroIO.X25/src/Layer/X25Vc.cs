@@ -95,6 +95,22 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public bool PeerSentFacilities { get; set; }
 
         /// <summary>
+        /// Every facility element other than window and packet size, byte for byte (<see cref="Models.X25Facilities.PassThrough"/>):
+        /// for an incoming call what the caller asked for, for an outgoing call first what we ask for and, once connected, what
+        /// the called side answered. A switch hands them from one leg of a call to the other (PLAN B1); this layer does not
+        /// act on them.
+        /// </summary>
+        public byte[] OtherFacilities { get; set; } = System.Array.Empty<byte>();
+
+        /// <summary>
+        /// The facility field of the Clear Request / Clear Indication that ended the last call on this channel (X.25 5.2.4.2:
+        /// charging information, called line address modified notification and the like); empty when it had none. Kept
+        /// after the channel is free so that a switch, told of the clear, can pass the field to the other leg of the call;
+        /// replaced by the next clear and emptied when the channel's next call starts.
+        /// </summary>
+        public byte[] ClearFacilities { get; set; } = System.Array.Empty<byte>();
+
+        /// <summary>
         /// True from our Interrupt until the peer's Interrupt Confirmation. X.25 4.4.2: "The DTE should
         /// not transmit a second DTE interrupt packet until the first one is confirmed."
         /// </summary>

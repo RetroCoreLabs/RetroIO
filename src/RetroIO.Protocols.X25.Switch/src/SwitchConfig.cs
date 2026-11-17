@@ -36,6 +36,12 @@ namespace RetroIO.Protocols.X25.Switch
         public ushort MgmtPort { get; set; } = 9000;
 
         /// <summary>
+        /// <c>mgmt_open</c>: true lets the telnet console run commands with no login, at full rights - x25emu's key of
+        /// the same name, meant for a demonstration. False (the default) asks for a <c>[user.N]</c> login.
+        /// </summary>
+        public bool MgmtOpen { get; set; }
+
+        /// <summary>
         /// TCP port for the packet-monitoring stream that remote viewers subscribe to; 0 disables it.
         /// </summary>
         public ushort MonitorPort { get; set; }
@@ -71,6 +77,19 @@ namespace RetroIO.Protocols.X25.Switch
         public string CdrFile { get; set; } = string.Empty;
 
         /// <summary>
+        /// Path to the price list (<c>tariff_file</c>) that <c>show x25 invoice</c> prices the call records with; blank
+        /// means the switch prints no bills. Read when the command runs, so a changed price list needs no restart.
+        /// </summary>
+        public string TariffFile { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The folder <c>write memory</c> writes into (config key <c>config_dir</c>, the same as x25emu). When the file
+        /// names none, <see cref="SwitchConfigLoader.LoadFile"/> sets the folder the file was loaded from; empty for a
+        /// configuration built in code, and then <c>write memory</c> is refused rather than writing somewhere unchosen.
+        /// </summary>
+        public string ConfigDir { get; set; } = string.Empty;
+
+        /// <summary>
         /// Configured ports, in order.
         /// </summary>
         public List<PortConfig> Ports { get; } = new List<PortConfig>();
@@ -79,6 +98,23 @@ namespace RetroIO.Protocols.X25.Switch
         /// The routing table (routes + hunt groups), including PVC entries.
         /// </summary>
         public X121RoutingTable Routing { get; } = new X121RoutingTable();
+
+        /// <summary>
+        /// The permanent virtual circuits the switch joins at start (<c>[pvc.N]</c>), checked by the loader.
+        /// </summary>
+        public List<PvcConfig> Pvcs { get; } = new List<PvcConfig>();
+
+        /// <summary>
+        /// How often each PVC writes a billing record, in minutes (<c>[switch] pvc_record_minutes</c>, the same key and
+        /// default as x25emu); 0 turns the periodic line off and leaves only the lines a reset or an outage writes.
+        /// </summary>
+        public int PvcRecordMinutes { get; set; } = 15;
+
+        /// <summary>
+        /// Octets in one charging segment (<c>[switch] segment_size</c>, the same key, default and limits as x25emu):
+        /// D.12's 64 by default; X.25 7.3.8.3 leaves it to the Administration for national calls. 1 to 4096.
+        /// </summary>
+        public int SegmentSize { get; set; } = Model.SegmentCounter.SegmentOctets;
 
         /// <summary>
         /// Configured accounts.

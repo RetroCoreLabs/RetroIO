@@ -116,6 +116,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public IReadOnlyDictionary<ushort, X25Vc> Circuits => _vcs;
 
         /// <summary>
+        /// Asked, at the DCE end, for the facility field of the DCE Clear Confirmation on a channel whose DTE has just
+        /// cleared; null or empty sends the basic confirmation.
+        /// </summary>
+        /// <remarks>
+        /// X.25 5.2.5: "The extended format may be used for DCE clear confirmation packets only in conjunction with the
+        /// charging information facility" - the charging answer to a DTE that cleared its own call (6.22). Only the
+        /// switch knows what the call cost, so it is asked here, at the moment the confirmation is built, while its view
+        /// of the call is still whole. Not asked at the DTE end: a DTE clear confirmation has no extended form.
+        /// </remarks>
+        public Func<ushort, byte[]?>? ClearConfirmationFacilities { get; set; }
+
+        /// <summary>
         /// How many times the peer broke a rule badly enough to reset a circuit (invalid P(S) or
         /// P(R), a REJ we do not support, ...).
         /// </summary>
@@ -181,6 +193,24 @@ namespace RetroIO.Protocols.X25.PacketLayer
         }
 
         /// <summary>
+        /// Places an outgoing call with this layer's default window and packet sizes and the given further facility
+        /// elements (encoded as X.25 7.1 has them), and returns its logical channel, or 0 on failure.
+        /// </summary>
+        /// <param name="calledAddress">Destination X.121 address.</param>
+        /// <param name="callingAddress">Origin X.121 address; the configured local address when null or empty.</param>
+        /// <param name="callUserData">Optional call user data.</param>
+        /// <param name="facilities">Facility elements other than window and packet size, byte for byte.</param>
+        /// <returns>The allocated logical channel, or 0 on failure.</returns>
+        public ushort PlaceCall(string calledAddress, string? callingAddress, byte[]? callUserData, byte[] facilities)
+        {
+            return PlaceCall(
+                calledAddress,
+                callingAddress,
+                callUserData,
+                new X25CallParameters(_config.DefaultWindowSize, _config.DefaultWindowSize, _config.DefaultPacketSize, _config.DefaultPacketSize, facilities));
+        }
+
+        /// <summary>
         /// Places an outgoing call that asks for the given window and packet sizes, and returns its logical channel, or 0
         /// if no channel is free.
         /// </summary>
@@ -222,6 +252,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 WindowSizeIn = requested.WindowSizeIn,
                 PacketSizeOut = requested.PacketSizeOut,
                 PacketSizeIn = requested.PacketSizeIn,
+                OtherFacilities = requested.OtherFacilities,
+                ClearFacilities = System.Array.Empty<byte>(),
                 TimerExpiryMs = Now() + _config.CallRequestTimeoutMs
             };
             _vcs[lci] = vc;
@@ -284,6 +316,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
+            // The other facilities of the answer. Only a caller that gives values (a switch, passing on what the far end
+            // answered) puts any in: a plain accept must not repeat the caller's requests (reverse charging, say) as if the
+            // called side had made them.
+            byte[] otherFacilities = System.Array.Empty<byte>();
             if (agreed.HasValue)
             {
                 vc.WindowSizeOut = agreed.Value.WindowSizeOut;
@@ -291,25 +327,31 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 vc.PacketSizeOut = agreed.Value.PacketSizeOut;
                 vc.PacketSizeIn = agreed.Value.PacketSizeIn;
                 vc.PeerSentFacilities = true;
+                otherFacilities = agreed.Value.OtherFacilities;
             }
 
             // X.25 7.2.2.1: when the caller asked for flow control values the answer states what was
             // agreed. This engine accepts what was asked (the codec has already range-checked it), so
             // the Call Accepted echoes the circuit's sizes in the caller's terms: "from called" is our
-            // sending direction, "from calling" is theirs.
+            // sending direction, "from calling" is theirs. The other facilities follow them (7.1: X.25
+            // facilities first).
             byte[]? facilities = null;
-            if (vc.PeerSentFacilities)
+            if (vc.PeerSentFacilities || otherFacilities.Length > 0)
             {
                 facilities = new X25Facilities
                 {
-                    HasPacketSize = true,
+                    HasPacketSize = vc.PeerSentFacilities,
                     PacketSizeFromCalled = vc.PacketSizeOut,
                     PacketSizeFromCalling = vc.PacketSizeIn,
-                    HasWindowSize = true,
+                    HasWindowSize = vc.PeerSentFacilities,
                     WindowFromCalled = vc.WindowSizeOut,
                     WindowFromCalling = vc.WindowSizeIn,
+                    PassThrough = otherFacilities,
                 }.Encode();
             }
+
+            // From here the circuit holds what was answered, not what the caller asked for.
+            vc.OtherFacilities = otherFacilities;
 
             // The state moves before the packet goes out, and back if it does not: the peer's first
             // data packet can arrive synchronously inside Send (loopback sink) and must find the
@@ -351,7 +393,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
-            parameters = new X25CallParameters(vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn);
+            parameters = new X25CallParameters(vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn, vc.OtherFacilities);
             return true;
         }
 
@@ -565,6 +607,29 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </param>
         public bool ClearCall(ushort lci, byte cause = 0, byte diagnostic = 0)
         {
+            return ClearCall(lci, cause, diagnostic, null);
+        }
+
+        /// <summary>
+        /// Clears a circuit with a Clear Request that carries a facility field (X.25 5.2.4.2, the extended format).
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        /// <param name="facilities">
+        /// The facility field, byte for byte; null or empty sends the basic format.
+        /// </param>
+        /// <returns>
+        /// True when the Clear Request was sent.
+        /// </returns>
+        public bool ClearCall(ushort lci, byte cause, byte diagnostic, byte[]? facilities)
+        {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc))
             {
                 return false;
@@ -588,7 +653,22 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.Retries = 0;
             vc.CallRequestHeld = false;
             vc.TimerExpiryMs = Now() + _config.ClearRequestTimeoutMs;
-            return Send(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic));
+            return Send(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic, facilities));
+        }
+
+        /// <summary>
+        /// Gets the facility field of the Clear Request / Clear Indication that ended the last call on a channel.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <returns>
+        /// The field byte for byte; empty when the clear carried none, when the channel is unknown, or when a new call has
+        /// started on it since.
+        /// </returns>
+        public byte[] GetClearFacilities(ushort lci)
+        {
+            return _vcs.TryGetValue(lci, out X25Vc? vc) ? vc.ClearFacilities : System.Array.Empty<byte>();
         }
 
         /// <summary>
@@ -992,6 +1072,22 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             X25VcState state = _vcs.TryGetValue(lci, out X25Vc? vc) ? vc.State : X25VcState.Ready;
 
+            // Table C.1 NOTE 1: on a PVC only p4 exists and only Table C.4 applies. Its row "Invalid packet type on a
+            // permanent virtual circuit" is ERROR (d3) # 35 in d1 and d2 and DISCARD in d3 - a reset, never a clear,
+            // because a PVC has no call to clear and nothing that could set it up again.
+            if (vc != null && vc.Kind == X25VcKind.Pvc
+                && (type == X25PacketType.CallRequest || type == X25PacketType.CallAccepted
+                    || type == X25PacketType.ClearRequest || type == X25PacketType.ClearConfirmation))
+            {
+                if (state == X25VcState.ResetRequest)
+                {
+                    return Discard();
+                }
+
+                ResetForProcedureError(vc, X25Diagnostic.InvalidPacketTypeOnPvc);
+                return false;
+            }
+
             // Tables C.3 and C.4, one row per packet family. NORMAL and collision rows let the packet
             // through to its handler; DISCARD drops it; anything else is ERROR with the state's code.
             switch (type)
@@ -1067,6 +1163,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
                 vc = new X25Vc(lci, X25VcKind.Svc);
                 _vcs[lci] = vc;
+            }
+
+            // A PVC is never cleared: Table C.4 makes every one of its errors ERROR (d3), a reset, in d1 and d2, and
+            // DISCARD in d3 (our reset outstanding). Until 2026-11-16 this cleared it.
+            if (vc.Kind == X25VcKind.Pvc)
+            {
+                if (vc.State != X25VcState.ResetRequest)
+                {
+                    ResetForProcedureError(vc, diagnostic);
+                }
+
+                return;
             }
 
             ProcedureErrors++;
@@ -1303,6 +1411,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.CallRequestHeld = false;
             vc.OutOfOrder = false;
             vc.PeerSentFacilities = false;
+            vc.OtherFacilities = System.Array.Empty<byte>();
             vc.CalledAddress = string.Empty;
             vc.CallingAddress = string.Empty;
             vc.CallUserData = Array.Empty<byte>();
@@ -1378,6 +1487,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 HasWindowSize = true,
                 WindowFromCalled = vc.WindowSizeIn,
                 WindowFromCalling = vc.WindowSizeOut,
+
+                // The other facilities after them (7.1: X.25 facilities first): none for a call an application placed,
+                // what the calling side asked for for a call a switch relays.
+                PassThrough = vc.OtherFacilities,
             }.Encode();
 
             // T21 is armed before the send: a Call Connected arriving synchronously inside Send
@@ -1488,6 +1601,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.PacketSizeIn = requested.PacketSizeFromCalling;
             vc.WindowSizeOut = requested.WindowFromCalled;
             vc.WindowSizeIn = requested.WindowFromCalling;
+            vc.OtherFacilities = requested.PassThrough;
+            vc.ClearFacilities = System.Array.Empty<byte>();
 
             RaiseIncomingCall(lci, info.CalledAddress, info.CallingAddress, info.CallUserData);
         }
@@ -1543,6 +1658,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.WindowSizeIn = agreed.WindowFromCalled;
             vc.PacketSizeOut = agreed.PacketSizeFromCalling;
             vc.PacketSizeIn = agreed.PacketSizeFromCalled;
+            vc.OtherFacilities = agreed.PassThrough;
             vc.CallUserData = info.CallUserData;
 
             vc.State = X25VcState.DataTransfer;
@@ -1696,9 +1812,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
-            Send(X25PacketBuilder.CreateClearConfirmation(lci));
+            byte[]? confirmationFacilities = _config.IsDte ? null : ClearConfirmationFacilities?.Invoke(lci);
+            Send(X25PacketBuilder.CreateClearConfirmation(lci, confirmationFacilities));
             ToReady(vc);
             vc.CallRequestHeld = false;
+
+            // Kept for whoever is told of the clear (a switch passes it to the other leg, PLAN B1).
+            vc.ClearFacilities = info.Facilities ?? System.Array.Empty<byte>();
             ReportCleared(vc, info.ClearingCause, info.DiagnosticCode);
         }
 

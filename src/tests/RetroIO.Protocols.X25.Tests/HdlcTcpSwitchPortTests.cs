@@ -268,8 +268,20 @@ namespace RetroIO.Protocols.X25.Tests
                 }
             }
 
-            // Let the last acknowledgements settle before the counters are compared.
-            Assert.That(SpinWait.SpinUntil(() => pair.Dte.GetLinkSnapshot().InformationFramesOut == pair.Dce.GetLinkSnapshot().InformationFramesIn, 5000), Is.True);
+            // Let the last acknowledgements settle before the counters are compared, in BOTH directions and at both
+            // layers. A packet is counted as sent when the port hands it to LAPB (HdlcSwitchPortBase.WritePacket), and
+            // LAPB holds it until its window has room, so for a moment the packet count is one ahead of the frame count.
+            // Waiting only for the DTE-to-DCE frames left the DCE's own acknowledgements in that state: 202 packets and
+            // 201 frames, seen twice in full-suite runs on 2026-11-16.
+            Assert.That(SpinWait.SpinUntil(() =>
+            {
+                HdlcLinkSnapshot dteNow = pair.Dte.GetLinkSnapshot();
+                HdlcLinkSnapshot dceNow = pair.Dce.GetLinkSnapshot();
+                return dteNow.InformationFramesOut == dceNow.InformationFramesIn
+                    && dceNow.InformationFramesOut == dteNow.InformationFramesIn
+                    && dteNow.InformationFramesOut == pair.Dte.Counters.AllPacketsOut
+                    && dceNow.InformationFramesOut == pair.Dce.Counters.AllPacketsOut;
+            }, 5000), Is.True, "the link goes quiet: every packet handed to LAPB has gone out and arrived");
 
             HdlcLinkSnapshot dte = pair.Dte.GetLinkSnapshot();
             HdlcLinkSnapshot dce = pair.Dce.GetLinkSnapshot();

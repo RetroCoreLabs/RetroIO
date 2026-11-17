@@ -140,6 +140,18 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private readonly PortConfig _config;
         private readonly ILogger _logger;
         private readonly X25Layer _layer;
+
+        /// <summary>Reset cause "Out of order" (X.25 Table 5-8, 0x01) - not the clearing cause of the same name, 0x09.</summary>
+        private const byte PvcResetCauseOutOfOrder = 0x01;
+
+        /// <summary>Reset cause "Remote DTE operational" (X.25 Table 5-8, 0x09).</summary>
+        private const byte PvcResetCauseRemoteDteOperational = 0x09;
+
+        /// <summary>This port's PVC channels; a lost connection resets these and never clears them.</summary>
+        private readonly HashSet<ushort> _pvcChannels = new HashSet<ushort>();
+
+        /// <summary>The RFC 1613 6.5 responder's decisions for this port's PVCs.</summary>
+        private readonly XotPvcResponder _pvcResponder;
         private readonly Timer _ticker;
 
         private readonly List<XotConnection> _connections = new List<XotConnection>();
@@ -222,6 +234,201 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             _layer.WindowOpened += OnLayerWindowOpened;
 
             _ticker = new Timer(OnTick, null, Timeout.Infinite, Timeout.Infinite);
+
+            // The largest packet one XOT frame carries: a power of two that fits after the 3-octet packet header.
+            int largest = 16;
+            while (largest * 2 <= 4096 && largest * 2 + 3 <= XotFrameCodec.FrameMaxPayload)
+            {
+                largest *= 2;
+            }
+
+            _pvcResponder = new XotPvcResponder(config.InterfaceName, (byte)config.DefaultWindowSize, config.DefaultPacketSize, largest);
+        }
+
+        /// <summary>
+        /// Adds a permanent virtual circuit on this port. Over XOT it carries nothing until an RFC 1613 6.5 setup
+        /// exchange binds it to a TCP connection; on a responder port the far XOT asks for it by channel.
+        /// </summary>
+        /// <param name="lci">The PVC's channel on this port.</param>
+        /// <returns>True.</returns>
+        public bool AddPvc(ushort lci)
+        {
+            lock (_sync)
+            {
+                _layer.AddPvc(lci, _config.DefaultWindowSize, _config.DefaultPacketSize);
+                _pvcChannels.Add(lci);
+                _pvcResponder.AddPvc(lci);
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// How long the initiator waits before trying a PVC setup again after it failed. RFC 1613 6.5: "An XOT MAY retry
+        /// a failed PVC setup; if implemented the XOT SHOULD wait between attempts (5 minutes is suggested)."
+        /// </summary>
+        public int PvcSetupRetryMs { get; set; } = 5 * 60 * 1000;
+
+        /// <summary>
+        /// As responder: whether a PVC's destination is up, so a setup for it is answered 0x14 "Destination interface is
+        /// not up" when it is not (RFC 1613 6.5). Set by the switch; null means always up.
+        /// </summary>
+        public Func<ushort, bool>? PvcDestinationUp
+        {
+            get => _pvcResponder.InterfaceUp;
+            set => _pvcResponder.InterfaceUp = value;
+        }
+
+        /// <summary>For each PVC this initiator has joined: how to set it up again when its connection is lost.</summary>
+        private readonly Dictionary<ushort, Action> _pvcRetries = new Dictionary<ushort, Action>();
+
+        /// <summary>The setups this initiator has sent and not yet had answered, by connection.</summary>
+        private readonly Dictionary<XotConnection, (ushort Lci, ushort FarLci, Action Retry)> _pendingSetups =
+            new Dictionary<XotConnection, (ushort, ushort, Action)>();
+
+        /// <summary>
+        /// Joins one of this port's PVCs to a channel on another XOT, as the RFC 1613 6.5 initiator: opens a TCP
+        /// connection of its own to the far XOT, sends the setup packet with status 0x00, and on a 0x00 reply carries the
+        /// PVC on that connection. A failure is tried again after <see cref="PvcSetupRetryMs"/>, for as long as the port
+        /// runs. Returns at once; the exchange runs in the background.
+        /// </summary>
+        /// <param name="lci">The PVC's channel on this port (added with <see cref="AddPvc"/>).</param>
+        /// <param name="remoteHost">The far XOT, <c>host</c> or <c>host:port</c>; port 1998 when none is given.</param>
+        /// <param name="remoteInterface">The far XOT's interface name.</param>
+        /// <param name="remoteLci">The PVC's channel on the far interface.</param>
+        public void StartPvcSetup(ushort lci, string remoteHost, string remoteInterface, ushort remoteLci)
+        {
+            string host = remoteHost;
+            int tcpPort = 1998;
+            int colon = remoteHost.LastIndexOf(':');
+            if (colon > 0)
+            {
+                host = remoteHost.Substring(0, colon);
+                tcpPort = int.Parse(remoteHost.Substring(colon + 1), System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            Action attempt = null!;
+            Action retry = () => ThreadPool.QueueUserWorkItem(_ =>
+            {
+                Thread.Sleep(PvcSetupRetryMs);
+                if (_running)
+                {
+                    attempt();
+                }
+            });
+
+            attempt = () =>
+            {
+                TcpClient client = new TcpClient();
+                try
+                {
+                    if (!client.ConnectAsync(host, tcpPort).Wait(DialTimeoutMs))
+                    {
+                        throw new TimeoutException("no answer in " + DialTimeoutMs + " ms");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    client.Close();
+                    _logger.LogWarning("Port {Id}: PVC {Lci} setup: dial to {Host}:{Port} failed ({Reason}); trying again in {S} s",
+                        Id, lci, host, tcpPort, ex.InnerException?.Message ?? ex.Message, PvcSetupRetryMs / 1000);
+                    retry();
+                    return;
+                }
+
+                if (!_running)
+                {
+                    client.Close();
+                    return;
+                }
+
+                XotConnection connection = AddConnection(client, "dialled for PVC " + lci, dialled: false);
+                XotPvcSetup setup = new XotPvcSetup
+                {
+                    GfiLcn = (ushort)(0x1000 | lci),
+                    Status = XotPvcSetup.StatusOk,
+                    InitiatorInterface = _config.InterfaceName,
+                    InitiatorLci = lci,
+                    ResponderInterface = remoteInterface,
+                    ResponderLci = remoteLci,
+                    IncomingWindow = (byte)_config.DefaultWindowSize,
+                    OutgoingWindow = (byte)_config.DefaultWindowSize,
+                    IncomingPacketSize = _config.DefaultPacketSize,
+                    OutgoingPacketSize = _config.DefaultPacketSize,
+                };
+
+                lock (_sync)
+                {
+                    _pendingSetups[connection] = (lci, remoteLci, retry);
+                    SendOnConnection(connection, setup.Build());
+                }
+            };
+
+            ThreadPool.QueueUserWorkItem(_ => attempt());
+        }
+
+        /// <summary>
+        /// The initiator reads the responder's reply to its setup. The lock is held.
+        /// </summary>
+        private void TakeSetupReply(XotConnection connection, ReadOnlySpan<byte> frame)
+        {
+            if (!_pendingSetups.TryGetValue(connection, out (ushort Lci, ushort FarLci, Action Retry) pending))
+            {
+                _logger.LogWarning("Port {Id}: PVC setup received on an initiator port with none outstanding; connection closed", Id);
+                ThreadPool.QueueUserWorkItem(_ => CloseConnection(connection, "unexpected PVC setup"));
+                return;
+            }
+
+            _pendingSetups.Remove(connection);
+            bool read = XotPvcSetup.TryParse(frame, out XotPvcSetup reply);
+            if (!read || reply.Status != XotPvcSetup.StatusOk)
+            {
+                // "An XOT PVC setup is successful if the responder returns a status of 0x00."
+                _logger.LogWarning("Port {Id}: PVC {Lci} setup refused, status 0x{Status:X2}; trying again in {S} s", Id, pending.Lci,
+                    read ? reply.Status : XotPvcSetup.StatusProtocolError, PvcSetupRetryMs / 1000);
+                ThreadPool.QueueUserWorkItem(_ => CloseConnection(connection, "PVC setup refused"));
+                pending.Retry();
+                return;
+            }
+
+            AddRoute(pending.Lci, connection, pending.FarLci);
+            _pvcRetries[pending.Lci] = pending.Retry;
+            _logger.LogInformation("Port {Id}: PVC channel {Lci} joined to {Iface} channel {Far} (connection {Conn})", Id,
+                pending.Lci, reply.ResponderInterface, pending.FarLci, connection.Number);
+            _layer.ResetCall(pending.Lci, PvcResetCauseRemoteDteOperational, 0);
+        }
+
+        /// <summary>
+        /// Answers an RFC 1613 6.5 PVC setup packet as the responder. The lock is held.
+        /// </summary>
+        /// <remarks>
+        /// "the responder will reply with its own PVC setup packet or by closing the TCP connection." On 0x00 the
+        /// connection carries this PVC, and "each XOT MUST complete a Reset procedure on the local interface". A
+        /// refusal is sent and the connection closed. An initiator port does not answer setups; it sends them.
+        /// </remarks>
+        private void AnswerPvcSetup(XotConnection connection, ReadOnlySpan<byte> frame)
+        {
+            if (_config.XotPvcInitiator)
+            {
+                TakeSetupReply(connection, frame);
+                return;
+            }
+
+            byte status = _pvcResponder.Answer(frame, out XotPvcSetup reply);
+            SendOnConnection(connection, reply.Build());
+            if (status != XotPvcSetup.StatusOk)
+            {
+                _logger.LogWarning("Port {Id}: PVC setup for channel {Lci} refused, status 0x{Status:X2}", Id, reply.ResponderLci, status);
+                ThreadPool.QueueUserWorkItem(_ => CloseConnection(connection, "PVC setup refused"));
+                return;
+            }
+
+            // The PVC's packets travel on this connection with the far end's channel number on the wire.
+            AddRoute(reply.ResponderLci, connection, reply.InitiatorLci);
+            _logger.LogInformation("Port {Id}: PVC channel {Lci} joined to {Iface} channel {Far} (connection {Conn})", Id,
+                reply.ResponderLci, reply.InitiatorInterface, reply.InitiatorLci, connection.Number);
+            // The RFC names no cause; the far end has just become reachable, which X.25 4.6.5 resets with "Remote DTE
+            // operational" (Table 5-8, 0x09).
+            _layer.ResetCall(reply.ResponderLci, PvcResetCauseRemoteDteOperational, 0);
         }
 
         /// <summary>
@@ -705,6 +912,31 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
+        /// <inheritdoc/>
+        public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities)
+        {
+            lock (_sync)
+            {
+                _layer.ClearCall(lci, cause, diagnostic, facilities);
+            }
+        }
+
+        /// <inheritdoc/>
+        public byte[] GetClearFacilities(ushort lci)
+        {
+            lock (_sync)
+            {
+                return _layer.GetClearFacilities(lci);
+            }
+        }
+
+        /// <inheritdoc/>
+        public Func<ushort, byte[]?>? ClearConfirmationFacilities
+        {
+            get { lock (_sync) { return _layer.ClearConfirmationFacilities; } }
+            set { lock (_sync) { _layer.ClearConfirmationFacilities = value; } }
+        }
+
         /// <summary>
         /// Resets a circuit: the sequence numbers go back to zero and what was in flight is discarded.
         /// </summary>
@@ -1103,6 +1335,17 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                     _currentInbound = null;
                 }
 
+                // A responder that closes instead of replying refused the setup ("reply ... or by closing the TCP
+                // connection"): the initiator tries again later.
+                if (_pendingSetups.TryGetValue(connection, out (ushort Lci, ushort FarLci, Action Retry) unanswered))
+                {
+                    _pendingSetups.Remove(connection);
+                    if (_running)
+                    {
+                        unanswered.Retry();
+                    }
+                }
+
                 lost = connection.Circuits.ToArray();
                 for (int i = 0; i < lost.Length; i++)
                 {
@@ -1143,7 +1386,22 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 lock (_sync)
                 {
-                    _layer.AbortCircuit(lost[i], CauseOutOfOrder, 0);
+                    if (_pvcChannels.Contains(lost[i]))
+                    {
+                        // "An XOT PVC connection is broken by simply closing the TCP connection." A PVC is never cleared
+                        // (X.25 4.2); it is reset "Out of order" (4.6.3) and waits for a new setup.
+                        _pvcResponder.Disconnected(lost[i]);
+                        _layer.ResetCall(lost[i], PvcResetCauseOutOfOrder, 0);
+                        if (_running && _pvcRetries.TryGetValue(lost[i], out Action? again))
+                        {
+                            _pvcRetries.Remove(lost[i]);
+                            again();
+                        }
+                    }
+                    else
+                    {
+                        _layer.AbortCircuit(lost[i], CauseOutOfOrder, 0);
+                    }
                 }
             }
 
@@ -1444,6 +1702,14 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 tap(Id, true, frame.ToArray());
             }
 
+            // RFC 1613 6.5: the setup packet's type was "selected from the unused X.25 PTI values" so it can be told
+            // apart before anything else; it never reaches the packet layer.
+            if (XotPvcSetup.IsSetup(frame))
+            {
+                AnswerPvcSetup(connection, frame);
+                return;
+            }
+
             ushort wire = ChannelOf(frame);
             ReadOnlySpan<byte> forEngine = frame;
             if (wire != 0)
@@ -1565,6 +1831,14 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private X25SendResult WritePacket(ReadOnlySpan<byte> packet)
         {
             bool isCallRequest = packet.Length >= 3 && packet[2] == CallRequestType;
+
+            // A PVC travels only on the connection its RFC 1613 6.5 setup joined it to; until then it has no way out.
+            ushort pvc = ChannelOf(packet);
+            if (pvc != 0 && _pvcChannels.Contains(pvc) && !_routes.ContainsKey(pvc))
+            {
+                return X25SendResult.LinkDown;
+            }
+
             XotConnection? connection = ConnectionFor(ChannelOf(packet), isCallRequest, out ushort wire);
             if (connection == null || connection.Closed)
             {

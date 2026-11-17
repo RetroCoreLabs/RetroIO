@@ -115,7 +115,9 @@ namespace RetroIO.Protocols.X25.Tests
         public void Api_GetAccounts_ByteExact()
         {
             Assert.That(Api().Process("GET_ACCOUNTS"),
-                Is.EqualTo("ACCOUNT name=pad_users addr_start=23400000 addr_end=23409999 calls_made=0 calls_recv=0\n"));
+                // x25emu's GET_ACCOUNTS line (tools/x25switch.c), field for field.
+                Is.EqualTo("ACCOUNT name=pad_users|addr_start=23400000|addr_end=23409999|nui=|active=0|calls_made=0|calls_recv=0"
+                    + "|pkts_sent=0|pkts_recv=0|bytes_sent=0|bytes_recv=0|segs_sent=0|segs_recv=0|up=0\n"));
         }
 
         [Test]
@@ -124,6 +126,32 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(Api().Process("SUBSCRIBE"), Is.EqualTo("OK subscribed\n"));
             Assert.That(Api().Process("UNSUBSCRIBE"), Is.EqualTo("OK unsubscribed\n"));
             Assert.That(Api().Process("FROB"), Is.EqualTo(string.Empty));
+        }
+
+        [Test]
+        public void ReadOnlyUser_MayLookButNotChange()
+        {
+            // [user.N] level 0 is read-only; level 1 may change things. A command not on the read-only list is refused.
+            Assert.That(MgmtSession.LevelAllows(0, "show x25 route"), Is.True);
+            Assert.That(MgmtSession.LevelAllows(0, "show x25 account"), Is.True);
+            Assert.That(MgmtSession.LevelAllows(0, "help"), Is.True);
+            Assert.That(MgmtSession.LevelAllows(0, "x25 route add exact 1 1"), Is.False);
+            Assert.That(MgmtSession.LevelAllows(0, "clear x25 vc 0 1"), Is.False);
+            Assert.That(MgmtSession.LevelAllows(0, "write memory a.conf"), Is.False);
+            Assert.That(MgmtSession.LevelAllows(0, "x25 account del a"), Is.False);
+            Assert.That(MgmtSession.LevelAllows(0, "a command nobody has written yet"), Is.False);
+            Assert.That(MgmtSession.LevelAllows(1, "write memory a.conf"), Is.True);
+
+            // Through a session: a level 0 login is refused a change, and the route table is untouched.
+            SwitchCli cli = new SwitchCli(_node, () => 5000L);
+            List<UserConfig> users = new List<UserConfig> { new UserConfig { Name = "look", Password = "pw", Level = 0 } };
+            MgmtSession s = new MgmtSession(cli, Api(), users, "Switch Alpha", "2340");
+            s.FeedLine("look", false);
+            s.FeedLine("pw", false);
+            int routesBefore = _node.Config.Routing.Routes.Count;
+            Assert.That(s.FeedLine("x25 route add exact 23499999 1", false).Output,
+                Is.EqualTo("Error: your user is read-only (level 0)\r\n> "));
+            Assert.That(_node.Config.Routing.Routes.Count, Is.EqualTo(routesBefore));
         }
 
         [Test]

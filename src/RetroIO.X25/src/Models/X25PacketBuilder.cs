@@ -353,18 +353,20 @@ namespace RetroIO.Protocols.X25.Models
             // Diagnostic code
             ms.WriteByte(diagnosticCode);
 
-            // Facilities (optional)
+            // X.25 5.2.4.2: the extended format is used when facilities or clear user data are carried,
+            // and then "the diagnostic code field, the DTE address length fields and the facility length
+            // field must be present". No addresses are carried (the called address is only for the called
+            // line address modified notification), so the address length octet is 00 (5.2.1). Until
+            // 2026-11-16 the address octet was missing and the facility length sat where the address
+            // lengths belong, so every charging answer was misread (vector
+            // pkt-clear-request-extended-charging).
             facilities = facilities ?? Array.Empty<byte>();
-            if (facilities.Length > 0)
+            clearUserData = clearUserData ?? Array.Empty<byte>();
+            if (facilities.Length > 0 || clearUserData.Length > 0)
             {
+                ms.WriteByte(0x00);
                 ms.WriteByte((byte)facilities.Length);
                 ms.Write(facilities);
-            }
-
-            // Clear user data (optional)
-            clearUserData = clearUserData ?? Array.Empty<byte>();
-            if (clearUserData.Length > 0)
-            {
                 ms.Write(clearUserData);
             }
 
@@ -374,14 +376,35 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Create CLEAR CONFIRMATION packet
         /// </summary>
-        public static byte[] CreateClearConfirmation(ushort lcn)
+        /// <param name="lcn">
+        /// Logical channel.
+        /// </param>
+        /// <param name="facilities">
+        /// Facilities for the extended format of a DCE clear confirmation (X.25 5.2.5, Figure 5-7), which is used only for
+        /// the charging information facility (6.22); none gives the basic three-octet packet. A DTE clear confirmation never
+        /// uses the extended format.
+        /// </param>
+        public static byte[] CreateClearConfirmation(ushort lcn, byte[]? facilities = null)
         {
-            return new byte[]
+            if (facilities == null || facilities.Length == 0)
             {
-                GFI.Create(false, false, false, (byte)((lcn >> 8) & 0x0F)),
-                (byte)(lcn & 0xFF),
-                PTI.CLEAR_CONFIRMATION
-            };
+                return new byte[]
+                {
+                    GFI.Create(false, false, false, (byte)((lcn >> 8) & 0x0F)),
+                    (byte)(lcn & 0xFF),
+                    PTI.CLEAR_CONFIRMATION
+                };
+            }
+
+            // Figure 5-7: address block (5.2.1; no addresses, so 00), facility length, facilities.
+            byte[] packet = new byte[5 + facilities.Length];
+            packet[0] = GFI.Create(false, false, false, (byte)((lcn >> 8) & 0x0F));
+            packet[1] = (byte)(lcn & 0xFF);
+            packet[2] = PTI.CLEAR_CONFIRMATION;
+            packet[3] = 0x00;
+            packet[4] = (byte)facilities.Length;
+            facilities.CopyTo(packet, 5);
+            return packet;
         }
 
         #endregion

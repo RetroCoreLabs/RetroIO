@@ -86,6 +86,53 @@ namespace RetroIO.Protocols.X25.Switch
         public ushort LciCount { get; set; } = 16;
 
         /// <summary>
+        /// First logical channel kept for permanent virtual circuits (<c>pvc_base</c>). X.25 Annex A puts the PVC channels
+        /// below the virtual call range; they are agreed at subscription, not chosen per call.
+        /// </summary>
+        public ushort PvcBase { get; set; } = 1;
+
+        /// <summary>
+        /// How many channels from <see cref="PvcBase"/> are kept for PVCs (<c>pvc_count</c>); 0, the default, keeps none.
+        /// </summary>
+        public ushort PvcCount { get; set; }
+
+        /// <summary>
+        /// This port's interface name (<c>iface_name</c>), sent in the RFC 1613 6.5 PVC setup packet and checked against an
+        /// incoming one. The RFC says the names "SHOULD be case-insensitive".
+        /// </summary>
+        public string InterfaceName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// For an XOT port with PVCs (<c>xot_pvc_role</c>): true when this end is the RFC 1613 6.5 initiator - it opens the
+        /// TCP connection and sends the setup packet - and false when it is the responder, which waits, checks the packet
+        /// and answers. X.25 itself has no such roles; they exist only in XOT.
+        /// </summary>
+        public bool XotPvcInitiator { get; set; }
+
+        /// <summary>
+        /// True when every call arriving on this port must name a network user identifier (X.25 6.21.3: "Some networks
+        /// may require that the NUI selection facility be requested by the DTE in every call request packet"). A call
+        /// without one, and without a <see cref="DefaultNui"/>, is cleared with "Local procedure error", diagnostic 84
+        /// (Annex C). Config key <c>nui_required</c>; off by default.
+        /// </summary>
+        public bool NuiRequired { get; set; }
+
+        /// <summary>
+        /// The DTE on this port subscribes to the charging information facility (X.25 6.22: "agreed for a period of
+        /// time"): when it is the DTE to be charged it gets the charging answer at the end of every call, without asking
+        /// for it in the call. Config key <c>charging_info</c>; off by default. Only an access port has a DTE of ours.
+        /// </summary>
+        public bool ChargingInfo { get; set; }
+
+        /// <summary>
+        /// The network user identifier a call arriving on this port is billed to when it names none: the port's own
+        /// subscription (X.25 6.21, agreed for a period of time). It must be the NUI of a configured account. Config key
+        /// <c>default_nui</c>; empty for none. Made for easy test set-ups: one line and every call on the port has a
+        /// paying account.
+        /// </summary>
+        public string DefaultNui { get; set; } = string.Empty;
+
+        /// <summary>
         /// Serial device path (HDLC-serial transport only).
         /// </summary>
         public string SerialDevice { get; set; } = string.Empty;

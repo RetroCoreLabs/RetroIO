@@ -244,9 +244,29 @@ namespace RetroIO.Protocols.X25.Modules
         #region Public API
 
         /// <summary>
+        /// Starts the PAD with a NUI already given, as if the user had typed <c>ID</c> and the NUI (X.28 5.2); see
+        /// <see cref="X28.SetNui"/>. <c>IDOFF</c> still takes it away.
+        /// </summary>
+        /// <param name="nui">The NUI.</param>
+        /// <returns>False when the NUI is not a valid one.</returns>
+        public bool SetNui(string nui)
+        {
+            return _x28Protocol.SetNui(nui);
+        }
+
+        /// <summary>
         /// Connect to remote TAD server
         /// </summary>
         public bool Connect(string remoteAddress, string callingAddress = "")
+        {
+            return Connect(remoteAddress, callingAddress, null);
+        }
+
+        /// <summary>
+        /// Connect to a remote TAD server, with a NUI given for this one call (X.28 3.5.15.1.1, <c>N&lt;nui&gt;-</c>) that is
+        /// used instead of the one given with <c>ID</c>; null uses the <c>ID</c> one, if any.
+        /// </summary>
+        public bool Connect(string remoteAddress, string callingAddress, string? callNui)
         {
             if (_state != PadState.Disconnected)
             {
@@ -261,10 +281,19 @@ namespace RetroIO.Protocols.X25.Modules
             
             _logger.LogInformation("PAD Client connecting to {RemoteAddress}", remoteAddress);
             
+            // X.28 5.2: the NUI given with ID "will apply for all subsequent calls until either the access path is
+            // disconnected or a NUI OFF PAD command signal is received". It goes in the Call Request as the NUI selection
+            // facility; the network reads it for billing and does not pass it on (X.25 6.21).
+            string? nui = callNui ?? _x28Protocol.Nui;
+            byte[] facilities = nui == null
+                ? Array.Empty<byte>()
+                : RetroIO.Protocols.X25.PacketLayer.X25CallParameters.NuiSelectionElement(System.Text.Encoding.ASCII.GetBytes(nui));
+
             var success = _transport.PlaceCall(
                 remoteAddress,
                 callingAddress.Length > 0 ? callingAddress : LocalAddress,
-                callUserData
+                callUserData,
+                facilities
             );
 
             if (!success)
@@ -1000,7 +1029,7 @@ namespace RetroIO.Protocols.X25.Modules
                         if (command.Arguments.Count > 0)
                         {
                             string address = command.Arguments[0];
-                            if (!Connect(address, LocalAddress))
+                            if (!Connect(address, LocalAddress, command.CallNui))
                             {
                                 // The call never left: no route, or the link to the next node is down.
                                 // The terminal must be told, or it waits for a connection forever.

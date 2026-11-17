@@ -363,7 +363,7 @@ namespace RetroIO.Protocols.X25.Tests
                 case "CallRequest": return X25PacketBuilder.CreateCallRequest(lcn, called, calling, facilities, cud, q, d);
                 case "CallAccepted": return X25PacketBuilder.CreateCallAccepted(lcn, facilities, cud, q, d);
                 case "ClearRequest": return X25PacketBuilder.CreateClearRequest(lcn, cause, diag, facilities, cud);
-                case "ClearConfirmation": return X25PacketBuilder.CreateClearConfirmation(lcn);
+                case "ClearConfirmation": return X25PacketBuilder.CreateClearConfirmation(lcn, facilities);
                 case "Data": return X25PacketBuilder.CreateDataPacket(lcn, ps, pr, data, m, q, d);
                 case "RR": return X25PacketBuilder.CreateRR(lcn, pr);
                 case "RNR": return X25PacketBuilder.CreateRNR(lcn, pr);
@@ -397,7 +397,8 @@ namespace RetroIO.Protocols.X25.Tests
             CheckString(why, "called", info.CalledAddress, parse);
             CheckString(why, "calling", info.CallingAddress, parse);
             CheckHex(why, "facilitiesHex", info.Facilities, parse);
-            CheckHex(why, "cudHex", info.CallUserData, parse);
+            // A clear carries clear user data (X.25 5.2.4.2.4), not call user data.
+            CheckHex(why, "cudHex", wantType == "ClearRequest" ? info.ClearUserData : info.CallUserData, parse);
 
             // "cause" lives in a different property per packet type.
             if (parse.TryGetProperty("cause", out JsonElement causeEl))

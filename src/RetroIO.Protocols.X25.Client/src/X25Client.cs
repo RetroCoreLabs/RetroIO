@@ -30,7 +30,7 @@ namespace RetroIO.Protocols.X25.Client
     ///  - an <see cref="X25Layer"/> that runs the call/data/clear state machine and raises up-events.
     ///
     /// Threading: the transport reads on its own background thread and drives the codec and the packet layer
-    /// from there, while application calls (<see cref="Call"/>, <see cref="Send"/>, <see cref="Clear"/>) come
+    /// from there, while application calls (<see cref="Call(string, byte[])"/>, <see cref="Send"/>, <see cref="Clear"/>) come
     /// from the application thread. A single lock serializes every access to the packet layer, so its
     /// non-thread-safe state stays consistent. Application callbacks fire on whichever thread advanced the
     /// state machine; an application blocks in <see cref="Run"/> until <see cref="Close"/> is called.
@@ -206,6 +206,19 @@ namespace RetroIO.Protocols.X25.Client
         /// </returns>
         public X25Vc? Call(string calledAddress, byte[]? callUserData = null)
         {
+            return Call(calledAddress, callUserData, Array.Empty<byte>());
+        }
+
+        /// <summary>
+        /// Places an X.25 call carrying further facility elements (X.25 7.1 encoding, other than window and packet size) -
+        /// a NUI selection, for one. Otherwise the same as <see cref="Call(string, byte[])"/>.
+        /// </summary>
+        /// <param name="calledAddress">Destination X.121 address.</param>
+        /// <param name="callUserData">Optional call user data.</param>
+        /// <param name="facilities">The facility elements, byte for byte; empty for none.</param>
+        /// <returns>The new (not-yet-connected) circuit, or null if no channel was free.</returns>
+        public X25Vc? Call(string calledAddress, byte[]? callUserData, byte[] facilities)
+        {
             RequireOpen();
 
             // RFC 1613 section 5: one TCP connection for each circuit. The first call placed uses the connection
@@ -251,7 +264,9 @@ namespace RetroIO.Protocols.X25.Client
 
             lock (_lock)
             {
-                ushort lci = leg.Layer.PlaceCall(calledAddress ?? string.Empty, _config.LocalAddress, callUserData);
+                ushort lci = facilities.Length == 0
+                    ? leg.Layer.PlaceCall(calledAddress ?? string.Empty, _config.LocalAddress, callUserData)
+                    : leg.Layer.PlaceCall(calledAddress ?? string.Empty, _config.LocalAddress, callUserData, facilities);
                 if (lci == 0)
                 {
                     if (!leg.IsPrimary)

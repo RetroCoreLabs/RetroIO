@@ -101,6 +101,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte UnidentifiablePacket = 33;
 
         /// <summary>
+        /// 35 - Packet not appropriate for a permanent virtual circuit: a call set-up or clearing packet on a PVC's channel
+        /// (Annex C, Table C.4, "Invalid packet type on a permanent virtual circuit").
+        /// </summary>
+        public const byte InvalidPacketTypeOnPvc = 35;
+
+        /// <summary>
         /// 36 - Packet on unassigned logical channel.
         /// </summary>
         public const byte UnassignedLogicalChannel = 36;

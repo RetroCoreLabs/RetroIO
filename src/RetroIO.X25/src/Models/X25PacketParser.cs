@@ -71,6 +71,11 @@ namespace RetroIO.Protocols.X25.Models
                 case X25PacketType.ClearRequest:
                     ParseClearRequestPacket(data, info);
                     break;
+                case X25PacketType.ClearConfirmation:
+                    // The extended DCE clear confirmation carries charging information (X.25 5.2.5,
+                    // Figure 5-7): address block, facility length, facilities, no user data.
+                    ParseExtendedClearTail(data, 3, info, allowUserData: false);
+                    break;
                 case X25PacketType.Interrupt:
                     ParseInterruptPacket(data, info);
                     break;
@@ -282,30 +287,74 @@ namespace RetroIO.Protocols.X25.Models
 
             info.DiagnosticCode = data[4];
 
-            int offset = 5;
+            // Anything after the diagnostic is the extended format, and it is not ambiguous: X.25
+            // 5.2.4.2 - "When the extended format is used, the diagnostic code field, the DTE address
+            // length fields and the facility length field must be present" - and clear user data is
+            // allowed only in the extended format (5.2.4.2.4). So the next octet is the address
+            // lengths, then the addresses, the facility length, the facilities, and the rest is clear
+            // user data. Until 2026-11-16 this parser guessed ("ambiguous - implementation dependent")
+            // and read the address length octet as a facility length.
+            ParseExtendedClearTail(data, 5, info, allowUserData: true);
+        }
 
-            // Check for optional facilities and clear user data
+        /// <summary>
+        /// Parse the part of an extended clear request, clear indication or DCE clear confirmation that follows the fixed
+        /// fields: the address block (X.25 5.2.1), the facility length, the facilities and, in a clear request only, clear
+        /// user data.
+        /// </summary>
+        private static void ParseExtendedClearTail(byte[] data, int offset, X25PacketInfo info, bool allowUserData)
+        {
+            if (offset >= data.Length)
+            {
+                return;
+            }
+
+            byte addressLengths = data[offset++];
+            int callingLength = (addressLengths >> 4) & 0x0F;
+            int calledLength = addressLengths & 0x0F;
+            int totalDigits = calledLength + callingLength;
+            int addressBytes = (totalDigits + 1) / 2;
+            if (offset + addressBytes > data.Length)
+            {
+                info.ParseError = "address lengths " + calledLength + "+" + callingLength + " digits exceed the packet";
+                return;
+            }
+
+            if (totalDigits > 0)
+            {
+                string digits = ExtractBcdDigits(data, offset, totalDigits);
+                info.CalledAddress = digits.Substring(0, calledLength);
+                info.CallingAddress = digits.Substring(calledLength, callingLength);
+            }
+
+            offset += addressBytes;
+            if (offset >= data.Length)
+            {
+                info.ParseError = "the extended format needs a facility length (X.25 5.2.4.2)";
+                return;
+            }
+
+            int facilityLength = data[offset++];
+            if (offset + facilityLength > data.Length)
+            {
+                info.ParseError = "facility length " + facilityLength + " exceeds the packet";
+                return;
+            }
+
+            info.Facilities = new byte[facilityLength];
+            Array.Copy(data, offset, info.Facilities, 0, facilityLength);
+            offset += facilityLength;
+
             if (offset < data.Length)
             {
-                // Try to determine if next byte is facilities length or clear user data
-                // This is ambiguous in X.25 spec - implementation dependent
-                byte possibleFacLength = data[offset];
-
-                if (possibleFacLength > 0 && offset + 1 + possibleFacLength <= data.Length)
+                if (!allowUserData)
                 {
-                    // Assume it's facilities length
-                    offset++;
-                    info.Facilities = new byte[possibleFacLength];
-                    Array.Copy(data, offset, info.Facilities, 0, possibleFacLength);
-                    offset += possibleFacLength;
+                    info.ParseError = "a clear confirmation carries no user data (X.25 Figure 5-7)";
+                    return;
                 }
 
-                // Remaining data is clear user data
-                if (offset < data.Length)
-                {
-                    info.ClearUserData = new byte[data.Length - offset];
-                    Array.Copy(data, offset, info.ClearUserData, 0, data.Length - offset);
-                }
+                info.ClearUserData = new byte[data.Length - offset];
+                Array.Copy(data, offset, info.ClearUserData, 0, data.Length - offset);
             }
         }
 

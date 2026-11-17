@@ -30,6 +30,12 @@ namespace RetroIO.Protocols.X25.Switch.Model
         public string AddrEnd { get; }
 
         /// <summary>
+        /// Calls of this account up now, as caller or called party: the column an operator watching a busy subscriber
+        /// wants.
+        /// </summary>
+        public uint CallsActive { get; set; }
+
+        /// <summary>
         /// Calls placed by an address in this account's range.
         /// </summary>
         public uint CallsMade { get; set; }
@@ -65,6 +71,16 @@ namespace RetroIO.Protocols.X25.Switch.Model
         public ulong TotalDurationMs { get; set; }
 
         /// <summary>
+        /// Charging segments this account's calls sent (ITU-T D.12), added when each call ends.
+        /// </summary>
+        public ulong SegmentsSent { get; set; }
+
+        /// <summary>
+        /// Charging segments this account's calls received.
+        /// </summary>
+        public ulong SegmentsReceived { get; set; }
+
+        /// <summary>
         /// Creates a runtime account from its configuration.
         /// </summary>
         /// <param name="config">
@@ -75,6 +91,40 @@ namespace RetroIO.Protocols.X25.Switch.Model
             Name = config.Name;
             AddrStart = config.AddrStart;
             AddrEnd = config.AddrEnd;
+            Nui = config.Nui;
+        }
+
+        /// <summary>
+        /// The network user identifier that names this account in a call (see <see cref="AccountConfig.Nui"/>); empty when
+        /// the account is reached only by its address range.
+        /// </summary>
+        public string Nui { get; }
+
+        /// <summary>
+        /// Tests whether a network user identifier from a Call Request names this account, octet for octet.
+        /// </summary>
+        /// <param name="identifier">
+        /// The parameter field of the NUI selection element (X.25 7.3.7).
+        /// </param>
+        /// <returns>
+        /// True when the account has an NUI and it is exactly these octets.
+        /// </returns>
+        public bool HasNui(ReadOnlySpan<byte> identifier)
+        {
+            if (Nui.Length == 0 || Nui.Length != identifier.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < identifier.Length; i++)
+            {
+                if (Nui[i] != identifier[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
