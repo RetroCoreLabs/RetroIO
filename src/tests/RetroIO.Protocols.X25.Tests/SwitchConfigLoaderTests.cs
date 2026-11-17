@@ -228,10 +228,20 @@ namespace RetroIO.Protocols.X25.Tests
                 "type = hunt",
                 "address = 555",
                 "hunt_group = 0",
+                "[port.0]",
+                "type = access",
+                "transport = hdlc-tcp",
+                "lci_base = 16",
+                "pvc_count = 8",
+                "[port.1]",
+                "type = access",
+                "transport = hdlc-tcp",
+                "lci_base = 16",
+                "pvc_count = 8",
                 "[pvc.0]",
-                "src_port = 2",
+                "src_port = 0",
                 "src_lci = 5",
-                "dst_port = 4",
+                "dst_port = 1",
                 "dst_lci = 6"
             });
 
@@ -251,9 +261,9 @@ namespace RetroIO.Protocols.X25.Tests
                 if (sw.Routing.Routes[i].Type == X121RouteType.Pvc)
                 {
                     foundPvc = true;
-                    Assert.That(sw.Routing.Routes[i].SourcePort, Is.EqualTo(2));
+                    Assert.That(sw.Routing.Routes[i].SourcePort, Is.EqualTo(0));
                     Assert.That(sw.Routing.Routes[i].SourceLci, Is.EqualTo(5));
-                    Assert.That(sw.Routing.Routes[i].DestPort, Is.EqualTo(4));
+                    Assert.That(sw.Routing.Routes[i].DestPort, Is.EqualTo(1));
                     Assert.That(sw.Routing.Routes[i].DestLci, Is.EqualTo(6));
                 }
             }

@@ -11,7 +11,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
 {
     /// <summary>
     /// Raised when a remote party places a call to this endpoint. The upper layer responds with
-    /// <see cref="X25Layer.AcceptCall(ushort)"/> or <see cref="X25Layer.ClearCall"/>.
+    /// <see cref="X25Layer.AcceptCall(ushort)"/> or <see cref="X25Layer.ClearCall(ushort, byte, byte)"/>.
     /// </summary>
     /// <param name="layer">
     /// The layer that received the call.

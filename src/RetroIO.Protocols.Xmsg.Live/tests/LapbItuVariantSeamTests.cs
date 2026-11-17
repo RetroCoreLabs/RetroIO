@@ -71,6 +71,24 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             Assert.Equal(new byte[] { LapbLayer.AddressItuB, 0x73 }, sent[0]);
         }
 
+        /// <summary>
+        /// The F bit of the UA copies the P bit of the SABM it answers (X.25 2.4.4.1 / ISO 7776: a response's F bit is set to
+        /// the value of the P bit of the command). SINTRAN's X.25 driver sends SABMs with P=0 as well as P=1 (capture of port
+        /// 2362, 2026-11-16, at 326.249 s: 01 2F); our switch answered 01 73, F=1, to a P=0 command.
+        /// </summary>
+        [Theory]
+        [InlineData(0x2F, 0x63)]   // SABM P=0 -> UA F=0
+        [InlineData(0x3F, 0x73)]   // SABM P=1 -> UA F=1
+        public void ItuDce_UaFinalBit_CopiesTheSabmPollBit(byte sabm, byte expectedUa)
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = LapbTestKit.NewLink(0x0066, sent, Itu(isDte: false));
+
+            LapbTestKit.Deliver(link, LapbLayer.AddressItuB, sabm);
+
+            Assert.Equal(new byte[] { LapbLayer.AddressItuB, expectedUa }, sent[0]);
+        }
+
         [Fact]
         public void ItuDte_CommandsCarryAddressB()
         {

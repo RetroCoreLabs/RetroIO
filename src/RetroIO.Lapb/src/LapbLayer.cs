@@ -860,7 +860,11 @@ namespace RetroIO.Protocols.Xmsg.Live
                     // it arrives INSIDE this send, finds the station still disconnected, and is
                     // answered with a DM - both ends then tear the link down they had just built.
                     // Found 2026-09-06 wiring two stations back to back through a codec bridge.
-                    SendUnnumbered(UaBase, includeNode: true, pollFinal: true);
+                    // F copies the SABM's P (X.25 2.4.4.1 / ISO 7776: a response's F bit has the value of
+                    // the command's P bit). ND stations always send P=1, so they still get F=1; SINTRAN's
+                    // X.25 driver also sends P=0 SABMs, and answering those with F=1 was wrong (capture of
+                    // port 2362, 2026-11-16).
+                    SendUnnumbered(UaBase, includeNode: true, pollFinal: frame.PollFinal);
 
                     // Push the peer to the RUN phase: it advances only once it receives an RR from us
                     // (spec 3.4 idle keepalive; live-necessary against the ND kernel).

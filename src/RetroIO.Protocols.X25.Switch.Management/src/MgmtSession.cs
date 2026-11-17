@@ -92,6 +92,9 @@ namespace RetroIO.Protocols.X25.Switch.Management
 
         private string _username = string.Empty;
 
+        // The logged-in user's [user.N] level; 0 (read-only) until a login succeeds.
+        private int _level;
+
         /// <summary>
         /// The current authentication state.
         /// </summary>
@@ -213,6 +216,11 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 return new MgmtResult(string.Empty, false, false);
             }
 
+            if (!LevelAllows(_level, line))
+            {
+                return new MgmtResult("Error: your user is read-only (level 0)\r\n> ", false, false);
+            }
+
             return new MgmtResult(_cli.Process(line) + "> ", false, false);
         }
 
@@ -222,11 +230,42 @@ namespace RetroIO.Protocols.X25.Switch.Management
             {
                 if (_users[i].Name == username && _users[i].Password == password)
                 {
+                    _level = _users[i].Level;
                     return true;
                 }
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Whether a user of this level may run this console command - the same rule as x25emu's
+        /// <c>sw_cli_level_allows</c> (found 2026-11-17: the level was stored and never checked in either switch).
+        /// </summary>
+        /// <remarks>
+        /// Level 0 is read-only: only <c>show ...</c>, <c>help</c>, <c>?</c> and <c>reload</c> (which changes nothing).
+        /// Anything else, including a command this list does not know, needs level 1, so a command added later stays
+        /// refused to a read-only user until it is listed here.
+        /// </remarks>
+        /// <param name="level">
+        /// The user's level from <c>[user.N] level</c>.
+        /// </param>
+        /// <param name="command">
+        /// The command line.
+        /// </param>
+        /// <returns>
+        /// True when the command may run.
+        /// </returns>
+        public static bool LevelAllows(int level, string command)
+        {
+            if (level >= 1)
+            {
+                return true;
+            }
+
+            string c = command.TrimStart(' ');
+            return c.StartsWith("show ", StringComparison.Ordinal) || c == "show" || c == "help" || c == "?"
+                || c.StartsWith("reload", StringComparison.Ordinal);
         }
     }
 }

@@ -39,6 +39,30 @@ namespace RetroIO.Protocols.X25.Modules
         bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData);
 
         /// <summary>
+        /// Places an outgoing X.25 call carrying further facility elements (X.25 7.1 encoding) - the NUI selection a PAD
+        /// user gave with X.28 <c>ID</c>.
+        /// </summary>
+        /// <remarks>
+        /// A transport that cannot put facilities in its Call Request throws rather than placing the call without them: a
+        /// call that silently loses its NUI is billed to someone else (or refused for no reason the user can see).
+        /// </remarks>
+        /// <param name="calledAddress">Destination X.121 address.</param>
+        /// <param name="callingAddress">Origin X.121 address.</param>
+        /// <param name="callUserData">Call user data, or null.</param>
+        /// <param name="facilities">The facility elements; empty for none.</param>
+        /// <returns>True if the call was initiated.</returns>
+        /// <exception cref="System.NotSupportedException">The transport cannot send facilities.</exception>
+        bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, byte[] facilities)
+        {
+            if (facilities.Length == 0)
+            {
+                return PlaceCall(calledAddress, callingAddress, callUserData);
+            }
+
+            throw new System.NotSupportedException(GetType().Name + " cannot put facilities (a NUI) in its Call Request");
+        }
+
+        /// <summary>
         /// Sends a data packet on an established circuit.
         /// </summary>
         /// <param name="lcn">

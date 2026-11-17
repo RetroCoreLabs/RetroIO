@@ -213,7 +213,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Assert.That(stitch.ForwardQueue.Count, Is.EqualTo(0), "what was held is discarded");
                 Assert.That(_ingress.ResetCircuits.Count, Is.EqualTo(1));
                 Assert.That(_egress.ResetCircuits.Count, Is.EqualTo(1));
-                Assert.That(_ingress.ResetCircuits[0].Cause, Is.EqualTo(SwitchCore.ResetCauseNetworkCongestion));
+                Assert.That(_ingress.ResetCircuits[0].Cause, Is.EqualTo((byte)0x07), "network congestion, X.25 Table 5-8");
             });
         }
 

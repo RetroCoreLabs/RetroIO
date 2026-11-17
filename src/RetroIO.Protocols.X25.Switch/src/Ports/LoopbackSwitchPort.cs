@@ -129,7 +129,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         /// <summary>
         /// Raised when a circuit on this port is cleared by the far end; here only by
-        /// <see cref="InjectClear"/>.
+        /// <see cref="InjectClear(ushort, byte, byte)"/>.
         /// </summary>
         public event PortCallCleared? CallCleared;
 
@@ -162,6 +162,26 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         {
             _active = true;
             StateChanged?.Invoke(this, true);
+            return true;
+        }
+
+        /// <summary>
+        /// The PVC channels the switch created on this port, in order.
+        /// </summary>
+        public List<ushort> Pvcs { get; } = new List<ushort>();
+
+        /// <summary>
+        /// Records a PVC in <see cref="Pvcs"/>. There is no packet layer to put it in.
+        /// </summary>
+        /// <param name="lci">
+        /// The channel.
+        /// </param>
+        /// <returns>
+        /// Always <c>true</c>.
+        /// </returns>
+        public bool AddPvc(ushort lci)
+        {
+            Pvcs.Add(lci);
             return true;
         }
 
@@ -354,7 +374,47 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         public void ClearCall(ushort lci, byte cause, byte diagnostic)
         {
             ClearedCalls.Add((lci, cause, diagnostic));
+            ClearedFacilities.Add(Array.Empty<byte>());
         }
+
+        /// <summary>
+        /// Records a cleared call in <see cref="ClearedCalls"/> and its facility field in <see cref="ClearedFacilities"/>.
+        /// No event is raised.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to clear.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        /// <param name="facilities">
+        /// The facility field the switch passed on.
+        /// </param>
+        public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities)
+        {
+            ClearedCalls.Add((lci, cause, diagnostic));
+            ClearedFacilities.Add(facilities);
+        }
+
+        /// <summary>
+        /// The facility field of each clear in <see cref="ClearedCalls"/>, in the same order (empty for a clear that had none).
+        /// </summary>
+        public List<byte[]> ClearedFacilities { get; } = new List<byte[]>();
+
+        // Set by InjectClear for the switch to read while it handles the clear.
+        private readonly Dictionary<ushort, byte[]> _injectedClearFacilities = new Dictionary<ushort, byte[]>();
+
+        /// <inheritdoc/>
+        public byte[] GetClearFacilities(ushort lci)
+        {
+            return _injectedClearFacilities.TryGetValue(lci, out byte[]? f) ? f : Array.Empty<byte>();
+        }
+
+        /// <inheritdoc/>
+        public Func<ushort, byte[]?>? ClearConfirmationFacilities { get; set; }
 
         /// <summary>
         /// Injects an incoming call, as if a remote party dialled into this port.
@@ -426,6 +486,27 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </param>
         public void InjectClear(ushort lci, byte cause = 0, byte diagnostic = 0)
         {
+            InjectClear(lci, cause, diagnostic, Array.Empty<byte>());
+        }
+
+        /// <summary>
+        /// Injects a clear that carries a facility field, as if the remote party sent an extended Clear Request.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to clear.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        /// <param name="facilities">
+        /// The facility field, readable through <see cref="GetClearFacilities"/> while the switch handles the clear.
+        /// </param>
+        public void InjectClear(ushort lci, byte cause, byte diagnostic, byte[] facilities)
+        {
+            _injectedClearFacilities[lci] = facilities;
             CallCleared?.Invoke(this, lci, cause, diagnostic);
         }
 

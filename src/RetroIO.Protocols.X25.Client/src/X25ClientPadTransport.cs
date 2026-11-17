@@ -76,6 +76,19 @@ namespace RetroIO.Protocols.X25.Client
             return _vc != null;
         }
 
+        /// <inheritdoc/>
+        public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, byte[] facilities)
+        {
+            if (!string.IsNullOrEmpty(callingAddress) && !string.Equals(callingAddress, _client.LocalAddress, StringComparison.Ordinal))
+            {
+                throw new NotSupportedException(
+                    "X25ClientPadTransport.PlaceCall with a calling address other than the client's own is not implemented: the client always calls with its configured local address.");
+            }
+
+            _vc = _client.Call(calledAddress, callUserData, facilities);
+            return _vc != null;
+        }
+
         /// <summary>
         /// Sends a data packet on the PAD's one circuit.
         /// </summary>

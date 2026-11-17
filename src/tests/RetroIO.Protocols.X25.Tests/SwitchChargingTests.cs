@@ -1,0 +1,381 @@
+//
+// SPDX-License-Identifier: MIT
+// Copyright (c) 1985-2026 Ronny Hansen
+// RetroCore Labs — https://github.com/RetroCoreLabs
+// RetroIO - Accessing yesterday's data with today's standards
+//
+
+using System;
+using System.Collections.Generic;
+using System.Net.Sockets;
+using System.Threading;
+using NUnit.Framework;
+using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.Routing;
+using RetroIO.Protocols.X25.Switch;
+using RetroIO.Protocols.X25.Switch.Model;
+using RetroIO.Protocols.X25.Switch.Ports;
+
+namespace RetroIO.Protocols.X25.Tests
+{
+    /// <summary>
+    /// The charging information facility at the switch (X.25 6.22, 7.3.8; ITU-T D.12; PLAN B1b): segments counted per
+    /// message, call duration from the switch's clock, and the answer given to the DTE to be charged in its Clear
+    /// Indication or DCE Clear Confirmation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every expected figure is worked by hand. Packet size 128 both ways (facility 42 07 07), window 7 (43 07 07). The
+    /// caller sends a full 128-octet packet with M set and a 1-octet packet (one message of 129 octets: ceil(129 / 64) =
+    /// 3 segments), then a 64-octet packet (one message: 1 segment) - 4 segments from the caller. The callee sends one
+    /// 65-octet packet: 2 segments. The call is answered at clock 1 000 000 ms and cleared 5025 s later: 0 days, 1 hour,
+    /// 23 minutes, 45 seconds.
+    /// </para>
+    /// <para>
+    /// The answer to the caller (7.3.8.3, 7.3.8.4): C2 08, four BCD octets of segments sent to it (2), four received
+    /// from it (4), then C1 04 00 01 23 45.
+    /// </para>
+    /// </remarks>
+    [TestFixture]
+    public class SwitchChargingTests
+    {
+        private const string AnswerToCaller = "C2 08 00 00 00 02 00 00 00 04 C1 04 00 01 23 45";
+
+        // To the called DTE the directions swap: 4 segments sent to it, 2 received from it.
+        private const string AnswerToCallee = "C2 08 00 00 00 04 00 00 00 02 C1 04 00 01 23 45";
+
+        private sealed class Rig : IDisposable
+        {
+            public SwitchNode Node = null!;
+            public SwitchCore Core = null!;
+            public XotSwitchPort CallerPort = null!;
+            public XotSwitchPort CalleePort = null!;
+            public TcpClient Caller = null!;
+            public TcpClient Callee = null!;
+            public NetworkStream CallerStream = null!;
+            public NetworkStream CalleeStream = null!;
+            public long Now = 1_000_000;
+            public readonly List<Cdr> Cdrs = new List<Cdr>();
+
+            public void Dispose()
+            {
+                Caller?.Dispose();
+                Callee?.Dispose();
+                CallerPort?.Stop();
+                CalleePort?.Stop();
+            }
+        }
+
+        private static Rig Build(bool callerSubscribes = false, bool calleeSubscribes = false)
+        {
+            SwitchConfig cfg = new SwitchConfig { Dnic = "2340" };
+            cfg.Routing.AddRoute(new X121Route { Type = X121RouteType.Prefix, Address = "2342", PrefixLen = 4, DestPort = 1 });
+            cfg.Accounts.Add(new AccountConfig { Name = "lineA", AddrStart = "23400000", AddrEnd = "23400099" });
+
+            Rig r = new Rig();
+            r.Node = new SwitchNode(cfg);
+            r.CallerPort = new XotSwitchPort(new PortConfig { Id = 0, Mode = PortMode.Dce, Host = "127.0.0.1", Port = 0, LciBase = 1, LciCount = 16, ChargingInfo = callerSubscribes });
+            r.CalleePort = new XotSwitchPort(new PortConfig { Id = 1, Mode = PortMode.Dce, Host = "127.0.0.1", Port = 0, LciBase = 1, LciCount = 16, ChargingInfo = calleeSubscribes });
+            r.Node.AddPort(r.CallerPort);
+            r.Node.AddPort(r.CalleePort);
+            r.Core = new SwitchCore(r.Node);
+            r.Core.ClockMs = () => Interlocked.Read(ref r.Now);
+            r.Core.CdrRecorded += c => { lock (r.Cdrs) { r.Cdrs.Add(c); } };
+            Assert.That(r.CallerPort.Start() && r.CalleePort.Start(), Is.True);
+
+            r.Callee = new TcpClient { NoDelay = true };
+            r.Callee.Connect("127.0.0.1", r.CalleePort.BoundPort);
+            r.Caller = new TcpClient { NoDelay = true };
+            r.Caller.Connect("127.0.0.1", r.CallerPort.BoundPort);
+            Assert.That(SpinWait.SpinUntil(() => r.CallerPort.PeerConnected && r.CalleePort.PeerConnected, 5000), Is.True);
+            r.CallerStream = r.Caller.GetStream();
+            r.CalleeStream = r.Callee.GetStream();
+            r.CallerStream.ReadTimeout = 10000;
+            r.CalleeStream.ReadTimeout = 10000;
+            return r;
+        }
+
+        private static string Hex(byte[] bytes) => BitConverter.ToString(bytes).Replace('-', ' ');
+
+        private static void SendXot(NetworkStream stream, byte[] packet)
+        {
+            byte[] frame = new byte[4 + packet.Length];
+            frame[2] = (byte)(packet.Length >> 8);
+            frame[3] = (byte)packet.Length;
+            packet.CopyTo(frame, 4);
+            stream.Write(frame, 0, frame.Length);
+        }
+
+        private static byte[] ReadExactly(NetworkStream stream, int count)
+        {
+            byte[] buffer = new byte[count];
+            int got = 0;
+            while (got < count)
+            {
+                int n = stream.Read(buffer, got, count - got);
+                Assert.That(n, Is.GreaterThan(0), "the connection closed");
+                got += n;
+            }
+
+            return buffer;
+        }
+
+        // The next packet of the given type, passing over flow control (RR, RNR) on the way.
+        private static X25PacketInfo ReadUntil(NetworkStream stream, X25PacketType type)
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                byte[] header = ReadExactly(stream, 4);
+                byte[] packet = ReadExactly(stream, (header[2] << 8) | header[3]);
+                X25PacketInfo info = X25PacketParser.ParsePacket(packet);
+                if (info.PacketType == type)
+                {
+                    return info;
+                }
+
+                Assert.That(info.PacketType, Is.EqualTo(X25PacketType.RR).Or.EqualTo(X25PacketType.RNR),
+                    "an unexpected " + info.PacketType + " while waiting for " + type);
+            }
+
+            Assert.Fail("no " + type);
+            return null!;
+        }
+
+        private static byte[] Octets(int n)
+        {
+            byte[] b = new byte[n];
+            for (int i = 0; i < n; i++)
+            {
+                b[i] = (byte)('A' + (i % 26));
+            }
+
+            return b;
+        }
+
+        private static byte[] Join(byte[] a, byte[] b)
+        {
+            byte[] r = new byte[a.Length + b.Length];
+            a.CopyTo(r, 0);
+            b.CopyTo(r, a.Length);
+            return r;
+        }
+
+        private static readonly byte[] Flow = { 0x42, 0x07, 0x07, 0x43, 0x07, 0x07 };
+        private static readonly byte[] ChargingRequested = { 0x04, 0x01 };
+        private static readonly byte[] ReverseChargingRequested = { 0x01, 0x01 };
+
+        // Sets the call up and passes the traffic of the remarks; returns the callee's LCI.
+        private static ushort CallAndTalk(Rig r, byte[] callerFacilities, byte[] calleeFacilities)
+        {
+            SendXot(r.CallerStream, X25PacketBuilder.CreateCallRequest(1, "23420001", "23400001", Join(Flow, callerFacilities)));
+            X25PacketInfo incoming = ReadUntil(r.CalleeStream, X25PacketType.CallRequest);
+            ushort calleeLci = incoming.LCN;
+            SendXot(r.CalleeStream, X25PacketBuilder.CreateCallAccepted(calleeLci, Join(Flow, calleeFacilities)));
+            ReadUntil(r.CallerStream, X25PacketType.CallAccepted);
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateDataPacket(1, 0, 0, Octets(128), mBit: true));
+            SendXot(r.CallerStream, X25PacketBuilder.CreateDataPacket(1, 1, 0, Octets(1)));
+            SendXot(r.CallerStream, X25PacketBuilder.CreateDataPacket(1, 2, 0, Octets(64)));
+            for (int i = 0; i < 3; i++)
+            {
+                ReadUntil(r.CalleeStream, X25PacketType.Data);
+            }
+
+            SendXot(r.CalleeStream, X25PacketBuilder.CreateDataPacket(calleeLci, 0, 3, Octets(65)));
+            ReadUntil(r.CallerStream, X25PacketType.Data);
+
+            Interlocked.Add(ref r.Now, 5025L * 1000);
+            return calleeLci;
+        }
+
+        private static Cdr OneCdr(Rig r)
+        {
+            Assert.That(SpinWait.SpinUntil(() => { lock (r.Cdrs) { return r.Cdrs.Count == 1; } }, 5000), Is.True);
+            return r.Cdrs[0];
+        }
+
+        /// <summary>
+        /// The caller asked for charging information and the called DTE clears: the caller's Clear Indication carries the
+        /// answer.
+        /// </summary>
+        [Test]
+        public void CallerAsked_CalleeClears_TheClearIndicationCarriesTheAnswer()
+        {
+            using Rig r = Build();
+            ushort calleeLci = CallAndTalk(r, ChargingRequested, Array.Empty<byte>());
+
+            SendXot(r.CalleeStream, X25PacketBuilder.CreateClearRequest(calleeLci, 0x00, 0x00));
+            X25PacketInfo clear = ReadUntil(r.CallerStream, X25PacketType.ClearRequest);
+            X25PacketInfo confirm = ReadUntil(r.CalleeStream, X25PacketType.ClearConfirmation);
+
+            Assert.That(Hex(clear.Facilities), Is.EqualTo(AnswerToCaller));
+            Assert.That(confirm.Facilities, Is.Empty, "the called DTE did not ask and does not pay");
+        }
+
+        /// <summary>
+        /// The caller asked and clears the call itself: the answer comes in the DCE Clear Confirmation (5.2.5).
+        /// </summary>
+        [Test]
+        public void CallerAsked_CallerClears_TheDceClearConfirmationCarriesTheAnswer()
+        {
+            using Rig r = Build();
+            CallAndTalk(r, ChargingRequested, Array.Empty<byte>());
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateClearRequest(1, 0x00, 0x00));
+            X25PacketInfo confirm = ReadUntil(r.CallerStream, X25PacketType.ClearConfirmation);
+            X25PacketInfo clear = ReadUntil(r.CalleeStream, X25PacketType.ClearRequest);
+
+            Assert.That(Hex(confirm.Facilities), Is.EqualTo(AnswerToCaller));
+            Assert.That(clear.Facilities, Is.Empty);
+        }
+
+        /// <summary>
+        /// Nobody asked: neither end gets an answer, and the counts are still recorded and billed.
+        /// </summary>
+        [Test]
+        public void NobodyAsked_NoAnswer_TheCountsAreStillRecordedAndBilled()
+        {
+            using Rig r = Build();
+            CallAndTalk(r, Array.Empty<byte>(), Array.Empty<byte>());
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateClearRequest(1, 0x00, 0x00));
+            X25PacketInfo confirm = ReadUntil(r.CallerStream, X25PacketType.ClearConfirmation);
+            X25PacketInfo clear = ReadUntil(r.CalleeStream, X25PacketType.ClearRequest);
+
+            Assert.That(confirm.Facilities, Is.Empty);
+            Assert.That(clear.Facilities, Is.Empty);
+
+            Cdr cdr = OneCdr(r);
+            Assert.That(cdr.SegmentsForward, Is.EqualTo(4ul));
+            Assert.That(cdr.SegmentsReverse, Is.EqualTo(2ul));
+            Assert.That(cdr.ConnectedTimeMs, Is.EqualTo(1_000_000L));
+            Assert.That(cdr.EndTimeMs - cdr.ConnectedTimeMs, Is.EqualTo(5025L * 1000));
+            Assert.That(cdr.Account, Is.EqualTo("lineA"));
+
+            SwitchAccount lineA = r.Node.Accounts[0];
+            Assert.That(lineA.SegmentsSent, Is.EqualTo(4ul));
+            Assert.That(lineA.SegmentsReceived, Is.EqualTo(2ul));
+
+            // The read-out and the record file must never disagree: this account paid for this one call only, so every
+            // total it shows is that call's line (PLAN B1c).
+            Assert.That(lineA.CallsMade, Is.EqualTo(1u));
+            Assert.That(lineA.CallsActive, Is.EqualTo(0u));
+            Assert.That(cdr.PacketsForward, Is.GreaterThan(0u), "this call carries data, so the comparison below means something");
+            Assert.That(lineA.PacketsSent, Is.EqualTo((ulong)cdr.PacketsForward));
+            Assert.That(lineA.PacketsReceived, Is.EqualTo((ulong)cdr.PacketsReverse));
+            Assert.That(lineA.BytesSent, Is.EqualTo(cdr.BytesForward));
+            Assert.That(lineA.BytesReceived, Is.EqualTo(cdr.BytesReverse));
+            Assert.That(lineA.TotalDurationMs, Is.EqualTo((ulong)(cdr.EndTimeMs - cdr.StartTimeMs)));
+        }
+
+        /// <summary>
+        /// X.25 Table 7-2 (read from the PDF page): "Charging information - requesting service" may be in a Call Request
+        /// and a Call Accepted only, not in an Incoming Call or a Call Connected. The request is to the DTE's own DCE, so
+        /// the switch takes it off what it passes on, in both directions; and the caller still gets its answer.
+        /// </summary>
+        [Test]
+        public void TheChargingRequest_IsNotPassedOn_EitherWay()
+        {
+            using Rig r = Build();
+            SendXot(r.CallerStream, X25PacketBuilder.CreateCallRequest(1, "23420001", "23400001", Join(Flow, ChargingRequested)));
+            X25PacketInfo incoming = ReadUntil(r.CalleeStream, X25PacketType.CallRequest);
+            SendXot(r.CalleeStream, X25PacketBuilder.CreateCallAccepted(incoming.LCN, Join(Flow, ChargingRequested)));
+            X25PacketInfo connected = ReadUntil(r.CallerStream, X25PacketType.CallAccepted);
+
+            Assert.That(Hex(incoming.Facilities), Does.Not.Contain("04 01"), "no charging request in the Incoming Call: " + Hex(incoming.Facilities));
+            Assert.That(Hex(connected.Facilities), Does.Not.Contain("04 01"), "no charging request in the Call Connected: " + Hex(connected.Facilities));
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateClearRequest(1, 0x00, 0x00));
+            X25PacketInfo confirm = ReadUntil(r.CallerStream, X25PacketType.ClearConfirmation);
+            Assert.That(confirm.Facilities, Is.Not.Empty, "the caller asked its own DCE, and is answered");
+        }
+
+        /// <summary>
+        /// The caller's port subscribes to the facility (6.22, "agreed for a period of time"): the caller did not ask in
+        /// the call and still gets the same answer as if it had; the called DTE, whose port does not subscribe, gets none.
+        /// </summary>
+        [Test]
+        public void CallerSubscribes_NotAskedInTheCall_StillGetsTheAnswer()
+        {
+            using Rig r = Build(callerSubscribes: true);
+            CallAndTalk(r, Array.Empty<byte>(), Array.Empty<byte>());
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateClearRequest(1, 0x00, 0x00));
+            X25PacketInfo confirm = ReadUntil(r.CallerStream, X25PacketType.ClearConfirmation);
+            X25PacketInfo clear = ReadUntil(r.CalleeStream, X25PacketType.ClearRequest);
+
+            Assert.That(Hex(confirm.Facilities), Is.EqualTo(AnswerToCaller));
+            Assert.That(clear.Facilities, Is.Empty);
+            Assert.That(OneCdr(r).ChargingRequested, Is.True, "the record says the answer was given");
+        }
+
+        /// <summary>
+        /// The called DTE's port subscribes, but the caller pays (no reverse charging): only the DTE to be charged is owed
+        /// the answer (6.22), so nobody gets one.
+        /// </summary>
+        [Test]
+        public void CalleeSubscribes_ButTheCallerPays_NoAnswer()
+        {
+            using Rig r = Build(calleeSubscribes: true);
+            CallAndTalk(r, Array.Empty<byte>(), Array.Empty<byte>());
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateClearRequest(1, 0x00, 0x00));
+            X25PacketInfo confirm = ReadUntil(r.CallerStream, X25PacketType.ClearConfirmation);
+            X25PacketInfo clear = ReadUntil(r.CalleeStream, X25PacketType.ClearRequest);
+
+            Assert.That(confirm.Facilities, Is.Empty);
+            Assert.That(clear.Facilities, Is.Empty);
+        }
+
+        /// <summary>
+        /// Reverse charging and the called DTE's port subscribes: it pays, did not ask in its Call Accepted, and gets the
+        /// answer from its side, exactly as if it had asked.
+        /// </summary>
+        [Test]
+        public void ReverseCharging_CalleeSubscribes_TheCalleeGetsTheAnswer()
+        {
+            using Rig r = Build(calleeSubscribes: true);
+            CallAndTalk(r, ReverseChargingRequested, Array.Empty<byte>());
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateClearRequest(1, 0x00, 0x00));
+            X25PacketInfo confirm = ReadUntil(r.CallerStream, X25PacketType.ClearConfirmation);
+            X25PacketInfo clear = ReadUntil(r.CalleeStream, X25PacketType.ClearRequest);
+
+            Assert.That(confirm.Facilities, Is.Empty, "the caller does not pay");
+            Assert.That(Hex(clear.Facilities), Is.EqualTo(AnswerToCallee));
+        }
+
+        /// <summary>
+        /// Reverse charging (6.18): the called DTE pays, asks in its Call Accepted, and gets the answer with the
+        /// directions seen from its side; the caller gets none.
+        /// </summary>
+        [Test]
+        public void ReverseCharging_CalleeAsked_CallerClears_TheCalleeGetsTheAnswer()
+        {
+            using Rig r = Build();
+            CallAndTalk(r, ReverseChargingRequested, ChargingRequested);
+
+            SendXot(r.CallerStream, X25PacketBuilder.CreateClearRequest(1, 0x00, 0x00));
+            X25PacketInfo confirm = ReadUntil(r.CallerStream, X25PacketType.ClearConfirmation);
+            X25PacketInfo clear = ReadUntil(r.CalleeStream, X25PacketType.ClearRequest);
+
+            Assert.That(confirm.Facilities, Is.Empty, "the caller does not pay");
+            Assert.That(Hex(clear.Facilities), Is.EqualTo(AnswerToCallee));
+        }
+
+        /// <summary>
+        /// The caller asked but reverse charging moved the bill to the called DTE, which did not ask: no answer to anyone.
+        /// </summary>
+        [Test]
+        public void ReverseCharging_OnlyTheCallerAsked_NoAnswer()
+        {
+            using Rig r = Build();
+            ushort calleeLci = CallAndTalk(r, Join(ReverseChargingRequested, ChargingRequested), Array.Empty<byte>());
+
+            SendXot(r.CalleeStream, X25PacketBuilder.CreateClearRequest(calleeLci, 0x00, 0x00));
+            X25PacketInfo clear = ReadUntil(r.CallerStream, X25PacketType.ClearRequest);
+
+            Assert.That(clear.Facilities, Is.Empty);
+        }
+    }
+}

@@ -51,6 +51,12 @@ namespace RetroIO.Protocols.X25.Switch.Model
         public int HopCount { get; set; }
 
         /// <summary>
+        /// A PVC only: the port whose interface is out of order (X.25 4.6), or null while both are up. While it is set,
+        /// data or an interrupt from the other end is answered with a reset "Out of order" (4.6.4).
+        /// </summary>
+        public ISwitchPort? PvcDownPort { get; set; }
+
+        /// <summary>
         /// Calling (origin) X.121 address for accounting and reporting.
         /// </summary>
         public string CallingAddress { get; set; } = string.Empty;
@@ -64,6 +70,75 @@ namespace RetroIO.Protocols.X25.Switch.Model
         /// Timestamp (milliseconds) when the stitch was created, set by the engine.
         /// </summary>
         public long StartTimeMs { get; set; }
+
+        /// <summary>
+        /// The account the caller's side of this call is billed to: the account its NUI names (X.25 6.21), the port's
+        /// default NUI's account, or else the account whose address range holds the calling address. Null when none
+        /// applies. Chosen once, when the call is routed, so the clear bills the same account as the set-up.
+        /// </summary>
+        public SwitchAccount? PayingAccount { get; set; }
+
+        /// <summary>
+        /// The NUI the call was billed by: the one it named, or the port's default; empty when none (for the call record).
+        /// </summary>
+        public string PayingNui { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The account whose address range holds the called address, or null: the called party's side of the call.
+        /// Credited with what it receives and sends, as x25emu does.
+        /// </summary>
+        public SwitchAccount? CalledAccount { get; set; }
+
+        /// <summary>
+        /// When the far end answered (milliseconds, the same clock as <see cref="StartTimeMs"/>); 0 until then. Call
+        /// duration for charging runs from here (X.25 7.3.8.4): a call that was never connected lasted no time.
+        /// </summary>
+        public long ConnectedTimeMs { get; set; }
+
+        /// <summary>
+        /// When the call was routed, by the wall clock: seconds since 1970-01-01 UTC (for the call record).
+        /// </summary>
+        public long StartWallSeconds { get; set; }
+
+        /// <summary>
+        /// Segments of data the calling DTE sent (D.12), counted as they arrive on the ingress leg.
+        /// </summary>
+        /// <remarks>
+        /// D.12's 64 octets unless the switch was given another <c>segment_size</c> (set when the stitch is made).
+        /// </remarks>
+        public SegmentCounter SegmentsForward { get; init; } = new SegmentCounter();
+
+        /// <summary>
+        /// Segments of data the called DTE sent (D.12), counted as they arrive on the egress leg.
+        /// </summary>
+        public SegmentCounter SegmentsReverse { get; init; } = new SegmentCounter();
+
+        /// <summary>
+        /// The maximum user data field length of a packet arriving on the ingress leg (X.25 6.12), read once; 0 until read.
+        /// </summary>
+        public int IngressFullSize { get; set; }
+
+        /// <summary>
+        /// The maximum user data field length of a packet arriving on the egress leg, read once; 0 until read.
+        /// </summary>
+        public int EgressFullSize { get; set; }
+
+        /// <summary>
+        /// True when the calling DTE is the DTE to be charged and asked for charging information (X.25 6.22, code 04 bit 1
+        /// in its Call Request) on an access port of this switch: it gets the charging answer when the call ends.
+        /// </summary>
+        public bool ChargingToCaller { get; set; }
+
+        /// <summary>
+        /// True when the called DTE is the DTE to be charged (reverse charging accepted, X.25 6.18) and asked for charging
+        /// information in its Call Accepted, on an access port of this switch.
+        /// </summary>
+        public bool ChargingToCallee { get; set; }
+
+        /// <summary>
+        /// True when the caller asked for reverse charging (X.25 6.18, code 01 bit 1): the called DTE pays if it accepts.
+        /// </summary>
+        public bool ReverseCharging { get; set; }
 
         /// <summary>
         /// Packets forwarded ingress to egress.

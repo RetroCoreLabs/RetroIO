@@ -1004,6 +1004,122 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(layer.Circuits[1].SendSeq, Is.EqualTo(0));
         }
 
+        // ------------------------------------------------------------------ R13  PVC: Table C.4
+        //
+        // X.25 Annex C, Table C.1 NOTE 1: "On permanent virtual circuit, only state p4 exists and the DCE takes no action
+        // except those specified in Table C.4." Table C.4 row "Invalid packet type on a permanent virtual circuit":
+        // ERROR (d3) # 35 in d1 and d2, DISCARD in d3. ERROR (d3) is a reset with "Local procedure error" - never a
+        // clear. Found 2026-11-16: every one of these cleared the PVC instead, which a PVC has no way back from.
+
+        private static (RecordingSink Sink, X25Layer Layer) DcePvc()
+        {
+            RecordingSink sink = new RecordingSink();
+            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 16, LciCount = 16, IsDte = false });
+            layer.AddPvc(1, 2, 128);
+            return (sink, layer);
+        }
+
+        [TestCase(X25PacketType.CallRequest)]
+        [TestCase(X25PacketType.CallAccepted)]
+        [TestCase(X25PacketType.ClearRequest)]
+        [TestCase(X25PacketType.ClearConfirmation)]
+        public void R13_ACallOrClearPacketOnAPvc_IsResetWithDiagnostic35(X25PacketType type)
+        {
+            (RecordingSink sink, X25Layer layer) = DcePvc();
+            byte[] pkt = type switch
+            {
+                X25PacketType.CallRequest => X25PacketBuilder.CreateCallRequest(1, LocalAddress, RemoteAddress),
+                X25PacketType.CallAccepted => X25PacketBuilder.CreateCallAccepted(1),
+                X25PacketType.ClearRequest => X25PacketBuilder.CreateClearRequest(1, 0, 0),
+                _ => X25PacketBuilder.CreateClearConfirmation(1),
+            };
+
+            layer.ProcessPacket(pkt);
+
+            Assert.That(sink.Sent.Count, Is.EqualTo(1));
+            X25PacketInfo back = sink.LastInfo;
+            Assert.That(back.PacketType, Is.EqualTo(X25PacketType.ResetRequest), "a reset, never a clear (Table C.4)");
+            Assert.That(back.ResetCause, Is.EqualTo(X25Cause.ResettingLocalProcedureError));
+            Assert.That(back.DiagnosticCode, Is.EqualTo((byte)35));
+            Assert.That(layer.Circuits[1].Kind, Is.EqualTo(X25VcKind.Pvc));
+
+            // The DTE confirms; the PVC is usable again.
+            layer.ProcessPacket(X25PacketBuilder.CreateResetConfirmation(1));
+            Assert.That(layer.Circuits[1].State, Is.EqualTo(X25VcState.PvcReady));
+        }
+
+        [Test]
+        public void R13_ACallPacketOnAPvcBeingReset_IsDiscarded()
+        {
+            // Table C.4, d3 column: DISCARD.
+            (RecordingSink sink, X25Layer layer) = DcePvc();
+            layer.ResetCall(1);
+            sink.Sent.Clear();
+
+            layer.ProcessPacket(X25PacketBuilder.CreateClearRequest(1, 0, 0));
+
+            Assert.That(sink.Sent.Count, Is.EqualTo(0));
+            Assert.That(layer.Circuits[1].State, Is.EqualTo(X25VcState.ResetRequest));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void R13_AResetCollisionOnAPvc_CompletesTheReset_WithNoConfirmation(bool isDte)
+        {
+            // X.25 4.4.3.3: when the two resets cross "the DCE will consider that the reset is completed. The DCE will
+            // not expect a DTE reset confirmation packet and will not transfer a DCE reset confirmation packet. This
+            // places the logical channel in the flow control ready state (d1)." Run from both sides of the interface.
+            RecordingSink sink = new RecordingSink();
+            X25Layer layer = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 16, LciCount = 16, IsDte = isDte });
+            layer.AddPvc(1, 2, 128);
+            layer.ResetCall(1);
+            Assert.That(sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            sink.Sent.Clear();
+
+            // The other side's reset arrives before any confirmation (request and indication share one type code).
+            layer.ProcessPacket(X25PacketBuilder.CreateResetRequest(1, 0, 0));
+
+            Assert.That(sink.CountOfType(X25PacketType.ResetConfirmation), Is.EqualTo(0), "no confirmation is sent");
+            Assert.That(layer.Circuits[1].State, Is.EqualTo(X25VcState.PvcReady), "d1");
+            Assert.That(layer.SendData(1, new byte[] { 1 }), Is.True, "the PVC carries data straight away");
+        }
+
+        [Test]
+        public void R13_AnUnknownPacketTypeOnAPvc_IsResetWithDiagnostic33_NotCleared()
+        {
+            // Table C.4: "undefined or not supported" - ERROR (d3) # 33.
+            (RecordingSink sink, X25Layer layer) = DcePvc();
+
+            // 0x03: no X.25 packet type has this identifier (0xF7 would be Registration Confirmation, #32).
+            layer.ProcessPacket(new byte[] { 0x10, 0x01, 0x03 });
+
+            Assert.That(sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            Assert.That(sink.LastInfo.DiagnosticCode, Is.EqualTo((byte)33));
+            Assert.That(sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void R13_APvcWindowOf2_HoldsTheThirdPacket()
+        {
+            (RecordingSink sink, X25Layer layer) = DcePvc();
+            Assert.That(layer.SendData(1, new byte[] { 1 }), Is.True);
+            Assert.That(layer.SendData(1, new byte[] { 2 }), Is.True);
+            Assert.That(layer.SendData(1, new byte[] { 3 }), Is.False, "the window of 2 is full (4.4.1.2)");
+            Assert.That(sink.CountOfType(X25PacketType.Data), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void R13_APacketOnAnUnassignedChannel_GetsDiagnostic36()
+        {
+            // Table C.1: outside every range - DIAG # 36. Channel 2 is neither the PVC (1) nor the call range (16..31).
+            (RecordingSink sink, X25Layer layer) = DcePvc();
+
+            layer.ProcessPacket(X25PacketBuilder.CreateDataPacket(2, 0, 0, new byte[] { 1 }, false));
+
+            Assert.That(sink.LastInfo.PacketType, Is.EqualTo(X25PacketType.Diagnostic));
+            Assert.That(sink.LastInfo.DiagnosticCode, Is.EqualTo((byte)36));
+        }
+
         // ================================================================== R14  send results
         //
         // FIXED 2026-09-06 (Phase B2) and these tests were rewritten deliberately. Until then
@@ -1402,6 +1518,74 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(agreedAtA.PacketSizeIn, Is.EqualTo(512));
         }
 
+        /// <summary>
+        /// The facilities this layer does not act on cross the call unchanged, both ways: what the caller puts in its Call
+        /// Request beside window and packet size reaches the called side, and what the called side answers with reaches the
+        /// caller. A switch relays a call through two of these layers, so without this every facility but window and packet
+        /// size was lost at the first switch (PLAN B1). X.25 7.1: "requests for X.25 facilities must precede the other
+        /// requests", so they go after window and packet size.
+        /// </summary>
+        [Test]
+        public void R21_OtherFacilities_CrossTheCallBothWays_AfterWindowAndPacketSize()
+        {
+            X25Config cfgA = new X25Config { LocalAddress = "1", LciBase = 1, LciCount = 4, IsDte = true };
+            X25Config cfgB = new X25Config { LocalAddress = "2", LciBase = 1, LciCount = 4, IsDte = false };
+            LoopSinkPair pair = new LoopSinkPair();
+            X25Layer a = new X25Layer(pair.A, cfgA);
+            X25Layer b = new X25Layer(pair.B, cfgB);
+            pair.A.Target = b;
+            pair.B.Target = a;
+            List<byte[]> fromA = pair.A.Sent;
+
+            // Reverse charging (01 01), then a marker (00 00) and a national element after it (class D, 2 octets).
+            byte[] asked = { 0x01, 0x01, 0x00, 0x00, 0xC3, 0x02, 0xAB, 0xCD };
+
+            // Throughput class (02 BB), a class A element.
+            byte[] answered = { 0x02, 0xBB };
+
+            X25CallParameters seenAtB = default;
+            b.IncomingCall += (l, c, called, calling, cud) =>
+            {
+                l.TryGetCallParameters(c, out seenAtB);
+                l.AcceptCall(c, new X25CallParameters(2, 2, 128, 128, answered));
+            };
+
+            ushort lci = a.PlaceCall("2", null, null, new X25CallParameters(2, 2, 128, 128, asked));
+
+            Assert.That(a.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            Assert.That(Hex(seenAtB.OtherFacilities), Is.EqualTo(Hex(asked)), "the called side sees the caller's other facilities");
+            Assert.That(Hex(X25PacketParser.ParsePacket(fromA[0]).Facilities), Is.EqualTo("42 07 07 43 02 02 " + Hex(asked)),
+                "window and packet size first, then the others byte for byte");
+            Assert.That(a.TryGetCallParameters(lci, out X25CallParameters agreedAtA), Is.True);
+            Assert.That(Hex(agreedAtA.OtherFacilities), Is.EqualTo(Hex(answered)), "the caller sees the called side's answer");
+        }
+
+        /// <summary>
+        /// A called application that just accepts (no values given) does not echo the caller's other facilities in its Call
+        /// Accepted: a request such as reverse charging is the caller's, and repeating it would put words in the called side's
+        /// mouth. Only window and packet size are stated (7.2.2.1).
+        /// </summary>
+        [Test]
+        public void R21_PlainAccept_DoesNotEchoTheCallersOtherFacilities()
+        {
+            X25Config cfgA = new X25Config { LocalAddress = "1", LciBase = 1, LciCount = 4, IsDte = true };
+            X25Config cfgB = new X25Config { LocalAddress = "2", LciBase = 1, LciCount = 4, IsDte = false };
+            LoopSinkPair pair = new LoopSinkPair();
+            X25Layer a = new X25Layer(pair.A, cfgA);
+            X25Layer b = new X25Layer(pair.B, cfgB);
+            pair.A.Target = b;
+            pair.B.Target = a;
+            List<byte[]> fromB = pair.B.Sent;
+            b.IncomingCall += (l, c, called, calling, cud) => l.AcceptCall(c);
+
+            ushort lci = a.PlaceCall("2", null, null, new X25CallParameters(2, 2, 128, 128, new byte[] { 0x01, 0x01 }));
+
+            Assert.That(a.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
+            Assert.That(Hex(X25PacketParser.ParsePacket(fromB[0]).Facilities), Is.EqualTo("42 07 07 43 02 02"));
+            Assert.That(a.TryGetCallParameters(lci, out X25CallParameters agreedAtA), Is.True);
+            Assert.That(agreedAtA.OtherFacilities.Length, Is.EqualTo(0));
+        }
+
         [Test]
         public void R21_ARoundTripThroughTwoLayers_DeliversTheMessageWhole()
         {
@@ -1437,13 +1621,19 @@ namespace RetroIO.Protocols.X25.Tests
             public readonly LoopSink B = new LoopSink();
         }
 
+        private static string Hex(byte[] bytes) => BitConverter.ToString(bytes).Replace('-', ' ');
+
         private sealed class LoopSink : IX25PacketSink
         {
             public X25Layer? Target;
 
+            // Every packet this side sent, in order.
+            public readonly List<byte[]> Sent = new List<byte[]>();
+
             public X25SendResult SendPacket(ReadOnlySpan<byte> packet)
             {
                 byte[] bytes = packet.ToArray();
+                Sent.Add(bytes);
                 Target?.ProcessPacket(bytes);
                 return X25SendResult.Sent;
             }

@@ -193,15 +193,28 @@ namespace RetroIO.Protocols.X25.Switch.Management
 
         private string Accounts()
         {
+            // The same line as x25emu's GET_ACCOUNTS (PLAN B1c: one read-out in both switches), field for field. '|' between
+            // fields because an account name may contain a space; "up" is x25emu's name for the summed call time in
+            // seconds. Segments are the charging units (X.25 7.3.8.3), not bytes divided by the segment size.
             StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < _node.Accounts.Count; i++)
+            System.Collections.Generic.IReadOnlyList<SwitchAccount> accounts = _node.Accounts;
+            for (int i = 0; i < accounts.Count; i++)
             {
-                SwitchAccount a = _node.Accounts[i];
+                SwitchAccount a = accounts[i];
                 sb.Append("ACCOUNT name=").Append(a.Name)
-                  .Append(" addr_start=").Append(a.AddrStart)
-                  .Append(" addr_end=").Append(a.AddrEnd)
-                  .Append(" calls_made=").Append(a.CallsMade)
-                  .Append(" calls_recv=").Append(a.CallsReceived)
+                  .Append("|addr_start=").Append(a.AddrStart)
+                  .Append("|addr_end=").Append(a.AddrEnd)
+                  .Append("|nui=").Append(a.Nui)
+                  .Append("|active=").Append(a.CallsActive)
+                  .Append("|calls_made=").Append(a.CallsMade)
+                  .Append("|calls_recv=").Append(a.CallsReceived)
+                  .Append("|pkts_sent=").Append(a.PacketsSent)
+                  .Append("|pkts_recv=").Append(a.PacketsReceived)
+                  .Append("|bytes_sent=").Append(a.BytesSent)
+                  .Append("|bytes_recv=").Append(a.BytesReceived)
+                  .Append("|segs_sent=").Append(a.SegmentsSent)
+                  .Append("|segs_recv=").Append(a.SegmentsReceived)
+                  .Append("|up=").Append(a.TotalDurationMs / 1000)
                   .Append('\n');
             }
             return sb.ToString();

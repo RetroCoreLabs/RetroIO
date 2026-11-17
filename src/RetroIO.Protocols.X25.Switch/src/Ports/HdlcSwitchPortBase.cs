@@ -596,11 +596,50 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         }
 
         /// <inheritdoc/>
+        public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities)
+        {
+            lock (_sync)
+            {
+                _layer.ClearCall(lci, cause, diagnostic, facilities);
+            }
+        }
+
+        /// <inheritdoc/>
+        public byte[] GetClearFacilities(ushort lci)
+        {
+            lock (_sync)
+            {
+                return _layer.GetClearFacilities(lci);
+            }
+        }
+
+        /// <inheritdoc/>
+        public Func<ushort, byte[]?>? ClearConfirmationFacilities
+        {
+            get { lock (_sync) { return _layer.ClearConfirmationFacilities; } }
+            set { lock (_sync) { _layer.ClearConfirmationFacilities = value; } }
+        }
+
+        /// <inheritdoc/>
         public void ResetCircuit(ushort lci, byte cause, byte diagnostic)
         {
             lock (_sync)
             {
                 _layer.ResetCall(lci, cause, diagnostic);
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// One packet layer serves the whole line, so the PVC lives in it beside the calls; a restart of the line
+        /// resets it (X.25 4.5) and leaves it in place.
+        /// </remarks>
+        public bool AddPvc(ushort lci)
+        {
+            lock (_sync)
+            {
+                _layer.AddPvc(lci, _config.DefaultWindowSize, _config.DefaultPacketSize);
+                return true;
             }
         }
 

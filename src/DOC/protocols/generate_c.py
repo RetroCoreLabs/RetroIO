@@ -233,8 +233,18 @@ def main():
 
         mp = doc.get("message_prefix")
         if mp and mp.get("fields"):
-            gen_struct("fa_message_prefix", dict(mp, size_bytes=mp.get("minimum_body_length", 0),
-                                                 byte_order="big-endian"), out)
+            # The registry names the C struct in bindings.c.struct (fa_message_prefix,
+            # chat_message_prefix). Hard-coding "fa_message_prefix" here made two registries
+            # emit the same symbol, so a program including both headers failed to compile
+            # (found by libxmsg's smoke test, 2026-11-08). No binding is a registry gap, not a
+            # reason to invent a name.
+            mp_name = ((mp.get("bindings") or {}).get("c") or {}).get("struct")
+            if not mp_name:
+                PROBLEMS.append("%s/message_prefix has no bindings.c.struct - a C generator "
+                                "cannot name it" % entry["file"])
+            else:
+                gen_struct(mp_name, dict(mp, size_bytes=mp.get("minimum_body_length", 0),
+                                         byte_order="big-endian"), out)
 
         out.append("#endif /* %s */" % guard)
         path = os.path.join(out_dir, stem + ".h")

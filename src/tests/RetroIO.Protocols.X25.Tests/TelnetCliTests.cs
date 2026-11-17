@@ -123,7 +123,7 @@ namespace RetroIO.Protocols.X25.Tests
             SwitchConfig cfg = new SwitchConfig { Dnic = "2340", Name = "Switch Alpha" };
             SwitchNode node = new SwitchNode(cfg) { UptimeStartMs = 0 };
             SwitchCli cli = new SwitchCli(node, () => 1000L);
-            TelnetCliServer server = new TelnetCliServer(cli, "127.0.0.1", 0);
+            TelnetCliServer server = new TelnetCliServer(cli, "127.0.0.1", 0, new List<UserConfig>(), open: true);
 
             Assert.That(server.Start(), Is.True);
             try
@@ -148,6 +148,56 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 server.Stop();
             }
+        }
+
+        [Test]
+        public void Server_AsksForALogin_AndALevel0UserMayOnlyLook()
+        {
+            SwitchConfig cfg = new SwitchConfig { Dnic = "2340", Name = "Switch Alpha" };
+            SwitchNode node = new SwitchNode(cfg) { UptimeStartMs = 0 };
+            SwitchCli cli = new SwitchCli(node, () => 1000L);
+            List<UserConfig> users = new List<UserConfig> { new UserConfig { Name = "look", Password = "pw", Level = 0 } };
+            TelnetCliServer server = new TelnetCliServer(cli, "127.0.0.1", 0, users, open: false);
+
+            Assert.That(server.Start(), Is.True);
+            try
+            {
+                using TcpClient client = new TcpClient();
+                client.Connect("127.0.0.1", server.Port);
+                using NetworkStream s = client.GetStream();
+
+                Assert.That(ReadAvailable(s, 500), Does.EndWith("Username: "));
+
+                // A command before the login is taken as a username, never run.
+                Send(s, "show info\r");
+                Assert.That(ReadAvailable(s, 500), Does.Contain("Password: "));
+                Send(s, "x\r");
+                Assert.That(ReadAvailable(s, 500), Does.Contain("Login incorrect."));
+
+                Send(s, "look\r");
+                ReadAvailable(s, 300);
+                Send(s, "pw\r");
+                string afterPassword = ReadAvailable(s, 500);
+                Assert.That(afterPassword, Does.EndWith("> "));
+                Assert.That(afterPassword, Does.Not.Contain("pw"), "the password is not echoed");
+
+                Send(s, "show info\r");
+                Assert.That(ReadAvailable(s, 500), Does.Contain("Name:        Switch Alpha"));
+
+                Send(s, "x25 route add exact 23499999 1\r");
+                Assert.That(ReadAvailable(s, 500), Does.Contain("Error: your user is read-only (level 0)"));
+                Assert.That(cfg.Routing.Routes.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                server.Stop();
+            }
+        }
+
+        private static void Send(NetworkStream s, string text)
+        {
+            byte[] b = Encoding.ASCII.GetBytes(text);
+            s.Write(b, 0, b.Length);
         }
 
         private static string ReadAvailable(NetworkStream s, int quietMs)

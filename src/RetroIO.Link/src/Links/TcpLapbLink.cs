@@ -392,6 +392,12 @@ namespace RetroIO.Link
 
         #region Server Mode
 
+        /// <summary>
+        /// Gets the TCP port a server-mode link is listening on, or 0 before it has started. With
+        /// <c>Port = 0</c> in the configuration the system picks a free port and this says which one.
+        /// </summary>
+        public int BoundPort => _listener?.LocalEndpoint is IPEndPoint ep ? ep.Port : 0;
+
         private void StartServer()
         {
             var endpoint = new IPEndPoint(IPAddress.Any, _config.Port);
@@ -544,6 +550,15 @@ namespace RetroIO.Link
                         // No auto-reconnect
                         break;
                     }
+                }
+                catch (Exception)
+                {
+                    // Stop() closed the socket under a connect or a read in progress, and that call
+                    // threw. The link is being stopped, so the thread simply ends. Without this the
+                    // exception left the thread unhandled and took the whole process down: found
+                    // 2026-11-16 when the test host crashed in TcpLapbLink_ClientServerLoopback_Connects
+                    // ("The I/O operation has been aborted", from connectTask.Wait).
+                    break;
                 }
             }
         }

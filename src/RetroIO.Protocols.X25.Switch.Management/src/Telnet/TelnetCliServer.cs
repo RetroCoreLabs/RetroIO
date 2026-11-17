@@ -17,14 +17,23 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
     /// <summary>
     /// A raw-TCP management console server: it accepts connections on the management port and drives each
     /// through a <see cref="TelnetLineEditor"/>, dispatching completed lines to a <see cref="SwitchCli"/>
-    /// and writing the responses back with a <c>> </c> prompt. No authentication.
+    /// and writing the responses back with a <c>> </c> prompt.
     /// </summary>
+    /// <remarks>
+    /// Login as in x25emu's TCP console: a username and password from the <c>[user.N]</c> list, three tries and the
+    /// connection goes, and the user's level decides what may run (<see cref="MgmtSession.LevelAllows"/>). Until
+    /// 2026-11-17 this console asked for nothing, so whoever reached the port could change the switch. An open console
+    /// (<c>mgmt_open = 1</c>) asks for no login and runs everything, as x25emu's does.
+    /// </remarks>
     public sealed class TelnetCliServer
     {
-        private const string Banner = "\r\nX.25 Switch Management Console\r\n\r\n> ";
+        private const string Banner = "\r\nX.25 Switch Management Console\r\n\r\n";
         private const string Prompt = "> ";
+        private const int MaxLoginTries = 3;
 
         private readonly SwitchCli _cli;
+        private readonly IReadOnlyList<UserConfig> _users;
+        private readonly bool _open;
         private readonly string _bindHost;
         private readonly int _port;
         private readonly object _lock = new object();
@@ -46,9 +55,17 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
         /// <param name="port">
         /// The TCP port to listen on.
         /// </param>
-        public TelnetCliServer(SwitchCli cli, string bindHost, int port)
+        /// <param name="users">
+        /// The <c>[user.N]</c> accounts a login is checked against.
+        /// </param>
+        /// <param name="open">
+        /// <c>mgmt_open</c>: true runs every command with no login.
+        /// </param>
+        public TelnetCliServer(SwitchCli cli, string bindHost, int port, IReadOnlyList<UserConfig> users, bool open)
         {
             _cli = cli ?? throw new ArgumentNullException(nameof(cli));
+            _users = users ?? throw new ArgumentNullException(nameof(users));
+            _open = open;
             _bindHost = bindHost;
             _port = port;
         }
@@ -141,12 +158,31 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
             }
         }
 
+        private int FindUser(string name, string password)
+        {
+            for (int i = 0; i < _users.Count; i++)
+            {
+                if (_users[i].Name == name && _users[i].Password == password)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
         private void Serve(TcpClient client)
         {
             try
             {
                 using NetworkStream stream = client.GetStream();
                 Write(stream, Banner);
+                bool loggedIn = _open;
+                int level = _open ? 1 : 0;
+                bool askingPassword = false;
+                int tries = 0;
+                string username = string.Empty;
+                Write(stream, loggedIn ? Prompt : "Username: ");
 
                 TelnetLineEditor editor = new TelnetLineEditor();
                 while (_running)
@@ -158,7 +194,8 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
                     }
 
                     TelnetInput input = editor.Feed((byte)read);
-                    if (input.Echo.Length > 0)
+                    // A password is not echoed, the same as x25emu's console.
+                    if (input.Echo.Length > 0 && !askingPassword)
                     {
                         Write(stream, input.Echo);
                     }
@@ -169,6 +206,37 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
                     }
 
                     string line = input.Line;
+                    if (!loggedIn)
+                    {
+                        if (!askingPassword)
+                        {
+                            username = line;
+                            askingPassword = true;
+                            Write(stream, "\r\nPassword: ");
+                            continue;
+                        }
+
+                        askingPassword = false;
+                        int found = FindUser(username, line);
+                        if (found >= 0)
+                        {
+                            loggedIn = true;
+                            level = _users[found].Level;
+                            Write(stream, "\r\n" + Prompt);
+                            continue;
+                        }
+
+                        username = string.Empty;
+                        if (++tries >= MaxLoginTries)
+                        {
+                            Write(stream, "\r\nLogin incorrect.\r\n");
+                            break;
+                        }
+
+                        Write(stream, "\r\nLogin incorrect.\r\nUsername: ");
+                        continue;
+                    }
+
                     if (line.StartsWith("quit", StringComparison.Ordinal) || line.StartsWith("exit", StringComparison.Ordinal))
                     {
                         break;
@@ -176,7 +244,9 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
 
                     if (line.Length > 0)
                     {
-                        Write(stream, _cli.Process(line));
+                        Write(stream, MgmtSession.LevelAllows(level, line)
+                            ? _cli.Process(line)
+                            : "Error: your user is read-only (level 0)\r\n");
                     }
 
                     Write(stream, Prompt);
