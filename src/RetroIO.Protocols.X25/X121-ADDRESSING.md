@@ -44,6 +44,25 @@ flowchart LR
 | 2 - 7 | A country or region; the digit is the geographic zone (7.2.7) |
 | 8, 9, 0 | **Escape codes**, not part of any DNIC: the rest is from another numbering plan (7.9, Table 2) |
 
+**Examples, one of each kind.** The country codes are from X.121 Annex J (240 Sweden, 242 and 243 Norway).
+The network digits and subscriber numbers are made up for the example, except where a source is named.
+
+| Dialled | Split | What it is |
+|---|---|---|
+| `110006` | NTN `110006` | A local number inside our own network (a SINTRAN machine). No DNIC: the switch adds its own |
+| `2422 110006` | DNIC `2422` + NTN `110006` | The same machine called from another network, if our DNIC were `2422` (DCC `242` Norway, network `2`) |
+| `2402 0001730` | DNIC `2402` + NTN `0001730` | An international data number in Sweden (DCC `240`, network `2`); the Tor address book has it as `024020001730`, with the prefix |
+| `0 2402 001487` | prefix `0` + DNIC `2402` + NTN | The same kind of number with a one-digit international prefix in front, as dialled on the Tor machine (7.8) |
+| `243 12345678` | DCC `243` + NN `12345678` | A country with one numbering scheme for all its networks: no network digit, the national number follows (7.6.1) |
+| `7501 1 2345` | DNIC `7501` + 5th digit `1` + rest | A DNIC shared by several networks, split on the 5th digit (Annex A.2) |
+| `111S ...` | DNIC `111S` + mobile earth station number | Mobile satellite: `S` is the ocean area (7.4, Annex I) |
+| `9 4722123456` | escape `9` + E.164 number | A phone number, reached through an analogue interface (Table 2) |
+| `0 4722123456` | escape `0` + E.164 number | A phone or ISDN number, digital interface requested (Table 2) |
+| `8 ...` | escape `8` + F.69 number | A telex number (Table 2; still "for further study") |
+
+**`0` has two meanings.** It can be a national prefix (row 4) or the E.164 escape code (row 9). Which one a
+network uses it for is its own choice (7.8.2), so the switch must be told; the digits alone do not say.
+
 **The X.25 address field** holds at most **15 digits including any prefix and escape code** in the normal
 (non-TOA/NPI) format (X.25 5.2.1). That is why a prefix for international format can be only one digit:
 14 + 1 = 15 (X.121 7.8, note).
