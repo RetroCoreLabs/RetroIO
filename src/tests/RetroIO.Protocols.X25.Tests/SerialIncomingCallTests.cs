@@ -84,7 +84,7 @@ namespace RetroIO.Protocols.X25.Tests
         /// Builds a runtime with one mock serial interface, starts it, and captures every byte the
         /// runtime writes to the line.
         /// </summary>
-        private void Build(SerialX25LinkOptions? options, bool answerAutomatically = true)
+        private void Build(SerialX25LinkOptions? options, bool answerAutomatically = true, bool withRoute = true)
         {
             SerialInterfaceConfig serial = new SerialInterfaceConfig
             {
@@ -99,6 +99,22 @@ namespace RetroIO.Protocols.X25.Tests
             config.X25.LocalMachineId = LocalMachineId;
             config.Routing.Enabled = true;
             config.Routing.SerialInterfaces.Add(serial);
+
+            // The router answers every incoming call first (decided by Ronny, 2026-11-17): a call with
+            // no inbound route is refused with access barred before a service or the program hears of
+            // it. So the line's own address gets a route to the local TAD unless a test wants none.
+            if (withRoute)
+            {
+                config.Routing.RoutingTable.Add(new X25RouteEntry
+                {
+                    Name = "LocalTAD",
+                    X121AddressPattern = "^" + LocalMachineId + "$",
+                    Type = RetroIO.Protocols.X25.Runtime.RouteType.Local,
+                    Destination = "LocalTAD",
+                    Priority = 200,
+                    Enabled = true
+                });
+            }
 
             _runtime = new ProtocolRuntime(NullLogger.Instance, config);
             _runtime.PhysicalLayer.MockSerialTransmit += (s, e) =>
@@ -353,9 +369,7 @@ namespace RetroIO.Protocols.X25.Tests
         public void ACallRequestInAnIFrame_IsAcceptedOnceAndTheAnswerGoesOutInAnIFrame()
         {
             Build(Dce());
-            int routerRaises = 0;
             int transportRaises = 0;
-            _runtime.Router.IncomingCallRouted += (s, e) => routerRaises++;
             _transport.IncomingCall += (s, e) => transportRaises++;
 
             // The DTE brings the link up: SABM with P=1, address B (a command from the DTE, 2.4.2).
@@ -393,9 +407,9 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(sawIFrameFromDce, Is.True);
 
-            // Raised once: by the engine, not also by the transport or the router (one route only).
+            // Raised once: by the engine, not also by the transport (one route only). The router's
+            // own IncomingCallRouted event, also checked here before, was removed on 2026-11-17.
             Assert.That(transportRaises, Is.EqualTo(0), "the transport event must not also route the call");
-            Assert.That(routerRaises, Is.EqualTo(0), "the router event must not also route the call");
         }
 
         [Test]
@@ -854,6 +868,175 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(taken, Is.False);
             Assert.That(SentFrames(), Is.Empty);
+        }
+
+        // ------------------------------------------------------------------ the router answers first (2026-11-17)
+        //
+        // Decided by Ronny, 2026-11-17: the router answers an incoming call first. A call it has no
+        // inbound route for is refused at once with a Clear Request, cause 0x0B access barred (X.25
+        // 4.1.4 and 4.1.7, Table 5-7), on the line it came in on; only a call it has a route for is
+        // offered to the program (wait mode) or answered by the local service (automatic mode).
+
+        private int CountClearsOn(byte lcn)
+        {
+            int count = 0;
+            List<byte[]> packets = SentInformationPackets();
+            for (int i = 0; i < packets.Count; i++)
+            {
+                if (packets[i].Length > 3 && packets[i][2] == 0x13 && packets[i][1] == lcn)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private byte[] TheClearOn(byte lcn)
+        {
+            Assert.That(CountClearsOn(lcn), Is.EqualTo(1), "exactly one Clear Request (type 0x13, Table 5-1) on channel " + lcn);
+            List<byte[]> packets = SentInformationPackets();
+            for (int i = 0; i < packets.Count; i++)
+            {
+                if (packets[i].Length > 3 && packets[i][2] == 0x13 && packets[i][1] == lcn)
+                {
+                    return packets[i];
+                }
+            }
+
+            throw new AssertionException("unreachable");
+        }
+
+        [Test]
+        public void WaitMode_NoRoute_IsClearedWithAccessBarred_AndNotOfferedToTheProgram()
+        {
+            Build(Dce(), answerAutomatically: false, withRoute: false);
+            int offered = 0;
+            _transport.IncomingCall += (s, e) => offered++;
+            Inject(Frame(AddressB, Sabm));
+
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+
+            byte[] clear = TheClearOn(5);
+            Assert.That(clear[3], Is.EqualTo(X25Cause.AccessBarred), "no inbound route: Table 5-7, 0x0B access barred");
+            Assert.That(clear[4], Is.EqualTo((byte)0), "diagnostic 0");
+            Assert.That(offered, Is.EqualTo(0), "the router refused it; the program must not be offered the call");
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void AutomaticMode_NoRoute_IsClearedWithAccessBarred()
+        {
+            Build(Dce(), answerAutomatically: true, withRoute: false);
+            Inject(Frame(AddressB, Sabm));
+
+            // The local TAD takes calls to the machine's own address, but with no inbound route the
+            // router refuses the call before any service is asked.
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "a call with no route must not be accepted");
+            Assert.That(TheClearOn(5)[3], Is.EqualTo(X25Cause.AccessBarred));
+        }
+
+        [Test]
+        public void AutomaticMode_ACallToAnUnroutedAddress_IsClearedWithAccessBarred()
+        {
+            Build(Dce());
+            Inject(Frame(AddressB, Sabm));
+
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(6, "999")));
+
+            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.AccessBarred), "the router refuses it, not the service lookup (0x0D)");
+        }
+
+        [Test]
+        public void AutomaticMode_WithARoute_IsAcceptedWithoutAskingTheProgram()
+        {
+            Build(Dce());
+            int offered = 0;
+            _transport.IncomingCall += (s, e) => offered++;
+            Inject(Frame(AddressB, Sabm));
+
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1), "one Call Accepted");
+            Assert.That(LastPacketOfType(0x0F)[1], Is.EqualTo((byte)5));
+            Assert.That(offered, Is.EqualTo(0), "an automatic line does not offer the call to the program");
+            Assert.That(Channel5().State, Is.EqualTo(PacketLayer.X25VcState.DataTransfer));
+        }
+
+        [Test]
+        public void AnswersForARefusedAnAnsweredOrAnUnknownCall_ReturnFalse_AndSendNothing()
+        {
+            Build(Dce(), answerAutomatically: false);
+            List<X25CallRequest> offered = new List<X25CallRequest>();
+            _transport.IncomingCall += (s, e) => offered.Add(e);
+            Inject(Frame(AddressB, Sabm));
+
+            // Channel 6 has no route: the router refuses it.
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(6, "999")));
+            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.AccessBarred));
+            Assert.That(offered.Count, Is.EqualTo(0));
+            int framesBefore = SentFrames().Count;
+
+            X25CallRequest lookalike = new X25CallRequest("999", CallingAddress) { SourceLcn = 6 };
+            Assert.That(_transport.AcceptCall(lookalike), Is.False, "a call the router refused cannot be accepted");
+            Assert.That(_transport.RejectCall(lookalike, X25Cause.OutOfOrder), Is.False, "nor refused a second time");
+            Assert.That(_transport.AcceptCall(new X25CallRequest(LocalMachineId, CallingAddress)), Is.False, "a call never offered");
+            Assert.That(SentFrames().Count, Is.EqualTo(framesBefore), "nothing may be sent for those answers");
+
+            // Channel 5 is routed and offered; answered once, then every other answer is refused.
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
+            Assert.That(offered.Count, Is.EqualTo(1));
+            Assert.That(_transport.AcceptCall(offered[0]), Is.True);
+            int framesAfterAccept = SentFrames().Count;
+            Assert.That(_transport.AcceptCall(offered[0]), Is.False, "a call can be answered once");
+            Assert.That(_transport.RejectCall(offered[0], X25Cause.OutOfOrder), Is.False, "an accepted call cannot then be refused");
+            Assert.That(SentFrames().Count, Is.EqualTo(framesAfterAccept), "nothing may be sent for those answers");
+            Assert.That(CountClearsOn(5), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void TwoCallsAtOnce_OneRoutedOneNot_AreEachAnsweredOnTheirOwnChannel()
+        {
+            Build(Dce(), answerAutomatically: false);
+            List<X25CallRequest> offered = new List<X25CallRequest>();
+            _transport.IncomingCall += (s, e) => offered.Add(e);
+            Inject(Frame(AddressB, Sabm));
+
+            // Both calls are in before either is answered: channel 5 routed, channel 6 not.
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            Inject(Frame(AddressB, IControl(1, 0), CallRequest(6, "999")));
+
+            Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.AccessBarred), "the call with no route is refused at once");
+            Assert.That(offered.Count, Is.EqualTo(1), "only the routed call is offered");
+            Assert.That(offered[0].SourceLcn, Is.EqualTo((ushort)5));
+            Assert.That(offered[0].CalledAddress, Is.EqualTo(LocalMachineId));
+            Assert.That(Channel5().State, Is.EqualTo(PacketLayer.X25VcState.CallIncoming), "channel 5 still waits for the program");
+
+            Assert.That(_transport.AcceptCall(offered[0]), Is.True);
+
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1));
+            Assert.That(LastPacketOfType(0x0F)[1], Is.EqualTo((byte)5), "the Call Accepted is on channel 5");
+            Assert.That(CountClearsOn(5), Is.EqualTo(0), "channel 5 is not cleared");
+            Assert.That(Channel5().State, Is.EqualTo(PacketLayer.X25VcState.DataTransfer));
+        }
+
+        [Test]
+        public void WaitMode_CallerClearsWhileTheProgramDecides_ALaterAcceptReturnsFalseAndSendsNothing()
+        {
+            X25CallRequest call = OfferACallOnChannel5();
+
+            // The DTE gives up (4.1.7): Clear Request on channel 5, GFI 1, type 0x13, cause 0, diagnostic 0,
+            // in its second I frame (N(S)=1); the DCE has sent no I frame yet, so N(R)=0.
+            Inject(Frame(AddressB, IControl(1, 0), new byte[] { 0x10, 0x05, 0x13, 0x00, 0x00 }));
+            Assert.That(CountPacketsOfType(0x17), Is.EqualTo(1), "4.1.7: the DCE confirms the clear (type 0x17)");
+            int framesBefore = SentFrames().Count;
+
+            Assert.That(_transport.AcceptCall(call), Is.False, "the call is gone; it cannot be accepted");
+            Assert.That(_transport.RejectCall(call, X25Cause.OutOfOrder), Is.False, "nor refused");
+            Assert.That(SentFrames().Count, Is.EqualTo(framesBefore), "nothing may be sent");
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0));
         }
     }
 }
