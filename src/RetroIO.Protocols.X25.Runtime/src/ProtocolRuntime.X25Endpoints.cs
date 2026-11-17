@@ -660,19 +660,6 @@ namespace RetroIO.Protocols.X25.Runtime
 
             ITransportInterface? transport = TransportOf(connection);
 
-            // An XOT server entry may list the called addresses it takes calls for. This is where a call
-            // on one of its connections really arrives (through the connection's own X.25 engine), so the
-            // list is applied here. A call to any other address is cleared with cause 0x0B, access barred
-            // (X.25 Table 5-7). Until 2026-11-17 the list was read only by XotServerTransport's own
-            // incoming-call handler, which nothing called, so it had no effect.
-            if (connection is XotServerConnection && transport is XotServerTransport xotServer && !xotServer.AcceptsX121Address(called))
-            {
-                _logger.LogWarning("Incoming call to {Called} on {Name} refused: the XOT server entry does not accept that address - clearing (access barred)",
-                    called, endpoint.Name);
-                layer.ClearCall(lci, X25Cause.AccessBarred, X25Diagnostic.None);
-                return;
-            }
-
             X25CallRequest request = new X25CallRequest(called, calling, null, cud)
             {
                 SourceLcn = lci,
@@ -680,64 +667,55 @@ namespace RetroIO.Protocols.X25.Runtime
                 UsedTransport = transport,
             };
 
-            // The router answers first (decided by Ronny, 2026-11-17). On an XOT server entry and on
-            // a serial line the router is asked before anyone else hears of the call: a call with no
-            // inbound route is refused at once with cause 0x0B, access barred (X.25 4.1.4 and 4.1.7,
-            // Table 5-7), and only a call it passes goes on - offered to the program on an entry that
-            // waits for the program's answer, or routed to the local service on one that answers by
-            // itself. The order is fixed here, in one place: the program's offer (the transport's
-            // IncomingCall event) is raised below, after the router passed the call, so it does not
-            // depend on who subscribed to an event first.
+            // One routing decision for every line (2026-11-18): an XOT server connection, an XOT peer
+            // connection, a serial line and a link manager link all hand the call to the router first,
+            // and the line only carries out the answer. A refusal goes out as a Clear Request from this
+            // connection's own engine, with the router's cause and diagnostic (X.25 4.1.7; the causes
+            // are on X25CallDecision, from Table C.1). Until 2026-11-18 only the XOT server and the
+            // serial line asked the router (with 0x0B for no route); the XOT server's address list was
+            // checked here with diagnostic 0, and a call on an XOT peer link or a link manager link went
+            // straight to the local service lookup, which cleared it with 0x0D.
             //
-            // The router refuses through the transport's RejectCall, which comes back to
-            // RejectOfferedCall and the engine of this connection. That needs the call in the list of
-            // calls waiting for an answer, so it is remembered BEFORE the router is asked - which also
-            // covers a program handler that answers inside the event.
+            // A line set to wait for the program's answer: the router decides with that in mind, and a
+            // call it passes is offered to the program instead of a service.
             bool waitsForProgram = (transport is XotServerTransport waitingXot && connection is XotServerConnection && !waitingXot.AnswerIncomingCallsAutomatically)
                 || (connection is SerialTransport waitingSerial && !waitingSerial.AnswerIncomingCallsAutomatically);
-            bool screenedByRouter = (connection is XotServerConnection && transport is XotServerTransport) || connection is SerialTransport;
-            if (screenedByRouter)
+            X25CallDecision decision = _x25Router.DecideIncomingCall(request, transport, waitsForProgram);
+            if (decision.IsRefused)
             {
-                RememberOfferedCall(request, endpoint, lci);
-                if (!_x25Router.AnswerIncomingCall(request, transport!))
-                {
-                    // RejectOfferedCall has taken the call out of the list when the Clear Request
-                    // went out. If it did not go out (the channel was cleared meanwhile), the entry
-                    // is dropped here so the call cannot be answered later.
-                    TakeOfferedCall(request);
-                    return;
-                }
-
-                // An entry set to wait for the program's answer: the call is offered through the
-                // transport's IncomingCall event and stays in p3 until the program calls AcceptCall or
-                // RejectCall (AcceptOfferedCall / RejectOfferedCall below), or until the engine's T11
-                // runs out and clears it (X.25 4.1.4, Table D.1: 180 s). Nothing is routed yet: a
-                // local service that took the call now could start sending before the call is
-                // accepted.
-                if (waitsForProgram)
-                {
-                    _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} offered to the program; it waits for an answer", called, endpoint.Name, lci);
-                    if (transport is XotServerTransport offerXot)
-                    {
-                        offerXot.OfferIncomingCall(request);
-                    }
-                    else
-                    {
-                        ((SerialTransport)connection).OfferIncomingCall(request);
-                    }
-
-                    return;
-                }
-
-                // A line that answers by itself: the call is no longer waiting for the program.
-                TakeOfferedCall(request);
+                _logger.LogWarning("Incoming call to {Called} on {Name} channel {Lci} refused by the router: {Decision}", called, endpoint.Name, lci, decision);
+                layer.ClearCall(lci, decision.Cause, decision.Diagnostic);
+                return;
             }
 
-            // The routing layer allocates the local LCN, maps the circuit and binds the service, but
-            // sends nothing: the engine below owns this circuit, so the answer goes out through it.
-            // That is also why a LinkManager link works here - it has no ITransportInterface.
-            bool accepted = RoutingLayer.RouteIncomingCall(request, endpoint.Name);
-            if (accepted)
+            // Offered through the transport's IncomingCall event; the call stays in p3 until the program
+            // calls AcceptCall or RejectCall (AcceptOfferedCall / RejectOfferedCall below), or until the
+            // engine's T11 runs out and clears it (X.25 4.1.4, Table D.1: 180 s). Nothing is routed to a
+            // service yet: a local service that took the call now could start sending before the call is
+            // accepted. The call is remembered before the offer, so a program that answers inside the
+            // event finds it.
+            if (waitsForProgram)
+            {
+                RememberOfferedCall(request, endpoint, lci);
+                _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} offered to the program; it waits for an answer", called, endpoint.Name, lci);
+                if (transport is XotServerTransport offerXot)
+                {
+                    offerXot.OfferIncomingCall(request);
+                }
+                else
+                {
+                    ((SerialTransport)connection).OfferIncomingCall(request);
+                }
+
+                return;
+            }
+
+            // Delivered to the local service. The routing layer allocates the local LCN, maps the
+            // circuit and binds the service, but sends nothing: the engine below owns this circuit, so
+            // the answer goes out through it. That is also why a link manager link works here - it has
+            // no ITransportInterface.
+            X25CallDecision delivered = RoutingLayer.RouteIncomingCall(request, endpoint.Name);
+            if (!delivered.IsRefused)
             {
                 if (!layer.AcceptCall(lci))
                 {
@@ -747,10 +725,9 @@ namespace RetroIO.Protocols.X25.Runtime
                 return;
             }
 
-            _logger.LogWarning("Incoming call to {Called} on {Name} not routed - clearing", called, endpoint.Name);
-            layer.ClearCall(lci, X25Cause.NotObtainable, X25Diagnostic.None);
+            _logger.LogWarning("Incoming call to {Called} on {Name} not taken by the local service: {Decision}", called, endpoint.Name, delivered);
+            layer.ClearCall(lci, delivered.Cause, delivered.Diagnostic);
         }
-
         // ------------------------------------------------------------------ calls waiting for the program
 
         /// <summary>
@@ -831,8 +808,8 @@ namespace RetroIO.Protocols.X25.Runtime
         /// The program's "accept" for a call offered by <see cref="OnEndpointIncomingCall"/>: the
         /// call is routed to its local service the same way an automatic entry routes it, and the
         /// engine sends the Call Accepted (X.25 4.1.4), which puts the channel in data transfer (p4).
-        /// A call no local service takes is cleared with cause 0x0D (not obtainable), as on an
-        /// automatic entry.
+        /// A call no local service takes is cleared with the cause the routing layer gives
+        /// (<see cref="RetroIO.Protocols.X25.Layers.X25RoutingLayer.RouteIncomingCall"/>), as on an automatic entry.
         /// </summary>
         /// <param name="request">
         /// The request object the program was given by the transport's IncomingCall event.
@@ -860,10 +837,11 @@ namespace RetroIO.Protocols.X25.Runtime
                     return false;
                 }
 
-                if (!RoutingLayer.RouteIncomingCall(request, endpoint.Name))
+                X25CallDecision delivered = RoutingLayer.RouteIncomingCall(request, endpoint.Name);
+                if (delivered.IsRefused)
                 {
-                    _logger.LogWarning("Incoming call to {Called} on {Name} accepted by the program but not routed - clearing", request.CalledAddress, endpoint.Name);
-                    endpoint.Layer.ClearCall(offered.Lci, X25Cause.NotObtainable, X25Diagnostic.None);
+                    _logger.LogWarning("Incoming call to {Called} on {Name} accepted by the program but not taken by the local service: {Decision}", request.CalledAddress, endpoint.Name, delivered);
+                    endpoint.Layer.ClearCall(offered.Lci, delivered.Cause, delivered.Diagnostic);
                     return false;
                 }
 

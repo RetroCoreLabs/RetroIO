@@ -8,6 +8,7 @@
 using Microsoft.Extensions.Logging;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
+using RetroIO.Protocols.X25.PacketLayer;
 
 namespace RetroIO.Protocols.X25.Transport
 {
@@ -120,7 +121,7 @@ namespace RetroIO.Protocols.X25.Transport
 
             // The router does not listen to the transport's IncomingCall event. That event is the
             // offer to the program, and it is raised only after the router passed the call: the
-            // runtime asks AnswerIncomingCall first (decided by Ronny, 2026-11-17). Hearing the event
+            // runtime asks DecideIncomingCall first (decided by Ronny, 2026-11-17). Hearing the event
             // as well made the router refuse calls the program was still deciding on.
 
             _logger.LogInformation("X.25 transport interface registered: {InterfaceName} ({Type})", 
@@ -307,68 +308,93 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// Answers an incoming call first, before anyone else hears of it: a call with no inbound
-        /// route is refused at once on the transport it came in on, with cause 0x0B (access barred,
-        /// X.25 Table 5-7); a call with a route is left alone, for the program or the local service.
+        /// Says whether a local service takes calls to a called address with given call user data.
+        /// Set by the runtime, which owns the services. Null means no local service exists.
+        /// </summary>
+        public Func<string, byte[], bool>? LocalServiceAvailable { get; set; }
+
+        /// <summary>
+        /// The one routing decision for a call that came in on any line of this node: an XOT server
+        /// connection, an XOT peer connection, a serial line or a link manager link. The line never
+        /// decides; it hands the call here first and carries out the answer - a refusal becomes a Clear
+        /// Request with the returned cause and diagnostic, sent by the line's own X.25 engine on the
+        /// call's channel (X.25 4.1.7).
         /// </summary>
         /// <remarks>
         /// <para>
-        /// X.25 4.1.4: a called DTE that does not accept a call refuses it "by a clear request packet
-        /// as described in 4.1.7". The refusal goes through
-        /// <see cref="ITransportInterface.RejectCall"/>, so the X.25 engine of the line the call came
-        /// in on sends the Clear Request on the channel of the call.
+        /// In this order:
+        /// </para>
+        ///  - A rule of the line bars the called address (an XOT server entry that lists the addresses it
+        ///    takes calls for): Access barred, diagnostic 70 (X.25 Table C.1 row 25).
+        ///  - No inbound route matches the called address: Not obtainable, diagnostic 67 (Table C.1 row 24,
+        ///    "Unknown number").
+        ///  - The line waits for a program to answer: delivered locally, to that program.
+        ///  - A local service takes calls to the address: delivered locally, to that service.
+        ///  - Nothing here takes it: Not obtainable, diagnostic 67, as above - the number has no one to
+        ///    answer at this node.
+        /// <para>
+        /// The causes and their citations are on <see cref="X25CallDecision"/>. Until 2026-11-18 this
+        /// method was <c>AnswerIncomingCall</c>: it refused a call with no route itself through the
+        /// transport's RejectCall with 0x0B, and only the XOT server and serial lines asked it; an XOT
+        /// peer link and a link manager link went straight to the local service lookup, which cleared
+        /// with 0x0D.
         /// </para>
         /// <para>
-        /// Decided by Ronny, 2026-11-17: the router answers first. The runtime calls this method for
-        /// every incoming call before it offers the call to the program (a line that waits for the
-        /// program's answer) or routes it to a local service (a line that answers by itself). The
-        /// router no longer listens to the transport's IncomingCall event, which is the offer to the
-        /// program; when it did, it refused calls the program had been given and was deciding on.
-        /// Until 2026-11-17 the refusal here only wrote a log line and nothing went on the wire.
-        /// </para>
-        /// <para>
-        /// The router does not accept a call. A routed call is accepted by whoever owns it next.
+        /// An inbound route whose destination is another line is treated like a local route: this node
+        /// does not forward an incoming call out of another line (see src/BUGS.md).
         /// </para>
         /// </remarks>
         /// <param name="callRequest">
-        /// The call, as the transport will hand it to the program.
+        /// The call.
         /// </param>
         /// <param name="sourceInterface">
-        /// The transport the call came in on; a refusal is sent through it.
+        /// The transport of the line the call came in on; null for a link manager link, which has none.
+        /// </param>
+        /// <param name="programWaits">
+        /// True when the line is set to offer its calls to a program and wait for its answer.
         /// </param>
         /// <returns>
-        /// True when an inbound route matches the called address and the call may go on; false when
-        /// the call was refused.
+        /// Deliver locally, or a refusal.
         /// </returns>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="callRequest"/> or <paramref name="sourceInterface"/> is null.
+        /// Thrown when <paramref name="callRequest"/> is null.
         /// </exception>
-        public bool AnswerIncomingCall(X25CallRequest callRequest, ITransportInterface sourceInterface)
+        public X25CallDecision DecideIncomingCall(X25CallRequest callRequest, ITransportInterface? sourceInterface, bool programWaits)
         {
             ArgumentNullException.ThrowIfNull(callRequest);
-            ArgumentNullException.ThrowIfNull(sourceInterface);
 
-            _logger.LogInformation("Processing incoming call from X.121 address: {CallingAddress} to {CalledAddress} on {Interface}",
-                                  callRequest.CallingAddress, callRequest.CalledAddress, sourceInterface.Name);
+            string called = callRequest.CalledAddress;
+            string line = sourceInterface?.Name ?? "a link";
 
-            List<X25Route> routes = FindRoutes(callRequest.CalledAddress, RouteDirection.Inbound, callRequest.CallUserData);
-            if (routes.Count == 0)
+            if (sourceInterface is XotServerTransport xotServer && !xotServer.AcceptsX121Address(called))
             {
-                _logger.LogWarning("No route found for incoming call to X.121 address: {CalledAddress} - refusing it (access barred)",
-                                  callRequest.CalledAddress);
-                RejectCall(callRequest, sourceInterface, AccessBarredCause);
-                return false;
+                _logger.LogWarning("Incoming call to {Called} on {Line}: the entry does not take calls for that address - access barred", called, line);
+                return X25CallDecision.Barred();
             }
 
-            _logger.LogInformation("Incoming call to {CalledAddress} passed by route: {RouteName}", callRequest.CalledAddress, routes[0].Name);
-            return true;
+            List<X25Route> routes = FindRoutes(called, RouteDirection.Inbound, callRequest.CallUserData);
+            if (routes.Count == 0)
+            {
+                _logger.LogWarning("Incoming call to {Called} on {Line}: no inbound route - not obtainable", called, line);
+                return X25CallDecision.NoRoute();
+            }
+
+            if (programWaits)
+            {
+                _logger.LogInformation("Incoming call to {Called} on {Line} passed by route {Route}; offered to the program", called, line, routes[0].Name);
+                return X25CallDecision.DeliverLocally();
+            }
+
+            Func<string, byte[], bool>? serviceAvailable = LocalServiceAvailable;
+            if (serviceAvailable == null || !serviceAvailable(called, callRequest.CallUserData ?? Array.Empty<byte>()))
+            {
+                _logger.LogWarning("Incoming call to {Called} on {Line}: route {Route} matches but no local service takes the address - not obtainable", called, line, routes[0].Name);
+                return X25CallDecision.NoRoute();
+            }
+
+            _logger.LogInformation("Incoming call to {Called} on {Line} passed by route {Route}; delivered to the local service", called, line, routes[0].Name);
+            return X25CallDecision.DeliverLocally();
         }
-
-        /// <summary>
-        /// X.25 Table 5-7, clearing cause "access barred" (0 0 0 0 1 0 1 1).
-        /// </summary>
-        private const byte AccessBarredCause = 0x0B;
-
         #endregion
 
         #region XOT Specific Methods
@@ -504,27 +530,11 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
-        /// <summary>
-        /// Refuses an incoming call with the given cause, through the transport it came in on: that
-        /// transport's X.25 engine sends the Clear Request (X.25 4.1.7) on the call's channel.
-        /// </summary>
-        private void RejectCall(X25CallRequest callRequest, ITransportInterface sourceInterface, byte cause)
-        {
-            _logger.LogInformation("Rejecting call from {CallingAddress} to {CalledAddress} with cause 0x{Cause:X2}",
-                                  callRequest.CallingAddress, callRequest.CalledAddress, cause);
-
-            if (!sourceInterface.RejectCall(callRequest, cause))
-            {
-                _logger.LogWarning("Transport {Interface} did not send the Clear Request for the call to {CalledAddress}",
-                                  sourceInterface.Name, callRequest.CalledAddress);
-            }
-        }
-
         #endregion
 
         // The IncomingCallRouted event that stood here was removed on 2026-11-17. It was raised only
         // from the router's own handler of the transport's IncomingCall event, which is gone: the
-        // router now answers a call when the runtime asks it (AnswerIncomingCall), and nothing
+        // router now decides a call when the runtime asks it (DecideIncomingCall), and nothing
         // subscribed to the event.
 
         #region Statistics and Diagnostics

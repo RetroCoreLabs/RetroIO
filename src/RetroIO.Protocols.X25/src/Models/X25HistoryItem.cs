@@ -279,23 +279,35 @@ namespace RetroIO.Protocols.X25.Models
         /// <summary>
         /// Get description for clear cause codes
         /// </summary>
-        private string GetClearCauseDescription(byte cause)
+        /// <remarks>
+        /// X.25 (10/96) Table 5-7, read from its bit columns. Until 2026-11-18 this table had half the
+        /// values wrong (0x0D read "Local procedure error", 0x09 "Invalid facility request", 0x13 "Not
+        /// obtainable"), so a no-route clear showed in the history as a procedure error. A cause with bit
+        /// 8 set carries the remote DTE's own cause in the other bits (Table 5-7 note a).
+        /// </remarks>
+        public static string GetClearCauseDescription(byte cause)
         {
+            if ((cause & 0x80) != 0)
+            {
+                return "DTE originated";
+            }
+
             return cause switch
             {
                 0x00 => "DTE originated",
-                0x01 => "Number busy", 
-                0x02 => "Out of order",
-                0x03 => "Remote procedure error",
-                0x04 => "Reverse charging acceptance not subscribed",
-                0x05 => "Incompatible destination",
-                0x06 => "Fast select acceptance not subscribed",
-                0x09 => "Invalid facility request",
+                0x01 => "Number busy",
+                0x03 => "Invalid facility request",
+                0x05 => "Network congestion",
+                0x09 => "Out of order",
                 0x0B => "Access barred",
-                0x0D => "Local procedure error",
-                0x11 => "Network congestion",
-                0x13 => "Not obtainable",
-                0x15 => "RPOA out of order",
+                0x0D => "Not obtainable",
+                0x11 => "Remote procedure error",
+                0x13 => "Local procedure error",
+                0x15 => "ROA out of order",
+                0x19 => "Reverse charging acceptance not subscribed",
+                0x21 => "Incompatible destination",
+                0x29 => "Fast select acceptance not subscribed",
+                0x39 => "Ship absent",
                 _ => $"Reserved/Unknown"
             };
         }

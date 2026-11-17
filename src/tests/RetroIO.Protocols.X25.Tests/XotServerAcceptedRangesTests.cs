@@ -76,11 +76,13 @@ namespace RetroIO.Protocols.X25.Tests
             using ProtocolRuntime runtime = StartRuntime(port, "^99999999$");
 
             int cause = -1;
+            int diag = -1;
             ManualResetEventSlim cleared = new ManualResetEventSlim(false);
             using X25Client client = new X25Client { ServiceName = "barred-caller" };
             client.SetOnClear((c, vc, clearCause, diagnostic) =>
             {
                 cause = clearCause;
+                diag = diagnostic;
                 cleared.Set();
             });
             client.Open(new X25ClientConfig
@@ -96,6 +98,11 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(vc, Is.Null, "a call to an address the entry does not accept must not connect");
             Assert.That(cleared.Wait(5000), Is.True, "the call must be cleared");
             Assert.That(cause, Is.EqualTo(0x0B), "access barred");
+
+            // Decided by the router (X25Router.DecideIncomingCall), not the line: X.25 Table C.1 row 25,
+            // "Incoming call barred", gives Access barred with diagnostic 70. Until 2026-11-18 the line
+            // cleared it itself with diagnostic 0.
+            Assert.That(diag, Is.EqualTo(70), "Table C.1 row 25: # 70");
         }
 
         [Test]

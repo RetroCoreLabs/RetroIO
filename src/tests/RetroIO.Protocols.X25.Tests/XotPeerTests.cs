@@ -291,6 +291,86 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// Calls into a listening entry and waits for the clear: the cause and diagnostic, or -1 each
+        /// when no clear came within five seconds.
+        /// </summary>
+        private (int Cause, int Diagnostic, bool Connected) CallAndWaitForClear(int port, string called, string calling)
+        {
+            X25Client client = new X25Client { ServiceName = "refused-caller" };
+            _toDispose.Add(client);
+            int cause = -1;
+            int diagnostic = -1;
+            bool connected = false;
+            ManualResetEventSlim cleared = new ManualResetEventSlim(false);
+            client.SetOnConnected((c, vc) => connected = true);
+            client.SetOnClear((c, vc, clearCause, clearDiagnostic) =>
+            {
+                cause = clearCause;
+                diagnostic = clearDiagnostic;
+                cleared.Set();
+            });
+            client.Open(new X25ClientConfig
+            {
+                Host = "127.0.0.1",
+                Port = (ushort)port,
+                LocalAddress = calling,
+                Framing = X25ClientFraming.Xot,
+            }, NullLogger.Instance);
+
+            Assert.That(client.Call(called), Is.Not.Null, "the client must place the call");
+            cleared.Wait(5000);
+            return (cause, diagnostic, connected);
+        }
+
+        /// <summary>
+        /// A call on a connection of a peer entry is decided by the router, as on every other line
+        /// (2026-11-18): a number with no inbound route is refused with Not obtainable, diagnostic 67
+        /// (X.25 Table C.1 row 24). Until then a peer link skipped the router and the local service
+        /// lookup cleared the call itself, with diagnostic 0.
+        /// </summary>
+        [Test]
+        public void PeerEntry_ACallWithNoRoute_IsRefusedByTheRouter_WithNotObtainable()
+        {
+            int listen = FreePort();
+            Start(AddressA, null, new XotInterfaceConfig
+            {
+                Name = "Peer", Mode = XotMode.Both, RemoteIPAddress = "127.0.0.1", RemotePort = FreePort(), LocalPort = listen, RemoteMachineId = "B",
+            });
+
+            (int cause, int diagnostic, bool connected) = CallAndWaitForClear(listen, "99990000", AddressB);
+
+            Assert.That(connected, Is.False, "a call with no route must not connect");
+            Assert.That(cause, Is.EqualTo(0x0D), "Table C.1 row 24: not obtainable");
+            Assert.That(diagnostic, Is.EqualTo(67), "the router's diagnostic, # 67 invalid called DTE address");
+        }
+
+        /// <summary>
+        /// The local TAD takes calls to the machine's own address; with no inbound route for it the
+        /// router refuses the call before the service is asked. Until 2026-11-18 a peer link skipped the
+        /// router and the TAD answered.
+        /// </summary>
+        [Test]
+        public void PeerEntry_ACallToTheLocalAddressWithNoRoute_IsRefusedByTheRouter()
+        {
+            int listen = FreePort();
+            RuntimeConfig config = new RuntimeConfig();
+            config.X25.LocalMachineId = AddressA;
+            config.Routing.XotInterfaces.Add(new XotInterfaceConfig
+            {
+                Name = "Peer", Mode = XotMode.Both, RemoteIPAddress = "127.0.0.1", RemotePort = FreePort(), LocalPort = listen, RemoteMachineId = "B",
+            });
+            ProtocolRuntime runtime = new ProtocolRuntime(NullLogger.Instance, config);
+            _toDispose.Add(runtime);
+            Assert.That(runtime.StartTransportInterfaces(), Is.True);
+
+            (int cause, int diagnostic, bool connected) = CallAndWaitForClear(listen, AddressA, AddressB);
+
+            Assert.That(connected, Is.False, "no route: the TAD must not answer");
+            Assert.That(cause, Is.EqualTo(0x0D));
+            Assert.That(diagnostic, Is.EqualTo(67));
+        }
+
+        /// <summary>
         /// One entry does both at the same time: it has dialled out for one call and accepted a
         /// connection for another, and the report keeps the two apart.
         /// </summary>

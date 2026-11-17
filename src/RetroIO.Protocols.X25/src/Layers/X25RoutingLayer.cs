@@ -11,6 +11,7 @@ using RetroIO.Link.Lapb;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
+using RetroIO.Protocols.X25.PacketLayer;
 using RetroIO.Protocols.X25.Services;
 using RetroIO.Protocols.X25.Transport;
 namespace RetroIO.Protocols.X25.Layers
@@ -360,10 +361,18 @@ namespace RetroIO.Protocols.X25.Layers
         /// The connection's name, for logs.
         /// </param>
         /// <returns>
-        /// True when a local service took the call and the caller should accept it; false when the
-        /// caller should clear it.
+        /// <see cref="X25CallDecision.DeliverLocally"/> when a local service took the call and the
+        /// caller should accept it; otherwise the refusal the caller should clear it with: no service
+        /// for the address (Not obtainable, 67), no free local channel (Number busy, 71; X.25 Table C.1
+        /// row 31), or the service refused it (DTE originated, 0; X.25 4.1.7 - the service is the called
+        /// DTE here). Until 2026-11-18 this returned a bool and the caller cleared every failure with
+        /// 0x0D.
         /// </returns>
-        public bool RouteIncomingCall(X25CallRequest callRequest, string sourceName)
+        /// <remarks>
+        /// The router (<see cref="X25Router.DecideIncomingCall"/>) has already decided the call is for
+        /// this node before this is called; this carries the decision out.
+        /// </remarks>
+        public X25CallDecision RouteIncomingCall(X25CallRequest callRequest, string sourceName)
         {
             _logger.LogInformation("Incoming call from {CallingAddress} to {CalledAddress} on {Source}",
                 callRequest.CallingAddress, callRequest.CalledAddress, sourceName);
@@ -376,14 +385,14 @@ namespace RetroIO.Protocols.X25.Layers
                 if (localService == null)
                 {
                     _logger.LogWarning("No local service for {CalledAddress} on {Source}", callRequest.CalledAddress, sourceName);
-                    return false;
+                    return X25CallDecision.NoRoute();
                 }
 
                 ushort lcn = _runtime.FindAvailableLCN();
                 if (lcn == 0)
                 {
                     _logger.LogError("No free local channel for the call to {CalledAddress} on {Source}", callRequest.CalledAddress, sourceName);
-                    return false;
+                    return X25CallDecision.Busy();
                 }
 
                 // The mapping has to exist before the service runs: a service may answer inside
@@ -398,17 +407,20 @@ namespace RetroIO.Protocols.X25.Layers
                 if (accepted)
                 {
                     _logger.LogInformation("Service '{ServiceName}' took the call on local channel {LCN}", localService.ServiceName, lcn);
-                    return true;
+                    return X25CallDecision.DeliverLocally();
                 }
 
                 _logger.LogWarning("Service '{ServiceName}' refused the call on local channel {LCN}", localService.ServiceName, lcn);
                 _runtime.UnregisterXotConnection(lcn);
-                return false;
+                return X25CallDecision.CalledSideRefused();
             }
             catch (Exception ex)
             {
+                // The exception is logged with its stack, and the call is refused the way the service's
+                // own refusal would be, so the caller is not left waiting for a Call Accepted that never
+                // comes.
                 _logger.LogError(ex, "Error routing the incoming call to {CalledAddress} on {Source}", callRequest.CalledAddress, sourceName);
-                return false;
+                return X25CallDecision.CalledSideRefused();
             }
         }
 

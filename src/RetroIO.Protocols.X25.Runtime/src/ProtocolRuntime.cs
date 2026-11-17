@@ -240,6 +240,10 @@ namespace RetroIO.Protocols.X25.Runtime
 
             RoutingLayer = new X25RoutingLayer(logger, _x25Router, this, _protocolServices);
 
+            // The router decides every incoming call (X25Router.DecideIncomingCall); whether a local service
+            // takes an address is the one thing it has to ask the runtime, which owns the services.
+            _x25Router.LocalServiceAvailable = (called, cud) => _protocolServices.FindServiceForCall(called, cud) != null;
+
             // Subscribe to layer events
             SubscribeToLayerEvents();
 
@@ -4381,104 +4385,9 @@ namespace RetroIO.Protocols.X25.Runtime
             }
         }
 
-        /// <summary>
-        /// Evaluate routing using new centralized routing system with CUD-based protocol detection
-        /// </summary>
-        private IProtocolModule? EvaluateSvcRules(X25CallRequest callRequest, ushort lcn)
-        {
-            lock (_routingLock)
-            {
-                // First, detect protocol from Call User Data according to X.25 spec
-                var protocolInfo = _protocolDetection.GetProtocolInfo(callRequest.CallUserData, callRequest.CalledAddress);
-                _logger.LogInformation("Protocol detected for {CalledAddress}: {Protocol} ({Description})",
-                    callRequest.CalledAddress, protocolInfo.Protocol, protocolInfo.Description);
-
-                // Check if this is a local call to our machine ID
-                bool isLocalCall = callRequest.CalledAddress == _config.X25.LocalMachineId;
-
-                if (isLocalCall)
-                {
-                    // Use dynamic protocol service registry for local calls
-                    _logger.LogInformation("Processing local call to machine ID {CalledAddress}, protocol: {Protocol}",
-                        callRequest.CalledAddress, protocolInfo.Protocol);
-
-                    // Find appropriate protocol service based on address and CUD
-                    var service = _protocolServices.FindServiceForCall(callRequest.CalledAddress, callRequest.CallUserData);
-
-                    if (service != null)
-                    {
-                        _logger.LogInformation("Found protocol service '{ServiceName}' for local call to {CalledAddress}",
-                            service.ServiceName, callRequest.CalledAddress);
-
-                        try
-                        {
-                            // Handle the call using the protocol service
-                            var success = service.HandleIncomingCall(lcn, callRequest.CalledAddress,
-                                callRequest.CallingAddress, callRequest.CallUserData, callRequest.Facilities);
-
-                            if (success)
-                            {
-                                _logger.LogInformation("✅ Local call setup successful via {ServiceName} for address {CalledAddress} on LCN {LCN}",
-                                    service.ServiceName, callRequest.CalledAddress, lcn);
-
-                                // Return the associated module if available
-                                return _registeredModules.ContainsKey(service.ServiceName + "Server") ?
-                                    _registeredModules[service.ServiceName + "Server"] : null;
-                            }
-                            else
-                            {
-                                _logger.LogWarning("❌ Local call setup failed via {ServiceName} for address {CalledAddress} on LCN {LCN}",
-                                    service.ServiceName, callRequest.CalledAddress, lcn);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error handling local call via {ServiceName} for address {CalledAddress} on LCN {LCN}",
-                                service.ServiceName, callRequest.CalledAddress, lcn);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("No protocol service found for local call to {CalledAddress} with protocol {Protocol}",
-                            callRequest.CalledAddress, protocolInfo.Protocol);
-                    }
-                }
-
-                // Use traditional address-based routing for remote calls
-                if (_config.Routing?.Enabled == true)
-                {
-                    foreach (var route in _config.Routing.RoutingTable)
-                    {
-                        if (route.Enabled && route.Type == RouteType.Local)
-                        {
-                            try
-                            {
-                                var regex = new System.Text.RegularExpressions.Regex(route.X121AddressPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                                if (regex.IsMatch(callRequest.CalledAddress))
-                                {
-                                    _logger.LogInformation("Found address-based route '{RouteName}' for address {CalledAddress}", route.Name, callRequest.CalledAddress);
-
-                                    // For LocalTAD route, return the registered TAD server module
-                                    if (route.Destination == "LocalTAD" && _registeredModules.ContainsKey("TadServer"))
-                                    {
-                                        return _registeredModules["TadServer"];
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError("Error evaluating route '{RouteName}': {Error}", route.Name, ex.Message);
-                            }
-                        }
-                    }
-                }
-
-                _logger.LogWarning("No route found for call request to {CalledAddress} with protocol {Protocol}",
-                    callRequest.CalledAddress, protocolInfo.Protocol);
-                return null;
-            }
-        }
-
+        // EvaluateSvcRules stood here until 2026-11-18: a second incoming-call decision (local machine id,
+        // then the configured route table read directly) that nothing called. Incoming calls are decided
+        // by X25Router.DecideIncomingCall.
 
         /// <summary>
         /// Bind LCN to module

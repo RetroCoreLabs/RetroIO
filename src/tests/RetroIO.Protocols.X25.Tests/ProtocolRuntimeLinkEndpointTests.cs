@@ -51,6 +51,26 @@ namespace RetroIO.Protocols.X25.Tests
         [SetUp]
         public void SetUp()
         {
+            Build(withRoute: true);
+        }
+
+        /// <summary>
+        /// Builds the runtime on its default test link. A call on a link manager link is decided by the
+        /// router like a call on any other line (2026-11-18), so the local machine's address gets an
+        /// inbound route to the local TAD unless a test wants none.
+        /// </summary>
+        private void Build(bool withRoute)
+        {
+            if (_runtime != null)
+            {
+                if (_link != null)
+                {
+                    _link.FrameTransmitted -= OnFrameTransmitted;
+                }
+
+                _runtime.Dispose();
+            }
+
             _outbound = new List<byte[]>();
 
             RuntimeConfig config = new RuntimeConfig
@@ -58,6 +78,19 @@ namespace RetroIO.Protocols.X25.Tests
                 X25 = new X25Config { LocalMachineId = LocalMachineId },
                 TestMode = true,
             };
+
+            if (withRoute)
+            {
+                config.Routing.RoutingTable.Add(new X25RouteEntry
+                {
+                    Name = "LocalTAD",
+                    X121AddressPattern = "^" + LocalMachineId + "$",
+                    Type = RetroIO.Protocols.X25.Runtime.RouteType.Local,
+                    Destination = "LocalTAD",
+                    Priority = 200,
+                    Enabled = true,
+                });
+            }
 
             _runtime = new ProtocolRuntime(NullLogger.Instance, config);
             _link = _runtime.DefaultTestLink;
@@ -78,6 +111,10 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             _runtime?.Dispose();
+
+            // NUnit keeps one fixture object for every test; Build must not dispose this one again.
+            _runtime = null!;
+            _link = null!;
         }
 
         private void OnFrameTransmitted(object? sender, LapbFrameEventArgs e)
@@ -175,6 +212,123 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             Assert.That(sawClear, Is.True, "an unroutable call must be cleared, not left open");
+        }
+
+        /// <summary>
+        /// The clear of a call on channel <paramref name="lcn"/>, or null when none was sent.
+        /// </summary>
+        private byte[]? ClearOn(byte lcn)
+        {
+            List<byte[]> sent = Outbound();
+            for (int i = 0; i < sent.Count; i++)
+            {
+                // Clear Request / Clear Indication is 0x13 (Table 5-1): cause in octet 4, diagnostic in octet 5.
+                if (TypeOf(sent[i]) == 0x13 && sent[i][1] == lcn && sent[i].Length >= 5)
+                {
+                    return sent[i];
+                }
+            }
+
+            return null;
+        }
+
+        [Test]
+        public void ACallToAnUnknownAddress_IsRefusedByTheRouter_WithNotObtainable()
+        {
+            DeliverToLink(X25PacketBuilder.CreateCallRequest(lcn: 6, calledAddress: "999", callingAddress: CallingAddress), ns: 0);
+
+            byte[]? clear = ClearOn(6);
+            Assert.That(clear, Is.Not.Null, "an unroutable call must be cleared on the link it came in on");
+            // The router decides Not obtainable, diagnostic 67 (Table C.1 row 24). The runtime is the DTE
+            // on a link manager link (EndpointForLink), and a DTE's Clear Request may carry only "DTE
+            // originated" or a cause with bit 8 set (Table 5-7 note a, text line 8006), so the engine puts
+            // 0x00 in the cause and the router's diagnostic goes on unchanged (lines 8022-8024).
+            Assert.That(clear![3], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Cause.DteOriginated), "a DTE clears with DTE originated");
+            Assert.That(clear[4], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Diagnostic.InvalidCalledAddress), "the router's diagnostic, # 67");
+        }
+
+        [Test]
+        public void ACallToTheLocalAddressWithNoRoute_IsRefusedByTheRouter_NotAnsweredByTheService()
+        {
+            // The local TAD takes calls to the machine's own address. With no inbound route the router
+            // refuses the call before the service is asked, the same as on every other line. Until
+            // 2026-11-18 a link manager link skipped the router and the service accepted the call.
+            Build(withRoute: false);
+
+            DeliverToLink(X25PacketBuilder.CreateCallRequest(lcn: 5, calledAddress: LocalMachineId, callingAddress: CallingAddress), ns: 0);
+
+            List<byte[]> sent = Outbound();
+            for (int i = 0; i < sent.Count; i++)
+            {
+                Assert.That(TypeOf(sent[i]), Is.Not.EqualTo((byte)0x0F), "a call with no route must not be accepted");
+            }
+
+            byte[]? clear = ClearOn(5);
+            Assert.That(clear, Is.Not.Null, "the call must be cleared on the link");
+            Assert.That(clear![3], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Cause.DteOriginated), "a DTE clears with DTE originated (Table 5-7 note a)");
+            Assert.That(clear[4], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Diagnostic.InvalidCalledAddress), "the router's diagnostic, # 67");
+        }
+
+        /// <summary>
+        /// A local service that refuses every call it is given.
+        /// </summary>
+        private sealed class RefusingService : RetroIO.Protocols.X25.Services.IProtocolService
+        {
+            public string ServiceName => "Refuser";
+
+            public string[] LocalAddresses => new[] { "777" };
+
+            public int Priority => 1000;
+
+            public int Calls;
+
+            public bool CanHandleCUD(byte[] cud) => true;
+
+            public bool HandleIncomingCall(ushort lcn, string calledAddress, string callingAddress, byte[] cud, byte[] facilities)
+            {
+                Calls++;
+                return false;
+            }
+
+            public void HandleData(ushort lcn, byte[] data)
+            {
+            }
+
+            public void HandleClear(ushort lcn, byte cause, byte diagnostic)
+            {
+            }
+
+            public void HandleInterrupt(ushort lcn, byte[] data)
+            {
+            }
+        }
+
+        [Test]
+        public void ACallTheLocalServiceRefuses_IsClearedAsDteOriginated()
+        {
+            // The router passes the call (it has a route and a service takes the address); the service,
+            // which is the called DTE here, then refuses it. X.25 4.1.7: "The called DTE may refuse an
+            // incoming call by clearing it"; Table 5-7: DTE originated, 0x00. Until 2026-11-18 this was
+            // cleared with 0x0D like a number that does not exist.
+            Build(withRoute: true);
+            _runtime.Router.AddRoute(new RetroIO.Protocols.X25.Transport.X25Route
+            {
+                Name = "Refuser",
+                X121AddressPattern = "^777$",
+                Type = RetroIO.Protocols.X25.Transport.RouteType.Local,
+                Destination = "Refuser",
+                Enabled = true,
+            });
+            RefusingService service = new RefusingService();
+            _runtime.GetProtocolServiceRegistry().RegisterService(service);
+
+            DeliverToLink(X25PacketBuilder.CreateCallRequest(lcn: 4, calledAddress: "777", callingAddress: CallingAddress), ns: 0);
+
+            Assert.That(service.Calls, Is.EqualTo(1), "the service must have been asked");
+            byte[]? clear = ClearOn(4);
+            Assert.That(clear, Is.Not.Null);
+            Assert.That(clear![3], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Cause.DteOriginated), "4.1.7: the called side refused");
+            Assert.That(clear[4], Is.EqualTo((byte)0));
         }
 
         [Test]

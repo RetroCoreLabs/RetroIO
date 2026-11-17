@@ -119,7 +119,8 @@ namespace RetroIO.Protocols.X25.Transport
         /// answer goes to the X.25 engine of the connection the call came in on, which sends the
         /// Call Accepted. The runtime first gives the call to the local service its route names,
         /// the same as it does for a call it answers automatically; a call no service takes is
-        /// cleared instead (cause 0x0D, not obtainable) and false is returned. Until 2026-11-17 this
+        /// cleared instead, with the cause the routing layer gives (0x0D not obtainable when no service
+        /// takes the address, X25CallDecision), and false is returned. Until 2026-11-17 this
         /// method threw <see cref="NotSupportedException"/>; before that it sent nothing and
         /// returned true.
         /// </remarks>
@@ -510,9 +511,9 @@ namespace RetroIO.Protocols.X25.Transport
         /// If no patterns are configured, accepts all addresses.
         /// </summary>
         /// <remarks>
-        /// Called by the runtime (ProtocolRuntime.OnEndpointIncomingCall), where a call on one of this
-        /// server's connections arrives through the connection's own X.25 engine; a refused call is
-        /// cleared there with cause 0x0B (access barred).
+        /// Asked by the router (X25Router.DecideIncomingCall) for a call on one of this server's
+        /// connections; a call to an address the list does not take is refused by the router with
+        /// Access barred, diagnostic 70 (X.25 Table C.1 row 25), and the connection's engine sends the clear.
         /// </remarks>
         /// <param name="x121Address">The called address of the incoming call.</param>
         /// <returns>True when the address matches a pattern, or no pattern is set.</returns>

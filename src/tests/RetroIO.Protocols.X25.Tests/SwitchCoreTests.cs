@@ -40,6 +40,11 @@ namespace RetroIO.Protocols.X25.Tests
             _node.AddPort(_p0);
             _node.AddPort(_p1);
 
+            // Both lines are up: the router forwards a call only to a port that is in service
+            // (SwitchCallRouter, X.25 4.6.4).
+            _p0.Start();
+            _p1.Start();
+
             _core = new SwitchCore(_node);
         }
 
@@ -112,8 +117,40 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_p0.ClearedCalls.Count, Is.EqualTo(1));
             Assert.That(_p0.ClearedCalls[0].Lci, Is.EqualTo(inLci));
             Assert.That(_p0.ClearedCalls[0].Cause, Is.EqualTo(SwitchCore.CauseNotObtainable));
+            Assert.That(_p0.ClearedCalls[0].Diag, Is.EqualTo((byte)67), "X.25 Table C.1 row 24: # 67, invalid called DTE address");
             Assert.That(_node.ActiveStitchCount, Is.EqualTo(0));
             Assert.That(_p1.PlacedCalls.Count, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void IncomingCall_RouteToAPortThatIsDown_IsClearedOutOfOrder_AndNotPlaced()
+        {
+            // The number has a route, but the line it goes out of is out of order. X.25 4.6.4 item 1:
+            // the DCE "will clear any incoming virtual call with the cause Out of order"; Table C.1,
+            // "Called DTE out of order": Out of order, diagnostic 0. Until 2026-11-18 the switch placed
+            // the call on the stopped port anyway.
+            _p1.Stop();
+
+            ushort inLci = _p0.InjectIncomingCall("23410001", "23400001");
+
+            Assert.That(_p1.PlacedCalls.Count, Is.EqualTo(0), "no call may be placed on a port that is down");
+            Assert.That(_p0.ClearedCalls.Count, Is.EqualTo(1));
+            Assert.That(_p0.ClearedCalls[0].Lci, Is.EqualTo(inLci));
+            Assert.That(_p0.ClearedCalls[0].Cause, Is.EqualTo(SwitchCore.CauseOutOfOrder), "Table 5-7: 0x09 out of order");
+            Assert.That(_p0.ClearedCalls[0].Diag, Is.EqualTo((byte)0));
+            Assert.That(_node.ActiveStitchCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void IncomingCall_RouteToAPortTheSwitchDoesNotHave_IsClearedNotObtainable()
+        {
+            _node.Config.Routing.AddRoute(new X121Route { Type = X121RouteType.Exact, Address = "55550001", DestPort = 7 });
+
+            _p0.InjectIncomingCall("55550001", "23400001");
+
+            Assert.That(_p0.ClearedCalls.Count, Is.EqualTo(1));
+            Assert.That(_p0.ClearedCalls[0].Cause, Is.EqualTo(SwitchCore.CauseNotObtainable));
+            Assert.That(_p0.ClearedCalls[0].Diag, Is.EqualTo((byte)67), "Table C.1 row 24: nowhere to reach the number");
         }
 
         [Test]

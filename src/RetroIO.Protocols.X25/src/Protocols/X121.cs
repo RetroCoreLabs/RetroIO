@@ -7,7 +7,6 @@
 
 using System;
 using System.Text;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace RetroIO.Protocols.X25.Protocols
@@ -20,51 +19,65 @@ namespace RetroIO.Protocols.X25.Protocols
     {
         private readonly ILogger? _logger;
         
+        // Sources for every rule below: ITU-T X.121 (10/2000), file T-REC-X.121-200010-I!!PDF-E.txt, and
+        // ITU-T X.25 (10/96), file T-REC-X.25-199610-I!!PDF-E.txt, both in the specification folder kept beside
+        // this repository (text made with pdftotext -layout). "line N" means a line in those text files.
+        //
+        // What an X.25 called address can hold (and so what this class may refuse):
+        //  - X.25 5.2.1 (X.25 lines 6243-6246): the non-TOA/NPI address field carries an X.121 or X.301 address
+        //    "whose length (including possible prefixes and/or escape codes) is not greater than 15 digits".
+        //  - X.121 7.6.2 (lines 509-514): inside its own network a terminal is called by its Network Terminal
+        //    Number (NTN) or National Number (NN) alone. X.121 says nothing about the digits of such a local
+        //    number, so ANY first digit is allowed (SINTRAN's local number 110006 starts with 1).
+        //  - X.121 7.8 (lines 557-573): a prefix choosing national or international format is "a national
+        //    matter", is not part of the number, and in the non-TOA/NPI X.25 format can be only one digit. The
+        //    network decides it, so this class cannot refuse a prefix (02402001487 = prefix 0 + 2402001487).
+        //  - X.121 7.9 and Table 2 (lines 579-599, 628-641): escape codes 8, 9 and 0 in front of an F.69 or
+        //    E.164 number. These are allowed too.
+        //  - X.25 5.2.1 NOTE 1 (X.25 lines 6258-6260): an "alternative address" does not follow X.121 at all; it
+        //    is carried only in the TOA/NPI format, which this class does not handle.
+        // So the only checks X.121 and X.25 allow on a non-TOA/NPI address without the network's own rules are:
+        // decimal digits only, at most 15 of them. Everything finer (which prefix, which DNIC is really
+        // allocated, how long a national number is) is left to the network and NOT refused here.
+
         /// <summary>
-        /// Maximum address length according to X.121 standard (14 digits)
+        /// The most digits a non-TOA/NPI X.25 address field holds, prefix and escape code included
+        /// (X.25 5.2.1, X.25 lines 6243-6246; X.121 7.8 NOTE, lines 571-573).
         /// </summary>
-        public const int MAX_ADDRESS_LENGTH = 14;
-        
+        public const int MAX_ADDRESS_LENGTH = 15;
+
         /// <summary>
-        /// Minimum address length (1 digit for local implementations)
+        /// The fewest digits this class accepts as a called address. X.121 sets no lower limit for a number used
+        /// inside one network (7.6.2, lines 509-514); one digit is the least a call can be made to.
         /// </summary>
         public const int MIN_ADDRESS_LENGTH = 1;
-        
+
         /// <summary>
-        /// DNIC (Data Network Identification Code) length (4 digits)
+        /// Longest international data number, prefix and escape code not counted (X.121 7.7, line 546).
+        /// </summary>
+        public const int MAX_INTERNATIONAL_DATA_NUMBER_LENGTH = 14;
+
+        /// <summary>
+        /// Shortest international data number (X.121 7.7, line 546).
+        /// </summary>
+        public const int MIN_INTERNATIONAL_DATA_NUMBER_LENGTH = 5;
+
+        /// <summary>
+        /// DNIC (Data Network Identification Code) length: always four digits (X.121 7.2.3, line 410; 7.7, line 548).
         /// </summary>
         public const int DNIC_LENGTH = 4;
 
         /// <summary>
-        /// Geographic region codes for DNIC first digit
+        /// DCC (Data Country Code) length: the first three digits of a DNIC whose first digit is 2-7
+        /// (X.121 7.2.3, lines 413-415; 7.7, lines 548-549).
         /// </summary>
-        public static class RegionCodes
-        {
-            /// <summary>
-            /// DNIC first digit for the region Europe, Africa and Middle East.
-            /// </summary>
-            public const char EUROPE_AFRICA_MIDDLE_EAST = '2';
-            /// <summary>
-            /// DNIC first digit for the region North America.
-            /// </summary>
-            public const char NORTH_AMERICA = '3';
-            /// <summary>
-            /// DNIC first digit for the region Asia and Oceania.
-            /// </summary>
-            public const char ASIA_OCEANIA = '4';
-            /// <summary>
-            /// DNIC first digit for the region Latin America and Caribbean.
-            /// </summary>
-            public const char LATIN_AMERICA_CARIBBEAN = '5';
-            /// <summary>
-            /// DNIC first digit for the region reserved (6).
-            /// </summary>
-            public const char RESERVED_6 = '6';
-            /// <summary>
-            /// DNIC first digit for the region reserved (7).
-            /// </summary>
-            public const char RESERVED_7 = '7';
-        }
+        public const int DCC_LENGTH = 3;
+
+        // The old RegionCodes class named the first DNIC digits "Europe/Africa/Middle East", "North America" ...
+        // and called 6 and 7 "reserved". X.121 gives no such names: Table 1 (lines 395-409) says only that 1 is
+        // for mobile satellite systems and global networks and 2-7 are "country or geographic specific", and
+        // Annex J lists zones 6 and 7 with allocated country codes (for example 602 Egypt, line 1703). The class
+        // and its names were removed.
 
         /// <summary>
         /// Creates the X.121 helper.
@@ -78,13 +91,17 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Validate X.121 address format and content
+        /// Checks an address as it goes in the non-TOA/NPI called or calling address field of an X.25 packet:
+        /// 1 to 15 decimal digits (X.25 5.2.1, X.25 lines 6243-6246). It does NOT require the address to be an
+        /// international data number: a local number inside one network (X.121 7.6.2), a national or international
+        /// prefix (X.121 7.8, a national matter) and an escape code (X.121 7.9) are all allowed, because only the
+        /// network knows which of these it uses.
         /// </summary>
         /// <param name="address">
         /// Address string to validate
         /// </param>
         /// <returns>
-        /// True if valid X.121 address
+        /// True if the address can be carried in the address field.
         /// </returns>
         public bool IsValidAddress(string address)
         {
@@ -94,31 +111,19 @@ namespace RetroIO.Protocols.X25.Protocols
                 return false;
             }
 
-            // Check length constraints
-            if (address.Length < MIN_ADDRESS_LENGTH || address.Length > MAX_ADDRESS_LENGTH)
+            if (address.Length > MAX_ADDRESS_LENGTH)
             {
-                _logger?.LogWarning("X.121: Address length {Length} outside valid range {Min}-{Max}", 
+                _logger?.LogWarning("X.121: Address length {Length} outside valid range {Min}-{Max}",
                     address.Length, MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH);
                 return false;
             }
 
-            // Check that all characters are digits
-            if (!Regex.IsMatch(address, @"^\d+$"))
+            // The field holds decimal digits, one per semi-octet (X.25 5.2.1). ASCII '0'-'9' only, so a
+            // non-ASCII Unicode digit is refused too.
+            if (!AllDecimalDigits(address))
             {
                 _logger?.LogWarning("X.121: Address contains non-numeric characters: {Address}", address);
                 return false;
-            }
-
-            // Validate DNIC if address is long enough for international format
-            if (address.Length >= DNIC_LENGTH)
-            {
-                char regionCode = address[0];
-                if (!IsValidRegionCode(regionCode))
-                {
-                    _logger?.LogWarning("X.121: Invalid region code {RegionCode} in address {Address}", 
-                        regionCode, address);
-                    return false;
-                }
             }
 
             _logger?.LogTrace("X.121: Address {Address} is valid", address);
@@ -126,56 +131,93 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Check if region code is valid according to X.121
+        /// Checks whether the digits, taken with no prefix and no escape code, form an international data number:
+        /// 5 to 14 digits (X.121 7.7, line 546) beginning with a DNIC whose first digit is 1-7 (Table 1,
+        /// lines 395-409). 8, 9 and 0 are escape codes and never begin a DNIC (7.2.2 NOTE 2, line 392).
+        /// This does not say that the DNIC is allocated (Annex J is a list that changes, 7.3, lines 460-464), and
+        /// a number that passes may still be a local number of the same length; only the network's prefix rule
+        /// (7.8.2) tells the two apart.
         /// </summary>
-        /// <param name="regionCode">
-        /// First digit of DNIC
-        /// </param>
-        /// <returns>
-        /// True if valid region code
-        /// </returns>
-        public bool IsValidRegionCode(char regionCode)
+        /// <param name="address">The digits to check.</param>
+        /// <returns>True if the digits have the form of an international data number.</returns>
+        public bool IsInternationalDataNumber(string address)
         {
-            return regionCode >= '2' && regionCode <= '7';
+            if (string.IsNullOrEmpty(address)
+                || address.Length < MIN_INTERNATIONAL_DATA_NUMBER_LENGTH
+                || address.Length > MAX_INTERNATIONAL_DATA_NUMBER_LENGTH
+                || !AllDecimalDigits(address))
+            {
+                return false;
+            }
+
+            return IsDnicFirstDigit(address[0]);
         }
 
         /// <summary>
-        /// Extract DNIC from X.121 address
+        /// Checks whether a digit can begin a DNIC: 1 (public mobile satellite systems and global public data
+        /// networks) or 2-7 (country or geographic DNICs), X.121 Table 1, lines 395-409, and 7.2.3,
+        /// lines 410-414. 8, 9 and 0 are escape codes (7.2.2 NOTE 2, line 392).
+        /// </summary>
+        /// <param name="digit">
+        /// First digit of the DNIC
+        /// </param>
+        /// <returns>
+        /// True if the digit can begin a DNIC.
+        /// </returns>
+        public bool IsDnicFirstDigit(char digit)
+        {
+            return digit >= '1' && digit <= '7';
+        }
+
+        private static bool AllDecimalDigits(string text)
+        {
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] < '0' || text[i] > '9')
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Extract DNIC from X.121 address. Only an address that has the form of an international data number
+        /// (<see cref="IsInternationalDataNumber"/>) has a DNIC in its first four digits (X.121 7.6.1, line 508);
+        /// a local number, or one with a prefix or escape code in front, does not.
         /// </summary>
         /// <param name="address">
         /// X.121 address
         /// </param>
         /// <returns>
-        /// DNIC or null if address too short
+        /// DNIC, or null if the address is not an international data number
         /// </returns>
         public string? ExtractDNIC(string address)
         {
-            if (!IsValidAddress(address) || address.Length < DNIC_LENGTH)
+            if (!IsInternationalDataNumber(address))
                 return null;
 
             return address.Substring(0, DNIC_LENGTH);
         }
 
         /// <summary>
-        /// Extract national number from X.121 address
+        /// Returns the digits after the DNIC, that is the Network Terminal Number (X.121 7.6.1, line 508), of an
+        /// international data number. For any other address (a local number, or one with a prefix or escape code)
+        /// the address itself is returned, since X.121 gives no way to split it without the network's rules.
         /// </summary>
         /// <param name="address">
         /// X.121 address
         /// </param>
         /// <returns>
-        /// National number or original address if no DNIC
+        /// The digits after the DNIC, or the original address if it has no DNIC
         /// </returns>
         public string ExtractNationalNumber(string address)
         {
-            if (!IsValidAddress(address))
+            if (!IsInternationalDataNumber(address))
                 return address;
 
-            if (address.Length > DNIC_LENGTH)
-            {
-                return address.Substring(DNIC_LENGTH);
-            }
-
-            return address; // Entire address is national number
+            return address.Substring(DNIC_LENGTH);
         }
 
         /// <summary>
@@ -297,7 +339,9 @@ namespace RetroIO.Protocols.X25.Protocols
 
             string fullAddress = dnic + nationalNumber;
 
-            if (!IsValidAddress(fullAddress))
+            // DNIC + NTN is an international data number (X.121 7.6.1, line 508): at most 14 digits, so an NTN of
+            // at most 10 (7.7, lines 546-551), and the DNIC must begin with 1-7 (Table 1).
+            if (!IsInternationalDataNumber(fullAddress))
             {
                 throw new ArgumentException($"Generated address is invalid: {fullAddress}");
             }
@@ -305,55 +349,24 @@ namespace RetroIO.Protocols.X25.Protocols
             return fullAddress;
         }
 
-        /// <summary>
-        /// Check if address is local format (shorter than DNIC length)
-        /// </summary>
-        /// <param name="address">
-        /// X.121 address
-        /// </param>
-        /// <returns>
-        /// True if local format address
-        /// </returns>
-        public bool IsLocalFormat(string address)
-        {
-            return IsValidAddress(address) && address.Length < DNIC_LENGTH;
-        }
+        // IsLocalFormat ("shorter than 4 digits") and GetRegionName were removed. X.121 does not tell a local
+        // number from an international one by its length: a local NTN can be up to 10 digits (7.7, line 550),
+        // and which format a call uses is chosen by a prefix that is a national matter (7.8.2, lines 562-568).
 
         /// <summary>
-        /// Check if address is international format (includes DNIC)
+        /// Check if address has the form of an international data number (see
+        /// <see cref="IsInternationalDataNumber"/>). This is a reading of the digits only; a local number of the
+        /// same form passes too, and only the network's prefix rule (X.121 7.8.2) can tell them apart.
         /// </summary>
         /// <param name="address">
         /// X.121 address
         /// </param>
         /// <returns>
-        /// True if international format address
+        /// True if the digits have the form of an international data number
         /// </returns>
         public bool IsInternationalFormat(string address)
         {
-            return IsValidAddress(address) && address.Length >= DNIC_LENGTH;
-        }
-
-        /// <summary>
-        /// Get region name from region code
-        /// </summary>
-        /// <param name="regionCode">
-        /// First digit of DNIC
-        /// </param>
-        /// <returns>
-        /// Region name or "Unknown"
-        /// </returns>
-        public string GetRegionName(char regionCode)
-        {
-            return regionCode switch
-            {
-                RegionCodes.EUROPE_AFRICA_MIDDLE_EAST => "Europe/Africa/Middle East",
-                RegionCodes.NORTH_AMERICA => "North America",
-                RegionCodes.ASIA_OCEANIA => "Asia/Oceania",
-                RegionCodes.LATIN_AMERICA_CARIBBEAN => "Latin America/Caribbean",
-                RegionCodes.RESERVED_6 => "Reserved (6)",
-                RegionCodes.RESERVED_7 => "Reserved (7)",
-                _ => "Unknown"
-            };
+            return IsInternationalDataNumber(address);
         }
 
         /// <summary>
@@ -371,19 +384,16 @@ namespace RetroIO.Protocols.X25.Protocols
             {
                 OriginalAddress = address,
                 IsValid = IsValidAddress(address),
-                IsLocal = IsLocalFormat(address),
                 IsInternational = IsInternationalFormat(address)
             };
 
-            if (info.IsValid && info.IsInternational)
+            if (info.IsInternational)
             {
                 info.DNIC = ExtractDNIC(address);
                 info.NationalNumber = ExtractNationalNumber(address);
-                
                 if (!string.IsNullOrEmpty(info.DNIC))
                 {
-                    info.RegionCode = info.DNIC[0];
-                    info.RegionName = GetRegionName(info.RegionCode);
+                    info.DnicFirstDigit = info.DNIC[0];
                 }
             }
             else if (info.IsValid)
@@ -409,11 +419,8 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public bool IsValid { get; set; }
         /// <summary>
-        /// Gets or sets whether the address has the local format.
-        /// </summary>
-        public bool IsLocal { get; set; }
-        /// <summary>
-        /// Gets or sets whether the address has the international format.
+        /// Gets or sets whether the digits have the form of an international data number (DNIC + NTN,
+        /// X.121 7.6.1). A local number of the same form also sets it; see <see cref="X121.IsInternationalFormat"/>.
         /// </summary>
         public bool IsInternational { get; set; }
         /// <summary>
@@ -421,17 +428,15 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public string? DNIC { get; set; }
         /// <summary>
-        /// Gets or sets the national number part, or null.
+        /// Gets or sets the digits after the DNIC (the NTN), or the whole address when it has no DNIC; null when
+        /// the address is not valid.
         /// </summary>
         public string? NationalNumber { get; set; }
         /// <summary>
-        /// Gets or sets the first digit of the DNIC.
+        /// Gets or sets the first digit of the DNIC: 1 for mobile satellite systems and global networks, 2-7 for
+        /// a country or geographic zone (X.121 Table 1, lines 395-409). X.121 gives the zones no names.
         /// </summary>
-        public char RegionCode { get; set; }
-        /// <summary>
-        /// Gets or sets the region name for the region code.
-        /// </summary>
-        public string RegionName { get; set; } = "";
+        public char DnicFirstDigit { get; set; }
 
         /// <summary>
         /// Returns a one-line description of the address.
@@ -439,9 +444,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <returns>
         /// One of these:
         ///  - <c>Invalid:</c> followed by the original address, when the address is not valid.
-        ///  - for an international address, the original address followed by its DNIC, region name
-        ///    and national number in brackets.
-        ///  - otherwise the original address followed by <c>(Local format)</c>.
+        ///  - for an address with the form of an international data number, the original address followed by
+        ///    its DNIC and the digits after it in brackets.
+        ///  - otherwise the original address followed by <c>(no DNIC)</c>.
         /// </returns>
         public override string ToString()
         {
@@ -449,9 +454,9 @@ namespace RetroIO.Protocols.X25.Protocols
                 return $"Invalid: {OriginalAddress}";
 
             if (IsInternational)
-                return $"{OriginalAddress} (DNIC: {DNIC}, Region: {RegionName}, National: {NationalNumber})";
+                return $"{OriginalAddress} (DNIC: {DNIC}, NTN: {NationalNumber})";
 
-            return $"{OriginalAddress} (Local format)";
+            return $"{OriginalAddress} (no DNIC)";
         }
     }
 }

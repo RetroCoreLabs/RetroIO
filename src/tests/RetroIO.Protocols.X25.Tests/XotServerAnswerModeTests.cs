@@ -137,7 +137,7 @@ namespace RetroIO.Protocols.X25.Tests
             using ProtocolRuntime runtime = StartRuntime(port, answerAutomatically: false);
             XotServerTransport server = (XotServerTransport)runtime.TransportInterfaces["XOT_Server"];
 
-            // A cause other than the router's own 0x0B, so the test can tell the program's refusal
+            // A cause other than the router's own 0x0D, so the test can tell the program's refusal
             // from a refusal by the router.
             bool rejected = false;
             server.IncomingCall += (s, call) => rejected = server.RejectCall(call, X25Cause.OutOfOrder);
@@ -178,8 +178,8 @@ namespace RetroIO.Protocols.X25.Tests
         // ------------------------------------------------------------------ the router answers first (2026-11-17)
         //
         // Decided by Ronny, 2026-11-17: the router answers an incoming call first. A call it has no
-        // inbound route for is refused at once with a Clear Request, cause 0x0B access barred (X.25
-        // 4.1.4 and 4.1.7, Table 5-7), on the connection the call came in on; only a call it has a
+        // inbound route for is refused at once with a Clear Request, cause 0x0D not obtainable (X.25
+        // 4.1.4 and 4.1.7, Table C.1 row 24; it was 0x0B access barred until 2026-11-18), on the connection the call came in on; only a call it has a
         // route for is offered to the program (wait mode) or answered by the local service
         // (automatic mode).
 
@@ -191,19 +191,30 @@ namespace RetroIO.Protocols.X25.Tests
         /// </summary>
         private static int CallAndWaitForClear(X25Client client, string called)
         {
+            return CallAndWaitForClear(client, called, out _);
+        }
+
+        /// <summary>
+        /// As <see cref="CallAndWaitForClear(X25Client, string)"/>, and also gives the diagnostic of the clear.
+        /// </summary>
+        private static int CallAndWaitForClear(X25Client client, string called, out int diagnostic)
+        {
             int cause = -1;
+            int diag = -1;
             bool connected = false;
             ManualResetEventSlim cleared = new ManualResetEventSlim(false);
             client.SetOnConnected((c, vc) => connected = true);
             client.SetOnClear((c, vc, clearCause, clearDiagnostic) =>
             {
                 cause = clearCause;
+                diag = clearDiagnostic;
                 cleared.Set();
             });
 
             Assert.That(client.Call(called), Is.Not.Null, "the client must place the call");
             Assert.That(cleared.Wait(5000), Is.True, "the caller must be told the call is cleared");
             Assert.That(connected, Is.False, "a refused call must not connect");
+            diagnostic = diag;
             return cause;
         }
 
@@ -245,7 +256,7 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void WaitMode_NoRoute_IsRefusedWithAccessBarred_AndNotOfferedToTheProgram()
+        public void WaitMode_NoRoute_IsRefusedWithNotObtainable_AndNotOfferedToTheProgram()
         {
             int port = FreePort();
             using ProtocolRuntime runtime = StartRuntime(port, answerAutomatically: false, withRoute: false);
@@ -253,22 +264,26 @@ namespace RetroIO.Protocols.X25.Tests
             List<X25CallRequest> offered = CollectOffers(server);
 
             using X25Client client = OpenClient(port, "noroute-wait");
-            int cause = CallAndWaitForClear(client, ServiceAddress);
+            int cause = CallAndWaitForClear(client, ServiceAddress, out int diagnostic);
 
-            Assert.That(cause, Is.EqualTo(X25Cause.AccessBarred), "no inbound route: Table 5-7, 0x0B access barred");
+            // X.25 Table C.1 row 24, "Unknown number": Not obtainable, diagnostic 67 (X25CallDecision).
+            // Until 2026-11-18 this was 0x0B access barred.
+            Assert.That(cause, Is.EqualTo(X25Cause.NotObtainable), "no inbound route: Table C.1 row 24, 0x0D not obtainable");
+            Assert.That(diagnostic, Is.EqualTo(X25Diagnostic.InvalidCalledAddress), "Table C.1 row 24: # 67");
             Assert.That(CountOf(offered), Is.EqualTo(0), "the router refused it; the program must not be offered the call");
         }
 
         [Test]
-        public void AutomaticMode_NoRoute_IsRefusedWithAccessBarred()
+        public void AutomaticMode_NoRoute_IsRefusedWithNotObtainable()
         {
             int port = FreePort();
             using ProtocolRuntime runtime = StartRuntime(port, answerAutomatically: true, withRoute: false);
 
             using X25Client client = OpenClient(port, "noroute-auto");
-            int cause = CallAndWaitForClear(client, ServiceAddress);
+            int cause = CallAndWaitForClear(client, ServiceAddress, out int diagnostic);
 
-            Assert.That(cause, Is.EqualTo(X25Cause.AccessBarred), "the router answers first in automatic mode too");
+            Assert.That(cause, Is.EqualTo(X25Cause.NotObtainable), "the router answers first in automatic mode too");
+            Assert.That(diagnostic, Is.EqualTo(X25Diagnostic.InvalidCalledAddress), "Table C.1 row 24: # 67");
         }
 
         [Test]
@@ -314,7 +329,7 @@ namespace RetroIO.Protocols.X25.Tests
             // Refused by the router: the program never had the call, and a request with the same
             // addresses is not that call.
             using X25Client refusedCaller = OpenClient(port, "refused");
-            Assert.That(CallAndWaitForClear(refusedCaller, UnroutedAddress), Is.EqualTo(X25Cause.AccessBarred));
+            Assert.That(CallAndWaitForClear(refusedCaller, UnroutedAddress), Is.EqualTo(X25Cause.NotObtainable));
             Assert.That(CountOf(offered), Is.EqualTo(0));
             X25CallRequest lookalike = new X25CallRequest(UnroutedAddress, "23430001");
             Assert.That(server.AcceptCall(lookalike), Is.False, "a call the router refused cannot be accepted");
@@ -368,7 +383,7 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(unrouted.Call(UnroutedAddress), Is.Not.Null);
 
             Assert.That(unroutedCleared.Wait(5000), Is.True, "the call with no route is refused at once");
-            Assert.That(unroutedCause, Is.EqualTo(X25Cause.AccessBarred));
+            Assert.That(unroutedCause, Is.EqualTo(X25Cause.NotObtainable));
             Assert.That(WaitUntil(() => CountOf(offered) == 1, 5000), Is.True, "only the routed call is offered");
             Assert.That(offered[0].CalledAddress, Is.EqualTo(ServiceAddress));
 

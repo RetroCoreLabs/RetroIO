@@ -81,6 +81,16 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte InvalidFacilityLength = 69;
 
         /// <summary>
+        /// 70 - Incoming call barred (Annex E; Table C.1 row 25 gives it with cause "Access barred").
+        /// </summary>
+        public const byte IncomingCallBarred = 70;
+
+        /// <summary>
+        /// 71 - No logical channel available (Annex E; Table C.1 row 31 gives it with cause "Number busy").
+        /// </summary>
+        public const byte NoLogicalChannelAvailable = 71;
+
+        /// <summary>
         /// 72 - Call collision: the diagnostic given to the application whose outgoing call lost a collision at the DCE (X.25 4.1.6).
         /// </summary>
         public const byte CallCollision = 72;
@@ -251,5 +261,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// local procedure error, which is exactly why these names carry their table.
         /// </summary>
         public const byte NetworkCongestion = 0x05;
+
+        /// <summary>
+        /// 00000001 - Number busy, clearing (Table 5-7, the first row of the second block). The same
+        /// octet as the RESETTING cause "Out of order" (Table 5-8).
+        /// </summary>
+        public const byte NumberBusy = 0x01;
     }
 }

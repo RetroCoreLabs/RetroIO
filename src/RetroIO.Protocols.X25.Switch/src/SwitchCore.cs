@@ -105,9 +105,20 @@ namespace RetroIO.Protocols.X25.Switch
 
         /// <summary>
         /// The reserved management address. Incoming calls to this address are handed to
-        /// <see cref="ManagementCall"/> instead of being routed. Null or empty disables it.
+        /// <see cref="ManagementCall"/> instead of being routed. Null or empty disables it. Held by the
+        /// switch's router (<see cref="Router"/>), which decides it like every other address.
         /// </summary>
-        public string? ManagementAddress { get; set; }
+        public string? ManagementAddress
+        {
+            get => Router.ManagementAddress;
+            set => Router.ManagementAddress = value;
+        }
+
+        /// <summary>
+        /// The one routing decision of this switch: every call that comes in on any port is decided
+        /// here, and the port only carries out the answer.
+        /// </summary>
+        public SwitchCallRouter Router { get; }
 
         /// <summary>
         /// Raised when a call arrives for <see cref="ManagementAddress"/>. The handler owns accepting the
@@ -124,6 +135,7 @@ namespace RetroIO.Protocols.X25.Switch
         public SwitchCore(SwitchNode node)
         {
             _node = node ?? throw new ArgumentNullException(nameof(node));
+            Router = new SwitchCallRouter(_node.Config.Routing, _node.GetPort);
             for (int i = 0; i < _node.Ports.Count; i++)
             {
                 Wire(_node.Ports[i]);
@@ -447,8 +459,10 @@ namespace RetroIO.Protocols.X25.Switch
         {
             inPort.Counters.IncrementCallsIn();
 
-            // Calls to the reserved management address are handed to the management surface, not routed.
-            if (!string.IsNullOrEmpty(ManagementAddress) && calledAddress == ManagementAddress)
+            // Calls to the reserved management address are for the switch itself: the router delivers
+            // them locally, to the management surface. Asked before the NUI checks, which are about who
+            // pays for a call through the network.
+            if (Router.IsForThisSwitch(calledAddress))
             {
                 ManagementCall?.Invoke(inPort, inLci, calledAddress, callingAddress, callUserData);
                 return;
@@ -487,19 +501,19 @@ namespace RetroIO.Protocols.X25.Switch
                 paying = FindAccount(callingAddress);
             }
 
-            // Resolve an egress port for the dialled address; never route back to the ingress port.
-            if (!_node.Config.Routing.TryLookup(calledAddress, inPort.Id, out int outPortId))
+            // The router decides where the call goes (SwitchCallRouter): no route or no such port is Not
+            // obtainable 67, a port whose line is out of order is Out of order 0 (X.25 Table C.1, 4.6.4).
+            // This port only sends the refusal. Until 2026-11-18 every one of these was 0x0D with
+            // diagnostic 0, and a call was placed on a port that was down. Never routed back out of the
+            // port it came in on (X121RoutingTable).
+            X25CallDecision decision = Router.Decide(calledAddress, inPort.Id);
+            if (decision.Action != X25CallAction.Forward)
             {
-                inPort.ClearCall(inLci, CauseNotObtainable, 0);
+                inPort.ClearCall(inLci, decision.Cause, decision.Diagnostic);
                 return;
             }
 
-            ISwitchPort? outPort = _node.GetPort(outPortId);
-            if (outPort == null)
-            {
-                inPort.ClearCall(inLci, CauseNotObtainable, 0);
-                return;
-            }
+            ISwitchPort outPort = _node.GetPort(decision.OutPort)!;
 
             // Place the onward call; a zero LCI means the egress port could not initiate it.
             // X.25 6.9 and 6.12: the window and packet size of a call are negotiated end to end. The onward Call Request
@@ -522,7 +536,16 @@ namespace RetroIO.Protocols.X25.Switch
 
             if (outLci == 0)
             {
-                inPort.ClearCall(inLci, CauseNotObtainable, 0);
+                // The router found the port in service and the port still could not place the call. If
+                // its line went down meanwhile (a link that dropped) that is Out of order (4.6.4);
+                // otherwise X.25 Table C.1 row 31, no logical channel available, is Number busy,
+                // diagnostic 71. A port does not say why PlaceCall failed, so its state is read again
+                // here; a failed XOT dial on a port that still has another connection up is reported as
+                // busy, which may be wrong (src/BUGS.md).
+                X25CallDecision failed = SwitchCallRouter.IsInService(outPort)
+                    ? X25CallDecision.Busy()
+                    : X25CallDecision.DestinationOutOfOrder();
+                inPort.ClearCall(inLci, failed.Cause, failed.Diagnostic);
                 return;
             }
 
