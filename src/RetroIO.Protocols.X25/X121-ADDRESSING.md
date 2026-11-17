@@ -6,6 +6,7 @@ should decide where a call goes. Every rule below cites its clause in the ITU-T 
 - [ITU-T X.121](https://www.itu.int/rec/T-REC-X.121/en) (10/2000) - the international numbering plan
 - [ITU-T X.25](https://www.itu.int/rec/T-REC-X.25/en) (10/96) - the DTE/DCE interface, address field and clearing causes
 - [ITU-T X.75](https://www.itu.int/rec/T-REC-X.75/en) (10/96) - the signalling between public networks (the gateway link)
+- [CCITT X.110](https://www.itu.int/rec/T-REC-X.110/en) (11/88) - international routing principles and routing plan
 
 ## 1. What an address is made of
 
@@ -106,7 +107,51 @@ The rules in the picture:
   public networks that link is X.75.
 - **No route at all** clears with *Not obtainable*; **a route whose port is down** clears with *Out of order*.
 
-## 5. Clearing causes a router uses
+## 5. How routes between networks were set up (1980s)
+
+No ITU text defines a protocol that passes routes between networks. Routes were a **plan made by people**:
+
+- **The operators plan them, by agreement between each pair of countries** (X.110 3.1). In return for
+  questions, each one tells the other which DNICs its international exchanges reach, circuits and speeds,
+  busy hours, alternative routes and facilities (X.110 9, Annex C).
+- **Each destination has a fixed list**: a direct "high usage" route, then alternative route 1, then
+  alternative route 2 (X.110 3.5, Appendix I.1). An agreed route may be offered on to third countries.
+- **Each international exchange picks the next link** from the called DNIC or DCC (X.110 3.10, 5.1; X.121
+  7.12). Reading digits after the DNIC is agreed between the two sides. The route is kept for the whole call
+  (X.110 3.11).
+- **At most 4 international links** in a row, and at most 2 by satellite (X.110 3.2, 3.4).
+- **No loops** (X.110 3.6, 5.6): every transit network writes its DNIC into the call, in the X.75 *transit
+  network identification* field (X.75 5.3.1). X.75 clears a call whose route would loop or grow too long
+  (Table E.1 items 40, 41).
+- **Several X.75 links to the same network**: which one a call takes is "network dependent" (X.75 3.0).
+- **The ITU's only part** is the DNIC list. A new, changed or removed DNIC is reported to the ITU and
+  published in the *Operational Bulletin*, with a full list once a year (X.121 Annex L).
+
+```mermaid
+flowchart LR
+    A["Operator A"] <-- "bilateral agreement<br/>DNICs, circuits, alternatives" --> B["Operator B"]
+    ITU["ITU Operational Bulletin<br/>list of DNICs"] -.-> A
+    ITU -.-> B
+    A --> TA["Route list in each<br/>international exchange:<br/>direct, alt 1, alt 2"]
+    B --> TB["Route list in each<br/>international exchange:<br/>direct, alt 1, alt 2"]
+    TA <-- "X.75 link" --> TB
+
+    style ITU fill:#FFA726,stroke:#FFA726,color:#fff
+    style A fill:#3F51B5,stroke:#3F51B5,color:#fff
+    style B fill:#3F51B5,stroke:#3F51B5,color:#fff
+    style TA fill:#009688,stroke:#009688,color:#fff
+    style TB fill:#009688,stroke:#009688,color:#fff
+```
+
+**Not in any text:** how a new DNIC got from the Bulletin into a switch. Typed in by an operator fits all of
+the above, but that is an inference. Inside one network, routing was the maker's own design. Sources found
+so far say Telenet used fixed tables, Tymnet a central supervisor, and Datapac updated its routes from its
+neighbours (Sproule and Mellor, IEEE Trans. Communications, 1981).
+
+**For our switch** this means: own DNIC(s) set in the configuration; per destination a route with ordered
+backups; a default gateway last; at most 4 transit networks; never a network the call has already passed.
+
+## 6. Clearing causes a router uses
 
 Cause field, Table 5-7/X.25; network diagnostic, Table E.1/X.25.
 
@@ -124,9 +169,9 @@ Cause field, Table 5-7/X.25; network diagnostic, Table E.1/X.25.
 | International routing problem | 119 | No way out to another network |
 | Unknown called DNIC | 121 | The DNIC is not ours and no route or gateway knows it |
 
-## 6. Status in RetroIO
+## 7. Status in RetroIO
 
-Done: one router decides every incoming call on every line and switch port, with the causes of section 5,
+Done: one router decides every incoming call on every line and switch port, with the causes of section 6,
 and the address check follows section 1 (any 1-15 digits; the DNIC rules only for international numbers).
 
 Not done yet: own-DNIC completion, the longest-match order over DNIC and DCC, and the default gateway. The
