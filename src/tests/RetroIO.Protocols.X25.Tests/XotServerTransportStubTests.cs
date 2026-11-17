@@ -15,8 +15,10 @@ using RetroIO.Protocols.X25.Transport;
 namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
-    /// The XOT server transport has no way to answer a call on its TCP connection yet. These tests pin
-    /// that AcceptCall and RejectCall say so, instead of counting a call and returning true.
+    /// The XOT server transport answers a call through the X.25 engine its owning runtime keeps for the
+    /// connection (since 2026-11-17, see XotServerAnswerModeTests). A transport no runtime owns has no
+    /// engine to answer with; these tests pin that AcceptCall and RejectCall say so, instead of
+    /// counting a call and returning true.
     /// </summary>
     [TestFixture]
     public class XotServerTransportStubTests
@@ -39,24 +41,24 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void AcceptCall_IsNotImplemented_AndSaysSo()
+        public void AcceptCall_WithNoRuntime_SaysThereIsNoEngine()
         {
             XotServerTransport transport = NewTransport();
 
-            NotSupportedException? ex = Assert.Throws<NotSupportedException>(() => transport.AcceptCall(NewCall()));
+            InvalidOperationException? ex = Assert.Throws<InvalidOperationException>(() => transport.AcceptCall(NewCall()));
 
-            Assert.That(ex!.Message, Does.Contain("not implemented"));
+            Assert.That(ex!.Message, Does.Contain("no X.25 engine"));
             Assert.That(transport.GetStatistics().InboundCallsAccepted, Is.EqualTo(0), "a call that was not answered must not be counted as accepted");
         }
 
         [Test]
-        public void RejectCall_IsNotImplemented_AndSaysSo()
+        public void RejectCall_WithNoRuntime_SaysThereIsNoEngine()
         {
             XotServerTransport transport = NewTransport();
 
-            NotSupportedException? ex = Assert.Throws<NotSupportedException>(() => transport.RejectCall(NewCall(), 0x0B));
+            InvalidOperationException? ex = Assert.Throws<InvalidOperationException>(() => transport.RejectCall(NewCall(), 0x0B));
 
-            Assert.That(ex!.Message, Does.Contain("not implemented"));
+            Assert.That(ex!.Message, Does.Contain("no X.25 engine"));
             Assert.That(transport.GetStatistics().InboundCallsRejected, Is.EqualTo(0), "a call that was not cleared must not be counted as rejected");
         }
     }

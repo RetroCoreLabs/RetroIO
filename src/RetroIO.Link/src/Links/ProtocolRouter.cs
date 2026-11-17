@@ -23,7 +23,7 @@ namespace RetroIO.Link
         private const byte SINTRAN_MARKER_1 = 0x21;
         private const byte SINTRAN_MARKER_2 = 0x13;
 
-        // SINTRAN protocol IDs (from SintranBinaryProtocol)
+        // SINTRAN protocol IDs (the same values the SintranBinaryProtocol class of the removed package RetroIO.Protocols.X25.Sintran used)
         private const byte SINTRAN_TAD = 0xDD;
         private const byte SINTRAN_PAD = 0xDA;
         private const byte SINTRAN_ROUTING = 0xDE;

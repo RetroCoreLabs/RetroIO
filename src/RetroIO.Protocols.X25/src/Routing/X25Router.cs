@@ -480,9 +480,12 @@ namespace RetroIO.Protocols.X25.Transport
         {
             _logger.LogInformation("Rejecting call from {CallingAddress} to {CalledAddress} with cause 0x{Cause:X2}",
                                   callRequest.CallingAddress, callRequest.CalledAddress, cause);
-            
+
             // TODO: Implement call rejection
             // TODO: Send X.25 Clear Request packet with cause code
+            // OPEN (BUGS.md, 2026-11-17): this sends nothing. Passing the refusal to the transport was tried and
+            // undone: the router hears the same IncomingCall as the program in "wait for an answer" mode, so with no
+            // route it refused calls before the program could answer them.
         }
 
         #endregion

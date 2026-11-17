@@ -62,7 +62,6 @@ flowchart TB
         ROUTING["Protocols.X25.Routing<br/>X.121 routing table, hunt groups"]
         MON["Protocols.X25.Monitor<br/>X25MON/1 capture and decode"]
         NMC["Protocols.X25.Nmc<br/>network discovery over management"]
-        SIN["Protocols.X25.Sintran<br/>SINTRAN protocols over PVC"]
     end
 
     THIS --> CLEAN
@@ -74,7 +73,6 @@ flowchart TB
     SWMGMT --> SWITCH
     MON --> CLEAN
     NMC --> SWMGMT
-    SIN --> THIS
 
     classDef clean fill:#009688,stroke:#00695C,stroke-width:2px,color:#fff
     classDef run   fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
@@ -82,7 +80,7 @@ flowchart TB
 
     class CLEAN clean
     class THIS,RT,COMMON run
-    class CLIENT,SWITCH,SWMGMT,ROUTING,MON,NMC,SIN cons
+    class CLIENT,SWITCH,SWMGMT,ROUTING,MON,NMC cons
 ```
 
 | Package | Reach for it when you want to | README |
@@ -97,7 +95,6 @@ flowchart TB
 | `.X25.Routing` | An X.121 routing table with hunt groups | [README](../RetroIO.Protocols.X25.Routing/README.md) |
 | `.X25.Monitor` | Capture, decode and stream traffic to a viewer | [README](../RetroIO.Protocols.X25.Monitor/README.md) |
 | `.X25.Nmc` | Discover and walk a whole network | [README](../RetroIO.Protocols.X25.Nmc/README.md) |
-| `.X25.Sintran` | SINTRAN's own protocols over permanent circuits | [README](../RetroIO.Protocols.X25.Sintran/README.md) |
 
 ## How an incoming call finds its service
 
@@ -109,7 +106,6 @@ flowchart TB
     REG["ProtocolServiceRegistry"]
     PAD["TadProtocolService<br/>terminal access, X.29"]
     XMSG["XmsgProtocolService<br/>COSMOS file transfer, RPC"]
-    SIN["SintranTadProtocolService"]
     NONE["No service matches:<br/>clear the call"]
 
     CALL --> REG
@@ -118,7 +114,6 @@ flowchart TB
     ADDR --> PAD
     CUD --> PAD
     CUD --> XMSG
-    CUD --> SIN
     REG --> NONE
 
     classDef core fill:#009688,stroke:#00695C,stroke-width:2px,color:#fff
@@ -128,7 +123,7 @@ flowchart TB
 
     class CALL,REG core
     class ADDR,CUD q
-    class PAD,XMSG,SIN ok
+    class PAD,XMSG ok
     class NONE bad
 ```
 

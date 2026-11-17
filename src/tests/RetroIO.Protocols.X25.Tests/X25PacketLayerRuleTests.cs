@@ -650,6 +650,56 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(cleared, Is.EqualTo(1), "told exactly once, however many steps the ending took");
         }
 
+        // X.25 4.1.4: "If the called DTE does not accept the call by a call accepted packet or does
+        // not reject it by a clear request packet as described in 4.1.7 within time-out T11 (see
+        // Annex D), the DCE will consider it as a procedure error from the called DTE and will clear
+        // the virtual call according to the procedure described in 4.1.8."
+        // Table D.1/X.25 (DCE time-outs), T11: 180 s, started when the DCE issues an incoming call,
+        // state p3, normally ended when the call accepted, clear request or call request is received;
+        // on expiry "DCE enters the p7 state signalling a clear indication (local procedure error # 49)".
+
+        [Test]
+        public void R7_T11Expiry_AtADce_ClearsTheUnansweredIncomingCallWithLocalProcedureError49()
+        {
+            X25Config dceConfig = new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, IsDte = false };
+            X25Layer dce = new X25Layer(_sink, dceConfig);
+            int cleared = 0;
+            byte seenDiag = 0;
+            dce.Cleared += (l, c, cause, diag) => { cleared++; seenDiag = diag; };
+
+            long start = Environment.TickCount64;
+            dce.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress));
+            Assert.That(dce.Circuits[5].State, Is.EqualTo(X25VcState.CallIncoming));
+            _sink.Sent.Clear();
+
+            // Just short of 180 s after the call was offered nothing happens yet.
+            dce.Tick(start + 179_000);
+            Assert.That(_sink.Sent, Is.Empty, "T11 is 180 s (Table D.1); it has not run out");
+            Assert.That(dce.Circuits[5].State, Is.EqualTo(X25VcState.CallIncoming));
+
+            dce.Tick(FarFuture);
+
+            Assert.That(_sink.CountOfType(X25PacketType.ClearRequest), Is.EqualTo(1), "the unanswered call must be cleared");
+            Assert.That(_sink.LastInfo.ClearingCause, Is.EqualTo(X25Cause.ClearingLocalProcedureError), "Table D.1: local procedure error");
+            Assert.That(_sink.LastInfo.DiagnosticCode, Is.EqualTo(X25Diagnostic.TimeExpiredCall), "Table D.1: # 49");
+            Assert.That(dce.Circuits[5].State, Is.EqualTo(X25VcState.ClearRequest));
+            Assert.That(cleared, Is.EqualTo(1), "the application was offered the call, so it is told it is gone");
+            Assert.That(seenDiag, Is.EqualTo(X25Diagnostic.TimeExpiredCall));
+        }
+
+        [Test]
+        public void R7_T11_IsStoppedByTheAnswer()
+        {
+            _layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, LocalAddress, RemoteAddress));
+            Assert.That(_layer.AcceptCall(5), Is.True);
+            _sink.Sent.Clear();
+
+            _layer.Tick(FarFuture);
+
+            Assert.That(_sink.Sent, Is.Empty, "a call accepted ends T11 (Table D.1: DCE leaves the p3 state)");
+            Assert.That(_layer.Circuits[5].State, Is.EqualTo(X25VcState.DataTransfer));
+        }
+
         [Test]
         public void R7_T23Expiry_RetransmitsTheClearRequestThenGivesUp()
         {

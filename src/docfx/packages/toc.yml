@@ -33,8 +33,6 @@
     href: ../../RetroIO.Protocols.X25.Routing/README.md
   - name: RetroIO.Protocols.X25.Runtime
     href: ../../RetroIO.Protocols.X25.Runtime/README.md
-  - name: RetroIO.Protocols.X25.Sintran
-    href: ../../RetroIO.Protocols.X25.Sintran/README.md
   - name: RetroIO.Protocols.X25.Switch.Management
     href: ../../RetroIO.Protocols.X25.Switch.Management/README.md
   - name: RetroIO.Protocols.X25.Switch

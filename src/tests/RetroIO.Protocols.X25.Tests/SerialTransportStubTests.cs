@@ -13,9 +13,9 @@ using RetroIO.Protocols.X25.Runtime.Transport;
 namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
-    /// The serial transport of the old runtime has no send path any more. These tests pin that
-    /// PlaceCall, AcceptCall and RejectCall say so, instead of logging "would accept", counting the
-    /// call and returning true with nothing sent.
+    /// The serial transport on a line with no X.25 data link. These tests pin that PlaceCall,
+    /// AcceptCall and RejectCall refuse there, instead of logging "would accept", counting the call
+    /// and returning true with nothing sent.
     /// </summary>
     [TestFixture]
     public class SerialTransportStubTests : TestBase
@@ -30,25 +30,24 @@ namespace RetroIO.Protocols.X25.Tests
             return new X25CallRequest("200", "100");
         }
 
+        // AcceptCall and RejectCall are built since 2026-11-17: they hand the program's answer to the
+        // line's X.25 engine for a call the line offered (SerialIncomingCallTests.WaitMode_*). A call
+        // that was never offered has no channel to answer on, so nothing is sent and false comes back.
         [Test]
-        public void AcceptCall_IsNotImplemented_AndSaysSo()
+        public void AcceptCall_ForACallThatWasNeverOffered_IsRefused()
         {
             SerialTransport transport = NewTransport();
 
-            NotSupportedException? ex = Assert.Throws<NotSupportedException>(() => transport.AcceptCall(NewCall()));
-
-            Assert.That(ex!.Message, Does.Contain("not implemented"));
+            Assert.That(transport.AcceptCall(NewCall()), Is.False);
             Assert.That(transport.GetStatistics().InboundCallsAccepted, Is.EqualTo(0), "a call that was not answered must not be counted as accepted");
         }
 
         [Test]
-        public void RejectCall_IsNotImplemented_AndSaysSo()
+        public void RejectCall_ForACallThatWasNeverOffered_IsRefused()
         {
             SerialTransport transport = NewTransport();
 
-            NotSupportedException? ex = Assert.Throws<NotSupportedException>(() => transport.RejectCall(NewCall(), 0x0B));
-
-            Assert.That(ex!.Message, Does.Contain("not implemented"));
+            Assert.That(transport.RejectCall(NewCall(), 0x0B), Is.False);
             Assert.That(transport.GetStatistics().InboundCallsRejected, Is.EqualTo(0), "a call that was not cleared must not be counted as rejected");
         }
 

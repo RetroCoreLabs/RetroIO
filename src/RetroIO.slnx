@@ -70,10 +70,6 @@
   <Folder Name="/src/RetroIO.Protocols.X25.Runtime/src/">
     <Project Path="RetroIO.Protocols.X25.Runtime/src/RetroIO.Protocols.X25.Runtime.csproj" />
   </Folder>
-  <Folder Name="/src/RetroIO.Protocols.X25.Sintran/" />
-  <Folder Name="/src/RetroIO.Protocols.X25.Sintran/src/">
-    <Project Path="RetroIO.Protocols.X25.Sintran/src/RetroIO.Protocols.X25.Sintran.csproj" />
-  </Folder>
   <Folder Name="/src/RetroIO.Protocols.X25.Switch.Management/" />
   <Folder Name="/src/RetroIO.Protocols.X25.Switch.Management/src/">
     <Project Path="RetroIO.Protocols.X25.Switch.Management/src/RetroIO.Protocols.X25.Switch.Management.csproj" />

@@ -128,6 +128,7 @@ namespace RetroIO.Protocols.X25.Runtime
                     DefaultWindowSize = windowSize,
                     DefaultPacketSize = (ushort)packetSize,
                     CallRequestTimeoutMs = (int)_config.X25.T21Timeout.TotalMilliseconds,
+                    IncomingCallTimeoutMs = (int)_config.X25.T11Timeout.TotalMilliseconds,
                     ResetRequestTimeoutMs = (int)_config.X25.T22Timeout.TotalMilliseconds,
                     ClearRequestTimeoutMs = (int)_config.X25.T23Timeout.TotalMilliseconds,
                     RestartTimeoutMs = (int)_config.X25.T20Timeout.TotalMilliseconds,
@@ -271,6 +272,7 @@ namespace RetroIO.Protocols.X25.Runtime
                 }
             }
 
+            ForgetOfferedCalls(endpoint, 0);
             endpoint.MarkLinkDown();
             for (int i = 0; i < circuits.Count; i++)
             {
@@ -678,6 +680,28 @@ namespace RetroIO.Protocols.X25.Runtime
                 UsedTransport = transport,
             };
 
+            // An entry set to wait for the program's answer: the call is offered through the
+            // transport's IncomingCall event and stays in p3 until the program calls AcceptCall or
+            // RejectCall (AcceptOfferedCall / RejectOfferedCall below), or until the engine's T11 runs
+            // out and clears it (X.25 4.1.4, Table D.1: 180 s). The call is remembered BEFORE it is
+            // offered, because a handler may answer inside the event. Nothing is routed yet: a local
+            // service that took the call now could start sending before the call is accepted.
+            if (connection is XotServerConnection && transport is XotServerTransport waitingXot && !waitingXot.AnswerIncomingCallsAutomatically)
+            {
+                RememberOfferedCall(request, endpoint, lci);
+                _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} offered to the program; it waits for an answer", called, endpoint.Name, lci);
+                waitingXot.OfferIncomingCall(request);
+                return;
+            }
+
+            if (connection is SerialTransport waitingSerial && !waitingSerial.AnswerIncomingCallsAutomatically)
+            {
+                RememberOfferedCall(request, endpoint, lci);
+                _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} offered to the program; it waits for an answer", called, endpoint.Name, lci);
+                waitingSerial.OfferIncomingCall(request);
+                return;
+            }
+
             // The routing layer allocates the local LCN, maps the circuit and binds the service, but
             // sends nothing: the engine below owns this circuit, so the answer goes out through it.
             // That is also why a LinkManager link works here - it has no ITransportInterface.
@@ -694,6 +718,178 @@ namespace RetroIO.Protocols.X25.Runtime
 
             _logger.LogWarning("Incoming call to {Called} on {Name} not routed - clearing", called, endpoint.Name);
             layer.ClearCall(lci, X25Cause.NotObtainable, X25Diagnostic.None);
+        }
+
+        // ------------------------------------------------------------------ calls waiting for the program
+
+        /// <summary>
+        /// One incoming call offered to the program and not answered yet: the request object the
+        /// program was given, and the engine and channel the answer goes to.
+        /// </summary>
+        private sealed class OfferedCall
+        {
+            public OfferedCall(X25CallRequest request, X25Endpoint endpoint, ushort lci)
+            {
+                Request = request;
+                Endpoint = endpoint;
+                Lci = lci;
+            }
+
+            public X25CallRequest Request { get; }
+
+            public X25Endpoint Endpoint { get; }
+
+            public ushort Lci { get; }
+        }
+
+        /// <summary>
+        /// Calls offered to the program and not answered yet. Guarded by <c>_routingLock</c>. Short:
+        /// one entry per call in p3 on a waiting entry.
+        /// </summary>
+        private readonly List<OfferedCall> _offeredCalls = new List<OfferedCall>();
+
+        private void RememberOfferedCall(X25CallRequest request, X25Endpoint endpoint, ushort lci)
+        {
+            lock (_routingLock)
+            {
+                _offeredCalls.Add(new OfferedCall(request, endpoint, lci));
+            }
+        }
+
+        /// <summary>
+        /// Takes an offered call out of the list by the request object the program was given.
+        /// </summary>
+        private OfferedCall? TakeOfferedCall(X25CallRequest request)
+        {
+            lock (_routingLock)
+            {
+                for (int i = 0; i < _offeredCalls.Count; i++)
+                {
+                    if (ReferenceEquals(_offeredCalls[i].Request, request))
+                    {
+                        OfferedCall found = _offeredCalls[i];
+                        _offeredCalls.RemoveAt(i);
+                        return found;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Forgets offered calls whose channel was cleared (by the caller, or by the engine at T11);
+        /// with <paramref name="lci"/> 0 every offered call of the endpoint is forgotten (the
+        /// connection is gone).
+        /// </summary>
+        private void ForgetOfferedCalls(X25Endpoint endpoint, ushort lci)
+        {
+            lock (_routingLock)
+            {
+                for (int i = _offeredCalls.Count - 1; i >= 0; i--)
+                {
+                    if (ReferenceEquals(_offeredCalls[i].Endpoint, endpoint) && (lci == 0 || _offeredCalls[i].Lci == lci))
+                    {
+                        _offeredCalls.RemoveAt(i);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The program's "accept" for a call offered by <see cref="OnEndpointIncomingCall"/>: the
+        /// call is routed to its local service the same way an automatic entry routes it, and the
+        /// engine sends the Call Accepted (X.25 4.1.4), which puts the channel in data transfer (p4).
+        /// A call no local service takes is cleared with cause 0x0D (not obtainable), as on an
+        /// automatic entry.
+        /// </summary>
+        /// <param name="request">
+        /// The request object the program was given by the transport's IncomingCall event.
+        /// </param>
+        /// <returns>
+        /// True when the Call Accepted went out; false when the call is not waiting for an answer
+        /// (never offered, already answered, or cleared meanwhile - by the caller or by T11), when no
+        /// service took it, or when the link refused the packet.
+        /// </returns>
+        internal bool AcceptOfferedCall(X25CallRequest request)
+        {
+            OfferedCall? offered = TakeOfferedCall(request);
+            if (offered == null)
+            {
+                _logger.LogWarning("Accept for a call to {Called} refused: the call is not waiting for an answer", request.CalledAddress);
+                return false;
+            }
+
+            X25Endpoint endpoint = offered.Endpoint;
+            lock (endpoint.Sync)
+            {
+                if (!endpoint.Layer.Circuits.TryGetValue(offered.Lci, out PacketLayer.X25Vc? vc) || vc.State != PacketLayer.X25VcState.CallIncoming)
+                {
+                    _logger.LogWarning("Accept for {Name} channel {Lci} refused: the call is no longer incoming", endpoint.Name, offered.Lci);
+                    return false;
+                }
+
+                if (!RoutingLayer.RouteIncomingCall(request, endpoint.Name))
+                {
+                    _logger.LogWarning("Incoming call to {Called} on {Name} accepted by the program but not routed - clearing", request.CalledAddress, endpoint.Name);
+                    endpoint.Layer.ClearCall(offered.Lci, X25Cause.NotObtainable, X25Diagnostic.None);
+                    return false;
+                }
+
+                if (!endpoint.Layer.AcceptCall(offered.Lci))
+                {
+                    _logger.LogWarning("Incoming call on {Name} channel {Lci}: Call Accepted refused by the engine", endpoint.Name, offered.Lci);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// The program's "refuse" for a call offered by <see cref="OnEndpointIncomingCall"/>: the
+        /// engine sends a Clear Request with the given cause and diagnostic 0 (X.25 4.1.4 and 4.1.7).
+        /// </summary>
+        /// <param name="request">
+        /// The request object the program was given by the transport's IncomingCall event.
+        /// </param>
+        /// <param name="cause">
+        /// The clearing cause (X.25 Table 5-7).
+        /// </param>
+        /// <returns>
+        /// True when the Clear Request went out; false when the call is not waiting for an answer.
+        /// </returns>
+        internal bool RejectOfferedCall(X25CallRequest request, byte cause)
+        {
+            OfferedCall? offered = TakeOfferedCall(request);
+            if (offered == null)
+            {
+                _logger.LogWarning("Reject for a call to {Called} refused: the call is not waiting for an answer", request.CalledAddress);
+                return false;
+            }
+
+            X25Endpoint endpoint = offered.Endpoint;
+            lock (endpoint.Sync)
+            {
+                if (!endpoint.Layer.Circuits.TryGetValue(offered.Lci, out PacketLayer.X25Vc? vc) || vc.State != PacketLayer.X25VcState.CallIncoming)
+                {
+                    _logger.LogWarning("Reject for {Name} channel {Lci} refused: the call is no longer incoming", endpoint.Name, offered.Lci);
+                    return false;
+                }
+
+                _logger.LogInformation("Incoming call to {Called} on {Name} channel {Lci} refused by the program, cause 0x{Cause:X2}",
+                    request.CalledAddress, endpoint.Name, offered.Lci, cause);
+                return endpoint.Layer.ClearCall(offered.Lci, cause, X25Diagnostic.None);
+            }
+        }
+
+        /// <summary>
+        /// Test seam: the X.25 engine the runtime keeps for a connection (an XOT connection, or a
+        /// serial transport), or null when none exists yet. Lets a test drive the engine's clock.
+        /// </summary>
+        internal X25Endpoint? EndpointForTest(object connection)
+        {
+            return FindEndpoint(connection);
         }
 
         private void OnEndpointCallConnected(X25Layer layer, ushort lci)
@@ -771,6 +967,10 @@ namespace RetroIO.Protocols.X25.Runtime
 
             // The engine reports Cleared inside its lock, so Sync is already held here.
             endpoint.ForgetCircuit(lci);
+
+            // A call still waiting for the program's answer is gone (the caller cleared it, or T11
+            // ran out): a late AcceptCall or RejectCall for it must find nothing.
+            ForgetOfferedCalls(endpoint, lci);
             if (!TryLocalLcn(endpoint, lci, out ushort localLcn))
             {
                 return;

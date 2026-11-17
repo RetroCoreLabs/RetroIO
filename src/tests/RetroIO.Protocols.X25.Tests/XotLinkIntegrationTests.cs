@@ -19,7 +19,6 @@ using RetroIO.Protocols.X25.Layers;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Runtime.Layers;
 using RetroIO.Protocols.X25.Runtime.Models;
-using RetroIO.Protocols.X25.Sintran;
 
 namespace RetroIO.Protocols.X25.Tests
 {

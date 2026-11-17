@@ -339,6 +339,13 @@ namespace RetroIO.Protocols.X25.Runtime
         public ushort MaxPacketSize { get; set; } = 128;
 
         /// <summary>
+        /// T11 time-out: how long an incoming call may wait for its answer before the engine clears
+        /// it. X.25 Table D.1: 180 s (X.25 4.1.4). Only matters on an entry that waits for the
+        /// program's answer; an automatic entry answers at once.
+        /// </summary>
+        public TimeSpan T11Timeout { get; set; } = TimeSpan.FromSeconds(180);
+
+        /// <summary>
         /// T20 timer duration (restart request)
         /// </summary>
         public TimeSpan T20Timeout { get; set; } = TimeSpan.FromSeconds(180);
@@ -536,6 +543,15 @@ namespace RetroIO.Protocols.X25.Runtime
         /// Description for this serial interface
         /// </summary>
         public string Description { get; set; } = string.Empty;
+
+        /// <summary>
+        /// How an incoming call on this line is answered. True (the default): the runtime answers
+        /// at once - Call Accepted when a local service takes the call, a Clear Request when none
+        /// does. False: the call is offered to the program through the serial transport's
+        /// <c>IncomingCall</c> event and waits for <c>AcceptCall</c> or <c>RejectCall</c>; a call not
+        /// answered within T11 (X.25 4.1.4, Table D.1: 180 s) is cleared by the line's X.25 engine.
+        /// </summary>
+        public bool AnswerIncomingCallsAutomatically { get; set; } = true;
 
         /// <summary>
         /// Enable LAPB auto-connect - automatically send SABM when interface is enabled
