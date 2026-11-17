@@ -536,7 +536,9 @@ namespace RetroIO.Protocols.X25.Runtime
                     // serial transport (HDLC, LAPB and the line's own X.25 engine in
                     // SerialTransport); a link built here from the same entry would open the same
                     // port and answer the same frames a second time.
-                    if (serialConfig.X25Link != null && serialConfig.X25Link.IsComplete)
+                    // The same test the runtime uses to open the port itself (OpenSerialPortsRunByTransports),
+                    // so the two can never both claim one line.
+                    if (IsRunBySerialTransport(serialConfig))
                     {
                         _logger.LogInformation("LinkManager: serial interface '{Name}' has X25Link options and is run by the serial transport; no link is created for it", serialConfig.Name);
                         continue;
@@ -1216,6 +1218,13 @@ namespace RetroIO.Protocols.X25.Runtime
                 // Load routing configuration
                 LoadRoutingConfiguration();
 
+                // Open the serial lines the serial transports run. This must come before the
+                // transports start: a serial transport only becomes active when its line is open
+                // in the physical layer. Until 2026-11-17 nothing in the program opened them (only
+                // tests did), so every serial transport configured here ended in Error with
+                // "interface not active".
+                OpenSerialPortsRunByTransports();
+
                 // Start all transport interfaces
                 StartTransportInterfaces();
 
@@ -1292,6 +1301,68 @@ namespace RetroIO.Protocols.X25.Runtime
                 {
                     _logger.LogError(ex, "Failed to create serial transport interface: {Name}", serialConfig.Name);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Tells which part of the program opens a configured serial line. Each line is opened by
+        /// exactly one part: a line with complete <c>X25Link</c> options is run by the serial
+        /// transport (HDLC, LAPB and the line's own X.25 engine), and its port is opened by this
+        /// runtime through <see cref="PhysicalLayer"/>; any other line belongs to the link manager,
+        /// which opens it itself when <see cref="InitializeLinksFromConfig"/> builds its link.
+        /// </summary>
+        /// <param name="serialConfig">
+        /// The configured serial line.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the serial transport runs the line, so this runtime opens its port;
+        /// <c>false</c> when the link manager opens it.
+        /// </returns>
+        private static bool IsRunBySerialTransport(SerialInterfaceConfig serialConfig)
+        {
+            return serialConfig.X25Link != null && serialConfig.X25Link.IsComplete;
+        }
+
+        /// <summary>
+        /// Opens, in the physical layer, every enabled serial line that the serial transport runs
+        /// (see <see cref="IsRunBySerialTransport"/>). A line the link manager opens is skipped, so
+        /// no port is opened twice. A port that fails to open is logged by the physical layer and
+        /// its transport then ends in Error when it starts, which shows the failure.
+        /// </summary>
+        private void OpenSerialPortsRunByTransports()
+        {
+            if (_config.Routing?.SerialInterfaces == null)
+            {
+                return;
+            }
+
+            List<SerialInterfaceConfig> lines = new List<SerialInterfaceConfig>();
+            for (int i = 0; i < _config.Routing.SerialInterfaces.Count; i++)
+            {
+                SerialInterfaceConfig serialConfig = _config.Routing.SerialInterfaces[i];
+                if (!serialConfig.Enabled)
+                {
+                    continue;
+                }
+
+                if (!IsRunBySerialTransport(serialConfig))
+                {
+                    _logger.LogInformation("Serial line '{Name}' has no complete X25Link options; the link manager opens it, not the runtime", serialConfig.Name);
+                    continue;
+                }
+
+                lines.Add(serialConfig);
+            }
+
+            if (lines.Count == 0)
+            {
+                return;
+            }
+
+            PhysicalLayer.InitializeSerialPorts(lines);
+            if (!PhysicalLayer.Start())
+            {
+                _logger.LogError("The physical layer could not open every serial line; the transport of a line that is not open will report Error");
             }
         }
 
