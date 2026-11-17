@@ -592,6 +592,46 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        /// <summary>
+        /// The same as the dialling case, on a LISTENING port: the peer opened the connection, the switch places a
+        /// call on it, and the peer answers on another channel number. RFC 1613 sections 5 and 6: one connection
+        /// carries one circuit, and the number "has no significance", whoever opened the connection.
+        /// </summary>
+        /// <remarks>
+        /// Found 2026-11-17: SINTRAN's X.29 PAD called x25emu's x25tadsrv through this port. The call went out on
+        /// channel 2 of the connection x25tadsrv had opened; x25tadsrv (the x25emu client renumbers every arriving
+        /// call) answered with Call Accepted on channel 1 on that same connection. The rebinding existed only for a
+        /// connection the port had dialled itself, so the acceptance was dropped and the caller waited for ever.
+        /// </remarks>
+        [Test]
+        public void AListeningPort_ConnectsTheCall_WhenThePeerAnswersOnAnotherChannelNumber()
+        {
+            using XotSwitchPort dce = NewDce();
+            int connected = 0;
+            dce.CallConnected += (port, lci) => Interlocked.Increment(ref connected);
+
+            using RawPeer peer = new RawPeer(dce.BoundPort);
+            Assert.That(WaitFor(() => dce.PeerConnected), Is.True, "the peer's connection never reached the port");
+
+            ushort lci = dce.PlaceCall(Called, Calling, null);
+            Assert.That(lci, Is.Not.EqualTo(0), "the port did not place the call");
+            Assert.That(peer.WaitForPacket(0x0B, out byte[] call), Is.True, "the Call Request never reached the peer");
+
+            byte answer = (byte)(call[1] == 7 ? 9 : 7);
+            peer.Send(X25PacketBuilder.CreateCallAccepted(answer, null));
+            Assert.That(WaitFor(() => Volatile.Read(ref connected) == 1), Is.True,
+                "the call was not connected; the peer saw: " + peer.Dump());
+
+            // Later packets and the clear use the peer's number.
+            Assert.That(dce.SendData(lci, new byte[] { 0x41 }, false, false, false), Is.EqualTo(PortSendResult.Sent));
+            Assert.That(peer.WaitForData(out byte[] data), Is.True);
+            Assert.That(data[1], Is.EqualTo(answer), "data must use the channel the peer answered on");
+
+            dce.ClearCall(lci, 0, 0);
+            Assert.That(peer.WaitForPacket(0x13, out byte[] clear), Is.True, "no clear reached the peer: " + peer.Dump());
+            Assert.That(clear[1], Is.EqualTo(answer), "the clear must use the peer's channel");
+        }
+
         private static string Dump(List<byte[]> packets)
         {
             lock (packets)
