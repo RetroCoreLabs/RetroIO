@@ -32,6 +32,7 @@ GUIDES = [
     ("RetroIO.Protocols.Econet/src/README.md", "Econet file server guide"),
     ("RetroIO.Protocols.Xmsg.Api/src/README.md", "XMSG kernel API guide"),
     ("RetroIO.Management.Api/src/README.md", "Management API guide"),
+    ("RetroIO.Protocols.X25/X121-ADDRESSING.md", "X.121 addresses and X.25 routing"),
 ]
 
 
