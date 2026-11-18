@@ -156,6 +156,56 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
+        public void ReverseCharging_LeavesAsAUtility_NotAFacility()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+
+            // The switch hands on the X.25 facility 01 with reverse charging (bit 1) and the X.25 (10/96) ICRD bits 6 and 5
+            // set: 0x31. X.75 5.3.9: no reverse charging in the user facility field; 5.4.3.6: utility 01, bits 6 and 5
+            // unassigned and 0, so the parameter is 0x01.
+            X25CallParameters p = new X25CallParameters(2, 2, 128, 128, new byte[] { 0x01, 0x31 }, Array.Empty<byte>());
+            Assert.That(ste.PlaceCall("2624", "2422", null, p), Is.EqualTo((ushort)1));
+
+            // Utility field: window 43 02 02, packet 42 07 07, then the reverse charging utility 01 01 (8 octets); the
+            // user facility field is empty (00).
+            byte[] expected =
+            {
+                0x10, 0x01, 0x0B, 0x44, 0x26, 0x24, 0x24, 0x22,
+                0x08, 0x43, 0x02, 0x02, 0x42, 0x07, 0x07, 0x01, 0x01,
+                0x00,
+            };
+            Assert.That(_sink.Last, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void AReverseChargingUtility_ReachesTheSwitchAsTheX25Facility()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ste.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, "2624", "2422",
+                networkUtilities: new byte[] { 0x81, 0x00, 0x00, 0x01, 0x01, 0x01 }));
+
+            Assert.That(ste.TryGetCallParameters(5, out X25CallParameters p), Is.True);
+            Assert.That(p.TryGetFacility(0x01, out byte[] parameter), Is.True);
+            Assert.That(parameter, Is.EqualTo(new byte[] { 0x01 }));
+        }
+
+        [Test]
+        public void ARelayedCall_SendsReverseChargingOnce()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+
+            // A transit switch hands on both the utility field it received (with 01 01) and the facility it made from it.
+            X25CallParameters p = new X25CallParameters(2, 2, 128, 128, new byte[] { 0x01, 0x01 },
+                new byte[] { 0x81, 0x00, 0x00, 0x01, 0x01, 0x01 });
+            ste.PlaceCall("2624", "2422", null, p);
+
+            X25PacketInfo info = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(X75Utilities.TryDecode(info.NetworkUtilities, out X75Utilities u), Is.EqualTo(X75UtilityError.None));
+            Assert.That(u.PassThrough, Is.EqualTo(new byte[] { 0x01, 0x01 }), "once, not twice (Annex F a) row 15)");
+            Assert.That(info.Facilities, Is.Empty);
+        }
+
+        [Test]
         public void AClearingCauseX75DoesNotHave_GoesOutAsNetworkCongestion()
         {
             X25Layer ste = Ste(fromHighest: false);
