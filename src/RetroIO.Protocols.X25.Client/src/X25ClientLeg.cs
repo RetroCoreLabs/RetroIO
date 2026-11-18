@@ -16,7 +16,7 @@ namespace RetroIO.Protocols.X25.Client
     /// <summary>
     /// One TCP connection of an <see cref="X25Client"/> with the framing codec and packet layer on it, and the
     /// circuits it carries. RFC 1613 section 5 gives each circuit a connection of its own, so a client has one
-    /// of these for every call it placed, plus the one <c>Open</c> made.
+    /// of these for every call it placed or took, plus one spare that waits for the next arriving call.
     /// </summary>
     /// <remarks>
     /// Every member is used with the owning client's lock held, except <see cref="Transport"/> and <see cref="Codec"/>
@@ -45,7 +45,10 @@ namespace RetroIO.Protocols.X25.Client
             Codec = codec;
         }
 
-        /// <summary>True for the connection <c>Open</c> made; it is not closed when a circuit clears.</summary>
+        /// <summary>
+        /// True for the connection <c>Open</c> made. Its circuits keep the packet layer's own channel numbers; in every
+        /// other way it is a connection like the others, and it is closed when its call ends.
+        /// </summary>
         internal bool IsPrimary { get; }
 
         /// <summary>The TCP transport.</summary>
@@ -58,10 +61,10 @@ namespace RetroIO.Protocols.X25.Client
         internal X25Layer Layer { get; set; } = null!;
 
         /// <summary>
-        /// True once a call we placed has used this connection. A connection carries one call we place, so the next call
-        /// gets a new connection.
+        /// True once a call has been put on this connection, by us or by the peer. RFC 1613 section 5: one connection
+        /// for each circuit, so a used connection never takes another call of ours and is closed when its call ends.
         /// </summary>
-        internal bool CallPlaced { get; set; }
+        internal bool Used { get; set; }
 
         /// <summary>
         /// True once the client itself is closing this connection; the transport's closed event is then no news.

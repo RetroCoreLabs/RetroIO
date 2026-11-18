@@ -13,12 +13,14 @@ using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using RetroIO.Protocols.X25.Client;
+using RetroIO.Protocols.X25.Switch;
+using RetroIO.Protocols.X25.Switch.Ports;
 
 namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
     /// RFC 1613 section 5: a separate TCP connection is used for each circuit. <see cref="X25Client"/> in XOT mode places
-    /// each call on a connection of its own (the first call may use the connection Open made) and closes that
+    /// each call on a connection of its own (the connection Open made is kept as a spare for calls that arrive) and closes that
     /// connection when the circuit is cleared.
     /// </summary>
     [TestFixture]
@@ -210,7 +212,7 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             Assert.That(peer.CallRequests, Is.EqualTo(Calls));
-            Assert.That(peer.Accepted, Is.EqualTo(Calls), "one TCP connection for each of the " + Calls + " calls (the first call uses the one Open made)");
+            Assert.That(peer.Accepted, Is.EqualTo(Calls + 1), "one TCP connection for each of the " + Calls + " calls, plus the spare Open made, which is kept for calls that arrive");
 
             // The circuit numbers the application sees are all different, whatever connection carries them.
             HashSet<ushort> numbers = new HashSet<ushort>();
@@ -245,7 +247,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Assert.That(vcs[i], Is.Not.Null, "call " + i + " was not answered");
             }
 
-            Assert.That(peer.Accepted, Is.EqualTo(Calls));
+            Assert.That(peer.Accepted, Is.EqualTo(Calls + 1), "one connection for each call, plus the spare Open made");
         }
 
         [Test]
@@ -259,7 +261,7 @@ namespace RetroIO.Protocols.X25.Tests
             X25Vc? second = client.CallWait("23410001", 3000);
             Assert.That(first, Is.Not.Null);
             Assert.That(second, Is.Not.Null);
-            Assert.That(peer.Accepted, Is.EqualTo(2));
+            Assert.That(peer.Accepted, Is.EqualTo(3), "one connection for each call, plus the spare Open made");
 
             client.Clear(second!);
             Assert.That(SpinWait.SpinUntil(() => peer.Ended == 1, 5000), Is.True, "the connection of the cleared call is closed");
@@ -299,6 +301,48 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(first!.Connected, Is.False);
             Assert.That(second!.Connected, Is.False);
+        }
+
+        /// <summary>
+        /// Calls that arrive come in on a spare connection the client keeps open for them, one call per connection.
+        /// When a call arrives on the spare the client opens a new spare; when the call ends its connection is
+        /// closed. The next call arrives on the new spare.
+        /// </summary>
+        /// <remarks>
+        /// RFC 1613 section 5: "A separate TCP connection MUST be used for each X.25 virtual circuit." The switch on
+        /// the other end (ours and x25emu's, both since 2026-11-18) puts a call only on a connection that has never
+        /// carried one and closes a connection when its call ends. Until 2026-11-18 this client took every arriving
+        /// call on the one connection Open made and kept it after the call; x25emu then had nowhere to put the next
+        /// call.
+        /// </remarks>
+        [Test]
+        public void ArrivingCalls_EachTakeAFreshConnection_AndItClosesWhenTheCallEnds()
+        {
+            using XotSwitchPort dce = new XotSwitchPort(
+                new PortConfig { Id = 0, Mode = PortMode.Dce, Port = 0, LciBase = 1, LciCount = 16 });
+            Assert.That(dce.Start(), Is.True);
+            int connected = 0;
+            dce.CallConnected += (port, lci) => Interlocked.Increment(ref connected);
+
+            using X25Client client = new X25Client { ServiceName = "spare" };
+            client.SetOnIncoming((c, vc) => c.Accept(vc));
+            client.Open(new X25ClientConfig { Host = "127.0.0.1", Port = dce.BoundPort, LocalAddress = "23430001", Framing = X25ClientFraming.Xot, NumVcs = 16 }, NullLogger.Instance);
+            Assert.That(SpinWait.SpinUntil(() => dce.ConnectionCount == 1, 5000), Is.True, "the client's first connection never arrived");
+
+            ushort first = dce.PlaceCall("23430001", "23400001", null);
+            Assert.That(first, Is.Not.EqualTo(0), "the switch had no fresh connection for the first call");
+            Assert.That(SpinWait.SpinUntil(() => Volatile.Read(ref connected) == 1, 5000), Is.True, "the first call was not answered");
+            Assert.That(SpinWait.SpinUntil(() => dce.ConnectionCount == 2, 5000), Is.True,
+                "the client did not open a new spare after a call took the old one (connections: " + dce.ConnectionCount + ")");
+
+            dce.ClearCall(first, 0, 0);
+            Assert.That(SpinWait.SpinUntil(() => dce.ConnectionCount == 1, 5000), Is.True,
+                "the connection of the ended call was not closed (connections: " + dce.ConnectionCount + ")");
+            Assert.That(client.IsOpen, Is.True, "the client still has its spare");
+
+            ushort second = dce.PlaceCall("23430001", "23400001", null);
+            Assert.That(second, Is.Not.EqualTo(0), "the switch had no fresh connection for the second call");
+            Assert.That(SpinWait.SpinUntil(() => Volatile.Read(ref connected) == 2, 5000), Is.True, "the second call was not answered");
         }
 
         [Test]
