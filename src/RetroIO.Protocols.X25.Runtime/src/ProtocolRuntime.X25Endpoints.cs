@@ -991,14 +991,17 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// A connection we dialled for one call is closed once its circuit is cleared (RFC 1613
-        /// section 5 lets an end keep a connection open, but one connection per circuit that is never
-        /// closed would leak). It is closed on another thread: this runs inside the engine's lock.
-        /// A connection the peer opened is left to the peer to close.
+        /// An XOT connection is closed once its circuit is cleared, whichever end opened it. RFC 1613
+        /// section 5: "A separate TCP connection MUST be used for each X.25 virtual circuit", so a
+        /// connection that has carried a call never carries another; keeping it only lets the other
+        /// end put a call on it. (Section 5 also lets an end keep a connection after the circuit is
+        /// cleared, but x25emu and our own switch both close it since 2026-11-18, and an end that
+        /// kept it would race that close.) Until 2026-11-18 a connection the peer opened was left
+        /// for the peer to close. It is closed on another thread: this runs inside the engine's lock.
         /// </summary>
         private void CloseDialledLinkAfterClear(X25Endpoint endpoint)
         {
-            if (ConnectionOf(endpoint) is XotPeerLink link && link.Dialed)
+            if (ConnectionOf(endpoint) is XotPeerLink link)
             {
                 ThreadPool.QueueUserWorkItem(_ => link.CloseGracefully());
             }

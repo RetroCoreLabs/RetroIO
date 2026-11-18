@@ -229,7 +229,7 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(called, Is.True, "the C# echo should receive an incoming call from the reference side");
             Assert.That(gotData.Wait(5000), Is.True, "the C# echo should receive data from the reference side");
-            Assert.That(calling.Length, Is.GreaterThan(0), "the incoming call should carry a calling address");
+            Assert.That(calling, Is.EqualTo("23400097"), "the incoming call should carry the calling address the reference caller gave");
         }
 
         private static Process StartWslCall(string repo, string calledAddress, int count)
@@ -246,7 +246,9 @@ namespace RetroIO.Protocols.X25.Tests
             psi.ArgumentList.Add("-e");
             psi.ArgumentList.Add("bash");
             psi.ArgumentList.Add("-lc");
-            psi.ArgumentList.Add($"cd '{repo}' && ./tools/x25traffic -x 127.0.0.1:2001 -d {calledAddress} -n {count}");
+            // -a: x25emu's x25traffic gives no calling address unless told (since 2026-11-18); 23400097 is a number of
+            // Switch A (2340), the network of the access port 2001 the call enters (X.25 Appendix IV.2 i).
+            psi.ArgumentList.Add($"cd '{repo}' && ./tools/x25traffic -x 127.0.0.1:2001 -d {calledAddress} -n {count} -a 23400097");
 
             Process p = new Process { StartInfo = psi };
             p.Start();

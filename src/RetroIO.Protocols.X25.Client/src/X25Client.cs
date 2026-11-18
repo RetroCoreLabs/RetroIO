@@ -45,14 +45,18 @@ namespace RetroIO.Protocols.X25.Client
         private readonly Dictionary<ushort, ManualResetEventSlim> _connectWaiters = new Dictionary<ushort, ManualResetEventSlim>();
         private readonly ManualResetEventSlim _shutdown = new ManualResetEventSlim(false);
 
-        // RFC 1613 section 5: a separate TCP connection is used for each circuit. Every connection has its own
-        // transport, framing codec and packet layer (a Leg). The first leg is the one Open makes; it carries the calls
-        // that arrive and the first call placed. Each further call placed gets a new leg of its own, which is closed
-        // when its circuit is cleared. All legs are guarded by _lock.
+        // RFC 1613 section 5: "A separate TCP connection MUST be used for each X.25 virtual circuit." Every connection
+        // has its own transport, framing codec and packet layer (a Leg), and carries one call. Each call placed dials a
+        // leg of its own. Calls that arrive need a connection the switch can put them on, so one unused leg - the spare
+        // - is always kept open; Open makes the first. When a call arrives on the spare, a new spare is opened. A leg
+        // whose call has ended is closed and never used again (the rule x25emu and our own switch follow since
+        // 2026-11-18). Until then the leg Open made took every arriving call and the first call placed, and was kept
+        // after its calls ended. All legs are guarded by _lock.
         private readonly List<Leg> _legs = new List<Leg>();
         private readonly HashSet<ushort> _extraLcns = new HashSet<ushort>();
         private ushort _nextExtraLcn = FirstExtraLcn;
-        private Leg? _primary;
+        private Leg? _spare;
+        private bool _opened;
         private int _legCounter;
 
         private ILogger _logger = NullLogger.Instance;
@@ -71,9 +75,32 @@ namespace RetroIO.Protocols.X25.Client
         public string ServiceName { get; set; } = "X25Client";
 
         /// <summary>
-        /// True once the client is open and its transport is connected.
+        /// True once the client is open and at least one of its connections is up (the spare that waits for arriving
+        /// calls, or a connection carrying a call).
         /// </summary>
-        public bool IsOpen => _primary != null && _primary.Transport.IsOpen;
+        public bool IsOpen
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    if (!_opened || _disposed)
+                    {
+                        return false;
+                    }
+
+                    for (int i = 0; i < _legs.Count; i++)
+                    {
+                        if (!_legs[i].Dead && !_legs[i].Closing && _legs[i].Transport.IsOpen)
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+            }
+        }
 
         /// <summary>
         /// The X.121 address this client uses as the calling address on every call it places.
@@ -119,12 +146,13 @@ namespace RetroIO.Protocols.X25.Client
             _config = config;
             _logger = logger ?? NullLogger.Instance;
 
-            // The first connection: transport, XOT framing and packet layer. It carries the calls that arrive and
-            // the first call placed; every further call placed opens a connection of its own (see Call).
-            Leg first = CreateLeg(isPrimary: true, config.NumVcs == 0 ? (ushort)1 : config.NumVcs);
+            // The first connection: transport, XOT framing and packet layer. It is the first spare, which waits for an
+            // arriving call; every call placed opens a connection of its own (see Call).
+            Leg first = CreateLeg(isPrimary: true, SpareCircuits);
             lock (_lock)
             {
-                _primary = first;
+                _opened = true;
+                _spare = first;
                 _legs.Add(first);
             }
 
@@ -221,16 +249,20 @@ namespace RetroIO.Protocols.X25.Client
         {
             RequireOpen();
 
-            // RFC 1613 section 5: one TCP connection for each circuit. The first call placed uses the connection
-            // Open made (nothing has used it for a call yet); every other call opens a connection of its own.
+            // RFC 1613 section 5: one TCP connection for each circuit. A call placed goes on the spare when the spare
+            // is still unused (so the first call goes on the connection Open made, which a peer that takes a single
+            // connection needs), and a new spare is opened for calls that arrive. Otherwise the call opens a
+            // connection of its own.
             Leg? leg = null;
             lock (_lock)
             {
-                Leg? first = _primary;
-                if (first != null && !first.CallPlaced && first.Vcs.Count == 0)
+                Leg? spare = _spare;
+                if (spare != null && !spare.Used && !spare.Dead && spare.Vcs.Count == 0)
                 {
-                    first.CallPlaced = true;
-                    leg = first;
+                    spare.Used = true;
+                    _spare = null;
+                    leg = spare;
+                    ThreadPool.QueueUserWorkItem(_ => OpenSpare());
                 }
             }
 
@@ -257,7 +289,7 @@ namespace RetroIO.Protocols.X25.Client
 
                 lock (_lock)
                 {
-                    leg.CallPlaced = true;
+                    leg.Used = true;
                     _legs.Add(leg);
                 }
             }
@@ -611,7 +643,7 @@ namespace RetroIO.Protocols.X25.Client
             {
                 legs = _legs.ToArray();
                 _legs.Clear();
-                _primary = null;
+                _spare = null;
             }
 
             for (int i = 0; i < legs.Length; i++)
@@ -741,9 +773,16 @@ namespace RetroIO.Protocols.X25.Client
                     OnLayerCleared(leg, numbers[i], X25Cause.OutOfOrder, 0);
                 }
 
-                if (!leg.IsPrimary && leg.Vcs.Count == 0)
+                // A dropped connection is never used again, the spare included. A spare the peer drops is not
+                // dialled again by itself: the peer that closed it does not want it (a port with no room left).
+                if (leg.Vcs.Count == 0)
                 {
                     _legs.Remove(leg);
+                    if (_spare == leg)
+                    {
+                        _spare = null;
+                    }
+
                     ThreadPool.QueueUserWorkItem(_ => CloseLeg(leg));
                 }
             }
@@ -776,6 +815,16 @@ namespace RetroIO.Protocols.X25.Client
             vc.Leg = leg;
             vc.LegLci = lci;
             leg.Vcs[lci] = vc;
+
+            // The call has taken the spare. The connection now belongs to this call, and the next arriving call
+            // needs a fresh one: open a new spare (on a pool thread - this runs on the connection's read thread
+            // with the lock held, and a dial blocks).
+            leg.Used = true;
+            if (_spare == leg)
+            {
+                _spare = null;
+                ThreadPool.QueueUserWorkItem(_ => OpenSpare());
+            }
 
             _onIncoming?.Invoke(this, vc);
 
@@ -820,17 +869,23 @@ namespace RetroIO.Protocols.X25.Client
 
         private void OnLayerCleared(Leg leg, ushort lci, byte cause, byte diagnostic)
         {
-            // A connection opened for one call ends with its circuit (RFC 1613 section 5). The close runs on a
-            // pool thread: this handler is on the connection's own read thread.
+            // A connection ends with its call (RFC 1613 section 5: one connection for each circuit), the one Open
+            // made included; it is never used for another call. The close runs on a pool thread: this handler is on
+            // the connection's own read thread.
             X25Vc? vc;
             if (leg.Vcs.TryGetValue(lci, out vc))
             {
                 leg.Vcs.Remove(lci);
             }
 
-            if (!leg.IsPrimary && leg.Vcs.Count == 0)
+            if (leg.Used && leg.Vcs.Count == 0)
             {
                 _legs.Remove(leg);
+                if (_spare == leg)
+                {
+                    _spare = null;
+                }
+
                 ThreadPool.QueueUserWorkItem(_ => CloseLeg(leg));
             }
 
@@ -864,9 +919,66 @@ namespace RetroIO.Protocols.X25.Client
 
         private void RequireOpen()
         {
-            if (_primary == null)
+            if (!_opened || _disposed)
             {
                 throw new InvalidOperationException("X25Client is not open.");
+            }
+        }
+
+        /// <summary>
+        /// The number of channels the packet layer of a spare offers: a spare takes the call the switch puts on it,
+        /// on whatever channel number the switch chose, so its layer needs the full range.
+        /// </summary>
+        private ushort SpareCircuits => _config.NumVcs == 0 ? (ushort)1 : _config.NumVcs;
+
+        /// <summary>
+        /// Dials a new spare connection for the next arriving call. Runs on a pool thread. A failed dial is logged and
+        /// leaves the client without a spare; it is not retried (the switch is then gone, and the next call placed
+        /// finds that out on its own).
+        /// </summary>
+        private void OpenSpare()
+        {
+            lock (_lock)
+            {
+                if (_disposed || _spare != null)
+                {
+                    return;
+                }
+            }
+
+            Leg spare = CreateLeg(isPrimary: false, SpareCircuits);
+            bool connected;
+            try
+            {
+                connected = spare.Transport.Open();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "X25Client: could not open a spare connection to {Host}:{Port}", _config.Host, _config.Port);
+                connected = false;
+            }
+
+            if (!connected)
+            {
+                _logger.LogWarning("X25Client: could not open a spare connection to {Host}:{Port}; no further call can arrive", _config.Host, _config.Port);
+                CloseLeg(spare);
+                return;
+            }
+
+            bool keep;
+            lock (_lock)
+            {
+                keep = !_disposed && _spare == null && !spare.Dead;
+                if (keep)
+                {
+                    _spare = spare;
+                    _legs.Add(spare);
+                }
+            }
+
+            if (!keep)
+            {
+                CloseLeg(spare);
             }
         }
 

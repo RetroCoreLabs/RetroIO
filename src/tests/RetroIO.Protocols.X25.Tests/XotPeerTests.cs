@@ -282,9 +282,13 @@ namespace RetroIO.Protocols.X25.Tests
             ClientVc? vc = CallInto(listen, AddressA, AddressB, out _);
             Assert.That(vc, Is.Not.Null, "the call from the listed peer should be answered");
 
+            // Two connections from the X25Client: the one its call went on, and the spare it opens next for calls that
+            // may arrive (one connection per call, RFC 1613 section 5; since 2026-11-18).
+            Assert.That(SpinWait.SpinUntil(() => PeerOf(a, "Peer").GetPeerReport().AcceptedOpenNow == 2, 5000), Is.True,
+                "accepted now: " + PeerOf(a, "Peer").GetPeerReport().AcceptedOpenNow);
             XotPeerReport report = PeerOf(a, "Peer").GetPeerReport();
-            Assert.That(report.Accepted, Is.EqualTo(1));
-            Assert.That(report.AcceptedOpenNow, Is.EqualTo(1));
+            Assert.That(report.Accepted, Is.EqualTo(2));
+            Assert.That(report.AcceptedOpenNow, Is.EqualTo(2));
             Assert.That(report.CallsReceived, Is.EqualTo(1));
             Assert.That(report.Unlisted, Is.Empty, "127.0.0.1 is the listed peer");
             Assert.That(report.DialedOpened, Is.EqualTo(0));
@@ -389,12 +393,17 @@ namespace RetroIO.Protocols.X25.Tests
             ClientVc? vc = CallInto(listenA, AddressA, AddressB, out _);
             Assert.That(vc, Is.Not.Null);
 
+            // The caller is an X25Client: its call took the connection Open made, and it then opens a new spare for
+            // calls that may arrive (RFC 1613 section 5, one connection per call; since 2026-11-18). So two accepted
+            // connections: the call's and the spare, once the spare has arrived.
+            Assert.That(SpinWait.SpinUntil(() => PeerOf(a, "ToB").GetPeerReport().AcceptedOpenNow == 2, 5000), Is.True,
+                "accepted now: " + PeerOf(a, "ToB").GetPeerReport().AcceptedOpenNow);
             XotPeerReport report = PeerOf(a, "ToB").GetPeerReport();
             Assert.That(report.DialedOpenNow, Is.EqualTo(1));
-            Assert.That(report.AcceptedOpenNow, Is.EqualTo(1));
+            Assert.That(report.AcceptedOpenNow, Is.EqualTo(2));
             Assert.That(report.CallsPlaced, Is.EqualTo(1));
             Assert.That(report.CallsReceived, Is.EqualTo(1));
-            Assert.That(PeerOf(a, "ToB").GetStatistics().ActiveConnections, Is.EqualTo(2));
+            Assert.That(PeerOf(a, "ToB").GetStatistics().ActiveConnections, Is.EqualTo(3));
             pad.Disconnect();
         }
 

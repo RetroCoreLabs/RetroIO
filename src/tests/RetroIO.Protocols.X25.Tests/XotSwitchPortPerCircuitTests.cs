@@ -632,6 +632,66 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(clear[1], Is.EqualTo(answer), "the clear must use the peer's channel");
         }
 
+        /// <summary>
+        /// A connection the peer opened is closed by the port once the call on it has ended, the same as a
+        /// connection the port dialled. It is never used for another call.
+        /// </summary>
+        /// <remarks>
+        /// RFC 1613 section 5: "A separate TCP connection MUST be used for each X.25 virtual circuit." x25emu
+        /// (2026-11-18) follows this both ways: a connection that has carried a call is closed when the call ends and
+        /// never carries another. Until 2026-11-18 this port kept a peer-opened connection after its call and put the
+        /// next call on it; when the peer had already closed its end, that call was lost.
+        /// </remarks>
+        [Test]
+        public void AListeningPort_ClosesAConnectionThePeerOpened_WhenItsCallEnds()
+        {
+            using XotSwitchPort dce = NewDce();
+            int connected = 0;
+            dce.CallConnected += (port, lci) => Interlocked.Increment(ref connected);
+
+            using RawPeer peer = new RawPeer(dce.BoundPort);
+            Assert.That(WaitFor(() => dce.PeerConnected), Is.True, "the peer's connection never reached the port");
+
+            ushort lci = dce.PlaceCall(Called, Calling, null);
+            Assert.That(lci, Is.Not.EqualTo(0), "the port did not place the call");
+            Assert.That(peer.WaitForPacket(0x0B, out byte[] call), Is.True, "the Call Request never reached the peer");
+            peer.Send(X25PacketBuilder.CreateCallAccepted(call[1], null));
+            Assert.That(WaitFor(() => Volatile.Read(ref connected) == 1), Is.True, "the call was not connected: " + peer.Dump());
+
+            // The peer ends the call; the port confirms and then closes the connection.
+            peer.Send(X25PacketBuilder.CreateClearRequest(call[1], 0, 0));
+            Assert.That(peer.WaitForPacket(0x17, out _), Is.True, "no Clear Confirmation reached the peer: " + peer.Dump());
+            Assert.That(WaitFor(() => peer.IsClosed), Is.True, "the port kept the used connection open");
+            Assert.That(WaitFor(() => dce.ConnectionCount == 0), Is.True, "the port still counts " + dce.ConnectionCount + " connection(s)");
+        }
+
+        /// <summary>
+        /// A call going out of a listening port goes only on a connection that has never carried a call. A connection
+        /// that carries a call already is not used for a second one: the call waits for no connection and is refused,
+        /// and goes out as soon as the peer opens a fresh connection.
+        /// </summary>
+        [Test]
+        public void AListeningPort_NeverPutsASecondCallOnAConnectionThatCarriesOne()
+        {
+            using XotSwitchPort dce = NewDce();
+            dce.IncomingCall += (port, lci, called, calling, cud) => port.AcceptCall(lci);
+
+            using RawPeer busy = new RawPeer(dce.BoundPort);
+            busy.Send(X25PacketBuilder.CreateCallRequest(5, Called, Calling));
+            Assert.That(busy.WaitForPacket(0x0F, out _), Is.True, "the peer's call was not accepted: " + busy.Dump());
+
+            ushort refused = dce.PlaceCall(Called, Calling, null);
+            Assert.That(refused, Is.EqualTo(0), "the port placed a second call on a connection that carries one");
+            Thread.Sleep(200);
+            Assert.That(busy.WaitForPacket(0x0B, out _), Is.False, "a Call Request went out on the busy connection: " + busy.Dump());
+
+            using RawPeer spare = new RawPeer(dce.BoundPort);
+            Assert.That(WaitFor(() => dce.ConnectionCount == 2), Is.True, "the spare never reached the port");
+            ushort placed = dce.PlaceCall(Called, Calling, null);
+            Assert.That(placed, Is.Not.EqualTo(0), "the port did not use the fresh connection");
+            Assert.That(spare.WaitForPacket(0x0B, out _), Is.True, "the Call Request did not go out on the fresh connection: " + spare.Dump());
+        }
+
         private static string Dump(List<byte[]> packets)
         {
             lock (packets)

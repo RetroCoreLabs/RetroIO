@@ -43,6 +43,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// (DCE) port accepts as many as it has channels. A dialling (DTE) port dials one connection for
     /// each call it places, and keeps one spare connection open so that a peer that can only listen has
     /// a way to place a call to it. The connection a call arrives on is the connection it stays on.
+    /// A connection that has carried a call is closed when that call ends, whichever end opened it, and
+    /// no call is ever put on it again (the same rule x25emu follows since 2026-11-18). A call going out
+    /// of a listening port goes only on a connection that has never carried one; with none, it is refused.
     /// </para>
     /// <para><b>Channel numbers are ours</b></para>
     /// <para>
@@ -50,8 +53,8 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     /// across connections, or to be inside this port's range. Each connection's circuits are given a
     /// channel number from the port's own range for the engine, and the packet is renumbered on the way
     /// in and again on the way out. When the number the peer used is free and in range it is kept, so
-    /// for a peer that behaves nothing is rewritten. One connection may also carry several circuits,
-    /// which is how a peer that multiplexes (RetroIO's own client) works with this port.
+    /// for a peer that behaves nothing is rewritten. A peer that puts several of its own calls on one
+    /// connection is still served (each is a circuit of its own), but this port never does that.
     /// </para>
     /// <para>
     /// The range is a limit on how many circuits the port carries at once, not a list of numbers the
@@ -735,7 +738,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// Places an outgoing call and returns the logical channel it was given.
         /// </summary>
         /// <remarks>
-        /// A dialling port opens a new TCP connection for the call, because RFC 1613 requires one connection for each virtual circuit; the dial happens before the lock is taken so a slow peer holds up only this call. A listening port places the call on a connection the peer already opened. No Restart is sent first (RFC 1613 6.4 says a Restart must not be sent over the connection). A connection opened for a call that could not be placed is closed again.
+        /// A dialling port opens a new TCP connection for the call, because RFC 1613 requires one connection for each virtual circuit; the dial happens before the lock is taken so a slow peer holds up only this call. A listening port places the call on a connection the peer already opened that has never carried a call, and refuses it when there is none. No Restart is sent first (RFC 1613 6.4 says a Restart must not be sent over the connection). A connection opened for a call that could not be placed is closed again.
         /// </remarks>
         /// <param name="calledAddress">
         /// The X.121 address to call.
@@ -806,6 +809,11 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 if (!_peerConnected)
                 {
                     return 0;
+                }
+
+                if (dialled == null)
+                {
+                    WaitForFreshConnection();
                 }
 
                 // No restart first. X.25 4.1 restarts a link before its first call, but this link is a
@@ -1128,7 +1136,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 haveIdle = false;
                 for (int i = 0; i < _connections.Count; i++)
                 {
-                    if (_connections[i].Circuits.Count == 0 && !_connections[i].Closed)
+                    if (IsFresh(_connections[i]))
                     {
                         haveIdle = true;
                         break;
@@ -1249,6 +1257,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 _connections.Add(connection);
                 _peerConnected = true;
+
+                // A call waiting for a fresh connection (see WaitForFreshConnection) may go now.
+                Monitor.PulseAll(_sync);
             }
 
             Interlocked.Exchange(ref _lastConnectedMs, Environment.TickCount64);
@@ -1541,6 +1552,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 return false;
             }
 
+            // A connection whose call has ended is being closed (see OnLayerCleared) and takes no new call
+            // (RFC 1613 section 5). The engine answers the Call Request with a clear.
+            if (connection.CarriedCall && connection.Circuits.Count == 0)
+            {
+                return false;
+            }
+
             ushort chosen = wireChannel;
             if (!ChannelIsUsable(wireChannel))
             {
@@ -1603,6 +1621,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             _routes[channel] = new CircuitRoute(connection, wireChannel);
             _inbound[InboundKey(connection, wireChannel)] = channel;
             connection.Circuits.Add(channel);
+            connection.CarriedCall = true;
         }
 
         private void ReleaseRoute(ushort channel)
@@ -1672,22 +1691,74 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// Picks the connection for a call going out of a port that did not dial one for it.
         /// </summary>
         /// <remarks>
-        /// RFC 1613 section 5 gives each circuit its own connection, so an idle one is used when there
-        /// is one. When every connection already carries a circuit the call is put on one of them
-        /// anyway: RetroIO's own client carries several circuits on one connection, and refusing the
-        /// call would break it. A peer that does not accept that clears the call.
+        /// RFC 1613 section 5: "A separate TCP connection MUST be used for each X.25 virtual circuit."
+        /// So the call goes only on a connection that has never carried one. When there is none the
+        /// call is refused (null: the engine reports the link down and the call is not placed).
+        /// Until 2026-11-18 the call was then put on a busy connection, and a connection whose call
+        /// had ended was used again; x25emu closes such a connection, so that call was lost.
         /// </remarks>
         private XotConnection? PickConnectionForNewCall()
         {
             for (int i = 0; i < _connections.Count; i++)
             {
-                if (_connections[i].Circuits.Count == 0 && !_connections[i].Closed)
+                if (IsFresh(_connections[i]))
                 {
                     return _connections[i];
                 }
             }
 
-            return _connections.Count > 0 ? _connections[0] : null;
+            return null;
+        }
+
+        /// <summary>
+        /// How long a call going out of a listening port waits for the peer to open a fresh connection, in
+        /// milliseconds. The same as x25emu's switch (SW_UNDELIVERABLE_MS in tools/x25switch.h), which holds such a
+        /// call for this long and then clears it.
+        /// </summary>
+        private const int FreshConnectionWaitMs = 5000;
+
+        /// <summary>
+        /// Waits, with the lock held (Monitor.Wait gives it up while waiting), until the port has a connection that
+        /// has never carried a call, or <see cref="FreshConnectionWaitMs"/> has passed.
+        /// </summary>
+        /// <remarks>
+        /// A listening port cannot dial: a call can go out only on a connection the peer opened and has not used. A
+        /// peer that keeps one spare connection opens the next one only after a call has taken the last, so a second
+        /// call that comes right after the first finds none for a moment. x25emu holds such a call until a connection
+        /// comes (tools/x25switch.c, conn_for_tx: "a DTE that has no idle connection at this instant may open one a
+        /// moment later, so the caller of this holds the packet rather than dropping it"). This does the same by
+        /// waiting; the accept path pulses the lock when a connection is added. The thread that waits is the one
+        /// placing the call (another port's reader, through the switch core).
+        /// </remarks>
+        private void WaitForFreshConnection()
+        {
+            long deadline = Environment.TickCount64 + FreshConnectionWaitMs;
+            while (_running && _peerConnected)
+            {
+                for (int i = 0; i < _connections.Count; i++)
+                {
+                    if (IsFresh(_connections[i]))
+                    {
+                        return;
+                    }
+                }
+
+                long left = deadline - Environment.TickCount64;
+                if (left <= 0)
+                {
+                    return;
+                }
+
+                Monitor.Wait(_sync, (int)left);
+            }
+        }
+
+        /// <summary>
+        /// True for a connection that is open and has never carried a call: the only kind a new call may go on.
+        /// </summary>
+        private static bool IsFresh(XotConnection connection)
+        {
+            return !connection.Closed && !connection.CarriedCall && connection.Circuits.Count == 0;
         }
 
         // ------------------------------------------------------------------ packets
@@ -1911,16 +1982,17 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             // Not counted here: SwitchCore counts the clear when it gets this event (see PortCounters).
             _logger.LogInformation("Port {Id}: clear LCI={Lci} cause={Cause} diag={Diag}", Id, lci, cause, diagnostic);
 
-            // The circuit is over, so it gives up its route. A connection this port dialled for the
-            // call has nothing left to carry and is closed (RFC 1613 section 5: one connection for
-            // one circuit). A connection the peer opened is the peer's to close, and a connection
-            // that carries other circuits stays.
+            // The circuit is over, so it gives up its route. The connection it went on has nothing
+            // left to carry and is closed (RFC 1613 section 5: one connection for one circuit),
+            // whichever end opened it: it may never carry another call, so keeping it only lets the
+            // other end put a call on it that this end will not take. A connection that still
+            // carries other circuits (a peer that puts several on one) stays until the last ends.
             XotConnection? closeAfter = null;
             if (_routes.TryGetValue(lci, out CircuitRoute? route))
             {
                 XotConnection connection = route.Connection;
                 ReleaseRoute(lci);
-                if (connection.DialledForCall && connection.Circuits.Count == 0)
+                if (connection.CarriedCall && connection.Circuits.Count == 0)
                 {
                     closeAfter = connection;
                 }
@@ -2023,6 +2095,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             /// Gets the channels of the circuits this connection carries, as the engine knows them.
             /// </summary>
             public List<ushort> Circuits { get; } = new List<ushort>();
+
+            /// <summary>
+            /// Gets or sets whether a call has ever been put on this connection, by either end. RFC 1613 section 5
+            /// gives each virtual circuit its own connection, so once this is set the connection never takes
+            /// another call, and it is closed when its call ends.
+            /// </summary>
+            public bool CarriedCall { get; set; }
 
             /// <summary>
             /// Gets the channel numbers (as the caller numbers them) of calls the port refused for
