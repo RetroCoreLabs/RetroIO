@@ -22,10 +22,21 @@ namespace RetroIO.Protocols.X25.Models
         /// </summary>
         public static X25PacketInfo ParsePacket(byte[] data)
         {
+            return ParsePacket(data, false);
+        }
+
+        /// <summary>
+        /// Parses a packet; with <paramref name="x75"/> set, as an X.75 packet between signalling terminals, whose Call
+        /// Request, Call Connected and extended Clear Request carry the network utility length and field after the
+        /// address block (X.75 4.2.1.4-5, 4.2.2, 4.2.3.3). Every other packet is laid out as in X.25.
+        /// </summary>
+        public static X25PacketInfo ParsePacket(byte[] data, bool x75)
+        {
             if (data == null || data.Length < 3)
                 throw new ArgumentException("X.25 packet must be at least 3 bytes (GFI + LCN + PTI)");
 
             var info = new X25PacketInfo();
+            info.X75 = x75;
 
             // Parse GFI
             byte gfi = data[0];
@@ -72,6 +83,18 @@ namespace RetroIO.Protocols.X25.Models
                     ParseClearRequestPacket(data, info);
                     break;
                 case X25PacketType.ClearConfirmation:
+                    // X.75 Figure 8: between signalling terminals the clear confirmation is the three header octets
+                    // and nothing else.
+                    if (info.X75)
+                    {
+                        if (data.Length > 3)
+                        {
+                            info.ParseError = "an X.75 clear confirmation is three octets (X.75 Figure 8)";
+                        }
+
+                        break;
+                    }
+
                     // The extended DCE clear confirmation carries charging information (X.25 5.2.5,
                     // Figure 5-7): address block, facility length, facilities, no user data.
                     ParseExtendedClearTail(data, 3, info, allowUserData: false);
@@ -182,7 +205,45 @@ namespace RetroIO.Protocols.X25.Models
             info.CallingAddress = digits.Substring(calledLength, callingLength);
             offset += addressBytes;
 
+            if (info.X75 && !ReadNetworkUtilities(data, ref offset, info))
+            {
+                return;
+            }
+
             ParseFacilitiesAndUserData(data, offset, info);
+        }
+
+        /// <summary>
+        /// Reads the X.75 network utility length octet and field at <paramref name="offset"/> (X.75 4.2.1.4: bits 6-1
+        /// the length, bits 8 and 7 "unassigned and set to 0"; 4.2.1.5: at most 63 octets) and moves past them.
+        /// </summary>
+        /// <returns>False, with <see cref="X25PacketInfo.ParseError"/> set, when the field is missing or does not fit.</returns>
+        private static bool ReadNetworkUtilities(byte[] data, ref int offset, X25PacketInfo info)
+        {
+            if (offset >= data.Length)
+            {
+                info.ParseError = "an X.75 packet needs its network utility length here (X.75 4.2.1.4)";
+                return false;
+            }
+
+            byte lengthOctet = data[offset++];
+            if ((lengthOctet & 0xC0) != 0)
+            {
+                info.ParseError = "network utility length octet has bit 8 or 7 set (X.75 4.2.1.4)";
+                return false;
+            }
+
+            int length = lengthOctet & 0x3F;
+            if (offset + length > data.Length)
+            {
+                info.ParseError = "network utility length " + length + " exceeds the packet";
+                return false;
+            }
+
+            info.NetworkUtilities = new byte[length];
+            Array.Copy(data, offset, info.NetworkUtilities, 0, length);
+            offset += length;
+            return true;
         }
 
         /// <summary>
@@ -229,7 +290,17 @@ namespace RetroIO.Protocols.X25.Models
             // octet is too). Until 2026-09-06 this parser, and the builder, left the address octet
             // out and read the facility length where the address lengths belong; the vector
             // pkt-call-accepted-with-facilities pinned it.
-            if (data.Length < 4) return;
+            if (data.Length < 4)
+            {
+                // X.75 5.4.1: "The network utility field is present in all call request and call connected packets",
+                // so an X.75 Call Connected has no three-octet basic format.
+                if (info.X75)
+                {
+                    info.ParseError = "an X.75 call connected packet carries the network utility field (X.75 5.4.1)";
+                }
+
+                return;
+            }
 
             int offset = 3;
             byte addressLengths = data[offset++];
@@ -252,6 +323,11 @@ namespace RetroIO.Protocols.X25.Models
             }
 
             offset += addressBytes;
+            if (info.X75 && !ReadNetworkUtilities(data, ref offset, info))
+            {
+                return;
+            }
+
             ParseFacilitiesAndUserData(data, offset, info);
         }
 
@@ -328,6 +404,14 @@ namespace RetroIO.Protocols.X25.Models
             }
 
             offset += addressBytes;
+
+            // X.75 4.2.3.3 (Figure 7): the network utility length and field follow the addresses in an extended Clear
+            // Request. Only the Clear Request: X.75's Clear Confirmation is three octets (Figure 8).
+            if (info.X75 && allowUserData && !ReadNetworkUtilities(data, ref offset, info))
+            {
+                return;
+            }
+
             if (offset >= data.Length)
             {
                 info.ParseError = "the extended format needs a facility length (X.25 5.2.4.2)";
@@ -607,6 +691,17 @@ namespace RetroIO.Protocols.X25.Models
         /// Gets or sets the facilities bytes of a call packet.
         /// </summary>
         public byte[] Facilities { get; set; } = Array.Empty<byte>();
+
+        /// <summary>
+        /// True when the packet was parsed as X.75 (between signalling terminals).
+        /// </summary>
+        public bool X75 { get; set; }
+
+        /// <summary>
+        /// The X.75 network utility field, without its length octet (X.75 4.2.1.5); empty for an X.25 packet. Decode it
+        /// with <see cref="X75Utilities.TryDecode"/>.
+        /// </summary>
+        public byte[] NetworkUtilities { get; set; } = Array.Empty<byte>();
 
         /// <summary>
         /// Null when the packet's fields fitted its body. Otherwise says what did not - a facility

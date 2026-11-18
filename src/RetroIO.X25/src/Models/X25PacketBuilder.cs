@@ -229,7 +229,8 @@ namespace RetroIO.Protocols.X25.Models
             byte[]? facilities = null,
             byte[]? callUserData = null,
             bool qBit = false,
-            bool dBit = false)
+            bool dBit = false,
+            byte[]? networkUtilities = null)
         {
             using var ms = new MemoryStream();
 
@@ -249,6 +250,10 @@ namespace RetroIO.Protocols.X25.Models
 
             // Called + calling addresses packed as one contiguous BCD stream
             WriteContiguousAddressBCD(ms, calledAddress, callingAddress);
+
+            // X.75 only (4.2.1.4, 4.2.1.5): the network utility length and field, between the addresses and the
+            // facility length. Null means an X.25 packet, which has no such field.
+            WriteNetworkUtilities(ms, networkUtilities);
 
             // Facilities
             facilities = facilities ?? Array.Empty<byte>();
@@ -276,7 +281,8 @@ namespace RetroIO.Protocols.X25.Models
             byte[]? facilities = null,
             byte[]? callUserData = null,
             bool qBit = false,
-            bool dBit = false)
+            bool dBit = false,
+            byte[]? networkUtilities = null)
         {
             using var ms = new MemoryStream();
 
@@ -293,8 +299,10 @@ namespace RetroIO.Protocols.X25.Models
             facilities = facilities ?? Array.Empty<byte>();
             callUserData = callUserData ?? Array.Empty<byte>();
 
-            // X.25 5.2.3.1: with nothing to say, the basic format is the three header octets alone.
-            if (facilities.Length == 0 && callUserData.Length == 0)
+            // X.25 5.2.3.1: with nothing to say, the basic format is the three header octets alone. X.75 has no basic
+            // format for this packet: "The network utility field is present in all call request and call connected
+            // packets" (X.75 5.4.1), so with utilities given the address block and the lengths are always written.
+            if (networkUtilities == null && facilities.Length == 0 && callUserData.Length == 0)
             {
                 return ms.ToArray();
             }
@@ -304,6 +312,9 @@ namespace RetroIO.Protocols.X25.Models
             // 2026-09-06 this octet was missing and the facility length landed where the address
             // lengths belong (pinned by the vector pkt-call-accepted-with-facilities).
             ms.WriteByte(0x00);
+
+            // X.75 4.2.2: the network utility length and field come next (null: X.25, no such field).
+            WriteNetworkUtilities(ms, networkUtilities);
 
             // Facilities
             ms.WriteByte((byte)facilities.Length);
@@ -333,7 +344,8 @@ namespace RetroIO.Protocols.X25.Models
             byte clearingCause,
             byte diagnosticCode = 0x00,
             byte[]? facilities = null,
-            byte[]? clearUserData = null)
+            byte[]? clearUserData = null,
+            byte[]? networkUtilities = null)
         {
             using var ms = new MemoryStream();
 
@@ -362,9 +374,13 @@ namespace RetroIO.Protocols.X25.Models
             // pkt-clear-request-extended-charging).
             facilities = facilities ?? Array.Empty<byte>();
             clearUserData = clearUserData ?? Array.Empty<byte>();
-            if (facilities.Length > 0 || clearUserData.Length > 0)
+            // X.75 4.2.3.3 (Figure 7): the same extended format with the network utility length and field after the
+            // address block. Null utilities is X.25; an empty X.75 field alone does not call for the extended format.
+            bool utilities = networkUtilities != null && networkUtilities.Length > 0;
+            if (facilities.Length > 0 || clearUserData.Length > 0 || utilities)
             {
                 ms.WriteByte(0x00);
+                WriteNetworkUtilities(ms, networkUtilities);
                 ms.WriteByte((byte)facilities.Length);
                 ms.Write(facilities);
                 ms.Write(clearUserData);
@@ -775,6 +791,28 @@ namespace RetroIO.Protocols.X25.Models
                 byte lo = (i + 1 < address.Length) ? (byte)(address[i + 1] - '0') : (byte)0;
                 ms.WriteByte((byte)((hi << 4) | lo));
             }
+        }
+
+        /// <summary>
+        /// Writes the X.75 network utility length octet and field (X.75 4.2.1.4, 4.2.1.5): bits 6-1 the length, bits 8
+        /// and 7 zero, at most 63 octets. Null writes nothing - an X.25 packet has no such field.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">The field is longer than 63 octets.</exception>
+        private static void WriteNetworkUtilities(MemoryStream ms, byte[]? networkUtilities)
+        {
+            if (networkUtilities == null)
+            {
+                return;
+            }
+
+            if (networkUtilities.Length > X75Utilities.MaxFieldLength)
+            {
+                throw new ArgumentOutOfRangeException(nameof(networkUtilities), networkUtilities.Length,
+                    "X.75 4.2.1.5: the network utility field is at most 63 octets.");
+            }
+
+            ms.WriteByte((byte)networkUtilities.Length);
+            ms.Write(networkUtilities);
         }
 
         /// <summary>
