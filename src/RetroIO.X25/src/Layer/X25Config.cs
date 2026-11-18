@@ -30,10 +30,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </summary>
         public ushort LciBase { get; set; } = 1;
 
+        private ushort? _lciCount;
+
         /// <summary>
-        /// Number of switched logical channels available from <see cref="LciBase"/>.
+        /// Number of switched logical channels available from <see cref="LciBase"/>. When it is never set,
+        /// every channel from the base up to 4095 (<see cref="X25Channels.DefaultCount"/>); until 2026-11-18
+        /// the default was 16.
         /// </summary>
-        public ushort LciCount { get; set; } = 16;
+        public ushort LciCount
+        {
+            get => _lciCount ?? X25Channels.DefaultCount(LciBase);
+            set => _lciCount = value;
+        }
 
         /// <summary>
         /// Default packet size in bytes.

@@ -133,7 +133,7 @@ flowchart TD
    number is a national one and gets the first 4 digits of the first own DNIC in front (7.6.1, 7.6.2).
    With no prefix set, nothing can tell the two apart and the number is used as it came in. **Escape codes
    (8, 9, 0, X.121 7.9 and Table 2) are not recognised**: a number after an escape code is completed like
-   any other (open, see section 7).
+   any other (open, see section 8).
 2. **Exact number or hunt group.** It matches the international number, or the own DNIC followed by its
    digits, so a route written as the local number `110006` also takes `2422110006`.
 3. **Pattern route** (`regex`), over the whole international number. Below every exact number and above
@@ -184,7 +184,7 @@ is active (`X25Router.PortStatusOf`).
 - **Never back out of the arrival port.** A route whose own port and every backup is the port the call
   came in on is skipped, and the next best route is tried. The no-route text then says "the only matching
   routes lead back out of the port the call came in on". X.110 3.6 and 5.6 ask for no circular routes;
-  this one-hop check is ours, the real loop check is open (section 7).
+  this one-hop check is ours, the real loop check is open (section 8).
 - **Hunt groups** (`hunt`): one number shared by several ports. Members are taken in turn (round robin);
   the arrival port and a member that is down are skipped. No members: Not obtainable 67. All down: Out of
   order. Round robin is **not in the spec**.
@@ -216,7 +216,7 @@ In the runtime (`X25Router.DecideIncomingCall`), in this order:
    does, Not obtainable 67.
 
 The runtime has no NUI check. It does not forward an incoming call to another of its lines: a route whose
-port is another line is treated like a local route (open, section 7).
+port is another line is treated like a local route (open, section 8).
 
 ### 4.6 The configuration
 
@@ -347,6 +347,7 @@ causes are on `X25CallDecision`.
 | Access barred | `0x0B` | 70 | The XOT server entry does not take that called number (row 25) | runtime |
 | Out of order | `0x09` | 0 | The route's port and every backup are down; every hunt member is down; the out port went down while the call was placed (4.6.4) | switch; the runtime gives the same answer for a call it places |
 | Number busy | `0x01` | 71 | The out port is up but has no free logical channel (row 31) | switch |
+| Network congestion | `0x05` | 0 | The switch already carries `max_calls` calls (section 7; list after Table C.3, row 36) | switch |
 | Invalid facility request | `0x03` | 84 | An NUI that no account has (6.21, row 15) | switch |
 | Local procedure error | `0x13` | 84 | No NUI on a port that needs one (row 16) | switch |
 | Local procedure error / DTE originated | `0x13` / `0x00` | 49 | Wait mode: nobody answered within T11, 180 s (4.1.4, Table D.1); `0x13` at a DCE, `0x00` at a DTE | the line's X.25 engine |
@@ -355,12 +356,39 @@ causes are on `X25CallDecision`.
 **The DTE side sends cause 0.** On a link manager link the runtime is the DTE, and the X.25 engine turns
 every cause without bit 8 into DTE originated `0x00` (Table 5-7, note a). So there a call with no route is
 cleared with `0x00` and diagnostic 67, while every other line and the switch send `0x0D` with 67. That is
-what the spec allows a DTE; whether the runtime should be the DCE on such a link is open (section 7).
+what the spec allows a DTE; whether the runtime should be the DCE on such a link is open (section 8).
 
 Diagnostics 119 (international routing problem) and 121 (unknown called DNIC) are never sent: a number
 with no route always gets 67.
 
-## 7. Status in RetroIO
+## 7. Channels and call limits
+
+**From the spec.** Logical channels belong to one line (one DTE/DCE interface), not to the network. A
+channel has a group number of at most 15 and a channel number of at most 255 (X.25 10/96, 3.1), so a line
+has channel numbers 0 to 4095, and 0 is kept for restart and diagnostic packets (5.1.3.1): calls use 1 to
+4095. How many channels a line uses was agreed per line at subscription (3.1, Annex A).
+
+**Ours.** Three rules here are our choices, not the spec's:
+
+- **Default 4095.** A line or port with no channel count gets every channel from its first channel
+  (`lci_base`, default 1) up to 4095. Trunks between switches get the same. A count that is set must keep
+  `lci_base + lci_count - 1` at or below 4095; anything else is refused when the file is read, with the key
+  named. (Until 2026-11-18 the default was 16.)
+- **XOT: one connection slot per channel.** RFC 1613 section 5 gives every call its own TCP connection, so
+  an XOT line holds at most as many connections as it has channels. When all are taken, a new connection
+  is not accepted: it waits in the TCP backlog until one closes. A slot is a counter, so 4095 of them cost
+  nothing until the connections exist.
+- **A limit for the whole switch.** `max_calls` in `[switch]`: 0 or absent means no limit. When the switch
+  already carries that many calls, the next incoming call is cleared with Network congestion, cause `0x05`
+  (Table 5-7), diagnostic 0 (the list of error conditions after Table C.3, row 36, allows 0, 122 or above
+  127). It is refused before routing, so the far end never sees it. A call through the switch counts once,
+  although it uses two ports (the leg in and the leg out). The spec has no such total; it is a network's own
+  dimensioning.
+
+In the RetroX25 desktop program the Routing screen shows both: "Max calls (whole switch)" (0 = no limit)
+and a Lines list with each line's channel count, "4095 (default)" when the file does not set one.
+
+## 8. Status in RetroIO
 
 Done (2026-11-18, not yet committed): one route table and one lookup for the switch and the runtime, with
 own-DNIC completion, the order of section 4.1, the default gateway, ordered backup ports, the arrival-port

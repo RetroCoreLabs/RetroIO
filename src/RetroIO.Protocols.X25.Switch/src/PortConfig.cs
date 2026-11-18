@@ -95,10 +95,26 @@ namespace RetroIO.Protocols.X25.Switch
         /// </summary>
         public ushort LciBase { get; set; } = 1;
 
+        private ushort? _lciCount;
+
         /// <summary>
-        /// Number of two-way SVC logical channels.
+        /// Number of two-way SVC logical channels (<c>lci_count</c>). When it is never set, every channel from
+        /// <see cref="LciBase"/> up to 4095 (<see cref="RetroIO.Protocols.X25.PacketLayer.X25Channels.DefaultCount"/>),
+        /// on access and trunk ports alike. Until 2026-11-18 the default was 16. On an XOT port it is also the
+        /// number of TCP connections the port holds at once (one per channel); a slot is only a counter, so a
+        /// large count costs nothing until the connections exist.
         /// </summary>
-        public ushort LciCount { get; set; } = 16;
+        public ushort LciCount
+        {
+            get => _lciCount ?? RetroIO.Protocols.X25.PacketLayer.X25Channels.DefaultCount(LciBase);
+            set => _lciCount = value;
+        }
+
+        /// <summary>
+        /// True when <see cref="LciCount"/> was set (the file has <c>lci_count</c>); false when it is the default,
+        /// every channel up to 4095. A screen shows "4095 (default)" from this.
+        /// </summary>
+        public bool LciCountIsSet => _lciCount.HasValue;
 
         /// <summary>
         /// First logical channel kept for permanent virtual circuits (<c>pvc_base</c>). X.25 Annex A puts the PVC channels

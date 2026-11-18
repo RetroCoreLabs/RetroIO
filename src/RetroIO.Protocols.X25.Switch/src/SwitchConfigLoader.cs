@@ -8,6 +8,7 @@
 using System;
 using System.IO;
 using RetroIO.Protocols.X25.Common;
+using RetroIO.Protocols.X25.PacketLayer;
 using RetroIO.Protocols.X25.Routing;
 
 namespace RetroIO.Protocols.X25.Switch
@@ -88,6 +89,14 @@ namespace RetroIO.Protocols.X25.Switch
             }
 
             sw.MaxHops = ini.GetInt("switch", "max_hops", 15);
+
+            // The most calls in progress on the whole switch; 0 or absent is no limit (SwitchConfig.MaxCalls).
+            sw.MaxCalls = ini.GetInt("switch", "max_calls", 0);
+            if (sw.MaxCalls < 0)
+            {
+                throw new InvalidDataException("[switch] max_calls = " + sw.MaxCalls + " (line " + ini.GetLine("switch", "max_calls")
+                    + "): must be 0 (no limit) or a positive number of calls");
+            }
             sw.MgmtPort = (ushort)ini.GetInt("switch", "mgmt_port", 9000);
             sw.MgmtOpen = ini.GetInt("switch", "mgmt_open", 0) != 0;
             sw.MonitorPort = (ushort)ini.GetInt("switch", "monitor_port", 0);
@@ -206,8 +215,31 @@ namespace RetroIO.Protocols.X25.Switch
                 pc.DefaultWindowSize = (byte)ini.GetInt(section, "window_size", 2);
                 pc.MaxPacketSize = (ushort)ini.GetInt(section, "max_packet_size", 1024);
                 pc.MaxWindowSize = (byte)ini.GetInt(section, "max_window_size", 7);
-                pc.LciBase = (ushort)ini.GetInt(section, "lci_base", 1);
-                pc.LciCount = (ushort)ini.GetInt(section, "lci_count", 16);
+                // The virtual call channels. With no lci_count the port gets every channel from lci_base up to 4095
+                // (X.25 3.1: group <= 15, channel <= 255, channel 0 kept for restart; decided 2026-11-18, the
+                // default was 16), trunks the same. A configured range that leaves 1..4095 is refused here, by name,
+                // instead of being cut short or failing later inside the packet layer.
+                int lciBase = ini.GetInt(section, "lci_base", 1);
+                if (lciBase < 1 || lciBase > X25Channels.Highest)
+                {
+                    throw new InvalidDataException("[" + section + "] lci_base = " + lciBase + " (line " + ini.GetLine(section, "lci_base")
+                        + "): logical channels run 1..4095 (X.25 3.1)");
+                }
+
+                pc.LciBase = (ushort)lciBase;
+                if (ini.Get(section, "lci_count") != null)
+                {
+                    int lciCount = ini.GetInt(section, "lci_count", 0);
+                    int lciLast = lciBase + lciCount - 1;
+                    if (lciCount < 1 || lciLast > X25Channels.Highest)
+                    {
+                        throw new InvalidDataException("[" + section + "] lci_base = " + lciBase + ", lci_count = " + lciCount
+                            + " (line " + ini.GetLine(section, "lci_count") + "): the channels must lie in 1..4095 (X.25 3.1), so lci_count must be 1.."
+                            + (X25Channels.Highest + 1 - lciBase) + " with this lci_base; leave lci_count out to get every channel up to 4095");
+                    }
+
+                    pc.LciCount = (ushort)lciCount;
+                }
 
                 // PVC channels (X.25 Annex A): kept apart from the virtual call range, the same keys as x25emu.
                 pc.PvcBase = (ushort)ini.GetInt(section, "pvc_base", 1);

@@ -52,11 +52,15 @@ namespace RetroIO.Protocols.X25
         /// </summary>
         public ushort LciBase { get; set; } = 1;
 
+        private ushort? _lciCount;
+
         /// <summary>
-        /// Number of logical channels this side may use. Default 16: as a DTE the engine picks
-        /// channels from the TOP of the range (X.25 Annex A note 6), so the range must lie inside
-        /// what the far switch port offers - the C demo switches offer 1..2048 on trunks and
-        /// 1..32 on one port, and 1..16 fits every one of them.
+        /// Number of logical channels this side may use. When it is never set, every channel from
+        /// <see cref="LciBase"/> up to 4095 (X.25 3.1; <see cref="RetroIO.Protocols.X25.PacketLayer.X25Channels.DefaultCount"/>).
+        /// Until 2026-11-18 the default was 16. As a DTE the engine picks channels from the TOP of the
+        /// range (X.25 Annex A note 6), so with the default a DTE's first call goes out on channel 4095:
+        /// the far switch port must offer that channel too, which it does when it also uses the default.
+        /// A far port configured with fewer channels needs this count set to match.
         /// <para>
         /// It is also the line's connection limit (Server and Both modes): RFC 1613 section 5 gives
         /// every circuit its own TCP connection, so the entry holds at most this many connections at
@@ -66,7 +70,32 @@ namespace RetroIO.Protocols.X25
         /// conn_max = vc_count). A caller that holds N calls and keeps a spare needs N + 1.
         /// </para>
         /// </summary>
-        public ushort LciCount { get; set; } = 16;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public ushort LciCount
+        {
+            get => _lciCount ?? RetroIO.Protocols.X25.PacketLayer.X25Channels.DefaultCount(LciBase);
+            set => _lciCount = value;
+        }
+
+        /// <summary>
+        /// True when <see cref="LciCount"/> was set; false when it is the default, every channel up to 4095. Not
+        /// written to the configuration file.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool LciCountIsSet => _lciCount.HasValue;
+
+        /// <summary>
+        /// The channel count as the configuration file holds it: null when the file does not set it (the default
+        /// then applies, and nothing is written), so a saved file keeps "not set" instead of turning the default
+        /// into a fixed 4095. This is the property the file's <c>LciCount</c> key maps to.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("LciCount")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public ushort? LciCountSetting
+        {
+            get => _lciCount;
+            set => _lciCount = value;
+        }
 
         /// <summary>
         /// Local listening port (for server mode, default 1998). In Both mode this is the port we

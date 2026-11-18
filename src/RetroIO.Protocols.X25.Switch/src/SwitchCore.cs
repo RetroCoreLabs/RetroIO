@@ -47,6 +47,14 @@ namespace RetroIO.Protocols.X25.Switch
         public const byte CauseLocalProcedureError = 0x13;
 
         /// <summary>
+        /// Clearing cause Network congestion. X.25 (10/96) Table 5-7 (clearing cause field): bits 0000 0101 = 0x05.
+        /// Used when the switch already carries <see cref="SwitchConfig.MaxCalls"/> calls. The list of error
+        /// conditions after Table C.3, row 36 ("Temporary network congestion or fault condition within the network"),
+        /// gives the cause Network congestion with diagnostic # 0, # 122 or greater than 127; this switch sends # 0.
+        /// </summary>
+        public const byte CauseNetworkCongestion = 0x05;
+
+        /// <summary>
         /// Diagnostic 84, "NUI problem" (X.25 Annex E).
         /// </summary>
         public const byte DiagnosticNuiProblem = 84;
@@ -506,6 +514,17 @@ namespace RetroIO.Protocols.X25.Switch
             // This port only sends the refusal. Until 2026-11-18 every one of these was 0x0D with
             // diagnostic 0, and a call was placed on a port that was down. Never routed back out of the
             // port it came in on (X121RoutingTable).
+            // The switch-wide call limit (SwitchConfig.MaxCalls; 0 = none). A call is one stitch from routing to
+            // clearing, so the leg in and the leg out count once together. Refused before routing, so the far end
+            // is never offered a call that is then dropped: Network congestion, diagnostic 0 (Table 5-7; the list
+            // after Table C.3, row 36).
+            int maxCalls = _node.Config.MaxCalls;
+            if (maxCalls > 0 && _node.ActiveStitchCount >= maxCalls)
+            {
+                inPort.ClearCall(inLci, CauseNetworkCongestion, 0);
+                return;
+            }
+
             X25CallDecision decision = Router.Decide(calledAddress, inPort.Id);
             if (decision.Action != X25CallAction.Forward)
             {

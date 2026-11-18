@@ -694,6 +694,7 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 sb.Append("dnic = ").Append(c.Dnic).Append(eol);
             }
             sb.Append("max_hops = ").Append(c.MaxHops).Append(eol);
+            sb.Append("max_calls = ").Append(c.MaxCalls).Append(eol);   // 0 = no limit
             sb.Append("mgmt_port = ").Append(c.MgmtPort).Append(eol);
             // Every other [switch] key the loader reads: a switch started from its own saved file must be the same switch.
             sb.Append("monitor_port = ").Append(c.MonitorPort).Append(eol);
@@ -755,7 +756,11 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 sb.Append("max_packet_size = ").Append(pc.MaxPacketSize).Append(eol);
                 sb.Append("max_window_size = ").Append(pc.MaxWindowSize).Append(eol);
                 sb.Append("lci_base = ").Append(pc.LciBase).Append(eol);
-                sb.Append("lci_count = ").Append(pc.LciCount).Append(eol);
+                if (pc.LciCountIsSet)
+                {
+                    // Not written when not set: the default (every channel up to 4095) stays a default.
+                    sb.Append("lci_count = ").Append(pc.LciCount).Append(eol);
+                }
                 if (pc.AddrRangeStart.Length > 0)
                 {
                     sb.Append("addr_start = ").Append(pc.AddrRangeStart).Append(eol);

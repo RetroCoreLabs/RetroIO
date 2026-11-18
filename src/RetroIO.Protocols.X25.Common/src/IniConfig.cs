@@ -167,6 +167,94 @@ namespace RetroIO.Protocols.X25.Common
         }
 
         /// <summary>
+        /// Sets, adds or removes one key in INI text and leaves every other line - comments, blank lines, other
+        /// keys - exactly as it was. Used by a screen that edits a few settings of a file a person also edits by hand.
+        /// </summary>
+        /// <param name="lines">
+        /// The file's lines; changed in place.
+        /// </param>
+        /// <param name="section">
+        /// The section, without brackets. Added at the end when the file has none and a value is set.
+        /// </param>
+        /// <param name="key">
+        /// The key.
+        /// </param>
+        /// <param name="value">
+        /// The new value; null removes the key (the line goes), so the reader's default applies.
+        /// </param>
+        /// <remarks>
+        /// The FIRST occurrence of the key in the section is the one changed, because <see cref="Get"/> reads the
+        /// first one. A new key goes after the section's last key line, so it stays inside the section.
+        /// </remarks>
+        public static void SetValue(List<string> lines, string section, string key, string? value)
+        {
+            if (lines == null)
+            {
+                throw new ArgumentNullException(nameof(lines));
+            }
+
+            string current = string.Empty;
+            int sectionAt = -1;
+            int lastKeyInSection = -1;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                string p = Trim(lines[i]);
+                if (p.Length > 0 && p[0] == '[')
+                {
+                    int end = p.IndexOf(']');
+                    current = end >= 0 ? p.Substring(1, end - 1) : p.Substring(1);
+                    if (current == section && sectionAt < 0)
+                    {
+                        sectionAt = i;
+                    }
+
+                    continue;
+                }
+
+                if (current != section || p.Length == 0 || p[0] == '#' || p[0] == ';')
+                {
+                    continue;
+                }
+
+                int eq = p.IndexOf('=');
+                if (eq < 0)
+                {
+                    continue;
+                }
+
+                lastKeyInSection = i;
+                if (Trim(p.Substring(0, eq)) == key)
+                {
+                    if (value == null)
+                    {
+                        lines.RemoveAt(i);
+                    }
+                    else
+                    {
+                        lines[i] = key + " = " + value;
+                    }
+
+                    return;
+                }
+            }
+
+            if (value == null)
+            {
+                return;
+            }
+
+            if (sectionAt < 0)
+            {
+                lines.Add("[" + section + "]");
+                lines.Add(key + " = " + value);
+                return;
+            }
+
+            int insertAt = (lastKeyInSection >= 0 ? lastKeyInSection : sectionAt) + 1;
+            lines.Insert(insertAt, key + " = " + value);
+        }
+
+        /// <summary>
         /// Returns whether any entry exists in the given section.
         /// </summary>
         /// <param name="section">

@@ -31,6 +31,15 @@ namespace RetroIO.Protocols.X25.Switch
         public int MaxHops { get; set; } = 15;
 
         /// <summary>
+        /// The most calls in progress on the whole switch at once (<c>max_calls</c> in the <c>[switch]</c> section).
+        /// 0, the default, and an absent key both mean no limit. A call is counted once, from the moment it is
+        /// routed until it is cleared, even though it uses two ports of the switch (the leg in and the leg out).
+        /// When the count has reached the limit a new incoming call is cleared with Network congestion
+        /// (<see cref="SwitchCore.CauseNetworkCongestion"/>, diagnostic 0) and is never offered onward.
+        /// </summary>
+        public int MaxCalls { get; set; }
+
+        /// <summary>
         /// Telnet management listener port; 0 disables it. The default is 9000.
         /// </summary>
         public ushort MgmtPort { get; set; } = 9000;
