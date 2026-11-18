@@ -384,14 +384,15 @@ namespace RetroIO.Protocols.X25.Tests
 
             // The Call Request is the first packet on the connection: RFC 1613 6.4 says a Restart is not
             // sent over XOT (see the test below). Since Phase C1c (2026-09-06) the one engine picks the
-            // channel: as a DTE it takes the highest of the interface's range (X.25 Annex A note 6), 16
-            // by default, where the old runtime always sent its local LCN 1.
+            // channel: as a DTE it takes the highest of the interface's range (X.25 Annex A note 6), where
+            // the old runtime always sent its local LCN 1. Since 2026-11-18 a line with no channel count
+            // has every channel up to 4095 (X.25 3.1), so that is 4095; it was 16 before.
             Assert.That(dce.Count, Is.GreaterThanOrEqualTo(1));
             byte[] call = dce.At(0);
             X25PacketInfo info = X25PacketParser.ParsePacket(call);
 
             Assert.That(info.PacketType, Is.EqualTo(X25PacketType.CallRequest), Hex(call));
-            Assert.That(info.LCN, Is.EqualTo(16));
+            Assert.That(info.LCN, Is.EqualTo(4095));
             Assert.That(info.CalledAddress, Is.EqualTo(CALLED_ADDRESS));
             Assert.That(info.CallingAddress, Is.EqualTo(CALLING_ADDRESS));
 
@@ -473,7 +474,7 @@ namespace RetroIO.Protocols.X25.Tests
             using ProtocolRuntime runtime = CreateRuntime(dce.Port);
             using PadClient pad = ConnectPad(runtime, dce, "PinChannel");
             int before = dce.Count;
-            Assert.That(X25PacketParser.ParsePacket(dce.At(0)).LCN, Is.EqualTo(16), "the call was placed on 16, so 1 is another number");
+            Assert.That(X25PacketParser.ParsePacket(dce.At(0)).LCN, Is.EqualTo(4095), "the call was placed on 4095 (the top of the default range), so 1 is another number");
 
             Assert.That(pad.SendText("AB"), Is.True);
             Assert.That(dce.WaitFor(() => dce.Count >= before + 1, 3000), Is.True);

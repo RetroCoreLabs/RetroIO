@@ -686,10 +686,12 @@ namespace RetroIO.Protocols.X25.Transport
         /// How many TCP connections the entry holds at once: one per X.25 channel of the line, an idle
         /// connection (a caller's spare for arriving calls) included. When all are taken the next
         /// connection is not accepted; it waits in the TCP backlog until a connection closes. The runtime
-        /// sets it from the entry's channel count, <c>XotInterfaceConfig.LciCount</c> (default 16). Copied
-        /// from x25emu, whose XOT port has one connection per channel (tools/x25switch.c, conn_max).
+        /// sets it from the entry's channel count, <c>XotInterfaceConfig.LciCount</c> (default 4095, all of
+        /// X.25's channels; 16 until 2026-11-18). Copied from x25emu, whose XOT port has one connection per
+        /// channel (tools/x25switch.c, conn_max). The slots are a counter, not an array, so a large limit
+        /// costs nothing until the connections exist.
         /// </summary>
-        public int MaxConnections { get; set; } = 16;
+        public int MaxConnections { get; set; } = RetroIO.Protocols.X25.PacketLayer.X25Channels.Highest;
 
         /// <summary>
         /// X.121 address patterns we accept calls for

@@ -51,7 +51,7 @@ namespace RetroIO.Protocols.X25.Transport
         /// are taken is not accepted (or, on a shared port where another entry had room, is held open and
         /// unread) until a connection closes; it is never accepted and then closed.
         /// </summary>
-        public int MaxConnections { get; set; } = 16;
+        public int MaxConnections { get; set; } = RetroIO.Protocols.X25.PacketLayer.X25Channels.Highest;
 
         /// <summary>Gets or sets whether connections from addresses no entry lists are refused.</summary>
         public bool AllowOnlyListedPeers { get; set; }
@@ -59,8 +59,17 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>Gets or sets the first logical channel number for calls we place (dialled connections).</summary>
         public ushort LciBase { get; set; } = 1;
 
-        /// <summary>Gets or sets how many logical channel numbers we may use on a dialled connection.</summary>
-        public ushort LciCount { get; set; } = 16;
+        private ushort? _lciCount;
+
+        /// <summary>
+        /// Gets or sets how many logical channel numbers we may use on a dialled connection. When never set, every
+        /// channel from <see cref="LciBase"/> up to 4095 (X.25 3.1); until 2026-11-18 the default was 16.
+        /// </summary>
+        public ushort LciCount
+        {
+            get => _lciCount ?? RetroIO.Protocols.X25.PacketLayer.X25Channels.DefaultCount(LciBase);
+            set => _lciCount = value;
+        }
 
         /// <summary>Gets or sets the listener registry to share a port through; null gives the entry a private one.</summary>
         public XotListenerRegistry? Listeners { get; set; }
