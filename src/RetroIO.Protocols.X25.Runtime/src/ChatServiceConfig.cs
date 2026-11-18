@@ -28,6 +28,13 @@ namespace RetroIO.Protocols.X25.Runtime
         public int MaxUsers { get; set; } = 30;
 
         /// <summary>
+        /// Most calls the chat keeps at one time, every state counted (waiting, in the chat, thrown out as slow). Default
+        /// 128, the same as the C service in x25emu (tools/x25chat, -c). The call past it is refused before it is
+        /// accepted: a clear request, cause 0 "DTE originated", diagnostic 0 (X.25 (10/96) 4.1.7; Table 5-7).
+        /// </summary>
+        public int MaxCalls { get; set; } = 128;
+
+        /// <summary>
         /// Octets that may be on their way to one user before a chat line to that user counts as a failed write, and
         /// the user is put out of the chat as the original did after a 2-second blocked write (CHAT 3.1 serv.c:200-204).
         /// Default 4096, a choice of this port.

@@ -1156,6 +1156,27 @@ namespace RetroIO.Protocols.X25.Runtime
 
             _logger.LogWarning("X.25 circuit reset on {Name} channel {Lci} (local LCN {Local}): cause 0x{Cause:X2} diag 0x{Diag:X2}",
                 endpoint.Name, lci, localLcn, cause, diagnostic);
+
+            // X.25 (10/96) 4.4.3: the reset "removes in each direction all data and interrupt packets which may be in the
+            // network". Data a service queued on this call and not yet sent goes too; a clear still waiting stays. Then
+            // the service is told, so it can drop its own count (the chat, ChatProtocolService.HandleReset).
+            if (_serviceOutboxes.TryGetValue(localLcn, out ServiceOutbox? outbox))
+            {
+                lock (outbox.Gate)
+                {
+                    int count = outbox.Pending.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        TadOutputEventArgs item = outbox.Pending.Dequeue();
+                        if (item.Kind != TadOutputKind.Data)
+                        {
+                            outbox.Pending.Enqueue(item);
+                        }
+                    }
+                }
+            }
+
+            FindServiceForLcn(localLcn)?.HandleReset(localLcn, cause, diagnostic);
         }
 
         private void OnEndpointRestart(X25Layer layer, byte cause, byte diagnostic)

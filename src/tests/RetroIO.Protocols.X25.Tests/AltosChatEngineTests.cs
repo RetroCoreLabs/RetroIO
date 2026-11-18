@@ -855,6 +855,38 @@ namespace RetroIO.Protocols.X25.Tests
             TestContext.Out.WriteLine(users + " users: " + sw.ElapsedMilliseconds + " ms");
         }
 
+        // ---- the cap on calls, the same in the C engine (src/chat/altoschat.c, max_calls) ----
+
+        /// <summary>
+        /// The engine keeps at most <see cref="AltosChatSettings.MaxCalls"/> calls, every state counted (waiting,
+        /// joined, thrown out as slow). Default 128, as the C engine. A connect past it is refused and nothing is sent;
+        /// a call that goes frees its place. The x25emu twin is c01_connect_past_max_calls_is_refused.
+        /// </summary>
+        [Test]
+        public void C01_ConnectPastMaxCalls_IsRefused_AndNothingIsSent()
+        {
+            Assert.That(new AltosChatSettings().MaxCalls, Is.EqualTo(128), "the default, the same as the C engine");
+
+            Make(s =>
+            {
+                s.MaxUsers = 2;
+                s.MaxCalls = 3;
+                s.WaitPause = TimeSpan.FromMinutes(1);
+            });
+            for (int i = 0; i < 3; i++)
+            {
+                Assert.That(_chat.Connect(i, "guest", "1"), Is.True, "call " + i);
+            }
+
+            Assert.That(_chat.CallCount, Is.EqualTo(3));
+            Assert.That(_chat.Connect(3, "guest", "1"), Is.False, "the fourth call");
+            Assert.That(Seen(3), Is.EqualTo(string.Empty), "a refused call was sent something");
+
+            _chat.Disconnect(1);
+            Assert.That(_chat.CallCount, Is.EqualTo(2));
+            Assert.That(_chat.Connect(3, "guest", "1"), Is.True, "a freed place is taken again");
+        }
+
         private static int Count(string text, string part)
         {
             int n = 0;

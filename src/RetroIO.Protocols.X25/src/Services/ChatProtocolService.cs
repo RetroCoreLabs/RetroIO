@@ -59,6 +59,11 @@ namespace RetroIO.Protocols.X25.Services
         /// standard profiles, X.28 (12/97) Table 1, "Set to character 7/15 (DEL) (value 127)").</description></item>
         /// <item><description>17 = 24: line delete is CAN (X.3 3.17; X.28 Table 1, "Set to character 1/8 (CAN) (value 24)").</description></item>
         /// <item><description>18 = 18: line display is DC2 (X.3 3.18; X.28 Table 1, "Set to character 1/2 (DC2) (value 18)").</description></item>
+        /// <item><description>19 = 2: "editing PAD service signals for display terminals - represented by decimal 2" (X.3
+        /// 3.19, text lines 1269-1271 of the Specs copy). A deleted character is then rubbed out on the screen: X.28 (12/97)
+        /// 3.5.24, "Value 2: the characters 0/8 (BS) 2/0 (SP) 0/8 (BS) will be sent" (line 1673), and a deleted line is
+        /// rubbed out the same way, once per graphic character (3.5.25). Both standard profiles have 1, the backslash of a
+        /// printing terminal (X.28 Table 1); the chat's users sit at screens (Ronny's decision, 2026-11-18).</description></item>
         /// </list>
         /// <para>
         /// The PAD answers a valid set message with nothing (X.29 3.1.4) and treats its arrival as a data forwarding
@@ -66,7 +71,18 @@ namespace RetroIO.Protocols.X25.Services
         /// values are the standard ones, and the user can change parameter 16 at the PAD.
         /// </para>
         /// </remarks>
-        public static readonly byte[] SetPadMessage = { 0x02, 2, 1, 3, 2, 13, 4, 15, 1, 16, 127, 17, 24, 18, 18 };
+        public static readonly byte[] SetPadMessage = { 0x02, 2, 1, 3, 2, 13, 4, 15, 1, 16, 127, 17, 24, 18, 18, 19, 2 };
+
+        /// <summary>
+        /// Octets of output that may wait to leave for one call: 32768, the same as the C service (X25CHAT_OUT_MAX in
+        /// x25emu tools/x25chat.h). Waiting means handed to the runtime and not yet reported sent
+        /// (<see cref="TadOutputEventArgs.Delivered"/>). The engine's own limit
+        /// (<see cref="AltosChatSettings.OutputLimitBytes"/>, 4096 by default) throws a slow user out long before this
+        /// for chat lines; what can still pile up is the user's own command answers typed while not reading. Output
+        /// that would go past it is not queued and the call is ended: the user leaves the chat (the others see
+        /// "---nick---") and the call is cleared after what is already queued, so nothing is lost without a word.
+        /// </summary>
+        public const int WaitingOutputLimit = 32768;
 
         /// <summary>
         /// The login every X.25 caller had on the Altos (CHAT 3.1 README: "login guest").
@@ -75,9 +91,11 @@ namespace RetroIO.Protocols.X25.Services
 
         /// <summary>
         /// Most user data in one data packet sent to a caller: 128 octets, "the standard maximum user data field length"
-        /// (X.25 (10/96) 4.3.2), the same chunk the TAD uses. A message longer than that goes in several packets, every
-        /// one but the last with the M bit set (X.25 4.3.4). Not taken from the call's negotiated size: a call that
-        /// negotiated less than 128 would have the longer packets refused by the packet layer, the same as the TAD's.
+        /// (X.25 (10/96) 4.3.2), the same as the C service (X25CHAT_PKT_MAX). A call that agreed a smaller packet size
+        /// for the direction from the called DTE (facility 0x42, X.25 7.2.2.1: "The packet size for the direction of
+        /// transmission from the called DTE is indicated in bits 4, 3, 2 and 1 of the first octet", line 12771) gets
+        /// packets of that size, as the C service does from the circuit's pkt_size_out. A message longer than one packet goes in
+        /// several, every one but the last with the M bit set (X.25 4.3.4).
         /// </summary>
         private const int MaxPacketUserData = 128;
 
@@ -88,6 +106,7 @@ namespace RetroIO.Protocols.X25.Services
         private readonly Action<TadOutputEventArgs> _deliver;
         private readonly string[] _localAddresses;
         private readonly Func<DateTime> _clock;
+        private readonly AltosChatSettings _settings;
         private readonly AltosChatEngine _engine;
         private readonly object _gate = new object();
         private readonly Timer? _ticker;
@@ -96,8 +115,11 @@ namespace RetroIO.Protocols.X25.Services
         // number is this service's own counter, never the channel, so a late report about a channel that has since
         // been given to a new call cannot reach the new call's session.
         private readonly Dictionary<ushort, int> _sessionByLcn = new Dictionary<ushort, int>();
-        private readonly Dictionary<int, ushort> _lcnBySession = new Dictionary<int, ushort>();
+        private readonly Dictionary<int, ChatCall> _callBySession = new Dictionary<int, ChatCall>();
         private int _nextSession = 1;
+
+        // Calls whose waiting output went past WaitingOutputLimit inside an engine call, ended once the engine returns.
+        private readonly List<ChatCall> _overflowed = new List<ChatCall>();
 
         // Output waiting to be handed to the runtime, under _gate, and whether a thread is handing it over.
         private readonly Queue<TadOutputEventArgs> _outbox = new Queue<TadOutputEventArgs>();
@@ -124,7 +146,8 @@ namespace RetroIO.Protocols.X25.Services
 
             _localAddresses = new[] { address.Trim() };
             _clock = clock ?? (() => DateTime.Now);
-            _engine = new AltosChatEngine(settings ?? throw new ArgumentNullException(nameof(settings)), this, this);
+            _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _engine = new AltosChatEngine(_settings, this, this);
             lock (_gate)
             {
                 _engine.Start(_clock());
@@ -243,15 +266,35 @@ namespace RetroIO.Protocols.X25.Services
                     return false;
                 }
 
+                // The cap on calls (AltosChatSettings.MaxCalls), counted here and in the engine: the call past it is
+                // refused before it is accepted. The runtime then answers the Incoming Call with a clear request of cause
+                // 0 "DTE originated", diagnostic 0 (X25CallDecision.CalledSideRefused; X.25 (10/96) 4.1.7, Table 5-7),
+                // the same as the C service's x25_clear(X25_CAUSE_DTE_ORIGINATED, 0).
+                int maxCalls = _settings.MaxCalls;
+                if (_sessionByLcn.Count >= maxCalls || _engine.CallCount >= maxCalls)
+                {
+                    _logger.LogError("CHAT: no room for the call from {Calling} ({Max} calls), refusing it", callingAddress, maxCalls);
+                    return false;
+                }
+
                 int session = _nextSession++;
+                ChatCall call = new ChatCall(session, lcn, AgreedPacketSize(facilities));
                 _sessionByLcn[lcn] = session;
-                _lcnBySession[session] = lcn;
-                _logger.LogInformation("CHAT: call from {Calling} to {Called} on local channel {Lcn} (session {Session})", callingAddress, calledAddress, lcn, session);
+                _callBySession[session] = call;
+                _logger.LogInformation("CHAT: call from {Calling} to {Called} on local channel {Lcn} (session {Session}, packets of {Size})", callingAddress, calledAddress, lcn, session, call.PacketSize);
 
                 _outbox.Enqueue(new TadOutputEventArgs { Kind = TadOutputKind.CallAccepted, Lcn = lcn });
                 _outbox.Enqueue(new TadOutputEventArgs { Kind = TadOutputKind.Data, Lcn = lcn, Data = (byte[])SetPadMessage.Clone(), QBit = true });
                 _engine.Tick(_clock());
-                _engine.Connect(session, CallerLogin, callingAddress);
+                bool connected = _engine.Connect(session, CallerLogin, callingAddress);
+                if (!connected)
+                {
+                    // Cannot happen while the count above holds; kept as the C service does it (cleared, cause 0).
+                    _logger.LogError("CHAT: the engine keeps too many calls, clearing local channel {Lcn}", lcn);
+                    ((IAltosChatSink)this).Clear(session);
+                }
+
+                EndOverflowedCalls();
             }
 
             Drain();
@@ -290,6 +333,7 @@ namespace RetroIO.Protocols.X25.Services
                 }
 
                 _engine.Input(session, data);
+                EndOverflowedCalls();
             }
 
             Drain();
@@ -310,13 +354,58 @@ namespace RetroIO.Protocols.X25.Services
                 }
 
                 _sessionByLcn.Remove(lcn);
-                _lcnBySession.Remove(session);
+                _callBySession.Remove(session);
                 _logger.LogInformation("CHAT: call on local channel {Lcn} cleared, cause 0x{Cause:X2} diagnostic {Diagnostic}", lcn, cause, diagnostic);
                 _engine.Disconnect(session);
+                EndOverflowedCalls();
             }
 
             Drain();
             RaiseChanged();
+        }
+
+        /// <summary>
+        /// The call was reset. "The reset procedure is used to reinitialize the virtual call ... and in so doing removes
+        /// in each direction all data and interrupt packets which may be in the network" (X.25 (10/96) 4.4.3, text lines
+        /// 5784-5785 of the Specs copy). The output still waiting for this call goes with it: the runtime has already
+        /// dropped what it held for the call (ProtocolRuntime.OnEndpointReset), the engine is told those octets are gone so
+        /// its count of waiting output is right, and a packet from before the reset that reports itself sent later is
+        /// not counted again. The same as the C service's x25chat_on_reset. The user stays in the chat.
+        /// </summary>
+        /// <param name="lcn">The local channel of the call.</param>
+        /// <param name="cause">The resetting cause.</param>
+        /// <param name="diagnostic">The diagnostic code.</param>
+        public void HandleReset(ushort lcn, byte cause, byte diagnostic)
+        {
+            lock (_gate)
+            {
+                _logger.LogInformation("CHAT: call on local channel {Lcn} reset, cause 0x{Cause:X2} diagnostic {Diagnostic}", lcn, cause, diagnostic);
+                if (!_sessionByLcn.TryGetValue(lcn, out int session) || !_callBySession.TryGetValue(session, out ChatCall? call))
+                {
+                    return;
+                }
+
+                // Requests this service still holds for the call, not yet handed to the runtime, go too.
+                int kept = _outbox.Count;
+                for (int i = 0; i < kept; i++)
+                {
+                    TadOutputEventArgs o = _outbox.Dequeue();
+                    if (o.Lcn == lcn && o.Kind == TadOutputKind.Data)
+                    {
+                        continue;
+                    }
+
+                    _outbox.Enqueue(o);
+                }
+
+                if (call.Waiting > 0)
+                {
+                    _engine.OutputDrained(session, call.Waiting);
+                }
+
+                call.Waiting = 0;
+                call.Generation++;
+            }
         }
 
         /// <summary>
@@ -345,6 +434,7 @@ namespace RetroIO.Protocols.X25.Services
                 // monitor shows), so a monitor is told only when the number of users moved.
                 int before = _engine.UserCount;
                 _engine.Tick(_clock());
+                EndOverflowedCalls();
                 joined = _engine.UserCount != before;
             }
 
@@ -369,31 +459,50 @@ namespace RetroIO.Protocols.X25.Services
         // ------------------------------------------------------------------ the engine's sink and log (under _gate)
 
         /// <summary>
-        /// The engine sends bytes to a user: cut into data packets of at most <see cref="MaxPacketUserData"/> octets,
-        /// every one but the last with the M bit (X.25 4.3.4). Each packet tells the engine
-        /// when it has left, so the engine's count of output still on its way to that user goes down.
+        /// The engine sends bytes to a user: cut into data packets of at most the call's packet size
+        /// (<see cref="ChatCall.PacketSize"/>, never above <see cref="MaxPacketUserData"/>), every one but the last with
+        /// the M bit (X.25 4.3.4). Each packet tells the service and the engine when it has left, so their counts of
+        /// output still on its way to that user go down. Output that would take the call past
+        /// <see cref="WaitingOutputLimit"/> is not queued, and the call is ended when the engine returns
+        /// (<see cref="EndOverflowedCalls"/>), as the C service's sink_send and drain_call do.
         /// </summary>
         void IAltosChatSink.Send(int session, ReadOnlySpan<byte> data)
         {
-            if (!_lcnBySession.TryGetValue(session, out ushort lcn))
+            if (!_callBySession.TryGetValue(session, out ChatCall? call))
             {
                 return;
             }
 
+            if (call.Overflowed || call.Waiting + data.Length > WaitingOutputLimit)
+            {
+                // The caller has not read for a long time and keeps asking for answers. The engine is not told here -
+                // this is inside its own call.
+                if (!call.Overflowed)
+                {
+                    call.Overflowed = true;
+                    _overflowed.Add(call);
+                }
+
+                call.OverflowBytes += data.Length;
+                return;
+            }
+
+            call.Waiting += data.Length;
+            int generation = call.Generation;
             int offset = 0;
             while (offset < data.Length)
             {
-                int length = data.Length - offset > MaxPacketUserData ? MaxPacketUserData : data.Length - offset;
+                int length = data.Length - offset > call.PacketSize ? call.PacketSize : data.Length - offset;
                 byte[] chunk = data.Slice(offset, length).ToArray();
                 offset += length;
                 int drained = length;
                 _outbox.Enqueue(new TadOutputEventArgs
                 {
                     Kind = TadOutputKind.Data,
-                    Lcn = lcn,
+                    Lcn = call.Lcn,
                     Data = chunk,
                     MBit = offset < data.Length,
-                    Delivered = () => OnDelivered(session, drained),
+                    Delivered = () => OnDelivered(call, generation, drained),
                 });
             }
         }
@@ -401,16 +510,64 @@ namespace RetroIO.Protocols.X25.Services
         /// <summary>The engine clears a user's call (table full, or the user left with .x).</summary>
         void IAltosChatSink.Clear(int session)
         {
-            if (!_lcnBySession.TryGetValue(session, out ushort lcn))
+            if (!_callBySession.TryGetValue(session, out ChatCall? call))
             {
                 return;
             }
 
-            _lcnBySession.Remove(session);
-            _sessionByLcn.Remove(lcn);
+            _callBySession.Remove(session);
+            _sessionByLcn.Remove(call.Lcn);
 
             // Cause 0, DTE originated: the chat is the called DTE clearing its own call (X.25 Table 5-7).
-            _outbox.Enqueue(new TadOutputEventArgs { Kind = TadOutputKind.Clear, Lcn = lcn, Cause = 0, Diagnostic = 0 });
+            _outbox.Enqueue(new TadOutputEventArgs { Kind = TadOutputKind.Clear, Lcn = call.Lcn, Cause = 0, Diagnostic = 0 });
+        }
+
+        /// <summary>
+        /// Ends every call whose waiting output went past <see cref="WaitingOutputLimit"/> during the last engine call:
+        /// the user leaves the chat (the others see "---nick---" once) and the call is cleared, cause 0 "DTE originated"
+        /// (X.25 (10/96) Table 5-7), after the output already queued for it - the runtime sends a call's requests in
+        /// order. The same as the C service's drain_call. Called under the lock, after the engine has returned; the
+        /// leave can push another call past its limit, so the list is walked until it stays empty.
+        /// </summary>
+        private void EndOverflowedCalls()
+        {
+            while (_overflowed.Count > 0)
+            {
+                ChatCall call = _overflowed[_overflowed.Count - 1];
+                _overflowed.RemoveAt(_overflowed.Count - 1);
+                if (!_callBySession.ContainsKey(call.Session))
+                {
+                    continue; // already gone (cleared, or left with .x in the same input)
+                }
+
+                _logger.LogError("CHAT: output for local channel {Lcn} is over {Max} octets ({More} more did not fit); ending the call", call.Lcn, WaitingOutputLimit, call.OverflowBytes);
+                _callBySession.Remove(call.Session);
+                _sessionByLcn.Remove(call.Lcn);
+                _engine.Disconnect(call.Session);
+                _outbox.Enqueue(new TadOutputEventArgs { Kind = TadOutputKind.Clear, Lcn = call.Lcn, Cause = 0, Diagnostic = 0 });
+            }
+        }
+
+        /// <summary>
+        /// The packet size this service sends on a call: the size for the direction from the called DTE in the call's
+        /// packet size facility (X.25 (10/96) 7.2.2.1), or the standard 128 without one; never above
+        /// <see cref="MaxPacketUserData"/>. The runtime's packet layer accepts the request's facilities as asked
+        /// (X25Layer, incoming call), so this is the size the call agreed. A facility field that does not decode gives 128.
+        /// </summary>
+        private static int AgreedPacketSize(byte[]? facilities)
+        {
+            if (facilities == null || facilities.Length == 0)
+            {
+                return MaxPacketUserData;
+            }
+
+            if (X25Facilities.TryDecode(facilities, out X25Facilities decoded) != X25FacilityError.None)
+            {
+                return MaxPacketUserData;
+            }
+
+            int size = decoded.PacketSizeFromCalled;
+            return size > 0 && size < MaxPacketUserData ? size : MaxPacketUserData;
         }
 
         /// <summary>One line of the chat's server log.</summary>
@@ -421,12 +578,59 @@ namespace RetroIO.Protocols.X25.Services
 
         // ------------------------------------------------------------------ hand-over to the runtime
 
-        private void OnDelivered(int session, int bytes)
+        private void OnDelivered(ChatCall call, int generation, int bytes)
         {
             lock (_gate)
             {
-                _engine.OutputDrained(session, bytes);
+                // A packet from before a reset: the reset already took its octets off both counts.
+                if (generation != call.Generation)
+                {
+                    return;
+                }
+
+                call.Waiting -= bytes;
+                if (call.Waiting < 0)
+                {
+                    call.Waiting = 0;
+                }
+
+                _engine.OutputDrained(call.Session, bytes);
             }
+        }
+
+        /// <summary>
+        /// One call on the service, under _gate. The session number is this service's own counter, never the channel,
+        /// so a late report about a channel that has since been given to a new call cannot reach the new call.
+        /// </summary>
+        private sealed class ChatCall
+        {
+            public ChatCall(int session, ushort lcn, int packetSize)
+            {
+                Session = session;
+                Lcn = lcn;
+                PacketSize = packetSize;
+            }
+
+            /// <summary>The engine's session number.</summary>
+            public int Session { get; }
+
+            /// <summary>The local channel.</summary>
+            public ushort Lcn { get; }
+
+            /// <summary>Most octets in one data packet to this caller (<see cref="AgreedPacketSize"/>).</summary>
+            public int PacketSize { get; }
+
+            /// <summary>Octets handed to the runtime and not yet reported sent; checked against <see cref="WaitingOutputLimit"/>.</summary>
+            public int Waiting { get; set; }
+
+            /// <summary>Counts resets; a sent report from an older generation is ignored.</summary>
+            public int Generation { get; set; }
+
+            /// <summary>The waiting output went past the limit; the call is being ended.</summary>
+            public bool Overflowed { get; set; }
+
+            /// <summary>Octets that did not fit after the limit was reached (logged).</summary>
+            public long OverflowBytes { get; set; }
         }
 
         /// <summary>

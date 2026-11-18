@@ -56,12 +56,13 @@ namespace RetroIO.Protocols.X25.Tests
         /// <summary>
         /// Test 21 of the plan: the X.29 set PAD message, byte for byte. Octet 1 0x02 (X.29 Table 2, set); then the
         /// parameter pairs 2=1 echo, 3=2 forward on CR, 13=4 LF after CR in the echo, 15=1 editing (X.3 3.2, 3.3, 3.13, 3.15), 16=127 DEL, 17=24 CAN,
-        /// 18=18 DC2 (X.3 3.16-3.18 with the values of X.28 Table 1).
+        /// 18=18 DC2 (X.3 3.16-3.18 with the values of X.28 Table 1), 19=2 editing PAD service signals for display
+        /// terminals (X.3 3.19; X.28 3.5.24 "Value 2: the characters 0/8 (BS) 2/0 (SP) 0/8 (BS) will be sent").
         /// </summary>
         [Test]
         public void TheSetPadMessage_IsExactlyTheseOctets()
         {
-            Assert.That(ChatProtocolService.SetPadMessage, Is.EqualTo(new byte[] { 0x02, 0x02, 0x01, 0x03, 0x02, 0x0D, 0x04, 0x0F, 0x01, 0x10, 0x7F, 0x11, 0x18, 0x12, 0x12 }));
+            Assert.That(ChatProtocolService.SetPadMessage, Is.EqualTo(new byte[] { 0x02, 0x02, 0x01, 0x03, 0x02, 0x0D, 0x04, 0x0F, 0x01, 0x10, 0x7F, 0x11, 0x18, 0x12, 0x12, 0x13, 0x02 }));
         }
 
         /// <summary>
@@ -110,6 +111,206 @@ namespace RetroIO.Protocols.X25.Tests
             // A parameter indication PAD message (X.29 Table 2: 0000 0000) with the Q bit: not a line of text.
             chat.HandleData(1, new byte[] { 0x00, 0x02, 0x01, 0x0D }, true);
             Assert.That(runtime.Outputs.Count, Is.EqualTo(0), "a PAD message reached the chat as text");
+        }
+
+        // ------------------------------------------------------------------ the same as the C service (x25emu tools/x25chat.c)
+
+        /// <summary>
+        /// A call that agreed packets of 64 octets (facility 0x42, first octet 6 = 2^6 for the direction "from the called
+        /// DTE", X.25 (10/96) 7.2.2.1) gets packets of at most 64 octets; a 132-octet line goes as 64 + 64 + 4, the M bit
+        /// on every packet but the last (X.25 4.3.4). The C service does the same (drain_call, vc->pkt_size_out).
+        /// </summary>
+        [Test]
+        public void OutputPackets_AreCutToTheCallsAgreedPacketSize()
+        {
+            RecordingRuntime runtime = new RecordingRuntime();
+            using ChatProtocolService chat = new ChatProtocolService(NullLogger.Instance, runtime.DeliverServiceOutput, Altos,
+                new AltosChatSettings { WaitPause = TimeSpan.Zero }, () => new DateTime(1987, 5, 29, 12, 0, 0));
+
+            Assert.That(chat.HandleIncomingCall(1, Altos, "24220001", PadCud, new byte[] { 0x42, 0x06, 0x06 }), Is.True);
+            Assert.That(chat.HandleIncomingCall(2, Altos, "24220002", PadCud, Array.Empty<byte>()), Is.True);
+            runtime.Outputs.Clear();
+
+            chat.HandleData(2, Encoding.ASCII.GetBytes(new string('x', 118) + "\r"));
+
+            List<TadOutputEventArgs> toA = runtime.DataFor(1);
+            Assert.That(toA.Count, Is.EqualTo(3), "132 octets in packets of 64");
+            Assert.That(toA[0].Data.Length, Is.EqualTo(64));
+            Assert.That(toA[1].Data.Length, Is.EqualTo(64));
+            Assert.That(toA[2].Data.Length, Is.EqualTo(4));
+            Assert.That(toA[0].MBit && toA[1].MBit && !toA[2].MBit, Is.True, "the M bit on every packet but the last");
+            Assert.That(runtime.TextFor(1), Is.EqualTo("guest says: " + new string('x', 118) + "\r\n"));
+        }
+
+        /// <summary>
+        /// No packet size facility means the standard 128 (X.25 7.2.2.1), and a call that agreed more than 128 still gets
+        /// 128 at most: the C service caps every call at X25CHAT_PKT_MAX = 128, "the standard maximum user data field
+        /// length" (X.25 4.3.2).
+        /// </summary>
+        [Test]
+        public void OutputPackets_AreAtMost128_WithNoFacilityOrALargerOne()
+        {
+            RecordingRuntime runtime = new RecordingRuntime();
+            using ChatProtocolService chat = new ChatProtocolService(NullLogger.Instance, runtime.DeliverServiceOutput, Altos,
+                new AltosChatSettings { WaitPause = TimeSpan.Zero }, () => new DateTime(1987, 5, 29, 12, 0, 0));
+
+            Assert.That(chat.HandleIncomingCall(1, Altos, "24220001", PadCud, Array.Empty<byte>()), Is.True);
+            Assert.That(chat.HandleIncomingCall(2, Altos, "24220002", PadCud, new byte[] { 0x42, 0x08, 0x08 }), Is.True);
+            Assert.That(chat.HandleIncomingCall(3, Altos, "24220003", PadCud, Array.Empty<byte>()), Is.True);
+            runtime.Outputs.Clear();
+
+            chat.HandleData(3, Encoding.ASCII.GetBytes(new string('y', 118) + "\r"));
+
+            for (ushort lcn = 1; lcn <= 2; lcn++)
+            {
+                List<TadOutputEventArgs> got = runtime.DataFor(lcn);
+                Assert.That(got.Count, Is.EqualTo(2), "call " + lcn);
+                Assert.That(got[0].Data.Length, Is.EqualTo(128), "call " + lcn);
+                Assert.That(got[1].Data.Length, Is.EqualTo(4), "call " + lcn);
+            }
+        }
+
+        /// <summary>
+        /// A reset throws away the output still waiting for the call: X.25 (10/96) 4.4.3, "The reset procedure is used to
+        /// reinitialize the virtual call ... and in so doing removes in each direction all data and interrupt packets
+        /// which may be in the network". The engine is told it is gone (as the C service's x25chat_on_reset does), so a
+        /// user who stopped reading before the reset is not thrown out for output the reset removed; and a packet from
+        /// before the reset that reports itself delivered afterwards does not count a second time.
+        /// </summary>
+        [Test]
+        public void AReset_DropsTheWaitingOutput_AndTheCountStartsAgain()
+        {
+            RecordingRuntime runtime = new RecordingRuntime();
+            using ChatProtocolService chat = new ChatProtocolService(NullLogger.Instance, runtime.DeliverServiceOutput, Altos,
+                new AltosChatSettings { WaitPause = TimeSpan.Zero, OutputLimitBytes = 300 }, () => new DateTime(1987, 5, 29, 12, 0, 0));
+
+            Assert.That(chat.HandleIncomingCall(1, Altos, "24220001", PadCud, Array.Empty<byte>()), Is.True);
+            Assert.That(chat.HandleIncomingCall(2, Altos, "24220002", PadCud, Array.Empty<byte>()), Is.True);
+            runtime.DeliverAll();
+            runtime.Outputs.Clear();
+
+            // Each line reaches A as 50 octets: "guest says: " (12) + 36 + CR LF. Five lines wait for A, never delivered.
+            string line = new string('z', 36);
+            for (int i = 0; i < 5; i++)
+            {
+                chat.HandleData(2, Encoding.ASCII.GetBytes(line + "\r"));
+            }
+
+            List<TadOutputEventArgs> before = runtime.DataFor(1);
+            Assert.That(before.Count, Is.EqualTo(5));
+
+            chat.HandleReset(1, 0, 0);
+
+            // The packets from before the reset report themselves now: they must not lower the new count.
+            for (int i = 0; i < before.Count; i++)
+            {
+                before[i].Delivered?.Invoke();
+            }
+
+            runtime.Outputs.Clear();
+
+            // After the reset the count is 0: six lines (300 octets) fit the limit of 300, the seventh does not.
+            for (int i = 0; i < 6; i++)
+            {
+                chat.HandleData(2, Encoding.ASCII.GetBytes(line + "\r"));
+            }
+
+            Assert.That(runtime.TextFor(2), Does.Not.Contain("---guest---"), "A was thrown out for output the reset removed");
+            Assert.That(runtime.DataFor(1).Count, Is.EqualTo(6));
+
+            chat.HandleData(2, Encoding.ASCII.GetBytes(line + "\r"));
+            Assert.That(runtime.TextFor(2), Is.EqualTo("---guest---\r\n"), "the seventh line must throw A out");
+            Assert.That(runtime.DataFor(1).Count, Is.EqualTo(6), "A got the line that did not fit");
+        }
+
+        /// <summary>
+        /// At most 32768 octets may wait for one call (the C service's X25CHAT_OUT_MAX). Output that would go past it is
+        /// not queued; the call is ended: the user leaves the chat (the others see "---guest---" once) and the call is
+        /// cleared, cause 0 "DTE originated" (X.25 (10/96) Table 5-7, the cause a DTE puts in its clear request), after
+        /// the output already queued.
+        /// </summary>
+        [Test]
+        public void OutputPastTheWaitingLimit_EndsTheCall()
+        {
+            Assert.That(ChatProtocolService.WaitingOutputLimit, Is.EqualTo(32768), "the same as X25CHAT_OUT_MAX");
+
+            RecordingRuntime runtime = new RecordingRuntime();
+            using ChatProtocolService chat = new ChatProtocolService(NullLogger.Instance, runtime.DeliverServiceOutput, Altos,
+                new AltosChatSettings { WaitPause = TimeSpan.Zero, OutputLimitBytes = 10 * 1024 * 1024 }, () => new DateTime(1987, 5, 29, 12, 0, 0));
+
+            Assert.That(chat.HandleIncomingCall(1, Altos, "24220001", PadCud, Array.Empty<byte>()), Is.True);
+            Assert.That(chat.HandleIncomingCall(2, Altos, "24220002", PadCud, Array.Empty<byte>()), Is.True);
+            runtime.DeliverAll();
+            runtime.Outputs.Clear();
+
+            string line = new string('z', 36); // 50 octets to A each
+            for (int i = 0; i < 700; i++)
+            {
+                chat.HandleData(2, Encoding.ASCII.GetBytes(line + "\r"));
+            }
+
+            int waiting = 0;
+            List<TadOutputEventArgs> toA = runtime.DataFor(1);
+            for (int i = 0; i < toA.Count; i++)
+            {
+                waiting += toA[i].Data.Length;
+            }
+
+            Assert.That(waiting, Is.EqualTo(655 * 50), "every line that fitted, and no more (32768 / 50 = 655)");
+            Assert.That(runtime.TextFor(2), Is.EqualTo("---guest---\r\n"), "B must see A leave once");
+
+            int lastForA = -1;
+            int clearAt = -1;
+            for (int i = 0; i < runtime.Outputs.Count; i++)
+            {
+                if (runtime.Outputs[i].Lcn != 1)
+                {
+                    continue;
+                }
+
+                if (runtime.Outputs[i].Kind == TadOutputKind.Data)
+                {
+                    lastForA = i;
+                }
+                else if (runtime.Outputs[i].Kind == TadOutputKind.Clear)
+                {
+                    Assert.That(clearAt, Is.EqualTo(-1), "two clears");
+                    clearAt = i;
+                    Assert.That(runtime.Outputs[i].Cause, Is.EqualTo((byte)0));
+                    Assert.That(runtime.Outputs[i].Diagnostic, Is.EqualTo((byte)0));
+                }
+            }
+
+            Assert.That(clearAt, Is.GreaterThan(lastForA), "the clear must follow A's queued output");
+            Assert.That(chat.UserCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// The cap on calls is a setting, <see cref="AltosChatSettings.MaxCalls"/>, default 128 as in the C service. The
+        /// call past it is refused before it is accepted: the runtime answers the Incoming Call with a Clear Request,
+        /// cause 0 "DTE originated", diagnostic 0 (X.25 (10/96) 4.1.7 clearing by the DTE; Table 5-7), as the C service's
+        /// x25_clear(X25_CAUSE_DTE_ORIGINATED, 0). Nothing is sent on it. A call that goes frees its place.
+        /// </summary>
+        [Test]
+        public void TheCallPastMaxCalls_IsRefusedUnanswered()
+        {
+            Assert.That(new ChatServiceConfig().MaxCalls, Is.EqualTo(128), "the runtime's setting, the same default");
+
+            RecordingRuntime runtime = new RecordingRuntime();
+            using ChatProtocolService chat = new ChatProtocolService(NullLogger.Instance, runtime.DeliverServiceOutput, Altos,
+                new AltosChatSettings { WaitPause = TimeSpan.Zero, MaxCalls = 3 }, () => new DateTime(1987, 5, 29, 12, 0, 0));
+
+            for (ushort lcn = 1; lcn <= 3; lcn++)
+            {
+                Assert.That(chat.HandleIncomingCall(lcn, Altos, "2422000" + lcn, PadCud, Array.Empty<byte>()), Is.True, "call " + lcn);
+            }
+
+            runtime.Outputs.Clear();
+            Assert.That(chat.HandleIncomingCall(4, Altos, "24220004", PadCud, Array.Empty<byte>()), Is.False, "the fourth call");
+            Assert.That(runtime.Outputs.Count, Is.EqualTo(0), "a refused call was answered or sent something");
+
+            chat.HandleClear(2, 0, 0);
+            Assert.That(chat.HandleIncomingCall(4, Altos, "24220004", PadCud, Array.Empty<byte>()), Is.True, "a freed place is taken again");
         }
 
         // ------------------------------------------------------------------ through the runtime and a switch
@@ -549,6 +750,43 @@ namespace RetroIO.Protocols.X25.Tests
             public void DeliverServiceOutput(TadOutputEventArgs output)
             {
                 Outputs.Add(output);
+            }
+
+            /// <summary>Reports every data request so far as sent, as the runtime does when a packet has left.</summary>
+            public void DeliverAll()
+            {
+                for (int i = 0; i < Outputs.Count; i++)
+                {
+                    Outputs[i].Delivered?.Invoke();
+                }
+            }
+
+            /// <summary>The plain data requests (no Q bit) on one channel, in order.</summary>
+            public List<TadOutputEventArgs> DataFor(ushort lcn)
+            {
+                List<TadOutputEventArgs> got = new List<TadOutputEventArgs>();
+                for (int i = 0; i < Outputs.Count; i++)
+                {
+                    if (Outputs[i].Lcn == lcn && Outputs[i].Kind == TadOutputKind.Data && !Outputs[i].QBit)
+                    {
+                        got.Add(Outputs[i]);
+                    }
+                }
+
+                return got;
+            }
+
+            /// <summary>The text of the plain data requests on one channel.</summary>
+            public string TextFor(ushort lcn)
+            {
+                StringBuilder b = new StringBuilder();
+                List<TadOutputEventArgs> got = DataFor(lcn);
+                for (int i = 0; i < got.Count; i++)
+                {
+                    b.Append(Encoding.ASCII.GetString(got[i].Data));
+                }
+
+                return b.ToString();
             }
         }
     }

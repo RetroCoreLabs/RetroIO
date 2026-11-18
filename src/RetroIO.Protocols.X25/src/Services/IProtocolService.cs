@@ -113,7 +113,28 @@ namespace RetroIO.Protocols.X25.Services
         /// Diagnostic code
         /// </param>
         void HandleClear(ushort lcn, byte cause, byte diagnostic);
-        
+
+        /// <summary>
+        /// The call was reset (X.25 (10/96) 4.4.3: the reset "removes in each direction all data and interrupt packets
+        /// which may be in the network"). The runtime has already dropped the service's data still waiting to be sent on
+        /// the call before it calls this.
+        /// </summary>
+        /// <param name="lcn">
+        /// Logical Channel Number
+        /// </param>
+        /// <param name="cause">
+        /// Resetting cause
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code
+        /// </param>
+        /// <remarks>
+        /// The default does nothing, which is what every service did before the chat needed to know.
+        /// </remarks>
+        void HandleReset(ushort lcn, byte cause, byte diagnostic)
+        {
+        }
+
         /// <summary>
         /// Handle interrupt packets
         /// </summary>
