@@ -243,6 +243,24 @@ namespace RetroIO.Protocols.X25
         void BindServiceToLcn(ushort lcn, IProtocolService service);
 
         /// <summary>
+        /// Takes a free local channel for an incoming call a service answers, maps the connection's circuit to it and
+        /// binds the service, in one step: two calls arriving at once on two connections never get the same channel.
+        /// </summary>
+        /// <param name="connection">
+        /// The connection the call came in on; null when it has none.
+        /// </param>
+        /// <param name="remoteLcn">
+        /// The call's channel on that connection.
+        /// </param>
+        /// <param name="service">
+        /// The service that answers the call.
+        /// </param>
+        /// <returns>
+        /// The local channel, or 0 when none is free.
+        /// </returns>
+        ushort ClaimChannelForService(object? connection, ushort remoteLcn, IProtocolService service);
+
+        /// <summary>
         /// Binds a protocol module to a logical channel.
         /// </summary>
         /// <param name="lcn">

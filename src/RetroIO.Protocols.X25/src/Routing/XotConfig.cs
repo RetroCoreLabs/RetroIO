@@ -166,6 +166,17 @@ namespace RetroIO.Protocols.X25
         public bool AnswerIncomingCallsAutomatically { get; set; } = true;
 
         /// <summary>
+        /// Client mode: keep one connection to the remote address open with no call on it, so the far end can put an
+        /// arriving call on it - how a subscriber line of a switch port works (the port listens, the subscriber dials,
+        /// and the port puts a call for the subscriber on a connection the subscriber opened that has never carried a
+        /// call). When a call arrives on it, a new one is opened; every connection still carries one call only
+        /// (RFC 1613 section 5) and is closed when its call ends. Calls that arrive are answered by the local services
+        /// (the TAD, the chat) like calls on any other line. Default false: a Client entry only dials when it has a
+        /// call to place. Passed on to <see cref="Transport.XotPeerConfig.KeepSpareConnection"/>.
+        /// </summary>
+        public bool KeepConnectionForIncomingCalls { get; set; } = false;
+
+        /// <summary>
         /// TCP keepalive settings (equivalent to Cisco tcp-keepalives)
         /// </summary>
         public bool TcpKeepalive { get; set; } = true;

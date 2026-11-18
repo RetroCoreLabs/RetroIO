@@ -399,17 +399,16 @@ namespace RetroIO.Protocols.X25.Layers
                     return X25CallDecision.NoRoute();
                 }
 
-                ushort lcn = _runtime.FindAvailableLCN();
+                // Found, mapped and bound in one step (the mapping has to exist before the service runs: a
+                // service may answer inside HandleIncomingCall, and its data is addressed by this local
+                // channel). Until 2026-11-18 these were three calls, and a channel held by a service was
+                // not even counted as busy, so two callers in the TAD or the chat shared a channel.
+                ushort lcn = _runtime.ClaimChannelForService(callRequest.SourceConnection, callRequest.SourceLcn, localService);
                 if (lcn == 0)
                 {
                     _logger.LogError("No free local channel for the call to {CalledAddress} on {Source}", callRequest.CalledAddress, sourceName);
                     return X25CallDecision.Busy();
                 }
-
-                // The mapping has to exist before the service runs: a service may answer inside
-                // HandleIncomingCall, and its data is addressed by this local channel number.
-                _runtime.RegisterXotConnection(lcn, callRequest.SourceConnection, callRequest.SourceLcn);
-                _runtime.BindServiceToLcn(lcn, localService);
 
                 bool accepted = localService.HandleIncomingCall(lcn, callRequest.CalledAddress,
                     callRequest.CallingAddress, callRequest.CallUserData ?? Array.Empty<byte>(),

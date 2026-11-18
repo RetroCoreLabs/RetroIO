@@ -1266,9 +1266,12 @@ namespace RetroIO.Protocols.X25.Runtime
 
                 if (item.Kind == TadOutputKind.Data)
                 {
-                    if (TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci))
+                    // The service is told when its data has left (TadOutputEventArgs.Delivered) - only then, so data held
+                    // back by a shut window stays counted as on its way.
+                    if (TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci)
+                        && endpoint.SendBlocking(lci, item.Data, XotSendTimeoutMs, item.QBit, item.MBit, item.DBit))
                     {
-                        endpoint.SendBlocking(lci, item.Data, XotSendTimeoutMs, item.QBit, item.MBit, item.DBit);
+                        item.Delivered?.Invoke();
                     }
                 }
                 else if (item.Kind == TadOutputKind.Clear)
@@ -1319,6 +1322,12 @@ namespace RetroIO.Protocols.X25.Runtime
 
             PacketHistory.FirePacketReceived(received);
             RouteX25EventToBoundModule(output.Lcn, received);
+
+            // The module in this process has been given the data: it has left the service.
+            if (output.Kind == TadOutputKind.Data)
+            {
+                output.Delivered?.Invoke();
+            }
         }
 
         /// <summary>
