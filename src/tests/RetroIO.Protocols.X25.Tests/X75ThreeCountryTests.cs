@@ -201,13 +201,13 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         // The X.75 packets of one type a link end captured in one direction, decoded as X.75.
-        private static X25PacketInfo Captured(List<byte[]> packets, X25PacketType type)
+        private static X25PacketInfo Captured(List<byte[]> packets, X25PacketType type, bool x75 = true)
         {
             lock (packets)
             {
                 for (int i = 0; i < packets.Count; i++)
                 {
-                    X25PacketInfo info = X25PacketParser.ParsePacket(packets[i], x75: true);
+                    X25PacketInfo info = X25PacketParser.ParsePacket(packets[i], x75);
                     if (info.PacketType == type)
                     {
                         return info;
@@ -349,6 +349,98 @@ namespace RetroIO.Protocols.X25.Tests
             byte[] reply = Encoding.ASCII.GetBytes("WELCOME TO ALTGER");
             SendXot(tadStream, X25PacketBuilder.CreateDataPacket(offered.LCN, 0, 1, reply));
             Assert.That(ReadUntil(padStream, X25PacketType.Data).UserData, Is.EqualTo(reply));
+        }
+
+        /// <summary>
+        /// England as two switches joined by an internal trunk: Norway - England 1 =internal= England 2 - Germany. The
+        /// transit list must cross England's internal trunk (in the private facility FE after the marker, x25emu's
+        /// coding), so Germany still sees [2342], England is still named exactly once, and the answer still names 2342.
+        /// </summary>
+        [Test]
+        public void TheTransitList_CrossesAnInternalTrunkInsideEngland()
+        {
+            // Germany: X.75 from England 2 on port 0, the TAD on port 1.
+            HdlcTcpSwitchPort deFromUk = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+            XotSwitchPort deTad = new XotSwitchPort(Subscriber(1));
+            Build("2624", "2624589004", deFromUk, deTad);
+            Assert.That(deFromUk.Start() && deTad.Start(), Is.True);
+
+            // England 2: internal trunk from England 1 on port 0 (listens), X.75 to Germany on port 1 (dials).
+            PortConfig internalIn = NetworkLink(0, PortMode.Dce, 0);
+            internalIn.BetweenNetworks = false;
+            HdlcTcpSwitchPort uk2FromUk1 = new HdlcTcpSwitchPort(internalIn, NullLogger.Instance);
+            HdlcTcpSwitchPort uk2ToDe = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, deFromUk.BoundPort), NullLogger.Instance);
+            Build("2342", "2624", uk2FromUk1, uk2ToDe);
+            Assert.That(uk2FromUk1.Start() && uk2ToDe.Start(), Is.True);
+
+            // England 1: X.75 from Norway on port 0 (listens), internal trunk to England 2 on port 1 (dials).
+            PortConfig internalOut = NetworkLink(1, PortMode.Dte, uk2FromUk1.BoundPort);
+            internalOut.BetweenNetworks = false;
+            HdlcTcpSwitchPort uk1FromNo = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+            HdlcTcpSwitchPort uk1ToUk2 = new HdlcTcpSwitchPort(internalOut, NullLogger.Instance);
+            Build("2342", "2624", uk1FromNo, uk1ToUk2);
+            Assert.That(uk1FromNo.Start() && uk1ToUk2.Start(), Is.True);
+
+            // Norway: a subscriber line on port 0, X.75 to England 1 on port 1.
+            XotSwitchPort noPad = new XotSwitchPort(Subscriber(0));
+            HdlcTcpSwitchPort noToUk = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, uk1FromNo.BoundPort), NullLogger.Instance);
+            Build("2422", "2624", noPad, noToUk);
+            Assert.That(noPad.Start() && noToUk.Start(), Is.True);
+
+            List<byte[]> internalCapture = new List<byte[]>();
+            List<byte[]> unused = new List<byte[]>();
+            List<byte[]> deLinkIn = new List<byte[]>();
+            List<byte[]> noLinkIn = new List<byte[]>();
+            Capture(uk1ToUk2, unused, internalCapture);
+            Capture(deFromUk, deLinkIn, unused);
+            Capture(noToUk, noLinkIn, unused);
+
+            Assert.That(SpinWait.SpinUntil(() => noToUk.PeerConnected && uk1FromNo.PeerConnected && uk1ToUk2.PeerConnected
+                && uk2FromUk1.PeerConnected && uk2ToDe.PeerConnected && deFromUk.PeerConnected, 10000), Is.True, "the links did not come up");
+
+            TcpClient tad = new TcpClient { NoDelay = true };
+            _disposables.Add(tad);
+            tad.Connect("127.0.0.1", deTad.BoundPort);
+            TcpClient pad = new TcpClient { NoDelay = true };
+            _disposables.Add(pad);
+            pad.Connect("127.0.0.1", noPad.BoundPort);
+            Assert.That(SpinWait.SpinUntil(() => noPad.PeerConnected && deTad.PeerConnected, 5000), Is.True);
+            NetworkStream padStream = pad.GetStream();
+            NetworkStream tadStream = tad.GetStream();
+            padStream.ReadTimeout = 10000;
+            tadStream.ReadTimeout = 10000;
+
+            SendXot(padStream, X25PacketBuilder.CreateCallRequest(1, Altger, "24220001",
+                new byte[] { 0x42, 0x07, 0x07, 0x43, 0x02, 0x02 }, new byte[] { 0x01, 0x00, 0x00, 0x00 }));
+
+            // The TAD gets the call with no private facility in it: the carried field is the network's own (X.25 7.1).
+            X25PacketInfo offered = ReadUntil(tadStream, X25PacketType.CallRequest);
+            Assert.That(offered.Facilities, Is.EqualTo(new byte[] { 0x42, 0x07, 0x07, 0x43, 0x02, 0x02 }));
+
+            // On England's internal trunk the field travelled after the marker as FE: 00 00 FE <length> <field>, and it
+            // does not name England yet (England has not left its network).
+            // An internal trunk is plain X.25: read without the X.75 utility field.
+            X25PacketInfo internalCall = Captured(internalCapture, X25PacketType.CallRequest, x75: false);
+            byte[] f = internalCall.Facilities ?? Array.Empty<byte>();
+            int marker = Array.IndexOf(f, (byte)0xFE);
+            Assert.That(marker, Is.GreaterThanOrEqualTo(2), "no carried field on the internal trunk: " + BitConverter.ToString(f));
+            Assert.That(f[marker - 2], Is.EqualTo(0x00));
+            Assert.That(f[marker - 1], Is.EqualTo(0x00));
+            byte[] carried = new byte[f[marker + 1]];
+            Array.Copy(f, marker + 2, carried, 0, carried.Length);
+            Assert.That(X75Utilities.TryDecode(carried, out X75Utilities onTrunk), Is.EqualTo(X75UtilityError.None));
+            Assert.That(onTrunk.TransitNetworks, Is.Empty);
+            Assert.That(onTrunk.HasCallIdentifier, Is.True);
+
+            // Into Germany: England named once, the call identifier Norway set.
+            X75Utilities enteringGermany = Utilities(Captured(deLinkIn, X25PacketType.CallRequest));
+            Assert.That(enteringGermany.TransitNetworks, Is.EqualTo(new[] { "2342" }));
+            Assert.That(enteringGermany.CallIdentifier, Is.EqualTo(onTrunk.CallIdentifier));
+
+            // The answer crosses the internal trunk back and still names England to Norway.
+            SendXot(tadStream, X25PacketBuilder.CreateCallAccepted(offered.LCN));
+            ReadUntil(padStream, X25PacketType.CallAccepted);
+            Assert.That(Utilities(Captured(noLinkIn, X25PacketType.CallAccepted)).TransitNetworks, Is.EqualTo(new[] { "2342" }));
         }
 
         // True when an X.25 facility field holds an element with the given code before the first marker (X.25 7.1).

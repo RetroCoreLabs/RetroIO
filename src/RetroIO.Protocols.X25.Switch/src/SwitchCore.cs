@@ -542,11 +542,18 @@ namespace RetroIO.Protocols.X25.Switch
 
             // Between networks (X.75): read the utility field the calling network sent, and build the one for the next
             // network. A refusal here is sent back on the X.75 link with the cause and diagnostic Annex F a) gives.
+            // Inside the network the field travels in a private facility on internal trunks (CarriedUtilitiesCode), so it is
+            // taken out of what the caller's side sent and, toward another switch of ours, put back with what is built here.
             byte[]? onwardUtilities = null;
-            if (!TryBuildOnwardUtilities(inPort, inLci, outPort, out onwardUtilities, out byte refuseDiagnostic))
+            if (!TryBuildOnwardUtilities(inPort, inLci, outPort, out onwardUtilities, out byte[]? onwardCarried, out byte refuseDiagnostic))
             {
                 inPort.ClearCall(inLci, CauseNetworkCongestion, refuseDiagnostic);
                 return;
+            }
+
+            if (haveParameters)
+            {
+                asked = WithCarriedUtilities(asked, onwardCarried);
             }
 
             // Place the onward call; a zero LCI means the egress port could not initiate it.
@@ -564,13 +571,13 @@ namespace RetroIO.Protocols.X25.Switch
                     .WithNetworkUtilities(onwardUtilities);
                 outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, toAsk);
             }
-            else if (onwardUtilities != null)
+            else if (onwardUtilities != null || onwardCarried != null)
             {
-                // No values from the caller's side, but the next network still needs its utility field: ask for the out
-                // port's own defaults with it.
-                X25CallParameters defaults = new X25CallParameters(
+                // No values from the caller's side, but the next network (or switch) still needs the utility field: ask
+                // for the out port's own defaults with it.
+                X25CallParameters defaults = WithCarriedUtilities(new X25CallParameters(
                     outPort.Config.DefaultWindowSize, outPort.Config.DefaultWindowSize,
-                    outPort.Config.DefaultPacketSize, outPort.Config.DefaultPacketSize, null, onwardUtilities);
+                    outPort.Config.DefaultPacketSize, outPort.Config.DefaultPacketSize, null, onwardUtilities), onwardCarried);
                 outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, defaults);
             }
             else
@@ -658,26 +665,46 @@ namespace RetroIO.Protocols.X25.Switch
         /// of its own in Annex F a); it is refused with # 0.
         /// </para>
         /// <para>
-        /// Known gap: a transit list only travels on X.75 links. A call that enters this network over X.75 at one switch
-        /// and crosses an internal trunk to the switch that leaves it loses the list on the internal trunk (PLAN B4).
+        /// Inside the network the field crosses internal trunks in a private facility (<see cref="CarriedUtilitiesCode"/>,
+        /// the same coding as x25emu), so a call that enters at one switch and leaves at another keeps its list.
+        /// Whether this network is a transit network for the call is told by the call identifier: 5.3.2 makes it "always
+        /// present in the call request packet" between networks and "established by the originating network", and this
+        /// switch sets one only on the way out of the network. So a call that already has one entered from another
+        /// network. A peer that breaks 5.3.2 is refused at the border (# 76), so that case does not reach the exit.
         /// </para>
         /// </remarks>
-        private bool TryBuildOnwardUtilities(ISwitchPort inPort, ushort inLci, ISwitchPort outPort, out byte[]? onward, out byte refuseDiagnostic)
+        private bool TryBuildOnwardUtilities(ISwitchPort inPort, ushort inLci, ISwitchPort outPort, out byte[]? onward, out byte[]? onwardCarried, out byte refuseDiagnostic)
         {
             onward = null;
+            onwardCarried = null;
             refuseDiagnostic = 0;
             bool fromNetwork = inPort.Config.BetweenNetworks;
             bool toNetwork = outPort.Config.BetweenNetworks;
-            if (!fromNetwork && !toNetwork)
+            bool toInternal = IsInternalTrunk(outPort);
+
+            // What the caller's side brought: the X.75 field from another network, or the carried copy from another of
+            // our switches, or nothing (a call from our own subscriber).
+            byte[]? received = null;
+            bool haveParameters = inPort.TryGetCallParameters(inLci, out X25CallParameters p);
+            if (fromNetwork)
             {
+                received = haveParameters ? p.NetworkUtilities : Array.Empty<byte>();
+            }
+            else if (IsInternalTrunk(inPort) && haveParameters && TryFindCarried(p.OtherFacilities, out byte[] carried, out _, out _))
+            {
+                received = carried;
+            }
+
+            if (received == null && !toNetwork)
+            {
+                // Our own subscriber's call staying inside the network, or reaching a subscriber: no field at all.
                 return true;
             }
 
             string ownDnic = _node.Config.Dnic;
             X75Utilities u;
-            if (fromNetwork)
+            if (received != null)
             {
-                byte[] received = inPort.TryGetCallParameters(inLci, out X25CallParameters p) ? p.NetworkUtilities : Array.Empty<byte>();
                 X75UtilityError error = X75Utilities.TryDecode(received, out u);
                 switch (error)
                 {
@@ -694,7 +721,7 @@ namespace RetroIO.Protocols.X25.Switch
                         return false;
                 }
 
-                if (!u.HasCallIdentifier)
+                if (fromNetwork && !u.HasCallIdentifier)
                 {
                     refuseDiagnostic = 76;
                     return false;
@@ -712,7 +739,7 @@ namespace RetroIO.Protocols.X25.Switch
                         }
                     }
 
-                    if (transit[i] == ownDnic)
+                    if (fromNetwork && transit[i] == ownDnic)
                     {
                         refuseDiagnostic = 120;
                         return false;
@@ -721,13 +748,14 @@ namespace RetroIO.Protocols.X25.Switch
             }
             else
             {
-                // Originating network: a new call identifier, and no transit network yet.
-                u = new X75Utilities
-                {
-                    HasCallIdentifier = true,
-                    CallIdentifier = _nextCallIdentifier,
-                };
-                _nextCallIdentifier = _nextCallIdentifier >= X75Utilities.MaxCallIdentifier ? 1 : _nextCallIdentifier + 1;
+                u = new X75Utilities();
+            }
+
+            if (toInternal)
+            {
+                // To another of our switches: the field goes along as it is; the switch that leaves the network decides.
+                onwardCarried = received != null ? u.Encode() : null;
+                return true;
             }
 
             if (!toNetwork)
@@ -736,10 +764,17 @@ namespace RetroIO.Protocols.X25.Switch
                 return true;
             }
 
-            if (fromNetwork)
+            if (u.HasCallIdentifier)
             {
-                // A transit network: in from one network, out to another.
+                // A transit network: the call entered from another network (it carries that network's identifier).
                 u.TransitNetworks.Add(ownDnic);
+            }
+            else
+            {
+                // Originating network: a new call identifier, and no transit network.
+                u.HasCallIdentifier = true;
+                u.CallIdentifier = _nextCallIdentifier;
+                _nextCallIdentifier = _nextCallIdentifier >= X75Utilities.MaxCallIdentifier ? 1 : _nextCallIdentifier + 1;
             }
 
             onward = u.Encode();
@@ -747,8 +782,151 @@ namespace RetroIO.Protocols.X25.Switch
         }
 
         /// <summary>
-        /// The X.75 utility field of the Call Connected sent back toward the calling network, or null when the caller's leg
-        /// is not between networks.
+        /// True for a trunk to another switch of this network (not to another network).
+        /// </summary>
+        private static bool IsInternalTrunk(ISwitchPort port)
+        {
+            return port.Config.Type == PortType.Trunk && !port.Config.BetweenNetworks;
+        }
+
+        /// <summary>
+        /// The private facility that carries the X.75 utility field across an internal trunk: code FE, after the marker
+        /// (00 00), with a length octet (class D, X.25 7.1) and then the field. The same coding as x25emu
+        /// (<c>SW_FAC_TRANSIT</c> in its <c>tools/x25switch.h</c>), so the two switches can share a network. X.25 7.1: what
+        /// follows a marker is not an X.25 facility, so this is the network's own signalling and never reaches a DTE.
+        /// </summary>
+        private const byte CarriedUtilitiesCode = 0xFE;
+
+        /// <summary>
+        /// Finds the carried utility field in a facility field: an FE element after the first marker.
+        /// </summary>
+        private static bool TryFindCarried(byte[] field, out byte[] utilities, out int at, out int length)
+        {
+            int i = 0;
+            bool afterMarker = false;
+            while (i < field.Length)
+            {
+                byte code = field[i];
+                int n;
+                switch (code >> 6)
+                {
+                    case 0: n = 2; break;
+                    case 1: n = 3; break;
+                    case 2: n = 4; break;
+                    default: n = i + 1 < field.Length ? 2 + field[i + 1] : field.Length - i; break;
+                }
+
+                if (i + n > field.Length)
+                {
+                    break;
+                }
+
+                if (afterMarker && code == CarriedUtilitiesCode && n >= 2)
+                {
+                    utilities = new byte[n - 2];
+                    Array.Copy(field, i + 2, utilities, 0, utilities.Length);
+                    at = i;
+                    length = n;
+                    return true;
+                }
+
+                if (code == 0x00)
+                {
+                    afterMarker = true;
+                }
+
+                i += n;
+            }
+
+            utilities = Array.Empty<byte>();
+            at = -1;
+            length = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// Returns the values with any carried utility field removed (and the marker too when nothing else follows it),
+        /// then, when <paramref name="carried"/> is given, a new one added after a marker.
+        /// </summary>
+        private static X25CallParameters WithCarriedUtilities(X25CallParameters values, byte[]? carried)
+        {
+            byte[] field = values.OtherFacilities;
+            if (TryFindCarried(field, out _, out int at, out int length))
+            {
+                byte[] kept = new byte[field.Length - length];
+                Array.Copy(field, 0, kept, 0, at);
+                Array.Copy(field, at + length, kept, at, field.Length - at - length);
+                field = kept;
+
+                // A marker (00 00) left as the last element marks nothing.
+                if (field.Length >= 2 && field[field.Length - 2] == 0x00 && field[field.Length - 1] == 0x00)
+                {
+                    byte[] shorter = new byte[field.Length - 2];
+                    Array.Copy(field, shorter, shorter.Length);
+                    field = shorter;
+                }
+            }
+
+            if (carried != null)
+            {
+                if (carried.Length > 255)
+                {
+                    throw new InvalidOperationException("a carried utility field is longer than a class D element holds");
+                }
+
+                bool hasMarker = HasMarker(field);
+                int extra = (hasMarker ? 0 : 2) + 2 + carried.Length;
+                byte[] grown = new byte[field.Length + extra];
+                field.CopyTo(grown, 0);
+                int pos = field.Length;
+                if (!hasMarker)
+                {
+                    grown[pos++] = 0x00;
+                    grown[pos++] = 0x00;
+                }
+
+                grown[pos++] = CarriedUtilitiesCode;
+                grown[pos++] = (byte)carried.Length;
+                carried.CopyTo(grown, pos);
+                field = grown;
+            }
+
+            if (ReferenceEquals(field, values.OtherFacilities))
+            {
+                return values;
+            }
+
+            return new X25CallParameters(values.WindowSizeOut, values.WindowSizeIn, values.PacketSizeOut, values.PacketSizeIn, field, values.NetworkUtilities);
+        }
+
+        // True when a facility field has a marker (code 00) among its elements (X.25 7.1).
+        private static bool HasMarker(byte[] field)
+        {
+            int i = 0;
+            while (i < field.Length)
+            {
+                byte code = field[i];
+                if (code == 0x00)
+                {
+                    return true;
+                }
+
+                switch (code >> 6)
+                {
+                    case 0: i += 2; break;
+                    case 1: i += 3; break;
+                    case 2: i += 4; break;
+                    default: i += i + 1 < field.Length ? 2 + field[i + 1] : field.Length - i; break;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The transit list to answer the caller's side with, from what the called side answered: the X.75 field from
+        /// another network, the carried copy from another of our switches, or - at the destination - the list the call
+        /// came with. Null when there is none.
         /// </summary>
         /// <remarks>
         /// X.75 5.3.1: "A transit network identification is always present for each transit network in the call connected
@@ -757,21 +935,36 @@ namespace RetroIO.Protocols.X25.Switch
         /// call identifier is left out: "The use of the call identifier in the call connected packet is for further study"
         /// (5.3.2).
         /// </remarks>
-        private static byte[]? AnswerUtilities(VcStitch stitch, X25CallParameters answered)
+        private static byte[]? AnswerTransitList(VcStitch stitch, X25CallParameters answered)
         {
-            if (!stitch.InPort.Config.BetweenNetworks)
-            {
-                return null;
-            }
-
-            byte[] source;
+            byte[]? source = null;
             if (stitch.OutPort.Config.BetweenNetworks)
             {
                 source = answered.NetworkUtilities;
             }
-            else
+            else if (IsInternalTrunk(stitch.OutPort))
             {
-                source = stitch.InPort.TryGetCallParameters(stitch.InLci, out X25CallParameters asked) ? asked.NetworkUtilities : Array.Empty<byte>();
+                if (TryFindCarried(answered.OtherFacilities, out byte[] carried, out _, out _))
+                {
+                    source = carried;
+                }
+            }
+            else if (stitch.InPort.TryGetCallParameters(stitch.InLci, out X25CallParameters asked))
+            {
+                // The destination switch: the list the call arrived with.
+                if (stitch.InPort.Config.BetweenNetworks)
+                {
+                    source = asked.NetworkUtilities;
+                }
+                else if (TryFindCarried(asked.OtherFacilities, out byte[] carried, out _, out _))
+                {
+                    source = carried;
+                }
+            }
+
+            if (source == null)
+            {
+                return null;
             }
 
             X75Utilities answer = new X75Utilities();
@@ -785,6 +978,25 @@ namespace RetroIO.Protocols.X25.Switch
             }
 
             return answer.Encode();
+        }
+
+        /// <summary>
+        /// The answer to the caller's side with the transit list where that side wants it: in the X.75 field toward
+        /// another network, in the carried facility toward another of our switches, and nowhere toward a subscriber.
+        /// </summary>
+        private static X25CallParameters WithAnswerTransitList(VcStitch stitch, X25CallParameters toCaller, byte[]? list)
+        {
+            if (stitch.InPort.Config.BetweenNetworks)
+            {
+                return WithCarriedUtilities(toCaller, null).WithNetworkUtilities(list ?? new X75Utilities().Encode());
+            }
+
+            if (IsInternalTrunk(stitch.InPort))
+            {
+                return WithCarriedUtilities(toCaller, list).WithNetworkUtilities(null);
+            }
+
+            return WithCarriedUtilities(toCaller, null).WithNetworkUtilities(null);
         }
 
         private void OnCallConnected(ISwitchPort port, ushort lci)
@@ -843,8 +1055,9 @@ namespace RetroIO.Protocols.X25.Switch
 
                 // The called DTE's NUI (6.21.3) does not go back to the caller either (6.21).
                 // Nor the called DTE's charging request: Table 7-2 does not allow it in a Call Connected.
-                stitch.InPort.AcceptCall(stitch.InLci, agreed.Swapped().WithoutNuiSelection().WithoutChargingRequest()
-                    .WithNetworkUtilities(AnswerUtilities(stitch, agreed)));
+                // The transit list goes back the way the caller's side wants it (X.75 5.3.1; WithAnswerTransitList).
+                stitch.InPort.AcceptCall(stitch.InLci, WithAnswerTransitList(stitch,
+                    agreed.Swapped().WithoutNuiSelection().WithoutChargingRequest(), AnswerTransitList(stitch, agreed)));
             }
             else
             {
