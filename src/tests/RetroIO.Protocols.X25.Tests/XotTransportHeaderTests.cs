@@ -156,7 +156,7 @@ namespace RetroIO.Protocols.X25.Tests
             try
             {
                 Assert.That(client.Start(), Is.True);
-                Assert.That(client.ConnectToXotGateway("127.0.0.1", port), Is.True);
+                Assert.That(client.ConnectToXotGateway("127.0.0.1", port), Is.Not.Null);
 
                 using TcpClient peer = listener.AcceptTcpClient();
                 NetworkStream stream = peer.GetStream();

@@ -588,9 +588,9 @@ namespace RetroIO.Protocols.X25.Transport
 
             try
             {
-                // Establish connection to the target IP if not already connected
-                var connected = xotClient.ConnectToXotGateway(ipAddress);
-                if (!connected)
+                // A new TCP connection for this one call (RFC 1613 section 5: one connection per circuit)
+                XotClientCircuit? circuit = xotClient.ConnectToXotGateway(ipAddress);
+                if (circuit == null)
                 {
                     _logger.LogWarning("Failed to establish XOT connection to {IpAddress}", ipAddress);
                     return false;
@@ -601,11 +601,12 @@ namespace RetroIO.Protocols.X25.Transport
                 if (x25CallPacket == null)
                 {
                     _logger.LogError("Failed to create X.25 call request packet");
+                    xotClient.CloseCircuit(circuit);
                     return false;
                 }
 
-                // Send X.25 call request over XOT connection
-                var success = xotClient.SendX25Packet(ipAddress, x25CallPacket);
+                // Send X.25 call request over the call's own XOT connection
+                var success = xotClient.SendX25Packet(circuit, x25CallPacket);
                 if (success)
                 {
                     _logger.LogInformation("XOT call request sent to {IpAddress} for {CalledAddress}", ipAddress, callRequest.CalledAddress);
@@ -617,6 +618,7 @@ namespace RetroIO.Protocols.X25.Transport
                 else
                 {
                     _logger.LogWarning("Failed to send XOT call request to {IpAddress}", ipAddress);
+                    xotClient.CloseCircuit(circuit);
                     return false;
                 }
             }

@@ -722,7 +722,7 @@ namespace RetroIO.Protocols.X25.Tests
                 XotClientTransport transport = new XotClientTransport(Logger, new XotClientConfig { Name = "xotc", ConnectTimeout = 5000 });
                 List<TransportDataEventArgs> seen = new List<TransportDataEventArgs>();
                 transport.DataReceived += (s, e) => { lock (seen) { seen.Add(e); } };
-                Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.True);
+                Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.Not.Null);
 
                 using (TcpClient peer = gateway.AcceptTcpClient())
                 {
