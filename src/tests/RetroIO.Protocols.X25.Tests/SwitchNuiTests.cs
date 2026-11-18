@@ -54,6 +54,9 @@ namespace RetroIO.Protocols.X25.Tests
             // Every record line the switch wrote.
             public readonly System.Collections.Generic.List<Cdr> Records = new System.Collections.Generic.List<Cdr>();
 
+            // The calling address in the last Call Request the callee received.
+            public string CalleeSawCalling = string.Empty;
+
             public void Dispose()
             {
                 CallerPort?.Stop();
@@ -61,7 +64,7 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
-        private static OneSwitch Build(bool nuiRequired = false, string defaultNui = "")
+        private static OneSwitch Build(bool nuiRequired = false, string defaultNui = "", string callingBase = "")
         {
             SwitchConfig cfg = new SwitchConfig { Dnic = "2340" };
             cfg.Routing.AddRoute(new X121Route { Type = X121RouteType.Prefix, Address = "2342", PrefixLen = 4, DestPort = 1 });
@@ -73,7 +76,7 @@ namespace RetroIO.Protocols.X25.Tests
             s.CallerPort = new XotSwitchPort(new PortConfig
             {
                 Id = 0, Mode = PortMode.Dce, Host = "127.0.0.1", Port = 0, LciBase = 1, LciCount = 16,
-                NuiRequired = nuiRequired, DefaultNui = defaultNui,
+                NuiRequired = nuiRequired, DefaultNui = defaultNui, CallingAddressBase = callingBase,
             });
             s.CalleePort = new XotSwitchPort(new PortConfig { Id = 1, Mode = PortMode.Dce, Host = "127.0.0.1", Port = 0, LciBase = 1, LciCount = 16 });
             s.Node.AddPort(s.CallerPort);
@@ -168,6 +171,7 @@ namespace RetroIO.Protocols.X25.Tests
                 calleeSawIt = atCallee.PacketType == X25PacketType.CallRequest;
                 if (calleeSawIt)
                 {
+                    s.CalleeSawCalling = atCallee.CallingAddress;
                     SendXot(calleeStream, X25PacketBuilder.CreateCallAccepted(atCallee.LCN, Facilities(null)));
                 }
             }
@@ -453,6 +457,81 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(cfg.Accounts[0].Nui, Is.EqualTo("ACCT-7"));
             Assert.That(cfg.Ports[0].NuiRequired, Is.True);
             Assert.That(cfg.Ports[0].DefaultNui, Is.EqualTo("ACCT-7"));
+        }
+
+        /// <summary>
+        /// Without a calling address base the callee gets the address the caller sent, unchanged.
+        /// </summary>
+        [Test]
+        public void NoCallingAddressBase_TheCallersAddressGoesThrough()
+        {
+            using OneSwitch s = Build();
+
+            PlaceAndAnswer(s, null, out bool calleeSawIt);
+
+            Assert.That(calleeSawIt, Is.True);
+            Assert.That(s.CalleeSawCalling, Is.EqualTo("23400001"));
+        }
+
+        /// <summary>
+        /// With a calling address base the network says where the call comes from: the callee gets base + the call's
+        /// channel on the switch's side (the first call on a port with lci_base 1 is channel 1), whatever the caller sent,
+        /// and the NUI still decides who pays.
+        /// </summary>
+        [Test]
+        public void CallingAddressBase_ReplacesTheCallersAddress_AndTheNuiStillPays()
+        {
+            using OneSwitch s = Build(callingBase: "234070000");
+
+            X25PacketInfo back = PlaceAndAnswer(s, "ACCT-7", out bool calleeSawIt);
+
+            Assert.That(calleeSawIt, Is.True);
+            Assert.That(back.PacketType, Is.EqualTo(X25PacketType.CallAccepted));
+            Assert.That(s.CalleeSawCalling, Is.EqualTo("234070001"));
+            Assert.That(SpinWait.SpinUntil(() => Account(s, "card7").CallsMade == 1, 5000), Is.True);
+            Assert.That(SpinWait.SpinUntil(() => { lock (s.Records) { return s.Records.Count == 1; } }, 5000), Is.True);
+            Assert.That(s.Records[0].Calling, Is.EqualTo("234070001"));
+        }
+
+        /// <summary>
+        /// The address is the base plus the channel, written with the base's number of digits.
+        /// </summary>
+        [Test]
+        public void CallingAddressFor_AddsTheChannel_KeepingTheLength()
+        {
+            PortConfig pc = new PortConfig { CallingAddressBase = "0242270000" };
+
+            Assert.That(pc.CallingAddressFor(1), Is.EqualTo("0242270001"));
+            Assert.That(pc.CallingAddressFor(64), Is.EqualTo("0242270064"));
+            Assert.That(new PortConfig().CallingAddressFor(1), Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// The setting is read from the file; a base that is not digits, is over 15 digits, or has no room for the
+        /// highest channel is refused when the file is read.
+        /// </summary>
+        [TestCase("242270000", true)]
+        [TestCase("2422 7000", false)]
+        [TestCase("24227A000", false)]
+        [TestCase("1234567890123456", false)]
+        [TestCase("99999", false)]
+        public void CallingAddressBase_IsReadAndChecked(string value, bool good)
+        {
+            string[] ini =
+            {
+                "[switch]", "name = t", "dnic = 2340",
+                "[port.0]", "type = access", "mode = dce", "host = 127.0.0.1", "port = 0", "lci_count = 64",
+                "calling_address_base = " + value,
+            };
+
+            if (good)
+            {
+                Assert.That(SwitchConfigLoader.Load(IniConfig.Parse(ini)).Ports[0].CallingAddressBase, Is.EqualTo(value));
+            }
+            else
+            {
+                Assert.Throws<InvalidDataException>(() => SwitchConfigLoader.Load(IniConfig.Parse(ini)));
+            }
         }
     }
 }

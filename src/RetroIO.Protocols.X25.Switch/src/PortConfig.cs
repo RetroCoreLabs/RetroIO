@@ -175,6 +175,52 @@ namespace RetroIO.Protocols.X25.Switch
         public string DefaultNui { get; set; } = string.Empty;
 
         /// <summary>
+        /// The calling address the network gives every call arriving on this port: this number plus the call's channel
+        /// number on the switch's side, written with as many digits as this number has (base 242270000, channel 3:
+        /// 242270003). Whatever calling address the DTE sent is replaced. Config key <c>calling_address_base</c>; empty
+        /// (the default) keeps the address the DTE sent.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Made for a line of PAD users (decision of 2026-11-18): every x25pad sent the same fixed address, so the called
+        /// machine, the call records and the far network could not tell the users apart. The calling address is the
+        /// address of the line the call comes in on, set by the network. It is not the NUI: X.25 (10/96) 6.21, "Network
+        /// user identifier is never transmitted to the remote DTE. The calling DTE address transmitted to the remote DTE
+        /// in the calling DTE address field should not be inferred from the network user identifier".
+        /// </para>
+        /// <para>
+        /// On an XOT port each PAD is its own TCP connection and may use channel 1 on it; the port gives every call its
+        /// own channel on the switch's side, and that is the number added here, so two calls at the same time never
+        /// share an address. The same user may get another address on the next call, as a dial-in user got another
+        /// port of the network PAD.
+        /// </para>
+        /// <para>
+        /// The loader refuses a base that is not digits, that is longer than 15 digits (X.25 (10/96) 5.2.1: the plain
+        /// address format carries addresses "whose length (including possible prefixes and/or escape codes) is not
+        /// greater than 15 digits"), or to which the port's highest channel cannot be added
+        /// without needing one more digit.
+        /// </para>
+        /// </remarks>
+        public string CallingAddressBase { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The calling address <see cref="CallingAddressBase"/> gives the call on <paramref name="channel"/>; the empty
+        /// string when no base is set.
+        /// </summary>
+        /// <param name="channel">The call's channel number on the switch's side of this port.</param>
+        /// <returns>The base plus the channel, zero-padded to the base's length; empty without a base.</returns>
+        public string CallingAddressFor(int channel)
+        {
+            if (CallingAddressBase.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            ulong value = ulong.Parse(CallingAddressBase, System.Globalization.CultureInfo.InvariantCulture) + (ulong)channel;
+            return value.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(CallingAddressBase.Length, '0');
+        }
+
+        /// <summary>
         /// Serial device path (HDLC-serial transport only).
         /// </summary>
         public string SerialDevice { get; set; } = string.Empty;

@@ -346,6 +346,33 @@ namespace RetroIO.Protocols.X25.Switch
                 pc.ChargingInfo = ReadYesNo(ini, section, "charging_info");
                 pc.DefaultNui = ini.GetString(section, "default_nui", string.Empty);
 
+                // The calling address the network gives each call on this port (PortConfig.CallingAddressBase). Refused
+                // here rather than sent wrong: only digits, at most 15 of them (X.25 5.2.1), and room for the highest
+                // channel without one more digit.
+                string callingBase = ini.GetString(section, "calling_address_base", string.Empty).Trim();
+                if (callingBase.Length > 0)
+                {
+                    bool digits = callingBase.Length <= 15;
+                    for (int d = 0; d < callingBase.Length && digits; d++)
+                    {
+                        digits = callingBase[d] >= '0' && callingBase[d] <= '9';
+                    }
+
+                    if (!digits)
+                    {
+                        throw new InvalidDataException("[" + section + "] calling_address_base = " + callingBase
+                            + ": must be 1 to 15 digits (X.25 5.2.1)");
+                    }
+
+                    pc.CallingAddressBase = callingBase;
+                    int highest = pc.LciBase + pc.LciCount - 1;
+                    if (pc.CallingAddressFor(highest).Length > callingBase.Length)
+                    {
+                        throw new InvalidDataException("[" + section + "] calling_address_base = " + callingBase
+                            + ": adding the highest channel (" + highest + ") needs one more digit");
+                    }
+                }
+
                 // Neighbour declaration (management/monitor plane only) for the network map. peer_monitor_host
                 // defaults to the port's host so a trunk usually only needs peer_name + peer_monitor_port.
                 pc.PeerName = ini.GetString(section, "peer_name", string.Empty);
