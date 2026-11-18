@@ -117,7 +117,7 @@ namespace RetroIO.Protocols.X25.Host
                 return HostAdmission.Busy;
             }
 
-            // X.29 (11/88) 2.2: a PAD's call carries the protocol identifier 01 00 00 00 in its first four bytes.
+            // X.29 (12/97) 1.3: a PAD's call carries the protocol identifier 01 00 00 00 in its first four bytes.
             if (_d.PadCallsOnly && callUserData.Length > 0
                 && (callUserData.Length < 4 || callUserData[0] != 1 || callUserData[1] != 0 || callUserData[2] != 0 || callUserData[3] != 0))
             {
