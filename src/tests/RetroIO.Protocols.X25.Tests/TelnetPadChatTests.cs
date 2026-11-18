@@ -80,7 +80,8 @@ namespace RetroIO.Protocols.X25.Tests
             _a.Send(13, 0);
 
             Assert.That(_b.WaitFor("guest says: hello\r\n"), Is.True, "B did not get A's edited line: " + _b.Visible);
-            Assert.That(_a.WaitFor("helo" + (char)127 + "\\lo\r\n", 5000, mark), Is.True,
+            // BS SP BS rubs the deleted character out: the chat's set makes parameter 19 = 2 (X.28 (12/97) 3.5.24, value 2).
+            Assert.That(_a.WaitFor("helo" + (char)127 + "\b \blo\r\n", 5000, mark), Is.True,
                 "A's PAD did not echo the line with the character deleted signal: " + _a.Visible.Substring(mark));
             Assert.That(_b.Visible, Does.Not.Contain("helo"), "the chat got the unedited line");
         }

@@ -17,8 +17,9 @@ namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
     /// The PAD does what the host tells it with X.29 (step 3 of RetroX25 docs/altos-chat-port-plan.md). The Altos chat
-    /// sends, with the Q bit, the set PAD message 02 02 01 03 02 0D 04 0F 01 10 7F 11 18 12 12: echo on, forward on CR, LF after CR in the echo,
-    /// editing on, character delete DEL, line delete CAN, line display DC2. Every C# PAD (the Desktop PAD window, the
+    /// sends, with the Q bit, the set PAD message 02 02 01 03 02 0D 04 0F 01 10 7F 11 18 12 12 13 02: echo on, forward on CR, LF after CR in the
+    /// echo, editing on, character delete DEL, line delete CAN, line display DC2, editing PAD service signals for display
+    /// terminals (BS SP BS for a deleted character). Every C# PAD (the Desktop PAD window, the
     /// console and telnet PAD of RetroX25.Pad, the runtime's telnet PAD) is a <see cref="PadClient"/>, so these tests
     /// drive that class directly, with a transport that keeps what the PAD sends.
     /// </summary>
@@ -118,7 +119,7 @@ namespace RetroIO.Protocols.X25.Tests
         /// indication PAD message in response to a valid set PAD message received."
         /// </summary>
         [Test]
-        public void TheChatSet_ChangesTheSixParameters_AndIsNotAnswered()
+        public void TheChatSet_ChangesItsEightParameters_AndIsNotAnswered()
         {
             using Rig rig = new Rig();
             rig.Host(ChatProtocolService.SetPadMessage);
@@ -130,6 +131,7 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(rig.Pad.GetParameter(16), Is.EqualTo((byte)127), "character delete");
             Assert.That(rig.Pad.GetParameter(17), Is.EqualTo((byte)24), "line delete");
             Assert.That(rig.Pad.GetParameter(18), Is.EqualTo((byte)18), "line display");
+            Assert.That(rig.Pad.GetParameter(19), Is.EqualTo((byte)2), "editing PAD service signals for display terminals");
             Assert.That(rig.Transport.Sent.Count, Is.EqualTo(0), "a valid set must not be answered");
         }
 
@@ -154,9 +156,10 @@ namespace RetroIO.Protocols.X25.Tests
         /// <summary>
         /// helo DEL lo CR after the chat's set: the host gets "hello" CR in one packet (X.3 3.3 value 2 forwards on CR),
         /// and the terminal is shown each typed character (X.28 4.10, parameter 2 = 1, echo mask 0 echoes all), and after
-        /// the DEL the character deleted service signal of parameter 19. Parameter 19 is 1 in the PAD's initial profile
-        /// (X.28 Table 1, "Set to editing PAD service signals for printing terminals (value 1)"), so the signal is the
-        /// backslash (X.28 3.5.24, "Value 1: the character 5/12 (\) will be sent").
+        /// the DEL the character deleted service signal of parameter 19. The chat's set makes parameter 19 = 2, editing PAD
+        /// service signals for display terminals (X.3 3.19, "editing PAD service signals for display terminals -
+        /// represented by decimal 2"), so the signal is BS SP BS (X.28 3.5.24, "Value 2: the characters 0/8 (BS) 2/0 (SP)
+        /// 0/8 (BS) will be sent"): the deleted character is rubbed out on the screen.
         /// </summary>
         [Test]
         public void HeloDelLo_IsEchoedLocally_AndTheHostGetsHelloOnly()
@@ -166,23 +169,23 @@ namespace RetroIO.Protocols.X25.Tests
             rig.Type("helo" + Del + "lo\r");
 
             Assert.That(rig.Transport.Forwarded, Is.EqualTo(new[] { "hello\r" }), "the host must get the edited line once");
-            Assert.That(Show(rig.Screen), Is.EqualTo(Show("helo" + Del + "\\lo\r\n")));
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show("helo" + Del + "\b \blo\r\n")));
         }
 
         /// <summary>
-        /// Parameter 19 = 2, display terminal: the character deleted signal is BS SP BS (X.28 3.5.24, "Value 2: the
-        /// characters 0/8 (BS) 2/0 (SP) 0/8 (BS) will be sent").
+        /// The user can still ask the PAD for the printing terminal signal: parameter 19 = 1 after the chat's set gives
+        /// the backslash (X.28 3.5.24, "Value 1: the character 5/12 (\) will be sent").
         /// </summary>
         [Test]
-        public void CharacterDelete_OnADisplayTerminal_IsBackspaceSpaceBackspace()
+        public void CharacterDelete_OnAPrintingTerminal_IsTheBackslash()
         {
             using Rig rig = new Rig();
             rig.Host(ChatProtocolService.SetPadMessage);
-            rig.Host(0x02, 19, 2);
+            rig.Host(0x02, 19, 1);
             rig.Type("ab" + Del + "c\r");
 
             Assert.That(rig.Transport.Forwarded, Is.EqualTo(new[] { "ac\r" }));
-            Assert.That(Show(rig.Screen), Is.EqualTo(Show("ab" + Del + "\b \bc\r\n")));
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show("ab" + Del + "\\c\r\n")));
         }
 
         /// <summary>
@@ -210,6 +213,7 @@ namespace RetroIO.Protocols.X25.Tests
         {
             using Rig rig = new Rig();
             rig.Host(ChatProtocolService.SetPadMessage);
+            rig.Host(0x02, 19, 1);
             rig.Type("abc" + Can);
             Assert.That(rig.Transport.Forwarded.Count, Is.EqualTo(0), "a deleted line reached the host");
 
@@ -228,7 +232,6 @@ namespace RetroIO.Protocols.X25.Tests
         {
             using Rig rig = new Rig();
             rig.Host(ChatProtocolService.SetPadMessage);
-            rig.Host(0x02, 19, 2);
             rig.Type("abc" + Can + "\r");
 
             Assert.That(rig.Transport.Forwarded, Is.EqualTo(new[] { "\r" }));
@@ -264,7 +267,7 @@ namespace RetroIO.Protocols.X25.Tests
 
             rig.Type("d\r");
             Assert.That(rig.Transport.Forwarded, Is.EqualTo(new[] { "acd\r" }));
-            Assert.That(Show(rig.Screen), Is.EqualTo(Show("ab" + Del + "\\c" + Dc2 + "\r\nacd\r\n")));
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show("ab" + Del + "\b \bc" + Dc2 + "\r\nacd\r\n")));
         }
 
         /// <summary>
@@ -310,7 +313,7 @@ namespace RetroIO.Protocols.X25.Tests
             rig.Type("ab" + Del + "\r");
 
             Assert.That(rig.Transport.Forwarded, Is.EqualTo(new[] { "a\r" }));
-            Assert.That(Show(rig.Screen), Is.EqualTo(Show("ab\\")));
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show("ab\b \b")));
         }
 
         /// <summary>

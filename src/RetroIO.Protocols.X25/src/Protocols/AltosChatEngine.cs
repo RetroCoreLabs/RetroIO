@@ -84,6 +84,11 @@ namespace RetroIO.Protocols.X25.Protocols
                 throw new ArgumentOutOfRangeException(nameof(settings), "MaxUsers must be at least 1.");
             }
 
+            if (settings.MaxCalls < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings), "MaxCalls must be at least 1.");
+            }
+
             _users = new UserSlot[n];
             _chans = new ChanEntry[n];
             for (int i = 0; i < n; i++)
@@ -112,6 +117,12 @@ namespace RetroIO.Protocols.X25.Protocols
                 return n;
             }
         }
+
+        /// <summary>
+        /// Number of calls the engine keeps now, every state counted (waiting, joined, thrown out as slow); checked
+        /// against <see cref="AltosChatSettings.MaxCalls"/>.
+        /// </summary>
+        public int CallCount => _sessions.Count;
 
         /// <summary>
         /// Copies the users in the chat now into <paramref name="into"/> (cleared first), lowest place first, as
@@ -258,11 +269,18 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <param name="login">The login name; kept 8 characters, like the /etc/passwd name (chat.c:312).</param>
         /// <param name="from">Where the caller comes from (the calling X.121 address); kept 16 characters
         /// (chat.c:325). Null is "somewhere", empty is "localhost" (chat.c:326-328).</param>
-        public void Connect(int session, string login, string? from)
+        /// <returns>True; false when the engine already keeps <see cref="AltosChatSettings.MaxCalls"/> calls, and then
+        /// nothing was sent (as altoschat_connect of the C engine returns -1).</returns>
+        public bool Connect(int session, string login, string? from)
         {
             if (_byId.ContainsKey(session))
             {
                 throw new InvalidOperationException("Session " + session + " is already connected.");
+            }
+
+            if (_sessions.Count >= _settings.MaxCalls)
+            {
+                return false;
             }
 
             var s = new Session(session)
@@ -287,6 +305,8 @@ namespace RetroIO.Protocols.X25.Protocols
             {
                 JoinNow(s);
             }
+
+            return true;
         }
 
         /// <summary>

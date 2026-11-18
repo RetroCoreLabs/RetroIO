@@ -23,6 +23,16 @@ namespace RetroIO.Protocols.X25.Protocols
         public int MaxUsers { get; set; } = 30;
 
         /// <summary>
+        /// Most calls the chat keeps at one time, every state counted: waiting for the join, in the chat, or thrown out
+        /// as slow and still connected. Default 128, the same as the C engine and service in x25emu (max_calls in
+        /// src/chat/altoschat.h, -c of tools/x25chat). The call past it is refused: <see cref="AltosChatEngine.Connect"/>
+        /// returns false and sends nothing, and <see cref="RetroIO.Protocols.X25.Services.ChatProtocolService"/> refuses
+        /// it before it is accepted, with a clear request of cause 0 "DTE originated", diagnostic 0 (X.25 (10/96)
+        /// 4.1.7; Table 5-7). The original had no such bound: every caller was its own Unix process.
+        /// </summary>
+        public int MaxCalls { get; set; } = 128;
+
+        /// <summary>
         /// Bytes that may be waiting to reach one user before a chat message to that user counts as a failed write.
         /// The original timed the write out after 2 seconds (CHAT 3.1 serv.c:200-204); the port counts bytes sent and
         /// not yet reported as delivered through <see cref="AltosChatEngine.OutputDrained"/>. The default 4096 is a

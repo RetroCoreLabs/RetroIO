@@ -3100,6 +3100,7 @@ namespace RetroIO.Protocols.X25.Runtime
             AltosChatSettings settings = new AltosChatSettings
             {
                 MaxUsers = chat.MaxUsers,
+                MaxCalls = chat.MaxCalls,
                 OutputLimitBytes = chat.OutputLimitBytes,
                 WaitPause = TimeSpan.FromMilliseconds(chat.WaitPauseMs < 0 ? 0 : chat.WaitPauseMs),
                 StartingNickname = chat.StartingNickname ?? "guest",

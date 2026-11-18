@@ -132,7 +132,10 @@ namespace RetroIO.Protocols.X25.Tests
             int aBefore = a.Screen.Length;
             a.Type("helo" + Del + "lo\r");
             Assert.That(b.WaitFor("guest says: hello\r\n", 5000), Is.True, "B did not get A's line: " + b.Screen);
-            Assert.That(a.Screen.Substring(aBefore), Does.StartWith("helo" + Del + "\\lo\r\n"), "A's own echo, with the LF the chat's parameter 13 = 4 asks for");
+            // The deleted character is rubbed out with BS SP BS: the chat's set makes parameter 19 = 2, display terminals
+            // (X.28 (12/97) 3.5.24, "Value 2: the characters 0/8 (BS) 2/0 (SP) 0/8 (BS) will be sent").
+            Assert.That(a.Pad.GetParameter(19), Is.EqualTo((byte)2));
+            Assert.That(a.Screen.Substring(aBefore), Does.StartWith("helo" + Del + "\b \blo\r\n"), "A's own echo, with the LF the chat's parameter 13 = 4 asks for");
 
             a.Type("oops" + Can + "fine\r");
             Assert.That(b.WaitFor("guest says: fine\r\n", 5000), Is.True, "B did not get A's second line: " + b.Screen);
