@@ -1148,12 +1148,20 @@ namespace RetroIO.Protocols.X25.Runtime
         /// </summary>
         public MappedSendOutcome SendMappedData(ushort lcn, byte[] data, int length)
         {
+            byte[] payload = data.Length == length ? data : data.AsSpan(0, length).ToArray();
+
+            // A call the router placed itself on an XOT_Client route (FinalizeOutboundXotCall). Its send does not wait
+            // for the window: a shut window is reported as a refusal, which the caller already handles.
+            if (TryRouterCall(lcn, out XotOutgoingCall routerCall))
+            {
+                return routerCall.Send(payload) ? MappedSendOutcome.Sent : MappedSendOutcome.RefusedByFlowControl;
+            }
+
             if (!TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci))
             {
                 return MappedSendOutcome.NotMapped;
             }
 
-            byte[] payload = data.Length == length ? data : data.AsSpan(0, length).ToArray();
             return endpoint.SendBlocking(lci, payload, XotSendTimeoutMs) ? MappedSendOutcome.Sent : MappedSendOutcome.RefusedByFlowControl;
         }
 
@@ -1162,6 +1170,11 @@ namespace RetroIO.Protocols.X25.Runtime
         /// </summary>
         public bool ClearMappedCall(ushort lcn, byte cause, byte diagnostic)
         {
+            if (TryRouterCall(lcn, out XotOutgoingCall routerCall))
+            {
+                return routerCall.Clear(cause, diagnostic);
+            }
+
             if (!TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci))
             {
                 return false;

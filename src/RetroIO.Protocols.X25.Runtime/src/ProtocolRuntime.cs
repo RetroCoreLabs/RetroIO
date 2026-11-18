@@ -3285,10 +3285,88 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Kept for the routing layer's call sequence; the mapping is made when the call is placed.
+        /// Called by the routing layer once an outgoing call is placed. A call handed to a line's engine was mapped
+        /// when it was placed, so there is nothing to do for it. A call the router placed itself on an XOT_Client
+        /// route arrives here already accepted (an <see cref="XotOutgoingCall"/>, X25Router.PlaceXotCall): it is
+        /// mapped to the local channel, the bound module is told the call is connected, its data goes to the module,
+        /// the module's data and clear go to the call, and the end of the call is delivered as a clear.
         /// </summary>
+        /// <param name="localLcn">
+        /// The runtime's local channel number of the call.
+        /// </param>
+        /// <param name="transport">
+        /// What carries the call: a line's transport, or an <see cref="XotOutgoingCall"/>.
+        /// </param>
+        /// <remarks>
+        /// Until 2026-11-18 this did nothing at all, and the router reported a call on an XOT_Client route placed
+        /// without waiting for its answer, so a call there was never connected to the module that made it.
+        /// </remarks>
         public void FinalizeOutboundXotCall(ushort localLcn, object transport)
         {
+            if (transport is not XotOutgoingCall call)
+            {
+                return;
+            }
+
+            lock (_routingLock)
+            {
+                _routerCalls[localLcn] = call;
+            }
+
+            call.DataReceived += (c, data, length, qBit, mBit) =>
+            {
+                byte[] payload = data.Length == length ? data : data.AsSpan(0, length).ToArray();
+                byte[] built = X25PacketBuilder.CreateDataPacket(localLcn, 0, 0, payload, mBit, qBit, false);
+                RouteX25EventToBoundModule(localLcn, new X25PacketEventArgs
+                {
+                    Packet = new X25Packet(built) { Direction = PacketDirection.Receive, LCN = localLcn },
+                    Direction = PacketDirection.Receive,
+                    Timestamp = DateTime.UtcNow,
+                    PacketId = GetNextFrameId(),
+                });
+            };
+
+            call.CallEnded += (c, cause, diagnostic) =>
+            {
+                lock (_routingLock)
+                {
+                    _routerCalls.Remove(localLcn);
+                }
+
+                ClearLocally(localLcn, cause, diagnostic);
+                c.Dispose();
+            };
+
+            // X.25 4.1.5: the Call Connected has arrived; the module learns its call is up.
+            byte[] accepted = X25PacketBuilder.CreateCallAccepted(localLcn, null);
+            RouteX25EventToBoundModule(localLcn, new X25PacketEventArgs
+            {
+                Packet = new X25Packet(accepted) { Direction = PacketDirection.Receive, LCN = localLcn },
+                Direction = PacketDirection.Receive,
+                Timestamp = DateTime.UtcNow,
+                PacketId = GetNextFrameId(),
+            });
+        }
+
+        /// <summary>
+        /// The calls the router placed itself on an XOT_Client route and that are up, by local channel number
+        /// (<see cref="FinalizeOutboundXotCall"/>). Guarded by _routingLock.
+        /// </summary>
+        private readonly Dictionary<ushort, XotOutgoingCall> _routerCalls = new Dictionary<ushort, XotOutgoingCall>();
+
+        private bool TryRouterCall(ushort lcn, out XotOutgoingCall call)
+        {
+            lock (_routingLock)
+            {
+                if (_routerCalls.TryGetValue(lcn, out XotOutgoingCall? found))
+                {
+                    call = found;
+                    return true;
+                }
+            }
+
+            call = null!;
+            return false;
         }
 
         /// <summary>

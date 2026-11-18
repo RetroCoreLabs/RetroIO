@@ -1,4 +1,4 @@
-//
+﻿//
 // SPDX-License-Identifier: MIT
 // Copyright (c) 1985-2026 Ronny Hansen
 // RetroCore Labs — https://github.com/RetroCoreLabs
@@ -384,9 +384,20 @@ namespace RetroIO.Protocols.X25.Transport
         /// X.25 call request to route
         /// </param>
         /// <returns>
-        /// True if call was successfully routed, false otherwise
+        /// What became of the call:
+        ///  - <see cref="X25CallOutcomeKind.HandedToLine"/>: a registered line's X.25 engine took it; that engine
+        ///    reports the answer to the program that placed the call.
+        ///  - <see cref="X25CallOutcomeKind.Accepted"/>, <see cref="X25CallOutcomeKind.Cleared"/> or
+        ///    <see cref="X25CallOutcomeKind.TimedOut"/>: the call was placed by this router on an XOT_Client route
+        ///    and this is the answer (<see cref="PlaceXotCall"/>). A clear or a time-out is an answer from the network
+        ///    side, so no further route is tried.
+        ///  - <see cref="X25CallOutcomeKind.NotPlaced"/>: no route or line could take it.
         /// </returns>
-        public bool RouteOutboundCall(X25CallRequest callRequest)
+        /// <remarks>
+        /// This call blocks until the answer when the call goes on an XOT_Client route: up to time-limit T21
+        /// (<see cref="OutgoingCallConfig"/>, 200 s by default, X.25 Annex D Table D.2).
+        /// </remarks>
+        public X25CallOutcome PlaceOutboundCall(X25CallRequest callRequest)
         {
             ArgumentNullException.ThrowIfNull(callRequest);
 
@@ -395,16 +406,17 @@ namespace RetroIO.Protocols.X25.Transport
             if (first.Outcome == X121RouteOutcome.Local)
             {
                 // A route to this node is not a line a call can be placed on.
-                return false;
+                return X25CallOutcome.NotPlaced("the route for " + callRequest.CalledAddress + " is this node, not a line");
             }
 
             List<int> tried = new List<int>();
             if (first.Outcome == X121RouteOutcome.Forward)
             {
                 tried.Add(first.Port);
-                if (TryPlace(first.Port, callRequest))
+                X25CallOutcome outcome = TryPlace(first.Port, callRequest);
+                if (outcome.Kind != X25CallOutcomeKind.NotPlaced)
                 {
-                    return true;
+                    return outcome;
                 }
             }
 
@@ -418,17 +430,40 @@ namespace RetroIO.Protocols.X25.Transport
                 }
 
                 tried.Add(port);
-                if (TryPlace(port, callRequest))
+                X25CallOutcome outcome = TryPlace(port, callRequest);
+                if (outcome.Kind != X25CallOutcomeKind.NotPlaced)
                 {
-                    return true;
+                    return outcome;
                 }
             }
 
             _logger.LogError("All routing attempts failed for outbound call to X.121 address: {CalledAddress}", callRequest.CalledAddress);
-            return false;
+            return X25CallOutcome.NotPlaced("no route or line could take the call to " + callRequest.CalledAddress);
         }
 
-        private bool TryPlace(int port, X25CallRequest callRequest)
+        /// <summary>
+        /// The packet layer settings of a call this router places itself on an XOT_Client route
+        /// (<see cref="PlaceXotCall"/>). <see cref="X25Config.CallRequestTimeoutMs"/> is time-limit T21, 200 s by
+        /// default (X.25 Annex D Table D.2); Annex D note 1 lets a DTE use a shorter one.
+        /// </summary>
+        public X25Config OutgoingCallConfig { get; set; } = new X25Config();
+
+        /// <summary>
+        /// Places a call as <see cref="PlaceOutboundCall"/> does and says only whether it succeeded.
+        /// </summary>
+        /// <param name="callRequest">
+        /// X.25 call request to route
+        /// </param>
+        /// <returns>
+        /// True when the call was accepted or handed to a line's engine (<see cref="X25CallOutcome.Succeeded"/>); false
+        /// when it was not placed, was cleared or timed out.
+        /// </returns>
+        public bool RouteOutboundCall(X25CallRequest callRequest)
+        {
+            return PlaceOutboundCall(callRequest).Succeeded;
+        }
+
+        private X25CallOutcome TryPlace(int port, X25CallRequest callRequest)
         {
             string name = _table.GetPortName(port);
             try
@@ -439,11 +474,11 @@ namespace RetroIO.Protocols.X25.Transport
                     {
                         callRequest.UsedTransport = transportInterface;
                         _logger.LogInformation("Outbound call to {CalledAddress} placed on {Port}", callRequest.CalledAddress, name);
-                        return true;
+                        return X25CallOutcome.HandedToLine(name);
                     }
 
                     _logger.LogDebug("Call to {CalledAddress} failed on {Port}, trying the next one", callRequest.CalledAddress, name);
-                    return false;
+                    return X25CallOutcome.NotPlaced("the line " + name + " did not take the call");
                 }
 
                 bool dynamic;
@@ -458,13 +493,13 @@ namespace RetroIO.Protocols.X25.Transport
                 }
 
                 _logger.LogWarning("Transport interface not found for destination: {Destination}", name);
+                return X25CallOutcome.NotPlaced("no line called " + name);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error placing call to {CalledAddress} on {Port}", callRequest.CalledAddress, name);
+                return X25CallOutcome.NotPlaced("placing the call on " + name + " failed: " + ex.Message);
             }
-
-            return false;
         }
         /// <summary>
         /// Says whether a local service takes calls to a called address with given call user data.
@@ -561,135 +596,90 @@ namespace RetroIO.Protocols.X25.Transport
         #region XOT Specific Methods
 
         /// <summary>
-        /// Place an XOT call to specified IP address
-        /// This creates a dynamic XOT client connection
+        /// Places a call on an XOT_Client route: a NEW XOT connection to the route's address for this one call (RFC
+        /// 1613 section 5), with a packet layer of its own acting as the DTE (<see cref="XotOutgoingCall"/>), and waits
+        /// for the answer.
         /// </summary>
-        private bool PlaceXotCall(string ipAddress, X25CallRequest callRequest)
+        /// <remarks>
+        /// <para>
+        /// X.25 4.1.5: the call is up when a Call Connected packet arrives ("This places the specified logical channel
+        /// in the data transfer state (p4)"), and "The time spent in the DTE waiting state (p2) will not exceed
+        /// time-limit T21 (see Annex D)". Annex D Table D.2 gives T21 = 200 s, started when the DTE issues a call
+        /// request, normally terminated when "the call connected or clear indication is received", and on expiry "To
+        /// transmit a clear request". So the outcome is one of: accepted, cleared with the cause and diagnostic of the
+        /// Clear Indication, timed out (this end sent the Clear Request, diagnostic 49), or not placed (the connection
+        /// could not be opened). A connection that closes before the answer is cleared with cause 9, out of order.
+        /// </para>
+        /// <para>
+        /// Until 2026-11-18 this method hand-built a Call Request with the addresses written in ASCII instead of BCD
+        /// (X.25 5.2.1), sent it, and returned true at once: "TODO: Wait for call accepted/cleared response. For now,
+        /// assume success". Every call on such a route was reported placed, whatever the peer did with it.
+        /// </para>
+        /// </remarks>
+        /// <param name="destination">
+        /// The route's destination: an address, or <c>address:port</c> (<see cref="SplitXotDestination"/>).
+        /// </param>
+        /// <param name="callRequest">
+        /// The call.
+        /// </param>
+        /// <returns>
+        /// The outcome; for an accepted call <see cref="X25CallOutcome.Call"/> is the <see cref="XotOutgoingCall"/> that
+        /// carries it, and <see cref="X25CallRequest.UsedTransport"/> is set to it.
+        /// </returns>
+        private X25CallOutcome PlaceXotCall(string destination, X25CallRequest callRequest)
         {
-            _logger.LogInformation("Placing XOT call to {IpAddress} for X.121 address {CalledAddress}",
-                                  ipAddress, callRequest.CalledAddress);
+            _logger.LogInformation("Placing XOT call to {Destination} for X.121 address {CalledAddress}", destination, callRequest.CalledAddress);
 
-            // Find any active XOT_Client interface to handle the call
-            XotClientTransport? xotClient = null;
-            foreach (var iface in _interfaces.Values)
-            {
-                if (iface is XotClientTransport xot && xot.Status == TransportStatus.Active)
-                {
-                    xotClient = xot;
-                    break;
-                }
-            }
-
+            XotClientTransport? xotClient = ActiveXotClient();
             if (xotClient == null)
             {
-                _logger.LogWarning("No active XOT client interface available for call to {IpAddress}", ipAddress);
-                return false;
+                _logger.LogWarning("No active XOT client interface available for call to {Destination}", destination);
+                return X25CallOutcome.NotPlaced("no XOT client line is active to dial " + destination);
             }
 
-            try
+            SplitXotDestination(destination, out string host, out int port);
+            XotClientCircuit? circuit = xotClient.ConnectToXotGateway(host, port);
+            if (circuit == null)
             {
-                // A new TCP connection for this one call (RFC 1613 section 5: one connection per circuit)
-                XotClientCircuit? circuit = xotClient.ConnectToXotGateway(ipAddress);
-                if (circuit == null)
-                {
-                    _logger.LogWarning("Failed to establish XOT connection to {IpAddress}", ipAddress);
-                    return false;
-                }
-
-                // Create X.25 call request packet
-                var x25CallPacket = CreateX25CallRequestPacket(callRequest);
-                if (x25CallPacket == null)
-                {
-                    _logger.LogError("Failed to create X.25 call request packet");
-                    xotClient.CloseCircuit(circuit);
-                    return false;
-                }
-
-                // Send X.25 call request over the call's own XOT connection
-                var success = xotClient.SendX25Packet(circuit, x25CallPacket);
-                if (success)
-                {
-                    _logger.LogInformation("XOT call request sent to {IpAddress} for {CalledAddress}", ipAddress, callRequest.CalledAddress);
-                    
-                    // TODO: Wait for call accepted/cleared response
-                    // For now, assume success
-                    return true;
-                }
-                else
-                {
-                    _logger.LogWarning("Failed to send XOT call request to {IpAddress}", ipAddress);
-                    xotClient.CloseCircuit(circuit);
-                    return false;
-                }
+                _logger.LogWarning("Failed to establish XOT connection to {Destination}", destination);
+                return X25CallOutcome.NotPlaced("the XOT connection to " + destination + " could not be opened");
             }
-            catch (Exception ex)
+
+            XotOutgoingCall call = new XotOutgoingCall(_logger, xotClient, circuit, OutgoingCallConfig);
+            X25CallOutcome outcome = call.Place(callRequest);
+            _logger.LogInformation("XOT call to {CalledAddress} via {Destination}: {Outcome}", callRequest.CalledAddress, destination, outcome);
+            if (outcome.Kind == X25CallOutcomeKind.Accepted)
             {
-                _logger.LogError(ex, "Error placing XOT call to {IpAddress}", ipAddress);
-                return false;
+                callRequest.UsedTransport = call;
             }
+
+            return outcome;
         }
 
         /// <summary>
-        /// Create X.25 Call Request packet from X25CallRequest
+        /// Reads the destination of an XOT_Client route: an IPv4 address, or an IPv4 address and a port as
+        /// <c>address:port</c>. With no port the port is 1998, the one RFC 1613 names for XOT.
         /// </summary>
-        private byte[]? CreateX25CallRequestPacket(X25CallRequest callRequest)
+        /// <param name="destination">
+        /// The route's destination as written.
+        /// </param>
+        /// <param name="host">
+        /// The address.
+        /// </param>
+        /// <param name="port">
+        /// The port.
+        /// </param>
+        public static void SplitXotDestination(string destination, out string host, out int port)
         {
-            try
+            host = destination;
+            port = 1998;
+            int colon = destination.LastIndexOf(':');
+            if (colon > 0 && colon == destination.IndexOf(':')
+                && int.TryParse(destination.AsSpan(colon + 1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int p)
+                && p > 0 && p <= 65535)
             {
-                // Basic X.25 Call Request packet format:
-                // [GFI & LCN (3 bytes)] [Packet Type (1 byte)] [Called/Calling Address] [Facilities] [Call User Data]
-                
-                using var ms = new System.IO.MemoryStream();
-                
-                // General Format Identifier and Logical Channel Number (placeholder - LCN 1)
-                ms.WriteByte(0x10); // GFI = Q=0, D=0, M=0, Q=1 (standard modulo 8)
-                ms.WriteByte(0x00); // LCN high nibble = 0
-                ms.WriteByte(0x01); // LCN low byte = 1
-                
-                // Packet Type Identifier - Call Request
-                ms.WriteByte(0x0B);
-                
-                // Calling and Called address lengths
-                var calledBytes = System.Text.Encoding.ASCII.GetBytes(callRequest.CalledAddress);
-                var callingBytes = System.Text.Encoding.ASCII.GetBytes(callRequest.CallingAddress ?? "");
-                
-                // Address length byte (4 bits called, 4 bits calling)
-                var addressLengthByte = (byte)((calledBytes.Length & 0x0F) << 4 | (callingBytes.Length & 0x0F));
-                ms.WriteByte(addressLengthByte);
-                
-                // Called address (BCD encoded, but using ASCII for simplicity)
-                ms.Write(calledBytes);
-                
-                // Calling address
-                ms.Write(callingBytes);
-                
-                // Facilities (optional)
-                if (callRequest.Facilities != null && callRequest.Facilities.Length > 0)
-                {
-                    ms.WriteByte((byte)callRequest.Facilities.Length);
-                    ms.Write(callRequest.Facilities);
-                }
-                else
-                {
-                    ms.WriteByte(0x00); // No facilities
-                }
-                
-                // Call User Data (optional)
-                if (callRequest.CallUserData != null && callRequest.CallUserData.Length > 0)
-                {
-                    ms.Write(callRequest.CallUserData);
-                }
-                
-                var packet = ms.ToArray();
-                _logger.LogDebug("Created X.25 Call Request packet: {PacketLength} bytes for {CalledAddress}", 
-                               packet.Length, callRequest.CalledAddress);
-                
-                return packet;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating X.25 Call Request packet");
-                return null;
+                host = destination.Substring(0, colon);
+                port = p;
             }
         }
 
