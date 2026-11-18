@@ -104,7 +104,7 @@ namespace RetroIO.Protocols.X25.Tests
                 "name = OSLO-1\nlocation = Oslo\ncoordinates = 59.9,10.7\ncontact = noc\nmgmt_addr = 23429999\ncdr_file = calls.cdr\n\n" +
                 "[port.0]\ntype = access\ntransport = xot\nmode = dce\nport = 2000\npvc_base = 1\npvc_count = 2\nlci_base = 3\nlci_count = 4\n" +
                 "iface_name = Serial1\nxot_pvc_role = initiator\nnui_required = yes\ndefault_nui = CARD7\ncharging_info = yes\naddr_start = 23420000\naddr_end = 23420099\n\n" +
-                "[port.1]\ntype = trunk\ntransport = hdlc-tcp\nmode = dte\nhost = 10.0.0.2\nport = 2001\ntcp = listen\n" +
+                "[port.1]\ntype = trunk\ntransport = hdlc-tcp\nmode = dte\nhost = 10.0.0.2\nport = 2001\ntcp = listen\ntrunk_kind = network\n" +
                 "pvc_base = 1\npvc_count = 1\nlci_base = 2\nlci_count = 4\nlapb_t1 = 2500\nlapb_k = 3\n" +
                 "peer_name = BERGEN\npeer_monitor_host = 10.0.0.9\npeer_monitor_port = 9124\npeer_mgmt_addr = 24429999\n\n" +
                 "[port.2]\ntype = access\ntransport = hdlc-serial\nmode = dce\nport = 2002\ndevice = COM3\nbaud = 19200\n" +

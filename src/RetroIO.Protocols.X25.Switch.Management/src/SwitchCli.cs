@@ -799,6 +799,11 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 {
                     sb.Append("xot_pvc_role = initiator").Append(eol);
                 }
+                // A trunk to another network: an X.75 link (PortConfig.BetweenNetworks).
+                if (pc.BetweenNetworks)
+                {
+                    sb.Append("trunk_kind = network").Append(eol);
+                }
                 // Network user identification (X.25 6.21).
                 if (pc.NuiRequired)
                 {

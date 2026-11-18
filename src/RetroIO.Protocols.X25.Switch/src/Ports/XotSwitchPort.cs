@@ -220,7 +220,11 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 // This decides the direction the engine searches for a free channel (Annex A) and
                 // which side wins a call collision (4.1.3), so it follows the port's own mode
                 // rather than being assumed.
-                IsDte = config.Mode != PortMode.Dce,
+                IsDte = !config.BetweenNetworks && config.Mode != PortMode.Dce,
+
+                // A trunk to another network is an X.75 STE (see HdlcSwitchPortBase for the same rule).
+                IsSte = config.BetweenNetworks,
+                SearchFromHighest = config.Mode == PortMode.Dte,
                 LciBase = config.LciBase,
                 LciCount = config.LciCount,
                 DefaultWindowSize = config.DefaultWindowSize,

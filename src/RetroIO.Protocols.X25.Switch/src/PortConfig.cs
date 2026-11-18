@@ -49,6 +49,17 @@ namespace RetroIO.Protocols.X25.Switch
         public PortMode Mode { get; set; } = PortMode.Dce;
 
         /// <summary>
+        /// True on a trunk to another NETWORK (key <c>trunk_kind = network</c>, the same key and word as x25emu): the port
+        /// is an X.75 signalling terminal (STE). Its call packets carry the network utility field, a call collision clears
+        /// both calls with "network congestion", and the switch keeps the transit network list and the call identifier
+        /// (X.75 5.3.1, 5.3.2). <see cref="Mode"/> then only sets which end searches channels from the highest number
+        /// (dte) and which from the lowest (dce) - X.75 3.1.4 leaves that to agreement between the two networks - and
+        /// which end starts the link. Both ends of a link must say <c>network</c>: the utility field changes where every
+        /// later field sits. Default false (<c>internal</c>): a trunk inside this network, plain X.25.
+        /// </summary>
+        public bool BetweenNetworks { get; set; }
+
+        /// <summary>
         /// Which end opens the TCP connection of an <c>hdlc-tcp</c> port (key <c>tcp = listen | dial</c>).
         /// The default follows <see cref="Mode"/>: DCE listens, DTE dials. See <see cref="PortTcpRole"/>.
         /// </summary>
