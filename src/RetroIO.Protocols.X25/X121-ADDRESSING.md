@@ -87,44 +87,210 @@ Which DNIC is "ours" is **configured**, not derived. A switch can own several (a
 DCCs, 7.2.6), and networks may **share one DNIC and split it on the 5th digit**: X.121 Annex A.2 gives
 the example of DNIC `7501` shared, with `75011` for one network and `75012`, `75013` for another.
 
-## 4. How a call should be routed
+## 4. How a call is routed
+
+This is what the code does (`X121RoutingTable.Resolve` in `RetroIO.Protocols.X25.Routing`). The switch
+asks it through `SwitchCallRouter`, and the desktop runtime through `X25Router`, so both decide from the
+same table and the same lookup. Where the code does something no ITU text asks for, the text says
+**not in the spec**.
 
 ```mermaid
 flowchart TD
-    IN["Call request arrives<br/>on port P"] --> LOC{"Called number<br/>short / local?"}
-    LOC -- yes --> ADD["Put own DNIC in front"]
-    LOC -- no --> STRIP["Drop the prefix"]
-    ADD --> OWN
-    STRIP --> OWN{"DNIC is one<br/>of ours?"}
-    OWN -- yes --> LT["Local table:<br/>NTN to port"]
-    OWN -- no --> LM["Longest match:<br/>full number, then DNIC+5th,<br/>then DNIC, then DCC"]
-    LT --> HIT{"Found a port<br/>other than P?"}
-    LM --> HIT
-    HIT -- no --> GW{"Default gateway<br/>(X.75 link) set?"}
-    GW -- no --> NO["Clear: Not obtainable 0x0D<br/>diag 67, or 121 unknown DNIC"]
-    HIT -- yes --> UP{"Port up?"}
-    GW -- yes --> UP
-    UP -- no --> OOO["Clear: Out of order 0x09"]
-    UP -- yes --> FWD["Forward the full international<br/>number, no prefix"]
+    IN["Call arrives on port P"] --> MG{"Switch only:<br/>the management address?"}
+    MG -- yes --> MGL["Delivered to the switch<br/>(management console)"]
+    MG -- no --> NUI{"Switch only:<br/>NUI accepted?"}
+    NUI -- no --> NUIX["Clear 0x03 or 0x13,<br/>diag 84"]
+    NUI -- yes --> CMP["Complete the number:<br/>drop the prefix, or<br/>put the own DNIC in front"]
+    CMP --> RANK["Rank every route that is on<br/>and matches: number/hunt, pattern,<br/>prefix, DNIC+5th, DNIC, DCC, default"]
+    RANK --> BACK{"Best route that does not<br/>lead only back out of P?"}
+    BACK -- none --> NO["Clear: Not obtainable 0x0D,<br/>diag 67"]
+    BACK -- found --> LOC{"Its port is local?"}
+    LOC -- yes --> HERE["Delivered on this node"]
+    LOC -- no --> EX{"The port exists?"}
+    EX -- no --> NO
+    EX -- yes --> UP{"In service and not P?"}
+    UP -- yes --> FWD["Forward, the number written<br/>the way the port wants it"]
+    UP -- no --> BK{"A backup in service,<br/>tried in order?"}
+    BK -- yes --> FWD
+    BK -- no --> OOO["Clear: Out of order 0x09"]
 
     style IN fill:#2196F3,stroke:#2196F3,color:#fff
-    style OWN fill:#3F51B5,stroke:#3F51B5,color:#fff
-    style LM fill:#9C27B0,stroke:#9C27B0,color:#fff
-    style GW fill:#FFA726,stroke:#FFA726,color:#fff
+    style CMP fill:#3F51B5,stroke:#3F51B5,color:#fff
+    style RANK fill:#9C27B0,stroke:#9C27B0,color:#fff
+    style BK fill:#FFA726,stroke:#FFA726,color:#000
+    style NUIX fill:#F44336,stroke:#F44336,color:#fff
     style NO fill:#F44336,stroke:#F44336,color:#fff
     style OOO fill:#F44336,stroke:#F44336,color:#fff
     style FWD fill:#4CAF50,stroke:#4CAF50,color:#fff
+    style HERE fill:#4CAF50,stroke:#4CAF50,color:#fff
+    style MGL fill:#4CAF50,stroke:#4CAF50,color:#fff
 ```
 
-The rules in the picture:
+### 4.1 The lookup order
 
-- **Complete the number first.** A local number gets our own DNIC in front, so every later step sees one
-  form (7.6.1, 7.6.2).
-- **Longest match wins**: an exact number before `DNIC + 5th digit`, before the DNIC, before the DCC.
-- **Never route a call back out of the port it came in on.** That only makes a loop.
-- **Toward another network, send the full international number without the prefix** (7.8.1). Between
-  public networks that link is X.75.
-- **No route at all** clears with *Not obtainable*; **a route whose port is down** clears with *Out of order*.
+1. **Number completion** (`ToInternational`), only when an international prefix is set (X.121 7.8.1: the
+   prefix is not part of the number). A number that starts with the prefix has it taken off; any other
+   number is a national one and gets the first 4 digits of the first own DNIC in front (7.6.1, 7.6.2).
+   With no prefix set, nothing can tell the two apart and the number is used as it came in. **Escape codes
+   (8, 9, 0, X.121 7.9 and Table 2) are not recognised**: a number after an escape code is completed like
+   any other (open, see section 7).
+2. **Exact number or hunt group.** It matches the international number, or the own DNIC followed by its
+   digits, so a route written as the local number `110006` also takes `2422110006`.
+3. **Pattern route** (`regex`), over the whole international number. Below every exact number and above
+   every prefix: **not in the spec**.
+4. **Address prefix**, the longest first. A prefix of any length beats every DNIC route: **not in the
+   spec** (X.121 7.12 says the DNIC or DCC chooses the network, and does not mention prefixes).
+5. **DNIC with its 5th digit** (5 digits, the shared-DNIC case of X.121 Annex A.2; 7.12.2).
+6. **DNIC** (4 digits, 7.12.2).
+7. **DCC**, the country (3 digits, 7.12.1).
+8. **Default route**, the default gateway.
+
+**The longer match always wins** inside a class, and a higher class always beats a lower one. Between two
+routes of the same class and length, the higher `Priority` wins, then the route written first. `Priority`
+is kept from the old route list; it is **not in the spec**. The routing screen lists the routes in exactly
+this order (`RoutesInLookupOrder`).
+
+A route is passed over when it is switched off (`enabled = no`), when it is for the other direction
+(`direction = incoming` or `outgoing`), or when it has a call user data pattern the call does not match.
+
+### 4.2 The default gateway
+
+A route of kind `default`: it matches every number and ranks last, so it is used only when nothing more
+exact matches. It is the way out to other networks, usually the X.75 link to another network. Like any route it can
+have backups. The old runtime key `DefaultGateway` (a machine id) becomes the route "Default gateway" when
+a known host with that id is reached directly; until 2026-11-18 no call ever used it.
+
+### 4.3 Backup ports and the order they are tried
+
+Every route can name backup ports (`backup_ports` in the switch, `BackupPorts` in JSON). X.110 3.5 and
+Appendix I.1 describe a direct route, then alternative route 1, then alternative route 2. The lookup:
+
+1. takes the route's own port when it is in service and is not the arrival port;
+2. otherwise tries the backups **in the order they are written**, skipping the arrival port; `local` as a
+   backup means this node; the first one in service is used;
+3. clears with Out of order 0x09 when none is in service.
+
+When the route's own port does not exist at all, the call is cleared Not obtainable 67 and the backups are
+**not** tried: a missing port is a mistake in the configuration, not a line that is down (**our choice, not
+in the spec**). The test box on the routing screen prints the order tried ("tried x75-gw (out of order),
+then backup 1").
+
+"In service" means: in the switch, the port is started and its peer is linked (`SwitchCallRouter.IsInService`);
+in the runtime, the line's transport is active, and a dynamic XOT address counts while any XOT client line
+is active (`X25Router.PortStatusOf`).
+
+### 4.4 Other rules
+
+- **Never back out of the arrival port.** A route whose own port and every backup is the port the call
+  came in on is skipped, and the next best route is tried. The no-route text then says "the only matching
+  routes lead back out of the port the call came in on". X.110 3.6 and 5.6 ask for no circular routes;
+  this one-hop check is ours, the real loop check is open (section 7).
+- **Hunt groups** (`hunt`): one number shared by several ports. Members are taken in turn (round robin);
+  the arrival port and a member that is down are skipped. No members: Not obtainable 67. All down: Out of
+  order. Round robin is **not in the spec**.
+- **The called number sent on** is written the way the out port asks (`called_address`): `as_received`,
+  `international` (no prefix, X.121 7.8.1 and 7.12.6-7.12.7) or `national` (own DNIC taken off). A switch
+  trunk defaults to `international`, an access port to `as_received`.
+
+### 4.5 Checks before the lookup
+
+In the switch (`SwitchCore.OnIncomingCall`), in this order:
+
+1. **The management address** (`[switch] mgmt_addr`), compared with the number as it came in: the call is
+   for the switch itself and goes to the management console. Not routed, no NUI check.
+2. **NUI** (X.25 6.21): an NUI that no account has clears with Invalid facility request 0x03, diagnostic 84
+   (Table C.1 row 15); no NUI on a port that needs one clears with Local procedure error 0x13, diagnostic 84
+   (row 16).
+3. The lookup above.
+
+In the runtime (`X25Router.DecideIncomingCall`), in this order:
+
+1. **The accepted-address list** of an XOT server entry: a called number the entry does not take clears
+   with Access barred 0x0B, diagnostic 70 (Table C.1 row 25).
+2. **An incoming route must match** (direction `incoming` or `both`): otherwise Not obtainable 0x0D, diagnostic 67.
+3. **Wait mode** (`AnswerIncomingCallsAutomatically = false`): the call is offered to the program and waits
+   for its Accept or Reject. One that is not answered is cleared by the line's X.25 engine when T11 runs out,
+   180 s (X.25 4.1.4, Table D.1), with diagnostic 49; the cause is Local procedure error 0x13 at a DCE and
+   DTE originated 0x00 at a DTE.
+4. **Automatic answering** (the default): the local service that takes the number answers it; if none
+   does, Not obtainable 67.
+
+The runtime has no NUI check. It does not forward an incoming call to another of its lines: a route whose
+port is another line is treated like a local route (open, section 7).
+
+### 4.6 The configuration
+
+**Switch `.ini`** (`SwitchConfigLoader`). The own network is `[network] own_dnic` (comma list, the first one
+completes local numbers) and `international_prefix`; without a `[network]` section, `[switch] dnic`. A route
+`[route.N]` names exactly one of `number`, `prefix`, `dnic`, `dcc`, `default = yes`, `regex`, or `hunt` with
+`hunt_group`; then `port` (a `[port.N]` name or number), `backup_ports`, `name`, `note`, `enabled`,
+`direction`. `[hunt.N] members` lists port numbers. `[port.N] called_address` is the form of section 4.4. An
+error stops the load with "[route.N] line L: ...". `local` is refused in the switch.
+
+**Runtime JSON**, section `Routing` (names are read without regard to case): `OwnDnics` (list),
+`InternationalPrefix`, and `Routes`, each with `Name`, `Kind` (`exact`, `prefix`, `dnic`, `dcc`, `default`,
+`hunt`, `regex`), `Match`, `Port` (a line name, or `local`), `BackupPorts`, `HuntPorts`, `Enabled`, `Note`,
+`Direction`, `CallUserDataPattern`, `Priority`.
+
+One example in both forms: own network 2422 with prefix 0, a local TAD, Sweden's network 2402, Denmark
+(DCC 238), and a default gateway with a backup.
+
+```ini
+[network]
+own_dnic = 2422
+international_prefix = 0
+
+[route.0]
+name = TAD
+number = 110006
+port = terminals
+
+[route.1]
+name = Datapak
+dnic = 2402
+port = x75-gw
+backup_ports = nordic
+
+[route.2]
+name = Denmark
+dcc = 238
+port = nordic
+
+[route.3]
+name = Gateway
+default = yes
+port = x75-gw
+backup_ports = nordic
+```
+
+```json
+"Routing": {
+  "OwnDnics": [ "2422" ],
+  "InternationalPrefix": "0",
+  "Routes": [
+    { "Name": "TAD",     "Kind": "exact",   "Match": "110006", "Port": "local" },
+    { "Name": "Datapak", "Kind": "dnic",    "Match": "2402",   "Port": "x75-gw", "BackupPorts": [ "nordic" ] },
+    { "Name": "Denmark", "Kind": "dcc",     "Match": "238",    "Port": "nordic" },
+    { "Name": "Gateway", "Kind": "default", "Match": "",       "Port": "x75-gw", "BackupPorts": [ "nordic" ] }
+  ]
+}
+```
+
+**Old configurations still load.** In the switch, `type` with `address`, `prefix_len`, `dnic`, `dcc`, `regex`
+and `backup_port` reads as before; a missing `port` there means port 0. In the runtime, each old
+`RoutingTable` entry is converted after the new routes (`RoutingConfigConverter`, `X121LegacyPattern`):
+
+| Old `X121AddressPattern` | Becomes |
+|---|---|
+| `.*`, `^.*`, `^.*$`, `*`, empty | default route |
+| digits, or `^digits$` | exact number |
+| `digits.*`, `^digits.*`, `^digits` | prefix |
+| anything else | pattern route |
+
+`Type = Local` becomes port `local`; `Gateway` goes to the line of the known host it names; `Priority` is
+kept, and a disabled entry stays, disabled. One change in behaviour: an old pattern `200` with no anchors
+used to match `1200` too; it now matches only `200`. Saving on the routing screen writes the new keys and
+empties `RoutingTable` and `DefaultGateway`.
 
 ## 5. How routes between networks were set up (1980s)
 
@@ -170,28 +336,48 @@ neighbours (Sproule and Mellor, IEEE Trans. Communications, 1981).
 **For our switch** this means: own DNIC(s) set in the configuration; per destination a route with ordered
 backups; a default gateway last; at most 4 transit networks; never a network the call has already passed.
 
-## 6. Clearing causes a router uses
+## 6. Clearing causes the router sends
 
-Cause field, Table 5-7/X.25; network diagnostic, Table E.1/X.25.
+Cause field, Table 5-7/X.25; diagnostic, Annex E; which one for which case, Table C.1/X.25 (10/96). The
+causes are on `X25CallDecision`.
 
-| Cause | Code | When |
-|---|---|---|
-| Number busy | `0x01` | The called DTE is busy |
-| Network congestion | `0x05` | The network cannot take the call now |
-| Out of order | `0x09` | The route exists, its link is down (X.25 4.6.2 - 4.6.3) |
-| Not obtainable | `0x0D` | No route for the called address |
-| Local procedure error | `0x13` | The call request itself is bad |
+| Cause | Code | Diagnostic | When | Sent by |
+|---|---|---|---|---|
+| Not obtainable | `0x0D` | 67 | No route; a route to a port that does not exist; a hunt group with no members; no local service takes the number (Table C.1 row 24) | switch and runtime |
+| Access barred | `0x0B` | 70 | The XOT server entry does not take that called number (row 25) | runtime |
+| Out of order | `0x09` | 0 | The route's port and every backup are down; every hunt member is down; the out port went down while the call was placed (4.6.4) | switch; the runtime gives the same answer for a call it places |
+| Number busy | `0x01` | 71 | The out port is up but has no free logical channel (row 31) | switch |
+| Invalid facility request | `0x03` | 84 | An NUI that no account has (6.21, row 15) | switch |
+| Local procedure error | `0x13` | 84 | No NUI on a port that needs one (row 16) | switch |
+| Local procedure error / DTE originated | `0x13` / `0x00` | 49 | Wait mode: nobody answered within T11, 180 s (4.1.4, Table D.1); `0x13` at a DCE, `0x00` at a DTE | the line's X.25 engine |
+| DTE originated | `0x00` | - | A local service refuses the call (4.1.7) | runtime |
 
-| Diagnostic | Decimal | When |
-|---|---|---|
-| Invalid called DTE address | 67 | No such number in our network, or a malformed one (Annex E, call request rule 7) |
-| International routing problem | 119 | No way out to another network |
-| Unknown called DNIC | 121 | The DNIC is not ours and no route or gateway knows it |
+**The DTE side sends cause 0.** On a link manager link the runtime is the DTE, and the X.25 engine turns
+every cause without bit 8 into DTE originated `0x00` (Table 5-7, note a). So there a call with no route is
+cleared with `0x00` and diagnostic 67, while every other line and the switch send `0x0D` with 67. That is
+what the spec allows a DTE; whether the runtime should be the DCE on such a link is open (section 7).
+
+Diagnostics 119 (international routing problem) and 121 (unknown called DNIC) are never sent: a number
+with no route always gets 67.
 
 ## 7. Status in RetroIO
 
-Done: one router decides every incoming call on every line and switch port, with the causes of section 6,
-and the address check follows section 1 (any 1-15 digits; the DNIC rules only for international numbers).
+Done (2026-11-18, not yet committed): one route table and one lookup for the switch and the runtime, with
+own-DNIC completion, the order of section 4.1, the default gateway, ordered backup ports, the arrival-port
+rule, switched-off routes, hunt groups that skip a member that is down, and the causes of section 6. Old
+configurations load as section 4.6 says. The RetroX25 desktop program has one Routing screen that lists the
+routes in this order and has a box to test a number.
 
-Not done yet: own-DNIC completion, the longest-match order over DNIC and DCC, and the default gateway. The
-lookup in `RetroIO.Protocols.X25.Routing` still ranks every address prefix above a DNIC route.
+Still open, each one in `src/BUGS.md` by name:
+
+- **No hop limit and no loop check** (`RetroIO.Protocols.X25.Routing`): X.110 3.2, 3.6 and 5.6, and X.75
+  5.3.1 (the transit network field) and Table E.1 items 40 and 41. `[switch] max_hops` (default 15) is read,
+  shown and written back, but nothing uses it.
+- **Escape codes** (`RetroIO.Protocols.X25.Routing`): X.121 7.9, Table 2 and note 2 of 7.2.
+- **No forwarding between lines** (`RetroIO.Protocols.X25.Runtime`): an incoming call is never sent on to
+  another runtime line.
+- **DTE cause on a link manager link** (`RetroIO.Protocols.X25.Runtime`): section 6.
+- **Why `PlaceCall` failed** (`RetroIO.Protocols.X25.Switch`): a failed XOT dial can be reported as Number busy.
+- **Routing screen and the built-in switch** (`RetroX25.Desktop`): the screen does not edit the switch's
+  own `.ini` routes.
+- **Routing screen Save drops comments** (`RetroX25.Desktop`).

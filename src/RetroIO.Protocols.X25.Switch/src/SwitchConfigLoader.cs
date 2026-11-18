@@ -26,6 +26,7 @@ namespace RetroIO.Protocols.X25.Switch
         private const int MaxStitches = 4096;
         private const int MaxAccounts = 64;
         private const int MaxUsers = 16;
+        private const int MaxIniSettings = 16384;
 
         /// <summary>
         /// Loads a switch configuration from a file.
@@ -38,7 +39,8 @@ namespace RetroIO.Protocols.X25.Switch
         /// </returns>
         public static SwitchConfig LoadFile(string path)
         {
-            SwitchConfig sw = Load(IniConfig.Load(path));
+            // The reader keeps at most MaxIniSettings settings; Load refuses a file that has more rather than lose them.
+            SwitchConfig sw = Load(IniConfig.Load(path, MaxIniSettings));
 
             // Where "write memory" may write, as in x25emu: config_dir when the file names one, otherwise the folder this
             // file came from, which is where a person running the switch expects the saved file to land.
@@ -69,7 +71,16 @@ namespace RetroIO.Protocols.X25.Switch
 
             SwitchConfig sw = new SwitchConfig();
 
-            // [switch] identity. DNIC defaults to 2342 (kept from the SwitchConfig default) when absent.
+            // A file longer than the reader keeps would lose its last lines without a word: refused instead.
+            if (ini.Dropped > 0)
+            {
+                throw new InvalidDataException("the file has more than " + ini.MaxKeys + " settings; line "
+                    + ini.FirstDroppedLine + " and " + (ini.Dropped - 1) + " more were not read");
+            }
+
+            // [switch] identity. DNIC defaults to 2342 (kept from the SwitchConfig default) when absent. When the
+            // file names the own network ([network] own_dnic, or this key), the DNIC is the first own DNIC; see
+            // LoadNetwork.
             string? dnic = ini.Get("switch", "dnic");
             if (dnic != null)
             {
@@ -101,12 +112,13 @@ namespace RetroIO.Protocols.X25.Switch
             sw.ConfigDir = ini.GetString("switch", "config_dir", string.Empty);
 
             LoadPorts(ini, sw);
+            LoadNetwork(ini, sw);
             LoadRoutes(ini, sw);
             LoadHuntGroups(ini, sw);
+            CheckHuntRoutes(ini, sw);
             LoadPvcs(ini, sw);
             LoadAccounts(ini, sw);
             LoadUsers(ini, sw);
-            ApplyBackupPorts(ini, sw);
             CheckDefaultNuis(sw);
 
             return sw;
@@ -202,6 +214,51 @@ namespace RetroIO.Protocols.X25.Switch
                 pc.PvcCount = (ushort)ini.GetInt(section, "pvc_count", 0);
                 pc.InterfaceName = ini.GetString(section, "iface_name", string.Empty);
 
+                // The port's name, which a route may use instead of its number ("port = x75-gw").
+                pc.Name = ini.GetString(section, "name", string.Empty);
+                if (pc.Name.Length > 0)
+                {
+                    if (X121RouteRules.IsDigits(pc.Name) || string.Equals(pc.Name, X121RoutingTable.LocalPortName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException("[" + section + "] name = " + pc.Name + " (line " + ini.GetLine(section, "name")
+                            + "): a port name may not be a number or 'local'");
+                    }
+
+                    for (int other = 0; other < sw.Ports.Count; other++)
+                    {
+                        if (string.Equals(sw.Ports[other].Name, pc.Name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidDataException("[" + section + "] name = " + pc.Name + " (line " + ini.GetLine(section, "name")
+                                + "): port " + other + " already has that name");
+                        }
+                    }
+
+                    sw.Routing.SetPortName(pc.Id, pc.Name);
+                }
+
+                // How the called number is written in a call sent out of this port. X.121 7.8.1 and 7.12.6-7.12.7:
+                // toward another network the full international number, without prefix, so a trunk defaults to
+                // that. What a local terminal wants is not in the spec; an access port keeps the number as received.
+                string form = ini.GetString(section, "called_address", string.Empty).Trim().ToLowerInvariant();
+                switch (form)
+                {
+                    case "":
+                        pc.CalledAddressForm = pc.Type == PortType.Trunk ? X121AddressForm.International : X121AddressForm.AsReceived;
+                        break;
+                    case "as_received":
+                        pc.CalledAddressForm = X121AddressForm.AsReceived;
+                        break;
+                    case "international":
+                        pc.CalledAddressForm = X121AddressForm.International;
+                        break;
+                    case "national":
+                        pc.CalledAddressForm = X121AddressForm.National;
+                        break;
+                    default:
+                        throw new InvalidDataException("[" + section + "] called_address = " + form + " (line "
+                            + ini.GetLine(section, "called_address") + ") is not one of: as_received, international, national");
+                }
+
                 // RFC 1613 6.5 names exactly two roles; any other word is refused rather than guessed.
                 string role = ini.GetString(section, "xot_pvc_role", string.Empty).Trim().ToLowerInvariant();
                 if (role == "initiator")
@@ -255,42 +312,292 @@ namespace RetroIO.Protocols.X25.Switch
             }
         }
 
+        // [network]: the own network. X.121 7.6 and A.2: a network has one DNIC (or several), optionally with
+        // the digit after it; 7.8: the international prefix. Without [network], [switch] dnic is the own DNIC
+        // when it is written; a file that writes neither leaves the own network unset, so no number is completed.
+        private static void LoadNetwork(IniConfig ini, SwitchConfig sw)
+        {
+            string? own = ini.Get("network", "own_dnic");
+            string ownKeySection = "network";
+            if (own == null && ini.Get("switch", "dnic") != null)
+            {
+                own = ini.Get("switch", "dnic");
+                ownKeySection = "switch";
+            }
+
+            if (own != null)
+            {
+                string key = ownKeySection == "network" ? "own_dnic" : "dnic";
+                try
+                {
+                    sw.Routing.SetOwnDnics(own.Split(','));
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidDataException("[" + ownKeySection + "] " + key + " = " + own + " (line "
+                        + ini.GetLine(ownKeySection, key) + "): " + ex.Message, ex);
+                }
+
+                if (sw.Routing.OwnDnics.Count > 0)
+                {
+                    // The switch's DNIC (used for its own address and the network map) is the first own DNIC.
+                    sw.Dnic = sw.Routing.OwnDnics[0].Substring(0, X121RoutingTable.DnicLength);
+                }
+            }
+
+            string? prefix = ini.Get("network", "international_prefix");
+            if (prefix != null)
+            {
+                try
+                {
+                    sw.Routing.InternationalPrefix = prefix;
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidDataException("[network] international_prefix = " + prefix + " (line "
+                        + ini.GetLine("network", "international_prefix") + "): " + ex.Message, ex);
+                }
+            }
+        }
+
+        // The keys that say what a route matches, without a type key: exactly one per route.
+        private static readonly string[] MatchKeys = { "number", "exact", "prefix", "dnic", "dcc", "default", "regex", "hunt" };
+
+        /// <summary>
+        /// The [route.N] sections. Two ways to write one, and both load into the same table:
+        ///  - the old way: <c>type = exact|prefix|dnic|default|hunt</c> (now also <c>dcc</c> and <c>regex</c>)
+        ///    with <c>address</c>, <c>prefix_len</c>, <c>dnic</c>, <c>hunt_group</c>, <c>port</c> (a number) and
+        ///    <c>backup_port</c>;
+        ///  - the easy way: one key that says what to match (<c>number = 2422110006</c>, <c>prefix = 242201</c>,
+        ///    <c>dnic = 2402</c>, <c>dcc = 238</c>, <c>default = yes</c>, <c>regex = ^9.*</c>,
+        ///    <c>hunt = 555</c> with <c>hunt_group</c>), and <c>port</c> by name or number.
+        /// Both may add <c>name</c>, <c>note</c>, <c>enabled</c>, <c>direction</c> and <c>backup_ports</c> (a
+        /// list, tried in its order when the port is out of order: X.110 3.5 and Appendix I.1, "direct route,
+        /// alternative 1, alternative 2"). A route the loader does not understand stops the load and names the
+        /// section and line; it used to be skipped, as in the C, which turned a typo into a missing route.
+        /// </summary>
         private static void LoadRoutes(IniConfig ini, SwitchConfig sw)
         {
             for (int i = 0; i < MaxRoutes; i++)
             {
                 string section = "route." + i;
-                string? type = ini.Get(section, "type");
-                if (type == null)
+                if (!ini.HasSection(section))
                 {
                     continue;
                 }
 
-                X121RouteType routeType;
-                switch (type)
-                {
-                    case "exact": routeType = X121RouteType.Exact; break;
-                    case "prefix": routeType = X121RouteType.Prefix; break;
-                    case "dnic": routeType = X121RouteType.Dnic; break;
-                    case "default": routeType = X121RouteType.Default; break;
-                    case "hunt": routeType = X121RouteType.Hunt; break;
-                    default: continue; // unrecognised type is skipped (as in the C)
-                }
-
-                X121Route route = new X121Route
-                {
-                    Type = routeType,
-                    Address = ini.GetString(section, "address", string.Empty),
-                    DestPort = ini.GetInt(section, "port", 0),
-                    PrefixLen = ini.GetInt(section, "prefix_len", 0),
-                    Dnic = ini.GetString(section, "dnic", string.Empty),
-                    HuntGroupId = ini.GetInt(section, "hunt_group", -1)
-                };
-
-                sw.Routing.AddRoute(route);
+                sw.Routing.AddRoute(ReadRoute(ini, sw, section));
             }
         }
 
+        private static X121Route ReadRoute(IniConfig ini, SwitchConfig sw, string section)
+        {
+            X121Route route = new X121Route
+            {
+                Name = ini.GetString(section, "name", string.Empty),
+                Note = ini.GetString(section, "note", string.Empty),
+            };
+
+            string? type = ini.Get(section, "type");
+            bool oldForm = type != null;
+            if (oldForm)
+            {
+                if (!X121TableBuilder.TryParseKind(type!, out X121RouteType kind))
+                {
+                    throw Bad(ini, section, "type", "type = " + type + " is not a route type this switch knows ("
+                        + string.Join(", ", X121TableBuilder.KindWords) + ")");
+                }
+
+                route.Type = kind;
+                switch (kind)
+                {
+                    case X121RouteType.Exact:
+                    case X121RouteType.Hunt:
+                        route.Address = ini.GetString(section, "address", string.Empty);
+                        break;
+                    case X121RouteType.Prefix:
+                        route.Address = ini.GetString(section, "address", string.Empty);
+                        route.PrefixLen = ini.GetInt(section, "prefix_len", 0);
+                        break;
+                    case X121RouteType.Dnic:
+                        route.Dnic = ini.GetString(section, "dnic", string.Empty);
+                        break;
+                    case X121RouteType.Dcc:
+                        route.Dcc = ini.GetString(section, "dcc", ini.GetString(section, "address", string.Empty));
+                        break;
+                    case X121RouteType.Regex:
+                        route.Pattern = ini.GetString(section, "regex", ini.GetString(section, "address", string.Empty));
+                        break;
+                }
+            }
+            else
+            {
+                string found = string.Empty;
+                for (int k = 0; k < MatchKeys.Length; k++)
+                {
+                    if (ini.Get(section, MatchKeys[k]) == null)
+                    {
+                        continue;
+                    }
+
+                    if (found.Length > 0)
+                    {
+                        throw Bad(ini, section, MatchKeys[k], "says both " + found + " and " + MatchKeys[k]
+                            + "; a route matches one thing");
+                    }
+
+                    found = MatchKeys[k];
+                }
+
+                if (found.Length == 0)
+                {
+                    throw new InvalidDataException("[" + section + "] (line " + ini.GetSectionLine(section)
+                        + ") says nothing to match: write one of " + string.Join(", ", MatchKeys) + ", or type =");
+                }
+
+                string value = ini.GetString(section, found, string.Empty);
+                switch (found)
+                {
+                    case "number":
+                    case "exact":
+                        route.Type = X121RouteType.Exact;
+                        route.Address = value;
+                        break;
+                    case "prefix":
+                        route.Type = X121RouteType.Prefix;
+                        route.Address = value;
+                        route.PrefixLen = value.Length;
+                        break;
+                    case "dnic":
+                        route.Type = X121RouteType.Dnic;
+                        route.Dnic = value;
+                        break;
+                    case "dcc":
+                        route.Type = X121RouteType.Dcc;
+                        route.Dcc = value;
+                        break;
+                    case "regex":
+                        route.Type = X121RouteType.Regex;
+                        route.Pattern = value;
+                        break;
+                    case "hunt":
+                        route.Type = X121RouteType.Hunt;
+                        route.Address = value;
+                        break;
+                    default:
+                        if (!ReadYesNo(ini, section, "default"))
+                        {
+                            throw Bad(ini, section, "default", "default = " + value + ": write default = yes, or leave the key out");
+                        }
+
+                        route.Type = X121RouteType.Default;
+                        break;
+                }
+            }
+
+            route.Enabled = ini.Get(section, "enabled") == null || ReadYesNo(ini, section, "enabled");
+            if (!X121TableBuilder.TryParseDirection(ini.Get(section, "direction"), out X121RouteDirection direction))
+            {
+                throw Bad(ini, section, "direction", "direction = " + ini.Get(section, "direction") + " is not one of: both, incoming, outgoing");
+            }
+
+            route.Direction = direction;
+
+            if (route.Type == X121RouteType.Hunt)
+            {
+                route.HuntGroupId = ini.GetInt(section, "hunt_group", -1);
+                if (route.HuntGroupId < 0)
+                {
+                    throw Bad(ini, section, oldForm ? "type" : "hunt", "a hunt route needs hunt_group = <the [hunt.N] number>");
+                }
+            }
+            else
+            {
+                string? port = ini.Get(section, "port");
+
+                // The old form took a missing port as port 0; kept, so an old file loads as it did.
+                route.DestPort = port == null && oldForm ? 0 : FindPort(ini, sw, section, "port", port);
+            }
+
+            string? oldBackup = ini.Get(section, "backup_port");
+            if (oldBackup != null && IniConfig.Atoi(oldBackup) >= 0)
+            {
+                route.BackupPorts.Add(FindPort(ini, sw, section, "backup_port", oldBackup));
+            }
+
+            string? backups = ini.Get(section, "backup_ports");
+            if (backups != null)
+            {
+                string[] parts = backups.Split(',');
+                for (int b = 0; b < parts.Length; b++)
+                {
+                    if (parts[b].Trim().Length > 0)
+                    {
+                        route.BackupPorts.Add(FindPort(ini, sw, section, "backup_ports", parts[b]));
+                    }
+                }
+            }
+
+            if (!X121RouteRules.Check(route, out string error))
+            {
+                string key = oldForm ? "type" : FirstPresent(ini, section);
+                throw Bad(ini, section, key, error);
+            }
+
+            return route;
+        }
+
+        private static string FirstPresent(IniConfig ini, string section)
+        {
+            for (int k = 0; k < MatchKeys.Length; k++)
+            {
+                if (ini.Get(section, MatchKeys[k]) != null)
+                {
+                    return MatchKeys[k];
+                }
+            }
+
+            return "type";
+        }
+
+        // A port named in a route: by its name ([port.N] name) or its number, and it must be a port of this
+        // switch. "local" (the runtime's own services) has no meaning in the switch: its own services answer at
+        // [switch] mgmt_addr.
+        private static int FindPort(IniConfig ini, SwitchConfig sw, string section, string key, string? value)
+        {
+            string v = (value ?? string.Empty).Trim();
+            if (!sw.Routing.TryFindPort(v, out int port) || port == X121RoutingTable.LocalPort || port < 0 || port >= sw.Ports.Count)
+            {
+                throw Bad(ini, section, key, key + " = " + v + " is not a port of this switch (a [port.N] number or name)");
+            }
+
+            return port;
+        }
+
+        private static InvalidDataException Bad(IniConfig ini, string section, string key, string message)
+        {
+            int line = ini.GetLine(section, key);
+            if (line == 0)
+            {
+                line = ini.GetSectionLine(section);
+            }
+
+            return new InvalidDataException("[" + section + "] line " + line + ": " + message);
+        }
+
+        // A hunt route's hunt_group must name a [hunt.N] that was read.
+        private static void CheckHuntRoutes(IniConfig ini, SwitchConfig sw)
+        {
+            for (int i = 0; i < sw.Routing.Routes.Count; i++)
+            {
+                X121Route r = sw.Routing.Routes[i];
+                if (r.Type == X121RouteType.Hunt && r.HuntGroupId >= sw.Routing.HuntGroups.Count)
+                {
+                    throw new InvalidDataException("route " + (r.Name.Length > 0 ? "'" + r.Name + "'" : r.Address)
+                        + ": hunt_group = " + r.HuntGroupId + " is not a [hunt.N] of this file");
+                }
+            }
+        }
         private static void LoadHuntGroups(IniConfig ini, SwitchConfig sw)
         {
             for (int i = 0; i < MaxHuntGroups; i++)
@@ -485,17 +792,6 @@ namespace RetroIO.Protocols.X25.Switch
                     Password = ini.GetString(section, "password", string.Empty),
                     Level = ini.GetInt(section, "level", 0)
                 });
-            }
-        }
-
-        private static void ApplyBackupPorts(IniConfig ini, SwitchConfig sw)
-        {
-            // Backup ports are applied in a second pass indexed by the ROUTE ARRAY position, reading section
-            // "route.<arrayindex>" -- so a backup only lands on a route whose array index matches an existing
-            // route.<n> section (an edge case for non-contiguous configs).
-            for (int i = 0; i < sw.Routing.Routes.Count; i++)
-            {
-                sw.Routing.Routes[i].BackupPort = ini.GetInt("route." + i, "backup_port", -1);
             }
         }
     }

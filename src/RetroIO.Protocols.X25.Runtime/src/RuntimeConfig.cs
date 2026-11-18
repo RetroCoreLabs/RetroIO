@@ -459,8 +459,30 @@ namespace RetroIO.Protocols.X25.Runtime
         public List<TcpLapbInterfaceConfig> TcpLapbInterfaces { get; set; } = new List<TcpLapbInterfaceConfig>();
 
         /// <summary>
-        /// X.25 routing table entries - maps X.121 address patterns to interfaces/gateways
-        /// Similar to Cisco "x25 route" command
+        /// This network's own DNICs (4 digits, or 5 with the digit after the DNIC), first one first. A local
+        /// number is completed with the first one when <see cref="InternationalPrefix"/> is set (X.121 7.6).
+        /// </summary>
+        public List<string> OwnDnics { get; set; } = new List<string>();
+
+        /// <summary>
+        /// The international prefix of this network (X.121 7.8); empty for none.
+        /// </summary>
+        public string InternationalPrefix { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The routes of the one routing table (RetroIO.Protocols.X25.Routing), ports by name. This is the
+        /// form the routing screen writes. Routes in the older <see cref="RoutingTable"/> list are converted
+        /// and added after these (see <c>RoutingConfigConverter</c>).
+        /// </summary>
+        public List<RetroIO.Protocols.X25.Routing.X121RouteConfig> Routes { get; set; } = new List<RetroIO.Protocols.X25.Routing.X121RouteConfig>();
+
+        /// <summary>
+        /// The older form of the routes, written before 2026-11-18: an X.121 address pattern (a regular
+        /// expression like <c>100.*</c>), a type, a destination name and a priority. Still read: each entry is
+        /// converted into a route of the one table when the runtime starts (<c>RoutingConfigConverter</c>):
+        /// plain digits become an exact route, digits followed by <c>.*</c> a prefix route, <c>.*</c> the default
+        /// route, anything else a pattern route; priority only decides between two routes that are otherwise
+        /// equal. The routing screen writes the new <see cref="Routes"/> list and empties this one.
         /// </summary>
         public List<X25RouteEntry> RoutingTable { get; set; } = new List<X25RouteEntry>();
 

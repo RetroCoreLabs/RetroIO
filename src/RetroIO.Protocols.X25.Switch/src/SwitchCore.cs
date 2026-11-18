@@ -515,6 +515,11 @@ namespace RetroIO.Protocols.X25.Switch
 
             ISwitchPort outPort = _node.GetPort(decision.OutPort)!;
 
+            // The called number as the out port wants it written (PortConfig.CalledAddressForm): toward another
+            // network the full international number without the prefix (X.121 7.8.1, 7.12.6-7.12.7). The call
+            // record keeps the number the caller dialled.
+            string onwardCalled = decision.CalledAddress ?? calledAddress;
+
             // Place the onward call; a zero LCI means the egress port could not initiate it.
             // X.25 6.9 and 6.12: the window and packet size of a call are negotiated end to end. The onward Call Request
             // asks for what the caller asked for (the directions swapped: what the caller sends, the callee receives),
@@ -527,11 +532,11 @@ namespace RetroIO.Protocols.X25.Switch
                 // The NUI says who pays this network; it never goes on to the called DTE (X.25 6.21).
                 X25CallParameters toAsk = asked.Swapped().WithPacketSizeAtMost(outPort.Config.MaxPacketSize).WithoutNuiSelection()
                     .WithoutChargingRequest();   // Table 7-2: not in an Incoming Call; this DCE answers it (6.22)
-                outLci = outPort.PlaceCall(calledAddress, callingAddress, callUserData, toAsk);
+                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, toAsk);
             }
             else
             {
-                outLci = outPort.PlaceCall(calledAddress, callingAddress, callUserData);
+                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData);
             }
 
             if (outLci == 0)

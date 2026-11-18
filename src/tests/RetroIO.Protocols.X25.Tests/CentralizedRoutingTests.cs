@@ -147,11 +147,13 @@ namespace RetroIO.Protocols.X25.Tests
             
             var runtime = new ProtocolRuntime(Logger, Config);
             
-            // Act & Assert
+            // Act & Assert. All four ask the runtime built after the route was added. Until 2026-11-18 the last three
+            // asked the fixture's Runtime, built before it; they passed only because FindRoute read the configuration
+            // list at lookup time, a list the router that carries calls never read (src/BUGS.md, two route tables).
             Assert.That(runtime.FindRoute("1050"), Is.Not.Null, "Should match 1050");
-            Assert.That(Runtime.FindRoute("1099"), Is.Not.Null, "Should match 1099");
-            Assert.That(Runtime.FindRoute("10999"), Is.Null, "Should not match 10999");
-            Assert.That(Runtime.FindRoute("999"), Is.Null, "Should not match 999");
+            Assert.That(runtime.FindRoute("1099"), Is.Not.Null, "Should match 1099");
+            Assert.That(runtime.FindRoute("10999"), Is.Null, "Should not match 10999");
+            Assert.That(runtime.FindRoute("999"), Is.Null, "Should not match 999");
         }
         
         [Test]

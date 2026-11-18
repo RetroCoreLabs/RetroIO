@@ -121,6 +121,36 @@ flowchart TB
 | `QueuedPacket` | A packet held because the egress leg would not take it |
 | `PortCounters` | Per-port lifetime counters (calls, packets and X.25 packet bytes), safe to read from another thread |
 
+## Routing
+
+The switch decides every call with the one route table of `RetroIO.Protocols.X25.Routing`
+(`X121RoutingTable.Resolve`, asked through `SwitchCallRouter`), the same table and lookup the desktop
+runtime uses. The lookup takes the most exact route first, whatever order the routes are written in: a
+number or hunt group, a pattern, the longest prefix, a network with its fifth digit, a network, a country,
+the default route. A route back out of the arrival port is never used; a route that is off is skipped; a
+route whose port is out of order tries its `backup_ports` in their order; a hunt group skips a member that
+is down. The full rules and their X.121 and X.25 sources are in
+[X121-ADDRESSING.md](../RetroIO.Protocols.X25/X121-ADDRESSING.md).
+
+`SwitchConfigLoader` reads the own network from `[network]` (`own_dnic`, `international_prefix`) or, without
+it, from `[switch] dnic`, and each `[route.N]` either the easy way, with one key for what it takes:
+
+```ini
+[route.1]
+name = Datapak
+dnic = 2402
+port = x75-gw
+backup_ports = nordic
+```
+
+(`number`, `prefix`, `dnic`, `dcc`, `default = yes`, `regex`, `hunt` with `hunt_group`), or the old way with
+`type`, `address`, `prefix_len`, `dnic` and `backup_port`, which still loads as it did. `port` and the backups
+take a `[port.N]` name or number. A route type it does not know, a route that names no match, a port the switch
+does not have, or a bad DNIC stops the load with the section and line. `[port.N] called_address`
+(`as_received`, `international`, `national`) sets the form of the called number sent on that port; a trunk
+defaults to the full international number. The tariff file's `home_dnic` is separate: it prices calls and
+does not route them.
+
 ## Defaults worth knowing
 
 `PortConfig` follows the switch configuration specification: window size **2**, packet size **128**,

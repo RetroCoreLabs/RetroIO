@@ -230,6 +230,8 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 case X121RouteType.Default: return "default";
                 case X121RouteType.Hunt: return "hunt";
                 case X121RouteType.Pvc: return "pvc";
+                case X121RouteType.Dcc: return "dcc";
+                case X121RouteType.Regex: return "regex";
                 default: return "???";
             }
         }

@@ -19,6 +19,21 @@ namespace RetroIO.Protocols.X25.Switch
         public int Id { get; set; }
 
         /// <summary>
+        /// The port's name (<c>name</c> in <c>[port.N]</c>), which routes may use instead of the number; empty
+        /// when it has none.
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// How the called number is written in a call sent out of this port (<c>called_address</c>:
+        /// <c>as_received</c>, <c>international</c> or <c>national</c>). X.121 7.8.1 and 7.12.6-7.12.7 want the
+        /// full international number without prefix toward another network, so a trunk port defaults to
+        /// <c>international</c>; what a local terminal wants is not in the spec, so an access port defaults to
+        /// leaving the number as it came in.
+        /// </summary>
+        public RetroIO.Protocols.X25.Routing.X121AddressForm CalledAddressForm { get; set; } = RetroIO.Protocols.X25.Routing.X121AddressForm.AsReceived;
+
+        /// <summary>
         /// Access or trunk role.
         /// </summary>
         public PortType Type { get; set; } = PortType.Access;

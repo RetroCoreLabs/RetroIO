@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using RetroIO.Link.Models;
 using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.PacketLayer;
+using RetroIO.Protocols.X25.Routing;
 
 namespace RetroIO.Protocols.X25.Transport
 {
@@ -19,9 +20,18 @@ namespace RetroIO.Protocols.X25.Transport
     public class X25Router
     {
         private readonly ILogger _logger;
-        private readonly List<X25Route> _routes;
         private readonly Dictionary<string, ITransportInterface> _interfaces;
         private readonly object _routeLock = new object();
+
+        // The one routing table (RetroIO.Protocols.X25.Routing), shared in kind with the switch. The runtime has no
+        // port numbers of its own, so every name a route uses (a transport, or the IP address of an XOT_Client
+        // route) is given a number here the first time it is seen, and the table carries the name.
+        private readonly X121RoutingTable _table = new X121RoutingTable();
+        private readonly Dictionary<string, int> _portIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        // Port numbers that stand for an IP address of an XOT_Client route: such a "port" is reached by dialling a
+        // new XOT connection (PlaceXotCall), and is in service while any XOT client transport is active.
+        private readonly HashSet<int> _dynamicXotPorts = new HashSet<int>();
 
         /// <summary>
         /// Creates an empty router.
@@ -35,78 +45,287 @@ namespace RetroIO.Protocols.X25.Transport
         public X25Router(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _routes = new List<X25Route>();
             _interfaces = new Dictionary<string, ITransportInterface>();
+        }
+
+        /// <summary>
+        /// The one routing table every decision of this router is made from. The routing screen shows it; to
+        /// change it use <see cref="LoadNetwork"/>, <see cref="AddRoute"/> or <see cref="RemoveRoute"/>.
+        /// </summary>
+        public X121RoutingTable Table => _table;
+
+        /// <summary>
+        /// The number the table uses for a port name, given on first use.
+        /// </summary>
+        /// <param name="name">
+        /// A transport name, an IP address of an XOT_Client route, or <c>local</c>.
+        /// </param>
+        /// <returns>
+        /// The number; <see cref="X121RoutingTable.LocalPort"/> for <c>local</c>.
+        /// </returns>
+        public int PortId(string name)
+        {
+            string n = (name ?? string.Empty).Trim();
+            if (string.Equals(n, X121RoutingTable.LocalPortName, StringComparison.OrdinalIgnoreCase))
+            {
+                return X121RoutingTable.LocalPort;
+            }
+
+            lock (_routeLock)
+            {
+                if (!_portIds.TryGetValue(n, out int id))
+                {
+                    id = _portIds.Count;
+                    _portIds[n] = id;
+                    _table.SetPortName(id, n);
+                }
+
+                return id;
+            }
+        }
+
+        /// <summary>
+        /// Replaces the table with a written one: the own network and every route, ports by name.
+        /// </summary>
+        /// <param name="network">
+        /// The written table.
+        /// </param>
+        /// <exception cref="System.IO.InvalidDataException">
+        /// A route is not valid; the message names it. The table is left as it was.
+        /// </exception>
+        public void LoadNetwork(X121NetworkConfig network)
+        {
+            ArgumentNullException.ThrowIfNull(network);
+            lock (_routeLock)
+            {
+                _dynamicXotPorts.Clear();
+                X121TableBuilder.Fill(_table, network, PortId);
+            }
+
+            _logger.LogInformation("X.25 routing table loaded: {Count} routes, own DNIC {Dnic}", _table.Routes.Count,
+                _table.OwnDnics.Count > 0 ? _table.OwnDnics[0] : "(none)");
+        }
+
+        /// <summary>
+        /// The one lookup for a call through this node's lines (<see cref="X121RoutingTable.Resolve"/>), with
+        /// each port's state taken from its transport.
+        /// </summary>
+        /// <param name="called">
+        /// The called number.
+        /// </param>
+        /// <param name="arrivalPort">
+        /// The name of the line the call came in on, never chosen; null for a call placed here.
+        /// </param>
+        /// <param name="direction">
+        /// Whether the call comes in or is placed here.
+        /// </param>
+        /// <param name="callUserData">
+        /// The call user data, or null.
+        /// </param>
+        /// <returns>
+        /// The decision, with the route, the port and why.
+        /// </returns>
+        public X121RouteResult ResolveCall(string called, string? arrivalPort, X121RouteDirection direction, byte[]? callUserData)
+        {
+            int inPort = -1;
+            if (!string.IsNullOrEmpty(arrivalPort))
+            {
+                lock (_routeLock)
+                {
+                    if (_portIds.TryGetValue(arrivalPort, out int id))
+                    {
+                        inPort = id;
+                    }
+                }
+            }
+
+            return _table.Resolve(called ?? string.Empty, inPort, PortStatus, direction, callUserData);
+        }
+
+        // What the lookup needs to know of a port: a registered transport is in service while it is active; an
+        // XOT_Client address while any XOT client transport is active; any other name is not a port of this node.
+        private X121PortStatus PortStatus(int id) => PortStatusOf(_table.GetPortName(id));
+
+        /// <summary>
+        /// The state of a port by its name, as the lookup sees it: a registered transport is in service while it
+        /// is active; the IP address of an XOT_Client route while any XOT client transport is active; any other
+        /// name is not a port of this node.
+        /// </summary>
+        /// <param name="name">
+        /// The port name.
+        /// </param>
+        /// <returns>
+        /// The state. The routing screen uses this to try a table it has not saved yet against the real lines.
+        /// </returns>
+        public X121PortStatus PortStatusOf(string name)
+        {
+            name ??= string.Empty;
+            if (_interfaces.TryGetValue(name, out ITransportInterface? t))
+            {
+                return new X121PortStatus(true, t.Status == TransportStatus.Active, X121AddressForm.AsReceived);
+            }
+
+            bool dynamic;
+            lock (_routeLock)
+            {
+                dynamic = _portIds.TryGetValue(name, out int id) && _dynamicXotPorts.Contains(id);
+            }
+
+            if (dynamic)
+            {
+                return new X121PortStatus(true, ActiveXotClient() != null, X121AddressForm.AsReceived);
+            }
+
+            return X121PortStatus.Missing;
+        }
+
+        private XotClientTransport? ActiveXotClient()
+        {
+            foreach (ITransportInterface iface in _interfaces.Values)
+            {
+                if (iface is XotClientTransport xot && xot.Status == TransportStatus.Active)
+                {
+                    return xot;
+                }
+            }
+
+            return null;
         }
 
         #region Route Management
 
         /// <summary>
-        /// Add a routing entry
+        /// Adds a route written in the older form (an address pattern, a type, a destination, a priority) to
+        /// the one table. A route with the same name is replaced. The pattern is read by
+        /// <see cref="X121LegacyPattern"/>; the priority only decides between two otherwise equal routes.
         /// </summary>
+        /// <param name="route">
+        /// The route.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// The route is not valid (for example a pattern that is not a regular expression).
+        /// </exception>
         public void AddRoute(X25Route route)
         {
-            if (route == null)
-                throw new ArgumentNullException(nameof(route));
+            ArgumentNullException.ThrowIfNull(route);
 
-            lock (_routeLock)
+            X121Route r = ToTableRoute(route);
+            if (!X121RouteRules.Check(r, out string error))
             {
-                // Remove existing route with same name
-                _routes.RemoveAll(r => r.Name.Equals(route.Name, StringComparison.OrdinalIgnoreCase));
-                
-                // Add new route
-                _routes.Add(route);
-                
-                // Sort by priority (highest first)
-                _routes.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+                throw new ArgumentException("route " + route.Name + ": " + error, nameof(route));
             }
 
-            _logger.LogInformation("X.25 route added: {Route}", route);
-        }
-
-        /// <summary>
-        /// Remove a routing entry by name
-        /// </summary>
-        public bool RemoveRoute(string routeName)
-        {
             lock (_routeLock)
             {
-                var removed = _routes.RemoveAll(r => r.Name.Equals(routeName, StringComparison.OrdinalIgnoreCase));
-                if (removed > 0)
+                RemoveByName(route.Name);
+                _table.AddRoute(r);
+            }
+
+            _logger.LogInformation("X.25 route added: {Route} ({Kind} {Match} -> {Target})", route.Name,
+                X121RouteText.KindName(r.Type), r.MatchText, X121RouteText.Target(r, _table));
+        }
+
+        private X121Route ToTableRoute(X25Route route)
+        {
+            X121LegacyPattern.Convert(route.X121AddressPattern, out X121RouteType type, out string match);
+            X121Route r = new X121Route
+            {
+                Name = route.Name,
+                Note = route.Description,
+                Enabled = route.Enabled,
+                Type = type,
+                Priority = route.Priority,
+                CallUserDataPattern = route.CallUserDataPattern ?? string.Empty,
+                Direction = route.Direction == RouteDirection.Inbound ? X121RouteDirection.Incoming
+                    : route.Direction == RouteDirection.Outbound ? X121RouteDirection.Outgoing : X121RouteDirection.Both,
+            };
+
+            switch (type)
+            {
+                case X121RouteType.Exact:
+                    r.Address = match;
+                    break;
+                case X121RouteType.Prefix:
+                    r.Address = match;
+                    r.PrefixLen = match.Length;
+                    break;
+                case X121RouteType.Regex:
+                    r.Pattern = match;
+                    break;
+            }
+
+            r.DestPort = route.Type == RouteType.Local ? X121RoutingTable.LocalPort : PortId(route.Destination);
+            if (route.Type == RouteType.XOT_Client && !_interfaces.ContainsKey(route.Destination))
+            {
+                lock (_routeLock)
                 {
-                    _logger.LogInformation("X.25 route removed: {RouteName}", routeName);
-                    return true;
+                    _dynamicXotPorts.Add(r.DestPort);
                 }
             }
-            return false;
+
+            for (int i = 0; i < route.BackupDestinations.Count; i++)
+            {
+                r.BackupPorts.Add(PortId(route.BackupDestinations[i]));
+            }
+
+            return r;
+        }
+
+        private bool RemoveByName(string name)
+        {
+            bool removed = false;
+            for (int i = _table.Routes.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(_table.Routes[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    _table.DeleteRouteAt(i);
+                    removed = true;
+                }
+            }
+
+            return removed;
         }
 
         /// <summary>
-        /// Clear all routes
+        /// Removes every route with this name.
+        /// </summary>
+        /// <param name="routeName">
+        /// The route name.
+        /// </param>
+        /// <returns>
+        /// True when one was removed.
+        /// </returns>
+        public bool RemoveRoute(string routeName)
+        {
+            bool removed;
+            lock (_routeLock)
+            {
+                removed = RemoveByName(routeName);
+            }
+
+            if (removed)
+            {
+                _logger.LogInformation("X.25 route removed: {RouteName}", routeName);
+            }
+
+            return removed;
+        }
+
+        /// <summary>
+        /// Removes every route and hunt group; the own network stays.
         /// </summary>
         public void ClearRoutes()
         {
             lock (_routeLock)
             {
-                var count = _routes.Count;
-                _routes.Clear();
+                int count = _table.Routes.Count;
+                _table.ClearRoutes();
+                _dynamicXotPorts.Clear();
                 _logger.LogInformation("Cleared {Count} X.25 routes", count);
             }
         }
 
-        /// <summary>
-        /// Get all configured routes
-        /// </summary>
-        public List<X25Route> GetRoutes()
-        {
-            lock (_routeLock)
-            {
-                return new List<X25Route>(_routes);
-            }
-        }
-
         #endregion
-
         #region Transport Interface Management
 
         /// <summary>
@@ -154,74 +373,12 @@ namespace RetroIO.Protocols.X25.Transport
 
         #endregion
 
-        #region Route Matching
-
-        /// <summary>
-        /// Find the best matching route for an X.121 address and direction
-        /// Returns routes in priority order for failover scenarios
-        /// </summary>
-        /// <param name="calledX121Address">
-        /// Called X.121 address
-        /// </param>
-        /// <param name="direction">
-        /// Call direction
-        /// </param>
-        /// <param name="callUserData">
-        /// Optional call user data for additional matching
-        /// </param>
-        /// <returns>
-        /// List of matching routes ordered by priority
-        /// </returns>
-        public List<X25Route> FindRoutes(string calledX121Address, RouteDirection direction, byte[]? callUserData = null)
-        {
-            if (string.IsNullOrEmpty(calledX121Address))
-                return new List<X25Route>();
-
-            lock (_routeLock)
-            {
-                // Collect matching routes without LINQ
-                var matchingRoutes = new List<X25Route>();
-                foreach (var route in _routes)
-                {
-                    if (route.Matches(calledX121Address, direction, callUserData))
-                    {
-                        matchingRoutes.Add(route);
-                    }
-                }
-
-                // Sort by priority descending (highest first)
-                matchingRoutes.Sort((a, b) => b.Priority.CompareTo(a.Priority));
-
-                // Build route names string without LINQ
-                var routeNames = new System.Text.StringBuilder();
-                for (int i = 0; i < matchingRoutes.Count; i++)
-                {
-                    if (i > 0) routeNames.Append(", ");
-                    routeNames.Append(matchingRoutes[i].Name);
-                }
-
-                _logger.LogDebug("Found {Count} matching routes for X.121 address {Address} ({Direction}): {Routes}",
-                               matchingRoutes.Count, calledX121Address, direction, routeNames.ToString());
-
-                return matchingRoutes;
-            }
-        }
-
-        /// <summary>
-        /// Find the best matching route for an X.121 address and direction
-        /// </summary>
-        public X25Route? FindBestRoute(string calledX121Address, RouteDirection direction, byte[]? callUserData = null)
-        {
-            var routes = FindRoutes(calledX121Address, direction, callUserData);
-            return routes.Count > 0 ? routes[0] : null;
-        }
-
-        #endregion
-
         #region Call Routing
 
         /// <summary>
-        /// Route an outbound X.25 call request
+        /// Places a call from this node: the one lookup picks the port (its backups when it is out of order),
+        /// and if placing the call there fails the remaining ports of every route that takes the number are
+        /// tried in lookup order (<see cref="X121RoutingTable.LookupMulti(string, int, int, X121RouteDirection, byte[])"/>).
         /// </summary>
         /// <param name="callRequest">
         /// X.25 call request to route
@@ -231,82 +388,84 @@ namespace RetroIO.Protocols.X25.Transport
         /// </returns>
         public bool RouteOutboundCall(X25CallRequest callRequest)
         {
-            if (callRequest == null)
-                throw new ArgumentNullException(nameof(callRequest));
+            ArgumentNullException.ThrowIfNull(callRequest);
 
-            _logger.LogInformation("Routing outbound call to X.121 address: {CalledAddress}", 
-                                  callRequest.CalledAddress);
-
-            var routes = FindRoutes(callRequest.CalledAddress, RouteDirection.Outbound, callRequest.CallUserData);
-            
-            if (routes.Count == 0)
+            X121RouteResult first = ResolveCall(callRequest.CalledAddress, null, X121RouteDirection.Outgoing, callRequest.CallUserData);
+            _logger.LogInformation("Outbound call to {CalledAddress}: {Why}", callRequest.CalledAddress, first.Explanation);
+            if (first.Outcome == X121RouteOutcome.Local)
             {
-                _logger.LogWarning("No route found for outbound call to X.121 address: {CalledAddress}", 
-                                  callRequest.CalledAddress);
+                // A route to this node is not a line a call can be placed on.
                 return false;
             }
 
-            // Try routes in priority order (including backup destinations)
-            foreach (var route in routes)
+            List<int> tried = new List<int>();
+            if (first.Outcome == X121RouteOutcome.Forward)
             {
-                foreach (var destination in route.GetAllDestinations())
+                tried.Add(first.Port);
+                if (TryPlace(first.Port, callRequest))
                 {
-                    if (_interfaces.TryGetValue(destination, out var transportInterface))
-                    {
-                        try
-                        {
-                            _logger.LogDebug("Attempting call via route {RouteName} to destination {Destination}", 
-                                           route.Name, destination);
-
-                            var success = transportInterface.PlaceCall(callRequest);
-                            if (success)
-                            {
-                                callRequest.UsedTransport = transportInterface;
-                                _logger.LogInformation("Outbound call successfully routed via {RouteName} to {Destination}",
-                                                     route.Name, destination);
-                                return true;
-                            }
-                            else
-                            {
-                                _logger.LogDebug("Call failed via {RouteName} to {Destination}, trying next option", 
-                                               route.Name, destination);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error placing call via route {RouteName} to {Destination}", 
-                                           route.Name, destination);
-                        }
-                    }
-                    else if (route.Type == RouteType.XOT_Client)
-                    {
-                        // For XOT client routes, destination is IP address - create dynamic connection
-                        try
-                        {
-                            var success = PlaceXotCall(destination, callRequest);
-                            if (success)
-                            {
-                                _logger.LogInformation("Outbound XOT call successfully placed to {Destination}", destination);
-                                return true;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error placing XOT call to {Destination}", destination);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Transport interface not found for destination: {Destination}", destination);
-                    }
+                    return true;
                 }
             }
 
-            _logger.LogError("All routing attempts failed for outbound call to X.121 address: {CalledAddress}", 
-                           callRequest.CalledAddress);
+            IReadOnlyList<int> all = _table.LookupMulti(callRequest.CalledAddress, -1, 16, X121RouteDirection.Outgoing, callRequest.CallUserData);
+            for (int i = 0; i < all.Count; i++)
+            {
+                int port = all[i];
+                if (tried.Contains(port) || port == X121RoutingTable.LocalPort || !PortStatus(port).InService)
+                {
+                    continue;
+                }
+
+                tried.Add(port);
+                if (TryPlace(port, callRequest))
+                {
+                    return true;
+                }
+            }
+
+            _logger.LogError("All routing attempts failed for outbound call to X.121 address: {CalledAddress}", callRequest.CalledAddress);
             return false;
         }
 
+        private bool TryPlace(int port, X25CallRequest callRequest)
+        {
+            string name = _table.GetPortName(port);
+            try
+            {
+                if (_interfaces.TryGetValue(name, out ITransportInterface? transportInterface))
+                {
+                    if (transportInterface.PlaceCall(callRequest))
+                    {
+                        callRequest.UsedTransport = transportInterface;
+                        _logger.LogInformation("Outbound call to {CalledAddress} placed on {Port}", callRequest.CalledAddress, name);
+                        return true;
+                    }
+
+                    _logger.LogDebug("Call to {CalledAddress} failed on {Port}, trying the next one", callRequest.CalledAddress, name);
+                    return false;
+                }
+
+                bool dynamic;
+                lock (_routeLock)
+                {
+                    dynamic = _dynamicXotPorts.Contains(port);
+                }
+
+                if (dynamic)
+                {
+                    return PlaceXotCall(name, callRequest);
+                }
+
+                _logger.LogWarning("Transport interface not found for destination: {Destination}", name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error placing call to {CalledAddress} on {Port}", callRequest.CalledAddress, name);
+            }
+
+            return false;
+        }
         /// <summary>
         /// Says whether a local service takes calls to a called address with given call user data.
         /// Set by the runtime, which owns the services. Null means no local service exists.
@@ -372,8 +531,10 @@ namespace RetroIO.Protocols.X25.Transport
                 return X25CallDecision.Barred();
             }
 
-            List<X25Route> routes = FindRoutes(called, RouteDirection.Inbound, callRequest.CallUserData);
-            if (routes.Count == 0)
+            // Any enabled incoming route that takes the number lets the call in (the one table's ranking picks
+            // which one is logged). Where it points is not used: see the remarks.
+            X121Route? winner = _table.FindWinner(called, -1, X121RouteDirection.Incoming, callRequest.CallUserData);
+            if (winner == null)
             {
                 _logger.LogWarning("Incoming call to {Called} on {Line}: no inbound route - not obtainable", called, line);
                 return X25CallDecision.NoRoute();
@@ -381,18 +542,18 @@ namespace RetroIO.Protocols.X25.Transport
 
             if (programWaits)
             {
-                _logger.LogInformation("Incoming call to {Called} on {Line} passed by route {Route}; offered to the program", called, line, routes[0].Name);
+                _logger.LogInformation("Incoming call to {Called} on {Line} passed by route {Route}; offered to the program", called, line, winner.Name);
                 return X25CallDecision.DeliverLocally();
             }
 
             Func<string, byte[], bool>? serviceAvailable = LocalServiceAvailable;
             if (serviceAvailable == null || !serviceAvailable(called, callRequest.CallUserData ?? Array.Empty<byte>()))
             {
-                _logger.LogWarning("Incoming call to {Called} on {Line}: route {Route} matches but no local service takes the address - not obtainable", called, line, routes[0].Name);
+                _logger.LogWarning("Incoming call to {Called} on {Line}: route {Route} matches but no local service takes the address - not obtainable", called, line, winner.Name);
                 return X25CallDecision.NoRoute();
             }
 
-            _logger.LogInformation("Incoming call to {Called} on {Line} passed by route {Route}; delivered to the local service", called, line, routes[0].Name);
+            _logger.LogInformation("Incoming call to {Called} on {Line} passed by route {Route}; delivered to the local service", called, line, winner.Name);
             return X25CallDecision.DeliverLocally();
         }
         #endregion
@@ -546,45 +707,29 @@ namespace RetroIO.Protocols.X25.Transport
         {
             lock (_routeLock)
             {
-                // Count enabled routes without LINQ
                 int enabledCount = 0;
-                foreach (var route in _routes)
+                Dictionary<X121RouteType, int> routesByType = new Dictionary<X121RouteType, int>();
+                for (int i = 0; i < _table.Routes.Count; i++)
                 {
-                    if (route.Enabled) enabledCount++;
-                }
+                    X121Route route = _table.Routes[i];
+                    if (route.Enabled)
+                    {
+                        enabledCount++;
+                    }
 
-                // Build routes by type dictionary without LINQ
-                var routesByType = new Dictionary<RouteType, int>();
-                foreach (var route in _routes)
-                {
-                    if (routesByType.ContainsKey(route.Type))
-                    {
-                        routesByType[route.Type]++;
-                    }
-                    else
-                    {
-                        routesByType[route.Type] = 1;
-                    }
+                    routesByType.TryGetValue(route.Type, out int n);
+                    routesByType[route.Type] = n + 1;
                 }
 
                 return new RoutingStatistics
                 {
-                    TotalRoutes = _routes.Count,
+                    TotalRoutes = _table.Routes.Count,
                     EnabledRoutes = enabledCount,
                     RegisteredInterfaces = _interfaces.Count,
                     RoutesByType = routesByType
                 };
             }
         }
-
-        /// <summary>
-        /// Test route matching without actually placing a call
-        /// </summary>
-        public List<X25Route> TestRoute(string x121Address, RouteDirection direction)
-        {
-            return FindRoutes(x121Address, direction);
-        }
-
         #endregion
     }
 
@@ -608,6 +753,6 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>
         /// Gets or sets the number of routes for each route type.
         /// </summary>
-        public Dictionary<RouteType, int> RoutesByType { get; set; } = new();
+        public Dictionary<X121RouteType, int> RoutesByType { get; set; } = new();
     }
 }

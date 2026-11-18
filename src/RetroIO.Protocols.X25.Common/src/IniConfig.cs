@@ -37,11 +37,15 @@ namespace RetroIO.Protocols.X25.Common
             public readonly string Key;
             public readonly string Value;
 
-            public Entry(string section, string key, string value)
+            // The line the entry was read from, counted from 1; 0 for an entry not read from text.
+            public readonly int Line;
+
+            public Entry(string section, string key, string value, int line)
             {
                 Section = section;
                 Key = key;
                 Value = value;
+                Line = line;
             }
         }
 
@@ -53,7 +57,7 @@ namespace RetroIO.Protocols.X25.Common
         private readonly List<Entry> _entries = new List<Entry>();
 
         /// <summary>
-        /// Maximum number of key/value entries retained. Entries beyond this are silently dropped.
+        /// Maximum number of key/value entries retained. Entries beyond this are dropped and counted in <see cref="Dropped"/>.
         /// </summary>
         public int MaxKeys { get; }
 
@@ -72,6 +76,17 @@ namespace RetroIO.Protocols.X25.Common
         /// Number of entries retained.
         /// </summary>
         public int Count => _entries.Count;
+
+        /// <summary>
+        /// The number of key/value lines that were dropped because <see cref="MaxKeys"/> was reached. A reader
+        /// that must see every line (the switch loader) refuses a file where this is not 0.
+        /// </summary>
+        public int Dropped { get; private set; }
+
+        /// <summary>
+        /// The line (counted from 1) of the first key/value line that was dropped, or 0 when none was.
+        /// </summary>
+        public int FirstDroppedLine { get; private set; }
 
         /// <summary>
         /// Loads and parses an INI file.
@@ -135,7 +150,16 @@ namespace RetroIO.Protocols.X25.Common
                 {
                     string key = Trim(p.Substring(0, eq));
                     string val = Trim(p.Substring(eq + 1));
-                    cfg._entries.Add(new Entry(currentSection, key, val));
+                    cfg._entries.Add(new Entry(currentSection, key, val, i + 1));
+                }
+                else if (eq >= 0)
+                {
+                    if (cfg.Dropped == 0)
+                    {
+                        cfg.FirstDroppedLine = i + 1;
+                    }
+
+                    cfg.Dropped++;
                 }
             }
 
@@ -178,15 +202,61 @@ namespace RetroIO.Protocols.X25.Common
         /// </returns>
         public string? Get(string section, string key)
         {
+            int at = Find(section, key);
+            return at < 0 ? null : _entries[at].Value;
+        }
+
+        /// <summary>
+        /// The line a section/key was read from (counted from 1), for an error message that points at it.
+        /// </summary>
+        /// <param name="section">
+        /// Section name.
+        /// </param>
+        /// <param name="key">
+        /// Key name.
+        /// </param>
+        /// <returns>
+        /// The line, or 0 when the key is not there or was not read from text.
+        /// </returns>
+        public int GetLine(string section, string key)
+        {
+            int at = Find(section, key);
+            return at < 0 ? 0 : _entries[at].Line;
+        }
+
+        /// <summary>
+        /// The line of the first entry of a section (counted from 1), or 0 when the section has none.
+        /// </summary>
+        /// <param name="section">
+        /// Section name.
+        /// </param>
+        /// <returns>
+        /// The line.
+        /// </returns>
+        public int GetSectionLine(string section)
+        {
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                if (_entries[i].Section == section)
+                {
+                    return _entries[i].Line;
+                }
+            }
+
+            return 0;
+        }
+
+        private int Find(string section, string key)
+        {
             for (int i = 0; i < _entries.Count; i++)
             {
                 if (_entries[i].Section == section && _entries[i].Key == key)
                 {
-                    return _entries[i].Value;
+                    return i;
                 }
             }
 
-            return null;
+            return -1;
         }
 
         /// <summary>

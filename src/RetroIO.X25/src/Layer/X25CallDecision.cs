@@ -65,13 +65,21 @@ namespace RetroIO.Protocols.X25.PacketLayer
     /// </remarks>
     public readonly struct X25CallDecision
     {
-        private X25CallDecision(X25CallAction action, int outPort, byte cause, byte diagnostic)
+        private X25CallDecision(X25CallAction action, int outPort, byte cause, byte diagnostic, string? calledAddress = null)
         {
             Action = action;
             OutPort = outPort;
             Cause = cause;
             Diagnostic = diagnostic;
+            CalledAddress = calledAddress;
         }
+
+        /// <summary>
+        /// The called number to send on with a forwarded call, written the way the out port asks (the
+        /// international prefix taken off toward another network, X.121 7.8.1 and 7.12.6-7.12.7); null when
+        /// the number goes on as it came in.
+        /// </summary>
+        public string? CalledAddress { get; }
 
         /// <summary>
         /// What happens to the call.
@@ -121,6 +129,23 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public static X25CallDecision Forward(int outPort)
         {
             return new X25CallDecision(X25CallAction.Forward, outPort, 0, 0);
+        }
+
+        /// <summary>
+        /// The call goes on out of another port, with the called number written anew.
+        /// </summary>
+        /// <param name="outPort">
+        /// The port it goes out of.
+        /// </param>
+        /// <param name="calledAddress">
+        /// The called number to send on; null to send it as it came in.
+        /// </param>
+        /// <returns>
+        /// A decision to forward the call.
+        /// </returns>
+        public static X25CallDecision Forward(int outPort, string? calledAddress)
+        {
+            return new X25CallDecision(X25CallAction.Forward, outPort, 0, 0, calledAddress);
         }
 
         /// <summary>

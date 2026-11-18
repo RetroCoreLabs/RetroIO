@@ -1223,7 +1223,7 @@ namespace RetroIO.Protocols.X25.Runtime
                 InitializeBridge();
 
                 _logger.LogInformation("X.25 routing system initialized with {RouteCount} routes and {InterfaceCount} transport interfaces",
-                                     _x25Router.GetRoutes().Count, _transportInterfaces.Count);
+                                     _x25Router.Table.Routes.Count, _transportInterfaces.Count);
             }
             catch (Exception ex)
             {
@@ -1564,87 +1564,33 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Load routing configuration and add routes to X25Router
+        /// Loads the routing section of the configuration into the one routing table of the router
+        /// (<see cref="RoutingConfigConverter"/>): the own network, the routes, and the older route list
+        /// converted. A route that cannot be read stops the start with a message that names it; until
+        /// 2026-11-18 such a route was logged and left out, and the start went on without it.
         /// </summary>
+        /// <summary>
+        /// Reads the routing section of the configuration again into the router's table, after it was
+        /// changed (the routing screen calls this when it saves). Calls already up keep their route.
+        /// </summary>
+        /// <exception cref="System.IO.InvalidDataException">
+        /// A route cannot be read; the table is left as it was.
+        /// </exception>
+        public void ReloadRouting()
+        {
+            LoadRoutingConfiguration();
+        }
+
         private void LoadRoutingConfiguration()
         {
-            _logger.LogInformation("Loading new centralized X.25 routing system");
-
-            if (_config.Routing?.RoutingTable == null)
+            if (_config.Routing == null)
             {
                 _logger.LogWarning("No routing table configured");
                 return;
             }
 
-            // Process routing table entries
-            foreach (var routeEntry in _config.Routing.RoutingTable)
-            {
-                if (!routeEntry.Enabled) continue;
-                try
-                {
-                    ProcessRouteEntry(routeEntry);
-                    _logger.LogDebug("Processed X.25 route: {RouteName} ({Pattern} -> {Destination})",
-                                   routeEntry.Name, routeEntry.X121AddressPattern, routeEntry.Destination);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to process route entry: {RouteName}", routeEntry.Name);
-                }
-            }
-
-            // Log default gateway configuration
-            if (!string.IsNullOrEmpty(_config.Routing.DefaultGateway))
-            {
-                _logger.LogInformation("Default gateway configured: {Gateway}", _config.Routing.DefaultGateway);
-            }
-
-            // Count enabled routes manually
-            int enabledRouteCount = 0;
-            foreach (var route in _config.Routing.RoutingTable)
-            {
-                if (route.Enabled)
-                    enabledRouteCount++;
-            }
-            _logger.LogInformation("New centralized routing system loaded with {RouteCount} enabled routes",
-                                 enabledRouteCount);
-
-            /*
-            // OLD CODE - will be replaced with new routing system
-            if (_config.Routing?.Routes == null) return;
-
-            foreach (var routeConfig in _config.Routing.Routes)
-            {
-                if (!routeConfig.Enabled) continue;
-            {
-                try
-                {
-                    var route = new X25Route
-                    {
-                        Name = routeConfig.Name,
-                        Description = routeConfig.Description ?? "",
-                        X121AddressPattern = routeConfig.X121AddressPattern,
-                        Type = Enum.Parse<RouteType>(routeConfig.Type, true),
-                        Destination = routeConfig.Destination,
-                        Priority = routeConfig.Priority,
-                        Enabled = routeConfig.Enabled,
-                        Direction = Enum.Parse<RouteDirection>(routeConfig.Direction ?? "Bidirectional", true),
-                        BackupDestinations = routeConfig.BackupDestinations != null ?
-                            new List<string>(routeConfig.BackupDestinations) : new List<string>(),
-                        CallUserDataPattern = routeConfig.CallUserDataPattern
-                    };
-
-                    _x25Router.AddRoute(route);
-                    _logger.LogDebug("Added X.25 route: {RouteName} ({Pattern} -> {Destination})",
-                                   route.Name, route.X121AddressPattern, route.Destination);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to add route: {RouteName}", routeConfig.Name);
-                }
-            }
-            */
+            _x25Router.LoadNetwork(RoutingConfigConverter.ToNetworkConfig(_config.Routing));
         }
-
         /// <summary>
         /// Initialize transport bridge if configured
         /// Supports XOT-to-Serial, XOT-to-XOT, and Serial-to-Serial bridging
@@ -1691,128 +1637,66 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Process a routing table entry and set up the route
+        /// The one lookup for a called number placed from this node, with the reason in words: what the
+        /// routing screen's "test an address" shows.
         /// </summary>
-        private void ProcessRouteEntry(X25RouteEntry routeEntry)
+        /// <param name="x121Address">
+        /// The called number.
+        /// </param>
+        /// <returns>
+        /// The decision.
+        /// </returns>
+        public RetroIO.Protocols.X25.Routing.X121RouteResult ResolveRoute(string x121Address)
         {
-            // Map from RuntimeConfig.RouteType to Routing.RouteType
-            RetroIO.Protocols.X25.Transport.RouteType mappedType = routeEntry.Type switch
-            {
-                RouteType.Interface => RetroIO.Protocols.X25.Transport.RouteType.Serial, // Default interface type
-                RouteType.Gateway => RetroIO.Protocols.X25.Transport.RouteType.Gateway,
-                RouteType.Local => RetroIO.Protocols.X25.Transport.RouteType.Local,
-                _ => RetroIO.Protocols.X25.Transport.RouteType.Serial
-            };
-
-            // For interface routes, check destination to determine specific interface type
-            if (routeEntry.Type == RouteType.Interface && routeEntry.Destination.StartsWith("XOT"))
-            {
-                mappedType = RetroIO.Protocols.X25.Transport.RouteType.XOT_Client;
-            }
-
-            // Create X25Route from RouteEntry configuration
-            var route = new X25Route
-            {
-                Name = routeEntry.Name,
-                Description = routeEntry.Description ?? "",
-                X121AddressPattern = routeEntry.X121AddressPattern,
-                Type = mappedType,
-                Destination = routeEntry.Destination,
-                Priority = routeEntry.Priority,
-                Enabled = routeEntry.Enabled,
-                Direction = RouteDirection.Bidirectional // Default to bidirectional
-            };
-
-            // Add route to router
-            _x25Router.AddRoute(route);
-
-            switch (routeEntry.Type)
-            {
-                case RouteType.Local:
-                    _logger.LogDebug("Local route configured: {Pattern} -> {Destination}",
-                                   routeEntry.X121AddressPattern, routeEntry.Destination);
-                    break;
-
-                case RouteType.Interface:
-                    _logger.LogDebug("Interface route configured: {Pattern} -> {Interface}",
-                                   routeEntry.X121AddressPattern, routeEntry.Destination);
-                    break;
-
-                case RouteType.Gateway:
-                    _logger.LogDebug("Gateway route configured: {Pattern} -> Gateway {Gateway}",
-                                   routeEntry.X121AddressPattern, routeEntry.Destination);
-                    break;
-
-                default:
-                    _logger.LogWarning("Unknown route type: {Type} for route {Name}",
-                                     routeEntry.Type, routeEntry.Name);
-                    break;
-            }
+            return _x25Router.ResolveCall(x121Address ?? string.Empty, null, RetroIO.Protocols.X25.Routing.X121RouteDirection.Both, null);
         }
 
         /// <summary>
-        /// Find route for X.121 address using the new centralized routing table
+        /// The route that wins for a called number in the one table, as an entry of the older route list: the
+        /// entry itself when the winner came from that list, otherwise the winner written in that form.
         /// </summary>
+        /// <param name="x121Address">
+        /// The called number.
+        /// </param>
+        /// <returns>
+        /// The winning route, or null when none takes the number.
+        /// </returns>
         public X25RouteEntry? FindRoute(string x121Address)
         {
-            if (_config.Routing?.RoutingTable == null || string.IsNullOrEmpty(x121Address))
+            if (string.IsNullOrEmpty(x121Address))
+            {
                 return null;
+            }
 
-            // Find matching routes ordered by priority (highest first)
-            var matchingRoutes = new List<X25RouteEntry>();
-            foreach (var route in _config.Routing.RoutingTable)
+            RetroIO.Protocols.X25.Routing.X121Route? winner = _x25Router.Table.FindWinner(x121Address);
+            if (winner == null)
             {
-                if (route.Enabled && MatchesAddressPattern(x121Address, route.X121AddressPattern))
+                return null;
+            }
+
+            List<X25RouteEntry>? old = _config.Routing?.RoutingTable;
+            if (old != null)
+            {
+                for (int i = 0; i < old.Count; i++)
                 {
-                    matchingRoutes.Add(route);
+                    if (string.Equals(old[i].Name, winner.Name, StringComparison.Ordinal))
+                    {
+                        return old[i];
+                    }
                 }
             }
 
-            // Sort by priority (highest first)
-            X25RouteEntry? bestRoute = null;
-            int highestPriority = int.MinValue;
-            foreach (var route in matchingRoutes)
+            return new X25RouteEntry
             {
-                if (route.Priority > highestPriority)
-                {
-                    highestPriority = route.Priority;
-                    bestRoute = route;
-                }
-            }
-
-            return bestRoute;
+                Name = winner.Name,
+                X121AddressPattern = winner.MatchText,
+                Type = winner.DestPort == RetroIO.Protocols.X25.Routing.X121RoutingTable.LocalPort ? RouteType.Local : RouteType.Interface,
+                Destination = _x25Router.Table.GetPortName(winner.DestPort),
+                Priority = winner.Priority,
+                Enabled = winner.Enabled,
+                Description = winner.Note,
+            };
         }
-
-        /// <summary>
-        /// Check if an address matches a routing pattern (supports regex patterns)
-        /// </summary>
-        private bool MatchesAddressPattern(string address, string pattern)
-        {
-            if (string.IsNullOrEmpty(pattern)) return false;
-
-            try
-            {
-                // Support exact match first
-                if (address == pattern) return true;
-
-                // Support wildcard patterns like "100.*"
-                if (pattern.EndsWith(".*"))
-                {
-                    string prefix = pattern.Substring(0, pattern.Length - 2);
-                    return address.StartsWith(prefix);
-                }
-
-                // Support regex patterns
-                var regex = new System.Text.RegularExpressions.Regex(pattern);
-                return regex.IsMatch(address);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Invalid address pattern: {Pattern}", pattern);
-                return false;
-            }
-        }
-
         /// <summary>
         /// Create serial transport from configuration
         /// </summary>
@@ -2513,42 +2397,42 @@ namespace RetroIO.Protocols.X25.Runtime
                     MarkUnifiedPacketError(unifiedPacketId, errorReason, LayerType.X25);
                 }
 
-            // Create X.25 history item first
-            // e.Packet is non-null by contract on this path (downstream code dereferences it and the
-            // X25HistoryItem ctor requires it). Assert once so the whole block sees a non-null packet.
-            if (e.Packet == null)
-                throw new InvalidOperationException("X.25 packet event carried a null Packet.");
+                // Create X.25 history item first
+                // e.Packet is non-null by contract on this path (downstream code dereferences it and the
+                // X25HistoryItem ctor requires it). Assert once so the whole block sees a non-null packet.
+                if (e.Packet == null)
+                    throw new InvalidOperationException("X.25 packet event carried a null Packet.");
 
-            var x25Item = new X25HistoryItem(
-                e.Direction == PacketDirection.Transmit ? Direction.TX : Direction.RX,
-                e.Packet,
-                e.PacketId
-            );
+                var x25Item = new X25HistoryItem(
+                    e.Direction == PacketDirection.Transmit ? Direction.TX : Direction.RX,
+                    e.Packet,
+                    e.PacketId
+                );
 
-            // Check if there's a pending LAPB frame key for this X.25 packet
-            // If so, store the X.25 item for later linking when LAPB history item is created
-            if (e.Direction == PacketDirection.Receive && e.Packet.FullPacket != null)
-            {
-                lock (_x25LinkingLock)
+                // Check if there's a pending LAPB frame key for this X.25 packet
+                // If so, store the X.25 item for later linking when LAPB history item is created
+                if (e.Direction == PacketDirection.Receive && e.Packet.FullPacket != null)
                 {
-                    var frameKey = Convert.ToBase64String(e.Packet.FullPacket);
-                    _logger.LogDebug("🔍 X.25 Packet RX: Checking for pending LAPB link. Key: {Key}, Pending keys: {Count}",
-                        frameKey.Substring(0, Math.Min(16, frameKey.Length)) + "...", _pendingLapbFrameKeys.Count);
+                    lock (_x25LinkingLock)
+                    {
+                        var frameKey = Convert.ToBase64String(e.Packet.FullPacket);
+                        _logger.LogDebug("🔍 X.25 Packet RX: Checking for pending LAPB link. Key: {Key}, Pending keys: {Count}",
+                            frameKey.Substring(0, Math.Min(16, frameKey.Length)) + "...", _pendingLapbFrameKeys.Count);
 
-                    if (_pendingLapbFrameKeys.Contains(frameKey))
-                    {
-                        // Store this X.25 item for later linking when LAPB frame history item is created
-                        _pendingX25LinksToLapb[frameKey] = x25Item;
-                        _pendingLapbFrameKeys.Remove(frameKey);
-                        _logger.LogInformation("🔗 DEFERRED LINK: X.25 #{X25Id} waiting for LAPB frame to be added to history",
-                            e.PacketId);
-                    }
-                    else
-                    {
-                        _logger.LogDebug("❌ NO PENDING LAPB: X.25 packet #{X25Id} has no pending LAPB frame key", e.PacketId);
+                        if (_pendingLapbFrameKeys.Contains(frameKey))
+                        {
+                            // Store this X.25 item for later linking when LAPB frame history item is created
+                            _pendingX25LinksToLapb[frameKey] = x25Item;
+                            _pendingLapbFrameKeys.Remove(frameKey);
+                            _logger.LogInformation("🔗 DEFERRED LINK: X.25 #{X25Id} waiting for LAPB frame to be added to history",
+                                e.PacketId);
+                        }
+                        else
+                        {
+                            _logger.LogDebug("❌ NO PENDING LAPB: X.25 packet #{X25Id} has no pending LAPB frame key", e.PacketId);
+                        }
                     }
                 }
-            }
 
                 // Handle X25 packet relationship tracking with error detection
                 HandleX25PacketRelationships(e, x25Item, errorReason);
@@ -2840,7 +2724,7 @@ namespace RetroIO.Protocols.X25.Runtime
                     }
                 }
 
-            _logger.LogDebug("X.25 data received: {PacketSummary}", e.GetPacketSummary());
+                _logger.LogDebug("X.25 data received: {PacketSummary}", e.GetPacketSummary());
 
                 // Route to bound module (existing functionality)
                 if (e.Direction == PacketDirection.Receive)
@@ -3565,34 +3449,24 @@ namespace RetroIO.Protocols.X25.Runtime
 
                 _logger.LogInformation("🚀 ROUTING: Extracted called address '{CalledAddress}' from X.25 packet", calledAddress);
 
-                // Use centralized routing system
+                // The one routing table (the same lookup the switch and the incoming calls use). Until 2026-11-18
+                // this walked the older route list and took the first entry whose pattern matched, ignoring both
+                // priority and how exact the match was.
                 if (_config.Routing?.Enabled == true)
                 {
-                    _logger.LogInformation("🚀 ROUTING: Centralized routing is enabled, checking {Count} routes", _config.Routing.RoutingTable.Count);
-
-                    foreach (var route in _config.Routing.RoutingTable)
+                    RetroIO.Protocols.X25.Routing.X121RouteResult result = _x25Router.ResolveCall(calledAddress, null,
+                        RetroIO.Protocols.X25.Routing.X121RouteDirection.Outgoing, ExtractCallUserDataFromX25Packet(packet));
+                    _logger.LogInformation("ROUTING: {Why}", result.Explanation);
+                    if (result.IsRouted)
                     {
-                        _logger.LogDebug("🚀 ROUTING: Checking route '{RouteName}' pattern '{Pattern}' (enabled: {Enabled})", route.Name, route.X121AddressPattern, route.Enabled);
-
-                        if (route.Enabled && IsRouteMatch(route, calledAddress))
-                        {
-                            _logger.LogInformation("🚀 ROUTING: ✅ MATCH! Route '{RouteName}' matches address {CalledAddress} -> {RouteType}/{Destination}",
-                                route.Name, calledAddress, route.Type, route.Destination);
-
-                            RoutePacketToDestination(packet, route);
-                            return;
-                        }
-                        else
-                        {
-                            _logger.LogDebug("🚀 ROUTING: ❌ No match for route '{RouteName}'", route.Name);
-                        }
+                        RoutePacketToDestination(packet, result);
+                        return;
                     }
                 }
                 else
                 {
-                    _logger.LogWarning("🚀 ROUTING: Centralized routing is DISABLED");
+                    _logger.LogWarning("ROUTING: Centralized routing is DISABLED");
                 }
-
                 // No route found - check protocol services before LAPB fallback
                 _logger.LogWarning("🚀 ROUTING: No route found for address {CalledAddress} - checking protocol services", calledAddress);
 
@@ -3752,169 +3626,77 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Check if route matches the called address
+        /// Acts on the routing decision for a packet this node sends: a call for this node goes to the local
+        /// protocol service; a call for another line is not carried, because this node does not yet forward
+        /// a call out of one of its lines (src/BUGS.md, "no forwarding between lines").
         /// </summary>
-        private bool IsRouteMatch(X25RouteEntry route, string calledAddress)
+        private void RoutePacketToDestination(X25Packet packet, RetroIO.Protocols.X25.Routing.X121RouteResult result)
         {
-            try
+            if (result.Outcome == RetroIO.Protocols.X25.Routing.X121RouteOutcome.Local)
             {
-                var regex = new System.Text.RegularExpressions.Regex(route.X121AddressPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                return regex.IsMatch(calledAddress);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error matching route pattern '{Pattern}' against address '{Address}'", route.X121AddressPattern, calledAddress);
-                return false;
-            }
-        }
+                _logger.LogDebug("Routing to local destination: {Destination}", result.Route?.Name ?? "local");
 
-        /// <summary>
-        /// Route packet to the specified destination
-        /// </summary>
-        private void RoutePacketToDestination(X25Packet packet, X25RouteEntry route)
-        {
-            switch (route.Type)
-            {
-                case RouteType.Local:
-                    _logger.LogDebug("Routing to local destination: {Destination}", route.Destination);
-
-                    // Use dynamic protocol service registry instead of hardcoded handlers
-                    if (packet.PacketType == X25PacketType.CallRequest)
+                // Use dynamic protocol service registry instead of hardcoded handlers
+                if (packet.PacketType == X25PacketType.CallRequest)
+                {
+                    try
                     {
-                        try
+                        // Parse the call request packet using constructor
+                        var callRequest = new X25CallRequest(packet.FullPacket);
+
+                        _logger.LogInformation("Processing local Call Request for address {CalledAddress} on LCN {LCN}",
+                            callRequest.CalledAddress, packet.LCN);
+
+                        // Find appropriate protocol service based on address and CUD
+                        var service = _protocolServices.FindServiceForCall(callRequest.CalledAddress, callRequest.CallUserData);
+
+                        if (service != null)
                         {
-                            // Parse the call request packet using constructor
-                            var callRequest = new X25CallRequest(packet.FullPacket);
+                            _logger.LogInformation("Found protocol service '{ServiceName}' for address {CalledAddress}",
+                                service.ServiceName, callRequest.CalledAddress);
 
-                            _logger.LogInformation("Processing local Call Request for address {CalledAddress} on LCN {LCN}",
-                                callRequest.CalledAddress, packet.LCN);
+                            // Handle the call using the protocol service
+                            var success = service.HandleIncomingCall(packet.LCN, callRequest.CalledAddress,
+                                callRequest.CallingAddress, callRequest.CallUserData, callRequest.Facilities);
 
-                            // Find appropriate protocol service based on address and CUD
-                            var service = _protocolServices.FindServiceForCall(callRequest.CalledAddress, callRequest.CallUserData);
-
-                            if (service != null)
+                            if (success)
                             {
-                                _logger.LogInformation("Found protocol service '{ServiceName}' for address {CalledAddress}",
-                                    service.ServiceName, callRequest.CalledAddress);
-
-                                // Handle the call using the protocol service
-                                var success = service.HandleIncomingCall(packet.LCN, callRequest.CalledAddress,
-                                    callRequest.CallingAddress, callRequest.CallUserData, callRequest.Facilities);
-
-                                if (success)
-                                {
-                                    _logger.LogInformation("✅ Local call setup successful for address {CalledAddress} on LCN {LCN} via {ServiceName}",
-                                        callRequest.CalledAddress, packet.LCN, service.ServiceName);
-                                }
-                                else
-                                {
-                                    _logger.LogWarning("❌ Local call setup failed for address {CalledAddress} on LCN {LCN} via {ServiceName}",
-                                        callRequest.CalledAddress, packet.LCN, service.ServiceName);
-                                }
+                                _logger.LogInformation("✅ Local call setup successful for address {CalledAddress} on LCN {LCN} via {ServiceName}",
+                                    callRequest.CalledAddress, packet.LCN, service.ServiceName);
                             }
                             else
                             {
-                                _logger.LogWarning("No protocol service found for address {CalledAddress} with CUD pattern",
-                                    callRequest.CalledAddress);
+                                _logger.LogWarning("❌ Local call setup failed for address {CalledAddress} on LCN {LCN} via {ServiceName}",
+                                    callRequest.CalledAddress, packet.LCN, service.ServiceName);
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error processing local call request on LCN {LCN}", packet.LCN);
-                        }
-                    }
-                    else
-                    {
-                        // For non-Call Request packets (Data, etc.), let them be handled normally
-                        // The protocol services will receive them via the existing event system
-                        _logger.LogDebug("Local route: {PacketType} packet on LCN {LCN} will be handled via existing protocol system",
-                            packet.PacketType, packet.LCN);
-
-                        // Don't route these packets - let them be processed normally by the protocol stack
-                        // This allows Data packets to reach bound modules via the existing LCN binding system
-                    }
-                    break;
-
-                case RouteType.Interface:
-                    _logger.LogDebug("Routing to interface: {Destination}", route.Destination);
-
-                    // Check if it's a serial interface
-                    SerialInterfaceConfig? serialInterface = null;
-                    if (_config.Routing?.SerialInterfaces != null)
-                    {
-                        foreach (var s in _config.Routing.SerialInterfaces)
-                        {
-                            if (s.Name == route.Destination)
-                            {
-                                serialInterface = s;
-                                break;
-                            }
-                        }
-                    }
-                    if (serialInterface != null)
-                    {
-                        if (serialInterface.Enabled)
-                        {
-                            _logger.LogInformation("Routing packet to Serial interface {InterfaceName} ({Port})",
-                                serialInterface.Name, serialInterface.PortName);
-
-                            // Serial routing is handled by the serial link (LinkManager); legacy LAPB retired.
-                            _logger.LogWarning("Routing: legacy serial-LAPB send retired; use the serial link for {InterfaceName}", serialInterface.Name);
                         }
                         else
                         {
-                            _logger.LogWarning("Serial interface {InterfaceName} is disabled", serialInterface.Name);
+                            _logger.LogWarning("No protocol service found for address {CalledAddress} with CUD pattern",
+                                callRequest.CalledAddress);
                         }
-                        return;
                     }
-
-                    // Check if it's an XOT interface
-                    XotInterfaceConfig? xotInterface = null;
-                    if (_config.Routing?.XotInterfaces != null)
+                    catch (Exception ex)
                     {
-                        foreach (var x in _config.Routing.XotInterfaces)
-                        {
-                            if (x.Name == route.Destination)
-                            {
-                                xotInterface = x;
-                                break;
-                            }
-                        }
+                        _logger.LogError(ex, "Error processing local call request on LCN {LCN}", packet.LCN);
                     }
-                    if (xotInterface != null)
-                    {
-                        if (xotInterface.Enabled)
-                        {
-                            _logger.LogInformation("Routing packet to XOT interface {InterfaceName} ({RemoteIP}:{Port})",
-                                xotInterface.Name, xotInterface.RemoteIPAddress, xotInterface.RemotePort);
+                }
+                else
+                {
+                    // For non-Call Request packets (Data, etc.), let them be handled normally
+                    // The protocol services will receive them via the existing event system
+                    _logger.LogDebug("Local route: {PacketType} packet on LCN {LCN} will be handled via existing protocol system",
+                        packet.PacketType, packet.LCN);
 
-                            // Route to XOT interface
-                            // TODO: Implement XOT routing when XOT layer is ready
-                            _logger.LogWarning("XOT routing not yet implemented");
-                        }
-                        else
-                        {
-                            _logger.LogWarning("XOT interface {InterfaceName} is disabled", xotInterface.Name);
-                        }
-                        return;
-                    }
-
-                    _logger.LogError("Interface {InterfaceName} not found in configuration", route.Destination);
-                    break;
-
-                case RouteType.Gateway:
-                    _logger.LogDebug("Routing via gateway: {Destination}", route.Destination);
-                    // TODO: Implement gateway routing
-                    _logger.LogWarning("Gateway routing not yet implemented");
-                    break;
-
-                default:
-                    _logger.LogError("Unknown route type: {RouteType}", route.Type);
-                    break;
+                    // Don't route these packets - let them be processed normally by the protocol stack
+                    // This allows Data packets to reach bound modules via the existing LCN binding system
+                }
+                return;
             }
+
+            _logger.LogWarning("Routing: route {Route} sends the call to line {Line}; this node does not forward calls out of its lines (src/BUGS.md)",
+                result.Route?.Name, _x25Router.Table.GetPortName(result.Port));
         }
-
-
         /// <summary>
         /// Add item to history ring buffer
         /// </summary>
