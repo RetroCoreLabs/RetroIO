@@ -18,7 +18,8 @@ namespace RetroIO.Protocols.X25.Host
         /// <summary>The machine already serves as many calls as it may (<c>sessions</c> in host.ini).</summary>
         Busy,
 
-        /// <summary>The call is not a PAD call (<c>pad_calls_only</c>): its call user data does not start 01 00 00 00.</summary>
+        /// <summary>The call is not a PAD call (<c>pad_calls_only</c>): its call user data does not start with the X.29
+        /// protocol identifier 01 00 00 00 (X.29 (12/97) 1.3).</summary>
         NotPadCall,
     }
 
@@ -67,8 +68,8 @@ namespace RetroIO.Protocols.X25.Host
     }
 
     /// <summary>
-    /// What a machine can ask of the caller's PAD besides text: an X.29 Set (X.29 (11/88) 3.5.4, parameter 2 "echo",
-    /// X.3 2.2). Implemented by the program that runs the machine, which sends it as a Q-bit data packet.
+    /// What a machine can ask of the caller's PAD besides text: an X.29 set PAD message (X.29 (12/97) 3.1) of X.3
+    /// parameter 2, echo. Implemented by the program that runs the machine, which sends it with Q = 1 (X.29 1.5.2).
     /// </summary>
     public interface IHostPadControl
     {
