@@ -352,6 +352,31 @@ namespace RetroIO.Protocols.X25.Tests
             return X25PacketBuilder.CreateCallRequest(lcn: lcn, calledAddress: called, callingAddress: CallingAddress);
         }
 
+        // Restart Indication with cause Network operational: GFI 0001, channel 0, type 0xFB (Table 5-1), cause 00000111
+        // (Table 5-9), diagnostic 0.
+        private static readonly byte[] RestartIndicationNetworkOperational = new byte[] { 0x10, 0x00, 0xFB, 0x07, 0x00 };
+
+        // DTE Restart Confirmation: GFI 0001, channel 0, type 0xFF (Table 5-1).
+        private static readonly byte[] RestartConfirmation = new byte[] { 0x10, 0x00, 0xFF };
+
+        /// <summary>
+        /// Brings a DCE line up the way X.25 orders it: the DTE sends SABM, the DCE answers UA and then sends its
+        /// Restart Indication with cause "Network operational" (4.6.5, text line 5938-5941), and the DTE confirms it
+        /// (3.3.2: "The DTE will confirm the restart by transferring a DTE restart confirmation packet"). The
+        /// confirmation goes in the DTE's first I frame, N(S)=0, and acknowledges the DCE's I frame, N(R)=1. Until
+        /// it is confirmed the DCE "will ignore all packets except for restart request and DTE restart
+        /// confirmation" (3.3.2), so every test that sends a call on a DCE line comes through here first. The DTE's
+        /// next I frame is therefore N(S)=1, and N(R) is at least 1.
+        /// </summary>
+        private void BringUpTheDceLineAndConfirmTheRestart()
+        {
+            int indicationsBefore = CountPacketsOfType(0xFB);
+            Inject(Frame(AddressB, Sabm));
+            Assert.That(_transport.IsLinkUp, Is.True, "the SABM must bring the data link up");
+            Assert.That(CountPacketsOfType(0xFB), Is.EqualTo(indicationsBefore + 1), "the DCE must send its Restart Indication when the link comes up");
+            Inject(Frame(AddressB, IControl(0, 1), RestartConfirmation));
+        }
+
         // ------------------------------------------------------------------ the helpers themselves
 
         [Test]
@@ -372,12 +397,12 @@ namespace RetroIO.Protocols.X25.Tests
             int transportRaises = 0;
             _transport.IncomingCall += (s, e) => transportRaises++;
 
-            // The DTE brings the link up: SABM with P=1, address B (a command from the DTE, 2.4.2).
-            Inject(Frame(AddressB, Sabm));
-            Assert.That(_transport.IsLinkUp, Is.True, "the SABM must bring the data link up");
+            // The DTE brings the link up: SABM with P=1, address B (a command from the DTE, 2.4.2), and confirms
+            // the DCE's restart.
+            BringUpTheDceLineAndConfirmTheRestart();
 
-            // N(S)=0, N(R)=0, the Call Request on logical channel 5 as the information field.
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            // N(S)=1, N(R)=1, the Call Request on logical channel 5 as the information field.
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
 
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1), "exactly one Call Accepted (type 0x0F, Table 5-1) must go back");
             List<byte[]> packets = SentInformationPackets();
@@ -416,9 +441,9 @@ namespace RetroIO.Protocols.X25.Tests
         public void ACallToAnUnknownAddress_IsClearedBackOverTheLine()
         {
             Build(Dce());
-            Inject(Frame(AddressB, Sabm));
+            BringUpTheDceLineAndConfirmTheRestart();
 
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(6, "999")));
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(6, "999")));
 
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "an unroutable call must not be accepted");
             List<byte[]> packets = SentInformationPackets();
@@ -440,13 +465,13 @@ namespace RetroIO.Protocols.X25.Tests
         public void TheSameIFrameTwice_IsOneCall()
         {
             Build(Dce());
-            Inject(Frame(AddressB, Sabm));
-            byte[] callFrame = Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId));
+            BringUpTheDceLineAndConfirmTheRestart();
+            byte[] callFrame = Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId));
 
             Inject(callFrame);
             Inject(callFrame);
 
-            // The second copy has N(S)=0 while V(R)=1: a duplicate, which LAPB must not pass up.
+            // The second copy has N(S)=1 while V(R)=2: a duplicate, which LAPB must not pass up.
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1), "a repeated I frame must not make a second call");
         }
 
@@ -455,13 +480,17 @@ namespace RetroIO.Protocols.X25.Tests
         {
             Build(Dce());
             byte[] sabm = Frame(AddressB, Sabm);
-            byte[] call = Frame(AddressB, IControl(0, 0), CallRequest(7, LocalMachineId));
+            byte[] confirm = Frame(AddressB, IControl(0, 1), RestartConfirmation);
+            byte[] call = Frame(AddressB, IControl(1, 1), CallRequest(7, LocalMachineId));
 
-            // The SABM and the first half of the call frame in one read, the rest in the next.
+            // The SABM is read alone: the DCE's Restart Indication answers it, and the DTE's confirmation of that
+            // restart (4.6.5, 3.3.2) has to come after. Then the confirmation and the first half of the call frame
+            // in one read, the rest in the next.
+            Inject(sabm);
             int split = call.Length / 2;
-            byte[] first = new byte[sabm.Length + split];
-            Buffer.BlockCopy(sabm, 0, first, 0, sabm.Length);
-            Buffer.BlockCopy(call, 0, first, sabm.Length, split);
+            byte[] first = new byte[confirm.Length + split];
+            Buffer.BlockCopy(confirm, 0, first, 0, confirm.Length);
+            Buffer.BlockCopy(call, 0, first, confirm.Length, split);
             byte[] second = new byte[call.Length - split];
             Buffer.BlockCopy(call, split, second, 0, second.Length);
 
@@ -551,6 +580,71 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(CountPacketsOfType(0xFF), Is.EqualTo(1), "the DTE did not confirm the restart");
         }
 
+        /// <summary>
+        /// X.25 (10/96) 4.6.5 (text line 5936-5941): "When the out of order condition is recovered: 1) the DCE will send
+        /// a restart indication packet with the cause 'Network operational' to the local DTE". A serial line run as the
+        /// DCE sent nothing when its link came up until 2026-11-18 (BUGS.md).
+        /// </summary>
+        [Test]
+        public void ADce_SendsARestartIndicationNetworkOperational_WhenTheLinkComesUp()
+        {
+            Build(Dce());
+
+            Inject(Frame(AddressB, Sabm));
+
+            List<byte[]> frames = SentFrames();
+            Assert.That(frames[0], Is.EqualTo(new byte[] { AddressB, Ua }), "the UA answers the SABM first");
+            List<byte[]> packets = SentInformationPackets();
+            Assert.That(packets.Count, Is.EqualTo(1), "one packet: the Restart Indication");
+            Assert.That(packets[0], Is.EqualTo(RestartIndicationNetworkOperational));
+
+            // The DCE's I frame is a command from the DCE, address A, N(S)=0 (2.4.2, 2.3.2.1).
+            byte[] iFrame = frames[frames.Count - 1];
+            Assert.That(iFrame[0], Is.EqualTo(AddressA));
+            Assert.That(iFrame[1] & 0x0F, Is.EqualTo(0), "an I frame with N(S)=0");
+        }
+
+        /// <summary>
+        /// X.25 (10/96) 3.3.2 (text line 5066-5070): "the DCE will ignore all packets except for restart request and DTE
+        /// restart confirmation" while its Restart Indication is unconfirmed (state r3); Table C.2 column r3 says
+        /// DISCARD for a Call Request. After the confirmation the same call is taken.
+        /// </summary>
+        [Test]
+        public void ADce_IgnoresACallRequestUntilTheDteConfirmsTheRestart()
+        {
+            Build(Dce());
+            Inject(Frame(AddressB, Sabm));
+
+            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "no Call Accepted in state r3");
+            Assert.That(CountPacketsOfType(0x13), Is.EqualTo(0), "no Clear either: the packet is discarded");
+
+            Inject(Frame(AddressB, IControl(1, 1), RestartConfirmation));
+            Inject(Frame(AddressB, IControl(2, 1), CallRequest(5, LocalMachineId)));
+
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1), "after the confirmation the call is accepted");
+        }
+
+        /// <summary>
+        /// T10 on a serial DCE line: X.25 (10/96) Table D.1 (text line 16129-16151): 60 s, and on the first expiry the
+        /// DCE "signals a restart indication (local procedure error # 52) again". The runtime's T10 setting is used.
+        /// </summary>
+        [Test]
+        public void ADce_SendsTheRestartIndicationAgainWhenT10RunsOut()
+        {
+            Build(Dce());
+            Inject(Frame(AddressB, Sabm));
+            X25Endpoint endpoint = _runtime.EndpointForTest(_transport)!;
+
+            endpoint.Tick(Environment.TickCount64 + 50_000);
+            Assert.That(CountPacketsOfType(0xFB), Is.EqualTo(1), "T10 is 60 s; not run out yet");
+
+            endpoint.Tick(Environment.TickCount64 + 61_000);
+            Assert.That(CountPacketsOfType(0xFB), Is.EqualTo(2), "the Restart Indication is sent again");
+            List<byte[]> packets = SentInformationPackets();
+            Assert.That(packets[packets.Count - 1], Is.EqualTo(new byte[] { 0x10, 0x00, 0xFB, 0x01, 52 }), "local procedure error (Table 5-9), # 52");
+        }
+
         [Test]
         public void ADce_AnswersAnSabmFromTheDteWithAUaCarryingAddressB()
         {
@@ -634,8 +728,8 @@ namespace RetroIO.Protocols.X25.Tests
             List<bool> states = new List<bool>();
             _transport.LinkStateChanged += (s, up) => states.Add(up);
 
-            Inject(Frame(AddressB, Sabm));
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            BringUpTheDceLineAndConfirmTheRestart();
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1));
 
             // DISC with P=1 from the DTE (2.4.4.3): the DCE answers UA and the link is down.
@@ -643,10 +737,13 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_transport.IsLinkUp, Is.False);
             Assert.That(states, Is.EqualTo(new List<bool> { true, false }));
 
-            // The link comes back and the same channel number is used for a new call: this works
-            // only if the engine of the dead link was dropped, because channel 5 was in data transfer.
-            Inject(Frame(AddressB, Sabm));
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            // The link comes back: that is the recovery of an out of order condition (4.6.2: "the DCE has received
+            // or transmitted a DISC command"), so the DCE sends a second Restart Indication (4.6.5), which the helper
+            // checks. The same channel number is then used for a new call: this works only if the engine of the dead
+            // link was dropped, because channel 5 was in data transfer.
+            BringUpTheDceLineAndConfirmTheRestart();
+            Assert.That(CountPacketsOfType(0xFB), Is.EqualTo(2), "one Restart Indication for each time the link came up");
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
 
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(2), "a fresh engine must accept the new call on channel 5");
         }
@@ -762,8 +859,8 @@ namespace RetroIO.Protocols.X25.Tests
             List<X25CallRequest> offered = new List<X25CallRequest>();
             _transport.IncomingCall += (s, e) => offered.Add(e);
 
-            Inject(Frame(AddressB, Sabm));
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            BringUpTheDceLineAndConfirmTheRestart();
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
 
             Assert.That(offered.Count, Is.EqualTo(1), "a waiting line must offer the call to the program once");
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "no Call Accepted may go out before the program answers");
@@ -933,9 +1030,9 @@ namespace RetroIO.Protocols.X25.Tests
             Build(Dce(), answerAutomatically: false, withRoute: false);
             int offered = 0;
             _transport.IncomingCall += (s, e) => offered++;
-            Inject(Frame(AddressB, Sabm));
+            BringUpTheDceLineAndConfirmTheRestart();
 
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
 
             byte[] clear = TheClearOn(5);
             Assert.That(clear[3], Is.EqualTo(X25Cause.NotObtainable), "no inbound route: Table C.1 row 24, 0x0D not obtainable");
@@ -948,11 +1045,11 @@ namespace RetroIO.Protocols.X25.Tests
         public void AutomaticMode_NoRoute_IsClearedWithNotObtainable()
         {
             Build(Dce(), answerAutomatically: true, withRoute: false);
-            Inject(Frame(AddressB, Sabm));
+            BringUpTheDceLineAndConfirmTheRestart();
 
             // The local TAD takes calls to the machine's own address, but with no inbound route the
             // router refuses the call before any service is asked.
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
 
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(0), "a call with no route must not be accepted");
             Assert.That(TheClearOn(5)[3], Is.EqualTo(X25Cause.NotObtainable));
@@ -963,9 +1060,9 @@ namespace RetroIO.Protocols.X25.Tests
         public void AutomaticMode_ACallToAnUnroutedAddress_IsClearedWithNotObtainable()
         {
             Build(Dce());
-            Inject(Frame(AddressB, Sabm));
+            BringUpTheDceLineAndConfirmTheRestart();
 
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(6, "999")));
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(6, "999")));
 
             Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.NotObtainable), "Table C.1 row 24");
             Assert.That(TheClearOn(6)[4], Is.EqualTo(X25Diagnostic.InvalidCalledAddress), "the router refuses it with # 67");
@@ -977,9 +1074,9 @@ namespace RetroIO.Protocols.X25.Tests
             Build(Dce());
             int offered = 0;
             _transport.IncomingCall += (s, e) => offered++;
-            Inject(Frame(AddressB, Sabm));
+            BringUpTheDceLineAndConfirmTheRestart();
 
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
 
             Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1), "one Call Accepted");
             Assert.That(LastPacketOfType(0x0F)[1], Is.EqualTo((byte)5));
@@ -993,10 +1090,10 @@ namespace RetroIO.Protocols.X25.Tests
             Build(Dce(), answerAutomatically: false);
             List<X25CallRequest> offered = new List<X25CallRequest>();
             _transport.IncomingCall += (s, e) => offered.Add(e);
-            Inject(Frame(AddressB, Sabm));
+            BringUpTheDceLineAndConfirmTheRestart();
 
             // Channel 6 has no route: the router refuses it.
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(6, "999")));
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(6, "999")));
             Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.NotObtainable));
             Assert.That(offered.Count, Is.EqualTo(0));
             int framesBefore = SentFrames().Count;
@@ -1008,7 +1105,7 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(SentFrames().Count, Is.EqualTo(framesBefore), "nothing may be sent for those answers");
 
             // Channel 5 is routed and offered; answered once, then every other answer is refused.
-            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
+            Inject(Frame(AddressB, IControl(2, 1), CallRequest(5, LocalMachineId)));
             Assert.That(offered.Count, Is.EqualTo(1));
             Assert.That(_transport.AcceptCall(offered[0]), Is.True);
             Assert.That(_transport.AcceptCall(offered[0]), Is.False, "a call can be answered once");
@@ -1030,11 +1127,11 @@ namespace RetroIO.Protocols.X25.Tests
             Build(Dce(), answerAutomatically: false);
             List<X25CallRequest> offered = new List<X25CallRequest>();
             _transport.IncomingCall += (s, e) => offered.Add(e);
-            Inject(Frame(AddressB, Sabm));
+            BringUpTheDceLineAndConfirmTheRestart();
 
             // Both calls are in before either is answered: channel 5 routed, channel 6 not.
-            Inject(Frame(AddressB, IControl(0, 0), CallRequest(5, LocalMachineId)));
-            Inject(Frame(AddressB, IControl(1, 0), CallRequest(6, "999")));
+            Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
+            Inject(Frame(AddressB, IControl(2, 1), CallRequest(6, "999")));
 
             Assert.That(TheClearOn(6)[3], Is.EqualTo(X25Cause.NotObtainable), "the call with no route is refused at once");
             Assert.That(offered.Count, Is.EqualTo(1), "only the routed call is offered");
@@ -1056,8 +1153,9 @@ namespace RetroIO.Protocols.X25.Tests
             X25CallRequest call = OfferACallOnChannel5();
 
             // The DTE gives up (4.1.7): Clear Request on channel 5, GFI 1, type 0x13, cause 0, diagnostic 0,
-            // in its second I frame (N(S)=1); the DCE has sent no I frame yet, so N(R)=0.
-            Inject(Frame(AddressB, IControl(1, 0), new byte[] { 0x10, 0x05, 0x13, 0x00, 0x00 }));
+            // in its third I frame (N(S)=2, after the restart confirmation and the call); the DCE's only I frame
+            // so far is its Restart Indication, already acknowledged, so N(R)=1.
+            Inject(Frame(AddressB, IControl(2, 1), new byte[] { 0x10, 0x05, 0x13, 0x00, 0x00 }));
             Assert.That(CountPacketsOfType(0x17), Is.EqualTo(1), "4.1.7: the DCE confirms the clear (type 0x17)");
             int framesBefore = SentFrames().Count;
 

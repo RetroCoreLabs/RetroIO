@@ -574,6 +574,43 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_layer.RestartTimeouts, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// X.25 (10/96) Table D.1 (DCE time-outs, text line 16129-16151 and 16241-16243): T10 = 60 s, started when the
+        /// "DCE issues a restart indication" (state r3), ended when "the restart confirmation or restart request is
+        /// received". First expiry: "DCE remains in r3, signals a restart indication (local procedure error # 52) again,
+        /// and restarts time-out T10". Second expiry: "DCE enters the r1 state and may issue a diagnostic packet (# 52)".
+        /// Table 5-9 (line 10155-10171): restarting cause "Local procedure error" is 00000001. 5.7 (line 10625-10633): the
+        /// diagnostic explanation for an expired T10 is the GFI in bits 8-5 of the first octet, the rest all 0.
+        /// The DCE used the DTE's T20 rule (180 s, five retransmissions) until 2026-11-18.
+        /// </summary>
+        [Test]
+        public void R6_DceRestartIndication_UsesT10_SendsItOnceMoreWithError52_ThenGivesUpWithADiagnostic()
+        {
+            RecordingSink sink = new RecordingSink();
+            X25Layer dce = new X25Layer(sink, new X25Config { LocalAddress = LocalAddress, LciBase = 1, LciCount = 16, IsDte = false });
+            int timedOut = 0;
+            dce.RestartTimedOut += l => timedOut++;
+            long now = Environment.TickCount64;
+
+            dce.Restart(X25Cause.RestartingNetworkOperational);
+            Assert.That(sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(1));
+
+            dce.Tick(now + 59_000);
+            Assert.That(sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(1), "T10 is 60 s; not run out yet");
+
+            dce.Tick(now + 60_500);
+            Assert.That(sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(2), "first T10 expiry: the indication again");
+            Assert.That(sink.Last, Is.EqualTo(new byte[] { 0x10, 0x00, 0xFB, 0x01, 52 }), "cause local procedure error 00000001, diagnostic 52");
+            Assert.That(dce.RestartOutstanding, Is.True, "the DCE remains in r3");
+
+            dce.Tick(now + 121_500);
+            Assert.That(sink.CountOfType(X25PacketType.RestartRequest), Is.EqualTo(2), "no third indication");
+            Assert.That(sink.Last, Is.EqualTo(new byte[] { 0x10, 0x00, 0xF1, 52, 0x10, 0x00 }), "the diagnostic packet # 52 (type 0xF1, Table 5-1)");
+            Assert.That(dce.RestartOutstanding, Is.False, "second T10 expiry: the DCE enters r1");
+            Assert.That(timedOut, Is.EqualTo(1));
+            Assert.That(dce.RestartTimeouts, Is.EqualTo(1));
+        }
+
         [Test]
         public void R6_ACallPlacedWhileOurRestartIsOutstanding_IsHeldUntilTheConfirmation()
         {

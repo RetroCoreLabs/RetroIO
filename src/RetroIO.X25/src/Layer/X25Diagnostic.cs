@@ -252,6 +252,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte RestartingNetworkOperational = 0x07;
 
         /// <summary>
+        /// Restarting cause 00000001 "Local procedure error" (X.25 (10/96) Table 5-9, text line 10155-10171). A DCE
+        /// sends it, with diagnostic 52, when it repeats a Restart Indication the DTE did not confirm within T10
+        /// (Table D.1). Not the same octet as the clearing or resetting cause of the same name.
+        /// </summary>
+        public const byte RestartingLocalProcedureError = 0x01;
+
+        /// <summary>
         /// 00001101 - Not obtainable (Table 5-7).
         /// </summary>
         public const byte NotObtainable = 0x0D;

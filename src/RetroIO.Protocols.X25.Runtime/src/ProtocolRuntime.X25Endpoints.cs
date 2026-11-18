@@ -132,6 +132,7 @@ namespace RetroIO.Protocols.X25.Runtime
                     ResetRequestTimeoutMs = (int)_config.X25.T22Timeout.TotalMilliseconds,
                     ClearRequestTimeoutMs = (int)_config.X25.T23Timeout.TotalMilliseconds,
                     RestartTimeoutMs = (int)_config.X25.T20Timeout.TotalMilliseconds,
+                    RestartIndicationTimeoutMs = (int)_config.X25.T10Timeout.TotalMilliseconds,
                 };
 
                 // An XOT circuit has no LAPB or HDLC under it, so the serial path's packet events never
@@ -557,13 +558,44 @@ namespace RetroIO.Protocols.X25.Runtime
 
         /// <summary>
         /// A serial data link that is no longer up takes its engine with it, so every call on it is
-        /// reported cleared. The next packet after the link is set up again builds a fresh engine.
+        /// reported cleared. When the link comes up a fresh engine is built; on a line run as the DCE it
+        /// restarts the packet layer at once.
         /// </summary>
+        /// <remarks>
+        /// X.25 (10/96) 4.6.2 (text line 5881-5895): a link that is not set up, or that sent or received a DISC,
+        /// is an out of order condition. 4.6.5 (line 5936-5941): "When the out of order condition is recovered:
+        /// 1) the DCE will send a restart indication packet with the cause 'Network operational' to the local
+        /// DTE". 3.3.2 (line 5066-5074): until the DTE confirms, the DCE ignores every packet but a restart
+        /// request or confirmation (the engine's state r3), and T10 (Table D.1) runs. Until 2026-11-18 a DCE line
+        /// sent nothing here and took a call straight after link set-up. A DTE line waits for the DCE's
+        /// indication and confirms it (the engine does that when it arrives).
+        /// </remarks>
         private void OnSerialLinkStateChanged(object? sender, bool up)
         {
-            if (!up && sender is SerialTransport serial)
+            if (sender is not SerialTransport serial)
+            {
+                return;
+            }
+
+            if (!up)
             {
                 DropEndpoint(serial);
+                return;
+            }
+
+            if (serial.LinkRole != SerialX25LinkRole.Dce)
+            {
+                return;
+            }
+
+            // An engine left from before is dropped first, so the line starts from a fresh one, the same as
+            // after a link-down event.
+            DropEndpoint(serial);
+            X25Endpoint endpoint = SerialEndpointFor(serial);
+            _logger.LogInformation("Serial line {Name} (DCE): data link up; sending Restart Indication, Network operational", serial.Name);
+            lock (endpoint.Sync)
+            {
+                endpoint.Layer.Restart(X25Cause.RestartingNetworkOperational);
             }
         }
 

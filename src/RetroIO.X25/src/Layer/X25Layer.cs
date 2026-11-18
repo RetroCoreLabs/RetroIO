@@ -879,7 +879,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             _restartRetries = 0;
             _restartCause = cause;
             _restartDiagnostic = diagnostic;
-            _restartExpiryMs = Now() + _config.RestartTimeoutMs;
+            _restartExpiryMs = Now() + RestartTimerMs();
             return Send(X25PacketBuilder.CreateRestartRequest(cause, diagnostic));
         }
 
@@ -1389,6 +1389,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            if (!_config.IsDte)
+            {
+                TickRestartIndication(nowMs);
+                return;
+            }
+
             if (_restartRetries < _config.MaxRetransmissions)
             {
                 _restartRetries++;
@@ -1399,6 +1405,47 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             _restartOutstanding = false;
             RestartTimeouts++;
+            FailHeldCalls(X25Diagnostic.TimeExpiredRestart);
+            RaiseRestartTimedOut();
+        }
+
+        /// <summary>
+        /// The restart timer for this side: T10 for a DCE (or an STE, which is not a DTE), T20 for a DTE.
+        /// </summary>
+        private int RestartTimerMs()
+        {
+            return _config.IsDte ? _config.RestartTimeoutMs : _config.RestartIndicationTimeoutMs;
+        }
+
+        /// <summary>
+        /// T10 (r3), the DCE's restart time-out. X.25 (10/96) Table D.1 (text line 16129-16151): T10 = 60 s, started
+        /// when the "DCE issues a restart indication", ended when "the restart confirmation or restart request is
+        /// received". The first time it runs out the "DCE remains in r3, signals a restart indication (local procedure
+        /// error # 52) again, and restarts time-out T10". The second time (line 16241-16243) the "DCE enters the r1
+        /// state and may issue a diagnostic packet (# 52)". Until 2026-11-18 a DCE ran the DTE's T20 rule (180 s and
+        /// five retransmissions), which Table D.1 does not give a DCE.
+        /// </summary>
+        private void TickRestartIndication(long nowMs)
+        {
+            if (_restartRetries == 0)
+            {
+                _restartRetries = 1;
+                _restartExpiryMs = nowMs + _config.RestartIndicationTimeoutMs;
+                _restartCause = X25Cause.RestartingLocalProcedureError;
+                _restartDiagnostic = X25Diagnostic.TimeExpiredRestart;
+                Send(X25PacketBuilder.CreateRestartRequest(_restartCause, _restartDiagnostic));
+                return;
+            }
+
+            _restartOutstanding = false;
+            RestartTimeouts++;
+
+            // X.25 5.7 (text line 10625-10633), the diagnostic explanation: "bits 8, 7, 6 and 5 of the first octet
+            // contain the general format identifier for the interface" and "bits 4 to 1 of the first octet and bits 8
+            // to 1 of the second octet are all 0 for expiration of time-out T10". The GFI is 0001, modulo 8, the only
+            // modulo this engine runs (X25Config.Validate).
+            DiagnosticsSent++;
+            Send(X25PacketBuilder.CreateDiagnostic(X25Diagnostic.TimeExpiredRestart, new byte[] { 0x10, 0x00 }));
             FailHeldCalls(X25Diagnostic.TimeExpiredRestart);
             RaiseRestartTimedOut();
         }

@@ -108,6 +108,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public int RestartTimeoutMs { get; set; } = 180000;
 
         /// <summary>
+        /// Restart-indication timer (T10) duration in milliseconds, used when this end is not a DTE. X.25 (10/96)
+        /// Table D.1 (DCE time-outs, text line 16129-16151): 60 s, started when the DCE issues a restart indication,
+        /// ended when the restart confirmation or a restart request is received. A DTE uses
+        /// <see cref="RestartTimeoutMs"/> (T20) instead.
+        /// </summary>
+        public int RestartIndicationTimeoutMs { get; set; } = 60000;
+
+        /// <summary>
         /// How many times an unanswered Restart, Reset or Clear Request is retransmitted before the
         /// engine gives up (X.25 Table D.2 notes 1 and 2 speak of "unsuccessful retries" without a
         /// number; the C emulator plan uses 5 for all three, and so does this).
