@@ -54,6 +54,9 @@
   <Folder Name="/src/RetroIO.Protocols.X25.Common/src/">
     <Project Path="RetroIO.Protocols.X25.Common/src/RetroIO.Protocols.X25.Common.csproj" />
   </Folder>
+  <Folder Name="/src/RetroIO.Protocols.X25.Host/">
+    <Project Path="RetroIO.Protocols.X25.Host/src/RetroIO.Protocols.X25.Host.csproj" />
+  </Folder>
   <Folder Name="/src/RetroIO.Protocols.X25.Monitor/" />
   <Folder Name="/src/RetroIO.Protocols.X25.Monitor/src/">
     <Project Path="RetroIO.Protocols.X25.Monitor/src/RetroIO.Protocols.X25.Monitor.csproj" />

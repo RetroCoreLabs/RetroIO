@@ -25,6 +25,8 @@
     href: ../../RetroIO.Protocols.X25.Client/README.md
   - name: RetroIO.Protocols.X25.Common
     href: ../../RetroIO.Protocols.X25.Common/README.md
+  - name: RetroIO.Protocols.X25.Host
+    href: ../../RetroIO.Protocols.X25.Host/README.md
   - name: RetroIO.Protocols.X25.Monitor
     href: ../../RetroIO.Protocols.X25.Monitor/README.md
   - name: RetroIO.Protocols.X25.Nmc
@@ -109,6 +111,8 @@
     href: ../../RetroIO.Protocols.Xmsg.Api/src/README.md
   - name: Management API guide
     href: ../../RetroIO.Management.Api/src/README.md
+  - name: X.121 addresses and X.25 routing
+    href: ../../RetroIO.Protocols.X25/X121-ADDRESSING.md
 - name: Tools
   items:
   - name: RetroIO.Demo

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.X25.Host</PackageId>
+    <AssemblyName>RetroIO.Protocols.X25.Host</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.X25.Host</RootNamespace>
+    <Description>Scripted X.25 hosts: one sandboxed JavaScript program per fake machine, with the shared machine and session API.</Description>
+    <PackageTags>retroio;x25;x25host;scripting</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The JavaScript engine. CLR access is never switched on; see ScriptedHost. -->
+    <PackageReference Include="Jint" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <!-- The example scripts ship with the package, for the host library to copy. -->
+    <None Include="..\scripts\*.js" Pack="true" PackagePath="scripts\" />
+  </ItemGroup>
+</Project>
