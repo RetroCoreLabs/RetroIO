@@ -1463,7 +1463,9 @@ namespace RetroIO.Protocols.X25.Runtime
                 Name = xotConfig.Name,
                 ListenAddress = "0.0.0.0", // Listen on all interfaces
                 ListenPort = xotConfig.LocalPort,
-                MaxConnections = 100, // Default value since MaxConnections doesn't exist in XotInterfaceConfig
+                // One connection slot per X.25 channel of the line, as on x25emu's XOT port
+                // (tools/x25switch.c: conn_max = vc_count). Until 2026-11-18 this was a made-up 100.
+                MaxConnections = Math.Max((int)xotConfig.LciCount, 1),
                 AcceptedX121Ranges = new List<string>(xotConfig.AcceptedX121Ranges),
                 AnswerIncomingCallsAutomatically = xotConfig.AnswerIncomingCallsAutomatically,
                 Listeners = _xotListeners // shares the port with any XOT peer entry on it
@@ -1502,6 +1504,8 @@ namespace RetroIO.Protocols.X25.Runtime
                 AllowOnlyListedPeers = xotConfig.AllowOnlyListedPeers,
                 LciBase = xotConfig.LciBase,
                 LciCount = xotConfig.LciCount,
+                // One connection slot per channel, dialled and accepted together (x25emu conn_max).
+                MaxConnections = Math.Max((int)xotConfig.LciCount, 1),
                 Listeners = _xotListeners
             };
 

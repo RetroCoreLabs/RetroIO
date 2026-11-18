@@ -707,6 +707,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             _running = false;
             _ticker.Change(Timeout.Infinite, Timeout.Infinite);
 
+            // AcceptOne may be waiting for a free slot; let it see the port is stopping.
+            lock (_sync)
+            {
+                Monitor.PulseAll(_sync);
+            }
+
             try
             {
                 _listener?.Stop();
@@ -1092,6 +1098,32 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 return;
             }
 
+            // One connection slot per channel of the port (LciCount), the same as x25emu's XOT port
+            // (tools/x25switch.c: conn_max = the link's vc_count, and the listener is only polled while
+            // conn_slot_free finds a slot). An idle connection - a caller's spare - takes a slot too.
+            // When every slot is taken nothing is accepted: the new connection waits in the TCP backlog
+            // until a connection closes (CloseConnection pulses _sync). It is never accepted and then
+            // closed, which a caller sees as its call lost. Until 2026-11-18 it was accepted and closed.
+            lock (_sync)
+            {
+                bool told = false;
+                while (_running && _connections.Count >= SlotCount)
+                {
+                    if (!told)
+                    {
+                        _logger.LogInformation("Port {Id}: all {Count} connection slots are taken; the next connection waits until one closes", Id, SlotCount);
+                        told = true;
+                    }
+
+                    Monitor.Wait(_sync);
+                }
+            }
+
+            if (!_running)
+            {
+                return;
+            }
+
             TcpClient accepted;
             try
             {
@@ -1104,24 +1136,14 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
 
             Interlocked.Increment(ref _connectAttempts);
-
-            bool room;
-            lock (_sync)
-            {
-                // A circuit needs a channel, so a port cannot use more connections than it has
-                // channels. Refusing here is clearer than accepting a call that would have no channel.
-                room = _connections.Count < Math.Max((int)_config.LciCount, 1);
-            }
-
-            if (!room)
-            {
-                _logger.LogWarning("Port {Id}: no room for another connection (channels={Count}); refused", Id, _config.LciCount);
-                accepted.Close();
-                return;
-            }
-
             AddConnection(accepted, "accepted", dialled: false);
         }
+
+        /// <summary>
+        /// How many connections a listening port holds at once: one per channel of the port
+        /// (<c>LciCount</c>), at least one. x25emu sizes an XOT port the same way (conn_max = vc_count).
+        /// </summary>
+        private int SlotCount => Math.Max((int)_config.LciCount, 1);
 
         /// <summary>
         /// A dialling port keeps one idle connection open. It is not for the calls the port places,
@@ -1341,6 +1363,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
                 connection.Closed = true;
                 _connections.Remove(connection);
+
+                // A slot is free: wake AcceptOne, which waits for one before it accepts the next connection.
+                Monitor.PulseAll(_sync);
                 if (ReferenceEquals(_currentInbound, connection))
                 {
                     _currentInbound = null;
