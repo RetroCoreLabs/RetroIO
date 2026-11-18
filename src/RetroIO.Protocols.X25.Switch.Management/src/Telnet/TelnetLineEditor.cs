@@ -55,9 +55,14 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
     /// </summary>
     /// <remarks>
     /// Behaviour, matching the management console protocol:
-    ///  - A byte <c>0xFF</c> (IAC) causes the next two bytes to be discarded; no option negotiation is sent.
-    ///  - CR or LF completes the current line and echoes <c>\r\n</c>; each of CR and LF completes a line, so
-    ///    a CR-LF pair completes the typed line and then an empty line.
+    ///  - Telnet commands are discarded (RFC 854): IAC (<c>0xFF</c>) and one command byte; WILL, WONT, DO and DONT
+    ///    (<c>0xFB</c>-<c>0xFE</c>) take one option byte more; a subnegotiation runs from IAC SB to IAC SE; IAC IAC is
+    ///    the data byte 255, which is not printable here and is dropped. The server's own offer (WILL ECHO, WILL
+    ///    SUPPRESS-GO-AHEAD) is sent by <see cref="TelnetCliServer"/>.
+    ///  - CR, LF, CR LF and CR NUL each complete the current line once and echo <c>\r\n</c>. RFC 854 makes CR LF the
+    ///    end of a line and CR NUL a bare carriage return, and the Windows telnet client sends CR LF for Enter.
+    ///    Until 2026-11-18 CR and LF each completed a line, so Enter at the login gave the user name and then an
+    ///    empty password, and every login from that client failed.
     ///  - <c>0x7F</c> or <c>0x08</c> erases the last character (echoing <c>\b \b</c>) when the line is non-empty.
     ///  - Printable bytes (>= 32) are stored and echoed, up to a 511-character line.
     /// </remarks>
@@ -66,7 +71,26 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
         private const int MaxLine = 511;
 
         private readonly StringBuilder _line = new StringBuilder();
-        private int _iacSkip;
+        // Where the editor is inside a telnet command (RFC 854).
+        private enum CommandState
+        {
+            None,       // ordinary data
+            Iac,        // after IAC: the command byte comes next
+            Option,     // after IAC WILL/WONT/DO/DONT: the option byte comes next
+            Sub,        // inside IAC SB ...: data until IAC SE
+            SubIac,     // inside a subnegotiation, after IAC
+        }
+
+        private const byte Iac = 0xFF;
+        private const byte Sb = 0xFA;
+        private const byte Se = 0xF0;
+        private const byte Will = 0xFB;
+        private const byte Dont = 0xFE;
+
+        private CommandState _command;
+
+        // The last data byte was a CR that completed a line: an LF or NUL right after it belongs to the same line end.
+        private bool _afterCr;
 
         /// <summary>
         /// Feeds one received byte and returns what to echo and whether a line completed.
@@ -79,20 +103,42 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
         /// </returns>
         public TelnetInput Feed(byte b)
         {
-            if (_iacSkip > 0)
+            TelnetInput nothing = new TelnetInput(string.Empty, false, string.Empty);
+            switch (_command)
             {
-                _iacSkip--;
-                return new TelnetInput(string.Empty, false, string.Empty);
+                case CommandState.Iac:
+                    // IAC IAC is the data byte 255: not printable, dropped. SB starts a subnegotiation; WILL..DONT take
+                    // an option byte; every other command is this one byte.
+                    _command = b == Sb ? CommandState.Sub : (b >= Will && b <= Dont ? CommandState.Option : CommandState.None);
+                    return nothing;
+                case CommandState.Option:
+                    _command = CommandState.None;
+                    return nothing;
+                case CommandState.Sub:
+                    _command = b == Iac ? CommandState.SubIac : CommandState.Sub;
+                    return nothing;
+                case CommandState.SubIac:
+                    _command = b == Se ? CommandState.None : CommandState.Sub;
+                    return nothing;
             }
 
-            if (b == 0xFF)
+            if (b == Iac)
             {
-                _iacSkip = 2;
-                return new TelnetInput(string.Empty, false, string.Empty);
+                _command = CommandState.Iac;
+                return nothing;
+            }
+
+            // The LF or NUL of a CR LF or CR NUL: the line was completed by the CR.
+            bool secondHalf = _afterCr && (b == (byte)'\n' || b == 0);
+            _afterCr = false;
+            if (secondHalf)
+            {
+                return nothing;
             }
 
             if (b == (byte)'\r' || b == (byte)'\n')
             {
+                _afterCr = b == (byte)'\r';
                 string line = _line.ToString();
                 _line.Clear();
                 return new TelnetInput("\r\n", true, line);

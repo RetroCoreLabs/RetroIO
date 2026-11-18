@@ -107,14 +107,78 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void Editor_CrLf_CompletesTypedLineThenEmptyLine()
+        public void Editor_CrLfAndCrNul_AreOneLineEnd_AsRfc854Says()
         {
             TelnetLineEditor ed = new TelnetLineEditor();
-            FeedAll(ed, "hi\r\n", out List<string> lines);
+            string echo = FeedAll(ed, "admin\r\npw\r\0x\ny\r", out List<string> lines);
 
-            Assert.That(lines.Count, Is.EqualTo(2));
-            Assert.That(lines[0], Is.EqualTo("hi"));
-            Assert.That(lines[1], Is.EqualTo(string.Empty));
+            Assert.That(lines, Is.EqualTo(new List<string> { "admin", "pw", "x", "y" }));
+            Assert.That(echo, Is.EqualTo("admin\r\npw\r\nx\r\ny\r\n"));
+        }
+
+        [Test]
+        public void Editor_TwoEntersAreTwoLines()
+        {
+            TelnetLineEditor ed = new TelnetLineEditor();
+            FeedAll(ed, "a\r\n\r\n", out List<string> lines);
+
+            Assert.That(lines, Is.EqualTo(new List<string> { "a", string.Empty }));
+        }
+
+        [Test]
+        public void Editor_SkipsEveryKindOfTelnetCommand()
+        {
+            TelnetLineEditor ed = new TelnetLineEditor();
+            // DO ECHO, DO SGA (the client's answer), a two-byte command (IAC NOP), a window-size subnegotiation that
+            // contains 255 doubled, and IAC IAC (data 255, not printable): only "ok" is left.
+            byte[] input =
+            {
+                0xFF, 0xFD, 0x01, 0xFF, 0xFD, 0x03, 0xFF, 0xF1,
+                0xFF, 0xFA, 0x1F, 0x00, 0x50, 0xFF, 0xFF, 0x18, 0xFF, 0xF0,
+                (byte)'o', 0xFF, 0xFF, (byte)'k', (byte)'\r',
+            };
+            StringBuilder echo = new StringBuilder();
+            List<string> lines = new List<string>();
+            for (int i = 0; i < input.Length; i++)
+            {
+                TelnetInput r = ed.Feed(input[i]);
+                echo.Append(r.Echo);
+                if (r.LineComplete)
+                {
+                    lines.Add(r.Line);
+                }
+            }
+
+            Assert.That(lines, Is.EqualTo(new List<string> { "ok" }));
+            Assert.That(echo.ToString(), Is.EqualTo("ok\r\n"));
+        }
+
+        [Test]
+        public void Server_OffersEchoAndSuppressGoAhead_BeforeTheBanner()
+        {
+            SwitchConfig cfg = new SwitchConfig { Dnic = "2340", Name = "Switch Alpha" };
+            SwitchCli cli = new SwitchCli(new SwitchNode(cfg) { UptimeStartMs = 0 }, () => 1000L);
+            TelnetCliServer server = new TelnetCliServer(cli, "127.0.0.1", 0, new List<UserConfig>(), open: true);
+            Assert.That(server.Start(), Is.True);
+            try
+            {
+                using TcpClient client = new TcpClient();
+                client.Connect("127.0.0.1", server.Port);
+                using NetworkStream s = client.GetStream();
+                s.ReadTimeout = 2000;
+                byte[] first = new byte[6];
+                int got = 0;
+                while (got < 6)
+                {
+                    got += s.Read(first, got, 6 - got);
+                }
+
+                Assert.That(first, Is.EqualTo(new byte[] { 0xFF, 0xFB, 0x01, 0xFF, 0xFB, 0x03 }));
+            }
+            finally
+            {
+                server.Stop();
+            }
         }
 
         [Test]
