@@ -27,10 +27,16 @@ namespace RetroIO.Protocols.X25.Tests
         // 29 May 1987, the date of CHAT 3.1; a Friday.
         private static readonly DateTime T0 = new DateTime(1987, 5, 29, 12, 0, 0);
 
-        private static string Script()
+        // The copy built into the DLL (HostScripts), which is the one x25host runs.
+        private static string Script() => HostScripts.Get("altos-chat") ?? throw new InvalidOperationException("altos-chat is not built in");
+
+        [Test]
+        public void TheBuiltInCopy_IsTheScriptsFolder()
         {
             string path = Path.Combine(TestContext.CurrentContext.TestDirectory, "scripts", "altos-chat.js");
-            return File.ReadAllText(path);
+            Assert.That(Script(), Is.EqualTo(File.ReadAllText(path)));
+            Assert.That(HostScripts.Names(), Does.Contain("altos-chat"));
+            Assert.That(HostScripts.Get("nothere"), Is.Null);
         }
 
         /// <summary>A step given to both engines.</summary>
