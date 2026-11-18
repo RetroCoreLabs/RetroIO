@@ -218,6 +218,38 @@ namespace RetroIO.Protocols.X25.Tests
             return (h, o);
         }
 
+        // ------------------------------------------------------------------ the operator (IHostOperator)
+
+        [Test]
+        public void TheOperator_SeesTheUserAndState_SendsALine_AndLogsTheUserOut()
+        {
+            (DescribedHost h, Output o) = LoggedInVax();
+            Assert.That(h.TryDescribe(1, out HostSessionInfo info), Is.True);
+            Assert.That(info.User, Is.EqualTo("guest"));
+            Assert.That(info.State, Is.EqualTo("shell"));
+            Assert.That(info.LoggedInAt, Is.EqualTo(T0));
+            Assert.That(h.TryDescribe(2, out _), Is.False);
+
+            Type(h, 1, "DIR");
+            h.OperatorSend(1, "System going down in 5 minutes");
+            Assert.That(o.Take(1), Is.EqualTo("\r\nSystem going down in 5 minutes\r\n$ DIR"), "the prompt and the half-typed line again");
+
+            h.OperatorLogout(1);
+            Assert.That(o.Take(1), Does.StartWith("guest logged out at"));
+            Assert.That(o.Cleared, Is.EqualTo(new List<int> { 1 }));
+        }
+
+        [Test]
+        public void TheOperator_SeesACallerNotYetLoggedIn_AsLogin()
+        {
+            (DescribedHost h, Output o) = Make(Vax, VaxFiles);
+            h.Connect(1, string.Empty, "24227001");
+            Assert.That(h.TryDescribe(1, out HostSessionInfo info), Is.True);
+            Assert.That(info.User, Is.Empty);
+            Assert.That(info.State, Is.EqualTo("login"));
+            Assert.That(info.LoggedInAt, Is.Null);
+        }
+
         // ------------------------------------------------------------------ reading the folder
 
         [Test]

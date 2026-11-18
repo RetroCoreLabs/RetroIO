@@ -67,6 +67,36 @@ namespace RetroIO.Protocols.X25.Host
         void OutputDrained(int session, int bytes);
     }
 
+    /// <summary>One call as the operator console sees it (docs/x25host-format.md in RetroX25, "The operator console").</summary>
+    /// <param name="User">The logged-in user as typed, or empty before the login.</param>
+    /// <param name="State">Where the caller is: <c>login</c>, <c>shell</c>, <c>menu</c> or <c>room</c>.</param>
+    /// <param name="LoggedInAt">When the login was accepted, or null before it.</param>
+    /// <param name="LastInput">When the caller last typed (the call's start if never).</param>
+    public readonly record struct HostSessionInfo(string User, string State, DateTime? LoggedInAt, DateTime LastInput);
+
+    /// <summary>
+    /// What the operator of the program running a machine may do to its calls. Implemented by
+    /// <see cref="DescribedHost"/>; a <see cref="ScriptedHost"/> does not know its users and does not implement it.
+    /// Called on the machine's own thread, as every other member.
+    /// </summary>
+    public interface IHostOperator
+    {
+        /// <summary>The state of one call.</summary>
+        /// <param name="session">The session.</param>
+        /// <param name="info">The call's state, when it is known.</param>
+        /// <returns>False for a session the machine does not have.</returns>
+        bool TryDescribe(int session, out HostSessionInfo info);
+
+        /// <summary>An operator message: a line to the caller, then the prompt and the half-typed line again.</summary>
+        /// <param name="session">The session.</param>
+        /// <param name="text">The text, without the line end.</param>
+        void OperatorSend(int session, string text);
+
+        /// <summary>Logs the caller out as the logout command does: the logout text, then the call is ended.</summary>
+        /// <param name="session">The session.</param>
+        void OperatorLogout(int session);
+    }
+
     /// <summary>
     /// What a machine can ask of the caller's PAD besides text: an X.29 set PAD message (X.29 (12/97) 3.1) of X.3
     /// parameter 2, echo. Implemented by the program that runs the machine, which sends it with Q = 1 (X.29 1.5.2).
