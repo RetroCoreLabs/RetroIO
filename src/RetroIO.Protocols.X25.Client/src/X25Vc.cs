@@ -45,6 +45,12 @@ namespace RetroIO.Protocols.X25.Client
         public bool Incoming { get; }
 
         /// <summary>
+        /// The call user data of the Incoming Call packet (X.25 5.2.2.6), empty when it had none or for a call we
+        /// placed. The first four bytes tell a PAD call (X.29 protocol identifier 01 00 00 00) from another one.
+        /// </summary>
+        public byte[] CallUserData { get; internal set; } = Array.Empty<byte>();
+
+        /// <summary>
         /// Arbitrary per-circuit context an application may attach.
         /// </summary>
         public object? UserData { get; set; }

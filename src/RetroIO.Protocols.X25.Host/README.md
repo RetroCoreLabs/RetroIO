@@ -1,6 +1,22 @@
 # RetroIO.Protocols.X25.Host
 
-Scripted X.25 hosts. A `ScriptedHost` runs one JavaScript program per fake machine: the program gets an event
+Fake X.25 machines, of two kinds. Both implement `IHostMachine`, so one program can run either kind:
+
+- **`DescribedHost`** runs a host folder: a `host.ini` and text files that say what to print and which typed
+  words lead where (a banner, a login, a command line or menus, a fake file tree, `who`, `send`, `wall`, chat
+  rooms). Nothing in the folder runs. `HostDescription.Load(folder, hostname, address)` reads and checks the
+  folder; every mistake stops it with the file, the line and the name. The format is
+  `src/docs/x25host-format.md` in the RetroX25 repository. To hide a password the host has to tell the caller's
+  PAD to stop echoing (an X.29 Set), so its output must also implement `IHostPadControl`.
+- **`ScriptedHost`** runs a JavaScript program, described below.
+
+`Admit(callUserData)` is asked before a call is accepted. A `DescribedHost` refuses a call when it already has
+`sessions` calls, or (with `pad_calls_only`) when the call user data does not start with the X.29 protocol
+identifier 01 00 00 00. A `ScriptedHost` takes every call.
+
+## Scripted hosts
+
+A `ScriptedHost` runs one JavaScript program per fake machine: the program gets an event
 for each call (`onConnect`, `onInput`, `onDisconnect`) and keeps whatever it needs in its own variables, so every
 caller on the same machine shares it. That is enough for a chat, `WHO`, `WALL` and messages between users.
 

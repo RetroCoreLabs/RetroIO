@@ -827,7 +827,10 @@ namespace RetroIO.Protocols.X25.Client
         {
             // Track the circuit, let the application accept it (which sets AcceptRequested), then either
             // accept or reject on the layer. This runs under the frame lock, so layer calls are safe.
-            X25Vc vc = new X25Vc(leg.IsPrimary ? lci : AllocateExtraLcn(), calledAddress, callingAddress, incoming: true);
+            X25Vc vc = new X25Vc(leg.IsPrimary ? lci : AllocateExtraLcn(), calledAddress, callingAddress, incoming: true)
+            {
+                CallUserData = callUserData ?? Array.Empty<byte>(),
+            };
             vc.Leg = leg;
             vc.LegLci = lci;
             leg.Vcs[lci] = vc;
