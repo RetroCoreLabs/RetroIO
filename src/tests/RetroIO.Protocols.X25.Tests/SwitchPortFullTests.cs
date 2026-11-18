@@ -71,6 +71,24 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        private static byte[] ReadExactly(System.Net.Sockets.NetworkStream stream, int count)
+        {
+            byte[] buffer = new byte[count];
+            int got = 0;
+            while (got < count)
+            {
+                int n = stream.Read(buffer, got, count - got);
+                if (n <= 0)
+                {
+                    throw new InvalidOperationException("the port closed the connection after " + got + " of " + count + " octets");
+                }
+
+                got += n;
+            }
+
+            return buffer;
+        }
+
         private static X25Client Dial(ushort port, string localAddress)
         {
             X25Client client = new X25Client { ServiceName = "full-port-test" };
@@ -113,6 +131,7 @@ namespace RetroIO.Protocols.X25.Tests
             raw.Connect(System.Net.IPAddress.Loopback, _portA.BoundPort);
             System.Net.Sockets.NetworkStream stream = raw.GetStream();
             WaitFor(() => _portA.PeerConnected && _portB.PeerConnected, 3000);
+            Assert.That(_portA.PeerConnected && _portB.PeerConnected, Is.True, "the caller or the callee never connected");
 
             for (int i = 0; i < Calls; i++)
             {
@@ -124,51 +143,27 @@ namespace RetroIO.Protocols.X25.Tests
                 stream.Write(frame, 0, frame.Length);
             }
 
-            // Read what the port answers: Call Accepted (0x0F) for the calls it took, Clear Request (0x13) with
-            // its cause for the others.
+            // Read what the port answers, one whole XOT frame at a time: Call Accepted (0x0F) for the calls it took,
+            // Clear Request (0x13) with its cause for the others. Until 2026-11-18 this read the 4-octet header with one
+            // Read (which may return fewer octets: TCP is a byte stream) and gave up after 3 seconds in all; a read now
+            // fails the test if no octet comes for 10 seconds.
             List<byte> causes = new List<byte>();
             int connected = 0;
-            long readDeadline = Environment.TickCount64 + 3000;
-            stream.ReadTimeout = 200;
-            byte[] header = new byte[4];
-            while (Environment.TickCount64 < readDeadline && connected + causes.Count < Calls)
+            stream.ReadTimeout = 10000;
+            while (connected + causes.Count < Calls)
             {
-                try
+                byte[] header = ReadExactly(stream, 4);
+                byte[] body = ReadExactly(stream, (header[2] << 8) | header[3]);
+                if (body[2] == 0x0F)
                 {
-                    if (stream.Read(header, 0, 4) < 4)
-                    {
-                        break;
-                    }
-
-                    int length = (header[2] << 8) | header[3];
-                    byte[] body = new byte[length];
-                    int got = 0;
-                    while (got < length)
-                    {
-                        int n = stream.Read(body, got, length - got);
-                        if (n <= 0)
-                        {
-                            break;
-                        }
-
-                        got += n;
-                    }
-
-                    if (body[2] == 0x0F)
-                    {
-                        connected++;
-                    }
-                    else if (body[2] == 0x13)
-                    {
-                        causes.Add(body[3]);
-                        // Confirm the clear, as a caller does.
-                        byte[] confirm = { 0, 0, 0, 3, (byte)(0x10 | (body[0] & 0x0F)), body[1], 0x17 };
-                        stream.Write(confirm, 0, confirm.Length);
-                    }
+                    connected++;
                 }
-                catch (System.IO.IOException)
+                else if (body[2] == 0x13)
                 {
-                    // read timeout: try again until the deadline
+                    causes.Add(body[3]);
+                    // Confirm the clear, as a caller does.
+                    byte[] confirm = { 0, 0, 0, 3, (byte)(0x10 | (body[0] & 0x0F)), body[1], 0x17 };
+                    stream.Write(confirm, 0, confirm.Length);
                 }
             }
 

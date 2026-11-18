@@ -212,6 +212,12 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             Assert.That(peer.CallRequests, Is.EqualTo(Calls));
+
+            // The first call takes the connection Open made, and the client dials a NEW spare for arriving calls on a
+            // pool thread (X25Client.OpenSpare), so that ninth connection arrives some time after the first call. Until
+            // 2026-11-18 this counted at once and failed now and then under load with 8: the spare had not been
+            // accepted yet. Wait for it, then check no further connection follows.
+            Assert.That(SpinWait.SpinUntil(() => peer.Accepted >= Calls + 1, 5000), Is.True, "the new spare never arrived (connections: " + peer.Accepted + ")");
             Assert.That(peer.Accepted, Is.EqualTo(Calls + 1), "one TCP connection for each of the " + Calls + " calls, plus the spare Open made, which is kept for calls that arrive");
 
             // The circuit numbers the application sees are all different, whatever connection carries them.
@@ -247,6 +253,8 @@ namespace RetroIO.Protocols.X25.Tests
                 Assert.That(vcs[i], Is.Not.Null, "call " + i + " was not answered");
             }
 
+            // The new spare is dialled on a pool thread after a call takes the first one (see EachCall_OpensItsOwnTcpConnection).
+            Assert.That(SpinWait.SpinUntil(() => peer.Accepted >= Calls + 1, 5000), Is.True, "the new spare never arrived (connections: " + peer.Accepted + ")");
             Assert.That(peer.Accepted, Is.EqualTo(Calls + 1), "one connection for each call, plus the spare Open made");
         }
 
@@ -261,6 +269,8 @@ namespace RetroIO.Protocols.X25.Tests
             X25Vc? second = client.CallWait("23410001", 3000);
             Assert.That(first, Is.Not.Null);
             Assert.That(second, Is.Not.Null);
+            // The new spare is dialled on a pool thread after a call takes the first one (see EachCall_OpensItsOwnTcpConnection).
+            Assert.That(SpinWait.SpinUntil(() => peer.Accepted >= 3, 5000), Is.True, "the new spare never arrived (connections: " + peer.Accepted + ")");
             Assert.That(peer.Accepted, Is.EqualTo(3), "one connection for each call, plus the spare Open made");
 
             client.Clear(second!);
@@ -338,11 +348,138 @@ namespace RetroIO.Protocols.X25.Tests
             dce.ClearCall(first, 0, 0);
             Assert.That(SpinWait.SpinUntil(() => dce.ConnectionCount == 1, 5000), Is.True,
                 "the connection of the ended call was not closed (connections: " + dce.ConnectionCount + ")");
-            Assert.That(client.IsOpen, Is.True, "the client still has its spare");
+            // The new spare is dialled on a pool thread (X25Client.OpenSpare), and the switch counts the connection as
+            // soon as TCP has it, a moment BEFORE the client records it as its spare. Until 2026-11-18 this was checked
+            // at once and failed now and then (IsOpen false: the first call's connection was gone and the spare was not
+            // recorded yet). Wait for the client to record it.
+            Assert.That(SpinWait.SpinUntil(() => client.IsOpen, 5000), Is.True, "the client still has its spare");
 
             ushort second = dce.PlaceCall("23430001", "23400001", null);
             Assert.That(second, Is.Not.EqualTo(0), "the switch had no fresh connection for the second call");
             Assert.That(SpinWait.SpinUntil(() => Volatile.Read(ref connected) == 2, 5000), Is.True, "the second call was not answered");
+        }
+
+        /// <summary>
+        /// A call can arrive on a new spare before the client has recorded the connection as its spare: the connection is
+        /// up, its read thread runs, and the switch puts the waiting call on it at once. The client must still open the
+        /// next spare. Until 2026-11-18 it made the taken connection its spare and never opened another, so the next
+        /// arriving call found no connection (seen as SwitchPortFullTests.MoreCallsThanChannels failing now and then).
+        /// The seam holds the dial at exactly that point while the call arrives.
+        /// </summary>
+        [Test]
+        public void ACallThatTakesTheNewSpareBeforeItIsRecorded_StillGetsAnotherSpareOpened()
+        {
+            TcpListener sw = new TcpListener(IPAddress.Loopback, 0);
+            sw.Start();
+            List<TcpClient> accepted = new List<TcpClient>();
+            try
+            {
+                int port = ((IPEndPoint)sw.LocalEndpoint).Port;
+                using X25Client client = new X25Client { ServiceName = "spare-race" };
+                client.SetOnIncoming((c, vc) => c.Accept(vc));
+
+                // In the seam: take the new spare's connection, put a call on it and wait for the answer, all before the
+                // client goes on to record the connection.
+                // The seam runs on the client's pool thread; the test thread waits for it to finish before it accepts
+                // the next connection, so the two never take each other's connection.
+                bool answeredInSeam = false;
+                Exception? seamFailure = null;
+                using ManualResetEventSlim seamDone = new ManualResetEventSlim(false);
+                client.SpareConnectedForTest = () =>
+                {
+                    client.SpareConnectedForTest = null;
+                    try
+                    {
+                        TcpClient second = sw.AcceptTcpClient();
+                        lock (accepted)
+                        {
+                            accepted.Add(second);
+                        }
+
+                        WriteXot(second.GetStream(), RetroIO.Protocols.X25.Models.X25PacketBuilder.CreateCallRequest(1, "23430001", "23400002"));
+                        answeredInSeam = ReadXotType(second.GetStream()) == 0x0F;
+                    }
+                    catch (Exception ex)
+                    {
+                        seamFailure = ex;
+                    }
+                    finally
+                    {
+                        seamDone.Set();
+                    }
+                };
+
+                client.Open(new X25ClientConfig { Host = "127.0.0.1", Port = (ushort)port, LocalAddress = "23430001", Framing = X25ClientFraming.Xot }, NullLogger.Instance);
+                TcpClient first = sw.AcceptTcpClient();
+                lock (accepted)
+                {
+                    accepted.Add(first);
+                }
+
+                // The first call takes the connection Open made; the client dials a new spare (and the seam runs).
+                WriteXot(first.GetStream(), RetroIO.Protocols.X25.Models.X25PacketBuilder.CreateCallRequest(1, "23430001", "23400001"));
+                Assert.That(ReadXotType(first.GetStream()), Is.EqualTo((byte)0x0F), "the first call was not accepted");
+
+                Assert.That(seamDone.Wait(5000), Is.True, "the client never dialled a new spare");
+                Assert.That(seamFailure, Is.Null, "the call on the new spare: " + seamFailure?.Message);
+
+                // The next spare must come: a third connection.
+                System.Threading.Tasks.Task<TcpClient> third = sw.AcceptTcpClientAsync();
+                Assert.That(third.Wait(5000), Is.True, "no new spare was opened after a call took the last one before it was recorded");
+                lock (accepted)
+                {
+                    accepted.Add(third.Result);
+                }
+
+                Assert.That(answeredInSeam, Is.True, "the call put on the new spare was not accepted");
+            }
+            finally
+            {
+                lock (accepted)
+                {
+                    for (int i = 0; i < accepted.Count; i++)
+                    {
+                        accepted[i].Close();
+                    }
+                }
+
+                sw.Stop();
+            }
+        }
+
+        private static void WriteXot(NetworkStream s, byte[] packet)
+        {
+            byte[] frame = new byte[4 + packet.Length];
+            frame[2] = (byte)(packet.Length >> 8);
+            frame[3] = (byte)packet.Length;
+            Array.Copy(packet, 0, frame, 4, packet.Length);
+            s.Write(frame, 0, frame.Length);
+        }
+
+        private static byte ReadXotType(NetworkStream s)
+        {
+            s.ReadTimeout = 5000;
+            byte[] header = ReadExactly(s, 4);
+            byte[] packet = ReadExactly(s, (header[2] << 8) | header[3]);
+            return packet[2];
+        }
+
+        private static byte[] ReadExactly(NetworkStream s, int count)
+        {
+            byte[] buffer = new byte[count];
+            int got = 0;
+            while (got < count)
+            {
+                int n = s.Read(buffer, got, count - got);
+                if (n <= 0)
+                {
+                    throw new InvalidOperationException("the connection closed after " + got + " of " + count + " octets");
+                }
+
+                got += n;
+            }
+
+            return buffer;
         }
 
         [Test]

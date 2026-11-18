@@ -936,6 +936,13 @@ namespace RetroIO.Protocols.X25.Client
         /// leaves the client without a spare; it is not retried (the switch is then gone, and the next call placed
         /// finds that out on its own).
         /// </summary>
+        /// <summary>
+        /// Test seam: called on the dialling thread after a new spare's connection is up and before
+        /// <see cref="OpenSpare"/> records it. A test holds it there while a call arrives on the new connection, the
+        /// order that left the client with no spare until 2026-11-18. Null outside tests.
+        /// </summary>
+        internal Action? SpareConnectedForTest { get; set; }
+
         private void OpenSpare()
         {
             lock (_lock)
@@ -965,20 +972,41 @@ namespace RetroIO.Protocols.X25.Client
                 return;
             }
 
+            SpareConnectedForTest?.Invoke();
+
+            // The connection is up and its read thread runs from the moment Open returns, so the switch can put a call on
+            // it BEFORE this lock is taken. That call ran OnLayerIncomingCall while the connection was not yet the spare:
+            // it marked the leg used but opened no new spare, because the leg was not _spare. Until 2026-11-18 this then
+            // made the used connection the spare, and no further spare was ever opened: the next call that arrived found
+            // no fresh connection and was never answered (SwitchPortFullTests.MoreCallsThanChannels failed now and then
+            // with two calls connected of three; the switch saw two connections, never a third). Now a connection that a
+            // call has already taken stays that call's connection, and another spare is opened for the next call.
             bool keep;
+            bool takenByACall;
             lock (_lock)
             {
-                keep = !_disposed && _spare == null && !spare.Dead;
+                takenByACall = spare.Used && !_disposed;
+
+                // A call that took it and has already ended was closed by OnLayerCleared; only a call still on it keeps it.
+                keep = !_disposed && !spare.Dead && (spare.Used ? spare.Vcs.Count > 0 : _spare == null);
                 if (keep)
                 {
-                    _spare = spare;
                     _legs.Add(spare);
+                    if (!spare.Used)
+                    {
+                        _spare = spare;
+                    }
                 }
             }
 
-            if (!keep)
+            if (!keep && !spare.Used)
             {
                 CloseLeg(spare);
+            }
+
+            if (takenByACall)
+            {
+                ThreadPool.QueueUserWorkItem(_ => OpenSpare());
             }
         }
 
