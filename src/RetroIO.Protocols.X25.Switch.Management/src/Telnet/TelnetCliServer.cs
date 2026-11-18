@@ -225,7 +225,9 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
                         {
                             username = line;
                             askingPassword = true;
-                            Write(stream, "\r\nPassword: ");
+                            // The echo of Enter has already moved to a new line, so no CR LF here (it gave an empty
+                            // line between the user name and the password).
+                            Write(stream, "Password: ");
                             continue;
                         }
 

@@ -258,6 +258,55 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        /// <summary>
+        /// A login as the Windows telnet client does it: it answers the server's offer with DO ECHO and DO
+        /// SUPPRESS-GO-AHEAD, sends each key on its own, and sends CR LF for Enter. Every key comes back once, the
+        /// password not at all, and admin/admin logs in. Before 2026-11-18 every key showed twice and every login
+        /// from that client failed (the LF of Enter was taken as an empty password).
+        /// </summary>
+        [Test]
+        public void Server_LoginAsWindowsTelnetDoesIt_EchoesOnce_AndLogsIn()
+        {
+            SwitchConfig cfg = new SwitchConfig { Dnic = "2340", Name = "Switch Alpha" };
+            SwitchCli cli = new SwitchCli(new SwitchNode(cfg) { UptimeStartMs = 0 }, () => 1000L);
+            List<UserConfig> users = new List<UserConfig> { new UserConfig { Name = "admin", Password = "admin", Level = 1 } };
+            TelnetCliServer server = new TelnetCliServer(cli, "127.0.0.1", 0, users, open: false);
+            Assert.That(server.Start(), Is.True);
+            try
+            {
+                using TcpClient client = new TcpClient();
+                client.Connect("127.0.0.1", server.Port);
+                using NetworkStream s = client.GetStream();
+                Assert.That(ReadAvailable(s, 500), Does.EndWith("Username: "));
+
+                byte[] answer = { 0xFF, 0xFD, 0x01, 0xFF, 0xFD, 0x03 };
+                s.Write(answer, 0, answer.Length);
+                string typed = "admin\r\n";
+                for (int i = 0; i < typed.Length; i++)
+                {
+                    s.WriteByte((byte)typed[i]);
+                }
+
+                Assert.That(ReadAvailable(s, 500), Is.EqualTo("admin\r\nPassword: "));
+
+                for (int i = 0; i < typed.Length; i++)
+                {
+                    s.WriteByte((byte)typed[i]);
+                }
+
+                Assert.That(ReadAvailable(s, 500), Is.EqualTo("\r\n> "));
+
+                Send(s, "show info\r\n");
+                string info = ReadAvailable(s, 500);
+                Assert.That(info, Does.StartWith("show info\r\nName:        Switch Alpha"));
+                Assert.That(info, Does.EndWith("> "));
+            }
+            finally
+            {
+                server.Stop();
+            }
+        }
+
         private static void Send(NetworkStream s, string text)
         {
             byte[] b = Encoding.ASCII.GetBytes(text);
