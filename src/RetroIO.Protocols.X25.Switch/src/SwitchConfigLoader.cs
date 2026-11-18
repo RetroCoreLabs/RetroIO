@@ -189,6 +189,24 @@ namespace RetroIO.Protocols.X25.Switch
                 pc.LapbK = ini.GetInt(section, "lapb_k", 0);
                 pc.Mode = ini.Get(section, "mode") == "dte" ? PortMode.Dte : PortMode.Dce;
 
+                // trunk_kind = network | internal (x25emu's key): network makes the trunk an X.75 link between networks.
+                // Any other word is refused, and so is network on an access port - a subscriber's DTE does not speak X.75.
+                string trunkKind = ini.GetString(section, "trunk_kind", "internal");
+                if (trunkKind == "network")
+                {
+                    if (pc.Type != PortType.Trunk)
+                    {
+                        throw new InvalidDataException("[" + section + "] trunk_kind = network needs type = trunk: a link "
+                            + "between networks (X.75) is a trunk, never a subscriber's access port");
+                    }
+
+                    pc.BetweenNetworks = true;
+                }
+                else if (trunkKind != "internal")
+                {
+                    throw new InvalidDataException("[" + section + "] trunk_kind = " + trunkKind + ": use network or internal");
+                }
+
                 // Which end plugs in the emulated cable (hdlc-tcp only). Not written = follow the X.25 role.
                 string tcpRole = ini.GetString(section, "tcp", string.Empty);
                 if (tcpRole.Length == 0)

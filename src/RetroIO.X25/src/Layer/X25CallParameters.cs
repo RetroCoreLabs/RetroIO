@@ -63,16 +63,56 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// when null.
         /// </param>
         public X25CallParameters(byte windowOut, byte windowIn, int packetSizeOut, int packetSizeIn, byte[]? otherFacilities)
+            : this(windowOut, windowIn, packetSizeOut, packetSizeIn, otherFacilities, null)
+        {
+        }
+
+        /// <summary>
+        /// Creates a set of values that also carries the call's other facilities and its X.75 network utility field.
+        /// </summary>
+        /// <param name="windowOut">The window for packets this end sends.</param>
+        /// <param name="windowIn">The window for packets this end receives.</param>
+        /// <param name="packetSizeOut">The largest user data field, in octets, of a packet this end sends.</param>
+        /// <param name="packetSizeIn">The largest user data field, in octets, of a packet this end receives.</param>
+        /// <param name="otherFacilities">Every facility element other than window and packet size; none when null.</param>
+        /// <param name="networkUtilities">The X.75 network utility field (see <see cref="NetworkUtilities"/>); none when null.</param>
+        public X25CallParameters(byte windowOut, byte windowIn, int packetSizeOut, int packetSizeIn, byte[]? otherFacilities, byte[]? networkUtilities)
         {
             WindowSizeOut = windowOut;
             WindowSizeIn = windowIn;
             PacketSizeOut = packetSizeOut;
             PacketSizeIn = packetSizeIn;
             _otherFacilities = otherFacilities;
+            _networkUtilities = networkUtilities;
         }
 
         // Null in a default-constructed value; the property turns that into an empty array.
         private readonly byte[]? _otherFacilities;
+
+        // Null in a default-constructed value; the property turns that into an empty array.
+        private readonly byte[]? _networkUtilities;
+
+        /// <summary>
+        /// Gets the X.75 network utility field of the call, without its length octet (X.75 4.2.1.5; decode it with
+        /// <see cref="Models.X75Utilities.TryDecode"/>).
+        /// </summary>
+        /// <remarks>
+        /// Only a circuit on a port between networks (<see cref="X25Config.IsSte"/>) has one. For an incoming call it is what
+        /// the calling STE sent in its Call Request; for an outgoing call, once connected, what the called STE sent in its
+        /// Call Connected; for a call to be placed, what to send. A switch builds the onward field from it (the transit
+        /// network list, the call identifier) - the layer itself only carries it.
+        /// </remarks>
+        public byte[] NetworkUtilities => _networkUtilities ?? Array.Empty<byte>();
+
+        /// <summary>
+        /// Returns the same values with another X.75 network utility field.
+        /// </summary>
+        /// <param name="networkUtilities">The field; none when null.</param>
+        /// <returns>The values with that field.</returns>
+        public X25CallParameters WithNetworkUtilities(byte[]? networkUtilities)
+        {
+            return new X25CallParameters(WindowSizeOut, WindowSizeIn, PacketSizeOut, PacketSizeIn, _otherFacilities, networkUtilities);
+        }
 
         /// <summary>
         /// Gets every facility element of the call other than window and packet size, byte for byte and in the order they
@@ -116,7 +156,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </returns>
         public X25CallParameters Swapped()
         {
-            return new X25CallParameters(WindowSizeIn, WindowSizeOut, PacketSizeIn, PacketSizeOut, _otherFacilities);
+            return new X25CallParameters(WindowSizeIn, WindowSizeOut, PacketSizeIn, PacketSizeOut, _otherFacilities, _networkUtilities);
         }
 
         /// <summary>
@@ -281,7 +321,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             byte[] result = new byte[keptLen];
             Array.Copy(kept, result, keptLen);
-            return new X25CallParameters(WindowSizeOut, WindowSizeIn, PacketSizeOut, PacketSizeIn, result);
+            return new X25CallParameters(WindowSizeOut, WindowSizeIn, PacketSizeOut, PacketSizeIn, result, _networkUtilities);
         }
 
         /// <summary>
@@ -327,7 +367,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
         {
             int packetOut = PacketSizeOut < largestPacketSize ? PacketSizeOut : largestPacketSize;
             int packetIn = PacketSizeIn < largestPacketSize ? PacketSizeIn : largestPacketSize;
-            return new X25CallParameters(WindowSizeOut, WindowSizeIn, packetOut, packetIn, _otherFacilities);
+            return new X25CallParameters(WindowSizeOut, WindowSizeIn, packetOut, packetIn, _otherFacilities, _networkUtilities);
         }
     }
 }

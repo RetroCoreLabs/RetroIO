@@ -177,7 +177,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 // A DCE port faces a DTE, so it is the DCE. This is the direction the engine searches for a free
                 // channel (Annex A) and which side wins a call collision (4.1.3).
-                IsDte = config.Mode != PortMode.Dce,
+                IsDte = !config.BetweenNetworks && config.Mode != PortMode.Dce,
+
+                // A trunk to another network is an X.75 STE, neither DTE nor DCE. Its mode then only picks the
+                // channel search direction X.75 3.1.4 leaves to agreement: dte searches from the highest, dce from
+                // the lowest, the same split as X.25 Annex A, so two ends set dte/dce never search the same way.
+                IsSte = config.BetweenNetworks,
+                SearchFromHighest = config.Mode == PortMode.Dte,
                 LciBase = config.LciBase,
                 LciCount = config.LciCount,
                 DefaultWindowSize = config.DefaultWindowSize,

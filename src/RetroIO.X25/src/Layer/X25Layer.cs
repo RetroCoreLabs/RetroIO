@@ -259,6 +259,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 PacketSizeOut = requested.PacketSizeOut,
                 PacketSizeIn = requested.PacketSizeIn,
                 OtherFacilities = requested.OtherFacilities,
+                NetworkUtilities = requested.NetworkUtilities,
                 ClearFacilities = System.Array.Empty<byte>(),
                 TimerExpiryMs = Now() + _config.CallRequestTimeoutMs
             };
@@ -326,8 +327,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // answered) puts any in: a plain accept must not repeat the caller's requests (reverse charging, say) as if the
             // called side had made them.
             byte[] otherFacilities = System.Array.Empty<byte>();
+            byte[] networkUtilities = System.Array.Empty<byte>();
             if (agreed.HasValue)
             {
+                networkUtilities = agreed.Value.NetworkUtilities;
                 vc.WindowSizeOut = agreed.Value.WindowSizeOut;
                 vc.WindowSizeIn = agreed.Value.WindowSizeIn;
                 vc.PacketSizeOut = agreed.Value.PacketSizeOut;
@@ -358,6 +361,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             // From here the circuit holds what was answered, not what the caller asked for.
             vc.OtherFacilities = otherFacilities;
+            vc.NetworkUtilities = networkUtilities;
 
             // The state moves before the packet goes out, and back if it does not: the peer's first
             // data packet can arrive synchronously inside Send (loopback sink) and must find the
@@ -366,7 +370,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.State = X25VcState.DataTransfer;
             vc.ResetFlow();
             vc.TimerExpiryMs = 0;
-            if (!Send(X25PacketBuilder.CreateCallAccepted(lci, facilities)))
+            // Between networks the Call Connected always carries the network utility field (X.75 5.4.1), even empty.
+            // The agreed sizes go in the utility field too (X.75 5.1, 5.3.4, 5.3.5), never in the user facility field.
+            byte[]? utilities = null;
+            if (_config.IsSte)
+            {
+                facilities = otherFacilities.Length > 0 ? new X25Facilities { PassThrough = otherFacilities }.Encode() : null;
+                utilities = vc.PeerSentFacilities
+                    ? WithUtilityFlowControl(networkUtilities, vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn)
+                    : networkUtilities;
+            }
+
+            if (!Send(X25PacketBuilder.CreateCallAccepted(lci, facilities, networkUtilities: utilities)))
             {
                 vc.State = X25VcState.CallIncoming;
                 return false;
@@ -399,7 +414,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
-            parameters = new X25CallParameters(vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn, vc.OtherFacilities);
+            parameters = new X25CallParameters(vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn, vc.OtherFacilities, vc.NetworkUtilities);
             return true;
         }
 
@@ -650,6 +665,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             cause = ApplyCauseRule(cause);
 
+            // Between networks, X.75 4.2.3.1: a clearing cause not in Table 13 is passed on unchanged or changed to
+            // network congestion; this engine changes it, so the far STE never receives a cause X.75 does not have.
+            if (_config.IsSte && !IsX75ClearingCause(cause))
+            {
+                cause = SteClearingNetworkCongestion;
+            }
+
             // The state change stands even when the packet is refused: the application has decided
             // the call is over, and the clear-request timer is what carries that decision to the
             // peer if this attempt did not (retransmission arrives with the T23 work, plan B5).
@@ -659,7 +681,44 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.Retries = 0;
             vc.CallRequestHeld = false;
             vc.TimerExpiryMs = Now() + _config.ClearRequestTimeoutMs;
-            return Send(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic, facilities));
+            // X.75 4.2.3.3.3: in the extended format the network utility length is "always present when the user
+            // facility length is present", so between networks an empty utility field goes with any facilities.
+            byte[]? utilities = _config.IsSte ? System.Array.Empty<byte>() : null;
+            return Send(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic, facilities, networkUtilities: utilities));
+        }
+
+        /// <summary>
+        /// True when a clearing cause is one X.75 Table 13 lists (read from the PDF page, 2026-11-18): DTE originated
+        /// (00000000, and any value with bit 8 set - Note 1), number busy 01, out of order 09, remote procedure error 11,
+        /// reverse charging acceptance not subscribed 19, incompatible destination 21, fast select acceptance not
+        /// subscribed 29, ship absent 39, invalid facility request 03, access barred 0B, network congestion 05, not
+        /// obtainable 0D, RPOA out of order 15 (hexadecimal).
+        /// </summary>
+        private static bool IsX75ClearingCause(byte cause)
+        {
+            if (cause == 0x00 || (cause & 0x80) != 0)
+            {
+                return true;
+            }
+
+            switch (cause)
+            {
+                case 0x01:
+                case 0x09:
+                case 0x11:
+                case 0x19:
+                case 0x21:
+                case 0x29:
+                case 0x39:
+                case 0x03:
+                case 0x0B:
+                case 0x05:
+                case 0x0D:
+                case 0x15:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -834,7 +893,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             byte[] pkt = packet.ToArray();
-            X25PacketInfo info = X25PacketParser.ParsePacket(pkt);
+            // On a port between networks the call set-up and clearing packets carry the X.75 utility field (X.75 4.2).
+            X25PacketInfo info = X25PacketParser.ParsePacket(pkt, _config.IsSte);
             ushort lci = info.LCN;
 
             if (!Admit(info, lci, pkt))
@@ -1448,6 +1508,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.OutOfOrder = false;
             vc.PeerSentFacilities = false;
             vc.OtherFacilities = System.Array.Empty<byte>();
+            vc.NetworkUtilities = System.Array.Empty<byte>();
             vc.CalledAddress = string.Empty;
             vc.CallingAddress = string.Empty;
             vc.CallUserData = Array.Empty<byte>();
@@ -1498,8 +1559,31 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </remarks>
         private byte ProcedureErrorCause()
         {
+            // Between networks there is no "local procedure error": X.75 Table 13 does not have it, and every ERROR
+            // entry of Annex C and every time-out of Annex D clears with "network congestion" (00000101, Table 13).
+            if (_config.IsSte)
+            {
+                return SteClearingNetworkCongestion;
+            }
+
             return _config.IsDte ? X25Cause.DteOriginated : X25Cause.ClearingLocalProcedureError;
         }
+
+        /// <summary>
+        /// X.75 Table 13: clearing cause "Network congestion", 00000101.
+        /// </summary>
+        private const byte SteClearingNetworkCongestion = 0x05;
+
+        /// <summary>
+        /// X.75 Table 15: resetting cause "Network congestion", 00000111.
+        /// </summary>
+        private const byte SteResettingNetworkCongestion = 0x07;
+
+        /// <summary>
+        /// X.75 Table C-3 (call request received in the STE's own call request state) and Annex F a) row 40 ("Call
+        /// collision is detected on the selected outgoing link"): diagnostic 116.
+        /// </summary>
+        private const byte SteCallCollisionDiagnostic = 116;
 
         /// <summary>
         /// Sends the Call Request for a circuit in p2 and arms T21.
@@ -1532,7 +1616,19 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // T21 is armed before the send: a Call Connected arriving synchronously inside Send
             // cancels it, and arming it afterwards would leave a timer running on a connected call.
             vc.TimerExpiryMs = Now() + _config.CallRequestTimeoutMs;
-            if (!Send(X25PacketBuilder.CreateCallRequest(vc.Lci, vc.CalledAddress, vc.CallingAddress, facilities, cud)))
+            // Between networks the Call Request always carries the network utility field (X.75 4.2.1, 5.4.1), and the
+            // window and packet sizes go in it, not in the user facility field (X.75 5.1: facilities that "require STE or
+            // transit network action are mapped into X.75 utilities and thus are not present in the X.75 facility
+            // field"; 5.3.4 and 5.3.5 are those utilities).
+            byte[]? utilities = null;
+            if (_config.IsSte)
+            {
+                facilities = new X25Facilities { PassThrough = vc.OtherFacilities }.Encode();
+                utilities = WithUtilityFlowControl(vc.NetworkUtilities, vc.WindowSizeIn, vc.WindowSizeOut, vc.PacketSizeIn, vc.PacketSizeOut);
+            }
+
+            if (!Send(X25PacketBuilder.CreateCallRequest(vc.Lci, vc.CalledAddress, vc.CallingAddress, facilities, cud,
+                    networkUtilities: utilities)))
             {
                 vc.TimerExpiryMs = 0;
                 return false;
@@ -1593,6 +1689,20 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // whatever was on the channel, and the application's own call vanished without a word.
             if (vc.State == X25VcState.CallRequest)
             {
+                // Between networks, X.75 3.1.4: "both calls shall be cleared. The clearing cause field shall be coded
+                // 'Network congestion'." Table C-3 (call request received in the STE's own call request state): ERROR -
+                // the received packet is discarded and the channel cleared with network congestion # 116, entering the
+                // STE's clear request state. Our own call is lost with it and its owner told. The far STE does the
+                // same, so the two Clear Requests cross and 3.1.7 (clear collision) completes both with no
+                // confirmation.
+                if (_config.IsSte)
+                {
+                    ProcedureErrors++;
+                    ReportCleared(vc, SteClearingNetworkCongestion, SteCallCollisionDiagnostic);
+                    BeginClear(vc, SteClearingNetworkCongestion, SteCallCollisionDiagnostic, Now());
+                    return;
+                }
+
                 if (_config.IsDte)
                 {
                     UnexpectedPackets++;
@@ -1630,6 +1740,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            ReadUtilityFlowControl(info.NetworkUtilities, requested);
+
             // We are the called DTE: "from called" is what we may send, "from calling" what we receive.
             // The request is accepted as asked (the codec has range-checked it).
             vc.PeerSentFacilities = requested.HasPacketSize || requested.HasWindowSize;
@@ -1638,6 +1750,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.WindowSizeOut = requested.WindowFromCalled;
             vc.WindowSizeIn = requested.WindowFromCalling;
             vc.OtherFacilities = requested.PassThrough;
+            vc.NetworkUtilities = info.NetworkUtilities;
             vc.ClearFacilities = System.Array.Empty<byte>();
 
             // T11 (Table D.1) runs from the moment the call is offered until it is answered. It is
@@ -1672,6 +1785,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            ReadUtilityFlowControl(info.NetworkUtilities, agreed);
+
             // 6.12 Table 6-2 (flow control parameter negotiation): with W(requested) >= 2 the Call
             // Connected may indicate 2..W(requested); with W(requested) = 1 it may indicate 1 or 2;
             // P likewise between 128 and the request. That is "between the default and the request,
@@ -1700,12 +1815,61 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.PacketSizeOut = agreed.PacketSizeFromCalling;
             vc.PacketSizeIn = agreed.PacketSizeFromCalled;
             vc.OtherFacilities = agreed.PassThrough;
+            vc.NetworkUtilities = info.NetworkUtilities;
             vc.CallUserData = info.CallUserData;
 
             vc.State = X25VcState.DataTransfer;
             vc.ResetFlow();
             vc.TimerExpiryMs = 0;
             RaiseCallConnected(lci);
+        }
+
+        /// <summary>
+        /// Between networks, takes the window and packet sizes from the X.75 utility field (5.3.4, 5.3.5) into the decoded
+        /// facilities, so the rest of the engine negotiates them the same way as on an X.25 interface. Does nothing on a
+        /// DTE or DCE port, or when the field has no such utility.
+        /// </summary>
+        private void ReadUtilityFlowControl(byte[] utilities, X25Facilities into)
+        {
+            if (!_config.IsSte || X75Utilities.TryDecode(utilities, out X75Utilities u) != X75UtilityError.None)
+            {
+                return;
+            }
+
+            if (u.HasWindowSize)
+            {
+                into.HasWindowSize = true;
+                into.WindowFromCalled = u.WindowFromCalled;
+                into.WindowFromCalling = u.WindowFromCalling;
+            }
+
+            if (u.HasPacketSize)
+            {
+                // 5.4.3.5: the packet size parameter is the base-2 logarithm of the length in octets.
+                into.HasPacketSize = true;
+                into.PacketSizeFromCalled = 1 << u.PacketSizeLog2FromCalled;
+                into.PacketSizeFromCalling = 1 << u.PacketSizeLog2FromCalling;
+            }
+        }
+
+        /// <summary>
+        /// Returns a utility field with the window size (code 43) and packet size (code 42) utilities set to the given
+        /// values, the rest of the field kept. "From called" and "from calling" are the directions of the call.
+        /// </summary>
+        private static byte[] WithUtilityFlowControl(byte[] utilities, byte windowFromCalled, byte windowFromCalling, int packetFromCalled, int packetFromCalling)
+        {
+            if (X75Utilities.TryDecode(utilities, out X75Utilities u) != X75UtilityError.None)
+            {
+                throw new InvalidOperationException("the X.75 utility field given for this call does not decode");
+            }
+
+            u.HasWindowSize = true;
+            u.WindowFromCalled = windowFromCalled;
+            u.WindowFromCalling = windowFromCalling;
+            u.HasPacketSize = true;
+            u.PacketSizeLog2FromCalled = (byte)System.Numerics.BitOperations.Log2((uint)packetFromCalled);
+            u.PacketSizeLog2FromCalling = (byte)System.Numerics.BitOperations.Log2((uint)packetFromCalling);
+            return u.Encode();
         }
 
         private static bool Between(int value, int a, int b)
@@ -1853,7 +2017,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
-            byte[]? confirmationFacilities = _config.IsDte ? null : ClearConfirmationFacilities?.Invoke(lci);
+            // X.75 Figure 8: between networks the clear confirmation is the three header octets only.
+            byte[]? confirmationFacilities = _config.IsDte || _config.IsSte ? null : ClearConfirmationFacilities?.Invoke(lci);
             Send(X25PacketBuilder.CreateClearConfirmation(lci, confirmationFacilities));
             ToReady(vc);
             vc.CallRequestHeld = false;
@@ -2058,7 +2223,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </remarks>
         private void ResetForProcedureError(X25Vc vc, byte diagnostic)
         {
-            byte cause = _config.IsDte ? (byte)0x00 : X25Cause.ResettingLocalProcedureError;
+            // Between networks: Annex C-4 and C-5 reset "with network congestion cause" (00000111, X.75 Table 15).
+            byte cause = _config.IsSte ? SteResettingNetworkCongestion
+                : _config.IsDte ? (byte)0x00 : X25Cause.ResettingLocalProcedureError;
             vc.State = X25VcState.ResetRequest;
             vc.Cause = cause;
             vc.Diagnostic = diagnostic;
@@ -2181,7 +2348,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return 0;
             }
 
-            if (_config.IsDte)
+            // X.75 3.1.4: between networks the direction is "agreed bilaterally", so it is the port's setting.
+            bool fromHighest = _config.IsSte ? _config.SearchFromHighest : _config.IsDte;
+            if (fromHighest)
             {
                 for (int candidate = last; candidate >= first; candidate--)
                 {

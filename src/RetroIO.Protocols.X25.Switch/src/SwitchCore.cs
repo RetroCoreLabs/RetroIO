@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.PacketLayer;
 using RetroIO.Protocols.X25.Switch.Model;
 using RetroIO.Protocols.X25.Switch.Ports;
@@ -539,6 +540,15 @@ namespace RetroIO.Protocols.X25.Switch
             // record keeps the number the caller dialled.
             string onwardCalled = decision.CalledAddress ?? calledAddress;
 
+            // Between networks (X.75): read the utility field the calling network sent, and build the one for the next
+            // network. A refusal here is sent back on the X.75 link with the cause and diagnostic Annex F a) gives.
+            byte[]? onwardUtilities = null;
+            if (!TryBuildOnwardUtilities(inPort, inLci, outPort, out onwardUtilities, out byte refuseDiagnostic))
+            {
+                inPort.ClearCall(inLci, CauseNetworkCongestion, refuseDiagnostic);
+                return;
+            }
+
             // Place the onward call; a zero LCI means the egress port could not initiate it.
             // X.25 6.9 and 6.12: the window and packet size of a call are negotiated end to end. The onward Call Request
             // asks for what the caller asked for (the directions swapped: what the caller sends, the callee receives),
@@ -550,8 +560,18 @@ namespace RetroIO.Protocols.X25.Switch
             {
                 // The NUI says who pays this network; it never goes on to the called DTE (X.25 6.21).
                 X25CallParameters toAsk = asked.Swapped().WithPacketSizeAtMost(outPort.Config.MaxPacketSize).WithoutNuiSelection()
-                    .WithoutChargingRequest();   // Table 7-2: not in an Incoming Call; this DCE answers it (6.22)
+                    .WithoutChargingRequest()    // Table 7-2: not in an Incoming Call; this DCE answers it (6.22)
+                    .WithNetworkUtilities(onwardUtilities);
                 outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, toAsk);
+            }
+            else if (onwardUtilities != null)
+            {
+                // No values from the caller's side, but the next network still needs its utility field: ask for the out
+                // port's own defaults with it.
+                X25CallParameters defaults = new X25CallParameters(
+                    outPort.Config.DefaultWindowSize, outPort.Config.DefaultWindowSize,
+                    outPort.Config.DefaultPacketSize, outPort.Config.DefaultPacketSize, null, onwardUtilities);
+                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, defaults);
             }
             else
             {
@@ -606,6 +626,165 @@ namespace RetroIO.Protocols.X25.Switch
             stitch.CalledAccount = FindAccount(calledAddress);
             AccountForCallSetup(stitch);
             CallSetup?.Invoke(callingAddress, calledAddress, inPort.Id, outPort.Id);
+        }
+
+        // The next call identifier this network gives a call it originates toward another network (X.75 5.3.2: "established
+        // by the originating network", 24 bits of binary data, 5.4.3.2). A counter: with the calling DTE address it names
+        // the call, and the uniqueness is "only guaranteed over a period of time" whose length X.75 leaves for further
+        // study - the counter repeats after 16 777 215 calls.
+        private int _nextCallIdentifier = 1;
+
+        /// <summary>
+        /// Reads the X.75 utility field of a call that came in from another network and builds the field for the next one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// X.75 5.3.1 (read 2026-11-18): "A transit network identification is always present in the call request packet for
+        /// each transit network controlling the virtual circuit up to this point of call set-up", in the order crossed. So
+        /// only a TRANSIT network - one the call entered from another network and leaves to another network - adds its
+        /// own DNIC. The originating network does not name itself, and the destination network adds nothing.
+        /// </para>
+        /// <para>
+        /// X.75 5.3.2: the call identifier "is always present in the call request packet" and is "established by the
+        /// originating network". A call from one of our own subscribers gets a new one; a call from another network keeps
+        /// the one it came with.
+        /// </para>
+        /// <para>
+        /// Refusals, all clearing cause network congestion (Annex F a), call request packet): no call identifier is row 10
+        /// "Utility expected and not provided" # 76; a length past the packet is row 14 # 101; a code repeated is row 15
+        /// # 73; a transit network named twice is row 16 "Duplicate TNIC" # 66; bits 8 or 7 of the length octet set are
+        /// row 18 # 101 (the packet parser already refuses those). Our own DNIC already in the list means the call has
+        /// come round in a circle: row 42 ("a circular routing would be formed") # 120. A digit that is not BCD has no row
+        /// of its own in Annex F a); it is refused with # 0.
+        /// </para>
+        /// <para>
+        /// Known gap: a transit list only travels on X.75 links. A call that enters this network over X.75 at one switch
+        /// and crosses an internal trunk to the switch that leaves it loses the list on the internal trunk (PLAN B4).
+        /// </para>
+        /// </remarks>
+        private bool TryBuildOnwardUtilities(ISwitchPort inPort, ushort inLci, ISwitchPort outPort, out byte[]? onward, out byte refuseDiagnostic)
+        {
+            onward = null;
+            refuseDiagnostic = 0;
+            bool fromNetwork = inPort.Config.BetweenNetworks;
+            bool toNetwork = outPort.Config.BetweenNetworks;
+            if (!fromNetwork && !toNetwork)
+            {
+                return true;
+            }
+
+            string ownDnic = _node.Config.Dnic;
+            X75Utilities u;
+            if (fromNetwork)
+            {
+                byte[] received = inPort.TryGetCallParameters(inLci, out X25CallParameters p) ? p.NetworkUtilities : Array.Empty<byte>();
+                X75UtilityError error = X75Utilities.TryDecode(received, out u);
+                switch (error)
+                {
+                    case X75UtilityError.None:
+                        break;
+                    case X75UtilityError.RepeatedCode:
+                        refuseDiagnostic = 73;
+                        return false;
+                    case X75UtilityError.InvalidDigit:
+                        refuseDiagnostic = 0;
+                        return false;
+                    default:
+                        refuseDiagnostic = 101;
+                        return false;
+                }
+
+                if (!u.HasCallIdentifier)
+                {
+                    refuseDiagnostic = 76;
+                    return false;
+                }
+
+                List<string> transit = u.TransitNetworks;
+                for (int i = 0; i < transit.Count; i++)
+                {
+                    for (int j = i + 1; j < transit.Count; j++)
+                    {
+                        if (transit[i] == transit[j])
+                        {
+                            refuseDiagnostic = 66;
+                            return false;
+                        }
+                    }
+
+                    if (transit[i] == ownDnic)
+                    {
+                        refuseDiagnostic = 120;
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                // Originating network: a new call identifier, and no transit network yet.
+                u = new X75Utilities
+                {
+                    HasCallIdentifier = true,
+                    CallIdentifier = _nextCallIdentifier,
+                };
+                _nextCallIdentifier = _nextCallIdentifier >= X75Utilities.MaxCallIdentifier ? 1 : _nextCallIdentifier + 1;
+            }
+
+            if (!toNetwork)
+            {
+                // Destination network: the field stops here. Its transit list is echoed in the Call Connected (AnswerUtilities).
+                return true;
+            }
+
+            if (fromNetwork)
+            {
+                // A transit network: in from one network, out to another.
+                u.TransitNetworks.Add(ownDnic);
+            }
+
+            onward = u.Encode();
+            return true;
+        }
+
+        /// <summary>
+        /// The X.75 utility field of the Call Connected sent back toward the calling network, or null when the caller's leg
+        /// is not between networks.
+        /// </summary>
+        /// <remarks>
+        /// X.75 5.3.1: "A transit network identification is always present for each transit network in the call connected
+        /// packet", in the order crossed from the calling to the called DTE. The destination network answers with the list
+        /// it received; a transit network passes on the list the next network answered with, which already names it. The
+        /// call identifier is left out: "The use of the call identifier in the call connected packet is for further study"
+        /// (5.3.2).
+        /// </remarks>
+        private static byte[]? AnswerUtilities(VcStitch stitch, X25CallParameters answered)
+        {
+            if (!stitch.InPort.Config.BetweenNetworks)
+            {
+                return null;
+            }
+
+            byte[] source;
+            if (stitch.OutPort.Config.BetweenNetworks)
+            {
+                source = answered.NetworkUtilities;
+            }
+            else
+            {
+                source = stitch.InPort.TryGetCallParameters(stitch.InLci, out X25CallParameters asked) ? asked.NetworkUtilities : Array.Empty<byte>();
+            }
+
+            X75Utilities answer = new X75Utilities();
+            if (X75Utilities.TryDecode(source, out X75Utilities read) == X75UtilityError.None)
+            {
+                List<string> transit = read.TransitNetworks;
+                for (int i = 0; i < transit.Count; i++)
+                {
+                    answer.TransitNetworks.Add(transit[i]);
+                }
+            }
+
+            return answer.Encode();
         }
 
         private void OnCallConnected(ISwitchPort port, ushort lci)
@@ -664,7 +843,8 @@ namespace RetroIO.Protocols.X25.Switch
 
                 // The called DTE's NUI (6.21.3) does not go back to the caller either (6.21).
                 // Nor the called DTE's charging request: Table 7-2 does not allow it in a Call Connected.
-                stitch.InPort.AcceptCall(stitch.InLci, agreed.Swapped().WithoutNuiSelection().WithoutChargingRequest());
+                stitch.InPort.AcceptCall(stitch.InLci, agreed.Swapped().WithoutNuiSelection().WithoutChargingRequest()
+                    .WithNetworkUtilities(AnswerUtilities(stitch, agreed)));
             }
             else
             {

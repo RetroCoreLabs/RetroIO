@@ -26,6 +26,24 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public bool IsDte { get; set; } = true;
 
         /// <summary>
+        /// True when this end is a signalling terminal (STE) on a link between two networks (CCITT X.75), not a DTE or a
+        /// DCE. Then Call Request, Call Connected and extended Clear Request packets carry the network utility field
+        /// (X.75 4.2), a call collision clears both calls with "network congestion" (3.1.4), and the channel search
+        /// direction is <see cref="SearchFromHighest"/>. Set <see cref="IsDte"/> false with it: an STE uses the network's
+        /// cause codes, never "DTE originated".
+        /// </summary>
+        public bool IsSte { get; set; }
+
+        /// <summary>
+        /// For an STE (<see cref="IsSte"/>): true to give an outgoing call the free channel with the highest number, false
+        /// for the lowest. X.75 3.1.4: "The call request packet of one STE will use the logical channel in the ready state
+        /// with the lowest number; the call request packet of the other STE will use the logical channel in the ready
+        /// state with the highest number. Which STE will use the lowest number and which the highest number will be
+        /// agreed bilaterally." So the two ends of a link must be set opposite.
+        /// </summary>
+        public bool SearchFromHighest { get; set; }
+
+        /// <summary>
         /// Lowest logical channel available for switched calls.
         /// </summary>
         public ushort LciBase { get; set; } = 1;
@@ -115,6 +133,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </remarks>
         public void Validate()
         {
+            if (IsSte && IsDte)
+            {
+                throw new ArgumentOutOfRangeException(nameof(IsDte), IsDte,
+                    "an STE (X.75) is not a DTE: set IsDte false on a port between networks");
+            }
+
             if (Modulo != 8)
             {
                 throw new ArgumentOutOfRangeException(nameof(Modulo), Modulo,

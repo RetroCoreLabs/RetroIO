@@ -103,6 +103,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public byte[] OtherFacilities { get; set; } = System.Array.Empty<byte>();
 
         /// <summary>
+        /// The X.75 network utility field (on a port between networks only): for an incoming call what the calling STE
+        /// sent, for an outgoing call first what we send and, once connected, what the called STE answered. Carried, not
+        /// acted on, by this layer.
+        /// </summary>
+        public byte[] NetworkUtilities { get; set; } = System.Array.Empty<byte>();
+
+        /// <summary>
         /// The facility field of the Clear Request / Clear Indication that ended the last call on this channel (X.25 5.2.4.2:
         /// charging information, called line address modified notification and the like); empty when it had none. Kept
         /// after the channel is free so that a switch, told of the clear, can pass the field to the other leg of the call;
