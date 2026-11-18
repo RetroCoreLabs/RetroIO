@@ -510,6 +510,9 @@ namespace RetroIO.Protocols.X25.Runtime
                     _pad = pad;
                     pad.DataReceived += OnPadData;
                     pad.CharacterEcho += OnPadEcho;
+                    // EXIT at the * prompt: the PAD has cleared any call; say goodbye and close this telnet
+                    // connection. The read loop then ends and End gives the PAD back.
+                    pad.ExitRequested += OnPadExit;
 
                     WriteText(Banner);
                     pad.Start();
@@ -556,6 +559,7 @@ namespace RetroIO.Protocols.X25.Runtime
                     // Stop writing to the dead socket first, then clear the call and give the PAD back.
                     pad.DataReceived -= OnPadData;
                     pad.CharacterEcho -= OnPadEcho;
+                    pad.ExitRequested -= OnPadExit;
                     try
                     {
                         pad.Disconnect();
@@ -591,6 +595,12 @@ namespace RetroIO.Protocols.X25.Runtime
             private void OnPadData(object? sender, PadDataEventArgs e)
             {
                 WriteText(e.Data);
+            }
+
+            private void OnPadExit(object? sender, EventArgs e)
+            {
+                WriteText("\r\nDisconnected.\r\n");
+                Close();
             }
 
             private void OnPadEcho(object? sender, PadCharacterEventArgs e)

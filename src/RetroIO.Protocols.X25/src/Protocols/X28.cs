@@ -133,6 +133,11 @@ namespace RetroIO.Protocols.X25.Protocols
             /// Command text "HELP": list the commands.
             /// </summary>
             public const string HELP = "HELP";      // List the commands
+            /// <summary>
+            /// Command text "EXIT": leave the PAD program. Not an X.28 command (a real PAD has no program to leave); the
+            /// PAD clears any call and asks the program that hosts it to end (<c>PadClient.ExitRequested</c>).
+            /// </summary>
+            public const string EXIT = "EXIT";      // Leave the PAD program
         }
 
         // Events for terminal interface - PROPER ARCHITECTURE
@@ -545,6 +550,11 @@ namespace RetroIO.Protocols.X25.Protocols
                 case "?":
                     command.Verb = Commands.HELP;
                     break;
+
+                case "EXIT":
+                case "QUIT":
+                    command.Verb = Commands.EXIT;
+                    break;
             }
 
             return command;
@@ -589,6 +599,8 @@ namespace RetroIO.Protocols.X25.Protocols
                 Commands.INTERRUPT => HandleInterruptCommand(command),
                 Commands.DATA => HandleDataCommand(command),
                 Commands.HELP => HandleHelpCommand(),
+                // Acted on by the PAD (PadClient), which hears the command through CommandReceived.
+                Commands.EXIT => CommandResult.Success,
                 _ => HandleInvalidCommand(command.Verb)
             };
         }
@@ -738,6 +750,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 "  INT              send an interrupt\r\n" +
                 "  DATA             return to the call\r\n" +
                 "  HELP             this list\r\n" +
+                "  EXIT             clear any call and leave the PAD (QUIT)\r\n" +
                 "In a call, press Ctrl+P (the PAD escape, X.3 parameter 1) to get to these commands.\r\n";
             CommandResponse?.Invoke(this, new CommandResponseEventArgs(text, ResponseType.Success));
             return CommandResult.Success;
@@ -945,6 +958,14 @@ namespace RetroIO.Protocols.X25.Protocols
         private char _pendingDeleteLead;
 
         /// <summary>
+        /// BS (0/8). While editing is on, it deletes a character as well as the delete character set in parameter 16.
+        /// X.3 names only one delete character; this is our choice, not the standard (decided 2026-11-18): the
+        /// Backspace key of a Windows console and many terminal programs sends BS, while hosts such as the Altos chat
+        /// set DEL (7/15), so Backspace was sent on as data.
+        /// </summary>
+        private const char BackspaceDelete = (char)0x08;
+
+        /// <summary>
         /// One character from the terminal in the data transfer state (X.28 (12/97) clause 4): PAD recall, the editing
         /// functions of 3.6 when parameter 15 is 1 (4.17), echo (4.10, X.3 3.2 and 3.20), data forwarding (4.4, X.3 3.3,
         /// 3.15) and linefeed insertion (X.3 3.13).
@@ -984,13 +1005,20 @@ namespace RetroIO.Protocols.X25.Protocols
                         TakeDataCharacter(held, editing);
                     }
 
+                    if (c == BackspaceDelete)
+                    {
+                        EchoTyped(c, true);
+                        HandleCharacterDelete();
+                        return true;
+                    }
+
                     if (c == lead)
                     {
                         _pendingDeleteLead = c;
                         return true;
                     }
                 }
-                else if (c == deleteValue)
+                else if (c == deleteValue || c == BackspaceDelete)
                 {
                     // X.28 3.6.2.1. The character itself is echoed unless parameter 20 masks it (4.10).
                     EchoTyped(c, true);

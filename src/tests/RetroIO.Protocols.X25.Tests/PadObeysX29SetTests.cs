@@ -56,7 +56,9 @@ namespace RetroIO.Protocols.X25.Tests
                 Forwarded.Add(Encoding.ASCII.GetString(data, 0, length));
             }
 
-            public void ClearCall(ushort lcn, byte cause, byte diagnostic) { }
+            public readonly List<ushort> Cleared = new List<ushort>();
+
+            public void ClearCall(ushort lcn, byte cause, byte diagnostic) { Cleared.Add(lcn); }
         }
 
         /// <summary>One PAD in a call, with everything its terminal is shown in one string.</summary>
@@ -170,6 +172,43 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(rig.Transport.Forwarded, Is.EqualTo(new[] { "hello\r" }), "the host must get the edited line once");
             Assert.That(Show(rig.Screen), Is.EqualTo(Show("helo" + Del + "\b \blo\r\n")));
+        }
+
+        /// <summary>
+        /// The Backspace key of a Windows console sends BS, not the DEL the chat sets as the delete character. BS deletes
+        /// too (our choice, not X.3): ".n du", Backspace, "ude" names you "dude", and the screen rubs the character out.
+        /// </summary>
+        [Test]
+        public void Backspace_DeletesLikeTheDeleteCharacter()
+        {
+            using Rig rig = new Rig();
+            rig.Host(ChatProtocolService.SetPadMessage);
+            rig.Type(".n du\bude\r");
+
+            Assert.That(rig.Transport.Forwarded, Is.EqualTo(new[] { ".n dude\r" }));
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show(".n du\b\b \bude\r\n")));
+        }
+
+        /// <summary>
+        /// EXIT at the * prompt during a call: the PAD clears the call first, then asks its program to end.
+        /// </summary>
+        [Test]
+        public void Exit_ClearsTheCall_ThenAsksToEnd()
+        {
+            using Rig rig = new Rig();
+            int exits = 0;
+            int clearsWhenExitCame = -1;
+            rig.Pad.ExitRequested += (s, e) =>
+            {
+                exits++;
+                clearsWhenExitCame = rig.Transport.Cleared.Count;
+            };
+
+            rig.Type("\x10" + "EXIT\r"); // Ctrl+P, the PAD escape (X.3 parameter 1), then the command
+
+            Assert.That(rig.Transport.Cleared, Is.EqualTo(new ushort[] { Lcn }), "the call must be cleared");
+            Assert.That(exits, Is.EqualTo(1));
+            Assert.That(clearsWhenExitCame, Is.EqualTo(1), "the clear must go out before the program is asked to end");
         }
 
         /// <summary>
