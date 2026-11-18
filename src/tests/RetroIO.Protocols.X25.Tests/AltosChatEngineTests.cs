@@ -565,13 +565,30 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(Seen(1) + Seen(2), Is.EqualTo(""));
         }
 
-        [Test]
-        public void T12c_Whisper_NoNumberIsSlot0_AndToYourself()
+        /// <summary>
+        /// Not 1987 (decided 2026-11-18): in the original, "!name" read as place 0 (atol of a name is 0), so the whisper
+        /// went to whoever sat at place 0. Now the sender is told to use the number and nothing is sent.
+        /// </summary>
+        [TestCase("!hi")]
+        [TestCase("!alice psst")]
+        [TestCase("! alice")]
+        [TestCase("!")]
+        public void T12c_Whisper_WithoutANumber_WarnsTheSender_AndSendsNothing(string cmd)
         {
             JoinAs(1, "alice");
             JoinAs(2, "bob");
-            Type(2, "!hi");
-            Assert.That(Seen(1), Is.EqualTo("bob whispers: !hi\r\n"));
+            Type(2, cmd);
+            Assert.That(Seen(2), Is.EqualTo(AltosChatEngine.WhisperNeedsNumber.Replace("\n", "\r\n")));
+            Assert.That(Seen(1), Is.EqualTo(""));
+        }
+
+        [Test]
+        public void T12d_Whisper_ANumberAfterSpaces_StillWorks()
+        {
+            JoinAs(1, "alice");
+            JoinAs(2, "bob");
+            Type(2, "! 0 hi");
+            Assert.That(Seen(1), Is.EqualTo("bob whispers: ! 0 hi\r\n"));
             _out.Reset();
             Type(2, "!1 me");
             Assert.That(Seen(2), Is.EqualTo("bob whispers: !1 me\r\n"));

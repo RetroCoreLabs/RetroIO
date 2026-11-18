@@ -331,6 +331,13 @@ function serverText(i, line) {
 
     if (startsWith(line, '!')) {
         // serv.c:368-376: to place N on any channel, the whole line quoted; a bad place is silent.
+        // Not 1987 (decided 2026-11-18): no number after '!' made atol give 0, so "!name text" went to place 0,
+        // often the sender. Now the sender is told and nothing is sent. Same text as AltosChatEngine.
+        if (!startsWithNumber(line.substring(1))) {
+            writeMsg(i, ALL_CHANNELS, 'Whisper with the user number from .s: !# text\n');
+            return;
+        }
+
         var target = atol(line.substring(1));
         var w = me.nickname + ' whispers: ' + text + '\n';
         toLog('[' + i + ':' + me.channel + ']' + w.substring(0, w.length - 1));
@@ -525,6 +532,20 @@ function ctime(t) {
 
 function two(v) {
     return v < 10 ? '0' + v : String(v);
+}
+
+// True when atol would read a number: spaces, at most one sign, then a digit.
+function startsWithNumber(s) {
+    var p = 0;
+    while (p < s.length && s.charAt(p) === ' ') {
+        p++;
+    }
+
+    if (p < s.length && (s.charAt(p) === '-' || s.charAt(p) === '+')) {
+        p++;
+    }
+
+    return p < s.length && s.charAt(p) >= '0' && s.charAt(p) <= '9';
 }
 
 // atol() of the 1987 C library: spaces skipped, one sign, digits in a 32-bit long that wraps.
