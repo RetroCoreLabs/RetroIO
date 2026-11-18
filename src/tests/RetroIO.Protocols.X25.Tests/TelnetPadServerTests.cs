@@ -475,6 +475,29 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(t.WaitFor("COM", 5000, mark), Is.True, "second call failed: " + t.Visible.Substring(mark));
         }
 
+        /// <summary>
+        /// EXIT at the prompt during a call clears the call, says "Disconnected." and closes the telnet connection.
+        /// </summary>
+        [Test]
+        public void Exit_ClearsTheCall_AndClosesTheTelnetConnection()
+        {
+            ProtocolRuntime rt = StartRuntime();
+            TelnetTestTerminal t = Connect(rt);
+            Assert.That(t.WaitFor("PAD> "), Is.True);
+            t.TypeLine("CALL " + LocalAddress);
+            Assert.That(t.WaitFor("COM"), Is.True);
+            Assert.That(WaitUntil(() => rt.GetLocalTadProtocol().GetActiveSessions().Length > 0), Is.True);
+
+            int mark = t.Visible.Length;
+            t.Send(0x10);
+            t.TypeLine("EXIT");
+
+            Assert.That(t.WaitFor("Disconnected.", 5000, mark), Is.True, "no goodbye: " + t.Visible.Substring(mark));
+            Assert.That(t.WaitForClose(), Is.True, "the telnet connection was not closed");
+            Assert.That(WaitUntil(() => rt.GetLocalTadProtocol().GetActiveSessions().Length == 0), Is.True, "the call was not cleared");
+            Assert.That(WaitUntil(() => rt.TelnetPadStatus.Sessions == 0), Is.True, "the session was not freed");
+        }
+
         [Test]
         public void ClosingTheSocket_ClearsTheCall_AndFreesTheSession()
         {
@@ -559,7 +582,9 @@ namespace RetroIO.Protocols.X25.Tests
             // Closing A ends only A's call.
             a.Dispose();
             Assert.That(WaitUntil(() => rt.GetLocalTadProtocol().GetActiveSessions().Length == 1), Is.True);
-            Assert.That(rt.TelnetPadStatus.Sessions, Is.EqualTo(1));
+            // A session ends in this order: the call is cleared, then the session is counted as gone
+            // (TelnetPadServer End). So the count is waited for too; reading it at once failed now and then.
+            Assert.That(WaitUntil(() => rt.TelnetPadStatus.Sessions == 1), Is.True, "A's session was not freed");
         }
 
         [Test]

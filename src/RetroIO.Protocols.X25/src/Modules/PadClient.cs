@@ -77,6 +77,12 @@ namespace RetroIO.Protocols.X25.Modules
         /// Raised when the connection state changes.
         /// </summary>
         public event EventHandler<PadConnectionEventArgs>? ConnectionStateChanged;
+
+        /// <summary>
+        /// Raised when the user types EXIT (or QUIT) at the <c>*</c> prompt, after any call has been cleared. The program
+        /// hosting the PAD ends the session (x25pad ends; a telnet PAD closes that user's connection).
+        /// </summary>
+        public event EventHandler? ExitRequested;
         /// <summary>
         /// Raised when text arrives for the terminal, including the prompt and echo.
         /// </summary>
@@ -1069,7 +1075,15 @@ namespace RetroIO.Protocols.X25.Modules
                     case "PAR":
                         ProcessParameterCommand(command);
                         break;
-                        
+
+                    case X28.Commands.EXIT:
+                        // Clear a call first, so the far end hears a clear and not a dropped line (does nothing
+                        // when there is no call).
+                        ClearCallFromTerminal();
+
+                        ExitRequested?.Invoke(this, EventArgs.Empty);
+                        break;
+
                     default:
                         _logger.LogWarning("Unknown X.28 command: {Command}", command.Verb);
                         break;
