@@ -18,18 +18,27 @@ namespace RetroIO.Protocols.X25.Transport
     /// XOT Client transport interface for outbound X.25 over TCP connections
     /// Implements RFC 1613 (X.25 over TCP) for outbound call placement
     /// </summary>
+    /// <remarks>
+    /// RFC 1613 section 5: "A separate TCP connection MUST be used for each X.25 virtual circuit." Every call this
+    /// transport carries gets a TCP connection of its own (an <see cref="XotClientCircuit"/>, returned by
+    /// <see cref="ConnectToXotGateway"/>), packets are sent on that connection only, and the connection is closed when
+    /// its call ends (a Clear Confirmation crosses it, either way). A closed connection is never used again. Until
+    /// 2026-11-18 this transport kept ONE connection per peer address, put every call on it and kept it after the calls
+    /// ended (the same fault the switch port and the client had, fixed in RetroIO 9f755dd); the real Cisco router clears
+    /// the first call when a second Call Request arrives on a connection that carries one (cause 19, diagnostic 23).
+    /// </remarks>
     public class XotClientTransport : ITransportInterface
     {
         private readonly ILogger _logger;
         private readonly XotClientConfig _config;
         private XotInterfaceConfig? _interfaceConfig;
         private readonly object _connectionLock = new object();
-        private readonly object _connectGate = new object();
-        private readonly ManualResetEvent _restartConfirmReceived = new ManualResetEvent(false);
-        private readonly ManualResetEvent _switchRestartSettled = new ManualResetEvent(false);
         private TransportStatus _status = TransportStatus.Stopped;
         private readonly TransportStatistics _statistics;
-        private readonly Dictionary<string, XotConnection> _connections = new Dictionary<string, XotConnection>();
+
+        // Every open connection, one per circuit, guarded by _connectionLock. A list, not a table keyed by address: two
+        // circuits to one peer are two entries.
+        private readonly List<XotClientCircuit> _connections = new List<XotClientCircuit>();
 
         /// <summary>
         /// Creates the XOT client transport in the stopped state.
@@ -94,19 +103,28 @@ namespace RetroIO.Protocols.X25.Transport
         public TransportStatus Status => _status;
 
         /// <summary>
-        /// Installed by the runtime: places the call through this connection's X.25 engine once the
-        /// TCP connection is up. The transport no longer builds packets or waits for a Restart
-        /// Confirmation itself - the engine does both (X.25 4.1.1: no call set-up in r2).
+        /// Installed by the user of the transport: places the call through an X.25 engine on the new TCP connection
+        /// <see cref="PlaceCall"/> opened for it (one connection per circuit, RFC 1613 section 5). The transport does not
+        /// build packets or wait for a Restart Confirmation itself - the engine does both (X.25 4.1.1: no call set-up in
+        /// r2). The engine sends with <see cref="SendX25Packet(XotClientCircuit, byte[])"/> on that connection.
         /// </summary>
-        public Func<XotClientTransport, X25CallRequest, bool>? PacketLayerPlaceCall { get; set; }
+        public Func<XotClientTransport, XotClientCircuit, X25CallRequest, bool>? PacketLayerPlaceCall { get; set; }
 
         /// <summary>
-        /// Writes one complete X.25 packet to this transport's connection.
+        /// Not usable on this transport, and it says so: a packet belongs to one circuit, and every circuit has its own
+        /// TCP connection (RFC 1613 section 5), so a packet with no connection named has nowhere to go. Use
+        /// <see cref="SendX25Packet(XotClientCircuit, byte[])"/>.
         /// </summary>
+        /// <param name="x25Packet">
+        /// The packet, which is not sent.
+        /// </param>
+        /// <returns>
+        /// Always false.
+        /// </returns>
         public bool SendPacket(byte[] x25Packet)
         {
-            string? ip = _interfaceConfig?.RemoteIPAddress;
-            return ip != null && SendX25Packet(ip, x25Packet);
+            _logger.LogError("XOT client transport {Name}: a packet was sent with no connection named; each circuit has its own connection (RFC 1613 section 5), so it is not sent", Name);
+            return false;
         }
 
         /// <summary>
@@ -142,22 +160,27 @@ namespace RetroIO.Protocols.X25.Transport
 
                 _statistics.OutboundCallsAttempted++;
 
-                // Step 1: Establish TCP connection (reuses existing if already connected)
-                var connected = ConnectToXotGateway(remoteIP, remotePort);
-                if (!connected)
-                {
-                    _logger.LogError("Failed to connect to XOT gateway {RemoteIP}:{RemotePort}", remoteIP, remotePort);
-                    return false;
-                }
-
-                // Step 2: Send X.25 Restart Request and wait for Confirm
                 if (PacketLayerPlaceCall == null)
                 {
                     _logger.LogError("XOT client transport {Name}: no packet layer installed to place the call", Name);
                     return false;
                 }
 
-                var sent = PacketLayerPlaceCall(this, callRequest);
+                // Step 1: a new TCP connection for this call (RFC 1613 section 5), never one another call has used.
+                XotClientCircuit? circuit = ConnectToXotGateway(remoteIP, remotePort);
+                if (circuit == null)
+                {
+                    _logger.LogError("Failed to connect to XOT gateway {RemoteIP}:{RemotePort}", remoteIP, remotePort);
+                    return false;
+                }
+
+                // Step 2: the engine restarts the packet layer on that connection and sends the Call Request.
+                var sent = PacketLayerPlaceCall(this, circuit, callRequest);
+                if (!sent)
+                {
+                    // The call never started, so its connection has no call to carry.
+                    CloseCircuit(circuit);
+                }
                 if (sent)
                 {
                     _statistics.OutboundCallsSucceeded++;
@@ -261,14 +284,18 @@ namespace RetroIO.Protocols.X25.Transport
 
                 _logger.LogInformation("Stopping XOT client transport {Name}", Name);
 
-                // Close all active connections
+                // Close every connection, one per circuit. Taken out of the list first, so the close events they raise
+                // find nothing to remove and are not counted as the peer dropping them.
+                XotClientCircuit[] open;
                 lock (_connectionLock)
                 {
-                    foreach (var connection in _connections.Values)
-                    {
-                        connection.Close();
-                    }
+                    open = _connections.ToArray();
                     _connections.Clear();
+                }
+
+                for (int i = 0; i < open.Length; i++)
+                {
+                    open[i].Close();
                 }
 
                 SetStatus(TransportStatus.Stopped, "XOT client transport stopped");
@@ -291,7 +318,11 @@ namespace RetroIO.Protocols.X25.Transport
         public TransportStatistics GetStatistics()
         {
             _statistics.CurrentStatus = _status;
-            _statistics.ActiveConnections = _connections.Count;
+            lock (_connectionLock)
+            {
+                _statistics.ActiveConnections = _connections.Count;
+            }
+
             return _statistics;
         }
 
@@ -333,75 +364,54 @@ namespace RetroIO.Protocols.X25.Transport
         #region XOT-Specific Methods
 
         /// <summary>
-        /// Establish XOT connection to specified IP address
-        /// This is called by the routing system with destination from route
+        /// Opens a NEW TCP connection to an XOT gateway for one circuit (RFC 1613 section 5: a separate TCP connection
+        /// for each X.25 virtual circuit). Every call gives a connection of its own, also to a peer that already has one;
+        /// nothing is shared or reused.
         /// </summary>
-        public bool ConnectToXotGateway(string ipAddress, int port = 1998)
-        {
-            lock (_connectionLock)
-            {
-                if (_connections.ContainsKey(ipAddress))
-                {
-                    _logger.LogDebug("XOT connection to {IpAddress} already exists", ipAddress);
-                    return true;
-                }
-            }
-
-            // Only one thread connects at a time. Without this gate, calls placed at the same moment each saw "no
-            // connection yet", each opened a TCP connection, and the last one replaced the others in the table: the
-            // replaced connections stayed open for ever, outside the table, so Stop() could not close them
-            // (found against the real router R1, 2026-11-13). The thread that waits here finds the connection the
-            // first thread made.
-            lock (_connectGate)
-            {
-                lock (_connectionLock)
-                {
-                    if (_connections.ContainsKey(ipAddress))
-                    {
-                        _logger.LogDebug("XOT connection to {IpAddress} already exists", ipAddress);
-                        return true;
-                    }
-                }
-
-                return ConnectLocked(ipAddress, port);
-            }
-        }
-
-        private bool ConnectLocked(string ipAddress, int port)
+        /// <param name="ipAddress">
+        /// The gateway's address.
+        /// </param>
+        /// <param name="port">
+        /// The gateway's XOT port (1998 is the port RFC 1613 names).
+        /// </param>
+        /// <returns>
+        /// The connection for the circuit, or null when it could not be opened (counted, with the reason, in the
+        /// statistics). There is no automatic retry: the next try is made by the next call.
+        /// </returns>
+        public XotClientCircuit? ConnectToXotGateway(string ipAddress, int port = 1998)
         {
             try
             {
-                // A client link opens its TCP connection only when a call needs it, and does not retry by
-                // itself: after a failure the next attempt is made by the next call.
-                _logger.LogInformation("XOT client {Name}: opening TCP connection to {IpAddress}:{Port} (a call needs it)", Name, ipAddress, port);
+                _logger.LogInformation("XOT client {Name}: opening a TCP connection to {IpAddress}:{Port} for one circuit", Name, ipAddress, port);
 
-                var connection = new XotConnection(_logger, ipAddress, port);
-
-                // Subscribe to events
+                var connection = new XotClientCircuit(_logger, ipAddress, port);
                 connection.DataReceived += OnConnectionDataReceived;
                 connection.ConnectionClosed += OnConnectionClosed;
 
-                var success = connection.Connect(_config.ConnectTimeout);
-
-                if (success)
+                // Added to the list before it is connected, so a peer that closes it at once is still found and
+                // counted, and Stop() can close a connection whose connect is still under way.
+                lock (_connectionLock)
                 {
-                    lock (_connectionLock)
-                    {
-                        _connections[ipAddress] = connection;
-                    }
-                    
+                    _connections.Add(connection);
+                }
+
+                if (connection.Connect(_config.ConnectTimeout))
+                {
                     _statistics.LastConnectedUtc = DateTime.UtcNow;
                     _logger.LogInformation("XOT client {Name}: TCP connection to {IpAddress}:{Port} is up", Name, ipAddress, port);
-                    return true;
+                    return connection;
                 }
-                else
+
+                lock (_connectionLock)
                 {
-                    _statistics.ConnectionErrors++;
-                    _statistics.LastError = connection.LastError.Length > 0 ? connection.LastError : "could not connect";
-                    _statistics.LastFailureUtc = DateTime.UtcNow;
-                    _logger.LogWarning("XOT client {Name}: could not connect to {IpAddress}:{Port}: {Reason}. No automatic retry: the next try is made when the next call needs this link", Name, ipAddress, port, _statistics.LastError);
-                    return false;
+                    _connections.Remove(connection);
                 }
+
+                _statistics.ConnectionErrors++;
+                _statistics.LastError = connection.LastError.Length > 0 ? connection.LastError : "could not connect";
+                _statistics.LastFailureUtc = DateTime.UtcNow;
+                _logger.LogWarning("XOT client {Name}: could not connect to {IpAddress}:{Port}: {Reason}. No automatic retry: the next try is made when the next call needs this link", Name, ipAddress, port, _statistics.LastError);
+                return null;
             }
             catch (Exception ex)
             {
@@ -409,39 +419,90 @@ namespace RetroIO.Protocols.X25.Transport
                 _statistics.LastError = ex.Message;
                 _statistics.LastFailureUtc = DateTime.UtcNow;
                 _logger.LogError(ex, "Error connecting to XOT gateway {IpAddress}", ipAddress);
-                return false;
+                return null;
             }
         }
 
         /// <summary>
-        /// Send X.25 packet over XOT connection
+        /// Sends one X.25 packet on the connection of its circuit. When the packet is a Clear Confirmation the call has
+        /// ended, and the connection is closed after the packet has gone (RFC 1613 section 5: the connection belongs to
+        /// the one circuit).
         /// </summary>
-        public bool SendX25Packet(string destinationIp, byte[] x25Packet)
+        /// <param name="circuit">
+        /// The circuit's connection, from <see cref="ConnectToXotGateway"/>.
+        /// </param>
+        /// <param name="x25Packet">
+        /// The complete X.25 packet.
+        /// </param>
+        /// <returns>
+        /// True when the packet was written; false when the connection is closed or the write failed.
+        /// </returns>
+        public bool SendX25Packet(XotClientCircuit circuit, byte[] x25Packet)
         {
-            XotConnection? connection;
+            ArgumentNullException.ThrowIfNull(circuit);
+            ArgumentNullException.ThrowIfNull(x25Packet);
+
+            bool known;
             lock (_connectionLock)
             {
-                if (!_connections.TryGetValue(destinationIp, out connection))
-                {
-                    _logger.LogError("No XOT connection to {DestinationIp}", destinationIp);
-                    return false;
-                }
+                known = _connections.Contains(circuit);
             }
 
+            if (!known)
+            {
+                _logger.LogError("XOT client {Name}: the connection to {Address} is closed; its call has ended or it was dropped, and it is never used again", Name, circuit.RemoteAddress);
+                return false;
+            }
+
+            bool success;
             try
             {
-                var success = connection.SendPacket(x25Packet);
-                if (success)
-                {
-                    _statistics.BytesTransmitted += x25Packet.Length;
-                }
-                return success;
+                success = circuit.SendPacket(x25Packet);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending X.25 packet over XOT to {DestinationIp}", destinationIp);
+                _logger.LogError(ex, "Error sending X.25 packet over XOT to {DestinationIp}", circuit.RemoteAddress);
                 return false;
             }
+
+            if (success)
+            {
+                _statistics.BytesTransmitted += x25Packet.Length;
+                if (IsClearConfirmation(x25Packet, x25Packet.Length))
+                {
+                    _logger.LogInformation("XOT client {Name}: the call on the connection to {Address} has ended (Clear Confirmation sent); closing it", Name, circuit.RemoteAddress);
+                    CloseCircuit(circuit);
+                }
+            }
+
+            return success;
+        }
+
+        /// <summary>
+        /// Closes one circuit's connection, for example when the call was never placed. It is not counted as the peer
+        /// dropping it.
+        /// </summary>
+        /// <param name="circuit">
+        /// The circuit's connection.
+        /// </param>
+        public void CloseCircuit(XotClientCircuit circuit)
+        {
+            ArgumentNullException.ThrowIfNull(circuit);
+            lock (_connectionLock)
+            {
+                _connections.Remove(circuit);
+            }
+
+            circuit.Close();
+        }
+
+        /// <summary>
+        /// True when the packet is a Clear Confirmation (X.25 Table 5-1: packet type identifier 00010111), the last packet
+        /// of a call in either direction.
+        /// </summary>
+        private static bool IsClearConfirmation(byte[] packet, int length)
+        {
+            return length >= 3 && packet[2] == 0x17;
         }
 
         #endregion
@@ -473,36 +534,37 @@ namespace RetroIO.Protocols.X25.Transport
         {
             // Update statistics
             _statistics.BytesReceived += e.Length;
+            XotClientCircuit? circuit = sender as XotClientCircuit;
 
-            if (e.Data != null && e.Data.Length >= 3)
+            if (circuit != null && e.Data != null && e.Data.Length >= 3)
             {
                 byte pti = e.Data[2];
 
-                // Handle Restart Confirm (0xFF)
-                if (pti == 0xFF)
+                // Handle incoming Restart Request (0xFB) - send back Restart Confirm, on the connection it came in on
+                // (the restart is of that circuit's packet layer only: every circuit has its own connection).
+                if (pti == 0xFB)
                 {
-                    _restartConfirmReceived.Set();
-                }
-                // Handle incoming Restart Request (0xFB) — send back Restart Confirm
-                else if (pti == 0xFB)
-                {
-                    var remoteIP = _interfaceConfig?.RemoteIPAddress;
-                    if (!string.IsNullOrEmpty(remoteIP))
-                    {
-                        var restartConfirm = new byte[] { 0x10, 0x00, 0xFF };
-                        SendX25Packet(remoteIP, restartConfirm);
-                        _switchRestartSettled.Set();
-                        _logger.LogDebug("Sent Restart Confirm in response to switch Restart Request");
-                    }
+                    var restartConfirm = new byte[] { 0x10, 0x00, 0xFF };
+                    SendX25Packet(circuit, restartConfirm);
+                    _logger.LogDebug("Sent Restart Confirm in response to switch Restart Request");
                 }
             }
 
-            // Set transport reference and forward to external subscribers
+            // Set transport reference and the connection (the circuit) and forward to external subscribers
             e.Transport = this;
+            e.Connection = circuit;
             DataReceived?.Invoke(this, e);
 
             if (_logger.IsEnabled(LogLevel.Trace))
                 _logger.LogTrace("XOT client {Name} received {Length} bytes", Name, e.Length);
+
+            // A Clear Confirmation from the peer ends the call this connection was opened for: close it, after the
+            // subscribers have seen the packet. It is never used for another call (RFC 1613 section 5).
+            if (circuit != null && e.Data != null && IsClearConfirmation(e.Data, e.Length))
+            {
+                _logger.LogInformation("XOT client {Name}: the call on the connection to {Address} has ended (Clear Confirmation received); closing it", Name, circuit.RemoteAddress);
+                CloseCircuit(circuit);
+            }
         }
 
         /// <summary>
@@ -510,9 +572,12 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         private void OnConnectionClosed(object? sender, string remoteAddress)
         {
+            XotClientCircuit? circuit = sender as XotClientCircuit;
             lock (_connectionLock)
             {
-                if (_connections.Remove(remoteAddress))
+                // Only a connection still in the list was closed from outside; one this transport closed itself (its
+                // call ended, or Stop) was taken out first.
+                if (circuit != null && _connections.Remove(circuit))
                 {
                     // Closed while the transport is running: the peer or the network ended it.
                     if (_status == TransportStatus.Active || _status == TransportStatus.Connected)
@@ -568,9 +633,11 @@ namespace RetroIO.Protocols.X25.Transport
     }
 
     /// <summary>
-    /// Represents a single XOT TCP connection to a remote gateway
+    /// One XOT TCP connection to a remote gateway, made by <see cref="XotClientTransport.ConnectToXotGateway"/> for ONE
+    /// circuit (RFC 1613 section 5). Packets go through <see cref="XotClientTransport.SendX25Packet(XotClientCircuit, byte[])"/>;
+    /// it is closed when its call ends and never used again.
     /// </summary>
-    internal class XotConnection
+    public sealed class XotClientCircuit
     {
         private readonly ILogger _logger;
         private readonly string _remoteAddress;
@@ -589,10 +656,10 @@ namespace RetroIO.Protocols.X25.Transport
         /// </remarks>
         private readonly object _sendLock = new object();
 
-        public event EventHandler<TransportDataEventArgs>? DataReceived;
-        public event EventHandler<string>? ConnectionClosed;
+        internal event EventHandler<TransportDataEventArgs>? DataReceived;
+        internal event EventHandler<string>? ConnectionClosed;
 
-        public XotConnection(ILogger logger, string remoteAddress, int remotePort)
+        internal XotClientCircuit(ILogger logger, string remoteAddress, int remotePort)
         {
             _logger = logger;
             _remoteAddress = remoteAddress;
@@ -600,11 +667,21 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
+        /// Gets the gateway's address.
+        /// </summary>
+        public string RemoteAddress => _remoteAddress;
+
+        /// <summary>
+        /// Gets the gateway's XOT port.
+        /// </summary>
+        public int RemotePort => _remotePort;
+
+        /// <summary>
         /// Gets the reason the last <see cref="Connect"/> failed, in words; empty if it has not failed.
         /// </summary>
         public string LastError { get; private set; } = string.Empty;
 
-        public bool Connect(int timeoutMs)
+        internal bool Connect(int timeoutMs)
         {
             try
             {
@@ -643,7 +720,7 @@ namespace RetroIO.Protocols.X25.Transport
             }
         }
 
-        public bool SendPacket(byte[] x25Packet)
+        internal bool SendPacket(byte[] x25Packet)
         {
             if (_stream == null || !_tcpClient?.Connected == true)
             {
@@ -782,7 +859,7 @@ namespace RetroIO.Protocols.X25.Transport
             return buffer;
         }
 
-        public void Close()
+        internal void Close()
         {
             try
             {

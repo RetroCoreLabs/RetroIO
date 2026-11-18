@@ -119,7 +119,7 @@ namespace RetroIO.Protocols.X25.Tests
             XotClientTransport transport = new XotClientTransport(NullLogger.Instance, new XotClientConfig { Name = "xotc", ConnectTimeout = 2000 });
             Assert.That(transport.Start(), Is.True);
 
-            Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.False, "nobody listens");
+            Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.Null, "nobody listens");
             TransportStatistics failed = transport.GetStatistics();
             Assert.That(failed.ConnectionErrors, Is.EqualTo(1));
             Assert.That(failed.LastError, Is.Not.Empty);
@@ -131,7 +131,7 @@ namespace RetroIO.Protocols.X25.Tests
             peer.Start();
             try
             {
-                Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.True);
+                Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.Not.Null);
                 TransportStatistics up = transport.GetStatistics();
                 Assert.That(up.LastConnectedUtc, Is.Not.Null);
                 Assert.That(up.ActiveConnections, Is.EqualTo(1));
@@ -154,12 +154,14 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
-        /// Several calls placed at the same moment must share the ONE connection a client link keeps per peer address: no connection
-        /// may be opened and then forgotten. Found 2026-11-13 against the real router R1: two calls at once opened two TCP connections,
-        /// the second replaced the first in the table, and the first stayed open after the transport was stopped.
+        /// Several circuits opened at the same moment to one peer each get a TCP connection of their own (RFC 1613 section 5:
+        /// "A separate TCP connection MUST be used for each X.25 virtual circuit"), and none may be opened and then forgotten:
+        /// Stop closes every one. Found 2026-11-13 against the real router R1: two calls at once opened two TCP connections,
+        /// the second replaced the first in a per-address table, and the first stayed open after the transport was stopped.
+        /// Until 2026-11-18 the fix for that was one shared connection per peer address, which RFC 1613 forbids.
         /// </summary>
         [Test]
-        public void ClientTransport_ConnectsFromSeveralThreadsAtOnce_KeepsOneConnection_AndStopClosesIt()
+        public void ClientTransport_ConnectsFromSeveralThreadsAtOnce_OneConnectionEach_AndStopClosesThemAll()
         {
             int port = FreePort();
             XotClientTransport transport = new XotClientTransport(NullLogger.Instance, new XotClientConfig { Name = "xotc", ConnectTimeout = 2000 });
@@ -177,7 +179,7 @@ namespace RetroIO.Protocols.X25.Tests
                     threads[i] = new Thread(() =>
                     {
                         start.SignalAndWait();
-                        Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.True);
+                        Assert.That(transport.ConnectToXotGateway("127.0.0.1", port), Is.Not.Null);
                     });
                     threads[i].Start();
                 }
@@ -193,8 +195,8 @@ namespace RetroIO.Protocols.X25.Tests
                     accepted.Add(peer.AcceptTcpClient());
                 }
 
-                Assert.That(accepted.Count, Is.EqualTo(1), "TCP connections the peer saw");
-                Assert.That(transport.GetStatistics().ActiveConnections, Is.EqualTo(1));
+                Assert.That(accepted.Count, Is.EqualTo(Threads), "TCP connections the peer saw: one per circuit");
+                Assert.That(transport.GetStatistics().ActiveConnections, Is.EqualTo(Threads));
 
                 transport.Stop();
                 for (int i = 0; i < accepted.Count; i++)
