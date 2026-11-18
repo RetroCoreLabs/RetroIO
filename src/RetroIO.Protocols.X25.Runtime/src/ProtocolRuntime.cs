@@ -3265,6 +3265,13 @@ namespace RetroIO.Protocols.X25.Runtime
         {
             lock (_routingLock)
             {
+                // The service that took the call on this channel, when one did (the routing layer binds it when a module's
+                // call goes to a local service). Until 2026-11-18 a PAD's data always went to the TAD below.
+                if (_lcnServiceBindings.TryGetValue(lcn, out var bound))
+                {
+                    return bound;
+                }
+
                 // Check if we have a module bound to this LCN
                 if (!_lcnBindings.TryGetValue(lcn, out var module))
                 {

@@ -55,13 +55,13 @@ namespace RetroIO.Protocols.X25.Tests
 
         /// <summary>
         /// Test 21 of the plan: the X.29 set PAD message, byte for byte. Octet 1 0x02 (X.29 Table 2, set); then the
-        /// parameter pairs 2=1 echo, 3=2 forward on CR, 15=1 editing (X.3 3.2, 3.3, 3.15), 16=127 DEL, 17=24 CAN,
+        /// parameter pairs 2=1 echo, 3=2 forward on CR, 13=4 LF after CR in the echo, 15=1 editing (X.3 3.2, 3.3, 3.13, 3.15), 16=127 DEL, 17=24 CAN,
         /// 18=18 DC2 (X.3 3.16-3.18 with the values of X.28 Table 1).
         /// </summary>
         [Test]
         public void TheSetPadMessage_IsExactlyTheseOctets()
         {
-            Assert.That(ChatProtocolService.SetPadMessage, Is.EqualTo(new byte[] { 0x02, 0x02, 0x01, 0x03, 0x02, 0x0F, 0x01, 0x10, 0x7F, 0x11, 0x18, 0x12, 0x12 }));
+            Assert.That(ChatProtocolService.SetPadMessage, Is.EqualTo(new byte[] { 0x02, 0x02, 0x01, 0x03, 0x02, 0x0D, 0x04, 0x0F, 0x01, 0x10, 0x7F, 0x11, 0x18, 0x12, 0x12 }));
         }
 
         /// <summary>

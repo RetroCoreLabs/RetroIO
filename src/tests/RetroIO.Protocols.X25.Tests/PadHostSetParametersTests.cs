@@ -176,8 +176,10 @@ namespace RetroIO.Protocols.X25.Tests
             PadClient pad = new PadClient(NullLogger.Instance, transport);
             pad.NotifyCallAccepted(5);
 
-            // READ PARAMETERS for 2 and 3 (X.29 type 4).
-            pad.DeliverData(5, new byte[] { 0x04, 2, 3 }, true);
+            // READ PARAMETERS for 2 and 3 (X.29 type 4). A read carries reference and value pairs like a set, "Value
+            // fields in read PAD messages are coded as all binary 0s" (X.29 (12/97) 4.4.5.3). Until 2026-11-18 this test
+            // sent bare references (04 02 03), which X.29 reads as parameter 2 with the value 3.
+            pad.DeliverData(5, new byte[] { 0x04, 2, 0, 3, 0 }, true);
             Assert.That(transport.Sent.Count, Is.EqualTo(1), "no answer to READ PARAMETERS");
             Assert.That(transport.Sent[0].Q, Is.True, "the answer must be a control message (Q bit)");
             Assert.That(transport.Sent[0].Data, Is.EqualTo(new byte[] { 0x00, 2, pad.GetParameter(2), 3, pad.GetParameter(3) }));

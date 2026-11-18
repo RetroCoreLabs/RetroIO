@@ -653,6 +653,259 @@ namespace RetroIO.Protocols.X25.Protocols
             return CreateParameterIndication(responseParams);
         }
 
+        /// <summary>
+        /// The codes of octet 2 of an error PAD message, X.29 (12/97) Table 4. The <see cref="X29ErrorCode"/> enum does
+        /// NOT hold these values (its 0x01 "parameter unavailable" and the rest are not in Table 4), so a PAD answering a
+        /// host uses these.
+        /// </summary>
+        public static class ErrorType
+        {
+            /// <summary>Table 4 case a: "Received PAD message contained less than eight bits", 00000000.</summary>
+            public const byte LessThanEightBits = 0x00;
+
+            /// <summary>Table 4 case b: "Unrecognized message code in received PAD message", 00000010.</summary>
+            public const byte UnrecognizedMessageCode = 0x02;
+
+            /// <summary>Table 4 case c: "Parameter field format of received PAD message was incorrect or incompatible with
+            /// message code", 00000100.</summary>
+            public const byte ParameterFieldFormat = 0x04;
+
+            /// <summary>Table 4 case d: "Received PAD message did not contain an integral number of octets", 00000110.</summary>
+            public const byte NotIntegralOctets = 0x06;
+
+            /// <summary>Table 4 case e: "Received parameter indication PAD message was unsolicited", 00001000.</summary>
+            public const byte UnsolicitedParameterIndication = 0x08;
+
+            /// <summary>Table 4 case f: "Received PAD message was too long", 00001010.</summary>
+            public const byte TooLong = 0x0A;
+        }
+
+        /// <summary>
+        /// The codes of the value field of a parameter field whose reference has the error bit set, X.29 Table 3.
+        /// </summary>
+        public static class ParameterErrorReason
+        {
+            /// <summary>"No additional information", 0 (the only mandatory value).</summary>
+            public const byte NoInformation = 0;
+
+            /// <summary>"The parameter reference does not exist or has not been implemented in the PAD", 1.</summary>
+            public const byte NoSuchReference = 1;
+
+            /// <summary>"The parameter value is invalid or has not been implemented in the PAD", 2.</summary>
+            public const byte InvalidValue = 2;
+
+            /// <summary>"The parameter is read-only", 4.</summary>
+            public const byte ReadOnly = 4;
+        }
+
+        /// <summary>
+        /// The PAD's side of X.29 3.1 and 3.5: a PAD message from the host (Q = 1) is applied to the PAD's own X.3
+        /// parameters, and the answer the PAD must send, if any, is returned.
+        /// </summary>
+        /// <param name="data">The user data of the complete packet sequence with Q = 1.</param>
+        /// <param name="x3">The PAD's own parameters.</param>
+        /// <param name="initialProfile">Puts the parameters back to the PAD's initial profile (X.29 Table 1, a set or a set
+        /// and read with no parameter field).</param>
+        /// <returns>The PAD message to send back with Q = 1, or null when X.29 says nothing is sent.</returns>
+        /// <remarks>
+        /// <para>
+        /// X.29 (12/97) Table 1, line for line: a set with no parameter field resets every parameter to the initial
+        /// profile and is not answered; a set with parameters sets them and is answered only when some could not be set,
+        /// with "List of these invalid parameters"; a set and read is answered with all the parameters it named, "with
+        /// their new current values" (or all of them, after the reset, when it named none); a read with no field is
+        /// answered with "all implemented Recommendation X.3 parameters with their current values", and with the named
+        /// ones otherwise. "If any of the parameters contain an error, then the error bit is set and the value field is
+        /// coded as described in Table 3" (Table 1, Note).
+        /// </para>
+        /// <para>
+        /// The parameter field (4.4.5): reference octet then value octet; "In PAD messages received by the PAD, bit 8 of
+        /// each octet will be ignored" (4.4.5.2); reference 127 means the reference goes on in the next octet as "the
+        /// parameter reference of Recommendation X.3 minus 127" (4.4.5.1); reference 0 with value 0 is the parameter
+        /// separator, after which come national parameters (4.4.5.4), of which this PAD has none. A read carries the same
+        /// pairs, "Value fields in read PAD messages are coded as all binary 0s" (4.4.5.3).
+        /// </para>
+        /// <para>
+        /// Errors that make the whole message invalid get an error PAD message (3.5.2, 4.4.6): octet 1 0x05, octet 2 the
+        /// Table 4 code, octet 3 "the message code of the received PAD message" (4.4.6.2).
+        /// </para>
+        /// <para>
+        /// Invitation to clear and indication of break are not answered here (3.2, 3.3); the caller acts on them.
+        /// Reselection (codes 0111, 1000) is not implemented by this PAD; it is returned as null and the caller logs it.
+        /// </para>
+        /// </remarks>
+        public byte[]? AnswerHostPadMessage(byte[] data, X3 x3, Action initialProfile)
+        {
+            if (data == null || data.Length == 0)
+            {
+                // Table 4 case a: less than eight bits. An empty Q = 1 packet holds no octet at all; octet 3 does not
+                // occur for this error type (Figure 3, Note).
+                return new byte[] { (byte)X29MessageType.Error, ErrorType.LessThanEightBits };
+            }
+
+            byte code = data[0];
+            switch (code)
+            {
+                case (byte)X29MessageType.SetParameters:
+                case (byte)X29MessageType.ReadParameters:
+                case (byte)X29MessageType.SetAndReadParameters:
+                    break;
+
+                case (byte)X29MessageType.ParameterIndication:
+                    // 3.5.2 d: a PAD never asks the host for its parameters, so every indication it gets is unsolicited.
+                    return new byte[] { (byte)X29MessageType.Error, ErrorType.UnsolicitedParameterIndication, code };
+
+                case (byte)X29MessageType.InvitationToClear:
+                case (byte)X29MessageType.IndicationOfBreak:
+                case 0x07: // reselection
+                case 0x08: // reselection with TOA/NPI
+                    return null;
+
+                default:
+                    // 3.5.2 a: an unrecognizable message code.
+                    return new byte[] { (byte)X29MessageType.Error, ErrorType.UnrecognizedMessageCode, code };
+            }
+
+            bool set = code != (byte)X29MessageType.ReadParameters;
+            bool read = code != (byte)X29MessageType.SetParameters;
+
+            if (data.Length == 1)
+            {
+                if (set)
+                {
+                    initialProfile();
+                }
+
+                if (!read)
+                {
+                    return null;
+                }
+
+                List<byte> all = new List<byte>(1 + 44) { (byte)X29MessageType.ParameterIndication };
+                for (byte reference = 1; reference <= 22; reference++)
+                {
+                    all.Add(reference);
+                    all.Add(x3.GetParameter(reference));
+                }
+
+                return all.ToArray();
+            }
+
+            // First pass: the field must be whole parameter fields, or nothing is done (3.5.2 c).
+            int at = 1;
+            while (at < data.Length)
+            {
+                int reference = data[at] & 0x7F;
+                at++;
+                if (reference == 127)
+                {
+                    if (at >= data.Length)
+                    {
+                        return new byte[] { (byte)X29MessageType.Error, ErrorType.ParameterFieldFormat, code };
+                    }
+
+                    at++;
+                }
+
+                if (at >= data.Length)
+                {
+                    return new byte[] { (byte)X29MessageType.Error, ErrorType.ParameterFieldFormat, code };
+                }
+
+                at++;
+            }
+
+            // Second pass: act on each parameter field in the order received, and build the answer.
+            List<byte> answer = new List<byte>(data.Length) { (byte)X29MessageType.ParameterIndication };
+            bool anyError = false;
+            bool afterSeparator = false;
+            at = 1;
+            while (at < data.Length)
+            {
+                int reference = data[at] & 0x7F;
+                at++;
+                int extension = -1;
+                if (reference == 127)
+                {
+                    extension = data[at] & 0x7F;
+                    at++;
+                }
+
+                // The value keeps bit 8: "binary coded in bits 8 to 1" (4.4.5.3), and X.3 has values above 127 (parameter
+                // 4 up to 255, 16 = 128 to 130, 20 = 128). 4.4.5.2's "bit 8 of each octet will be ignored" is read as the
+                // reference octets, the only octets where bit 8 has a meaning of its own (the error bit).
+                byte value = data[at];
+                at++;
+
+                if (extension < 0 && reference == 0 && value == 0)
+                {
+                    // The parameter separator (4.4.5.4): national parameters follow. It is not a parameter; a read and a
+                    // set and read list it back so the host can tell the two groups apart in the answer.
+                    afterSeparator = true;
+                    if (read)
+                    {
+                        answer.Add(0);
+                        answer.Add(0);
+                    }
+
+                    continue;
+                }
+
+                byte reason;
+                bool valid;
+                if (afterSeparator || extension >= 0 || reference < 1 || reference > 22)
+                {
+                    // This PAD has parameters 1 to 22 and no national ones.
+                    valid = false;
+                    reason = ParameterErrorReason.NoSuchReference;
+                }
+                else if (set && reference == X3.ParameterNumber.BINARY_SPEED)
+                {
+                    // X.3 3.11: "This parameter is a read-only parameter and cannot be changed by either of the DTEs".
+                    valid = false;
+                    reason = ParameterErrorReason.ReadOnly;
+                }
+                else if (set && !x3.SetParameter((byte)reference, value))
+                {
+                    valid = false;
+                    reason = ParameterErrorReason.InvalidValue;
+                }
+                else
+                {
+                    valid = true;
+                    reason = ParameterErrorReason.NoInformation;
+                }
+
+                if (!valid)
+                {
+                    anyError = true;
+                    _logger?.LogDebug("X.29: PAD refuses parameter {Reference} = {Value} in message 0x{Code:X2}, reason {Reason}", reference, value, code, reason);
+                }
+
+                if (read || !valid)
+                {
+                    // A reference that was extended is answered extended, with the error bit on the first octet.
+                    if (extension >= 0)
+                    {
+                        answer.Add(0x80 | 127);
+                        answer.Add((byte)extension);
+                    }
+                    else
+                    {
+                        answer.Add((byte)(valid ? reference : 0x80 | reference));
+                    }
+
+                    answer.Add(valid ? x3.GetParameter((byte)reference) : reason);
+                }
+            }
+
+            if (!read && !anyError)
+            {
+                return null;
+            }
+
+            return answer.ToArray();
+        }
+
         #region New Enum-Based Methods (Preferred API)
 
         /// <summary>

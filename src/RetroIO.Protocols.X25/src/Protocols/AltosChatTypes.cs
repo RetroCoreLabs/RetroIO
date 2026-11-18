@@ -50,6 +50,74 @@ namespace RetroIO.Protocols.X25.Protocols
     }
 
     /// <summary>
+    /// One user in the chat, as a monitor sees it: a copy taken by <see cref="AltosChatEngine.GetUsers"/>, not a live view.
+    /// </summary>
+    public readonly struct AltosChatUserInfo
+    {
+        /// <summary>Makes the copy.</summary>
+        /// <param name="slot">The place in the user table, the number <c>.s</c> shows and <c>!N</c> whispers to.</param>
+        /// <param name="nickname">The nickname now.</param>
+        /// <param name="login">The login name, without the padding <c>.s</c> shows.</param>
+        /// <param name="from">Where the user comes from (the calling X.121 address), without the padding.</param>
+        /// <param name="channel">The channel the user is on.</param>
+        /// <param name="connectedAt">When the call reached the chat, by the clock the engine was given.</param>
+        public AltosChatUserInfo(int slot, string nickname, string login, string from, long channel, DateTime connectedAt)
+        {
+            Slot = slot;
+            Nickname = nickname;
+            Login = login;
+            From = from;
+            Channel = channel;
+            ConnectedAt = connectedAt;
+        }
+
+        /// <summary>The place in the user table (0 up), the number <c>.s</c> shows.</summary>
+        public int Slot { get; }
+
+        /// <summary>The nickname now.</summary>
+        public string Nickname { get; }
+
+        /// <summary>The login name, without padding.</summary>
+        public string Login { get; }
+
+        /// <summary>Where the user comes from, without padding.</summary>
+        public string From { get; }
+
+        /// <summary>The channel the user is on.</summary>
+        public long Channel { get; }
+
+        /// <summary>When the call reached the chat.</summary>
+        public DateTime ConnectedAt { get; }
+    }
+
+    /// <summary>
+    /// One channel that has users on it: a copy taken by <see cref="AltosChatEngine.GetChannels"/>. The password of a
+    /// protected channel is not part of it.
+    /// </summary>
+    public readonly struct AltosChatChannelInfo
+    {
+        /// <summary>Makes the copy.</summary>
+        /// <param name="channel">The channel number.</param>
+        /// <param name="users">How many users are on it.</param>
+        /// <param name="isProtected">True when a user has set a password on it with <c>.p</c>.</param>
+        public AltosChatChannelInfo(long channel, int users, bool isProtected)
+        {
+            Channel = channel;
+            Users = users;
+            IsProtected = isProtected;
+        }
+
+        /// <summary>The channel number.</summary>
+        public long Channel { get; }
+
+        /// <summary>How many users are on it.</summary>
+        public int Users { get; }
+
+        /// <summary>True when the channel has a password (<c>.p</c>).</summary>
+        public bool IsProtected { get; }
+    }
+
+    /// <summary>
     /// Where the engine sends its output. Called synchronously from inside the engine's methods.
     /// </summary>
     public interface IAltosChatSink
