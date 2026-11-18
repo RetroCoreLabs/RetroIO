@@ -72,7 +72,7 @@ namespace RetroIO.Protocols.X25.Models
     /// Interpreted (codes from Table 21/X.75):
     /// </para>
     ///  - transit network identification, 0x41: two octets, a DNIC (or INIC) as four BCD digits, high digit first (5.4.3.1). It may repeat, one element per transit network, in the order the call crossed them (5.3.1);
-    ///  - call identifier, 0x81: three octets, 24 bits of binary data (5.4.3.2), high octet first - X.75 does not say the octet order; the high octet first is how every other multi-octet binary value in X.75 is coded (5.4.3.11, 5.4.3.12), and that is an assumption;
+    ///  - call identifier, 0x81: three octets, "24 bits of binary data" (5.4.3.2). Its content is not defined: "The definition of the content of the call identifier ... require[s] further study ... the content ... is under the responsibility of the originating network" (5.3.2 Note). It is a name, not a number, so X.75 gives it no high or low order; a network that did not start the call only carries it and compares it. <see cref="CallIdentifier"/> holds the three octets in arrival order, octet 1 in bits 23-16 - a lossless way to keep them, not a reading of the standard. The one value X.75 gives a meaning is all zeros: "not significant" (5.3.2 Note);
     ///  - throughput class indication, 0x02: one octet, bits 4-1 the class from the calling STE, bits 8-5 the class from the called STE (5.4.3.3). The four-bit class codes are kept as codes; Table 22 maps them to bit/s;
     ///  - window size indication, 0x43: first octet from the called STE, second from the calling STE, bits 7-1 each, bit 8 "unassigned and set to 0" (5.4.3.4);
     ///  - packet size indication, 0x42: first octet from the called STE, second from the calling STE, bits 4-1 the base-2 logarithm of the data field length, bits 8-5 "unassigned and set to 0" (5.4.3.5);
@@ -158,7 +158,9 @@ namespace RetroIO.Protocols.X25.Models
         public bool HasCallIdentifier { get; set; }
 
         /// <summary>
-        /// The call identifier, 0 to <see cref="MaxCallIdentifier"/>. Zero means "not significant" (5.3.2 Note).
+        /// The call identifier's three octets in arrival order: octet 1 in bits 23-16, octet 2 in 15-8, octet 3 in 7-0.
+        /// X.75 does not define the content (5.3.2 Note), so this is a container for the name, not a value to do sums
+        /// on. Zero (all three octets 0) means "not significant" (5.3.2 Note).
         /// </summary>
         public int CallIdentifier { get; set; }
 
