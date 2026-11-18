@@ -45,7 +45,7 @@ namespace RetroIO.Protocols.X25.Host
     /// the other calls go on. A failure in <c>onStart</c> or in a timer is logged only.
     /// </para>
     /// </summary>
-    public sealed class ScriptedHost
+    public sealed class ScriptedHost : IHostMachine
     {
         private readonly ScriptedHostSettings _settings;
         private readonly IHostOutput _output;
@@ -137,6 +137,11 @@ namespace RetroIO.Protocols.X25.Host
                 CallScript(run[i].Function, null, "timer");
             }
         }
+
+        /// <summary>A script takes every call; it may clear one itself in <c>onConnect</c>.</summary>
+        /// <param name="callUserData">The call user data (not looked at).</param>
+        /// <returns><see cref="HostAdmission.Accept"/>.</returns>
+        public HostAdmission Admit(ReadOnlySpan<byte> callUserData) => HostAdmission.Accept;
 
         /// <summary>A call arrives; the script's <c>onConnect</c> runs with the new session.</summary>
         /// <param name="session">A number the caller picks for this call, unique while the call lasts.</param>
