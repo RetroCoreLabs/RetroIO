@@ -32,7 +32,7 @@ namespace RetroIO.Protocols.X25.Host
     /// is sent on its own lines and the prompt is shown again with what was typed so far.
     /// </para>
     /// </remarks>
-    public sealed class DescribedHost : IHostMachine
+    public sealed class DescribedHost : IHostMachine, IHostOperator
     {
         /// <summary>The longest line taken from a caller.</summary>
         private const int MaxLine = 256;
@@ -196,6 +196,56 @@ namespace RetroIO.Protocols.X25.Host
                 s.Open = false;
                 LeaveRoom(s);
                 Forget(s);
+            }
+        }
+
+        /// <inheritdoc/>
+        public bool TryDescribe(int session, out HostSessionInfo info)
+        {
+            if (!_sessions.TryGetValue(session, out Session? s) || !s.Open)
+            {
+                info = default;
+                return false;
+            }
+
+            string state = s.State switch
+            {
+                State.Shell => "shell",
+                State.Menu => "menu",
+                State.Room => "room",
+                _ => "login",
+            };
+            info = new HostSessionInfo(s.User, state, s.User.Length > 0 ? s.LoggedInAt : null, s.LastInput);
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public void OperatorSend(int session, string text)
+        {
+            // As a message between users (Deliver), but never dropped by the per-second limit: the operator is one
+            // person typing.
+            if (!_sessions.TryGetValue(session, out Session? s) || !s.Open)
+            {
+                return;
+            }
+
+            Send(s, "\n" + text + "\n");
+            if (s.State == State.Shell || s.State == State.Menu)
+            {
+                Prompt(s);
+                if (s.Line.Length > 0)
+                {
+                    Send(s, s.Line.ToString());
+                }
+            }
+        }
+
+        /// <inheritdoc/>
+        public void OperatorLogout(int session)
+        {
+            if (_sessions.TryGetValue(session, out Session? s) && s.Open)
+            {
+                Logout(s);
             }
         }
 
