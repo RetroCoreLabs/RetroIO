@@ -114,6 +114,99 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// Copies the users in the chat now into <paramref name="into"/> (cleared first), lowest place first, as
+        /// <c>.s</c> lists them. Read only: the chat is not changed and nobody is told.
+        /// </summary>
+        /// <param name="into">The list to fill.</param>
+        /// <returns>The number of users copied.</returns>
+        public int GetUsers(List<AltosChatUserInfo> into)
+        {
+            if (into == null)
+            {
+                throw new ArgumentNullException(nameof(into));
+            }
+
+            into.Clear();
+            for (int i = 0; i < _users.Length; i++)
+            {
+                UserSlot u = _users[i];
+                if (!u.InUse)
+                {
+                    continue;
+                }
+
+                DateTime connectedAt = u.Owner != null ? u.Owner.ConnectedAt : default;
+                into.Add(new AltosChatUserInfo(i, u.Nickname, u.Login.TrimEnd(' '), u.From.TrimEnd(' '), u.Channel, connectedAt));
+            }
+
+            return into.Count;
+        }
+
+        /// <summary>
+        /// Copies every channel that has at least one user on it into <paramref name="into"/> (cleared first), lowest
+        /// channel number first, with its user count and whether it is protected (a <c>.p</c> password; the password is
+        /// not copied). Read only.
+        /// </summary>
+        /// <param name="into">The list to fill.</param>
+        /// <returns>The number of channels copied.</returns>
+        public int GetChannels(List<AltosChatChannelInfo> into)
+        {
+            if (into == null)
+            {
+                throw new ArgumentNullException(nameof(into));
+            }
+
+            into.Clear();
+            for (int i = 0; i < _users.Length; i++)
+            {
+                if (!_users[i].InUse)
+                {
+                    continue;
+                }
+
+                long chan = _users[i].Channel;
+
+                // Already counted: a lower place is on the same channel.
+                bool seen = false;
+                for (int k = 0; k < into.Count; k++)
+                {
+                    if (into[k].Channel == chan)
+                    {
+                        into[k] = new AltosChatChannelInfo(chan, into[k].Users + 1, into[k].IsProtected);
+                        seen = true;
+                        break;
+                    }
+                }
+
+                if (seen)
+                {
+                    continue;
+                }
+
+                bool isProtected = false;
+                for (int e = 0; e < _chans.Length; e++)
+                {
+                    if (_chans[e].Chan >= 0 && _chans[e].Chan == chan)
+                    {
+                        isProtected = true;
+                        break;
+                    }
+                }
+
+                // Keep the list ordered by channel number (insertion; the list is at most MaxUsers long).
+                int at = into.Count;
+                while (at > 0 && into[at - 1].Channel > chan)
+                {
+                    at--;
+                }
+
+                into.Insert(at, new AltosChatChannelInfo(chan, 1, isProtected));
+            }
+
+            return into.Count;
+        }
+
+        /// <summary>
         /// The server starts: set the time and log "Chat-Server Starting At: ..." (CHAT 3.1 serv.c:166-167).
         /// </summary>
         /// <param name="now">The wall-clock time now.</param>

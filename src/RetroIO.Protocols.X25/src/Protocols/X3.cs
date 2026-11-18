@@ -318,6 +318,29 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// Replaces the whole table with a copy taken earlier by <see cref="GetAllParameters"/> (a PAD going back to its
+        /// parameters of before a call). The values are copied as they are, without the checks of
+        /// <see cref="SetParameter"/>: they were this table's own. Raises <see cref="ParametersChanged"/> once.
+        /// </summary>
+        /// <param name="values">The copy to put back.</param>
+        public void LoadAll(Dictionary<byte, byte> values)
+        {
+            if (values == null)
+            {
+                throw new ArgumentNullException(nameof(values));
+            }
+
+            FillDefaultValues(_parameters);
+            Dictionary<byte, byte>.Enumerator e = values.GetEnumerator();
+            while (e.MoveNext())
+            {
+                _parameters[e.Current.Key] = e.Current.Value;
+            }
+
+            ParametersChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
         /// Set predefined parameter profile
         /// </summary>
         /// <param name="profileName">
@@ -787,35 +810,23 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <returns>
         /// Processed text
         /// </returns>
+        /// <remarks>
+        /// This is text going from the terminal side to the host. Of parameter 13 (X.3 (03/00) 3.13) only value 2 is
+        /// about this direction: "insert linefeed after each carriage return in the data stream from the start-stop mode
+        /// DTE". Padding (parameters 9 and 14) is for the stream TO the terminal (X.3 3.9, 3.14) and is not added here.
+        /// Until 2026-11-18 any non-zero parameter 13 added an LF here and parameters 9 and 14 added padding for the host.
+        /// </remarks>
         public string ProcessOutgoingText(string text)
         {
+            bool insertLf = (GetParameter(ParameterNumber.LINE_FEED_INSERTION) & 2) != 0;
             var processed = new StringBuilder(text.Length * 2);
-            
-            foreach (char c in text)
+            for (int i = 0; i < text.Length; i++)
             {
-                // Apply X.3 parameter processing
-                if (c == '\r' && GetParameter(ParameterNumber.LINE_FEED_INSERTION) > 0)
+                char c = text[i];
+                processed.Append(c);
+                if (c == '\r' && insertLf)
                 {
-                    processed.Append(c);
-                    processed.Append('\n'); // Add LF after CR
-                }
-                else if (c == '\r' && GetParameter(ParameterNumber.PADDING_AFTER_CR) > 0)
-                {
-                    processed.Append(c);
-                    // Add padding characters
-                    int padding = GetParameter(ParameterNumber.PADDING_AFTER_CR);
-                    processed.Append(new string('\0', padding));
-                }
-                else if (c == '\n' && GetParameter(ParameterNumber.PADDING_AFTER_LINE_FEED) > 0)
-                {
-                    processed.Append(c);
-                    // Add padding after LF
-                    int padding = GetParameter(ParameterNumber.PADDING_AFTER_LINE_FEED);
-                    processed.Append(new string('\0', padding));
-                }
-                else
-                {
-                    processed.Append(c);
+                    processed.Append('\n');
                 }
             }
 
@@ -831,46 +842,32 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <returns>
         /// Processed text
         /// </returns>
+        /// <remarks>
+        /// This is the host's data on its way to the terminal. Parameters 2 and 20 (echo, echo mask) are about the echo of
+        /// what the terminal TYPES (X.3 3.2, 3.20; X.28 4.10) and do not touch it; until 2026-11-18 a non-zero echo mask
+        /// here threw away every control character the host sent, CR and LF included. Parameter 13 value 1: "insert
+        /// linefeed after each carriage return in the data stream to the start-stop DTE" (X.3 3.13). Padding after CR and
+        /// LF (parameters 9, 14) is not added: see RetroIO BUGS.md.
+        /// </remarks>
         public string ProcessIncomingText(string text)
         {
-            if (GetParameter(ParameterNumber.ECHO) == 0)
+            if ((GetParameter(ParameterNumber.LINE_FEED_INSERTION) & 1) == 0)
             {
-                // No echo processing needed
                 return text;
             }
 
-            // Apply echo mask and other processing
-            var processed = new StringBuilder(text.Length);
-            byte echoMask = GetParameter(ParameterNumber.ECHO_MASK);
-            
-            foreach (char c in text)
+            var processed = new StringBuilder(text.Length * 2);
+            for (int i = 0; i < text.Length; i++)
             {
-                // Apply echo mask logic
-                if (ShouldEchoCharacter(c, echoMask))
+                char c = text[i];
+                processed.Append(c);
+                if (c == '\r')
                 {
-                    processed.Append(c);
+                    processed.Append('\n');
                 }
             }
 
             return processed.ToString();
-        }
-
-        /// <summary>
-        /// Check if character should be echoed based on echo mask
-        /// </summary>
-        /// <param name="c">
-        /// Character to check
-        /// </param>
-        /// <param name="echoMask">
-        /// Echo mask parameter
-        /// </param>
-        /// <returns>
-        /// True if character should be echoed
-        /// </returns>
-        private bool ShouldEchoCharacter(char c, byte echoMask)
-        {
-            // Simplified echo mask logic - full implementation would check bit patterns
-            return echoMask == 0 || (c >= 32 && c <= 126); // Printable characters
         }
     }
 }

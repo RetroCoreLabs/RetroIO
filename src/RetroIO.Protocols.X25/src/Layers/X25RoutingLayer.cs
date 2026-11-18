@@ -234,6 +234,12 @@ namespace RetroIO.Protocols.X25.Layers
                 // Add TX CALL REQUEST to packet history
                 _runtime.RouteX25EventToBoundModule(lcn, txCallRequestEvent);
 
+                // The channel carries a call to THIS service: the module's data and clear must reach it. Bound before the
+                // service runs, because a service may answer inside HandleIncomingCall. Until 2026-11-18 nothing was
+                // bound here and the runtime sent every in-process PAD's data to the TAD whatever service had taken the
+                // call, so a PAD in this process that called the Altos chat was never heard by it.
+                _runtime.BindServiceToLcn(lcn, service);
+
                 // Route the call to the local service
                 var success = service.HandleIncomingCall(lcn, callRequest.CalledAddress,
                     callRequest.CallingAddress, callRequest.CallUserData ?? Array.Empty<byte>(),
@@ -247,6 +253,7 @@ namespace RetroIO.Protocols.X25.Layers
                 }
                 else
                 {
+                    _runtime.UnregisterXotConnection(lcn);
                     _logger.LogWarning("Local service '{ServiceName}' rejected call on LCN {LCN}",
                         service.ServiceName, lcn);
                     // TODO: Generate TX CLEAR REQUEST packet for rejected calls

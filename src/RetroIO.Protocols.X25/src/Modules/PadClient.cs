@@ -276,6 +276,10 @@ namespace RetroIO.Protocols.X25.Modules
 
             _remoteAddress = remoteAddress;
             _state = PadState.Connecting;
+
+            // What the parameters are now (the defaults plus anything the person SET at the prompt) is what the PAD
+            // goes back to when this call ends (RestorePreCallParameters).
+            _preCallParameters = _x3Protocol.GetAllParameters();
             
             var callUserData = CreateInitialX29Message();
             
@@ -299,7 +303,7 @@ namespace RetroIO.Protocols.X25.Modules
             if (!success)
             {
                 _state = PadState.Disconnected;
-                ResetX3ToDefaults();
+                RestorePreCallParameters();
                 _logger.LogError("Failed to initiate X.25 call to {RemoteAddress}", remoteAddress);
             }
 
@@ -339,7 +343,7 @@ namespace RetroIO.Protocols.X25.Modules
 
             // Switch X.28 protocol back to command mode
             _x28Protocol.SwitchToCommandMode();
-            ResetX3ToDefaults();
+            RestorePreCallParameters();
 
             // The X.29 "invitation to clear" PAD message goes from the HOST to the PAD (X.29 3.2.1: it
             // asks the PAD to clear). A PAD never sends it, so it is not sent here: the PAD just clears.
@@ -638,42 +642,32 @@ namespace RetroIO.Protocols.X25.Modules
             try
             {
                 var message = _x29Protocol.ParseMessage(data);
-                if (message == null)
-                {
-                    _logger.LogWarning("Invalid X.29 message received");
-                    return;
-                }
 
                 _logger.LogDebug("PAD received X.29 message: {MessageType}", message.ToString());
 
-                switch (message.Type)
+                byte code = data[0];
+                if (code == (byte)X29MessageType.SetParameters
+                    || code == (byte)X29MessageType.SetAndReadParameters
+                    || code == (byte)X29MessageType.ReadParameters)
                 {
-                    case (byte)X29MessageType.ParameterIndication:
-                        // Remote PAD is sending parameter values
-                        foreach (var param in message.Parameters)
-                        {
-                            _x3Protocol.SetParameter(param.Key, param.Value);
-                        }
-                        break;
+                    // X.29 (12/97) 3.1.2: "The PAD will also consider the arrival of such a PAD message as a data
+                    // forwarding condition." What the person has typed so far goes to the host first, with the
+                    // parameters it was typed under.
+                    _x28Protocol.ForceForwardData();
+                }
 
-                    case (byte)X29MessageType.SetParameters:
-                    case (byte)X29MessageType.SetAndReadParameters:
-                    case (byte)X29MessageType.ReadParameters:
-                        {
-                            // X.29 3.2: the HOST changes (SET) or asks for (READ) the PAD's OWN X.3 parameters.
-                            // The PAD applies them to the parameters it really uses, so that for example the
-                            // host's SET with echo (parameter 2) = 0 makes the PAD stop echoing what the person
-                            // types (the host then echoes it); without this every typed line showed twice.
-                            // READ and SET AND READ are answered with a PARAMETER INDICATION (X.29 3.2.5), and
-                            // a value the PAD cannot take is answered with an ERROR message (X.29 3.2.7).
-                            byte[]? answer = _x29Protocol.ProcessControlMessage(message, _x3Protocol);
-                            if (answer != null)
-                            {
-                                SendX29Message(answer);
-                            }
-                        }
-                        break;
+                // X.29 3.1 and 3.5, PAD side: the HOST changes (set) or asks for (read) the PAD's OWN X.3 parameters,
+                // and the PAD applies them to the parameters it really uses - the host's set with echo (parameter 2) = 0
+                // makes the PAD stop echoing; the Altos chat's set turns echo, forward on CR and line editing on. The
+                // answer (a parameter indication, or an error PAD message) is what X.29 Table 1 and 3.5 say, or nothing.
+                byte[]? answer = _x29Protocol.AnswerHostPadMessage(data, _x3Protocol, ResetX3ToDefaults);
+                if (answer != null)
+                {
+                    SendX29Message(answer);
+                }
 
+                switch (code)
+                {
                     case (byte)X29MessageType.InvitationToClear:
                         // Remote wants to disconnect
                         _logger.LogInformation("Received invitation to clear from remote PAD");
@@ -763,20 +757,45 @@ namespace RetroIO.Protocols.X25.Modules
             // Switch X.28 protocol back to command mode
             _x28Protocol.SwitchToCommandMode();
 
-            ResetX3ToDefaults();
+            RestorePreCallParameters();
         }
 
         /// <summary>
-        /// Puts the whole X.3 parameter table back to its default values. Called whenever a call ends,
-        /// whichever way it ended (the host cleared, the person cleared, Disconnect, the call failed),
-        /// and nothing is sent to the host: the call is over.
+        /// The X.3 parameters as they were when the call now up (or being set up) was placed; null when no call has
+        /// been placed since the last restore.
+        /// </summary>
+        private Dictionary<byte, byte>? _preCallParameters;
+
+        /// <summary>
+        /// Puts the X.3 parameters back to what they were when the call was placed. Called whenever a call ends,
+        /// whichever way it ended (the host cleared, the person cleared, Disconnect, the call failed), and nothing is
+        /// sent to the host: the call is over.
         /// </summary>
         /// <remarks>
-        /// The rule is the user's: after a call the PAD always goes back to the defaults, never to
-        /// what the host set. The built-in TAD sets parameter 2 (echo) to 0 at the start of a call and
-        /// the PAD obeys it; if that stayed, the next call to a plain host would show nothing the person
-        /// types. This also drops a parameter the person changed on purpose before the call.
+        /// OUR CHOICE, NOT A STANDARD RULE: Ronny's decision of 2026-11-18. X.3, X.28 and X.29 were searched and no
+        /// text says what a PAD's parameters are after a call. Values the person SET at the prompt before the call
+        /// survive; everything changed during the call - an X.29 set from the host (the TAD's echo = 0, the Altos
+        /// chat's editing and LF insertion), or a SET typed after a PAD recall - is dropped. Before this the PAD went
+        /// back to the defaults after every call, which also dropped what the person had set on purpose.
         /// </remarks>
+        private void RestorePreCallParameters()
+        {
+            Dictionary<byte, byte>? saved = _preCallParameters;
+            _preCallParameters = null;
+            if (saved == null)
+            {
+                return;
+            }
+
+            _x3Protocol.LoadAll(saved);
+            OnParametersChanged();
+        }
+
+        /// <summary>
+        /// Puts the whole X.3 parameter table back to its default values, the PAD's initial profile. Used for an X.29
+        /// set or set and read with no parameter field (X.29 Table 1, "Reset all implemented Recommendation X.3
+        /// parameters to their initial values corresponding to the initial profile").
+        /// </summary>
         private void ResetX3ToDefaults()
         {
             _x3Protocol.SetDefaultProfile();
@@ -1119,7 +1138,7 @@ namespace RetroIO.Protocols.X25.Modules
                 _logger.LogInformation("PAD Client received X.25 reset: cause={Cause}, diagnostic={Diagnostic}", cause, diagnostic);
                 OnConnectionStateChanged(PadConnectionState.Disconnected, $"Reset: {cause}/{diagnostic}");
                 _state = PadState.Disconnected;
-                ResetX3ToDefaults();
+                RestorePreCallParameters();
             }
         }
 
@@ -1134,7 +1153,7 @@ namespace RetroIO.Protocols.X25.Modules
                 OnConnectionStateChanged(PadConnectionState.Disconnected, $"Cleared: {cause}/{diagnostic}");
                 _state = PadState.Disconnected;
                 _currentLCN = 0;
-                ResetX3ToDefaults();
+                RestorePreCallParameters();
             }
         }
 

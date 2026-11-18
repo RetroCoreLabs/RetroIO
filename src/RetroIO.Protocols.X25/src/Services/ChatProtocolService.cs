@@ -50,6 +50,10 @@ namespace RetroIO.Protocols.X25.Services
         /// <list type="bullet">
         /// <item><description>2 = 1: echo (X.3 (03/00) 3.2, "echo - represented by decimal 1").</description></item>
         /// <item><description>3 = 2: forward on the character CR (X.3 3.3, "character CR - represented by decimal 2").</description></item>
+        /// <item><description>13 = 4: "insert linefeed after each carriage return in the echo stream to the start-stop mode
+        /// DTE" (X.3 3.13, text line 1148 of the Specs copy; "NOTE 2 - This function applies only in the data transfer
+        /// state", line 1161). Without it the PAD echoed Enter as CR alone and the chat's answer overwrote the typed line
+        /// (Ronny's decision, 2026-11-18).</description></item>
         /// <item><description>15 = 1: editing in the data transfer state (X.3 3.15, "use of editing in the data transfer state - represented by decimal 1").</description></item>
         /// <item><description>16 = 127: character delete is DEL (X.3 3.16 takes any IA5 character; 127 is the value of both
         /// standard profiles, X.28 (12/97) Table 1, "Set to character 7/15 (DEL) (value 127)").</description></item>
@@ -62,7 +66,7 @@ namespace RetroIO.Protocols.X25.Services
         /// values are the standard ones, and the user can change parameter 16 at the PAD.
         /// </para>
         /// </remarks>
-        public static readonly byte[] SetPadMessage = { 0x02, 2, 1, 3, 2, 15, 1, 16, 127, 17, 24, 18, 18 };
+        public static readonly byte[] SetPadMessage = { 0x02, 2, 1, 3, 2, 13, 4, 15, 1, 16, 127, 17, 24, 18, 18 };
 
         /// <summary>
         /// The login every X.25 caller had on the Altos (CHAT 3.1 README: "login guest").
@@ -160,6 +164,46 @@ namespace RetroIO.Protocols.X25.Services
         }
 
         /// <summary>
+        /// Raised after something happened in the chat that may have changed its users or channels: a call came, a line
+        /// was read (a nickname or channel change, a leave), a call was cleared, a waiting caller joined. A monitor reads
+        /// <see cref="GetUsers"/> and <see cref="GetChannels"/> again. Raised on the thread that did the work, outside the
+        /// service's lock; it may also be raised when nothing a monitor shows has changed.
+        /// </summary>
+        public event EventHandler? Changed;
+
+        /// <summary>
+        /// Copies the users in the chat now, lowest place first (<see cref="AltosChatEngine.GetUsers"/>). Read only.
+        /// </summary>
+        /// <param name="into">The list to fill; cleared first.</param>
+        /// <returns>The number of users.</returns>
+        public int GetUsers(List<AltosChatUserInfo> into)
+        {
+            lock (_gate)
+            {
+                return _engine.GetUsers(into);
+            }
+        }
+
+        /// <summary>
+        /// Copies the channels that have users, lowest number first, with the protected flag
+        /// (<see cref="AltosChatEngine.GetChannels"/>). Read only.
+        /// </summary>
+        /// <param name="into">The list to fill; cleared first.</param>
+        /// <returns>The number of channels.</returns>
+        public int GetChannels(List<AltosChatChannelInfo> into)
+        {
+            lock (_gate)
+            {
+                return _engine.GetChannels(into);
+            }
+        }
+
+        private void RaiseChanged()
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
         /// A call for the chat comes from a PAD: call user data that starts with the X.29 protocol identifier
         /// 01 00 00 00 (X.29 (12/97) 4.2.1: first octet bits 8-7 00 and bits 6-1 000001 "for indicating PAD messages
         /// relating to the packet assembly/disassembly facility for the start-stop mode DTE", octets 2-4 all 0), or no
@@ -211,6 +255,7 @@ namespace RetroIO.Protocols.X25.Services
             }
 
             Drain();
+            RaiseChanged();
             return true;
         }
 
@@ -248,6 +293,7 @@ namespace RetroIO.Protocols.X25.Services
             }
 
             Drain();
+            RaiseChanged();
         }
 
         /// <summary>
@@ -270,6 +316,7 @@ namespace RetroIO.Protocols.X25.Services
             }
 
             Drain();
+            RaiseChanged();
         }
 
         /// <summary>
@@ -286,6 +333,7 @@ namespace RetroIO.Protocols.X25.Services
         /// </summary>
         public void Tick()
         {
+            bool joined;
             lock (_gate)
             {
                 if (_disposed)
@@ -293,10 +341,18 @@ namespace RetroIO.Protocols.X25.Services
                     return;
                 }
 
+                // A tick changes the users only by letting waiting callers join (or be refused, which changes nothing a
+                // monitor shows), so a monitor is told only when the number of users moved.
+                int before = _engine.UserCount;
                 _engine.Tick(_clock());
+                joined = _engine.UserCount != before;
             }
 
             Drain();
+            if (joined)
+            {
+                RaiseChanged();
+            }
         }
 
         /// <summary>Stops the timer. Calls still up are left to the runtime.</summary>

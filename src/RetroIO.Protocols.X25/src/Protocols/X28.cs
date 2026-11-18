@@ -926,60 +926,138 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Process character in data transfer mode
         /// </summary>
+        /// <summary>
+        /// The size of the editing buffer in the data transfer state, and of a full packet. X.28 (12/97) 3.6.1.2: the
+        /// editing buffer "will not be smaller than the full packet size and will not be smaller than the value of
+        /// parameter 10 plus one. It should be noted however, that in some networks the size of the editing buffer may be
+        /// limited to a maximum of 128 octets." 128 octets is also the standard maximum user data field of X.25 (4.3.2),
+        /// the packet this PAD forwards.
+        /// </summary>
+        private const int EditingBufferSize = 128;
+
+        /// <summary>The full packet the PAD forwards: 128 octets (X.25 4.3.2).</summary>
+        private const int FullPacketSize = 128;
+
+        /// <summary>
+        /// The first character of a two-character delete sequence (X.3 3.16, parameter 16 = 128, 129 or 130) that has
+        /// been received and not yet acted on; 0 when there is none.
+        /// </summary>
+        private char _pendingDeleteLead;
+
+        /// <summary>
+        /// One character from the terminal in the data transfer state (X.28 (12/97) clause 4): PAD recall, the editing
+        /// functions of 3.6 when parameter 15 is 1 (4.17), echo (4.10, X.3 3.2 and 3.20), data forwarding (4.4, X.3 3.3,
+        /// 3.15) and linefeed insertion (X.3 3.13).
+        /// </summary>
         private bool ProcessDataTransferCharacter(char c)
         {
             _logger?.LogDebug("X.28: Processing data transfer character '{Char}' (0x{Code:X2})", c, (int)c);
-            
+
             // Check for escape to command mode
             if (IsEscapeCharacter(c))
             {
                 return HandleEscapeCharacter();
             }
-            
-            // Check for editing characters if editing is enabled
-            if (_x3Parameters.GetParameter(X3.ParameterNumber.EDITING) == 1)
+
+            bool editing = _x3Parameters.GetParameter(X3.ParameterNumber.EDITING) == 1;
+            if (editing)
             {
-                if (c == _x3Parameters.GetParameter(X3.ParameterNumber.CHARACTER_DELETE))
+                // X.3 3.16: values 128 to 130 are two-character sequences. The first character is held until the
+                // second shows whether it is the sequence or an ordinary character.
+                byte deleteValue = _x3Parameters.GetParameter(X3.ParameterNumber.CHARACTER_DELETE);
+                if (deleteValue >= 128)
                 {
-                    return HandleCharacterDelete();
+                    char lead = deleteValue == 130 ? '*' : (char)0x13; // 128: 1/3 4/7; 129: 1/3 1/3; 130: 2/10 2/10
+                    char second = deleteValue == 128 ? 'G' : deleteValue == 129 ? (char)0x13 : '*';
+                    if (_pendingDeleteLead != 0)
+                    {
+                        char held = _pendingDeleteLead;
+                        _pendingDeleteLead = (char)0;
+                        if (c == second)
+                        {
+                            EchoTyped(held, true);
+                            EchoTyped(c, true);
+                            HandleCharacterDelete();
+                            return true;
+                        }
+
+                        TakeDataCharacter(held, editing);
+                    }
+
+                    if (c == lead)
+                    {
+                        _pendingDeleteLead = c;
+                        return true;
+                    }
                 }
-                
+                else if (c == deleteValue)
+                {
+                    // X.28 3.6.2.1. The character itself is echoed unless parameter 20 masks it (4.10).
+                    EchoTyped(c, true);
+                    HandleCharacterDelete();
+                    return true;
+                }
+
                 if (c == _x3Parameters.GetParameter(X3.ParameterNumber.LINE_DELETE))
                 {
-                    return HandleLineDelete();
+                    EchoTyped(c, true);
+                    HandleLineDelete();
+                    return true;
                 }
-                
+
                 if (c == _x3Parameters.GetParameter(X3.ParameterNumber.LINE_DISPLAY))
                 {
-                    return HandleLineDisplay();
+                    EchoTyped(c, true);
+                    HandleLineDisplay();
+                    return true;
                 }
             }
-            
-            // Add character to input buffer
+
+            TakeDataCharacter(c, editing);
+            return true;
+        }
+
+        /// <summary>
+        /// A character that is data for the host: it is echoed, put in the buffer and the forwarding conditions are
+        /// looked at.
+        /// </summary>
+        private void TakeDataCharacter(char c, bool editing)
+        {
+            // X.28 4.10: echoed "at the earliest opportunity" - before the line goes, so the echo of the CR that ends a
+            // line is on the screen before anything the host answers to that line.
+            EchoTyped(c, false);
+
             _inputBuffer.Append(c);
-            _logger?.LogDebug("X.28: Added char to buffer, buffer length now: {Length}", _inputBuffer.Length);
-            
-            // Check if data should be forwarded
+
+            // X.3 3.13 value 2: "insert linefeed after each carriage return in the data stream from the start-stop mode DTE".
+            if (c == '\r' && (_x3Parameters.GetParameter(X3.ParameterNumber.LINE_FEED_INSERTION) & 2) != 0)
+            {
+                _inputBuffer.Append('\n');
+            }
+
             var forwardingCondition = CheckForwardingCondition(c);
-            _logger?.LogDebug("X.28: Forwarding condition for char '{Char}': {Condition}", c, forwardingCondition);
-            
             if (forwardingCondition != ForwardingCondition.None)
             {
-                _logger?.LogDebug("X.28: Forwarding buffered data due to condition: {Condition}", forwardingCondition);
                 ForwardBufferedData(forwardingCondition);
             }
-            
-            // Restart idle timer
-            RestartIdleTimer();
-            
-            // Fire echo event if enabled
-            bool shouldEcho = ShouldEchoCharacter(c);
-            _logger?.LogDebug("X.28: Should echo character '{Char}': {ShouldEcho}", c, shouldEcho);
-            if (shouldEcho)
+            else if (editing)
             {
-                CharacterEcho?.Invoke(this, new CharacterEchoEventArgs(c, EchoType.Normal));
+                // X.3 3.15: editing suspends "data forwarding on full packet until the editing buffer is full". X.28
+                // 3.6.1.3: "Whenever more than enough data has been received to fill the editing buffer, one full packet
+                // will be forwarded. The remaining characters will be placed in the beginning of the editing buffer and
+                // editing of these characters remains possible."
+                if (_inputBuffer.Length > EditingBufferSize)
+                {
+                    ForwardFirst(FullPacketSize);
+                }
             }
-            return true;
+            else if (_inputBuffer.Length >= FullPacketSize)
+            {
+                ForwardBufferedData(ForwardingCondition.BufferFull);
+            }
+
+            // X.3 3.15: editing also suspends "data forwarding on idle timer period expiry"; RestartIdleTimer looks.
+            RestartIdleTimer();
         }
 
         /// <summary>
@@ -1026,12 +1104,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 }
             }
 
-            // Check buffer full condition
-            if (_inputBuffer.Length >= 128) // Typical PAD buffer limit
-            {
-                return ForwardingCondition.BufferFull;
-            }
-            
+            // A full packet is not a character condition; TakeDataCharacter looks at it, because editing changes it.
             return ForwardingCondition.None;
         }
 
@@ -1091,57 +1164,234 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Check if character should be echoed
+        /// Forwards the first <paramref name="count"/> characters of the buffer as one packet and keeps the rest in the
+        /// buffer, still editable (X.28 3.6.1.3).
         /// </summary>
-        private bool ShouldEchoCharacter(char c)
+        private void ForwardFirst(int count)
         {
-            if (_x3Parameters.GetParameter(X3.ParameterNumber.ECHO) == 0)
-                return false;
-                
-            // Check echo mask
-            byte echoMask = _x3Parameters.GetParameter(X3.ParameterNumber.ECHO_MASK);
-            if (echoMask != 0)
-            {
-                // Apply echo mask logic (implementation specific)
-                return true; // Simplified - echo all for now
-            }
-            
-            return true;
+            string data = _inputBuffer.ToString(0, count);
+            _inputBuffer.Remove(0, count);
+            DataForwarded?.Invoke(this, new X28DataEventArgs(data, ForwardingCondition.BufferFull));
         }
 
         /// <summary>
-        /// Handle character editing functions
+        /// Echoes one typed character as X.28 4.10 and X.3 3.2, 3.13 and 3.20 say.
         /// </summary>
-        private bool HandleCharacterDelete()
+        /// <param name="c">The character the terminal sent.</param>
+        /// <param name="isEditingCharacter">True when the character is doing an editing function of parameter 16, 17 or 18
+        /// (editing is then on: X.3 3.20 Note 6, value 64 "does not apply if editing is not enabled").</param>
+        private void EchoTyped(char c, bool isEditingCharacter)
         {
-            if (_inputBuffer.Length > 0)
+            // X.3 3.2: 0 no echo; 1 echo; 2 "echo all characters except the data forwarding sequence defined by parameter
+            // 25" - this PAD has no parameter 25, so there is no such sequence and 2 echoes like 1; 32 to 126 "scrambled
+            // echo character", "The decimal value represents the character to be transmitted back" (Note 2).
+            byte echo = _x3Parameters.GetParameter(X3.ParameterNumber.ECHO);
+            if (echo == 0 || IsEchoMasked(c, isEditingCharacter))
             {
-                _inputBuffer.Length--;
-                CharacterEcho?.Invoke(this, new CharacterEchoEventArgs('\b', EchoType.Delete));
-                CharacterEcho?.Invoke(this, new CharacterEchoEventArgs(' ', EchoType.Delete));
-                CharacterEcho?.Invoke(this, new CharacterEchoEventArgs('\b', EchoType.Delete));
+                return;
+            }
+
+            char shown = echo >= 32 && echo <= 126 ? (char)echo : c;
+            CharacterEcho?.Invoke(this, new CharacterEchoEventArgs(shown, EchoType.Normal));
+
+            // X.3 3.13 value 4: "insert linefeed after each carriage return in the echo stream to the start-stop mode DTE".
+            if (c == '\r' && shown == '\r' && (_x3Parameters.GetParameter(X3.ParameterNumber.LINE_FEED_INSERTION) & 4) != 0)
+            {
+                CharacterEcho?.Invoke(this, new CharacterEchoEventArgs('\n', EchoType.Normal));
+            }
+        }
+
+        /// <summary>
+        /// True when parameter 20 (echo mask, X.3 3.20) or its notes say the character is not echoed. "A character need
+        /// only be specified by a single value of parameter 20 in order for it not to be echoed" (Note 4).
+        /// </summary>
+        private bool IsEchoMasked(char c, bool isEditingCharacter)
+        {
+            // Note 2: "If parameter 5, 12 or 22 is set to a non-zero value, then X-ON and X-OFF are not echoed."
+            if ((c == (char)0x11 || c == (char)0x13)
+                && (_x3Parameters.GetParameter(X3.ParameterNumber.ANCILLARY_DEVICE_CONTROL) != 0
+                    || _x3Parameters.GetParameter(X3.ParameterNumber.FLOW_CONTROL_X_ON_X_OFF) != 0
+                    || _x3Parameters.GetParameter(X3.ParameterNumber.PAGE_WAIT) != 0))
+            {
                 return true;
             }
+
+            byte mask = _x3Parameters.GetParameter(X3.ParameterNumber.ECHO_MASK);
+            if (mask == 0)
+            {
+                return false;
+            }
+
+            // 64: "no echo of editing characters as designated by parameters 16, 17 and 18".
+            if ((mask & 64) != 0 && isEditingCharacter)
+            {
+                return true;
+            }
+
+            switch (c)
+            {
+                case '\r':
+                    return (mask & 1) != 0;   // "no echo of character CR"
+                case '\n':
+                    return (mask & 2) != 0;   // "no echo of character LF"
+                case (char)0x0B:
+                case '\t':
+                case (char)0x0C:
+                    return (mask & 4) != 0;   // "no echo of characters VT, HT, FF"
+                case (char)0x07:
+                case (char)0x08:
+                    return (mask & 8) != 0;   // "no echo of characters BEL, BS"
+                case (char)0x1B:
+                case (char)0x05:
+                    return (mask & 16) != 0;  // "no echo of characters ESC, ENQ"
+                case (char)0x06:
+                case (char)0x15:
+                case (char)0x02:
+                case (char)0x01:
+                case (char)0x04:
+                case (char)0x17:
+                case (char)0x03:
+                    return (mask & 32) != 0;  // "no echo of characters ACK, NAK, STX, SOH, EOT, ETB, ETX"
+            }
+
+            // 128: "no echo of all other characters in columns 0 and 1 of IA5 not mentioned above, and the character DEL".
+            if (c < (char)0x20 || c == (char)0x7F)
+            {
+                return (mask & 128) != 0;
+            }
+
             return false;
         }
 
-        private bool HandleLineDelete()
+        /// <summary>
+        /// True when parameter 6 lets editing PAD service signals out and parameter 19 asks for some (X.3 3.19: "This
+        /// parameter does not apply if the value of parameter 6 is set to 0").
+        /// </summary>
+        private byte EditingSignalStyle()
         {
-            if (_inputBuffer.Length > 0)
+            if (_x3Parameters.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS) == 0)
             {
-                int lineStart = _inputBuffer.ToString().LastIndexOf('\n') + 1;
-                _inputBuffer.Length = lineStart;
-                CommandResponse?.Invoke(this, new CommandResponseEventArgs("XXX\r\n", ResponseType.Success)); // Line delete indication
-                return true;
+                return 0;
             }
-            return false;
+
+            return _x3Parameters.GetParameter(X3.ParameterNumber.EDITING_PAD_SERVICE_SIGNALS);
         }
 
-        private bool HandleLineDisplay()
+        private void SendSignal(char c)
         {
-            var lineContent = _inputBuffer.ToString() + "\r\n";
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs(lineContent, ResponseType.Success));
-            return true;
+            CharacterEcho?.Invoke(this, new CharacterEchoEventArgs(c, EchoType.Delete));
+        }
+
+        /// <summary>
+        /// The format effector, X.28 3.5.2: "The characters 0/13 (CR) 0/10 (LF) will be sent by the PAD", followed by
+        /// padding. The padding is NOT sent: no PAD service signal of this PAD pads (X.28 3.5.2, parameter 9); see
+        /// RetroIO BUGS.md.
+        /// </summary>
+        private void SendFormatEffector()
+        {
+            SendSignal('\r');
+            SendSignal('\n');
+        }
+
+        private static bool IsGraphic(char c)
+        {
+            return c >= (char)0x20 && c <= (char)0x7E;
+        }
+
+        /// <summary>
+        /// X.28 3.6.2.1: "The receipt of each character delete character causes the last character currently in the
+        /// editing buffer to be deleted. Subsequently, if the value of parameter 6 is not set to 0, if the value of
+        /// parameter 19 is set to 2 or 8 and a graphic character is removed from the editing buffer, or, if the value of
+        /// parameter 19 is set to 1 or 32 to 126, and a character is removed from the editing buffer, the character
+        /// deleted PAD service signal will be sent by the PAD." Its format is 3.5.24.
+        /// </summary>
+        private void HandleCharacterDelete()
+        {
+            if (_inputBuffer.Length == 0)
+            {
+                return;
+            }
+
+            char removed = _inputBuffer[_inputBuffer.Length - 1];
+            _inputBuffer.Length--;
+
+            byte style = EditingSignalStyle();
+            if (style == 1)
+            {
+                SendSignal('\\');                // 3.5.24 "Value 1: the character 5/12 (\) will be sent"
+            }
+            else if (style == 2 && IsGraphic(removed))
+            {
+                SendSignal('\b');                // "Value 2: the characters 0/8 (BS) 2/0 (SP) 0/8 (BS) will be sent"
+                SendSignal(' ');
+                SendSignal('\b');
+            }
+            else if (style == 8 && IsGraphic(removed))
+            {
+                SendSignal((char)8);             // "Value 8, 32-126: one character from International Alphabet No. 5"
+            }
+            else if (style >= 32 && style <= 126)
+            {
+                SendSignal((char)style);
+            }
+        }
+
+        /// <summary>
+        /// X.28 3.6.2.2: "The receipt of the line delete character causes the deletion of the current contents of the
+        /// editing buffer. The PAD will transmit, if parameter 6 and parameter 19 are not set to 0 and the editing buffer
+        /// is not empty, a line deleted PAD service signal." Its format is 3.5.25.
+        /// </summary>
+        private void HandleLineDelete()
+        {
+            if (_inputBuffer.Length == 0)
+            {
+                return;
+            }
+
+            int graphic = 0;
+            for (int i = 0; i < _inputBuffer.Length; i++)
+            {
+                if (IsGraphic(_inputBuffer[i]))
+                {
+                    graphic++;
+                }
+            }
+
+            _inputBuffer.Clear();
+
+            byte style = EditingSignalStyle();
+            if (style == 2)
+            {
+                // "Value 2: the characters 0/8 (BS), 2/0 (SP), 0/8 (BS) will be sent the number of times equal to the
+                // number of graphic characters being deleted from the buffer."
+                for (int i = 0; i < graphic; i++)
+                {
+                    SendSignal('\b');
+                    SendSignal(' ');
+                    SendSignal('\b');
+                }
+            }
+            else if (style == 1 || style == 8 || (style >= 32 && style <= 126))
+            {
+                // "Value 1, 8, 32-126: the characters 5/8 (X), 5/8 (X), 5/8 (X) will be sent followed by the format effector".
+                SendSignal('X');
+                SendSignal('X');
+                SendSignal('X');
+                SendFormatEffector();
+            }
+        }
+
+        /// <summary>
+        /// X.28 3.6.2.3: "The receipt of the line display character causes the PAD to transmit to the start-stop mode DTE
+        /// a format effector followed by the characters currently stored in the editing buffer."
+        /// </summary>
+        private void HandleLineDisplay()
+        {
+            SendFormatEffector();
+            for (int i = 0; i < _inputBuffer.Length; i++)
+            {
+                SendSignal(_inputBuffer[i]);
+            }
         }
 
         /// <summary>
@@ -1222,7 +1472,11 @@ namespace RetroIO.Protocols.X25.Protocols
             StopIdleTimer();
             
             byte idleTimeout = _x3Parameters.GetParameter(X3.ParameterNumber.IDLE_TIMER);
-            if (idleTimeout > 0 && _currentMode == PadMode.DataTransfer)
+
+            // X.3 3.15: editing "suspends ... data forwarding on idle timer period expiry"; X.28 3.6.1.3 a) "the PAD will
+            // not take account of the value of the idle time delay defined by the value of parameter 4".
+            bool editing = _x3Parameters.GetParameter(X3.ParameterNumber.EDITING) == 1;
+            if (idleTimeout > 0 && !editing && _currentMode == PadMode.DataTransfer)
             {
                 int timeoutMs = idleTimeout * 50; // 50ms units (1/20 second)
                 _idleTimer = new System.Threading.Timer(OnIdleTimeout, null, timeoutMs, Timeout.Infinite);
@@ -1245,7 +1499,8 @@ namespace RetroIO.Protocols.X25.Protocols
         {
             try
             {
-                if (_inputBuffer.Length > 0)
+                // Editing may have been turned on (a host's set) after the timer started: it then forwards nothing.
+                if (_inputBuffer.Length > 0 && _x3Parameters.GetParameter(X3.ParameterNumber.EDITING) != 1)
                 {
                     ForwardBufferedData(ForwardingCondition.Timer);
                 }
@@ -1261,6 +1516,13 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public void ForceForwardData()
         {
+            // A held first character of a delete sequence (parameter 16 = 128 to 130) was data after all.
+            if (_pendingDeleteLead != 0)
+            {
+                _inputBuffer.Append(_pendingDeleteLead);
+                _pendingDeleteLead = (char)0;
+            }
+
             if (_inputBuffer.Length > 0)
             {
                 ForwardBufferedData(ForwardingCondition.ManualForward);
