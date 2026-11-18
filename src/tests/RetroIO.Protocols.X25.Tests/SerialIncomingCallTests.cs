@@ -991,11 +991,17 @@ namespace RetroIO.Protocols.X25.Tests
             Inject(Frame(AddressB, IControl(1, 1), CallRequest(5, LocalMachineId)));
             Assert.That(offered.Count, Is.EqualTo(1));
             Assert.That(_transport.AcceptCall(offered[0]), Is.True);
-            int framesAfterAccept = SentFrames().Count;
             Assert.That(_transport.AcceptCall(offered[0]), Is.False, "a call can be answered once");
             Assert.That(_transport.RejectCall(offered[0], X25Cause.OutOfOrder), Is.False, "an accepted call cannot then be refused");
-            Assert.That(SentFrames().Count, Is.EqualTo(framesAfterAccept), "nothing may be sent for those answers");
-            Assert.That(CountClearsOn(5), Is.EqualTo(0));
+
+            // Counted by packet type, not by frames on the line. Once the call is accepted the local TAD
+            // service starts its session on channel 5 from its own thread (a Q-bit data packet, an X.29
+            // "set PAD parameters" message, decoded from a failing run on 2026-11-18), so a frame count
+            // taken after the accept raced that packet and failed about one run in three. What the two
+            // refused answers must not send is a second Call Accepted (type 0x0F) or a Clear Request
+            // (type 0x13, Table 5-1).
+            Assert.That(CountPacketsOfType(0x0F), Is.EqualTo(1), "exactly one Call Accepted: the second accept sends nothing");
+            Assert.That(CountClearsOn(5), Is.EqualTo(0), "the refused reject sends no Clear Request");
         }
 
         [Test]

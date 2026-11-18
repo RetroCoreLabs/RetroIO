@@ -5,54 +5,86 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
 using System.Collections.Generic;
 
 namespace RetroIO.Protocols.X25.Routing
 {
     /// <summary>
-    /// An X.121 routing table implementing the switch routing precedence, plus an additive
-    /// <see cref="X121RouteType.Regex"/> rule so the same engine can express endpoint-style pattern routing.
+    /// The one X.121 routing table and its one lookup. The switch (<c>SwitchCallRouter</c>) and the
+    /// runtime (<c>X25Router</c>: incoming calls, the calls the local PAD places, outgoing packets) all
+    /// ask this table, so the same table gives the same answer everywhere.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Lookup runs as four passes, in this order, and stops at the first pass that produces a port
-    /// the call may actually go to:
+    /// The number analysis follows X.121 (10/2000), text <c>Specs\X25\T-REC-X.121-200010-I!!PDF-E.txt</c>:
     /// </para>
-    ///  - Exact, Hunt and Regex entries, in table order.
-    ///  - The longest matching Prefix.
-    ///  - A DNIC match, which is the whole of this pass: it ranks below every prefix, however short, so it cannot be reached while any prefix matched.
-    ///  - The Default route.
+    ///  - The table knows its own network: one or more own DNICs and the international prefix
+    ///    (<see cref="OwnDnics"/>, <see cref="InternationalPrefix"/>). A number that starts with the prefix is
+    ///    an international number with the prefix in front; the prefix is taken off, because it "is not part
+    ///    of the international X.121 format and is not signalled across internetwork or international
+    ///    boundaries" (7.8.1, lines 557-561). When a prefix is set, a number without it is a national number
+    ///    (the network terminal number, 7.6.2) and is completed with the first own DNIC
+    ///    (international data number = DNIC + NTN, 7.6.1, line 508). With no prefix set, numbers are taken
+    ///    as they come.
+    ///  - One lookup over that international number, most exact first: an exact number or a hunt group, a
+    ///    pattern route, the longest full-address prefix, a DNIC with the digit after it, a DNIC, a country
+    ///    code (DCC), and last the default route - usually the X.75 gateway. An originating or transit
+    ///    network reads the DCC, then the network digit, then the digit after the DNIC (7.12.1, 7.12.2,
+    ///    7.12.6, lines 644-675); X.121 does not say how a full-address prefix shorter than a DNIC ranks
+    ///    against a DNIC, so a prefix of any length ranks above every DNIC, as this table did before.
+    ///  - A route that would send the call back out of the port it came in on is skipped and the search
+    ///    goes on: that would send the call to the party that placed it.
+    ///  - A disabled route is skipped. A route for the other direction, or whose call user data pattern does
+    ///    not match, is skipped.
+    ///  - The winning route's port must exist; if it is out of order its backup port is used; a hunt group
+    ///    takes its next member that is in service. With none in service the answer is out of order.
+    ///  - The number sent on is the full international number, without the prefix, to a port that asks for
+    ///    it (a gateway: 7.12.6, 7.12.7 "the complete international data number should always be sent");
+    ///    otherwise the number as it came in, or the national number when the port asks for that. Which of
+    ///    those a local terminal wants is not in X.121 or X.25, so it is the port's setting.
     /// <para>
-    /// A port equal to the ingress port is never the answer: routing a call back out of the
-    /// interface it arrived on sends it to the party that placed it. Such a candidate is skipped and
-    /// the search carries on, so a hunt group with one member on the ingress port still finds
-    /// another, and an exact route pointing back the way the call came falls through to the prefix
-    /// and default routes instead of forming a loop.
+    /// PVC entries are held for configuration and reporting but skipped by the lookup; they are handled
+    /// at setup.
     /// </para>
     /// <para>
-    /// Written as separate passes on purpose. The single loop this replaces mixed the passes
-    /// together and got two things wrong: an Exact or Regex hit returned without the ingress check
-    /// at all, and a DNIC seen before a prefix claimed a match length of four, so a three-digit
-    /// prefix later in the table lost to it and the same table gave different answers depending on
-    /// the order it was written in.
-    /// </para>
-    /// <para>
-    /// PVC entries are held for configuration and reporting but skipped by dynamic lookup; they are
-    /// handled at setup.
+    /// Changing the table (adding, deleting, setting the own network) is not thread safe and is done while
+    /// nothing is looking up. Looking up from several threads at once is safe: the hunt cursor and the hit
+    /// counters are changed with interlocked operations.
     /// </para>
     /// </remarks>
-    public sealed class X121RoutingTable
+    public sealed partial class X121RoutingTable
     {
         /// <summary>
-        /// Number of leading digits compared for a DNIC match.
+        /// Number of leading digits compared for a DNIC match (X.121 7.2: the DNIC is four digits).
         /// </summary>
         public const int DnicLength = 4;
 
-        private readonly List<X121Route> _routes = new List<X121Route>();
-        private readonly List<X121HuntGroup> _huntGroups = new List<X121HuntGroup>();
+        /// <summary>
+        /// Number of leading digits compared for a country match (X.121 7.2: the DCC is three digits).
+        /// </summary>
+        public const int DccLength = 3;
 
         /// <summary>
-        /// The routing entries, in evaluation order.
+        /// The port number that means "this node": a route with it as its port delivers the call to a local
+        /// service (the runtime's TAD, a waiting program). Never a real port.
+        /// </summary>
+        public const int LocalPort = -2;
+
+        /// <summary>
+        /// The name <see cref="LocalPort"/> is shown and written with.
+        /// </summary>
+        public const string LocalPortName = "local";
+
+        private readonly List<X121Route> _routes = new List<X121Route>();
+        private readonly List<X121HuntGroup> _huntGroups = new List<X121HuntGroup>();
+        private readonly List<string> _ownDnics = new List<string>();
+        private readonly Dictionary<int, string> _portNames = new Dictionary<int, string>();
+        private string _internationalPrefix = string.Empty;
+
+        /// <summary>
+        /// The routing entries, in the order they were added (which is not the lookup order; see
+        /// <see cref="RoutesInLookupOrder"/>).
         /// </summary>
         public IReadOnlyList<X121Route> Routes => _routes;
 
@@ -60,6 +92,168 @@ namespace RetroIO.Protocols.X25.Routing
         /// The hunt groups, indexed by <see cref="X121Route.HuntGroupId"/>.
         /// </summary>
         public IReadOnlyList<X121HuntGroup> HuntGroups => _huntGroups;
+
+        /// <summary>
+        /// This network's own DNICs (four digits, or five with the digit after the DNIC), first one first.
+        /// A local number is completed with the first one's four DNIC digits. Empty when none is set.
+        /// </summary>
+        public IReadOnlyList<string> OwnDnics => _ownDnics;
+
+        /// <summary>
+        /// The international prefix of this network (X.121 7.8): a called number that starts with it is an
+        /// international number with the prefix in front. Empty (the default) means the network uses no
+        /// prefix and numbers are taken as they come.
+        /// </summary>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the value is not 1 to 3 digits or empty.
+        /// </exception>
+        public string InternationalPrefix
+        {
+            get => _internationalPrefix;
+            set
+            {
+                string v = value ?? string.Empty;
+                if (!X121RouteRules.CheckInternationalPrefix(v, out string error))
+                {
+                    throw new ArgumentException(error, nameof(value));
+                }
+
+                _internationalPrefix = v;
+            }
+        }
+
+        /// <summary>
+        /// Sets the own DNICs, replacing any set before.
+        /// </summary>
+        /// <param name="dnics">
+        /// The DNICs, first one first. Blank entries are left out.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when one of them is not a valid DNIC (<see cref="X121RouteRules.CheckDnic"/>).
+        /// </exception>
+        public void SetOwnDnics(IEnumerable<string> dnics)
+        {
+            if (dnics == null)
+            {
+                throw new ArgumentNullException(nameof(dnics));
+            }
+
+            List<string> checkedList = new List<string>();
+            foreach (string d in dnics)
+            {
+                string t = (d ?? string.Empty).Trim();
+                if (t.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!X121RouteRules.CheckDnic(t, out string error))
+                {
+                    throw new ArgumentException("own DNIC " + t + ": " + error, nameof(dnics));
+                }
+
+                checkedList.Add(t);
+            }
+
+            _ownDnics.Clear();
+            _ownDnics.AddRange(checkedList);
+        }
+
+        /// <summary>
+        /// Gives a port a name, for the routing screen, the explanations and the config files.
+        /// </summary>
+        /// <param name="port">
+        /// The port number.
+        /// </param>
+        /// <param name="name">
+        /// The name; empty removes it.
+        /// </param>
+        public void SetPortName(int port, string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                _portNames.Remove(port);
+                return;
+            }
+
+            _portNames[port] = name;
+        }
+
+        /// <summary>
+        /// The name of a port: the one set with <see cref="SetPortName"/>, <c>local</c> for
+        /// <see cref="LocalPort"/>, otherwise <c>port N</c>.
+        /// </summary>
+        /// <param name="port">
+        /// The port number.
+        /// </param>
+        /// <returns>
+        /// The name.
+        /// </returns>
+        public string GetPortName(int port)
+        {
+            if (_portNames.TryGetValue(port, out string? name))
+            {
+                return name;
+            }
+
+            if (port == LocalPort)
+            {
+                return LocalPortName;
+            }
+
+            return port < 0 ? "none" : "port " + port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// The named ports, by number.
+        /// </summary>
+        public IReadOnlyDictionary<int, string> PortNames => _portNames;
+
+        /// <summary>
+        /// Finds a port by its name or its number. The name compare ignores case. <c>local</c> is
+        /// <see cref="LocalPort"/> unless a real port carries that name.
+        /// </summary>
+        /// <param name="nameOrNumber">
+        /// A port name, or a port number written in digits.
+        /// </param>
+        /// <param name="port">
+        /// The port number; -1 when not found.
+        /// </param>
+        /// <returns>
+        /// True when found.
+        /// </returns>
+        public bool TryFindPort(string nameOrNumber, out int port)
+        {
+            port = -1;
+            string s = (nameOrNumber ?? string.Empty).Trim();
+            if (s.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (KeyValuePair<int, string> kv in _portNames)
+            {
+                if (string.Equals(kv.Value, s, StringComparison.OrdinalIgnoreCase))
+                {
+                    port = kv.Key;
+                    return true;
+                }
+            }
+
+            if (string.Equals(s, LocalPortName, StringComparison.OrdinalIgnoreCase))
+            {
+                port = LocalPort;
+                return true;
+            }
+
+            if (X121RouteRules.IsDigits(s) && s.Length <= 6)
+            {
+                port = int.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+                return true;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Appends a routing entry and returns its index.
@@ -72,6 +266,11 @@ namespace RetroIO.Protocols.X25.Routing
         /// </returns>
         public int AddRoute(X121Route route)
         {
+            if (route == null)
+            {
+                throw new ArgumentNullException(nameof(route));
+            }
+
             _routes.Add(route);
             return _routes.Count - 1;
         }
@@ -97,6 +296,29 @@ namespace RetroIO.Protocols.X25.Routing
         }
 
         /// <summary>
+        /// Deletes one routing entry.
+        /// </summary>
+        /// <param name="route">
+        /// The entry.
+        /// </param>
+        /// <returns>
+        /// True when it was in the table.
+        /// </returns>
+        public bool RemoveRoute(X121Route route)
+        {
+            return _routes.Remove(route);
+        }
+
+        /// <summary>
+        /// Removes every route and hunt group. The own network and the port names stay.
+        /// </summary>
+        public void ClearRoutes()
+        {
+            _routes.Clear();
+            _huntGroups.Clear();
+        }
+
+        /// <summary>
         /// Appends a hunt group.
         /// </summary>
         /// <param name="group">
@@ -108,7 +330,9 @@ namespace RetroIO.Protocols.X25.Routing
         }
 
         /// <summary>
-        /// Resolves the egress port for a called address, advancing hunt-group round-robin state.
+        /// Resolves the egress port for a called address, advancing hunt-group round-robin state. Kept for
+        /// callers that need only the port; it is <see cref="Resolve"/> with every port taken to be in
+        /// service, and a local route counts as found.
         /// </summary>
         /// <param name="calledAddress">
         /// The X.121 address to route.
@@ -124,217 +348,9 @@ namespace RetroIO.Protocols.X25.Routing
         /// </returns>
         public bool TryLookup(string calledAddress, int inPort, out int outPort)
         {
-            if (TryNamedRoutes(calledAddress, inPort, out outPort))
-            {
-                return true;
-            }
-
-            if (TryLongestPrefix(calledAddress, inPort, out outPort))
-            {
-                return true;
-            }
-
-            if (TryDnic(calledAddress, inPort, out outPort))
-            {
-                return true;
-            }
-
-            return TryDefault(inPort, out outPort);
-        }
-
-        /// <summary>
-        /// Pass one: Exact, Hunt and Regex entries, in table order.
-        /// </summary>
-        /// <param name="calledAddress">
-        /// The X.121 address to route.
-        /// </param>
-        /// <param name="inPort">
-        /// The port the call arrived on.
-        /// </param>
-        /// <param name="outPort">
-        /// The port to route to.
-        /// </param>
-        /// <returns>
-        /// True when one of them matched and named a port other than the ingress port.
-        /// </returns>
-        private bool TryNamedRoutes(string calledAddress, int inPort, out int outPort)
-        {
-            outPort = -1;
-
-            for (int i = 0; i < _routes.Count; i++)
-            {
-                X121Route r = _routes[i];
-
-                if (r.Type == X121RouteType.Exact)
-                {
-                    if (calledAddress == r.Address && r.DestPort != inPort)
-                    {
-                        outPort = r.DestPort;
-                        return true;
-                    }
-
-                    continue;
-                }
-
-                if (r.Type == X121RouteType.Regex)
-                {
-                    // Extension rule, ranked with Exact: first match in table order wins.
-                    if (r.RegexMatches(calledAddress) && r.DestPort != inPort)
-                    {
-                        outPort = r.DestPort;
-                        return true;
-                    }
-
-                    continue;
-                }
-
-                if (r.Type != X121RouteType.Hunt || calledAddress != r.Address)
-                {
-                    continue;
-                }
-
-                if (r.HuntGroupId < 0 || r.HuntGroupId >= _huntGroups.Count)
-                {
-                    continue;
-                }
-
-                X121HuntGroup hg = _huntGroups[r.HuntGroupId];
-                if (hg.MemberCount == 0)
-                {
-                    continue;
-                }
-
-                // Round-robin over the members, skipping any that would send the call back out of
-                // the port it arrived on. The cursor advances for every member tried, so a busy
-                // group keeps rotating rather than stalling on the one that cannot be used.
-                for (int tried = 0; tried < hg.MemberCount; tried++)
-                {
-                    int member = hg.Members[hg.NextIdx % hg.MemberCount];
-                    hg.NextIdx++;
-
-                    if (member != inPort)
-                    {
-                        outPort = member;
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Pass two: the longest matching prefix.
-        /// </summary>
-        /// <param name="calledAddress">
-        /// The X.121 address to route.
-        /// </param>
-        /// <param name="inPort">
-        /// The port the call arrived on.
-        /// </param>
-        /// <param name="outPort">
-        /// The port to route to.
-        /// </param>
-        /// <returns>
-        /// True when a prefix matched and named a port other than the ingress port.
-        /// </returns>
-        private bool TryLongestPrefix(string calledAddress, int inPort, out int outPort)
-        {
-            outPort = -1;
-            int bestLen = 0;
-
-            for (int i = 0; i < _routes.Count; i++)
-            {
-                X121Route r = _routes[i];
-                if (r.Type != X121RouteType.Prefix || r.PrefixLen <= 0)
-                {
-                    continue;
-                }
-
-                if (r.DestPort == inPort || r.PrefixLen <= bestLen)
-                {
-                    continue;
-                }
-
-                if (StartsWithN(calledAddress, r.Address, r.PrefixLen))
-                {
-                    bestLen = r.PrefixLen;
-                    outPort = r.DestPort;
-                }
-            }
-
-            return outPort >= 0;
-        }
-
-        /// <summary>
-        /// Pass three: a DNIC match, which is the first four digits of the address.
-        /// </summary>
-        /// <remarks>
-        /// A whole pass of its own rather than a prefix of length four, because it ranks below every
-        /// prefix however short. Treating it as a length-four prefix made a three-digit prefix lose
-        /// to it.
-        /// </remarks>
-        /// <param name="calledAddress">
-        /// The X.121 address to route.
-        /// </param>
-        /// <param name="inPort">
-        /// The port the call arrived on.
-        /// </param>
-        /// <param name="outPort">
-        /// The port to route to.
-        /// </param>
-        /// <returns>
-        /// True when a DNIC matched and named a port other than the ingress port.
-        /// </returns>
-        private bool TryDnic(string calledAddress, int inPort, out int outPort)
-        {
-            outPort = -1;
-
-            for (int i = 0; i < _routes.Count; i++)
-            {
-                X121Route r = _routes[i];
-                if (r.Type != X121RouteType.Dnic || r.DestPort == inPort)
-                {
-                    continue;
-                }
-
-                if (StartsWithN(calledAddress, r.Dnic, DnicLength))
-                {
-                    outPort = r.DestPort;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Pass four: the default route.
-        /// </summary>
-        /// <param name="inPort">
-        /// The port the call arrived on.
-        /// </param>
-        /// <param name="outPort">
-        /// The port to route to.
-        /// </param>
-        /// <returns>
-        /// True when a default route exists and is not the ingress port.
-        /// </returns>
-        private bool TryDefault(int inPort, out int outPort)
-        {
-            outPort = -1;
-
-            for (int i = 0; i < _routes.Count; i++)
-            {
-                X121Route r = _routes[i];
-                if (r.Type == X121RouteType.Default && r.DestPort != inPort)
-                {
-                    outPort = r.DestPort;
-                    return true;
-                }
-            }
-
-            return false;
+            X121RouteResult r = Resolve(calledAddress, inPort, null);
+            outPort = r.IsRouted ? r.Port : -1;
+            return r.IsRouted;
         }
 
         /// <summary>
@@ -350,100 +366,12 @@ namespace RetroIO.Protocols.X25.Routing
         /// Maximum number of candidate ports to return.
         /// </param>
         /// <returns>
-        /// The candidate egress ports, primary first (empty if none).
+        /// The candidate egress ports, primary first (empty if none): the winner's port, then the backup
+        /// ports of every route that matches, in lookup order, without repeats and never the ingress port.
         /// </returns>
         public IReadOnlyList<int> LookupMulti(string calledAddress, int inPort, int maxPorts)
         {
-            List<int> result = new List<int>();
-
-            int primary = -1;
-            if (TryLookup(calledAddress, inPort, out int p))
-            {
-                primary = p;
-                result.Add(primary);
-            }
-
-            for (int i = 0; i < _routes.Count && result.Count < maxPorts; i++)
-            {
-                X121Route r = _routes[i];
-                if (r.BackupPort < 0 || r.BackupPort == inPort || r.BackupPort == primary)
-                {
-                    continue;
-                }
-
-                bool matches = false;
-                switch (r.Type)
-                {
-                    case X121RouteType.Exact:
-                        matches = calledAddress == r.Address;
-                        break;
-                    case X121RouteType.Prefix:
-                        matches = r.PrefixLen > 0 && StartsWithN(calledAddress, r.Address, r.PrefixLen);
-                        break;
-                    case X121RouteType.Dnic:
-                        matches = StartsWithN(calledAddress, r.Dnic, DnicLength);
-                        break;
-                    case X121RouteType.Default:
-                        matches = true;
-                        break;
-                }
-
-                if (!matches)
-                {
-                    continue;
-                }
-
-                bool dup = false;
-                for (int j = 0; j < result.Count; j++)
-                {
-                    if (result[j] == r.BackupPort)
-                    {
-                        dup = true;
-                        break;
-                    }
-                }
-
-                if (!dup)
-                {
-                    result.Add(r.BackupPort);
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Compares the first <paramref name="n"/> characters of two strings: both must be at least
-        /// <paramref name="n"/> long and equal over that span.
-        /// </summary>
-        /// <param name="value">
-        /// The address being tested.
-        /// </param>
-        /// <param name="pattern">
-        /// The prefix/DNIC to compare against.
-        /// </param>
-        /// <param name="n">
-        /// Number of leading characters to compare.
-        /// </param>
-        /// <returns>
-        /// True if both strings share their first <paramref name="n"/> characters.
-        /// </returns>
-        private static bool StartsWithN(string value, string pattern, int n)
-        {
-            if (value.Length < n || pattern.Length < n)
-            {
-                return false;
-            }
-
-            for (int k = 0; k < n; k++)
-            {
-                if (value[k] != pattern[k])
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return LookupMulti(calledAddress, inPort, maxPorts, X121RouteDirection.Both, null);
         }
     }
 }

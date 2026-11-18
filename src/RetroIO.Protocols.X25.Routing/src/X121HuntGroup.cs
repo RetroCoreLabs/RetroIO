@@ -6,6 +6,7 @@
 //
 
 using System.Collections.Generic;
+using System.Threading;
 
 namespace RetroIO.Protocols.X25.Routing
 {
@@ -28,7 +29,17 @@ namespace RetroIO.Protocols.X25.Routing
         /// Round-robin cursor, advanced on every selection. Grows without bound and is taken modulo the
         /// member count at selection time.
         /// </summary>
-        public int NextIdx { get; set; }
+        public int NextIdx
+        {
+            get => Volatile.Read(ref Cursor);
+            set => Volatile.Write(ref Cursor, value);
+        }
+
+        /// <summary>
+        /// The cursor behind <see cref="NextIdx"/>, a field so the lookup can move it with an interlocked add
+        /// when two calls look up the group at once.
+        /// </summary>
+        internal int Cursor;
 
         /// <summary>
         /// Number of member ports.

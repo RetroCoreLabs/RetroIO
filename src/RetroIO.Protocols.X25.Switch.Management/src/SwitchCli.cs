@@ -184,7 +184,19 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 case X121RouteType.Default: return "default";
                 case X121RouteType.Hunt: return "hunt";
                 case X121RouteType.Pvc: return "pvc";
+                case X121RouteType.Dcc: return "dcc";
+                case X121RouteType.Regex: return "regex";
                 default: return "???";
+            }
+        }
+
+        private static string CalledAddressWord(RetroIO.Protocols.X25.Routing.X121AddressForm form)
+        {
+            switch (form)
+            {
+                case RetroIO.Protocols.X25.Routing.X121AddressForm.International: return "international";
+                case RetroIO.Protocols.X25.Routing.X121AddressForm.National: return "national";
+                default: return "as_received";
             }
         }
 
@@ -674,7 +686,13 @@ namespace RetroIO.Protocols.X25.Switch.Management
             SwitchConfig c = _node.Config;
             StringBuilder sb = new StringBuilder();
             sb.Append("[switch]").Append(eol);
-            sb.Append("dnic = ").Append(c.Dnic).Append(eol);
+
+            // Written only when the file named the own network: a dnic key makes it the own DNIC when loaded again
+            // (SwitchConfigLoader.LoadNetwork), and a switch that had none must not come back with one.
+            if (c.Routing.OwnDnics.Count > 0)
+            {
+                sb.Append("dnic = ").Append(c.Dnic).Append(eol);
+            }
             sb.Append("max_hops = ").Append(c.MaxHops).Append(eol);
             sb.Append("mgmt_port = ").Append(c.MgmtPort).Append(eol);
             // Every other [switch] key the loader reads: a switch started from its own saved file must be the same switch.
@@ -691,6 +709,19 @@ namespace RetroIO.Protocols.X25.Switch.Management
             AppendIfSet(sb, "tariff_file", c.TariffFile, eol);
             AppendIfSet(sb, "config_dir", c.ConfigDir, eol);
             sb.Append(eol);
+
+            // The own network (X.121 7.6, 7.8), when the file named it: the loader reads it back from [network].
+            if (c.Routing.OwnDnics.Count > 0 || c.Routing.InternationalPrefix.Length > 0)
+            {
+                sb.Append("[network]").Append(eol);
+                if (c.Routing.OwnDnics.Count > 0)
+                {
+                    sb.Append("own_dnic = ").Append(string.Join(", ", c.Routing.OwnDnics)).Append(eol);
+                }
+
+                AppendIfSet(sb, "international_prefix", c.Routing.InternationalPrefix, eol);
+                sb.Append(eol);
+            }
             for (int j = 0; j < c.Ports.Count; j++)
             {
                 PortConfig pc = c.Ports[j];
@@ -749,6 +780,16 @@ namespace RetroIO.Protocols.X25.Switch.Management
                     sb.Append("pvc_count = ").Append(pc.PvcCount).Append(eol);
                 }
                 AppendIfSet(sb, "iface_name", pc.InterfaceName, eol);
+                AppendIfSet(sb, "name", pc.Name, eol);
+
+                // Written only when it is not the port type's default, which the loader gives back by itself.
+                RetroIO.Protocols.X25.Routing.X121AddressForm defaultForm = pc.Type == PortType.Trunk
+                    ? RetroIO.Protocols.X25.Routing.X121AddressForm.International
+                    : RetroIO.Protocols.X25.Routing.X121AddressForm.AsReceived;
+                if (pc.CalledAddressForm != defaultForm)
+                {
+                    sb.Append("called_address = ").Append(CalledAddressWord(pc.CalledAddressForm)).Append(eol);
+                }
                 if (pc.XotPvcInitiator)
                 {
                     sb.Append("xot_pvc_role = initiator").Append(eol);
@@ -792,8 +833,8 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 }
                 sb.Append(eol);
             }
-            // The routes, numbered one after another without the PVCs: the loader reads [pvc.N] after the routes, and it
-            // finds a route's backup_port by the route's place in the table, so the numbering must be that place.
+            // The routes, numbered one after another without the PVCs. Every key the loader reads for a route is written,
+            // so a saved file loads back into the same table.
             int routeNo = 0;
             for (int j = 0; j < c.Routing.Routes.Count; j++)
             {
@@ -817,13 +858,45 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 {
                     sb.Append("dnic = ").Append(r.Dnic).Append(eol);
                 }
+                if (r.Type == X121RouteType.Dcc)
+                {
+                    sb.Append("dcc = ").Append(r.Dcc).Append(eol);
+                }
+                if (r.Type == X121RouteType.Regex)
+                {
+                    sb.Append("regex = ").Append(r.Pattern).Append(eol);
+                }
                 if (r.Type == X121RouteType.Hunt)
                 {
                     sb.Append("hunt_group = ").Append(r.HuntGroupId).Append(eol);
                 }
-                if (r.BackupPort >= 0)
+                // The backup ports in the order they are tried (X.110 3.5, Appendix I.1).
+                if (r.BackupPorts.Count == 1)
                 {
-                    sb.Append("backup_port = ").Append(r.BackupPort).Append(eol);
+                    sb.Append("backup_port = ").Append(r.BackupPorts[0]).Append(eol);
+                }
+                else if (r.BackupPorts.Count > 1)
+                {
+                    sb.Append("backup_ports = ");
+                    for (int b = 0; b < r.BackupPorts.Count; b++)
+                    {
+                        if (b > 0)
+                        {
+                            sb.Append(", ");
+                        }
+                        sb.Append(r.BackupPorts[b].ToString(CultureInfo.InvariantCulture));
+                    }
+                    sb.Append(eol);
+                }
+                AppendIfSet(sb, "name", r.Name, eol);
+                AppendIfSet(sb, "note", r.Note, eol);
+                if (!r.Enabled)
+                {
+                    sb.Append("enabled = no").Append(eol);
+                }
+                if (r.Direction != RetroIO.Protocols.X25.Routing.X121RouteDirection.Both)
+                {
+                    sb.Append("direction = ").Append(r.Direction == RetroIO.Protocols.X25.Routing.X121RouteDirection.Incoming ? "incoming" : "outgoing").Append(eol);
                 }
                 sb.Append(eol);
             }

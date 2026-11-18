@@ -5,13 +5,11 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
-using System.Text.RegularExpressions;
-
 namespace RetroIO.Protocols.X25.Transport
 {
     /// <summary>
-    /// X.25 routing entry that maps X.121 address patterns to transport destinations
-    /// Based on Cisco XOT routing model with regex pattern matching
+    /// A route in the older written form: an X.121 address pattern (in the style of Cisco's <c>x25 route</c>),
+    /// a type, a destination and a priority. <see cref="X25Router.AddRoute"/> reads it into the one table.
     /// </summary>
     public class X25Route
     {
@@ -77,90 +75,10 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         public string? CallUserDataPattern { get; set; }
 
-        /// <summary>
-        /// Compiled regex pattern for performance (cached after first use)
-        /// </summary>
-        private Regex? _compiledPattern;
-
-        /// <summary>
-        /// Check if this route matches the given X.121 address and direction
-        /// </summary>
-        /// <param name="x121Address">
-        /// X.121 address to match
-        /// </param>
-        /// <param name="direction">
-        /// Call direction to check
-        /// </param>
-        /// <param name="callUserData">
-        /// Optional call user data for additional matching
-        /// </param>
-        /// <returns>
-        /// True if route matches, false otherwise
-        /// </returns>
-        public bool Matches(string x121Address, RouteDirection direction, byte[]? callUserData = null)
-        {
-            if (!Enabled)
-                return false;
-
-            // Check direction compatibility
-            if (!SupportsDirection(direction))
-                return false;
-
-            // Check X.121 address pattern
-            if (!MatchesX121Pattern(x121Address))
-                return false;
-
-            // Check Call User Data pattern if specified
-            if (!string.IsNullOrEmpty(CallUserDataPattern) && callUserData != null)
-            {
-                var cudString = System.Text.Encoding.ASCII.GetString(callUserData);
-                if (!Regex.IsMatch(cudString, CallUserDataPattern))
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Check if this route supports the specified direction
-        /// </summary>
-        public bool SupportsDirection(RouteDirection direction)
-        {
-            return Direction == RouteDirection.Bidirectional ||
-                   Direction == direction;
-        }
-
-        /// <summary>
-        /// Check if X.121 address matches the pattern
-        /// </summary>
-        private bool MatchesX121Pattern(string x121Address)
-        {
-            try
-            {
-                // Cache compiled regex for performance
-                _compiledPattern ??= new Regex(X121AddressPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
-                
-                return _compiledPattern.IsMatch(x121Address);
-            }
-            catch (ArgumentException)
-            {
-                // Invalid regex pattern
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Get all destinations for this route (primary + backups)
-        /// </summary>
-        public IEnumerable<string> GetAllDestinations()
-        {
-            yield return Destination;
-            
-            foreach (var backup in BackupDestinations)
-            {
-                yield return backup;
-            }
-        }
+        // The matching that stood here (Matches, an unanchored regular expression search ranked only by Priority) was
+        // removed on 2026-11-18. An X25Route is now only the older written form of a route: X25Router.AddRoute turns
+        // it into a route of the one table (RetroIO.Protocols.X25.Routing, X121LegacyPattern), and every decision is
+        // made there.
 
         /// <summary>
         /// Returns a one-line description of the route.

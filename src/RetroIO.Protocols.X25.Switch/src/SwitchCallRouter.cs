@@ -92,32 +92,72 @@ namespace RetroIO.Protocols.X25.Switch
         /// </returns>
         public X25CallDecision Decide(string calledAddress, int inPortId)
         {
-            if (IsForThisSwitch(calledAddress))
-            {
-                return X25CallDecision.DeliverLocally();
-            }
-
-            if (!_table.TryLookup(calledAddress, inPortId, out int outPortId))
-            {
-                return X25CallDecision.NoRoute();
-            }
-
-            ISwitchPort? outPort = _portById(outPortId);
-            if (outPort == null)
-            {
-                // The table names a port this switch does not have: there is nowhere the number can be
-                // reached, the same as no route (Table C.1 row 24).
-                return X25CallDecision.NoRoute();
-            }
-
-            if (!IsInService(outPort))
-            {
-                return X25CallDecision.DestinationOutOfOrder();
-            }
-
-            return X25CallDecision.Forward(outPortId);
+            X121RouteResult r = Resolve(calledAddress, inPortId);
+            return ToDecision(r);
         }
 
+        /// <summary>
+        /// The full answer of the one lookup for a call (<see cref="X121RoutingTable.Resolve"/>): which route won,
+        /// why, the port, and the number to send on. Used by <see cref="Decide"/>, and by the console's
+        /// "test an address".
+        /// </summary>
+        /// <param name="calledAddress">
+        /// The called X.121 address.
+        /// </param>
+        /// <param name="inPortId">
+        /// The port the call came in on; -1 for none.
+        /// </param>
+        /// <returns>
+        /// The result; for the management address, a local result with no route.
+        /// </returns>
+        public X121RouteResult Resolve(string calledAddress, int inPortId)
+        {
+            if (IsForThisSwitch(calledAddress))
+            {
+                return X121RouteResult.ForThisNode(calledAddress, "A call to " + calledAddress + " is the switch's management address.");
+            }
+
+            return _table.Resolve(calledAddress, inPortId, PortStatus);
+        }
+
+        /// <summary>
+        /// Turns a lookup result into the decision a port acts on.
+        /// </summary>
+        /// <param name="r">
+        /// The lookup result.
+        /// </param>
+        /// <returns>
+        /// The decision.
+        /// </returns>
+        public static X25CallDecision ToDecision(X121RouteResult r)
+        {
+            switch (r.Outcome)
+            {
+                case X121RouteOutcome.Forward:
+                    return X25CallDecision.Forward(r.Port, r.CalledAddress == r.ReceivedAddress ? null : r.CalledAddress);
+                case X121RouteOutcome.Local:
+                    return X25CallDecision.DeliverLocally();
+                case X121RouteOutcome.OutOfOrder:
+                    return X25CallDecision.DestinationOutOfOrder();
+                default:
+                    // No route, or a route to a port this switch does not have: there is nowhere the number can be
+                    // reached (Table C.1 row 24).
+                    return X25CallDecision.NoRoute();
+            }
+        }
+
+        // What the lookup needs to know of a port: that the switch has it, whether it can carry a call now, and
+        // how it wants the called number written (PortConfig.CalledAddressForm).
+        private X121PortStatus PortStatus(int portId)
+        {
+            ISwitchPort? port = _portById(portId);
+            if (port == null)
+            {
+                return X121PortStatus.Missing;
+            }
+
+            return new X121PortStatus(true, IsInService(port), port.Config.CalledAddressForm);
+        }
         /// <summary>
         /// Whether a port can carry a call now: it is started and a peer is linked on it. These are the
         /// two things every port's <c>PlaceCall</c> checks before it tries.
