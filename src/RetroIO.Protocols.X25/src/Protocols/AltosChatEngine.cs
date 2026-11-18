@@ -685,6 +685,14 @@ namespace RetroIO.Protocols.X25.Protocols
             {
                 // serv.c:368-376: to place N on any channel, the whole line quoted, no confirmation. A bad number or an
                 // empty place is silent (write_msg's checks, serv.c:194-195).
+                // Not 1987 (decided 2026-11-18): with no number after the '!', atol gave 0, so "!name text" went to
+                // whoever was at place 0 - often the sender. Now the sender is told and nothing is sent.
+                if (!StartsWithNumber(line.Slice(1)))
+                {
+                    WriteMsg(i, AllChannels, WhisperNeedsNumber);
+                    return;
+                }
+
                 long target = Atol(line.Slice(1));
                 string msg = me.Nickname + " whispers: " + text + "\n";
                 ToLog("[" + i.ToString(CultureInfo.InvariantCulture) + ":" +
@@ -987,6 +995,30 @@ namespace RetroIO.Protocols.X25.Protocols
         /// UNVERIFIED: the Altos library itself was not seen; this is the classic Unix atol, with '+' accepted as
         /// the C standard says. Only spaces can come before the number, the line has no other white space left.
         /// </summary>
+        /// <summary>
+        /// The answer to a whisper with no user number after the '!' (not in the 1987 program).
+        /// </summary>
+        public const string WhisperNeedsNumber = "Whisper with the user number from .s: !# text\n";
+
+        /// <summary>
+        /// True when atol would read a number from <paramref name="s"/>: spaces, at most one sign, then a digit.
+        /// </summary>
+        private static bool StartsWithNumber(ReadOnlySpan<byte> s)
+        {
+            int p = 0;
+            while (p < s.Length && s[p] == ' ')
+            {
+                p++;
+            }
+
+            if (p < s.Length && (s[p] == '-' || s[p] == '+'))
+            {
+                p++;
+            }
+
+            return p < s.Length && s[p] >= '0' && s[p] <= '9';
+        }
+
         private static long Atol(ReadOnlySpan<byte> s)
         {
             int p = 0;
