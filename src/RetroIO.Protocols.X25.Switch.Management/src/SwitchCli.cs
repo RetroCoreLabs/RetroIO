@@ -787,11 +787,9 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 AppendIfSet(sb, "iface_name", pc.InterfaceName, eol);
                 AppendIfSet(sb, "name", pc.Name, eol);
 
-                // Written only when it is not the port type's default, which the loader gives back by itself.
-                RetroIO.Protocols.X25.Routing.X121AddressForm defaultForm = pc.Type == PortType.Trunk
-                    ? RetroIO.Protocols.X25.Routing.X121AddressForm.International
-                    : RetroIO.Protocols.X25.Routing.X121AddressForm.AsReceived;
-                if (pc.CalledAddressForm != defaultForm)
+                // Written only when it is not the default (international for every port since 2026-11-18), which
+                // the loader gives back by itself.
+                if (pc.CalledAddressForm != RetroIO.Protocols.X25.Routing.X121AddressForm.International)
                 {
                     sb.Append("called_address = ").Append(CalledAddressWord(pc.CalledAddressForm)).Append(eol);
                 }

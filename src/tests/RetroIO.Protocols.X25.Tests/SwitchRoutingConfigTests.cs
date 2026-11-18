@@ -145,11 +145,13 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
-        public void APortsCalledAddressForm_IsRead_TrunksDefaultToInternational()
+        public void APortsCalledAddressForm_IsRead_EveryPortDefaultsToInternational()
         {
             SwitchConfig sw = Load(With("[port.2]", "type = access", "name = terminals", "called_address = national"));
 
-            Assert.That(sw.Ports[0].CalledAddressForm, Is.EqualTo(X121AddressForm.AsReceived), "access port default: as received");
+            // Since 2026-11-18 an access port gives its machine the full number too (decided by Ronny; x25emu did so
+            // already). Before, it kept the number as the caller typed it.
+            Assert.That(sw.Ports[0].CalledAddressForm, Is.EqualTo(X121AddressForm.International), "access port default: the full international number");
             Assert.That(sw.Ports[1].CalledAddressForm, Is.EqualTo(X121AddressForm.International), "trunk default: the full international number");
             Assert.That(sw.Ports[2].CalledAddressForm, Is.EqualTo(X121AddressForm.National));
         }
