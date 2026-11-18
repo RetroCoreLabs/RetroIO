@@ -40,6 +40,10 @@ namespace RetroIO.Protocols.X25.Transport
         // circuits to one peer are two entries.
         private readonly List<XotClientCircuit> _connections = new List<XotClientCircuit>();
 
+        // Connections whose call has ended and that are finishing their close (EndCircuit), guarded by _connectionLock.
+        // Not in _connections: they are never used again and do not count as open.
+        private readonly List<XotClientCircuit> _ending = new List<XotClientCircuit>();
+
         /// <summary>
         /// Creates the XOT client transport in the stopped state.
         /// </summary>
@@ -286,11 +290,15 @@ namespace RetroIO.Protocols.X25.Transport
 
                 // Close every connection, one per circuit. Taken out of the list first, so the close events they raise
                 // find nothing to remove and are not counted as the peer dropping them.
+                // Connections whose call ended and that are still finishing their close (EndCircuit) are closed now too.
                 XotClientCircuit[] open;
                 lock (_connectionLock)
                 {
-                    open = _connections.ToArray();
+                    open = new XotClientCircuit[_connections.Count + _ending.Count];
+                    _connections.CopyTo(open, 0);
+                    _ending.CopyTo(open, _connections.Count);
                     _connections.Clear();
+                    _ending.Clear();
                 }
 
                 for (int i = 0; i < open.Length; i++)
@@ -471,7 +479,7 @@ namespace RetroIO.Protocols.X25.Transport
                 if (IsClearConfirmation(x25Packet, x25Packet.Length))
                 {
                     _logger.LogInformation("XOT client {Name}: the call on the connection to {Address} has ended (Clear Confirmation sent); closing it", Name, circuit.RemoteAddress);
-                    CloseCircuit(circuit);
+                    EndCircuit(circuit);
                 }
             }
 
@@ -494,6 +502,35 @@ namespace RetroIO.Protocols.X25.Transport
             }
 
             circuit.Close();
+        }
+
+        /// <summary>
+        /// Ends the connection of a call that has ended (a Clear Confirmation crossed it), so that every octet already
+        /// written still reaches the peer: the transport forgets the circuit at once (it is never used again), and the
+        /// circuit closes its sending side first and the socket only after the peer has closed too.
+        /// </summary>
+        /// <remarks>
+        /// Until 2026-11-18 this closed the socket at once. When the peer had sent something this side had not read yet
+        /// (seen: the peer's Clear Indication still in the receive buffer while the user's Clear Confirmation went out),
+        /// closing a socket with unread data makes Windows reset the connection (an RST instead of the normal end), and a
+        /// reset makes the peer throw away what it has received and not yet read - the Clear Confirmation itself. The test
+        /// <c>AClearConfirmationSent_ClosesTheConnection_AfterItHasGone</c> failed that way now and then ("An existing
+        /// connection was forcibly closed by the remote host" on the peer's read of the Clear Confirmation).
+        /// </remarks>
+        private void EndCircuit(XotClientCircuit circuit)
+        {
+            lock (_connectionLock)
+            {
+                if (!_connections.Remove(circuit))
+                {
+                    // Already ended or closed (both directions can see the Clear Confirmation).
+                    return;
+                }
+
+                _ending.Add(circuit);
+            }
+
+            circuit.EndAfterCall();
         }
 
         /// <summary>
@@ -563,7 +600,7 @@ namespace RetroIO.Protocols.X25.Transport
             if (circuit != null && e.Data != null && IsClearConfirmation(e.Data, e.Length))
             {
                 _logger.LogInformation("XOT client {Name}: the call on the connection to {Address} has ended (Clear Confirmation received); closing it", Name, circuit.RemoteAddress);
-                CloseCircuit(circuit);
+                EndCircuit(circuit);
             }
         }
 
@@ -575,6 +612,12 @@ namespace RetroIO.Protocols.X25.Transport
             XotClientCircuit? circuit = sender as XotClientCircuit;
             lock (_connectionLock)
             {
+                // A connection whose call ended has now finished closing (see EndCircuit).
+                if (circuit != null)
+                {
+                    _ending.Remove(circuit);
+                }
+
                 // Only a connection still in the list was closed from outside; one this transport closed itself (its
                 // call ended, or Stop) was taken out first.
                 if (circuit != null && _connections.Remove(circuit))
@@ -816,6 +859,14 @@ namespace RetroIO.Protocols.X25.Transport
                     if (packetData == null)
                         break;
 
+                    // The call on this connection has ended (EndAfterCall): whatever still arrives belongs to no call.
+                    // It is read only so the socket can close without a reset, and is not passed on.
+                    if (_ended)
+                    {
+                        _logger.LogDebug("XOT connection to {Address}:{Port}: a {Length}-octet packet after the call ended, not passed on", _remoteAddress, _remotePort, length);
+                        continue;
+                    }
+
                     // Fire DataReceived event for bridge pass-through mode
                     DataReceived?.Invoke(this, new TransportDataEventArgs
                     {
@@ -859,10 +910,49 @@ namespace RetroIO.Protocols.X25.Transport
             return buffer;
         }
 
+        /// <summary>
+        /// The call on this connection has ended: close the sending side now (TCP sends its end of data after every octet
+        /// already written, so the last packet - the Clear Confirmation - is not lost), keep reading until the peer closes
+        /// its side, and only then close the socket. Reading to the end matters: closing a socket that still holds unread
+        /// data makes Windows reset the connection, and a reset makes the peer throw away data it has received but not yet
+        /// read. A peer that never closes its side is closed on after <see cref="EndGraceMs"/>.
+        /// </summary>
+        internal void EndAfterCall()
+        {
+            _ended = true;
+            try
+            {
+                _tcpClient?.Client.Shutdown(SocketShutdown.Send);
+            }
+            catch (Exception ex)
+            {
+                // The socket is already closed or reset: nothing is left to send, close it outright.
+                _logger.LogDebug(ex, "XOT connection to {Address}:{Port}: closing the sending side failed; closing the connection", _remoteAddress, _remotePort);
+                Close();
+                return;
+            }
+
+            // The receive loop closes the socket when the peer's end of data arrives. This bounds the wait for a peer
+            // that keeps its side open. Close is safe to run twice.
+            _endTimer = new Timer(_ => Close(), null, EndGraceMs, Timeout.Infinite);
+        }
+
+        /// <summary>
+        /// How long <see cref="EndAfterCall"/> waits for the peer to close its side before the socket is closed anyway.
+        /// The Clear Confirmation was sent before the wait starts, so this only bounds how long a silent peer holds a
+        /// socket; it is a choice of this code, not a number from RFC 1613.
+        /// </summary>
+        private const int EndGraceMs = 5000;
+
+        // Set by EndAfterCall: the call has ended, nothing more is passed on.
+        private volatile bool _ended;
+        private Timer? _endTimer;
+
         internal void Close()
         {
             try
             {
+                _endTimer?.Dispose();
                 _cancellationTokenSource?.Cancel();
                 _stream?.Close();
                 _tcpClient?.Close();

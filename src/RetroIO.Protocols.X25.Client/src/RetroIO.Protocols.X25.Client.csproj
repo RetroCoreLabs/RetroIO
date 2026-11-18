@@ -26,4 +26,9 @@
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- For a test seam that holds the spare's dial at the point a race needs (X25Client.SpareConnectedForTest). -->
+    <InternalsVisibleTo Include="RetroIO.Protocols.X25.Tests" />
+  </ItemGroup>
 </Project>
