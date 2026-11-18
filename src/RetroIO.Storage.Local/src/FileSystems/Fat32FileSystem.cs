@@ -361,6 +361,10 @@ namespace RetroIO.Storage.Local.FileSystems
                 throw new IOException($"Cannot overwrite directory '{name}' with a file");
             }
 
+            // Every check on room is made before the first byte changes, so a write that does not fit
+            // leaves the disk as it was (the old file of the same name included).
+            EnsureRoomForWrite(path, parentCluster, data.Length, existing);
+
             if (existing.HasValue)
             {
                 if (existing.Value.Entry.StartCluster >= Fat32FirstDataCluster)
@@ -786,6 +790,68 @@ namespace RetroIO.Storage.Local.FileSystems
             _fatTable[offset + 3] = (byte)((newValue >> 24) & 0xFF);
 
             FlushFatTable();
+        }
+
+        // Refuses a write that cannot fit, BEFORE anything on the disk changes: the clusters the new
+        // data needs, plus one when the directory must grow for a new entry, must not be more than
+        // the free clusters plus the clusters the old file of the same name gives back. Before
+        // 2026-11-18 an overwrite freed the old file's clusters first and then ran out part way, so
+        // the old file was lost and a broken chain was left; a new file that did not fit kept the
+        // clusters it had taken before running out.
+        private void EnsureRoomForWrite(string path, uint parentCluster, int dataLength, RawEntry? existing)
+        {
+            long clusterBytes = (long)_bootSector!.SectorsPerCluster * _bootSector.BytesPerSector;
+            long needed = (dataLength + clusterBytes - 1) / clusterBytes;
+            long givenBack = 0;
+            if (existing.HasValue)
+            {
+                givenBack = CountChainClusters(existing.Value.Entry.StartCluster);
+            }
+            else if (!HasFreeSlot(parentCluster))
+            {
+                needed++;
+            }
+
+            long free = GetBlocksFree() / _bootSector.SectorsPerCluster;
+            if (needed > free + givenBack)
+            {
+                throw new IOException(
+                    $"Disk full: '{path}' needs {needed * clusterBytes} bytes but only {(free + givenBack) * clusterBytes} are free; nothing was written");
+            }
+        }
+
+        // The number of clusters in a chain, 0 for an empty file; stops at the end mark and never
+        // counts more clusters than the disk has, so a looped chain cannot hang the count.
+        private long CountChainClusters(uint startCluster)
+        {
+            long total = (_bootSector!.TotalSectors - _dataStart) / _bootSector.SectorsPerCluster;
+            long count = 0;
+            uint cluster = startCluster;
+            while (cluster >= Fat32FirstDataCluster && cluster < Fat32ReservedThreshold && count <= total)
+            {
+                count++;
+                cluster = ReadFatEntry(cluster);
+            }
+            return count;
+        }
+
+        // Whether a directory has a free entry (never used or deleted) without growing it.
+        private bool HasFreeSlot(uint dirStartCluster)
+        {
+            uint[] lbas = GetDirLbas(dirStartCluster);
+            byte[] sectorData = new byte[_bootSector!.BytesPerSector];
+            for (int s = 0; s < lbas.Length; s++)
+            {
+                _device!.ReadBlock(BlockAddress.FromLBA(lbas[s]), sectorData);
+                for (int i = 0; i < _bootSector.BytesPerSector; i += DirEntrySize)
+                {
+                    if (sectorData[i] == EndOfDirectoryMarker || sectorData[i] == DeletedEntryMarker)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private uint FindFreeCluster()
