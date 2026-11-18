@@ -28,6 +28,8 @@
   <ItemGroup>
     <!-- Shared X.25 conformance vectors (also read by the C emulator's test suite, see Migration/X25 one-stack plan.md). -->
     <None Include="..\x25-vectors\x25-vectors.json" Link="x25-vectors\x25-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The scripted Altos chat, run against the C# engine by ScriptedAltosChatParityTests. -->
+    <None Include="..\..\RetroIO.Protocols.X25.Host\scripts\altos-chat.js" Link="scripts\altos-chat.js" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -40,6 +42,8 @@
     <!-- Referenced for XotSwitchPort in the socket-level switch interop tests; the app's Main is not run. -->
 
     <ProjectReference Include="..\..\RetroIO.Protocols.X25.Nmc\src\RetroIO.Protocols.X25.Nmc.csproj" />
+    <!-- The scripted host, for the scripted Altos chat parity tests. -->
+    <ProjectReference Include="..\..\RetroIO.Protocols.X25.Host\src\RetroIO.Protocols.X25.Host.csproj" />
   </ItemGroup>
 
 </Project>

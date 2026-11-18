@@ -1,0 +1,8 @@
+<Project>
+  <!-- Family props for projects that came from the x25 tree. Imports the repo props first. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <!-- X.25 was built with style enforcement on; keep it for this family only. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+</Project>
