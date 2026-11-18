@@ -287,13 +287,16 @@ namespace RetroIO.Protocols.X25.Switch
                 }
 
                 // How the called number is written in a call sent out of this port. X.121 7.8.1 and 7.12.6-7.12.7:
-                // toward another network the full international number, without prefix, so a trunk defaults to
-                // that. What a local terminal wants is not in the spec; an access port keeps the number as received.
+                // toward another network the full international number, without prefix. Toward a local machine
+                // the spec leaves the form to the network (X.25 5.2.2.2 and Appendix IV.3, "depending on the
+                // network"); Ronny decided 2026-11-18 that every port gets the full number by default, so a machine
+                // sees one form whether the caller dialled 1001, 024221001 or called from abroad. x25emu's switch
+                // already did this (route_complete_number). Until then an access port kept the number as typed.
                 string form = ini.GetString(section, "called_address", string.Empty).Trim().ToLowerInvariant();
                 switch (form)
                 {
                     case "":
-                        pc.CalledAddressForm = pc.Type == PortType.Trunk ? X121AddressForm.International : X121AddressForm.AsReceived;
+                        pc.CalledAddressForm = X121AddressForm.International;
                         break;
                     case "as_received":
                         pc.CalledAddressForm = X121AddressForm.AsReceived;

@@ -27,11 +27,11 @@ namespace RetroIO.Protocols.X25.Switch
         /// <summary>
         /// How the called number is written in a call sent out of this port (<c>called_address</c>:
         /// <c>as_received</c>, <c>international</c> or <c>national</c>). X.121 7.8.1 and 7.12.6-7.12.7 want the
-        /// full international number without prefix toward another network, so a trunk port defaults to
-        /// <c>international</c>; what a local terminal wants is not in the spec, so an access port defaults to
-        /// leaving the number as it came in.
+        /// full international number without prefix toward another network. Toward a local machine X.25 leaves the
+        /// form to the network (5.2.2.2, Appendix IV.3); the default for every port is <c>international</c> (decided
+        /// 2026-11-18), so a machine always sees its number in one form, as x25emu's switch does.
         /// </summary>
-        public RetroIO.Protocols.X25.Routing.X121AddressForm CalledAddressForm { get; set; } = RetroIO.Protocols.X25.Routing.X121AddressForm.AsReceived;
+        public RetroIO.Protocols.X25.Routing.X121AddressForm CalledAddressForm { get; set; } = RetroIO.Protocols.X25.Routing.X121AddressForm.International;
 
         /// <summary>
         /// Access or trunk role.
