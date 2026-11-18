@@ -177,6 +177,20 @@ namespace RetroIO.Protocols.X25
         public bool KeepConnectionForIncomingCalls { get; set; } = false;
 
         /// <summary>
+        /// Client mode with <see cref="KeepConnectionForIncomingCalls"/>: the first wait, in milliseconds, before the kept
+        /// connection is dialled again after the far end closed it (a switch restart) or a dial failed. The wait doubles
+        /// after each failed dial up to <see cref="SpareRedialMostMs"/>, and starts again here after a dial that works.
+        /// 0 (the default) means 2000. The standards give no value for this (see <c>XotSpareRedial</c>).
+        /// </summary>
+        public int SpareRedialFirstMs { get; set; }
+
+        /// <summary>
+        /// Client mode with <see cref="KeepConnectionForIncomingCalls"/>: the longest wait, in milliseconds, between dials
+        /// of the kept connection. 0 (the default) means 30000.
+        /// </summary>
+        public int SpareRedialMostMs { get; set; }
+
+        /// <summary>
         /// TCP keepalive settings (equivalent to Cisco tcp-keepalives)
         /// </summary>
         public bool TcpKeepalive { get; set; } = true;

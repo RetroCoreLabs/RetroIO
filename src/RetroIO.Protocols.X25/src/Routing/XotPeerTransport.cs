@@ -89,6 +89,19 @@ namespace RetroIO.Protocols.X25.Transport
         /// spare is dialled; the connection with the call is closed when the call ends, like every other. Default false.
         /// </summary>
         public bool KeepSpareConnection { get; set; }
+
+        /// <summary>
+        /// Gets or sets the first wait, in milliseconds, before the spare (<see cref="KeepSpareConnection"/>) is dialled
+        /// again after the peer closed it or a dial failed. The wait doubles up to <see cref="SpareRedialMostMs"/>. 0 takes
+        /// <see cref="XotSpareRedial.DefaultFirstMs"/>. Our own timing, not the standard's (see <see cref="XotSpareRedial"/>).
+        /// </summary>
+        public int SpareRedialFirstMs { get; set; }
+
+        /// <summary>
+        /// Gets or sets the longest wait, in milliseconds, between dials of the spare. 0 takes
+        /// <see cref="XotSpareRedial.DefaultMostMs"/>.
+        /// </summary>
+        public int SpareRedialMostMs { get; set; }
     }
 
     /// <summary>
@@ -595,6 +608,12 @@ namespace RetroIO.Protocols.X25.Transport
                 SetStatus(TransportStatus.Active, "XOT peer ready");
                 if (_config.KeepSpareConnection)
                 {
+                    lock (_lock)
+                    {
+                        _spareRedial = new XotSpareRedial(_config.SpareRedialFirstMs, _config.SpareRedialMostMs);
+                        _spareRedialPending = false;
+                    }
+
                     // Dialled on a pool thread: a dial can wait ConnectTimeoutMs, and Start must not.
                     ThreadPool.QueueUserWorkItem(_ => OpenSpare());
                 }
@@ -662,6 +681,9 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 links = _links.ToArray();
                 _spare = null;
+                _spareRedialTimer?.Dispose();
+                _spareRedialTimer = null;
+                _spareRedialPending = false;
             }
 
             for (int i = 0; i < links.Length; i++)
@@ -814,9 +836,21 @@ namespace RetroIO.Protocols.X25.Transport
         private XotPeerLink? _spare;
 
         /// <summary>
+        /// When the spare is dialled again after the peer closed it or a dial failed (see <see cref="XotSpareRedial"/>).
+        /// Guarded by <c>_lock</c>, like the timer and the pending flag below.
+        /// </summary>
+        private XotSpareRedial? _spareRedial;
+
+        private Timer? _spareRedialTimer;
+
+        private bool _spareRedialPending;
+
+        /// <summary>
         /// Dials a new spare connection (<see cref="XotPeerConfig.KeepSpareConnection"/>). Runs on a pool thread. A
-        /// failed dial is logged and leaves the entry without a spare: there is no retry timer, the same rule as for a
-        /// call (and as X25Client's spare), so no further call can arrive until the entry is started again.
+        /// failed dial is dialled again after the wait of <see cref="XotSpareRedial"/>, for as long as the entry runs:
+        /// the entry is a DTE behind the switch, and the switch coming back is learned only by reaching it (X.25 4.6.5
+        /// would send a Restart Indication, which RFC 1613 6.4 forbids over XOT). Until 2026-11-18 a failed dial was
+        /// logged and nothing dialled again, so no call could arrive until the entry was started again.
         /// </summary>
         private void OpenSpare()
         {
@@ -836,10 +870,16 @@ namespace RetroIO.Protocols.X25.Transport
             // Recorded as the spare BEFORE its receive thread starts, so a call the peer puts on it at once is seen
             // arriving on the spare (OnLinkPacket) and a new spare is opened for the next one. X25Client recorded its
             // spare after the read thread had started and lost exactly that call's follow-up spare (fixed 2026-11-18).
-            XotPeerLink? link = DialLink(host, "no further call can arrive on this entry until it is started again", true);
+            XotPeerLink? link = DialLink(host, "the spare is dialled again after a wait", true);
             if (link == null)
             {
+                ScheduleSpareRedial("the dial failed");
                 return;
+            }
+
+            lock (_lock)
+            {
+                _spareRedial?.Reset();
             }
 
             bool stillActive;
@@ -855,6 +895,46 @@ namespace RetroIO.Protocols.X25.Transport
             }
 
             link.StartReceiving();
+        }
+
+        /// <summary>
+        /// Dials the spare again after the next wait of <see cref="XotSpareRedial"/>, unless the entry has stopped, a
+        /// spare is already there, or a redial is already waiting. Safe to call with <c>_lock</c> held.
+        /// </summary>
+        /// <param name="why">Words for the log: why the spare is needed again.</param>
+        private void ScheduleSpareRedial(string why)
+        {
+            int wait;
+            lock (_lock)
+            {
+                if (!_config.KeepSpareConnection || _status != TransportStatus.Active || _spare != null || _spareRedialPending || _spareRedial == null)
+                {
+                    return;
+                }
+
+                _spareRedialPending = true;
+                wait = _spareRedial.Next();
+                _spareRedialTimer ??= new Timer(_ => OnSpareRedialDue(), null, Timeout.Infinite, Timeout.Infinite);
+                _spareRedialTimer.Change(wait, Timeout.Infinite);
+            }
+
+            _logger.LogInformation("XOT peer {Name}: {Why}; the spare connection to {Host}:{Port} is dialled again in {Wait} ms", Name, why, _config.PeerAddress, _config.PeerPort, wait);
+        }
+
+        private void OnSpareRedialDue()
+        {
+            lock (_lock)
+            {
+                if (!_spareRedialPending)
+                {
+                    // Stopped while the wait ran.
+                    return;
+                }
+
+                _spareRedialPending = false;
+            }
+
+            OpenSpare();
         }
 
         private static async Task<bool> ConnectAsync(TcpClient tcp, string host, int port)
@@ -1084,15 +1164,22 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 _links.Remove(link);
 
-                // A spare the peer closed is not dialled again by itself (the same rule as X25Client): the peer that
-                // closed it did not want it, and there is no retry timer.
+                // The peer closed the spare: the switch went away (a restart). It is dialled again after a wait, so
+                // calls can arrive once the switch is back (XotSpareRedial). Until 2026-11-18 it was not dialled again.
+                bool redialSpare = false;
                 if (link == _spare)
                 {
                     _spare = null;
                     if (!link.ClosedByUs && _status == TransportStatus.Active)
                     {
-                        _logger.LogWarning("XOT peer {Name}: the peer closed the spare connection {Remote}; no further call can arrive on this entry until it is started again", Name, link.RemoteText);
+                        _logger.LogWarning("XOT peer {Name}: the peer closed the spare connection {Remote}", Name, link.RemoteText);
+                        redialSpare = true;
                     }
+                }
+
+                if (redialSpare)
+                {
+                    ScheduleSpareRedial("the peer closed the spare connection");
                 }
 
                 bool dropped = !link.ClosedByUs && link.OpenCircuits > 0;

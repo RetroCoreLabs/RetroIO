@@ -92,6 +92,19 @@ namespace RetroIO.Protocols.X25.Client
         public ushort NumVcs { get; set; } = 8;
 
         /// <summary>
+        /// The first wait, in milliseconds, before the spare connection (the one kept open for arriving calls) is dialled
+        /// again after the switch closed it (a switch restart) or a dial failed. The wait doubles after each failed dial
+        /// up to <see cref="SpareRedialMostMs"/> and starts again here after a dial that works. 0 (the default) means
+        /// 2000. The standards give no value for this; see <c>RetroIO.Protocols.X25.Transport.XotSpareRedial</c>.
+        /// </summary>
+        public int SpareRedialFirstMs { get; set; }
+
+        /// <summary>
+        /// The longest wait, in milliseconds, between dials of the spare connection. 0 (the default) means 30000.
+        /// </summary>
+        public int SpareRedialMostMs { get; set; }
+
+        /// <summary>
         /// Our local X.121 address (the switch routes inbound calls for this address to us).
         /// </summary>
         public string LocalAddress { get; set; } = string.Empty;

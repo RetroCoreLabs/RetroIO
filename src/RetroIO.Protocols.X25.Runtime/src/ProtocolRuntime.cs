@@ -1449,7 +1449,13 @@ namespace RetroIO.Protocols.X25.Runtime
                 DialOnly = true,
 
                 // A subscriber line of a switch port: keep a connection open for calls the switch puts on it.
-                KeepSpareConnection = xotConfig.KeepConnectionForIncomingCalls
+                KeepSpareConnection = xotConfig.KeepConnectionForIncomingCalls,
+
+                // When the switch closes the spare (it restarted) or a dial fails, the spare is dialled again after
+                // this wait (XotSpareRedial): the runtime is a DTE behind the switch and learns the link is back by
+                // reaching it again (X.25 4.6; RFC 1613 6.4 forbids the Restart Indication over XOT).
+                SpareRedialFirstMs = xotConfig.SpareRedialFirstMs,
+                SpareRedialMostMs = xotConfig.SpareRedialMostMs
             };
 
             XotPeerTransport transport = new XotPeerTransport(_logger, peerConfig);
