@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using RetroIO.Link;
 using RetroIO.Link.Framing;
 using RetroIO.Protocols.X25.PacketLayer;
+using RetroIO.Protocols.X25.Transport;
 using Leg = RetroIO.Protocols.X25.Client.X25ClientLeg;
 
 namespace RetroIO.Protocols.X25.Client
@@ -56,6 +57,12 @@ namespace RetroIO.Protocols.X25.Client
         private readonly HashSet<ushort> _extraLcns = new HashSet<ushort>();
         private ushort _nextExtraLcn = FirstExtraLcn;
         private Leg? _spare;
+
+        // When the spare is dialled again after the switch closed it or a dial failed (XotSpareRedial). Guarded by
+        // _lock, like the timer and the pending flag.
+        private XotSpareRedial? _spareRedial;
+        private Timer? _spareRedialTimer;
+        private bool _spareRedialPending;
         private bool _opened;
         private int _legCounter;
 
@@ -145,6 +152,7 @@ namespace RetroIO.Protocols.X25.Client
 
             _config = config;
             _logger = logger ?? NullLogger.Instance;
+            _spareRedial = new XotSpareRedial(config.SpareRedialFirstMs, config.SpareRedialMostMs);
 
             // The first connection: transport, XOT framing and packet layer. It is the first spare, which waits for an
             // arriving call; every call placed opens a connection of its own (see Call).
@@ -644,6 +652,9 @@ namespace RetroIO.Protocols.X25.Client
                 legs = _legs.ToArray();
                 _legs.Clear();
                 _spare = null;
+                _spareRedialTimer?.Dispose();
+                _spareRedialTimer = null;
+                _spareRedialPending = false;
             }
 
             for (int i = 0; i < legs.Length; i++)
@@ -773,14 +784,19 @@ namespace RetroIO.Protocols.X25.Client
                     OnLayerCleared(leg, numbers[i], X25Cause.OutOfOrder, 0);
                 }
 
-                // A dropped connection is never used again, the spare included. A spare the peer drops is not
-                // dialled again by itself: the peer that closed it does not want it (a port with no room left).
+                // A dropped connection is never used again, the spare included. A spare the switch drops is dialled
+                // again after a wait (XotSpareRedial): the client is a DTE behind the switch, and over XOT it learns the
+                // switch is back only by reaching it (X.25 4.6.5 would send a Restart Indication, which RFC 1613 6.4
+                // forbids over XOT). Until 2026-11-18 it was not dialled again, and x25echo answered no call after a
+                // switch restart until it was started again.
                 if (leg.Vcs.Count == 0)
                 {
                     _legs.Remove(leg);
-                    if (_spare == leg)
+                    bool wasSpare = _spare == leg;
+                    if (wasSpare)
                     {
                         _spare = null;
+                        ScheduleSpareRedial("the switch closed the spare connection");
                     }
 
                     ThreadPool.QueueUserWorkItem(_ => CloseLeg(leg));
@@ -932,17 +948,16 @@ namespace RetroIO.Protocols.X25.Client
         private ushort SpareCircuits => _config.NumVcs == 0 ? (ushort)1 : _config.NumVcs;
 
         /// <summary>
-        /// Dials a new spare connection for the next arriving call. Runs on a pool thread. A failed dial is logged and
-        /// leaves the client without a spare; it is not retried (the switch is then gone, and the next call placed
-        /// finds that out on its own).
-        /// </summary>
-        /// <summary>
         /// Test seam: called on the dialling thread after a new spare's connection is up and before
         /// <see cref="OpenSpare"/> records it. A test holds it there while a call arrives on the new connection, the
         /// order that left the client with no spare until 2026-11-18. Null outside tests.
         /// </summary>
         internal Action? SpareConnectedForTest { get; set; }
 
+        /// <summary>
+        /// Dials a new spare connection for the next arriving call. Runs on a pool thread. A failed dial is dialled again
+        /// after the next wait of <see cref="XotSpareRedial"/>, for as long as the client is open.
+        /// </summary>
         private void OpenSpare()
         {
             lock (_lock)
@@ -967,9 +982,14 @@ namespace RetroIO.Protocols.X25.Client
 
             if (!connected)
             {
-                _logger.LogWarning("X25Client: could not open a spare connection to {Host}:{Port}; no further call can arrive", _config.Host, _config.Port);
                 CloseLeg(spare);
+                ScheduleSpareRedial("could not open a spare connection");
                 return;
+            }
+
+            lock (_lock)
+            {
+                _spareRedial?.Reset();
             }
 
             SpareConnectedForTest?.Invoke();
@@ -1008,6 +1028,45 @@ namespace RetroIO.Protocols.X25.Client
             {
                 ThreadPool.QueueUserWorkItem(_ => OpenSpare());
             }
+        }
+
+        /// <summary>
+        /// Dials the spare again after the next wait of <see cref="XotSpareRedial"/>, unless the client is closed, a spare
+        /// is already there or a redial is already waiting. Safe to call with <c>_lock</c> held.
+        /// </summary>
+        /// <param name="why">Words for the log.</param>
+        private void ScheduleSpareRedial(string why)
+        {
+            int wait;
+            lock (_lock)
+            {
+                if (_disposed || !_opened || _spare != null || _spareRedialPending || _spareRedial == null)
+                {
+                    return;
+                }
+
+                _spareRedialPending = true;
+                wait = _spareRedial.Next();
+                _spareRedialTimer ??= new Timer(_ => OnSpareRedialDue(), null, Timeout.Infinite, Timeout.Infinite);
+                _spareRedialTimer.Change(wait, Timeout.Infinite);
+            }
+
+            _logger.LogWarning("X25Client: {Why} ({Host}:{Port}); dialling it again in {Wait} ms", why, _config.Host, _config.Port, wait);
+        }
+
+        private void OnSpareRedialDue()
+        {
+            lock (_lock)
+            {
+                if (!_spareRedialPending || _disposed)
+                {
+                    return;
+                }
+
+                _spareRedialPending = false;
+            }
+
+            OpenSpare();
         }
 
         /// <summary>

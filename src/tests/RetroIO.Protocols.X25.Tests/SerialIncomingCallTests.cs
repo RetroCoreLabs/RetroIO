@@ -531,6 +531,26 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_transport.IsLinkUp, Is.True);
         }
 
+        /// <summary>
+        /// X.25 (10/96) 4.6.5 (text line 5938-5941): when an out of order condition is recovered "the DCE will send a
+        /// restart indication packet with the cause 'Network operational' to the local DTE"; 3.3.2: "The DTE will confirm
+        /// the restart by transferring a DTE restart confirmation packet". The runtime as the DTE of a serial line must
+        /// learn of the switch's return that way: after the link comes up it answers the Restart Indication with a
+        /// Restart Confirmation (type 0xFF, Table 5-1) on channel 0.
+        /// </summary>
+        [Test]
+        public void ADte_ConfirmsTheRestartIndicationTheDceSendsWhenTheLinkComesBack()
+        {
+            Build(Dte());
+            Inject(Frame(AddressA, Sabm));
+            Assert.That(_transport.IsLinkUp, Is.True);
+
+            // Restart Indication, cause Network operational 0x07 (Table 5-9), diagnostic 0, in the DCE's first I frame.
+            Inject(Frame(AddressA, IControl(0, 0), new byte[] { 0x10, 0x00, 0xFB, 0x07, 0x00 }));
+
+            Assert.That(CountPacketsOfType(0xFF), Is.EqualTo(1), "the DTE did not confirm the restart");
+        }
+
         [Test]
         public void ADce_AnswersAnSabmFromTheDteWithAUaCarryingAddressB()
         {
