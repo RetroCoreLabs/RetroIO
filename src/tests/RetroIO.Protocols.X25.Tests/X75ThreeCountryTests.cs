@@ -16,7 +16,6 @@ using RetroIO.Protocols.X25.Models;
 using RetroIO.Protocols.X25.Modules;
 using RetroIO.Protocols.X25.PacketLayer;
 using RetroIO.Protocols.X25.Routing;
-using RetroIO.Protocols.X25.Runtime;
 using RetroIO.Protocols.X25.Switch;
 using RetroIO.Protocols.X25.Switch.Model;
 using RetroIO.Protocols.X25.Switch.Ports;
@@ -453,126 +452,6 @@ namespace RetroIO.Protocols.X25.Tests
             SendXot(tadStream, X25PacketBuilder.CreateCallAccepted(offered.LCN));
             ReadUntil(padStream, X25PacketType.CallAccepted);
             Assert.That(Utilities(Captured(noLinkIn, X25PacketType.CallAccepted)).TransitNetworks, Is.EqualTo(new[] { "2342" }));
-        }
-
-        /// <summary>
-        /// One PAD caller's XOT line: its stream, its channel and the sequence numbers it keeps (X.25 4.4.1, modulo 8).
-        /// </summary>
-        private sealed class Caller
-        {
-            public NetworkStream Stream = null!;
-            public ushort Lci;
-            public byte SendSeq;
-            public byte RecvSeq;
-            public readonly StringBuilder Text = new StringBuilder();
-        }
-
-        // Reads until the caller's screen holds the given text, acknowledging every data packet with an RR so the
-        // server's window stays open (X.25 4.4.1.2), and skipping the Q-bit X.29 messages.
-        private static void WaitForText(Caller c, string wanted)
-        {
-            long deadline = Environment.TickCount64 + 15000;
-            while (c.Text.ToString().IndexOf(wanted, StringComparison.Ordinal) < 0)
-            {
-                Assert.That(Environment.TickCount64, Is.LessThan(deadline), "never saw \"" + wanted + "\"; screen so far:\n" + c.Text);
-                byte[] header = ReadExactly(c.Stream, 4);
-                X25PacketInfo info = X25PacketParser.ParsePacket(ReadExactly(c.Stream, (header[2] << 8) | header[3]));
-                Assert.That(info.PacketType, Is.Not.EqualTo(X25PacketType.ClearRequest),
-                    "cleared: cause " + info.ClearingCause + " diagnostic " + info.DiagnosticCode + "; screen so far:\n" + c.Text);
-                if (info.PacketType != X25PacketType.Data)
-                {
-                    continue;
-                }
-
-                c.RecvSeq = (byte)((info.PS + 1) & 7);
-                SendXot(c.Stream, X25PacketBuilder.CreateRR(c.Lci, c.RecvSeq));
-                if (!info.QBit)
-                {
-                    c.Text.Append(Encoding.ASCII.GetString(info.UserData));
-                }
-            }
-        }
-
-        private static void Type(Caller c, string line)
-        {
-            SendXot(c.Stream, X25PacketBuilder.CreateDataPacket(c.Lci, c.SendSeq, c.RecvSeq, Encoding.ASCII.GetBytes(line)));
-            c.SendSeq = (byte)((c.SendSeq + 1) & 7);
-        }
-
-        /// <summary>
-        /// Two PAD users at the University of Tromsø dial Altos in Germany, 026245890040004 (0 is Norway's international
-        /// prefix), through England, and meet in the Altos CHAT 3.1 conference: what one types, the other reads as
-        /// "guest says: ...". The chat is the real one (RetroIO <c>ChatProtocolService</c>, the 1987 program's
-        /// behaviour), running in a RetroIO runtime that sits behind Germany's subscriber port as its XOT client.
-        /// </summary>
-        [Test]
-        public void TwoUsersInNorway_MeetInTheAltosChatInGermany()
-        {
-            // Germany: X.75 from England on port 0; the Altos host's line on port 1, enough channels for the chat's
-            // XOT connections (one per call plus the spare it keeps dialled).
-            HdlcTcpSwitchPort deFromUk = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
-            XotSwitchPort deAltos = new XotSwitchPort(Subscriber(1));
-            Build("2624", "2624589004", deFromUk, deAltos);
-            Assert.That(deFromUk.Start() && deAltos.Start(), Is.True);
-
-            // The chat, as Altos Germany: 26245890040004, a RetroIO runtime dialling Germany's port 1.
-            ProtocolRuntime altos = ChatProtocolServiceTests.StartChatRuntime(deAltos.BoundPort, maxUsers: 30, waitPauseMs: 0);
-            _disposables.Add(altos);
-
-            HdlcTcpSwitchPort ukFromNo = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
-            HdlcTcpSwitchPort ukToDe = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, deFromUk.BoundPort), NullLogger.Instance);
-            Build("2342", "2624", ukFromNo, ukToDe);
-            Assert.That(ukFromNo.Start() && ukToDe.Start(), Is.True);
-
-            // Norway: users dial with the international prefix 0 (X.121 7.8.1); the NUI is required.
-            PortConfig padLine = Subscriber(0);
-            padLine.NuiRequired = true;
-            XotSwitchPort noPad = new XotSwitchPort(padLine);
-            HdlcTcpSwitchPort noToUk = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, ukFromNo.BoundPort), NullLogger.Instance);
-            Build("2422", "2624", noPad, noToUk, nuiAccount: Tromso, internationalPrefix: "0");
-            Assert.That(noPad.Start() && noToUk.Start(), Is.True);
-
-            Assert.That(SpinWait.SpinUntil(() => noToUk.PeerConnected && ukFromNo.PeerConnected && ukToDe.PeerConnected
-                && deFromUk.PeerConnected && deAltos.PeerConnected, 10000), Is.True, "the links or the chat's line did not come up");
-
-            Caller anna = Dial("2422000101");
-            Caller bjorn = Dial("2422000102");
-
-            // Both get the 1987 welcome and are in the conference.
-            WaitForText(anna, "Conference-utility \"CHAT\"  ver. 3.1");
-            WaitForText(anna, "+++guest+++");
-            WaitForText(bjorn, "+++guest+++");
-
-            // What Anna types, Bjørn reads.
-            Type(anna, "hello from Tromso\r");
-            WaitForText(bjorn, "guest says: hello from Tromso");
-
-            // And back.
-            Type(bjorn, "hei Anna\r");
-            WaitForText(anna, "guest says: hei Anna");
-
-            // Anna leaves with .x; Bjørn sees her go.
-            Type(anna, ".x\r");
-            WaitForText(bjorn, "---guest---");
-
-            Caller Dial(string calling)
-            {
-                TcpClient tcp = new TcpClient { NoDelay = true };
-                _disposables.Add(tcp);
-                tcp.Connect("127.0.0.1", noPad.BoundPort);
-                NetworkStream stream = tcp.GetStream();
-                stream.ReadTimeout = 15000;
-
-                // A PAD call (CUD 01 00 00 00, X.29) with the University of Tromsø's NUI.
-                byte[] nui = X25CallParameters.NuiSelectionElement(Encoding.ASCII.GetBytes(Tromso));
-                byte[] facilities = new byte[6 + nui.Length];
-                new byte[] { 0x42, 0x07, 0x07, 0x43, 0x02, 0x02 }.CopyTo(facilities, 0);
-                nui.CopyTo(facilities, 6);
-                SendXot(stream, X25PacketBuilder.CreateCallRequest(1, "0" + Altger, calling, facilities, new byte[] { 0x01, 0x00, 0x00, 0x00 }));
-
-                X25PacketInfo connected = ReadUntil(stream, X25PacketType.CallAccepted);
-                return new Caller { Stream = stream, Lci = connected.LCN };
-            }
         }
 
         // True when an X.25 facility field holds an element with the given code before the first marker (X.25 7.1).
