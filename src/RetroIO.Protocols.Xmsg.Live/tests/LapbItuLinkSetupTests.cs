@@ -129,6 +129,67 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
         }
 
         /// <summary>
+        /// The peer's SABM crossed ours and was answered, and our own SABM is still unanswered. An I frame the
+        /// peer sends now (it got our UA, so for it the link is up) must be thrown away: not handed up, not
+        /// acknowledged. X.25 (10/96) 2.4.4.1: "The DCE, having sent the SABM ... command, will ignore and
+        /// discard any frames except an SABM ... or DISC command, or a UA or DM response", and frames other than
+        /// UA and DM "will be sent only after the data link is set up and if no outstanding SABM ... exists".
+        /// Measured 2026-11-18 on the real serial trunk (COM10/COM18): the station handed the peer's X.25
+        /// Restart Request up while it still said "not up", the switch port dropped it, the RR said it had
+        /// arrived, and the X.25 restart never finished at that end, so every call over the trunk was ignored.
+        /// </summary>
+        [Fact]
+        public void CrossingSabms_AnIFrameBeforeOurSabmIsAnswered_IsDiscardedAndNotAcknowledged()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            List<byte[]> got = new List<byte[]>();
+            LapbLayer link = LapbTestKit.NewLink(0x0066, sent, ItuDte());
+            link.OnInformation += delegate (ReadOnlyMemory<byte> info) { got.Add(info.ToArray()); };
+
+            link.Connect(0);
+            LapbTestKit.DeliverAt(link, 100, FromDceCommand, 0x3F);    // the peer's SABM crosses ours
+            sent.Clear();
+
+            // I frame N(S)=0 N(R)=0 carrying an X.25 Restart Indication.
+            LapbTestKit.DeliverAt(link, 150, FromDceCommand, 0x00, 0x10, 0x00, 0xFB, 0x07, 0x00);
+            Assert.Empty(got);
+            Assert.Empty(sent);
+
+            // T1 sets the link up (2.4.4.5.1). The peer sends the frame again (its timer recovery) and this time
+            // it is taken, once, with N(S)=0 because nothing was accepted before.
+            link.Tick(3500);
+            Assert.True(link.IsUp);
+            LapbTestKit.DeliverAt(link, 3600, FromDceCommand, 0x10, 0x10, 0x00, 0xFB, 0x07, 0x00);
+            Assert.Single(got);
+        }
+
+        /// <summary>
+        /// X.25 (10/96) 2.4.5.9: when T1 runs out with an I frame unacknowledged the station enters the timer
+        /// recovery condition and polls; when the answer with F=1 comes back it sets V(S) to the N(R) received
+        /// and retransmits from there. Before this the poll was sent and the F=1 answer changed nothing, so an I
+        /// frame the peer had thrown away was never sent again and the link failed after N2 polls.
+        /// </summary>
+        [Fact]
+        public void TimerRecovery_AnFOneAnswerWithAnOldNr_RetransmitsFromThatNr()
+        {
+            List<byte[]> sent = new List<byte[]>();
+            LapbLayer link = LapbTestKit.NewLink(0x0066, sent, ItuDte());
+            link.Connect(0);
+            LapbTestKit.DeliverAt(link, 10, FromDceResponse, 0x73);    // the UA to our SABM: link up
+            Assert.True(link.IsUp);
+
+            link.SendInformation(new byte[] { 0x10, 0x00, 0xFB, 0x00, 0x00 }, 20);
+            sent.Clear();
+
+            link.Tick(3500);                                           // T1: poll, RR P=1
+            Assert.Contains(sent, f => f.Length == 2 && f[1] == 0x11);
+            sent.Clear();
+
+            LapbTestKit.DeliverAt(link, 3600, FromDceResponse, 0x11);  // RR F=1 N(R)=0: nothing arrived
+            Assert.Contains(sent, f => f.Length > 2 && (f[1] & 0x01) == 0 && ((f[1] >> 1) & 0x07) == 0);
+        }
+
+        /// <summary>
         /// Two ITU stations joined back to back with a wire that delivers each frame at once, inside the
         /// send (as an in-process codec bridge does): a DTE's SABM brings the link up on both and the
         /// exchange ends. Found 2026-11-17: the first version of the unsolicited-UA reset made the two

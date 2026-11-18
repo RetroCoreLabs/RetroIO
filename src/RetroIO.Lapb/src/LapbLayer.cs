@@ -263,6 +263,11 @@ namespace RetroIO.Protocols.Xmsg.Live
         private long _t3Deadline;
         private int _retry;
 
+        // ITU dialect only: true from the T1 expiry that polls for an unacknowledged I frame until the answer
+        // with F=1 arrives (X.25 (10/96) 2.4.5.9, "the timer recovery condition"). That answer sets V(S) to
+        // its N(R) and the frames from there are sent again.
+        private bool _timerRecovery;
+
         // The last FRMR diagnostic sent, retained so FRMR_SENT can resend it (spec 5.1 / 6.3).
         private byte[]? _lastFrmrInfo;
 
@@ -680,6 +685,21 @@ namespace RetroIO.Protocols.Xmsg.Live
                     return;
             }
 
+            if (IsItu && !_ourSabmAcked)
+            {
+                // The peer's SABM was answered but ours is not yet (crossing SABMs, 2.4.4.5.1: we enter the
+                // information transfer phase on the UA to ours or when T1 runs out). Until then X.25 (10/96)
+                // 2.4.4.1 applies: "The DCE, having sent the SABM ... command, will ignore and discard any
+                // frames except an SABM ... or DISC command, or a UA or DM response". The peer, which got our
+                // UA, may already send I frames; they are thrown away here, not handed up and not
+                // acknowledged, and the peer sends them again from its timer recovery (2.4.5.9). Handing
+                // them up here gave the switch port an X.25 Restart Request while it still said the link
+                // was down; the port dropped it and the RR told the peer it had arrived (serial trunk
+                // COM10/COM18, 2026-11-18). The ND dialect is left as it was: nothing measured says what an
+                // ND station does here.
+                return;
+            }
+
             // Every I, RR and REJ from a SINTRAN machine carries its current receive window in the
             // address (see AddressData). A frame whose address does not have that shape is still
             // taken, as it always was - it just leaves the window alone.
@@ -1028,6 +1048,22 @@ namespace RetroIO.Protocols.Xmsg.Live
                     // An unknown S-subtype is an unimplemented control field: FRMR reason W (spec 2.3.3).
                     SendFrmr(frame.Control, FrmrReasonW, frame.PollFinal, currentTicks, ReceivedIsResponse(frame.Address));
                     return;
+            }
+
+            if (IsItu && _timerRecovery && frame.PollFinal && ReceivedIsResponse(frame.Address))
+            {
+                // X.25 (10/96) 2.4.5.9: "If, while in the timer recovery condition, the DCE correctly receives a
+                // supervisory frame with the F bit set to 1 and with the N(R) within the range from its current
+                // send state variable V(S) to x included, it will clear the timer recovery condition (including
+                // stopping Timer T1) and set its send state variable V(S) to the value of the received N(R), and
+                // may then resume with I frame transmission or retransmission". AcknowledgeThrough has checked
+                // the N(R) and moved V(A) to it; what is still outstanding is sent again from there. A REJ has
+                // done that already in the switch above.
+                _timerRecovery = false;
+                if (frame.SupervisoryKind != LapbSupervisoryKind.Reject && Outstanding > 0)
+                {
+                    GoBackN(frame.ReceiveSequence, currentTicks);
+                }
             }
 
             if (frame.PollFinal && !ReceivedIsResponse(frame.Address))
@@ -1412,6 +1448,13 @@ namespace RetroIO.Protocols.Xmsg.Live
                     }
 
                     // Poll-first recovery (spec 5.1): RR with P=1; the peer's N(R)/REJ drives go-back-N.
+                    // ITU: this is the timer recovery condition of X.25 (10/96) 2.4.5.9, and the answer with
+                    // F=1 is what sends the frames again (HandleSupervisory).
+                    if (IsItu && Outstanding > 0)
+                    {
+                        _timerRecovery = true;
+                    }
+
                     EmitSupervisory(RrNibble, pollFinal: true);
                     RestartT1(currentTicks);
                     return true;
@@ -1670,6 +1713,7 @@ namespace RetroIO.Protocols.Xmsg.Live
             _sendVariable = 0;
             _receiveVariable = 0;
             _acknowledgeVariable = 0;
+            _timerRecovery = false;        // nothing is outstanding after a reset, so no recovery either
             _peerWindow = MaxPeerWindow;   // a reset forgets the window; the next I/S frame tells us
             for (int i = 0; i < _txInfo.Length; i++)
             {
