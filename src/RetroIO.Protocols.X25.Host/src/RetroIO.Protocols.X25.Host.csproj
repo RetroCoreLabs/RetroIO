@@ -20,5 +20,7 @@
     <None Include="..\README.md" Pack="true" PackagePath="\" />
     <!-- The example scripts ship with the package, for the host library to copy. -->
     <None Include="..\scripts\*.js" Pack="true" PackagePath="scripts\" />
+    <!-- And inside the DLL, so a single-file program can run them by name (HostScripts). -->
+    <EmbeddedResource Include="..\scripts\*.js" LogicalName="RetroIO.Protocols.X25.Host.scripts.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
