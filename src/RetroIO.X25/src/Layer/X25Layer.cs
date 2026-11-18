@@ -375,6 +375,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
             byte[]? utilities = null;
             if (_config.IsSte)
             {
+                // X.75 5.3.6, 5.3.9: neither fast select nor reverse charging in a Call Connected, as utility or facility.
+                int rc = FindElement(otherFacilities, ReverseChargingFastSelectCode, out int rcLength);
+                if (rc >= 0)
+                {
+                    otherFacilities = Cut(otherFacilities, rc, rcLength);
+                }
+
                 facilities = otherFacilities.Length > 0 ? new X25Facilities { PassThrough = otherFacilities }.Encode() : null;
                 utilities = vc.PeerSentFacilities
                     ? WithUtilityFlowControl(networkUtilities, vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn)
@@ -1623,8 +1630,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
             byte[]? utilities = null;
             if (_config.IsSte)
             {
-                facilities = new X25Facilities { PassThrough = vc.OtherFacilities }.Encode();
-                utilities = WithUtilityFlowControl(vc.NetworkUtilities, vc.WindowSizeIn, vc.WindowSizeOut, vc.PacketSizeIn, vc.PacketSizeOut);
+                byte[] userFacilities = vc.OtherFacilities;
+                byte[] networkUtilities = vc.NetworkUtilities;
+                MoveReverseChargingToUtilities(ref userFacilities, ref networkUtilities);
+                facilities = new X25Facilities { PassThrough = userFacilities }.Encode();
+                utilities = WithUtilityFlowControl(networkUtilities, vc.WindowSizeIn, vc.WindowSizeOut, vc.PacketSizeIn, vc.PacketSizeOut);
             }
 
             if (!Send(X25PacketBuilder.CreateCallRequest(vc.Lci, vc.CalledAddress, vc.CallingAddress, facilities, cud,
@@ -1749,7 +1759,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.PacketSizeIn = requested.PacketSizeFromCalling;
             vc.WindowSizeOut = requested.WindowFromCalled;
             vc.WindowSizeIn = requested.WindowFromCalling;
-            vc.OtherFacilities = requested.PassThrough;
+            vc.OtherFacilities = _config.IsSte
+                ? ReverseChargingFromUtilities(info.NetworkUtilities, requested.PassThrough)
+                : requested.PassThrough;
             vc.NetworkUtilities = info.NetworkUtilities;
             vc.ClearFacilities = System.Array.Empty<byte>();
 
@@ -1856,6 +1868,123 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// Returns a utility field with the window size (code 43) and packet size (code 42) utilities set to the given
         /// values, the rest of the field kept. "From called" and "from calling" are the directions of the call.
         /// </summary>
+        /// <summary>
+        /// X.25 facility code 01 and X.75 utility code 01: reverse charging and fast select (X.25 7.3.6, X.75 5.4.3.6).
+        /// </summary>
+        private const byte ReverseChargingFastSelectCode = 0x01;
+
+        /// <summary>
+        /// The bits X.75 5.4.3.6 assigns in the reverse charging / fast select parameter: bit 8 and bit 7 fast select, bit 1
+        /// reverse charging. X.25 (10/96) 7.3.6 gives the same three bits the same meaning and uses bits 6 and 5 for the ICRD
+        /// status selection, which X.75 (11/88) leaves "unassigned and set to 0"; those are dropped at the border.
+        /// </summary>
+        private const byte ReverseChargingFastSelectBits = 0xC1;
+
+        /// <summary>
+        /// Finds the first element with a given code in a facility or utility field, before the first marker (00). Both
+        /// fields use the same element classes (X.25 7.1, X.75 5.2): bits 8 and 7 of the code give one, two or three
+        /// parameter octets, or a length octet first.
+        /// </summary>
+        /// <returns>The index of the element's code octet and its whole length, or -1.</returns>
+        private static int FindElement(byte[] field, byte code, out int length)
+        {
+            int i = 0;
+            while (i < field.Length)
+            {
+                byte here = field[i];
+                if (here == 0x00)
+                {
+                    break;
+                }
+
+                switch (here >> 6)
+                {
+                    case 0: length = 2; break;
+                    case 1: length = 3; break;
+                    case 2: length = 4; break;
+                    default: length = i + 1 < field.Length ? 2 + field[i + 1] : field.Length - i; break;
+                }
+
+                if (i + length > field.Length)
+                {
+                    length = field.Length - i;
+                }
+
+                if (here == code)
+                {
+                    return i;
+                }
+
+                i += length;
+            }
+
+            length = 0;
+            return -1;
+        }
+
+        // The field without the element at [at, at + length).
+        private static byte[] Cut(byte[] field, int at, int length)
+        {
+            byte[] kept = new byte[field.Length - length];
+            Array.Copy(field, 0, kept, 0, at);
+            Array.Copy(field, at + length, kept, at, field.Length - at - length);
+            return kept;
+        }
+
+        // The field with one two-octet element in front.
+        private static byte[] Prepend(byte code, byte parameter, byte[] field)
+        {
+            byte[] result = new byte[field.Length + 2];
+            result[0] = code;
+            result[1] = parameter;
+            field.CopyTo(result, 2);
+            return result;
+        }
+
+        /// <summary>
+        /// For a Call Request leaving an STE: moves reverse charging / fast select from the X.25 facilities into the X.75
+        /// utility field. X.75 5.3.9: "No indication of reverse charging should be present in the user facility field";
+        /// 5.3.6 the same for fast select, which is a utility between networks. An element 01 already in the utility field
+        /// (carried from the previous network) is replaced, so it is never sent twice (Annex F a) row 15: code repeated).
+        /// </summary>
+        private static void MoveReverseChargingToUtilities(ref byte[] otherFacilities, ref byte[] utilities)
+        {
+            int inUtilities = FindElement(utilities, ReverseChargingFastSelectCode, out int utilityLength);
+            if (inUtilities >= 0)
+            {
+                utilities = Cut(utilities, inUtilities, utilityLength);
+            }
+
+            int at = FindElement(otherFacilities, ReverseChargingFastSelectCode, out int length);
+            if (at < 0 || length != 2)
+            {
+                return;
+            }
+
+            byte parameter = (byte)(otherFacilities[at + 1] & ReverseChargingFastSelectBits);
+            otherFacilities = Cut(otherFacilities, at, length);
+            if (parameter != 0)
+            {
+                utilities = Prepend(ReverseChargingFastSelectCode, parameter, utilities);
+            }
+        }
+
+        /// <summary>
+        /// For a Call Request arriving at an STE: gives the X.75 reverse charging / fast select utility to the switch as the
+        /// X.25 facility 01 it means (same bits, X.25 7.3.6), in front of the other facilities. The utility field keeps it as
+        /// well; the next STE replaces it (MoveReverseChargingToUtilities).
+        /// </summary>
+        private static byte[] ReverseChargingFromUtilities(byte[] utilities, byte[] otherFacilities)
+        {
+            int at = FindElement(utilities, ReverseChargingFastSelectCode, out int length);
+            if (at < 0 || length != 2 || FindElement(otherFacilities, ReverseChargingFastSelectCode, out _) >= 0)
+            {
+                return otherFacilities;
+            }
+
+            return Prepend(ReverseChargingFastSelectCode, (byte)(utilities[at + 1] & ReverseChargingFastSelectBits), otherFacilities);
+        }
+
         private static byte[] WithUtilityFlowControl(byte[] utilities, byte windowFromCalled, byte windowFromCalling, int packetFromCalled, int packetFromCalling)
         {
             if (X75Utilities.TryDecode(utilities, out X75Utilities u) != X75UtilityError.None)
