@@ -351,6 +351,13 @@ namespace RetroIO.Protocols.X25.Runtime
         public TimeSpan T11Timeout { get; set; } = TimeSpan.FromSeconds(180);
 
         /// <summary>
+        /// T10 time-out: how long a DCE side waits for the DTE to confirm its Restart Indication. X.25 (10/96)
+        /// Table D.1: 60 s. Used by an engine that is the DCE (a serial line run as the DCE, a connection the XOT
+        /// server accepted); a DTE uses <see cref="T20Timeout"/>.
+        /// </summary>
+        public TimeSpan T10Timeout { get; set; } = TimeSpan.FromSeconds(60);
+
+        /// <summary>
         /// T20 timer duration (restart request)
         /// </summary>
         public TimeSpan T20Timeout { get; set; } = TimeSpan.FromSeconds(180);
