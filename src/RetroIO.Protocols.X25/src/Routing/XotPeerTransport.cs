@@ -44,8 +44,14 @@ namespace RetroIO.Protocols.X25.Transport
         /// <summary>Gets or sets whether the TCP keep-alive option is switched on for the connections.</summary>
         public bool TcpKeepalive { get; set; } = true;
 
-        /// <summary>Gets or sets the most connections open at the same time, dialled and accepted together.</summary>
-        public int MaxConnections { get; set; } = 100;
+        /// <summary>
+        /// Gets or sets the most connections open at the same time, dialled and accepted together: one
+        /// per X.25 channel of the line, as on x25emu's XOT port (tools/x25switch.c, conn_max). The
+        /// runtime sets it from <c>XotInterfaceConfig.LciCount</c>. A connection that arrives while all
+        /// are taken is not accepted (or, on a shared port where another entry had room, is held open and
+        /// unread) until a connection closes; it is never accepted and then closed.
+        /// </summary>
+        public int MaxConnections { get; set; } = 16;
 
         /// <summary>Gets or sets whether connections from addresses no entry lists are refused.</summary>
         public bool AllowOnlyListedPeers { get; set; }
@@ -503,6 +509,21 @@ namespace RetroIO.Protocols.X25.Transport
 
         bool IXotListenerClient.RefuseUnlisted => _config.AllowOnlyListedPeers;
 
+        bool IXotListenerClient.HasFreeSlot
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _links.Count < _config.MaxConnections;
+                }
+            }
+        }
+
+        // Connections matched to this entry while every slot was taken: open, unread, adopted oldest
+        // first when a connection closes.
+        private readonly Queue<(TcpClient Client, IPAddress Remote, bool Listed)> _waiting = new Queue<(TcpClient Client, IPAddress Remote, bool Listed)>();
+
         /// <inheritdoc />
         public event EventHandler<X25CallRequest>? IncomingCall
         {
@@ -621,6 +642,15 @@ namespace RetroIO.Protocols.X25.Transport
             for (int i = 0; i < links.Length; i++)
             {
                 links[i].Close();
+            }
+
+            lock (_lock)
+            {
+                // Connections that were waiting for a slot were never served.
+                while (_waiting.Count > 0)
+                {
+                    _waiting.Dequeue().Client.Close();
+                }
             }
 
             SetStatus(TransportStatus.Stopped, "XOT peer stopped");
@@ -773,6 +803,16 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 client.Close();
                 return;
+            }
+
+            lock (_lock)
+            {
+                if (_links.Count >= _config.MaxConnections)
+                {
+                    _waiting.Enqueue((client, remote, listed));
+                    _logger.LogInformation("XOT peer {Name}: all {Count} connection slots are taken; {Remote} waits for one", Name, _config.MaxConnections, remote);
+                    return;
+                }
             }
 
             ApplyKeepalive(client);
@@ -971,6 +1011,26 @@ namespace RetroIO.Protocols.X25.Transport
             }
 
             ConnectionClosed?.Invoke(this, link);
+
+            // A slot is free: a connection waiting for one gets it, and the shared socket is told there
+            // is room so it can accept the next connection from the TCP backlog.
+            TcpClient? nextClient = null;
+            IPAddress? nextRemote = null;
+            bool nextListed = false;
+            lock (_lock)
+            {
+                if (_waiting.Count > 0 && _links.Count < _config.MaxConnections)
+                {
+                    (nextClient, nextRemote, nextListed) = _waiting.Dequeue();
+                }
+            }
+
+            if (nextClient != null && nextRemote != null)
+            {
+                ((IXotListenerClient)this).OnConnection(nextClient, nextRemote, nextListed);
+            }
+
+            _registry?.SlotFreed();
         }
 
         /// <summary>

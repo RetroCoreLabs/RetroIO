@@ -28,6 +28,15 @@ namespace RetroIO.Protocols.X25.Transport
         private CancellationTokenSource? _cancellationTokenSource;
         private readonly Dictionary<string, XotServerConnection> _clientConnections = new Dictionary<string, XotServerConnection>();
 
+        // One slot per X.25 channel of the line (XotServerConfig.MaxConnections); every open client
+        // connection holds one, an idle spare included. See XotConnectionSlots.
+        private XotConnectionSlots _slots;
+
+        // Connections the shared listener handed over while every slot was taken. They are not read and
+        // not closed: each is adopted, oldest first, when a slot frees. Only the shared-port path fills
+        // this; an entry with its own socket leaves the connection in the TCP backlog instead.
+        private readonly Queue<(TcpClient Client, string Endpoint)> _waiting = new Queue<(TcpClient Client, string Endpoint)>();
+
         /// <summary>
         /// Creates the XOT server transport in the stopped state.
         /// </summary>
@@ -44,6 +53,7 @@ namespace RetroIO.Protocols.X25.Transport
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _slots = NewSlots();
             
             _statistics = new TransportStatistics
             {
@@ -216,6 +226,7 @@ namespace RetroIO.Protocols.X25.Transport
                                      Name, _config.ListenAddress, _config.ListenPort);
 
                 _cancellationTokenSource = new CancellationTokenSource();
+                _slots = NewSlots();
 
                 if (_config.Listeners != null)
                 {
@@ -280,6 +291,12 @@ namespace RetroIO.Protocols.X25.Transport
                         connection.Close();
                     }
                     _clientConnections.Clear();
+
+                    // Connections that were waiting for a slot were never served; close them now.
+                    while (_waiting.Count > 0)
+                    {
+                        _waiting.Dequeue().Client.Close();
+                    }
                 }
 
                 SetStatus(TransportStatus.Stopped, "XOT server transport stopped");
@@ -354,6 +371,15 @@ namespace RetroIO.Protocols.X25.Transport
 
             while (!cancellationToken.IsCancellationRequested && _tcpListener != null)
             {
+                // A slot first, then the accept (x25emu polls its listener only while conn_slot_free
+                // finds a slot). With every slot taken the next connection stays in the TCP backlog
+                // until a connection closes; it is never accepted and then closed.
+                if (!_slots.WaitAndTake(cancellationToken))
+                {
+                    break;
+                }
+
+                bool adopted = false;
                 try
                 {
                     var tcpClient = _tcpListener.AcceptTcpClient();
@@ -361,10 +387,8 @@ namespace RetroIO.Protocols.X25.Transport
 
                     _logger.LogInformation("XOT server {Name} accepted connection from {ClientEndpoint}", Name, clientEndpoint);
 
-                    if (!AdoptClient(tcpClient, clientEndpoint, cancellationToken))
-                    {
-                        continue;
-                    }
+                    AdoptClient(tcpClient, clientEndpoint, cancellationToken);
+                    adopted = true;
                 }
                 catch (ObjectDisposedException)
                 {
@@ -379,6 +403,14 @@ namespace RetroIO.Protocols.X25.Transport
                         _statistics.ConnectionErrors++;
                     }
                 }
+                finally
+                {
+                    if (!adopted)
+                    {
+                        // Nothing holds the slot taken for this accept.
+                        _slots.Release();
+                    }
+                }
             }
 
             _logger.LogDebug("XOT server {Name} stopped accepting connections", Name);
@@ -390,32 +422,88 @@ namespace RetroIO.Protocols.X25.Transport
 
         bool IXotListenerClient.RefuseUnlisted => false;
 
+        bool IXotListenerClient.HasFreeSlot => _slots.HasFree;
+
+        /// <summary>
+        /// Gets how many connection slots this entry has (one per X.25 channel of the line).
+        /// </summary>
+        public int ConnectionSlots => _slots.Limit;
+
+        /// <summary>
+        /// Gets how many connections the shared listener has handed over that wait for a free slot.
+        /// </summary>
+        public int WaitingConnections
+        {
+            get
+            {
+                lock (_clientLock)
+                {
+                    return _waiting.Count;
+                }
+            }
+        }
+
         void IXotListenerClient.OnConnection(TcpClient client, IPAddress remote, bool listed)
         {
             string endpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+            lock (_clientLock)
+            {
+                if (!_slots.TryTake())
+                {
+                    // The shared socket only accepts while some entry on the port has room, so this is
+                    // the case where that room was another entry's. The connection waits here, unread
+                    // and open, for a slot of this entry - what the TCP backlog does for an entry with
+                    // its own socket.
+                    _waiting.Enqueue((client, endpoint));
+                    _logger.LogInformation("XOT server {Name}: all {Count} connection slots are taken; {ClientEndpoint} waits for one",
+                        Name, _slots.Limit, endpoint);
+                    return;
+                }
+            }
+
             _logger.LogInformation("XOT server {Name} accepted connection from {ClientEndpoint}", Name, endpoint);
             AdoptClient(client, endpoint, _cancellationTokenSource?.Token ?? CancellationToken.None);
         }
 
-        /// <summary>
-        /// Takes over one accepted TCP connection: checks the limit, wires the events and starts its
-        /// reader thread. Used by the own accept loop and by the shared listener.
-        /// </summary>
-        /// <returns>False when the connection was refused (limit reached).</returns>
-        private bool AdoptClient(TcpClient tcpClient, string clientEndpoint, CancellationToken cancellationToken)
+        private XotConnectionSlots NewSlots()
         {
-            // Check connection limit
-            lock (_clientLock)
+            XotConnectionSlots slots = new XotConnectionSlots(_config.MaxConnections);
+            slots.Freed += OnSlotFreed;
+            return slots;
+        }
+
+        /// <summary>
+        /// A connection closed: a connection waiting for a slot gets it, and the shared listener is told
+        /// there is room again so it can accept the next connection from the backlog.
+        /// </summary>
+        private void OnSlotFreed()
+        {
+            while (true)
             {
-                if (_clientConnections.Count >= _config.MaxConnections)
+                (TcpClient Client, string Endpoint) next;
+                lock (_clientLock)
                 {
-                    _logger.LogWarning("XOT server {Name} connection limit reached ({Max}), rejecting {ClientEndpoint}",
-                                     Name, _config.MaxConnections, clientEndpoint);
-                    tcpClient.Close();
-                    return false;
+                    if (_waiting.Count == 0 || !_slots.TryTake())
+                    {
+                        break;
+                    }
+
+                    next = _waiting.Dequeue();
                 }
+
+                _logger.LogInformation("XOT server {Name}: a slot is free, taking the waiting connection from {ClientEndpoint}", Name, next.Endpoint);
+                AdoptClient(next.Client, next.Endpoint, _cancellationTokenSource?.Token ?? CancellationToken.None);
             }
 
+            _config.Listeners?.SlotFreed();
+        }
+
+        /// <summary>
+        /// Takes over one accepted TCP connection that already holds a slot: wires the events and starts
+        /// its reader thread. Used by the own accept loop and by the shared listener.
+        /// </summary>
+        private void AdoptClient(TcpClient tcpClient, string clientEndpoint, CancellationToken cancellationToken)
+        {
             // Create connection handler
             var connection = new XotServerConnection(_logger, tcpClient, clientEndpoint);
             connection.ConnectionClosed += OnClientConnectionClosed;
@@ -432,7 +520,6 @@ namespace RetroIO.Protocols.X25.Transport
 
             // Start handling this connection
             new Thread(() => connection.HandleConnectionLoop(cancellationToken)) { IsBackground = true }.Start();
-            return true;
         }
 
         /// <summary>
@@ -459,10 +546,12 @@ namespace RetroIO.Protocols.X25.Transport
         /// </summary>
         private void OnClientConnectionClosed(object? sender, string clientEndpoint)
         {
+            bool freed = false;
             lock (_clientLock)
             {
                 if (_clientConnections.Remove(clientEndpoint))
                 {
+                    freed = true;
                     if (_status == TransportStatus.Active || _status == TransportStatus.Connected)
                     {
                         _statistics.Disconnects++;
@@ -470,6 +559,12 @@ namespace RetroIO.Protocols.X25.Transport
 
                     _logger.LogInformation("XOT server {Name} client connection closed: {ClientEndpoint}", Name, clientEndpoint);
                 }
+            }
+
+            if (freed)
+            {
+                // Outside the lock: OnSlotFreed adopts a waiting connection, which takes the lock again.
+                _slots.Release();
             }
         }
 
@@ -588,9 +683,13 @@ namespace RetroIO.Protocols.X25.Transport
         public int ListenPort { get; set; } = 1998;
 
         /// <summary>
-        /// Maximum number of concurrent client connections
+        /// How many TCP connections the entry holds at once: one per X.25 channel of the line, an idle
+        /// connection (a caller's spare for arriving calls) included. When all are taken the next
+        /// connection is not accepted; it waits in the TCP backlog until a connection closes. The runtime
+        /// sets it from the entry's channel count, <c>XotInterfaceConfig.LciCount</c> (default 16). Copied
+        /// from x25emu, whose XOT port has one connection per channel (tools/x25switch.c, conn_max).
         /// </summary>
-        public int MaxConnections { get; set; } = 100;
+        public int MaxConnections { get; set; } = 16;
 
         /// <summary>
         /// X.121 address patterns we accept calls for

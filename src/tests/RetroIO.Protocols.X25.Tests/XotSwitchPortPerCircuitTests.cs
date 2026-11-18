@@ -410,11 +410,13 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
-        /// A port has no use for more connections than it has channels, and says so by closing the
-        /// extra one, as the C emulator's switch does by not accepting it.
+        /// A port has no use for more connections than it has channels. Like the C emulator's switch,
+        /// it does not accept the extra one: it waits in the TCP backlog, open, and is taken when a
+        /// connection closes. Until 2026-11-18 this test expected the port to accept it and close it,
+        /// which is not what x25emu does (tools/x25switch.c only polls its listener while a slot is free).
         /// </summary>
         [Test]
-        public void AConnectionBeyondThePortsChannels_IsClosed_AndTheOthersStayUp()
+        public void AConnectionBeyondThePortsChannels_Waits_AndIsTakenWhenOneCloses()
         {
             using XotSwitchPort dce = NewDce(channels: 2);
             dce.IncomingCall += (port, lci, called, calling, cud) => port.AcceptCall(lci);
@@ -427,9 +429,15 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(two.WaitForPacket(0x0F, out _), Is.True);
 
             using RawPeer three = new RawPeer(dce.BoundPort);
-            Assert.That(WaitFor(() => three.IsClosed), Is.True, "the third connection should be closed by the port");
+            three.Send(X25PacketBuilder.CreateCallRequest(7, Called, Calling));
+            Assert.That(WaitFor(() => three.IsClosed), Is.False, "the third connection must not be closed by the port");
             Assert.That(dce.ConnectionCount, Is.EqualTo(2));
             Assert.That(one.IsClosed, Is.False);
+            Assert.That(two.IsClosed, Is.False);
+
+            // The first call's connection closes: the third connection gets the slot and its call is answered.
+            one.Dispose();
+            Assert.That(three.WaitForPacket(0x0F, out _), Is.True, "the waiting connection's call is accepted once a slot frees");
             Assert.That(two.IsClosed, Is.False);
         }
 

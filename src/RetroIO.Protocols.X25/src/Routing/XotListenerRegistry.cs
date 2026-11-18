@@ -37,6 +37,15 @@ namespace RetroIO.Protocols.X25.Transport
         bool RefuseUnlisted { get; }
 
         /// <summary>
+        /// Gets whether the entry has a free connection slot (one slot per X.25 channel of its line).
+        /// The shared socket accepts only while at least one entry on it has one; with every entry full
+        /// the next connection waits in the TCP backlog, as on x25emu's XOT port. An entry that is
+        /// full when a connection is matched to it keeps the connection open and unread until a slot
+        /// frees, and calls <see cref="XotListenerRegistry.SlotFreed"/> whenever one does.
+        /// </summary>
+        bool HasFreeSlot { get; }
+
+        /// <summary>
         /// Called on the listener's thread with a connection that was matched to this entry.
         /// </summary>
         /// <param name="client">The accepted TCP connection. The entry owns it from now on.</param>
@@ -156,6 +165,21 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
+        /// Tells every listening socket that an entry has given a connection slot back, so a socket
+        /// that stopped accepting because every entry on it was full looks again.
+        /// </summary>
+        public void SlotFreed()
+        {
+            lock (_lock)
+            {
+                foreach (KeyValuePair<string, SharedListener> kv in _listeners)
+                {
+                    kv.Value.WakeForRoom();
+                }
+            }
+        }
+
+        /// <summary>
         /// Closes every listening socket.
         /// </summary>
         public void Dispose()
@@ -183,6 +207,39 @@ namespace RetroIO.Protocols.X25.Transport
             private readonly List<IXotListenerClient> _clients = new List<IXotListenerClient>();
             private TcpListener? _tcp;
             private volatile bool _closing;
+
+            // Set when a slot may have freed (or an entry joined, or the socket is closing).
+            private readonly AutoResetEvent _room = new AutoResetEvent(false);
+
+            public void WakeForRoom()
+            {
+                _room.Set();
+            }
+
+            /// <summary>
+            /// True when some entry on this socket has a free slot, or there is no entry at all (the
+            /// connection is then accepted and closed by Dispatch, "no entry is listening here").
+            /// </summary>
+            private bool AnyRoom()
+            {
+                lock (_clientLock)
+                {
+                    if (_clients.Count == 0)
+                    {
+                        return true;
+                    }
+
+                    for (int i = 0; i < _clients.Count; i++)
+                    {
+                        if (_clients[i].HasFreeSlot)
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+            }
 
             public SharedListener(ILogger logger, IPAddress address, int port)
             {
@@ -232,6 +289,8 @@ namespace RetroIO.Protocols.X25.Transport
 
                     _clients.Add(client);
                 }
+
+                _room.Set();
             }
 
             public void Remove(IXotListenerClient client)
@@ -245,6 +304,7 @@ namespace RetroIO.Protocols.X25.Transport
             public void Close()
             {
                 _closing = true;
+                _room.Set();
                 try
                 {
                     _tcp?.Stop();
@@ -259,6 +319,16 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 while (!_closing)
                 {
+                    // Copied from x25emu's XOT port: the listener is not polled while no slot is free,
+                    // so the next connection waits in the TCP backlog until a connection closes
+                    // (tools/x25switch.c, xot_port_io_loop and conn_slot_free). Accepting it and then
+                    // closing it is what a caller sees as its call lost (cause 0x09).
+                    if (!AnyRoom())
+                    {
+                        _room.WaitOne();
+                        continue;
+                    }
+
                     TcpClient client;
                     try
                     {

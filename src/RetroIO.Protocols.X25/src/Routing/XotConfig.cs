@@ -57,6 +57,14 @@ namespace RetroIO.Protocols.X25
         /// channels from the TOP of the range (X.25 Annex A note 6), so the range must lie inside
         /// what the far switch port offers - the C demo switches offer 1..2048 on trunks and
         /// 1..32 on one port, and 1..16 fits every one of them.
+        /// <para>
+        /// It is also the line's connection limit (Server and Both modes): RFC 1613 section 5 gives
+        /// every circuit its own TCP connection, so the entry holds at most this many connections at
+        /// once, an idle one (a caller's spare for arriving calls) included. When all are taken the
+        /// next connection is not accepted; it waits in the TCP backlog until a connection closes.
+        /// Copied from x25emu, whose XOT port has one connection per channel (tools/x25switch.c,
+        /// conn_max = vc_count). A caller that holds N calls and keeps a spare needs N + 1.
+        /// </para>
         /// </summary>
         public ushort LciCount { get; set; } = 16;
 
