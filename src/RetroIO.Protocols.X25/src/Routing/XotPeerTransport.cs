@@ -79,6 +79,16 @@ namespace RetroIO.Protocols.X25.Transport
         /// old "Client" entry runs: one new TCP connection for each call (RFC 1613 section 5).
         /// </summary>
         public bool DialOnly { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the entry keeps one dialled connection open with no call on it, for the peer to put an
+        /// arriving call on (the "spare"). Needed when the peer is a switch port that this side dials as a subscriber:
+        /// RFC 1613 section 6.1 has the end that opened a TCP connection send the Call Request on it, but a switch port
+        /// that listens for its subscriber (our <c>XotSwitchPort</c>, x25emu's XOT port) puts an arriving call on a
+        /// connection the subscriber opened and that has never carried a call. When a call arrives on the spare, a new
+        /// spare is dialled; the connection with the call is closed when the call ends, like every other. Default false.
+        /// </summary>
+        public bool KeepSpareConnection { get; set; }
     }
 
     /// <summary>
@@ -583,6 +593,11 @@ namespace RetroIO.Protocols.X25.Transport
 
                 _statistics.StartTime = DateTime.UtcNow;
                 SetStatus(TransportStatus.Active, "XOT peer ready");
+                if (_config.KeepSpareConnection)
+                {
+                    // Dialled on a pool thread: a dial can wait ConnectTimeoutMs, and Start must not.
+                    ThreadPool.QueueUserWorkItem(_ => OpenSpare());
+                }
                 if (_config.DialOnly)
                 {
                     _logger.LogInformation("XOT entry {Name} started: dials {Peer}:{PeerPort}, one TCP connection per call, accepts nothing", Name, _config.PeerAddress, _config.PeerPort);
@@ -646,6 +661,7 @@ namespace RetroIO.Protocols.X25.Transport
             lock (_lock)
             {
                 links = _links.ToArray();
+                _spare = null;
             }
 
             for (int i = 0; i < links.Length; i++)
@@ -700,43 +716,10 @@ namespace RetroIO.Protocols.X25.Transport
 
             // RFC 1613 section 5: a separate TCP connection for each virtual circuit.
             _logger.LogInformation("XOT peer {Name}: opening a TCP connection to {Host}:{Port} for the call to {Called}", Name, host, _config.PeerPort, callRequest.CalledAddress);
-            TcpClient tcp = new TcpClient();
-            try
+            XotPeerLink? link = DialLink(host, "the next try is made by the next call", false);
+            if (link == null)
             {
-                Task<bool> connect = ConnectAsync(tcp, host, _config.PeerPort);
-                if (!connect.Wait(_config.ConnectTimeoutMs > 0 ? _config.ConnectTimeoutMs : 5000) || !connect.Result)
-                {
-                    string reason = connect.IsCompleted && connect.Exception != null
-                        ? connect.Exception.GetBaseException().Message
-                        : "no answer in " + _config.ConnectTimeoutMs + " ms";
-                    tcp.Close();
-                    NoteDialFailure(reason);
-                    _logger.LogWarning("XOT peer {Name}: could not connect to {Host}:{Port}: {Reason}. No automatic retry: the next try is made by the next call", Name, host, _config.PeerPort, reason);
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                tcp.Close();
-                NoteDialFailure(ex.GetBaseException().Message);
-                _logger.LogWarning("XOT peer {Name}: could not connect to {Host}:{Port}: {Reason}. No automatic retry: the next try is made by the next call", Name, host, _config.PeerPort, ex.GetBaseException().Message);
                 return false;
-            }
-
-            ApplyKeepalive(tcp);
-            IPAddress? remote = (tcp.Client.RemoteEndPoint as IPEndPoint)?.Address;
-            XotPeerLink link = new XotPeerLink(_logger, this, tcp, true, remote, true);
-            if (!Register(link))
-            {
-                link.Close();
-                return false;
-            }
-
-            lock (_lock)
-            {
-                _dialedOpened++;
-                _lastDialConnected = DateTime.UtcNow;
-                _statistics.LastConnectedUtc = _lastDialConnected;
             }
 
             link.StartReceiving();
@@ -765,6 +748,113 @@ namespace RetroIO.Protocols.X25.Transport
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Opens one TCP connection to the peer and registers it as a dialled connection of this entry. Receiving is
+        /// not started: the caller starts it once it has recorded what the connection is for.
+        /// </summary>
+        /// <param name="host">The peer's address.</param>
+        /// <param name="nextTry">Words for the log on a failure: when the next try is made.</param>
+        /// <param name="asSpare">True when the connection becomes the spare: it is recorded as such under the same lock
+        /// that registers it.</param>
+        /// <returns>The registered connection, or null when the dial failed (counted and logged).</returns>
+        private XotPeerLink? DialLink(string host, string nextTry, bool asSpare)
+        {
+            TcpClient tcp = new TcpClient();
+            try
+            {
+                Task<bool> connect = ConnectAsync(tcp, host, _config.PeerPort);
+                if (!connect.Wait(_config.ConnectTimeoutMs > 0 ? _config.ConnectTimeoutMs : 5000) || !connect.Result)
+                {
+                    string reason = connect.IsCompleted && connect.Exception != null
+                        ? connect.Exception.GetBaseException().Message
+                        : "no answer in " + _config.ConnectTimeoutMs + " ms";
+                    tcp.Close();
+                    NoteDialFailure(reason);
+                    _logger.LogWarning("XOT peer {Name}: could not connect to {Host}:{Port}: {Reason}. No automatic retry: {NextTry}", Name, host, _config.PeerPort, reason, nextTry);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                tcp.Close();
+                NoteDialFailure(ex.GetBaseException().Message);
+                _logger.LogWarning("XOT peer {Name}: could not connect to {Host}:{Port}: {Reason}. No automatic retry: {NextTry}", Name, host, _config.PeerPort, ex.GetBaseException().Message, nextTry);
+                return null;
+            }
+
+            ApplyKeepalive(tcp);
+            IPAddress? remote = (tcp.Client.RemoteEndPoint as IPEndPoint)?.Address;
+            XotPeerLink link = new XotPeerLink(_logger, this, tcp, true, remote, true);
+            if (!Register(link))
+            {
+                link.Close();
+                return null;
+            }
+
+            lock (_lock)
+            {
+                _dialedOpened++;
+                _lastDialConnected = DateTime.UtcNow;
+                _statistics.LastConnectedUtc = _lastDialConnected;
+                if (asSpare)
+                {
+                    _spare = link;
+                }
+            }
+
+            return link;
+        }
+
+        /// <summary>
+        /// The dialled connection that waits, with no call on it, for the peer to put an arriving call on it
+        /// (<see cref="XotPeerConfig.KeepSpareConnection"/>); null when there is none. Guarded by <c>_lock</c>.
+        /// </summary>
+        private XotPeerLink? _spare;
+
+        /// <summary>
+        /// Dials a new spare connection (<see cref="XotPeerConfig.KeepSpareConnection"/>). Runs on a pool thread. A
+        /// failed dial is logged and leaves the entry without a spare: there is no retry timer, the same rule as for a
+        /// call (and as X25Client's spare), so no further call can arrive until the entry is started again.
+        /// </summary>
+        private void OpenSpare()
+        {
+            string host = _config.PeerAddress ?? string.Empty;
+            lock (_lock)
+            {
+                if (_status != TransportStatus.Active || _spare != null || host.Length == 0)
+                {
+                    return;
+                }
+
+                _dialAttempts++;
+            }
+
+            _logger.LogInformation("XOT peer {Name}: opening a spare TCP connection to {Host}:{Port} for arriving calls", Name, host, _config.PeerPort);
+
+            // Recorded as the spare BEFORE its receive thread starts, so a call the peer puts on it at once is seen
+            // arriving on the spare (OnLinkPacket) and a new spare is opened for the next one. X25Client recorded its
+            // spare after the read thread had started and lost exactly that call's follow-up spare (fixed 2026-11-18).
+            XotPeerLink? link = DialLink(host, "no further call can arrive on this entry until it is started again", true);
+            if (link == null)
+            {
+                return;
+            }
+
+            bool stillActive;
+            lock (_lock)
+            {
+                stillActive = _status == TransportStatus.Active;
+            }
+
+            if (!stillActive)
+            {
+                link.Close();
+                return;
+            }
+
+            link.StartReceiving();
         }
 
         private static async Task<bool> ConnectAsync(TcpClient tcp, string host, int port)
@@ -921,10 +1011,18 @@ namespace RetroIO.Protocols.X25.Transport
                 if (pti == 0x0B)
                 {
                     link.OpenCircuits++;
-                    if (!link.Dialed)
+                    if (!link.Dialed || link == _spare)
                     {
                         _callsReceived++;
                         _statistics.InboundCallsReceived++;
+                    }
+
+                    // A call arrived on the spare: the connection now belongs to that call, and the next arriving call
+                    // needs a fresh one (XotPeerConfig.KeepSpareConnection).
+                    if (link == _spare)
+                    {
+                        _spare = null;
+                        ThreadPool.QueueUserWorkItem(_ => OpenSpare());
                     }
                 }
                 else if (pti == 0x17 && link.OpenCircuits > 0)
@@ -985,6 +1083,18 @@ namespace RetroIO.Protocols.X25.Transport
             lock (_lock)
             {
                 _links.Remove(link);
+
+                // A spare the peer closed is not dialled again by itself (the same rule as X25Client): the peer that
+                // closed it did not want it, and there is no retry timer.
+                if (link == _spare)
+                {
+                    _spare = null;
+                    if (!link.ClosedByUs && _status == TransportStatus.Active)
+                    {
+                        _logger.LogWarning("XOT peer {Name}: the peer closed the spare connection {Remote}; no further call can arrive on this entry until it is started again", Name, link.RemoteText);
+                    }
+                }
+
                 bool dropped = !link.ClosedByUs && link.OpenCircuits > 0;
                 if (dropped)
                 {

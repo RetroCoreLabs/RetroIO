@@ -1446,7 +1446,10 @@ namespace RetroIO.Protocols.X25.Runtime
                 TcpKeepalive = xotConfig.TcpKeepalive,
                 LciBase = xotConfig.LciBase,
                 LciCount = xotConfig.LciCount,
-                DialOnly = true
+                DialOnly = true,
+
+                // A subscriber line of a switch port: keep a connection open for calls the switch puts on it.
+                KeepSpareConnection = xotConfig.KeepConnectionForIncomingCalls
             };
 
             XotPeerTransport transport = new XotPeerTransport(_logger, peerConfig);
@@ -3056,6 +3059,48 @@ namespace RetroIO.Protocols.X25.Runtime
             {
                 _logger.LogError(ex, "Error registering protocol services");
             }
+
+            RegisterChatService();
+        }
+
+        /// <summary>
+        /// The built-in Altos CHAT 3.1 service, when the "Chat" section names an address. Null when there is none.
+        /// </summary>
+        public Services.ChatProtocolService? ChatService => _chatService;
+
+        private Services.ChatProtocolService? _chatService;
+
+        /// <summary>
+        /// Registers the chat next to the TAD, on its own address (<see cref="ChatServiceConfig.Address"/>). Nothing is
+        /// registered when the address is empty. An address equal to the TAD's (<c>X25.LocalMachineId</c>) is refused
+        /// with an error in the log: one address would then answer every PAD call with the chat and the TAD would be
+        /// unreachable for PADs (the chat ranks above the TAD).
+        /// </summary>
+        private void RegisterChatService()
+        {
+            ChatServiceConfig chat = _config.Chat ?? new ChatServiceConfig();
+            string address = (chat.Address ?? string.Empty).Trim();
+            if (address.Length == 0)
+            {
+                return;
+            }
+
+            if (string.Equals(address, _config.X25.LocalMachineId, StringComparison.Ordinal))
+            {
+                _logger.LogError("Chat address {Address} is the TAD's address (X25.LocalMachineId); the chat needs an address of its own and is not started", address);
+                return;
+            }
+
+            AltosChatSettings settings = new AltosChatSettings
+            {
+                MaxUsers = chat.MaxUsers,
+                OutputLimitBytes = chat.OutputLimitBytes,
+                WaitPause = TimeSpan.FromMilliseconds(chat.WaitPauseMs < 0 ? 0 : chat.WaitPauseMs),
+                StartingNickname = chat.StartingNickname ?? "guest",
+            };
+
+            _chatService = new Services.ChatProtocolService(_logger, DeliverServiceOutput, address, settings);
+            _protocolServices.RegisterService(_chatService);
         }
 
         /// <summary>
@@ -3374,10 +3419,19 @@ namespace RetroIO.Protocols.X25.Runtime
         }
 
         /// <summary>
-        /// Finds the lowest logical channel number from 1 to 4095 that has no module bound to it.
+        /// Finds the lowest local logical channel number from 1 to 4095 that carries nothing: no module bound to it,
+        /// no service bound to it, no circuit of a connection mapped to it, and no call the router placed on it.
         /// </summary>
+        /// <remarks>
+        /// Until 2026-11-18 only a bound module made a channel busy. A call held by a service (the TAD, XMSG, the chat)
+        /// is bound in <c>_lcnServiceBindings</c> and mapped in <c>_circuitByLocalLcn</c>, so while one caller was in
+        /// the TAD or the chat, the next caller - on another XOT connection - was given the same local channel, and
+        /// the two calls' data and clears were mixed. A caller that finds a channel here and records it later can
+        /// still lose it to another thread in between; an incoming call for a service uses
+        /// <see cref="ClaimChannelForService"/>, which does both under one lock.
+        /// </remarks>
         /// <returns>
-        /// The free logical channel number, or 0 when all of them are bound.
+        /// The free logical channel number, or 0 when all of them are in use.
         /// </returns>
         public ushort FindAvailableLCN()
         {
@@ -3386,12 +3440,40 @@ namespace RetroIO.Protocols.X25.Runtime
                 // Look for first available LCN (starting from 1, avoiding LCN 0)
                 for (ushort lcn = 1; lcn <= 4095; lcn++)
                 {
-                    if (!_lcnBindings.ContainsKey(lcn))
+                    if (!_lcnBindings.ContainsKey(lcn) && !_lcnServiceBindings.ContainsKey(lcn)
+                        && !_circuitByLocalLcn.ContainsKey(lcn) && !_routerCalls.ContainsKey(lcn))
                     {
                         return lcn;
                     }
                 }
                 return 0; // No available LCN
+            }
+        }
+
+        /// <summary>
+        /// Takes a free local channel for an incoming call that a service answers, maps the connection's circuit to it
+        /// and binds the service, all under the routing lock, so two calls arriving at once on two connections never
+        /// get the same channel.
+        /// </summary>
+        /// <param name="connection">The connection the call came in on; null when it has none.</param>
+        /// <param name="remoteLcn">The call's channel on that connection.</param>
+        /// <param name="service">The service that answers the call.</param>
+        /// <returns>The local channel, or 0 when none is free.</returns>
+        public ushort ClaimChannelForService(object? connection, ushort remoteLcn, Services.IProtocolService service)
+        {
+            lock (_routingLock)
+            {
+                ushort lcn = FindAvailableLCN();
+                if (lcn == 0)
+                {
+                    return 0;
+                }
+
+                // The mapping has to exist before the service runs: a service may answer inside
+                // HandleIncomingCall, and its data is addressed by this local channel number.
+                RegisterXotConnection(lcn, connection, remoteLcn);
+                BindServiceToLcn(lcn, service);
+                return lcn;
             }
         }
 
@@ -4418,6 +4500,7 @@ namespace RetroIO.Protocols.X25.Runtime
         public void Dispose()
         {
             StopTelnetPad();
+            _chatService?.Dispose();
             DisposeEndpoints();
             lock (_stateLock)
             {

@@ -66,6 +66,11 @@ namespace RetroIO.Protocols.X25.Runtime
         public TelnetPadConfig TelnetPad { get; set; } = new();
 
         /// <summary>
+        /// The built-in Altos CHAT 3.1 service. Off unless its address is set (<see cref="ChatServiceConfig.Address"/>).
+        /// </summary>
+        public ChatServiceConfig Chat { get; set; } = new();
+
+        /// <summary>
         /// Create default runtime configuration with example routing setup
         /// </summary>
         public static RuntimeConfig CreateDefault()

@@ -81,5 +81,15 @@ namespace RetroIO.Protocols.X25.Models
         /// Diagnostic code, for <see cref="TadOutputKind.Clear"/>.
         /// </summary>
         public byte Diagnostic { get; init; }
+
+        /// <summary>
+        /// Called by the runtime once the data of a <see cref="TadOutputKind.Data"/> request has left: the packet layer
+        /// has sent it (its window was open), or a module in this process has been given it. Not called when the data
+        /// could not be sent (the window stayed shut past the send time-out, or the call is gone). Null for a service
+        /// that does not need to know. The chat counts what is still on its way to each user with it
+        /// (<see cref="RetroIO.Protocols.X25.Protocols.AltosChatEngine.OutputDrained"/>), the way the original threw out
+        /// a user whose terminal did not take its output.
+        /// </summary>
+        public Action? Delivered { get; init; }
     }
 }
