@@ -29,6 +29,12 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
     {
         private const string Banner = "\r\nX.25 Switch Management Console\r\n\r\n";
         private const string Prompt = "> ";
+
+        /// <summary>
+        /// Sent first on every connection: IAC WILL ECHO (option 1, RFC 857) and IAC WILL SUPPRESS-GO-AHEAD (option 3,
+        /// RFC 858). IAC is 255, WILL is 251 (RFC 854).
+        /// </summary>
+        private static readonly byte[] TelnetOffer = { 0xFF, 0xFB, 0x01, 0xFF, 0xFB, 0x03 };
         private const int MaxLoginTries = 3;
 
         private readonly SwitchCli _cli;
@@ -176,6 +182,13 @@ namespace RetroIO.Protocols.X25.Switch.Management.Telnet
             try
             {
                 using NetworkStream stream = client.GetStream();
+
+                // This console echoes what is typed itself (TelnetLineEditor), so it says so: IAC WILL ECHO (RFC 857)
+                // and IAC WILL SUPPRESS-GO-AHEAD (RFC 858), which makes a telnet client stop echoing locally and send
+                // each key as it is pressed. Without it the server has not taken the echo on, so a client may echo
+                // locally as well; in Windows telnet every typed character showed twice (2026-11-18).
+                // The client's answers are discarded by the editor.
+                stream.Write(TelnetOffer, 0, TelnetOffer.Length);
                 Write(stream, Banner);
                 bool loggedIn = _open;
                 int level = _open ? 1 : 0;
