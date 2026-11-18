@@ -810,6 +810,8 @@ namespace RetroIO.Protocols.X25.Switch.Management
                     sb.Append("nui_required = yes").Append(eol);
                 }
                 AppendIfSet(sb, "default_nui", pc.DefaultNui, eol);
+                // The calling address the network gives each call on this port (PortConfig.CallingAddressBase).
+                AppendIfSet(sb, "calling_address_base", pc.CallingAddressBase, eol);
                 // The charging information facility by subscription (X.25 6.22).
                 if (pc.ChargingInfo)
                 {

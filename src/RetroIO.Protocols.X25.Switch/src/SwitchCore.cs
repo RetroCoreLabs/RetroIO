@@ -468,6 +468,15 @@ namespace RetroIO.Protocols.X25.Switch
         {
             inPort.Counters.IncrementCallsIn();
 
+            // On a port with a calling address base the network, not the DTE, says where the call comes from: the line's
+            // address plus the call's channel (PortConfig.CallingAddressBase). Done first, so the management surface,
+            // billing by address, the call record and the far end all see the same address.
+            string lineAddress = inPort.Config.CallingAddressFor(inLci);
+            if (lineAddress.Length > 0)
+            {
+                callingAddress = lineAddress;
+            }
+
             // Calls to the reserved management address are for the switch itself: the router delivers
             // them locally, to the management surface. Asked before the NUI checks, which are about who
             // pays for a call through the network.
