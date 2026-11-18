@@ -99,8 +99,12 @@ namespace RetroIO.Protocols.X25.Tests
                 Assert.Ignore("Set CROSSENV_WSL_MON_HOST to the running WSL switch's monitor host to run this test.");
             }
 
-            string portText = Environment.GetEnvironmentVariable("CROSSENV_WSL_MON_PORT") ?? "4199";
-            int port = int.TryParse(portText, out int p) ? p : 4199;
+            // The network is x25emu's own demo (demo/demo.sh start). Its Switch A is set up in demo/switch_a.conf:
+            // monitor_port = 4101, name = Switch Alpha, dnic = 2340, and a trunk (port.4) whose peer_name is
+            // CSharp-SwitchA. Until 2026-11-18 this test asked port 4199 for a node "WSL-W5" with DNIC 2345, which no
+            // configuration in x25emu (nor in its history) describes, so it could never pass on the demo network.
+            string portText = Environment.GetEnvironmentVariable("CROSSENV_WSL_MON_PORT") ?? "4101";
+            int port = int.TryParse(portText, out int p) ? p : 4101;
 
             using MonitorClient client = new MonitorClient();
             TopologySnapshot? topo = null;
@@ -115,10 +119,10 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(got.Wait(5000), Is.True, "the WSL switch should send a topology snapshot on connect");
 
             Assert.That(topo, Is.Not.Null);
-            Assert.That(topo!.Name, Is.EqualTo("WSL-W5"), "decoded node name from the C switch");
-            Assert.That(topo.Dnic, Is.EqualTo("2345"), "decoded DNIC from the C switch");
+            Assert.That(topo!.Name, Is.EqualTo("Switch Alpha"), "decoded node name from the C switch (demo/switch_a.conf: name)");
+            Assert.That(topo.Dnic, Is.EqualTo("2340"), "decoded DNIC from the C switch (demo/switch_a.conf: dnic)");
 
-            // The WSL switch config declares the C# Switch-A as its neighbour.
+            // demo/switch_a.conf declares the C# Switch-A as the peer of its trunk port.4.
             bool hasCSharpNeighbour = false;
             for (int i = 0; i < topo.Neighbours.Count; i++)
             {

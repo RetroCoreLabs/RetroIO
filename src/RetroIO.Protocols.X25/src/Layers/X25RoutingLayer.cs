@@ -121,21 +121,32 @@ namespace RetroIO.Protocols.X25.Layers
                 if (lcn > 0)
                     _runtime.RegisterOutboundXotCallDeferred(lcn, lcn);
 
-                var success = _router.RouteOutboundCall(callRequest);
+                // The router says what became of the call (X25Router.PlaceOutboundCall): handed to a line's engine
+                // (which answers the module later), accepted, cleared with a cause, timed out (T21), or not placed.
+                // Until 2026-11-18 it said only true or false, and true for a call on an XOT_Client route meant only
+                // that a Call Request had been written.
+                X25CallOutcome outcome = _router.PlaceOutboundCall(callRequest);
 
-                if (success && lcn > 0 && callRequest.UsedTransport != null)
+                if (outcome.Succeeded && lcn > 0 && callRequest.UsedTransport != null)
                 {
-                    // Now set the actual transport on the pre-registered mapping
+                    // An accepted call the router placed itself is joined to the module here.
                     _runtime.FinalizeOutboundXotCall(lcn, callRequest.UsedTransport);
-                    _logger.LogInformation("Outbound XOT call to {CalledAddress} placed on LCN {LCN}", calledAddress, lcn);
+                    _logger.LogInformation("Outbound call to {CalledAddress} on LCN {LCN}: {Outcome}", calledAddress, lcn, outcome);
                 }
-                else if (!success && lcn > 0)
+                else if ((outcome.Kind == X25CallOutcomeKind.Cleared || outcome.Kind == X25CallOutcomeKind.TimedOut) && lcn > 0)
                 {
-                    // Unbind on failure
+                    // The call got an answer and it was a clear: the module is told so, with the cause and diagnostic
+                    // (a PAD shows them as the clear service signal, X.28), and the channel is freed.
+                    _logger.LogWarning("Outbound call to {CalledAddress} on LCN {LCN}: {Outcome}", calledAddress, lcn, outcome);
+                    _runtime.ClearCallByLocalLcn(lcn, outcome.Cause, outcome.Diagnostic);
+                }
+                else if (!outcome.Succeeded && lcn > 0)
+                {
+                    _logger.LogWarning("Outbound call to {CalledAddress}: {Outcome}", calledAddress, outcome);
                     _runtime.UnbindModule(lcn);
                 }
 
-                return success;
+                return outcome.Succeeded;
             }
             catch (Exception ex)
             {
