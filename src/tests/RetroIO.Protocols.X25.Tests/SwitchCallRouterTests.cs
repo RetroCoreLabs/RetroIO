@@ -54,6 +54,35 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(decision.OutPort, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// A transit switch with its own international prefix (England, 2342, prefix 0): a number for a third network
+        /// that arrives on a link between networks is international already and goes on by its DNIC, while the same
+        /// digits typed on an access line are a national number and are completed with 2342.
+        /// </summary>
+        [Test]
+        public void ANumberArrivingOnALinkBetweenNetworks_IsTakenAsInternational()
+        {
+            var table = new X121RoutingTable();
+            table.SetOwnDnics(new[] { "2342" });
+            table.InternationalPrefix = "0";
+            table.AddRoute(new X121Route { Type = X121RouteType.Dnic, Dnic = "3110", DestPort = 2 });
+            var x75In = new LoopbackSwitchPort(new PortConfig { Id = 0, LciBase = 1, Type = PortType.Trunk, BetweenNetworks = true });
+            var access = new LoopbackSwitchPort(new PortConfig { Id = 1, LciBase = 1 });
+            var x75Out = new LoopbackSwitchPort(new PortConfig { Id = 2, LciBase = 1, Type = PortType.Trunk, BetweenNetworks = true });
+            x75In.Start();
+            access.Start();
+            x75Out.Start();
+            var ports = new Dictionary<int, ISwitchPort> { { 0, x75In }, { 1, access }, { 2, x75Out } };
+            var router = new SwitchCallRouter(table, id => ports.TryGetValue(id, out ISwitchPort? p) ? p : null);
+
+            X25CallDecision fromLink = router.Decide("31109001", inPortId: 0);
+            Assert.That(fromLink.Action, Is.EqualTo(X25CallAction.Forward), router.Resolve("31109001", 0).Explanation);
+            Assert.That(fromLink.OutPort, Is.EqualTo(2));
+
+            Assert.That(router.Decide("31109001", inPortId: 1).Cause, Is.EqualTo(X25Cause.NotObtainable), "typed on an access line it is national: 2342 31109001");
+            Assert.That(router.Decide("031109001", inPortId: 1).OutPort, Is.EqualTo(2), "typed with the prefix it is international");
+        }
+
         [Test]
         public void NoRoute_IsNotObtainable67()
         {

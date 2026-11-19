@@ -171,7 +171,7 @@ namespace RetroIO.Protocols.X25.Routing
 
         /// <summary>
         /// How many calls this route has decided since the table was built (or since
-        /// <see cref="ResetHits"/>). Counted by <see cref="X121RoutingTable.Resolve"/>.
+        /// <see cref="ResetHits"/>). Counted by <see cref="X121RoutingTable.Resolve(string, int, Func{int, X121PortStatus}?, bool, X121RouteDirection, byte[])"/>.
         /// </summary>
         public long Hits => Interlocked.Read(ref _hits);
 
