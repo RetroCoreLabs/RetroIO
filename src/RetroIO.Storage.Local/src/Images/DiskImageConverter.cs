@@ -227,7 +227,9 @@ namespace RetroIO.Storage.Local.Images
         public static void RawToFixedVhd(string source, string target, DiskGeometry? geometry)
         {
             CheckPaths(source, target);
-            using FileStream input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+            // Shared for writing too: an emulator that is switched off may still hold the disk open
+            // for writing (RetroCore keeps a mounted disk open that way). Only read here.
+            using FileStream input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             VhdProbeResult kind = FixedVhd.Probe(input, out _, out string? problem);
             if (kind == VhdProbeResult.Fixed)
             {
@@ -281,7 +283,9 @@ namespace RetroIO.Storage.Local.Images
         public static void FixedVhdToRaw(string source, string target)
         {
             CheckPaths(source, target);
-            using FileStream input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+            // Shared for writing too: an emulator that is switched off may still hold the disk open
+            // for writing (RetroCore keeps a mounted disk open that way). Only read here.
+            using FileStream input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             VhdProbeResult kind = FixedVhd.Probe(input, out FixedVhdFooter footer, out string? problem);
             if (kind == VhdProbeResult.NotVhd)
             {
