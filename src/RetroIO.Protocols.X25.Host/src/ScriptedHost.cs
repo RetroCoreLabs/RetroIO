@@ -55,6 +55,16 @@ namespace RetroIO.Protocols.X25.Host
         private readonly Dictionary<int, HostSession> _sessions = new Dictionary<int, HostSession>();
         private readonly List<HostSession> _order = new List<HostSession>();
 
+        /// <summary>Rooms one machine may have (machine.room).</summary>
+        private const int MaxRooms = 64;
+
+        /// <summary>Characters of keys and values together in machine.store (64 KB, as docs/x25host-format.md says).</summary>
+        private const int MaxStoreChars = 65536;
+
+        private readonly Dictionary<string, HostRoom> _rooms = new Dictionary<string, HostRoom>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _store = new Dictionary<string, string>(StringComparer.Ordinal);
+        private int _storeChars;
+
         /// <summary>Waiting timers, kept sorted by due time and then by the order they were made.</summary>
         private readonly List<HostTimer> _timers = new List<HostTimer>();
         private long _timerSequence;
@@ -244,6 +254,12 @@ namespace RetroIO.Protocols.X25.Host
             {
                 _order.Remove(s);
             }
+
+            // Out of every room: a gone call is nobody's member.
+            foreach (HostRoom room in _rooms.Values)
+            {
+                room.Members.Remove(s);
+            }
         }
 
         // ------------------------------------------------------------------ the objects the script sees
@@ -334,6 +350,7 @@ namespace RetroIO.Protocols.X25.Host
 
             machine.Set("broadcast", Fn("broadcast", (_, a) =>
             {
+                // To every session but the one given (an id); each through its onMessage when it has one.
                 string text = Str(a, 0);
                 JsValue except = Arg(a, 1);
                 int exceptId = except.IsNumber() ? (int)except.AsNumber() : int.MinValue;
@@ -342,14 +359,208 @@ namespace RetroIO.Protocols.X25.Host
                 {
                     if (now[i].Id != exceptId)
                     {
-                        Send(now[i], text);
+                        Deliver(now[i], text, JsValue.Null);
                     }
                 }
 
                 return JsValue.Undefined;
             }));
 
+            machine.Set("send", Fn("send", (_, a) =>
+            {
+                // machine.send(user, text, from): to every session whose user (s.user, any case) is that name.
+                string user = Str(a, 0);
+                string text = Str(a, 1);
+                JsValue from = Arg(a, 2);
+                bool any = false;
+                HostSession[] now = _order.ToArray();
+                for (int i = 0; i < now.Length; i++)
+                {
+                    if (now[i].Open && string.Equals(UserOf(now[i]), user, StringComparison.OrdinalIgnoreCase) && user.Length > 0)
+                    {
+                        Deliver(now[i], text, from.IsUndefined() ? JsValue.Null : from);
+                        any = true;
+                    }
+                }
+
+                return any ? JsBoolean.True : JsBoolean.False;
+            }));
+
+            machine.Set("room", Fn("room", (_, a) =>
+            {
+                string name = Str(a, 0);
+                if (!_rooms.TryGetValue(name, out HostRoom? room))
+                {
+                    if (_rooms.Count >= MaxRooms)
+                    {
+                        throw new JavaScriptException("machine.room: too many rooms (" + MaxRooms + ")");
+                    }
+
+                    room = new HostRoom(name);
+                    room.Js = BuildRoom(room);
+                    _rooms.Add(name, room);
+                }
+
+                return room.Js!;
+            }));
+
+            machine.Set("store", BuildStore());
+
             return machine;
+        }
+
+        /// <summary>
+        /// A room: <c>join(s)</c>, <c>leave(s)</c>, <c>say(text, from)</c> (to every member but <c>from</c>, a session),
+        /// <c>members()</c> (the sessions in it), <c>name</c>. When the script sets <c>room.onMessage = fn</c>, a said line
+        /// is given to <c>fn(member, text, from)</c> for each member instead of the member's own delivery. A session
+        /// leaves every room when its call ends.
+        /// </summary>
+        private JsValue BuildRoom(HostRoom room)
+        {
+            var o = new JsObject(_engine);
+            o.Set("name", room.Name);
+            o.Set("join", Fn("join", (_, a) =>
+            {
+                HostSession? s = SessionArg(a, 0, "room.join");
+                if (s != null && s.Open && !room.Members.Contains(s))
+                {
+                    room.Members.Add(s);
+                }
+
+                return JsValue.Undefined;
+            }));
+            o.Set("leave", Fn("leave", (_, a) =>
+            {
+                HostSession? s = SessionArg(a, 0, "room.leave");
+                return s != null && room.Members.Remove(s) ? JsBoolean.True : JsBoolean.False;
+            }));
+            o.Set("members", Fn("members", (_, _) =>
+            {
+                var items = new JsValue[room.Members.Count];
+                for (int i = 0; i < items.Length; i++)
+                {
+                    items[i] = room.Members[i].Js!;
+                }
+
+                return new JsArray(_engine, items);
+            }));
+            o.Set("say", Fn("say", (_, a) =>
+            {
+                string text = Str(a, 0);
+                JsValue fromJs = Arg(a, 1);
+                HostSession? from = fromJs.IsObject() ? SessionArg(a, 1, "room.say") : null;
+                HostSession[] now = room.Members.ToArray();
+                JsValue handler = room.Js!.AsObject().Get("onMessage");
+                for (int i = 0; i < now.Length; i++)
+                {
+                    if (now[i] == from || !now[i].Open)
+                    {
+                        continue;
+                    }
+
+                    if (handler.IsObject())
+                    {
+                        CallScript(handler, now[i], "room.onMessage", now[i].Js!, new JsString(text), from?.Js ?? JsValue.Null);
+                    }
+                    else
+                    {
+                        Deliver(now[i], text, from?.Js ?? JsValue.Null);
+                    }
+                }
+
+                return JsValue.Undefined;
+            }));
+            return o;
+        }
+
+        /// <summary>
+        /// <c>machine.store</c>: <c>get(key)</c> (undefined when absent), <c>set(key, value)</c> (false when it would go
+        /// over <see cref="MaxStoreChars"/> characters of keys and values together), <c>remove(key)</c>, <c>keys()</c>.
+        /// Strings only; shared by the sessions of this machine, gone when the machine stops.
+        /// </summary>
+        private JsValue BuildStore()
+        {
+            var o = new JsObject(_engine);
+            o.Set("get", Fn("get", (_, a) => _store.TryGetValue(Str(a, 0), out string? v) ? new JsString(v) : JsValue.Undefined));
+            o.Set("set", Fn("set", (_, a) =>
+            {
+                string key = Str(a, 0);
+                string value = Str(a, 1);
+                int now = _storeChars - (_store.TryGetValue(key, out string? old) ? key.Length + old.Length : 0);
+                if (now + key.Length + value.Length > MaxStoreChars)
+                {
+                    return JsBoolean.False;
+                }
+
+                _store[key] = value;
+                _storeChars = now + key.Length + value.Length;
+                return JsBoolean.True;
+            }));
+            o.Set("remove", Fn("remove", (_, a) =>
+            {
+                string key = Str(a, 0);
+                if (!_store.Remove(key, out string? old))
+                {
+                    return JsBoolean.False;
+                }
+
+                _storeChars -= key.Length + old.Length;
+                return JsBoolean.True;
+            }));
+            o.Set("keys", Fn("keys", (_, _) =>
+            {
+                var items = new JsValue[_store.Count];
+                int i = 0;
+                foreach (string k in _store.Keys)
+                {
+                    items[i++] = new JsString(k);
+                }
+
+                return new JsArray(_engine, items);
+            }));
+            return o;
+        }
+
+        // A message reaching a session (send, broadcast, room): its onMessage(text, from) when the script set one,
+        // else the text is sent to the caller as it is.
+        private void Deliver(HostSession to, string text, JsValue from)
+        {
+            if (!to.Open)
+            {
+                return;
+            }
+
+            JsValue handler = to.Js!.Get("onMessage");
+            if (handler.IsObject())
+            {
+                CallScript(handler, to, "session.onMessage", new JsString(text), from);
+            }
+            else
+            {
+                Send(to, text);
+            }
+        }
+
+        // The session's user name: s.user as the script set it, else the login it was given.
+        private static string UserOf(HostSession s)
+        {
+            JsValue u = s.Js!.Get("user");
+            return u.IsString() ? u.AsString() : s.Login;
+        }
+
+        private HostSession? SessionArg(JsValue[] a, int index, string what)
+        {
+            JsValue v = Arg(a, index);
+            if (v.IsObject())
+            {
+                JsValue id = v.AsObject().Get("id");
+                if (id.IsNumber() && _sessions.TryGetValue((int)id.AsNumber(), out HostSession? s) && s.Js == v)
+                {
+                    return s;
+                }
+            }
+
+            throw new JavaScriptException(what + ": the argument must be a session");
         }
 
         private JsValue BuildSession(HostSession s)
@@ -357,6 +568,9 @@ namespace RetroIO.Protocols.X25.Host
             var o = new JsObject(_engine);
             o.Set("id", s.Id);
             o.Set("login", s.Login);
+
+            // The name machine.send looks for; the script may set it (after its own login), starts as the login.
+            o.Set("user", s.Login);
             o.Set("calling", s.Calling == null ? JsValue.Null : new JsString(s.Calling));
             o.Set("connectedAt", Clock(s.ConnectedAt));
             o.Set("send", Fn("send", (_, a) =>
@@ -499,6 +713,21 @@ namespace RetroIO.Protocols.X25.Host
             public long Pending { get; set; }
 
             /// <summary>The session object the script sees.</summary>
+            public JsValue? Js { get; set; }
+        }
+
+        private sealed class HostRoom
+        {
+            public HostRoom(string name)
+            {
+                Name = name;
+            }
+
+            public string Name { get; }
+
+            public List<HostSession> Members { get; } = new List<HostSession>();
+
+            /// <summary>The room object the script sees.</summary>
             public JsValue? Js { get; set; }
         }
 
