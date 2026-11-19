@@ -331,6 +331,17 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(X28.PadClearSignal(true), Is.EqualTo("CLR PAD - Call cleared, remote request"));
         }
 
+        /// <summary>
+        /// The PSS clear line, against the recorded 1987 session (RetroX25 docs/research-os.md 1.2):
+        /// <c>CLR PAD (00) 00:00:00:32 13 17</c>.
+        /// </summary>
+        [Test]
+        public void PssClearSignal_MatchesTheRecordedSession()
+        {
+            Assert.That(X28.PssClearSignal("PAD", 0, 0, TimeSpan.FromSeconds(32), 13, 17), Is.EqualTo("CLR PAD (00) 00:00:00:32 13 17"));
+            Assert.That(X28.PssClearSignal(X28.ClearMnemonic(0x01), 0x01, 0, new TimeSpan(1, 2, 3, 4), 0, 0), Is.EqualTo("CLR OCC (00) 01:02:03:04 0 0"));
+        }
+
         private sealed class ResetTransport : IPadTransport
         {
             public bool CanReset;
