@@ -225,6 +225,65 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        /// <summary>Types a line at the prompt (no call) and returns what the PAD answered.</summary>
+        private static string Type(X28 pad, string line)
+        {
+            var seen = new StringBuilder();
+            EventHandler<CommandResponseEventArgs> handler = (s, e) => seen.Append(e.Response);
+            pad.CommandResponse += handler;
+            foreach (char ch in line + "\r")
+            {
+                pad.ProcessCharacter(ch);
+            }
+
+            pad.CommandResponse -= handler;
+            return seen.ToString();
+        }
+
+        /// <summary>
+        /// PAR?, SET and SET? in the formats of X.28 3.5.4.1, 3.5.6.1 and 3.5.14, with the list separated by ", " (the
+        /// X.28 example "SET 2:0, 3:2, 9:4" itself), INV for what is not valid, and SET acknowledged by a format
+        /// effector only (3.3.2).
+        /// </summary>
+        [Test]
+        public void ParameterCommands_AnswerInTheX28Formats()
+        {
+            var x3 = new X3();
+            var pad = new X28(x3);
+
+            Assert.That(Type(pad, "SET 2:0, 3:2, 9:4"), Is.EqualTo("\r\n"));
+            Assert.That(x3.GetParameter(2), Is.EqualTo(0));
+            Assert.That(x3.GetParameter(3), Is.EqualTo(2));
+            Assert.That(x3.GetParameter(9), Is.EqualTo(4));
+
+            Assert.That(Type(pad, "PAR? 2, 3"), Is.EqualTo("PAR 2:0, 3:2\r\n"));
+            Assert.That(Type(pad, "PAR?9"), Is.EqualTo("PAR 9:4\r\n"));
+            Assert.That(Type(pad, "SET? 2:1"), Is.EqualTo("PAR 2:1\r\n"));
+            Assert.That(Type(pad, "PAR? 99"), Is.EqualTo("PAR 99:INV\r\n"));
+            Assert.That(Type(pad, "SET 2:0, 99:1"), Is.EqualTo("PAR 99:INV\r\n"), "only the invalid entry is named");
+            Assert.That(x3.GetParameter(2), Is.EqualTo(0), "the valid entry is still set");
+            Assert.That(Type(pad, "PAR?"), Does.StartWith("PAR 1:"));
+        }
+
+        /// <summary>
+        /// Extended dialogue mode (parameter 6 at 16 or more): a Table 8 name or its abbreviation in place of the number,
+        /// in any case, and the name after each entry of the answer. Names are not taken outside that mode.
+        /// </summary>
+        [Test]
+        public void ParameterNames_InExtendedDialogueMode()
+        {
+            var x3 = new X3();
+            var pad = new X28(x3);
+            Assert.That(Type(pad, "PAR? ech"), Is.EqualTo("PAR ECH:INV\r\n"), "no names outside extended mode (the line is read in upper case)");
+
+            Type(pad, "SET 6:17");
+            Assert.That(Type(pad, "SET? ech:0"), Is.EqualTo("PAR 2:0 - echo\r\n"));
+            Assert.That(Type(pad, "PAR? ESCAPE, Ldis"), Is.EqualTo("PAR 1:" + x3.GetParameter(1) + " - escape, 18:" + x3.GetParameter(18) + " - Ldisplay\r\n"));
+            Assert.That(Type(pad, "PAR? es"), Is.EqualTo("PAR ES:INV\r\n"), "shorter than the abbreviation");
+            Assert.That(X28.ParameterName(29), Is.EqualTo("Xecho"));
+            Assert.That(X28.ParameterName(30), Is.Null);
+        }
+
         private sealed class ResetTransport : IPadTransport
         {
             public bool CanReset;
