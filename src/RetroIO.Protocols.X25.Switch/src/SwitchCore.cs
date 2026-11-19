@@ -1278,8 +1278,11 @@ namespace RetroIO.Protocols.X25.Switch
         /// <param name="length">
         /// How many bytes it carried.
         /// </param>
-        private static void CountForwarded(VcStitch stitch, bool toEgress, int length)
+        private void CountForwarded(VcStitch stitch, bool toEgress, int length)
         {
+            // The switch's own totals since start (show x25 stats), which outlive the stitch.
+            _node.CountForwardedBytes(toEgress, length);
+
             // Under the stitch's lock, as the PVC period line reads and zeroes these (EndPvcPeriod). Nothing in here
             // calls a port, so the lock cannot wait on a port's lock.
             lock (stitch)

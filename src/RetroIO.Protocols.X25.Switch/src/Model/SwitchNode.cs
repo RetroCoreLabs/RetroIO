@@ -292,6 +292,44 @@ namespace RetroIO.Protocols.X25.Switch.Model
             return null;
         }
 
+        private ulong _bytesForwardTotal;
+        private ulong _bytesReverseTotal;
+
+        /// <summary>
+        /// Every data byte forwarded calling side to called side since the switch started, finished calls and permanent
+        /// circuits included. A stitch's own byte count ends with its call (and a PVC's is zeroed at every record
+        /// period), so these totals are kept here, counted where each packet is forwarded. x25emu's switch shows the
+        /// same figure as the bytes of finished calls plus those of the calls still up (x25switch.c, bytes_fwd_done).
+        /// </summary>
+        public ulong BytesForwardTotal => Interlocked.Read(ref _bytesForwardTotal);
+
+        /// <summary>
+        /// Every data byte forwarded called side to calling side since the switch started; see
+        /// <see cref="BytesForwardTotal"/>.
+        /// </summary>
+        public ulong BytesReverseTotal => Interlocked.Read(ref _bytesReverseTotal);
+
+        /// <summary>
+        /// Adds forwarded data bytes to the switch's totals.
+        /// </summary>
+        /// <param name="forward">
+        /// True for calling side to called side.
+        /// </param>
+        /// <param name="length">
+        /// The number of data bytes in the packet.
+        /// </param>
+        public void CountForwardedBytes(bool forward, int length)
+        {
+            if (forward)
+            {
+                Interlocked.Add(ref _bytesForwardTotal, (ulong)length);
+            }
+            else
+            {
+                Interlocked.Add(ref _bytesReverseTotal, (ulong)length);
+            }
+        }
+
         /// <summary>
         /// Returns a snapshot of the currently active stitches.
         /// </summary>

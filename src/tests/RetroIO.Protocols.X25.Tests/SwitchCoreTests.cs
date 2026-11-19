@@ -165,6 +165,34 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_p1.Counters.PacketsOut, Is.EqualTo(1u), "forwarded packet counted on egress");
         }
 
+        /// <summary>
+        /// The switch's byte totals since start outlive the call: after two calls, both cleared, show x25 stats gives
+        /// their bytes both ways. Until 2026-11-19 it summed only the calls up at that moment, so it read 0 here (found
+        /// by the large demo network's test report: 140 calls, every switch "Bytes forwarded: 0").
+        /// </summary>
+        [Test]
+        public void ByteTotals_KeepTheBytesOfFinishedCalls_AndShowInTheConsole()
+        {
+            for (int call = 0; call < 2; call++)
+            {
+                ushort inLci = _p0.InjectIncomingCall("23410001", "23400001");
+                VcStitch stitch = _node.SnapshotStitches()[0];
+                _p1.InjectConnected(stitch.OutLci);
+                _p0.InjectData(inLci, Encoding.ASCII.GetBytes("hello"));
+                _p1.InjectData(stitch.OutLci, Encoding.ASCII.GetBytes("hi!"));
+                _p0.InjectClear(inLci, SwitchCore.CauseDteOriginated, 0);
+            }
+
+            Assert.That(_node.ActiveStitchCount, Is.EqualTo(0));
+            Assert.That(_node.BytesForwardTotal, Is.EqualTo(10u));
+            Assert.That(_node.BytesReverseTotal, Is.EqualTo(6u));
+
+            string stats = new RetroIO.Protocols.X25.Switch.Management.SwitchCli(_node, () => 0L).Process("show x25 stats");
+            Assert.That(stats, Does.Contain("Bytes forwarded: 10\r\n"));
+            Assert.That(stats, Does.Contain("Bytes reversed:  6\r\n"));
+            Assert.That(stats, Does.Contain("Total bytes:     16\r\n"));
+        }
+
         [Test]
         public void Cdr_RecordedOnClear()
         {

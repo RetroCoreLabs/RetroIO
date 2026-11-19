@@ -93,12 +93,8 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 pktsOut += ct.PacketsOut;
             }
 
-            ulong bytes = 0;
-            System.Collections.Generic.List<VcStitch> stitches = _node.SnapshotStitches();
-            for (int i = 0; i < stitches.Count; i++)
-            {
-                bytes += stitches[i].BytesForward + stitches[i].BytesReverse;
-            }
+            // Since the switch started, as the console's show x25 stats (finished calls included).
+            ulong bytes = _node.BytesForwardTotal + _node.BytesReverseTotal;
 
             StringBuilder sb = new StringBuilder();
             sb.Append("STATS dnic=").Append(c.Dnic)
