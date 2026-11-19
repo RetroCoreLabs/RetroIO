@@ -74,4 +74,14 @@ namespace RetroIO.Protocols.X25.Client
     /// X.25 diagnostic code.
     /// </param>
     public delegate void X25ClearHandler(X25Client client, X25Vc vc, byte cause, byte diagnostic);
+
+    /// <summary>
+    /// Called when a circuit was reset by the other end or the network (X.25 (10/96) 4.4.3). The packet layer has
+    /// already confirmed it; the call stays.
+    /// </summary>
+    /// <param name="client">The client whose circuit was reset.</param>
+    /// <param name="vc">The virtual circuit that was reset.</param>
+    /// <param name="cause">Resetting cause (X.25 Table 5-8).</param>
+    /// <param name="diagnostic">Diagnostic code.</param>
+    public delegate void X25ResetHandler(X25Client client, X25Vc vc, byte cause, byte diagnostic);
 }

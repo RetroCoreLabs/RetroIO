@@ -75,6 +75,7 @@ namespace RetroIO.Protocols.X25.Client
         private X25CallConnectedHandler? _onConnected;
         private X25DataHandler? _onData;
         private X25ClearHandler? _onClear;
+        private X25ResetHandler? _onReset;
 
         /// <summary>
         /// A friendly name identifying this client, used as the transport/link label in diagnostics.
@@ -225,6 +226,15 @@ namespace RetroIO.Protocols.X25.Client
         public void SetOnClear(X25ClearHandler? handler)
         {
             _onClear = handler;
+        }
+
+        /// <summary>
+        /// Sets the callback invoked when a circuit is reset by the other end or the network.
+        /// </summary>
+        /// <param name="handler">The reset handler.</param>
+        public void SetOnReset(X25ResetHandler? handler)
+        {
+            _onReset = handler;
         }
 
         /// <summary>
@@ -726,6 +736,13 @@ namespace RetroIO.Protocols.X25.Client
             leg.Layer.CallConnected += (layer, lci) => OnLayerCallConnected(leg, lci);
             leg.Layer.DataReceived += (layer, lci, data, length, q, m, d) => OnLayerData(leg, lci, data, length, q, m, d);
             leg.Layer.Cleared += (layer, lci, cause, diagnostic) => OnLayerCleared(leg, lci, cause, diagnostic);
+            leg.Layer.Reset += (layer, lci, cause, diagnostic) =>
+            {
+                if (leg.Vcs.TryGetValue(lci, out X25Vc? vc))
+                {
+                    _onReset?.Invoke(this, vc, cause, diagnostic);
+                }
+            };
             return leg;
         }
 

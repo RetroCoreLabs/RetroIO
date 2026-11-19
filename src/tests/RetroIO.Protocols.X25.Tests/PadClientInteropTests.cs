@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System;
 using System.Text;
 using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -136,6 +137,59 @@ namespace RetroIO.Protocols.X25.Tests
             pad.OnKey('\u0010');
             TypeLine(pad, "CLR");
             Assert.That(disconnected.Wait(3000), Is.True, "the PAD should disconnect after CLR");
+
+            pad.Dispose();
+        }
+
+        /// <summary>
+        /// Resets over the wire, wired as the x25pad program does: the far end's reset shows RESET DTE on the PAD
+        /// (X.28 3.5.7), the PAD's RESET command reaches the far end, and the call carries data after both.
+        /// </summary>
+        [Test]
+        public void Pad_ResetsBothWays_AndTheCallStays()
+        {
+            using LoopbackX25Peer peer = new LoopbackX25Peer("200");
+            using X25Client client = new X25Client { ServiceName = "pad-test" };
+            X25ClientPadTransport transport = new X25ClientPadTransport(client);
+            PadClient pad = new PadClient(NullLogger.Instance, transport) { LocalAddress = "10000" };
+            client.SetOnConnected((c, vc) => pad.NotifyCallAccepted(vc.Lcn));
+            client.SetOnData((c, vc, data, length, qBit, mBit, dBit) => pad.DeliverData(vc.Lcn, data, qBit));
+            client.SetOnClear((c, vc, cause, diagnostic) => pad.DeliverClear(vc.Lcn, cause, diagnostic));
+            client.SetOnReset((c, vc, cause, diagnostic) => pad.DeliverReset(vc.Lcn, cause, diagnostic));
+
+            ManualResetEventSlim connected = new ManualResetEventSlim(false);
+            StringBuilder received = new StringBuilder();
+            object gate = new object();
+            pad.ConnectionStateChanged += (sender, e) =>
+            {
+                if (e.State == PadConnectionState.Connected)
+                {
+                    connected.Set();
+                }
+            };
+            pad.DataReceived += (sender, e) => { lock (gate) { received.Append(e.Data); } };
+            Func<string, bool> seen = text => { lock (gate) { return received.ToString().Contains(text); } };
+
+            client.Open(new X25ClientConfig { Host = "127.0.0.1", Port = (ushort)peer.Port, LocalAddress = "10000", Framing = X25ClientFraming.Xot }, NullLogger.Instance);
+            pad.Initialize();
+            TypeLine(pad, "CALL 200");
+            Assert.That(connected.Wait(3000), Is.True, "the PAD should connect after CALL 200");
+
+            // The peer is a DTE: its packet layer sends a DTE's own cause as "DTE originated" (X.25 5.4.3.1), so
+            // the PAD shows RESET DTE whatever cause the peer asked for.
+            Assert.That(peer.ResetLastCall(0x07, 0), Is.True);
+            Assert.That(SpinWait.SpinUntil(() => seen("RESET DTE 0"), 3000), Is.True, "the far end's reset on the PAD: " + received);
+
+            // The peer's layer also reports its own reset once confirmed (X25Layer.OnResetConfirmation), so count on.
+            Assert.That(SpinWait.SpinUntil(() => peer.ResetsSeen == 1, 3000), Is.True, "the peer's own reset completed");
+            pad.OnKey('\u0010');
+            TypeLine(pad, "RESET");
+            Assert.That(SpinWait.SpinUntil(() => peer.ResetsSeen == 2, 3000), Is.True, "the PAD's RESET at the far end");
+            Assert.That(seen("ERR"), Is.False, received.ToString());
+
+            TypeLine(pad, "DATA");
+            TypeLine(pad, "HELLO");
+            Assert.That(SpinWait.SpinUntil(() => seen("HELLO"), 3000), Is.True, "the call carries data after both resets: " + received);
 
             pad.Dispose();
         }
