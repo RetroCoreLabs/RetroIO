@@ -352,6 +352,16 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// The clear indication PAD service signal for a call the PAD cleared because the host asked it to (the X.29
+        /// invitation to clear): <c>CLR PAD</c>, and in extended dialogue mode <c> - Call cleared, remote request</c>
+        /// (X.28 (12/97) 3.5.17.1, Table 6). The cause code and diagnostic fields are optional (3.5.17.1 note) and
+        /// left out: the PAD sent the clear itself, so there is no network cause to show.
+        /// </summary>
+        /// <param name="extended">The PAD is in extended dialogue mode.</param>
+        /// <returns>The service signal, without line ends.</returns>
+        public static string PadClearSignal(bool extended) => extended ? "CLR PAD - " + ExtendedClearText("PAD") : "CLR PAD";
+
+        /// <summary>
         /// The clear confirmation PAD service signal: <c>CLR CONF</c>, and in extended dialogue mode
         /// <c> - Call cleared, confirmed</c> (X.28 (12/97) 3.5.18, Table 7).
         /// </summary>

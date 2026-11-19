@@ -337,9 +337,8 @@ namespace RetroIO.Protocols.X25.Modules
         }
 
         /// <summary>
-        /// Clears the call at the person's request and tells the terminal "CLR CONF". Returns false when
-        /// there was no call to clear. It does not write the prompt: a caller that is in the middle of a
-        /// typed line (the CLR command) gets its prompt when the line ends.
+        /// The RESET command (X.28 4.9.2.3): a Reset Request on the call, then the acknowledgement; ERR when the
+        /// transport could not send it.
         /// </summary>
         private void ResetCallFromTerminal()
         {
@@ -364,7 +363,22 @@ namespace RetroIO.Protocols.X25.Modules
             }
         }
 
-        private bool ClearCallFromTerminal()
+        /// <summary>
+        /// Clears the call at the person's request and tells the terminal "CLR CONF". Returns false when
+        /// there was no call to clear. It does not write the prompt: a caller that is in the middle of a
+        /// typed line (the CLR command) gets its prompt when the line ends.
+        /// </summary>
+        private bool ClearCallFromTerminal() => ClearCall(invitedByHost: false);
+
+        /// <summary>
+        /// Clears the call. The person's own clear is confirmed with CLR CONF (X.28 3.5.9). A clear the host asked for
+        /// with the X.29 invitation to clear is told with the clear indication signal and the cause PAD, "Call cleared,
+        /// remote request" (X.28 Table 6) - the PSS session in docs/research-os.md 1.2 shows CLR PAD at that point.
+        /// Until 2026-11-19 both printed CLR CONF.
+        /// </summary>
+        /// <param name="invitedByHost">The host sent an invitation to clear.</param>
+        /// <returns>False when there was no call to clear.</returns>
+        private bool ClearCall(bool invitedByHost)
         {
             if (_currentLCN == 0 || _state == PadState.Disconnected)
                 return false;
@@ -389,8 +403,9 @@ namespace RetroIO.Protocols.X25.Modules
             _logger.LogDebug("PAD sending X.25 Clear Request on LCN {LCN}", clearedLCN);
             _transport.ClearCall(clearedLCN, 0, 0);
 
-            OnDataReceived("\r\n" + X28.ClearConfirmation(X28.IsExtendedDialogue(_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS))) + "\r\n");
-            OnConnectionStateChanged(PadConnectionState.Disconnected, "User initiated");
+            bool extended = X28.IsExtendedDialogue(_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
+            OnDataReceived("\r\n" + (invitedByHost ? X28.PadClearSignal(extended) : X28.ClearConfirmation(extended)) + "\r\n");
+            OnConnectionStateChanged(PadConnectionState.Disconnected, invitedByHost ? "Invitation to clear" : "User initiated");
             return true;
         }
 
@@ -727,7 +742,13 @@ namespace RetroIO.Protocols.X25.Modules
                     case (byte)X29MessageType.InvitationToClear:
                         // Remote wants to disconnect
                         _logger.LogInformation("Received invitation to clear from remote PAD");
-                        System.Threading.ThreadPool.QueueUserWorkItem((_) => Disconnect());
+                        System.Threading.ThreadPool.QueueUserWorkItem((_) =>
+                        {
+                            if (ClearCall(invitedByHost: true))
+                            {
+                                SendPrompt();
+                            }
+                        });
                         break;
 
                     case (byte)X29MessageType.IndicationOfBreak:
