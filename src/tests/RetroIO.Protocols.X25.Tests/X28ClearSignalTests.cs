@@ -138,6 +138,25 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// The escape (DLE with parameter 1 = 1) during a call shows the PAD's prompt only (X.28 3.5.23), and the call stays.
+        /// </summary>
+        [Test]
+        public void Escape_DuringACall_ShowsThePromptOnly()
+        {
+            var x3 = new X3();
+            Assert.That(x3.SetParameter(1, 1), Is.True);
+            var pad = new X28(x3);
+            var seen = new StringBuilder();
+            pad.CommandResponse += (s, e) => seen.Append(e.Response);
+            pad.SwitchToDataTransferMode();
+
+            pad.ProcessCharacter((char)0x10);
+
+            Assert.That(seen.ToString(), Is.EqualTo("\r\n" + X28.PromptText));
+            Assert.That(pad.StatusSignal(), Is.EqualTo("ENGAGED"));
+        }
+
+        /// <summary>
         /// A remote clear delivered to the PAD with cause and diagnostic shows the signal on the terminal.
         /// </summary>
         [Test]

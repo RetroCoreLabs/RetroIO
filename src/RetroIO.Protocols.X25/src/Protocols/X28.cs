@@ -1564,9 +1564,18 @@ namespace RetroIO.Protocols.X25.Protocols
         {
             _logger?.LogDebug("X.28: PAD escape character detected, switching to command mode (connection maintained)");
             SwitchMode(PadMode.Command);
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs("\r\n*** PAD Command Mode (connection maintained) ***\r\nCMD: ", ResponseType.Success));
+            // X.28 3.1.3 / 3.5.23: the PAD shows it is ready for a command with the prompt PAD service signal, after a
+            // format effector. Until 2026-11-19 this printed "*** PAD Command Mode (connection maintained) ***" and
+            // "CMD: ", which X.28 has no signal for, and differed from the PAD's own prompt.
+            CommandResponse?.Invoke(this, new CommandResponseEventArgs("\r\n" + PromptText, ResponseType.Success));
             return true;
         }
+
+        /// <summary>
+        /// The prompt PAD service signal this PAD shows (X.28 3.5.23). The standard one is <c>*</c>; X.28 permits other
+        /// characters "for an interim period", and this PAD has always shown <c>PAD&gt; </c>.
+        /// </summary>
+        public const string PromptText = "PAD> ";
 
         /// <summary>
         /// Process character in escape mode (not implemented in basic X.28)
