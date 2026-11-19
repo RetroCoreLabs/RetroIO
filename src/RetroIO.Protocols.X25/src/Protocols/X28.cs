@@ -591,6 +591,16 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         private X28Command ParseCommand(string commandLine)
         {
+            // Read, set, and set and read (X.28 3.5.4.1, 3.5.6.1): the verb may be followed at once by the list
+            // ("PAR?1"), and the list items are separated by commas with optional spaces ("SET 2:0, 3:2, 9:4"). Until
+            // 2026-11-19 the line was split on spaces, so the X.28 example itself failed ("2:0," did not match) and
+            // SET? was unknown.
+            X28Command? parameterCommand = ParseParameterCommand(commandLine);
+            if (parameterCommand != null)
+            {
+                return parameterCommand;
+            }
+
             var parts = commandLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var arguments = new List<string>();
             for (int i = 1; i < parts.Length; i++)
@@ -622,10 +632,6 @@ namespace RetroIO.Protocols.X25.Protocols
                 case "STAT":
                 case "STATUS":
                     command.Verb = Commands.STATUS;
-                    break;
-                    
-                case Commands.SET:
-                    ParseSetCommand(command);
                     break;
                     
                 case "PAR":
@@ -660,24 +666,128 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Parse SET command parameters
+        /// Parses a read (<c>PAR?</c>), set (<c>SET</c>) or set and read (<c>SET?</c>) command signal (X.28 3.5.4.1,
+        /// 3.5.6.1), or returns null for any other line. The bare <c>PAR</c> (no <c>?</c>) this PAD has always taken as a
+        /// read of all parameters is kept. Each list item is kept as typed in <see cref="X28Command.Items"/>; the
+        /// handler resolves it, so an item it cannot read is answered INV rather than dropped.
         /// </summary>
-        private void ParseSetCommand(X28Command command)
+        /// <param name="commandLine">The command line in upper case.</param>
+        /// <returns>The command, or null.</returns>
+        private static X28Command? ParseParameterCommand(string commandLine)
         {
-            command.Parameters = new Dictionary<byte, byte>();
-            
-            foreach (string arg in command.Arguments)
+            string verb;
+            string rest;
+            if (commandLine.StartsWith("PAR?", StringComparison.Ordinal))
             {
-                var match = Regex.Match(arg, @"^(\d+):(\d+)$");
-                if (match.Success)
+                verb = Commands.PARAMETER;
+                rest = commandLine.Substring(4);
+            }
+            else if (commandLine == "PAR" || commandLine == "PARAMETER")
+            {
+                verb = Commands.PARAMETER;
+                rest = string.Empty;
+            }
+            else if (commandLine.StartsWith("SET?", StringComparison.Ordinal))
+            {
+                verb = SetAndRead;
+                rest = commandLine.Substring(4);
+            }
+            else if (commandLine.StartsWith("SET", StringComparison.Ordinal) && (commandLine.Length == 3 || commandLine[3] == ' ' || char.IsDigit(commandLine[3])))
+            {
+                verb = Commands.SET;
+                rest = commandLine.Substring(3);
+            }
+            else
+            {
+                return null;
+            }
+
+            var command = new X28Command { Verb = verb, OriginalLine = commandLine };
+            string[] items = rest.Split(',');
+            for (int i = 0; i < items.Length; i++)
+            {
+                string item = items[i].Trim();
+                if (item.Length > 0)
                 {
-                    if (byte.TryParse(match.Groups[1].Value, out byte paramNum) &&
-                        byte.TryParse(match.Groups[2].Value, out byte paramValue))
+                    command.Items.Add(item);
+                    command.Arguments.Add(item);
+                }
+            }
+
+            return command;
+        }
+
+        /// <summary>The verb this class gives the set and read command signal, <c>SET?</c> (X.28 3.5.6.1).</summary>
+        internal const string SetAndRead = "SET?";
+
+        /// <summary>
+        /// The abbreviated PAD parameter names of X.28 (12/97) Table 8 (page 28), for parameters 1 to 29: the full name,
+        /// and how many letters of it are the abbreviation that must be typed (the part outside the brackets in the
+        /// table, e.g. "esc(ape)").
+        /// </summary>
+        private static readonly (string Name, int Abbreviation)[] ParameterNames =
+        {
+            ("escape", 3), ("echo", 3), ("forward", 3), ("idle", 3), ("device", 3), ("signals", 3), ("break", 3),
+            ("discard", 3), ("CRpad", 3), ("folding", 3), ("speed", 3), ("flow", 3), ("LFinsert", 3), ("LFpad", 3),
+            ("Edit", 3), ("Cdelete", 4), ("Ldelete", 4), ("Ldisplay", 4), ("Esignals", 4), ("Mask", 3), ("parity", 3),
+            ("page", 3), ("input", 3), ("frame", 3), ("Xforward", 4), ("Dinterrupt", 4), ("Dconfirmation", 4),
+            ("Coding", 3), ("Xecho", 4),
+        };
+
+        /// <summary>
+        /// The X.28 Table 8 name of a PAD parameter (e.g. <c>escape</c> for 1), or null for a number the table has no
+        /// name for.
+        /// </summary>
+        /// <param name="reference">The parameter reference number.</param>
+        /// <returns>The name, or null.</returns>
+        public static string? ParameterName(int reference)
+        {
+            return reference >= 1 && reference <= ParameterNames.Length ? ParameterNames[reference - 1].Name : null;
+        }
+
+        /// <summary>
+        /// Reads a parameter reference: a decimal number, or in extended dialogue mode a Table 8 name typed as its
+        /// abbreviation or any longer part of the name, in any case (X.28 3.5 and Table 8 note 1: "The name or
+        /// abbreviation should be accepted in the read, set, or set and read PAD command signals").
+        /// </summary>
+        /// <param name="text">The reference as typed.</param>
+        /// <param name="extended">The PAD is in extended dialogue mode.</param>
+        /// <param name="reference">The parameter number.</param>
+        /// <returns>False when the text is neither.</returns>
+        public static bool TryParameterReference(string text, bool extended, out byte reference)
+        {
+            if (byte.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out reference))
+            {
+                return true;
+            }
+
+            if (extended)
+            {
+                for (int i = 0; i < ParameterNames.Length; i++)
+                {
+                    string name = ParameterNames[i].Name;
+                    if (text.Length >= ParameterNames[i].Abbreviation && text.Length <= name.Length
+                        && string.Compare(text, 0, name, 0, text.Length, StringComparison.OrdinalIgnoreCase) == 0)
                     {
-                        command.Parameters[paramNum] = paramValue;
+                        reference = (byte)(i + 1);
+                        return true;
                     }
                 }
             }
+
+            reference = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// One entry of the parameter value PAD service signal (X.28 3.5.14): <c>reference:value</c>, with
+        /// <c> - </c> and the Table 8 name in extended dialogue mode; <c>INV</c> in place of the value for a reference
+        /// or value that is not valid.
+        /// </summary>
+        private static string ParameterEntry(string reference, string value, int number, bool extended)
+        {
+            string? name = extended ? ParameterName(number) : null;
+            return name == null ? reference + ":" + value : reference + ":" + value + " - " + name;
         }
 
         /// <summary>
@@ -692,6 +802,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 Commands.CLEAR => HandleClearCommand(command),
                 Commands.STATUS => HandleStatusCommand(command),
                 Commands.SET => HandleSetCommand(command),
+                SetAndRead => HandleSetCommand(command),
                 Commands.PARAMETER => HandleParameterCommand(command),
                 Commands.PROFILE => HandleProfileCommand(command),
                 Commands.RESET => HandleResetCommand(command),
@@ -889,66 +1000,91 @@ namespace RetroIO.Protocols.X25.Protocols
         /// <summary>
         /// Handle parameter-related commands
         /// </summary>
+        /// <summary>
+        /// SET and SET? (X.28 3.3.2, 3.5.6.1, 3.5.14). Valid entries are set (also when others in the line are not).
+        /// With parameter 6 not 0: SET? answers the parameter value PAD service signal with the new values; SET answers
+        /// the acknowledgement (a format effector, 3.5.3) when every entry was valid, and otherwise the parameter value
+        /// signal naming only the invalid ones, each with INV. With parameter 6 at 0 nothing is printed.
+        /// </summary>
         private CommandResult HandleSetCommand(X28Command command)
         {
-            if (command.Parameters == null || command.Parameters.Count == 0)
+            bool read = command.Verb == SetAndRead;
+            bool extended = IsExtendedDialogue(_x3Parameters.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
+            command.Parameters = new Dictionary<byte, byte>();
+            var entries = new List<string>();
+            bool invalid = false;
+            for (int i = 0; i < command.Items.Count; i++)
             {
-                CommandResponse?.Invoke(this, new CommandResponseEventArgs("Parameters required (format: SET param:value)\r\n", ResponseType.Error));
-                return CommandResult.InvalidParameters;
-            }
-                
-            var results = new List<string>();
-            var hasErrors = false;
-            foreach (var param in command.Parameters)
-            {
-                if (_x3Parameters.SetParameter(param.Key, param.Value))
+                string item = command.Items[i];
+                int colon = item.IndexOf(':');
+                string referenceText = (colon < 0 ? item : item.Substring(0, colon)).Trim();
+                string valueText = colon < 0 ? string.Empty : item.Substring(colon + 1).Trim();
+                bool known = TryParameterReference(referenceText, extended, out byte reference);
+                bool set = known
+                    && byte.TryParse(valueText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out byte value)
+                    && _x3Parameters.SetParameter(reference, value);
+                if (set)
                 {
-                    results.Add($"{param.Key}:{param.Value}");
+                    command.Parameters[reference] = _x3Parameters.GetParameter(reference);
+                    if (read)
+                    {
+                        entries.Add(ParameterEntry(reference.ToString(System.Globalization.CultureInfo.InvariantCulture), command.Parameters[reference].ToString(System.Globalization.CultureInfo.InvariantCulture), reference, extended));
+                    }
                 }
                 else
                 {
-                    results.Add($"{param.Key}:ERR");
-                    hasErrors = true;
+                    invalid = true;
+                    entries.Add(ParameterEntry(known ? reference.ToString(System.Globalization.CultureInfo.InvariantCulture) : referenceText, "INV", known ? reference : 0, extended));
                 }
             }
-            
-            var response = string.Join(" ", results) + "\r\n";
-            var responseType = hasErrors ? ResponseType.Error : ResponseType.Success;
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs(response, responseType));
-            return hasErrors ? CommandResult.InvalidParameters : CommandResult.Success;
+
+            // Parameter 6 is read again: the line may have just set it.
+            if (_x3Parameters.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS) != 0)
+            {
+                string answer = read || invalid ? "PAR " + string.Join(", ", entries) + "\r\n" : "\r\n";
+                CommandResponse?.Invoke(this, new CommandResponseEventArgs(answer, invalid ? ResponseType.Error : ResponseType.Success));
+            }
+
+            return invalid ? CommandResult.InvalidParameters : CommandResult.Success;
         }
 
+        /// <summary>
+        /// PAR? (X.28 3.4, 3.5.4.1, 3.5.14): the parameter value PAD service signal, <c>PAR 1:1, 2:1, ...</c>; all
+        /// parameters when none is named. A reference this PAD does not have answers INV.
+        /// </summary>
         private CommandResult HandleParameterCommand(X28Command command)
         {
-            if (command.Arguments.Count > 0)
+            bool extended = IsExtendedDialogue(_x3Parameters.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
+            Dictionary<byte, byte> all = _x3Parameters.GetAllParameters();
+            var entries = new List<string>();
+            if (command.Items.Count == 0)
             {
-                // Read specific parameters
-                var results = new List<string>();
-                foreach (string arg in command.Arguments)
+                byte[] numbers = new byte[all.Count];
+                all.Keys.CopyTo(numbers, 0);
+                Array.Sort(numbers);
+                for (int i = 0; i < numbers.Length; i++)
                 {
-                    if (byte.TryParse(arg, out byte paramNum))
-                    {
-                        byte value = _x3Parameters.GetParameter(paramNum);
-                        results.Add($"{paramNum}:{value}");
-                    }
+                    entries.Add(ParameterEntry(numbers[i].ToString(System.Globalization.CultureInfo.InvariantCulture), all[numbers[i]].ToString(System.Globalization.CultureInfo.InvariantCulture), numbers[i], extended));
                 }
-                var response = string.Join(" ", results) + "\r\n";
-                CommandResponse?.Invoke(this, new CommandResponseEventArgs(response, ResponseType.Success));
-                return CommandResult.Success;
             }
             else
             {
-                // Read all parameters
-                var allParams = _x3Parameters.GetAllParameters();
-                var paramStrings = new List<string>();
-                foreach (var kvp in allParams)
+                for (int i = 0; i < command.Items.Count; i++)
                 {
-                    paramStrings.Add($"{kvp.Key}:{kvp.Value}");
+                    string text = command.Items[i];
+                    if (TryParameterReference(text, extended, out byte reference) && all.TryGetValue(reference, out byte value))
+                    {
+                        entries.Add(ParameterEntry(reference.ToString(System.Globalization.CultureInfo.InvariantCulture), value.ToString(System.Globalization.CultureInfo.InvariantCulture), reference, extended));
+                    }
+                    else
+                    {
+                        entries.Add(ParameterEntry(text, "INV", 0, extended));
+                    }
                 }
-                var response = string.Join(" ", paramStrings) + "\r\n";
-                CommandResponse?.Invoke(this, new CommandResponseEventArgs(response, ResponseType.Success));
-                return CommandResult.Success;
             }
+
+            CommandResponse?.Invoke(this, new CommandResponseEventArgs("PAR " + string.Join(", ", entries) + "\r\n", ResponseType.Success));
+            return CommandResult.Success;
         }
 
         private CommandResult HandleProfileCommand(X28Command command)
@@ -1796,6 +1932,11 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Gets or sets the parameter number and value pairs of a command, or null.
         /// </summary>
         public Dictionary<byte, byte>? Parameters { get; set; }
+        /// <summary>
+        /// The list items of a read, set or set and read command (X.28 3.5.4.1, 3.5.6.1), as typed between the commas:
+        /// <c>2:0</c>, <c>ech:0</c>, <c>5</c>.
+        /// </summary>
+        public List<string> Items { get; } = new List<string>();
     }
 
     /// <summary>

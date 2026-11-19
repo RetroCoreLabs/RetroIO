@@ -1123,6 +1123,7 @@ namespace RetroIO.Protocols.X25.Modules
                         break;
 
                     case "SET":
+                    case X28.SetAndRead:
                         ProcessSetParameterCommand(command);
                         break;
                         
@@ -1154,18 +1155,14 @@ namespace RetroIO.Protocols.X25.Modules
         /// </summary>
         private void ProcessSetParameterCommand(X28Command command)
         {
-            if (command.Arguments.Count == 0)
+            // X28 has already read the line and set the valid entries (names included); these are the ones it set.
+            // SetParameter sets them again (no change) and, during a call, tells the host.
+            if (command.Parameters == null)
                 return;
-                
-            foreach (var param in command.Arguments)
+
+            foreach (var param in command.Parameters)
             {
-                var parts = param.Split(':');
-                if (parts.Length == 2 && 
-                    byte.TryParse(parts[0], out byte paramNum) && 
-                    byte.TryParse(parts[1], out byte value))
-                {
-                    SetParameter(paramNum, value);
-                }
+                SetParameter(param.Key, param.Value);
             }
         }
 
