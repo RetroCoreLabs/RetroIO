@@ -976,7 +976,9 @@ namespace RetroIO.Protocols.X25.Host
                 case "sessions": return _order.Count.ToString(CultureInfo.InvariantCulture);
                 case "uptime": return Span(_now - _started, true);
                 case "nl": return "\n";
-                case "user": return s.User;
+                // At the password prompt (and its fail text) the name is typed but not yet checked: that name, so a
+                // prompt can name the user as TSO's "ENTER CURRENT PASSWORD FOR GUEST-" does.
+                case "user": return s.State == State.Password ? s.TypedUser : s.User;
                 case "cwd": return s.State == State.User || s.State == State.Password ? string.Empty : s.Cwd;
                 case "word": return word ?? string.Empty;
                 case "args": return args ?? string.Empty;

@@ -363,6 +363,16 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
+        public void ThePasswordPrompt_CanNameTheUserJustTyped()
+        {
+            (DescribedHost h, Output o) = Make(Tops20.Replace("[user.0]", "password_prompt = \"PASSWORD FOR {user}-\"\n[user.0]"), VaxFiles);
+            h.Connect(1, string.Empty, null);
+            o.Take(1);
+            Type(h, 1, "LOGIN sartini\r");
+            Assert.That(o.Take(1), Is.EqualTo("PASSWORD FOR sartini-"));
+        }
+
+        [Test]
         public void ALoginCommand_WithoutThePassword_AsksForIt_WithEchoOff()
         {
             (DescribedHost h, Output o) = Make(Tops20, VaxFiles);
