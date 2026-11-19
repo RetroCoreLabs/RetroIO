@@ -262,7 +262,7 @@ namespace RetroIO.Protocols.X25.Host
             if (target == "login")
             {
                 s.State = State.User;
-                Send(s, Render(_d.Login!.UserPrompt, s, null, null));
+                Prompt(s);
             }
             else if (target == "shell")
             {
@@ -297,7 +297,8 @@ namespace RetroIO.Protocols.X25.Host
             switch (s.State)
             {
                 case State.User:
-                    Send(s, Render(_d.Login!.UserPrompt, s, null, null));
+                    HostLogin l = _d.Login!;
+                    Send(s, Render(l.Commands.Length > 0 ? l.CommandPrompt : l.UserPrompt, s, null, null));
                     break;
                 case State.Password:
                     Send(s, Render(_d.Login!.PasswordPrompt, s, null, null));
@@ -345,6 +346,12 @@ namespace RetroIO.Protocols.X25.Host
                 return;
             }
 
+            if (_d.Login!.Commands.Length > 0)
+            {
+                OnLoginCommand(s, name);
+                return;
+            }
+
             s.TypedUser = name;
             s.State = State.Password;
             if (_d.Login!.HidePassword)
@@ -355,10 +362,64 @@ namespace RetroIO.Protocols.X25.Host
             Prompt(s);
         }
 
-        private void OnPassword(Session s, string password)
+        // [login] command: "LOGIN user [password [account ...]]". A word after the password (the TOPS-20 account) is
+        // taken and not looked at. With the password on the line it is checked at once; the PAD has echoed it, as
+        // it echoes everything typed (X.29 parameter 2); without it, the password prompt follows with echo off.
+        private void OnLoginCommand(Session s, string line)
         {
             HostLogin login = _d.Login!;
+            string[] words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            bool known = false;
+            for (int i = 0; i < login.Commands.Length; i++)
+            {
+                if (string.Equals(words[0], login.Commands[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    known = true;
+                    break;
+                }
+            }
+
+            if (!known)
+            {
+                Send(s, Render(login.CommandRefused, s, words[0], null) + "\n");
+                Prompt(s);
+                return;
+            }
+
+            if (words.Length < 2)
+            {
+                // LOGIN with no name: asked again, as an unknown name would be.
+                Send(s, Render(login.FailText, s, null, null) + "\n");
+                Prompt(s);
+                return;
+            }
+
+            s.TypedUser = words[1];
+            if (words.Length >= 3)
+            {
+                Check(s, words[2], false);
+                return;
+            }
+
+            s.State = State.Password;
             if (login.HidePassword)
+            {
+                _pad!.SetEcho(s.Id, false);
+            }
+
+            Prompt(s);
+        }
+
+        private void OnPassword(Session s, string password)
+        {
+            Check(s, password, _d.Login!.HidePassword);
+        }
+
+        // The password check, for both logins. echoWasOff: the password prompt turned the PAD's echo off.
+        private void Check(Session s, string password, bool echoWasOff)
+        {
+            HostLogin login = _d.Login!;
+            if (echoWasOff)
             {
                 // The PAD echoed nothing, the CR included: the host ends the line itself, then echo comes back.
                 _pad!.SetEcho(s.Id, true);

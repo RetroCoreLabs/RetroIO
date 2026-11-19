@@ -344,6 +344,39 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(o.Take(1), Is.EqualTo("\r\nHello guest\r\n$ "), "the host ends the hidden line; {user} is the name as typed");
         }
 
+        private const string Tops20 = "[host]\naddress = 1\nhostname = AURORA\n[login]\ncommand = LOGIN, LOG\n"
+            + "command_prompt = \"@\"\ncommand_refused = ?Unrecognized command\ncase = upper\nfail_text = ?Incorrect password\n"
+            + "[user.0]\nname = SARTINI\npassword = XYZ\n[shell]\nprompt = \"@\"\n";
+
+        [Test]
+        public void ALoginCommand_TakesTheNameAndPasswordOnOneLine_AndIgnoresTheAccount()
+        {
+            (DescribedHost h, Output o) = Make(Tops20, VaxFiles);
+            h.Connect(1, string.Empty, null);
+            Assert.That(o.Take(1), Is.EqualTo("@"), "no user prompt: the command prompt");
+            Type(h, 1, "DAYTIME\r");
+            Assert.That(o.Take(1), Is.EqualTo("?Unrecognized command\r\n@"));
+            Type(h, 1, "login sartini XYZ 341\r");
+            Assert.That(o.Take(1), Is.EqualTo("@"), "logged in: the shell prompt");
+            Assert.That(o.Echo, Is.Empty, "the password was typed on the line: echo was never turned off");
+            Assert.That(h.TryDescribe(1, out HostSessionInfo info) && info.State == "shell", Is.True);
+        }
+
+        [Test]
+        public void ALoginCommand_WithoutThePassword_AsksForIt_WithEchoOff()
+        {
+            (DescribedHost h, Output o) = Make(Tops20, VaxFiles);
+            h.Connect(1, string.Empty, null);
+            o.Take(1);
+            Type(h, 1, "LOG SARTINI\r");
+            Assert.That(o.Take(1), Is.EqualTo("Password: "));
+            Type(h, 1, "nope\r");
+            Assert.That(o.Echo, Is.EqualTo(new List<string> { "1 off", "1 on" }));
+            Assert.That(o.Take(1), Is.EqualTo("\r\n?Incorrect password\r\n@"), "refused: the command prompt again");
+            Type(h, 1, "LOGIN\r");
+            Assert.That(o.Take(1), Is.EqualTo("?Incorrect password\r\n@"), "LOGIN with no name");
+        }
+
         [Test]
         public void TheGreeting_IsForThatUserOnly()
         {
