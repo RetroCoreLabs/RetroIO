@@ -47,7 +47,12 @@ namespace RetroIO.Protocols.X25.Tests
             _codec.FrameReceived += (id, frame) => _x25.ProcessPacket(frame);
 
             // Accept every incoming call, then echo every data packet straight back.
-            _x25.IncomingCall += (layer, lci, called, calling, cud) => layer.AcceptCall(lci);
+            _x25.IncomingCall += (layer, lci, called, calling, cud) =>
+            {
+                _lastLci = lci;
+                layer.AcceptCall(lci);
+            };
+            _x25.Reset += (layer, lci, cause, diagnostic) => System.Threading.Interlocked.Increment(ref _resetsSeen);
             _x25.DataReceived += (layer, lci, data, length, qBit, mBit, dBit) =>
             {
                 byte[] echo = new byte[length];
@@ -86,6 +91,21 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 return X25SendResult.LinkDown;
             }
+        }
+
+        private ushort _lastLci;
+        private int _resetsSeen;
+
+        /// <summary>How many resets of a call the peer has been told of (the client's, after the peer confirmed them).</summary>
+        public int ResetsSeen => System.Threading.Volatile.Read(ref _resetsSeen);
+
+        /// <summary>Resets the call the peer answered last (sends a Reset Request).</summary>
+        /// <param name="cause">Resetting cause.</param>
+        /// <param name="diagnostic">Diagnostic code.</param>
+        /// <returns>False when the packet layer would not send it.</returns>
+        public bool ResetLastCall(byte cause, byte diagnostic)
+        {
+            return _x25.ResetCall(_lastLci, cause, diagnostic);
         }
 
         /// <summary>
