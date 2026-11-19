@@ -309,14 +309,37 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(x3.GetParameter(3), Is.EqualTo(expected.GetParameter(3)));
         }
 
+        /// <summary>
+        /// The host's X.29 invitation to clear (code 1, with the Q bit): the PAD clears the call and tells the terminal
+        /// CLR PAD (X.28 Table 6, "Call cleared, remote request"), not the CLR CONF of the person's own clear.
+        /// </summary>
+        [Test]
+        public void InvitationToClear_IsToldAsClrPad()
+        {
+            var transport = new ResetTransport();
+            PadClient pad = new PadClient(NullLogger.Instance, transport);
+            pad.NotifyCallAccepted(5);
+            var seen = new StringBuilder();
+            object gate = new object();
+            pad.DataReceived += (s, e) => { lock (gate) { seen.Append(e.Data); } };
+
+            pad.DeliverData(5, new byte[] { 0x01 }, true);
+
+            Assert.That(System.Threading.SpinWait.SpinUntil(() => { lock (gate) { return seen.ToString().Contains("CLR PAD"); } }, 3000), Is.True, seen.ToString());
+            Assert.That(seen.ToString(), Does.Not.Contain("CLR CONF"));
+            Assert.That(transport.Cleared, Is.EqualTo(1));
+            Assert.That(X28.PadClearSignal(true), Is.EqualTo("CLR PAD - Call cleared, remote request"));
+        }
+
         private sealed class ResetTransport : IPadTransport
         {
             public bool CanReset;
+            public int Cleared;
             public readonly System.Collections.Generic.List<string> Resets = new System.Collections.Generic.List<string>();
             public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData) => true;
             public bool SendData(ushort lcn, byte[] data, bool mBit, bool qBit, bool dBit) => true;
             public void ForwardData(ushort lcn, byte[] data, int length) { }
-            public void ClearCall(ushort lcn, byte cause, byte diagnostic) { }
+            public void ClearCall(ushort lcn, byte cause, byte diagnostic) { System.Threading.Interlocked.Increment(ref Cleared); }
 
             public bool ResetCall(ushort lcn, byte cause, byte diagnostic)
             {
