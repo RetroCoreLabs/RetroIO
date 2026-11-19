@@ -290,6 +290,19 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         [Test]
+        public void Convert_SourceHeldOpenForWritingByAnotherProgram_StillConverts()
+        {
+            // As an emulator holds a mounted disk: open for writing, others may only read.
+            string raw = MakeDisk("DISK.img", vhd: false);
+            using FileStream held = new FileStream(raw, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            string vhd = Path.Combine(_dir, "OUT.vhd");
+            DiskImageConverter.RawToFixedVhd(raw, vhd, null);
+            string back = Path.Combine(_dir, "BACK.img");
+            DiskImageConverter.FixedVhdToRaw(vhd, back);
+            Assert.That(new FileInfo(back).Length, Is.EqualTo(held.Length));
+        }
+
+        [Test]
         public void Convert_GivenGeometry_IsRecorded()
         {
             string raw = MakeDisk("DISK.img", vhd: false);
