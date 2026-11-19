@@ -1005,8 +1005,17 @@ namespace RetroIO.Protocols.X25.Protocols
 
         private CommandResult HandleClearCommand(X28Command command)
         {
+            // With a call up, the clear itself and its CLR CONF (X.28 3.5.18) belong to the PAD that owns the call
+            // (PadClient.ClearCallFromTerminal); until 2026-11-19 this also printed "CLEARED", so the person saw both.
+            // With no call there is nothing to clear: X.28 does not say what the answer is, so the PAD gives its error
+            // service signal ERR (3.5.19). That choice is ours, not the spec's.
+            if (!_callUp)
+            {
+                CommandResponse?.Invoke(this, new CommandResponseEventArgs("ERR\r\n", ResponseType.Error));
+                return CommandResult.Success;
+            }
+
             SwitchMode(PadMode.Command);
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs("CLEARED\r\n", ResponseType.Success));
             return CommandResult.Success;
         }
 

@@ -120,6 +120,24 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// CLR typed at the prompt with no call answers ERR, and no longer "CLEARED". (With a call up, X28 prints
+        /// nothing and the PAD prints CLR CONF: PadClient.ClearCallFromTerminal.)
+        /// </summary>
+        [Test]
+        public void ClearCommand_WithNoCall_IsErr()
+        {
+            var pad = new X28(new X3());
+            var seen = new StringBuilder();
+            pad.CommandResponse += (s, e) => seen.Append(e.Response);
+            foreach (char ch in "CLR\r")
+            {
+                pad.ProcessCharacter(ch);
+            }
+
+            Assert.That(seen.ToString(), Is.EqualTo("ERR\r\n"));
+        }
+
+        /// <summary>
         /// A remote clear delivered to the PAD with cause and diagnostic shows the signal on the terminal.
         /// </summary>
         [Test]
