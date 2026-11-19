@@ -1021,7 +1021,15 @@ namespace RetroIO.Protocols.X25.Protocols
 
         private CommandResult HandleResetCommand(X28Command command)
         {
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs("RESET\r\n", ResponseType.Success));
+            // X.28 4.9.2.3: the PAD resets the call and acknowledges the command (3.5.3, a format effector). Sending
+            // the reset and the acknowledgement belong to the PAD that owns the call (PadClient), which knows whether
+            // the reset went out. With no call there is nothing to reset: ERR (3.5.19), as for CLR. Until
+            // 2026-11-19 this answered "RESET" and nothing was sent.
+            if (!_callUp)
+            {
+                CommandResponse?.Invoke(this, new CommandResponseEventArgs("ERR\r\n", ResponseType.Error));
+            }
+
             return CommandResult.Success;
         }
 

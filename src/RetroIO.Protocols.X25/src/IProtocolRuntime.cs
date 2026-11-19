@@ -182,6 +182,19 @@ namespace RetroIO.Protocols.X25
         void ClearCallByLocalLcn(ushort lcn, byte cause, byte diagnostic);
 
         /// <summary>
+        /// Resets a call by its local channel number (X.25 (10/96) 4.4.3): a Reset Request goes out on the connection
+        /// that carries it, and the call stays.
+        /// </summary>
+        /// <param name="lcn">The runtime's local channel number.</param>
+        /// <param name="cause">Resetting cause (0 for a DTE, X.25 5.4.3.1).</param>
+        /// <param name="diagnostic">Diagnostic code (Annex E).</param>
+        /// <returns>
+        /// True when the Reset Request was sent. False when no connection carries the channel (a call that runs in
+        /// process to a local service has no packet layer to reset), or when the packet layer would not send it.
+        /// </returns>
+        bool ResetCallByLocalLcn(ushort lcn, byte cause, byte diagnostic);
+
+        /// <summary>
         /// Finalizes a deferred outbound XOT call by attaching its transport.
         /// </summary>
         /// <param name="localLcn">

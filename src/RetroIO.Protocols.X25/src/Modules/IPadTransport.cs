@@ -112,5 +112,19 @@ namespace RetroIO.Protocols.X25.Modules
         /// X.25 diagnostic code.
         /// </param>
         void ClearCall(ushort lcn, byte cause, byte diagnostic);
+
+        /// <summary>
+        /// Resets a circuit (X.25 (10/96) 4.4.3): a Reset Request goes out and the call stays. The X.28 <c>RESET</c>
+        /// command (4.9.2.3).
+        /// </summary>
+        /// <remarks>
+        /// A transport that cannot send a reset answers false, and the PAD tells the person ERR; it never pretends the
+        /// reset went out.
+        /// </remarks>
+        /// <param name="lcn">Logical channel number.</param>
+        /// <param name="cause">Resetting cause (0 for a DTE, X.25 5.4.3.1).</param>
+        /// <param name="diagnostic">Diagnostic code.</param>
+        /// <returns>True when the Reset Request was sent.</returns>
+        bool ResetCall(ushort lcn, byte cause, byte diagnostic) => false;
     }
 }
