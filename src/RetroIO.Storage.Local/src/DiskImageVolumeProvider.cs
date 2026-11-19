@@ -293,18 +293,21 @@ namespace RetroIO.Storage.Local
                 }
             }
 
-            // Open image stream
-            FileStream baseImageStream;
+            // Open image stream. A fixed VHD is opened without its footer (recognised by the footer at
+            // the end of the file, not by its name), so every driver below sees only the disk bytes
+            // and no write can reach the footer.
+            Stream baseImageStream;
             try
             {
                 FileAccess access = readOnly ? FileAccess.Read : FileAccess.ReadWrite;
                 FileShare share = FileShare.Read;  // Always allow multiple read mounts for different partitions
-                baseImageStream = new FileStream(imagePath, FileMode.Open, access, share);
+                baseImageStream = Images.DiskImageFile.Open(imagePath, access, share);
             }
             catch (Exception ex)
             {
                 driver.Dispose();
-                throw new IOException($"Failed to open image file: {imagePath}", ex);
+                // The inner message carries the reason (for example a damaged or dynamic VHD).
+                throw new IOException($"Failed to open image file: {imagePath}: {ex.Message}", ex);
             }
 
             // Wrap stream in PartitionStream if MBR partition was selected
