@@ -315,6 +315,43 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// The reset PAD service signal (X.28 (12/97) 3.5.7): <c>RESET</c>, the cause from Table 5, the decimal
+        /// diagnostic, and in extended dialogue mode <c> - </c> and the Table 5 text, e.g. <c>RESET NC 0 - Reset due to
+        /// temporary network problem, data may be lost</c>. The cause is paired with the X.25 resetting cause of
+        /// Table 5-8 (X.25 (10/96) page 81) by wording: DTE originated (0, or bit 8 set) is DTE, local procedure
+        /// error (0x05) ERR, network congestion (0x07) NC, remote procedure error (0x03) RPE. The other Table 5-8
+        /// causes (out of order, remote DTE operational, network operational, incompatible destination, network out
+        /// of order) have no Table 5 cause: then only <c>RESET</c> and the diagnostic, with no text.
+        /// </summary>
+        /// <param name="cause">The resetting cause octet.</param>
+        /// <param name="diagnostic">The diagnostic octet.</param>
+        /// <param name="extended">The PAD is in extended dialogue mode.</param>
+        /// <returns>The service signal, without line ends.</returns>
+        public static string ResetSignal(byte cause, byte diagnostic, bool extended)
+        {
+            string? mnemonic;
+            string? text;
+            if (cause == 0x00 || (cause & 0x80) != 0)
+            {
+                mnemonic = "DTE";
+                text = "Reset by remote device, data may be lost";
+            }
+            else
+            {
+                switch (cause)
+                {
+                    case 0x05: mnemonic = "ERR"; text = "Reset by network, local procedure error, data may be lost"; break;
+                    case 0x07: mnemonic = "NC"; text = "Reset due to temporary network problem, data may be lost"; break;
+                    case 0x03: mnemonic = "RPE"; text = "Reset by network, remote procedure error, data may be lost"; break;
+                    default: mnemonic = null; text = null; break;
+                }
+            }
+
+            string signal = mnemonic == null ? "RESET " + diagnostic : "RESET " + mnemonic + " " + diagnostic;
+            return extended && text != null ? signal + " - " + text : signal;
+        }
+
+        /// <summary>
         /// The clear confirmation PAD service signal: <c>CLR CONF</c>, and in extended dialogue mode
         /// <c> - Call cleared, confirmed</c> (X.28 (12/97) 3.5.18, Table 7).
         /// </summary>

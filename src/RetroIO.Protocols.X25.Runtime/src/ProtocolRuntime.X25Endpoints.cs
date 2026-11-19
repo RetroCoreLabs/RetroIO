@@ -1177,6 +1177,28 @@ namespace RetroIO.Protocols.X25.Runtime
             }
 
             FindServiceForLcn(localLcn)?.HandleReset(localLcn, cause, diagnostic);
+
+            // A PAD on this call prints the X.28 reset service signal (3.5.7); the call stays. Handed over as a packet,
+            // as a clear is (OnEndpointCleared).
+            Modules.PadClient? pad = null;
+            lock (_routingLock)
+            {
+                if (_lcnBindings.TryGetValue(localLcn, out IProtocolModule? module) && module is Modules.PadClient pc)
+                {
+                    pad = pc;
+                }
+            }
+
+            if (pad != null)
+            {
+                X25Packet packet = new X25Packet(X25PacketBuilder.CreateResetRequest(localLcn, cause, diagnostic)) { LCN = localLcn };
+                pad.OnX25Event(new X25PacketEventArgs
+                {
+                    Packet = packet,
+                    Direction = PacketDirection.Receive,
+                    Timestamp = DateTime.UtcNow,
+                });
+            }
         }
 
         private void OnEndpointRestart(X25Layer layer, byte cause, byte diagnostic)
