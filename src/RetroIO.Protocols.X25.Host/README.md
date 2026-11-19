@@ -43,7 +43,15 @@ fed as well.
 | `machine.after(ms, fn)` | Run `fn` at the first tick `ms` from now; returns an id for `machine.cancel(id)` |
 | `machine.wireLength(text)` | The bytes `text` takes on the wire |
 | `machine.session(id)`, `machine.sessions()` | One open session, or all of them in the order they came |
-| `machine.broadcast(text, exceptId)` | `send` to every open session but one |
+| `machine.broadcast(text, exceptId)` | A message to every open session but one |
+| `s.user` | The name `machine.send` looks for; starts as `s.login`, the script sets it after its own login |
+| `s.onMessage = fn` | `fn(text, from)` gets the messages for `s` (from `machine.send`, `broadcast` and rooms); without it the text is sent to the caller as it is |
+| `machine.send(user, text, from)` | A message to every session of that user (any case); `false` when there is none |
+| `machine.room(name)` | A room (made on first use, at most 64): `join(s)`, `leave(s)`, `say(text, from)` to every member but `from`, `members()`, `name`; `room.onMessage = fn(member, text, from)` takes each member's message instead |
+| `machine.store` | Strings shared by this machine's sessions, at most 64 K characters of keys and values: `get(key)`, `set(key, value)` (`false` when full), `remove(key)`, `keys()`; gone when the machine stops |
+
+A session leaves every room when its call ends. A failing `onMessage` clears that session's call alone, as any
+other failing event does.
 
 ## Safety
 

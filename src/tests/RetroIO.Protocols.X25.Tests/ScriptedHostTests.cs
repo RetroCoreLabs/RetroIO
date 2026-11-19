@@ -54,6 +54,92 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         [Test]
+        public void MachineSend_ReachesTheUserByName_InAnyCase_AndSaysFalseForNobody()
+        {
+            (ScriptedHost host, Output o) = Make(
+                "function onConnect(s){ if (s.id == 2) s.user = 'Bob'; }" +
+                "function onInput(s, t){ machine.log('' + machine.send('bob', 'psst\\n', s) + ',' + machine.send('carol', 'x')); }");
+            host.Connect(1, "ann", null);
+            host.Connect(2, "", null);
+            host.Input(1, B("go"));
+            Assert.That(o.List.TextFor(2), Is.EqualTo("psst\r\n"));
+            Assert.That(o.List.TextFor(1), Is.Empty);
+            Assert.That(o.List.LogLines(), Is.EqualTo(new List<string> { "true,false" }));
+        }
+
+        [Test]
+        public void SessionOnMessage_TakesSendAndBroadcast_WithTheSender()
+        {
+            (ScriptedHost host, Output o) = Make(
+                "function onConnect(s){ if (s.id == 2) s.onMessage = function(text, from){ s.send('[' + (from ? from.user : 'all') + '] ' + text); }; }" +
+                "function onInput(s, t){ if (t == 's') machine.send('bob', 'hi', s); else machine.broadcast('news', s.id); }");
+            host.Connect(1, "ann", null);
+            host.Connect(2, "bob", null);
+            host.Input(1, B("s"));
+            host.Input(1, B("b"));
+            Assert.That(o.List.TextFor(2), Is.EqualTo("[ann] hi[all] news"));
+            Assert.That(o.List.TextFor(1), Is.Empty, "broadcast leaves out the sender");
+        }
+
+        [Test]
+        public void ARoom_SaysToItsMembersButTheSender_AndAGoneCallLeavesIt()
+        {
+            (ScriptedHost host, Output o) = Make(
+                "var r = machine.room('lounge');" +
+                "function onConnect(s){ if (s.id != 3) r.join(s); }" +
+                "function onInput(s, t){ if (t == 'm') machine.log(r.name + ':' + r.members().length); else r.say(t, s); }");
+            host.Connect(1, "ann", null);
+            host.Connect(2, "bob", null);
+            host.Connect(3, "eve", null);
+            host.Input(1, B("hello"));
+            Assert.That(o.List.TextFor(2), Is.EqualTo("hello"));
+            Assert.That(o.List.TextFor(1), Is.Empty);
+            Assert.That(o.List.TextFor(3), Is.Empty, "not a member");
+            host.Disconnect(2);
+            host.Input(1, B("m"));
+            Assert.That(o.List.LogLines(), Is.EqualTo(new List<string> { "lounge:1" }));
+        }
+
+        [Test]
+        public void ARoomOnMessage_IsCalledPerMember_InsteadOfTheDelivery()
+        {
+            (ScriptedHost host, Output o) = Make(
+                "var r = machine.room('cb'); r.onMessage = function(m, text, from){ m.send(from.user + ' says: ' + text); };" +
+                "function onConnect(s){ r.join(s); }" +
+                "function onInput(s, t){ r.say(t, s); }");
+            host.Connect(1, "ann", null);
+            host.Connect(2, "bob", null);
+            host.Input(2, B("hi"));
+            Assert.That(o.List.TextFor(1), Is.EqualTo("bob says: hi"));
+            Assert.That(o.List.TextFor(2), Is.Empty, "the one who said it does not get it");
+        }
+
+        [Test]
+        public void ARoomJoin_RefusesSomethingThatIsNotASession()
+        {
+            (ScriptedHost host, Output o) = Make("function onConnect(s){ machine.room('x').join({ id: s.id }); }");
+            host.Connect(1, "ann", null);
+            Assert.That(o.List.LogLines()[0], Does.Contain("room.join: the argument must be a session"));
+            Assert.That(o.List.ClearCount(1), Is.EqualTo(1), "the failing call is cleared alone");
+        }
+
+        [Test]
+        public void TheStore_KeepsStrings_SharedBySessions_UpTo64K()
+        {
+            (ScriptedHost host, Output o) = Make(
+                "function onInput(s, t){" +
+                " if (t == 'w') machine.log('' + machine.store.set('top', 'ann 120'));" +
+                " if (t == 'r') machine.log(machine.store.get('top') + ',' + machine.store.keys().length + ',' + typeof machine.store.get('none'));" +
+                " if (t == 'big') machine.log('' + machine.store.set('big', new Array(65535).join('x')) + ',' + machine.store.remove('top') + ',' + machine.store.set('big', new Array(65530).join('x'))); }");
+            host.Connect(1, "ann", null);
+            host.Connect(2, "bob", null);
+            host.Input(1, B("w"));
+            host.Input(2, B("r"));
+            host.Input(2, B("big"));
+            Assert.That(o.List.LogLines(), Is.EqualTo(new List<string> { "true", "ann 120,1,undefined", "false,true,true" }));
+        }
+
+        [Test]
         public void TheScriptCannotReachDotNet()
         {
             (ScriptedHost host, Output o) = Make(
