@@ -384,6 +384,22 @@ namespace RetroIO.Protocols.X25.Host
                         l.Then = value;
                         _gotos.Add((where, value));
                         break;
+                    case "command":
+                        // LOGIN, or several names: LOGIN, LOG. Compared in any case, as a command word.
+                        string[] names = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        if (names.Length == 0)
+                        {
+                            throw new FormatException(where + ": command needs a name");
+                        }
+
+                        l.Commands = names;
+                        break;
+                    case "command_prompt":
+                        l.CommandPrompt = Text(value, where);
+                        break;
+                    case "command_refused":
+                        l.CommandRefused = Text(value, where);
+                        break;
                     default:
                         throw new FormatException(where + ": unknown key");
                 }
@@ -900,6 +916,18 @@ namespace RetroIO.Protocols.X25.Host
 
         /// <summary>Where a good login goes: <c>shell</c> or <c>menu.&lt;name&gt;</c>.</summary>
         public string Then { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The login command words (TOPS-20 <c>LOGIN</c>, RSX-11 <c>HELLO</c>), or empty for the two-prompt login.
+        /// When set, the caller sees <see cref="CommandPrompt"/> and types <c>LOGIN user [password [more]]</c>.
+        /// </summary>
+        public string[] Commands { get; set; } = Array.Empty<string>();
+
+        /// <summary>The prompt before login when <see cref="Commands"/> is set.</summary>
+        public string CommandPrompt { get; set; } = "@";
+
+        /// <summary>The answer to any other line before login; <c>{word}</c> is the word typed.</summary>
+        public string CommandRefused { get; set; } = "?Please log in";
     }
 
     /// <summary><c>[user.N]</c>.</summary>
