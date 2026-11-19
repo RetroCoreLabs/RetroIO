@@ -289,10 +289,66 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Table 6 mnemonic with the same wording (21 ROA out of order) is printed without a mnemonic,
         /// as the format makes the cause field optional, rather than with a guessed one.
         /// </remarks>
-        public static string ClearSignal(byte cause, byte diagnostic)
+        public static string ClearSignal(byte cause, byte diagnostic) => ClearSignal(cause, diagnostic, false);
+
+        /// <summary>
+        /// The clear indication PAD service signal, with the extended dialogue mode text when
+        /// <paramref name="extended"/> (X.28 (12/97) 3.5.17.1: <c>&lt;text&gt; ::= SP - SP</c> and the Table 6 text
+        /// for the cause), e.g. <c>CLR OCC C:1 D:0 - Call cleared, number busy</c>. A cause with no Table 6 mnemonic
+        /// gets no text either.
+        /// </summary>
+        /// <param name="cause">Cause octet of the clear packet.</param>
+        /// <param name="diagnostic">Diagnostic octet of the clear packet.</param>
+        /// <param name="extended">The PAD is in extended dialogue mode (<see cref="IsExtendedDialogue"/>).</param>
+        /// <returns>The service signal, without line ends.</returns>
+        public static string ClearSignal(byte cause, byte diagnostic, bool extended)
+        {
+            string signal = StandardClearSignal(cause, diagnostic, out string? mnemonic);
+            string? text = extended && mnemonic != null ? ExtendedClearText(mnemonic) : null;
+            return text == null ? signal : signal + " - " + text;
+        }
+
+        /// <summary>
+        /// The clear confirmation PAD service signal: <c>CLR CONF</c>, and in extended dialogue mode
+        /// <c> - Call cleared, confirmed</c> (X.28 (12/97) 3.5.18, Table 7).
+        /// </summary>
+        /// <param name="extended">The PAD is in extended dialogue mode.</param>
+        /// <returns>The service signal, without line ends.</returns>
+        public static string ClearConfirmation(bool extended) => extended ? "CLR CONF - Call cleared, confirmed" : "CLR CONF";
+
+        /// <summary>
+        /// X.28 (12/97) 3.5: "If the high order 4 bits of parameter 6 are not all zero, the PAD will operate in the
+        /// extended dialogue mode."
+        /// </summary>
+        /// <param name="parameter6">The value of X.3 parameter 6.</param>
+        /// <returns>True in extended dialogue mode.</returns>
+        public static bool IsExtendedDialogue(byte parameter6) => (parameter6 & 0xF0) != 0;
+
+        // X.28 (12/97) Table 6, the text for each cause mnemonic, word for word. ROO (X.96) is in the table but no
+        // X.25 cause is paired with it above, so it never comes here.
+        private static string? ExtendedClearText(string mnemonic) => mnemonic switch
+        {
+            "OCC" => "Call cleared, number busy",
+            "NC" => "Call cleared, temporary network problem",
+            "INV" => "Call cleared, invalid facility requested",
+            "NA" => "Call cleared, access to this number is barred",
+            "ERR" => "Call cleared, network detected local procedure error",
+            "RPE" => "Call cleared, network detected remote procedure error",
+            "NP" => "Call cleared, number not assigned",
+            "DER" => "Call cleared, number out of order",
+            "PAD" => "Call cleared, remote request",
+            "DTE" => "Call cleared, by remote device, data may be lost",
+            "RNA" => "Call cleared, reverse charging refused",
+            "ID" => "Call cleared, incompatible destination",
+            "SA" => "Call cleared, ship cannot be contacted",
+            "FNA" => "Call cleared, fast select refused",
+            "ROO" => "Call cleared, cannot be routed as requested",
+            _ => null,
+        };
+
+        private static string StandardClearSignal(byte cause, byte diagnostic, out string? mnemonic)
         {
             // Cause 128-255 (bit 8 set) is "DTE originated" with the DTE's own code in the low bits.
-            string? mnemonic;
             if ((cause & 0x80) != 0)
             {
                 mnemonic = "DTE";
