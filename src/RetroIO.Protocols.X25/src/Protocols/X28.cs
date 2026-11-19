@@ -725,13 +725,21 @@ namespace RetroIO.Protocols.X25.Protocols
         /// and how many letters of it are the abbreviation that must be typed (the part outside the brackets in the
         /// table, e.g. "esc(ape)").
         /// </summary>
-        private static readonly (string Name, int Abbreviation)[] ParameterNames =
+        private static readonly (string Name, int Abbreviation, string Description)[] ParameterNames =
         {
-            ("escape", 3), ("echo", 3), ("forward", 3), ("idle", 3), ("device", 3), ("signals", 3), ("break", 3),
-            ("discard", 3), ("CRpad", 3), ("folding", 3), ("speed", 3), ("flow", 3), ("LFinsert", 3), ("LFpad", 3),
-            ("Edit", 3), ("Cdelete", 4), ("Ldelete", 4), ("Ldisplay", 4), ("Esignals", 4), ("Mask", 3), ("parity", 3),
-            ("page", 3), ("input", 3), ("frame", 3), ("Xforward", 4), ("Dinterrupt", 4), ("Dconfirmation", 4),
-            ("Coding", 3), ("Xecho", 4),
+            ("escape", 3, "PAD recall using a character"), ("echo", 3, "Echo"),
+            ("forward", 3, "Selection of data forwarding characters"), ("idle", 3, "Selection of idle timer delay"),
+            ("device", 3, "Ancillary device control"), ("signals", 3, "Control of PAD service signals"),
+            ("break", 3, "Operation on receipt of break signal"), ("discard", 3, "Discard output"),
+            ("CRpad", 3, "Padding after carriage return"), ("folding", 3, "Line folding"),
+            ("speed", 3, "Binary speed of start-stop mode DTE"), ("flow", 3, "Flow control of the PAD"),
+            ("LFinsert", 3, "Linefeed insertion after carriage return"), ("LFpad", 3, "Padding after linefeed"),
+            ("Edit", 3, "Editing"), ("Cdelete", 4, "Character delete"), ("Ldelete", 4, "Line delete"),
+            ("Ldisplay", 4, "Line display"), ("Esignals", 4, "Editing PAD service signals"), ("Mask", 3, "Echo mask"),
+            ("parity", 3, "Parity treatment"), ("page", 3, "Page wait"), ("input", 3, "Size of input field"),
+            ("frame", 3, "End-of-frame signal"), ("Xforward", 4, "Extended forwarding signals"),
+            ("Dinterrupt", 4, "Display interrupt character"), ("Dconfirmation", 4, "Display interrupt confirmation"),
+            ("Coding", 3, "Diacritic character coding scheme"), ("Xecho", 4, "Extended echo mask"),
         };
 
         /// <summary>
@@ -808,7 +816,7 @@ namespace RetroIO.Protocols.X25.Protocols
                 Commands.RESET => HandleResetCommand(command),
                 Commands.INTERRUPT => HandleInterruptCommand(command),
                 Commands.DATA => HandleDataCommand(command),
-                Commands.HELP => HandleHelpCommand(),
+                Commands.HELP => HandleHelpCommand(command),
                 // Acted on by the PAD (PadClient), which hears the command through CommandReceived.
                 Commands.EXIT => CommandResult.Success,
                 _ => HandleInvalidCommand(command.Verb)
@@ -944,26 +952,156 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Handle HELP: list the commands this PAD understands, exactly the ones it implements.
+        /// The commands this PAD carries out, each with the one line HELP shows for it (HELP COMMAND lists them all,
+        /// HELP followed by the command shows its own line). Exactly the ones it implements.
         /// </summary>
-        private CommandResult HandleHelpCommand()
+        private static readonly (string Name, string Line)[] HelpCommands =
         {
-            string text =
-                "PAD commands:\r\n" +
-                "  CALL <address>   place a call (C <address>)\r\n" +
-                "  CLR              clear the call (CLEAR)\r\n" +
-                "  STAT             show the PAD state\r\n" +
-                "  PAR [n ...]      read X.3 parameters (all if none are named)\r\n" +
-                "  SET n:v [n:v]    set X.3 parameters\r\n" +
-                "  PROF <name>      set a parameter profile\r\n" +
-                "  RESET            reset the virtual circuit\r\n" +
-                "  INT              send an interrupt\r\n" +
-                "  DATA             return to the call\r\n" +
-                "  HELP             this list\r\n" +
-                "  EXIT             clear any call and leave the PAD (QUIT)\r\n" +
-                "In a call, press Ctrl+P (the PAD escape, X.3 parameter 1) to get to these commands.\r\n";
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs(text, ResponseType.Success));
+            ("CALL", "CALL <address>     place a call (also C <address>, or the address alone)"),
+            ("CLR", "CLR                clear the call (CLEAR)"),
+            ("STAT", "STAT               FREE or ENGAGED: is there a call"),
+            ("PAR?", "PAR? [n, n ...]    read X.3 parameters (all when none is named)"),
+            ("SET", "SET n:v, n:v ...   set X.3 parameters"),
+            ("SET?", "SET? n:v, n:v ...  set X.3 parameters and show the new values"),
+            ("PROF", "PROF <profile>     set a standard profile (HELP PROFILES)"),
+            ("RESET", "RESET              reset the call: data in the network is thrown away, the call stays"),
+            ("INT", "INT                send an interrupt"),
+            ("ID", "ID<nui>            give a network user identity for the next calls (IDOFF takes it away)"),
+            ("DATA", "DATA               return to the call"),
+            ("HELP", "HELP [subject]     help: HELP LIST shows the subjects"),
+            ("EXIT", "EXIT               clear any call and leave the PAD (QUIT)"),
+        };
+
+        /// <summary>
+        /// HELP with the subjects of X.28 (12/97) 5.4 and Table 10: none (how to use HELP), LIST, COMMAND, PARAMETER,
+        /// PARAMETER n, PROFILES, PROFILE id, or a command name. The texts are this PAD's own: X.28 says their contents
+        /// are network dependent (Table 10 note 1). MAP is not offered: this PAD has no Multi-Aspect PAD. A subject it
+        /// does not know answers ERR (3.5.19).
+        /// </summary>
+        private CommandResult HandleHelpCommand(X28Command command)
+        {
+            string subject = string.Join(" ", command.Arguments);
+            var text = new StringBuilder();
+            if (subject.Length == 0 || subject == "HELP")
+            {
+                // The telnet PAD's greeting says "Type HELP for the commands", so the bare HELP lists them too.
+                text.Append("PAD commands:\r\n");
+                for (int i = 0; i < HelpCommands.Length; i++)
+                {
+                    text.Append("  ").Append(HelpCommands[i].Line).Append("\r\n");
+                }
+
+                text.Append("HELP <subject> gives more: LIST, COMMAND, PARAMETER, PARAMETER <n>, PROFILES, PROFILE <id>, or a command name.\r\n");
+                text.Append("In a call, the PAD escape character (X.3 parameter 1, Ctrl+P) brings you to the PAD.\r\n");
+            }
+            else if (subject == "LIST")
+            {
+                text.Append("LIST, COMMAND, PARAMETER, PARAMETER <n>, PROFILES, PROFILE <id>, ");
+                for (int i = 0; i < HelpCommands.Length; i++)
+                {
+                    text.Append(i == 0 ? string.Empty : ", ").Append(HelpCommands[i].Name);
+                }
+
+                text.Append("\r\n");
+            }
+            else if (subject == "COMMAND")
+            {
+                for (int i = 0; i < HelpCommands.Length; i++)
+                {
+                    text.Append(HelpCommands[i].Line).Append("\r\n");
+                }
+            }
+            else if (subject == "PARAMETER")
+            {
+                Dictionary<byte, byte> all = _x3Parameters.GetAllParameters();
+                byte[] numbers = new byte[all.Count];
+                all.Keys.CopyTo(numbers, 0);
+                Array.Sort(numbers);
+                for (int i = 0; i < numbers.Length; i++)
+                {
+                    AppendParameterHelp(text, numbers[i], all[numbers[i]]);
+                }
+            }
+            else if (subject.StartsWith("PARAMETER ", StringComparison.Ordinal))
+            {
+                Dictionary<byte, byte> all = _x3Parameters.GetAllParameters();
+                bool extended = IsExtendedDialogue(_x3Parameters.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
+                if (!TryParameterReference(subject.Substring(10).Trim(), extended, out byte reference) || !all.TryGetValue(reference, out byte value))
+                {
+                    return HelpError();
+                }
+
+                AppendParameterHelp(text, reference, value);
+            }
+            else if (subject == "PROFILES")
+            {
+                text.Append("90 simple standard profile (also SIMPLE)\r\n");
+                text.Append("91 transparent standard profile (also TRANS)\r\n");
+                text.Append("STD this PAD's own starting values\r\n");
+            }
+            else if (subject.StartsWith("PROFILE ", StringComparison.Ordinal))
+            {
+                string id = subject.Substring(8).Trim();
+                var probe = new X3();
+                if (!probe.SetProfile(id))
+                {
+                    return HelpError();
+                }
+
+                Dictionary<byte, byte> values = probe.GetAllParameters();
+                byte[] numbers = new byte[values.Count];
+                values.Keys.CopyTo(numbers, 0);
+                Array.Sort(numbers);
+                text.Append(id).Append(": PAR ");
+                for (int i = 0; i < numbers.Length; i++)
+                {
+                    text.Append(i == 0 ? string.Empty : ", ").Append(numbers[i]).Append(':').Append(values[numbers[i]]);
+                }
+
+                text.Append("\r\n");
+            }
+            else
+            {
+                string name = subject == "C" || subject == "CLEAR" ? (subject == "C" ? "CALL" : "CLR")
+                    : subject == "PAR" ? "PAR?" : subject == "QUIT" ? "EXIT" : subject == "IDOFF" ? "ID" : subject;
+                int found = -1;
+                for (int i = 0; i < HelpCommands.Length; i++)
+                {
+                    if (HelpCommands[i].Name == name)
+                    {
+                        found = i;
+                        break;
+                    }
+                }
+
+                if (found < 0)
+                {
+                    return HelpError();
+                }
+
+                text.Append(HelpCommands[found].Line).Append("\r\n");
+            }
+
+            CommandResponse?.Invoke(this, new CommandResponseEventArgs(text.ToString(), ResponseType.Success));
             return CommandResult.Success;
+        }
+
+        private static void AppendParameterHelp(StringBuilder text, byte reference, byte value)
+        {
+            int index = reference - 1;
+            text.Append(reference).Append(':').Append(value);
+            if (index >= 0 && index < ParameterNames.Length)
+            {
+                text.Append(" - ").Append(ParameterNames[index].Name).Append(", ").Append(ParameterNames[index].Description);
+            }
+
+            text.Append("\r\n");
+        }
+
+        private CommandResult HelpError()
+        {
+            CommandResponse?.Invoke(this, new CommandResponseEventArgs("ERR\r\n", ResponseType.Error));
+            return CommandResult.InvalidParameters;
         }
 
         /// <summary>
@@ -1097,7 +1235,13 @@ namespace RetroIO.Protocols.X25.Protocols
                 
             if (_x3Parameters.SetProfile(command.ProfileName))
             {
-                CommandResponse?.Invoke(this, new CommandResponseEventArgs($"{command.ProfileName} SET\r\n", ResponseType.Success));
+                // X.28 3.3.1: acknowledged with the acknowledgement PAD service signal (a format effector, 3.5.3) when
+                // parameter 6 is not 0 - read after the profile, which sets it. It answered "<name> SET" until 2026-11-19.
+                if (_x3Parameters.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS) != 0)
+                {
+                    CommandResponse?.Invoke(this, new CommandResponseEventArgs("\r\n", ResponseType.Success));
+                }
+
                 return CommandResult.Success;
             }
             else

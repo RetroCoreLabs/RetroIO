@@ -573,7 +573,8 @@ namespace RetroIO.Protocols.X25.Tests
             b.TypeLine("HELP");
             Assert.That(b.WaitFor("PAD commands:"), Is.True);
             Assert.That(a.Visible, Does.Not.Contain("PAD commands:"));
-            Assert.That(b.Visible, Does.Not.Contain("COM"));
+            // The connected signal is COM on its own line (X.28 3.5.21); the help text has the word COMMAND in it.
+            Assert.That(System.Text.RegularExpressions.Regex.IsMatch(b.Visible, @"(^|\n)COM\b"), Is.False, b.Visible);
 
             b.TypeLine("CALL " + LocalAddress);
             Assert.That(b.WaitFor("COM"), Is.True);
