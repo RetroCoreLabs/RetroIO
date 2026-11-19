@@ -86,6 +86,24 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// STAT (X.28 3.5.11): FREE with no call, ENGAGED with one (also at the prompt after the escape, where the
+        /// call stays), with the extended dialogue text when parameter 6 is 16 or more.
+        /// </summary>
+        [Test]
+        public void Status_IsFreeOrEngaged_WithTheExtendedText()
+        {
+            var x3 = new X3();
+            var pad = new X28(x3);
+            Assert.That(pad.StatusSignal(), Is.EqualTo("FREE"));
+            pad.SwitchToDataTransferMode();
+            Assert.That(pad.StatusSignal(), Is.EqualTo("ENGAGED"));
+            Assert.That(x3.SetParameter(6, 17), Is.True);
+            Assert.That(pad.StatusSignal(), Is.EqualTo("ENGAGED - Call Established"));
+            pad.SwitchToCommandMode();
+            Assert.That(pad.StatusSignal(), Is.EqualTo("FREE - No Call Established"));
+        }
+
+        /// <summary>
         /// A remote clear delivered to the PAD with cause and diagnostic shows the signal on the terminal.
         /// </summary>
         [Test]
