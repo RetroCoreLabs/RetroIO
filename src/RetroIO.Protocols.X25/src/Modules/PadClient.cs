@@ -234,6 +234,15 @@ namespace RetroIO.Protocols.X25.Modules
                     case X25PacketType.Interrupt:
                         DeliverInterrupt(args.Packet.LCN);
                         break;
+                    case X25PacketType.ResetRequest:
+                        {
+                            // Reset indication (the layer below has confirmed it): cause in Data[0], diagnostic in Data[1].
+                            var rd = args.Packet.Data;
+                            byte resetCause = rd != null && rd.Length > 0 ? rd[0] : (byte)0;
+                            byte resetDiag = rd != null && rd.Length > 1 ? rd[1] : (byte)0;
+                            DeliverReset(args.Packet.LCN, resetCause, resetDiag);
+                        }
+                        break;
                     default:
                         _logger.LogDebug("PAD Client received unhandled packet type: {PacketType}", args.Packet.PacketType);
                         break;
@@ -627,6 +636,22 @@ namespace RetroIO.Protocols.X25.Modules
 
             var reason = "Remote disconnect";
             OnConnectionStateChanged(PadConnectionState.Disconnected, reason);
+        }
+
+        /// <summary>
+        /// The call was reset by the other end or the network: the terminal is told with the X.28 reset service signal
+        /// (3.5.7) and the call stays up. X.25 (10/96) 4.4.3: a reset removes the data in the network but does not
+        /// end the call.
+        /// </summary>
+        /// <param name="lcn">The logical channel that was reset.</param>
+        /// <param name="cause">The resetting cause octet.</param>
+        /// <param name="diagnostic">The diagnostic octet.</param>
+        public void DeliverReset(ushort lcn, byte cause, byte diagnostic)
+        {
+            bool extended = X28.IsExtendedDialogue(_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
+            string signal = X28.ResetSignal(cause, diagnostic, extended);
+            _logger.LogInformation("PAD call reset on LCN {LCN}: {Signal}", lcn, signal);
+            OnDataReceived("\r\n" + signal + "\r\n");
         }
 
         /// <summary>
@@ -1149,12 +1174,10 @@ namespace RetroIO.Protocols.X25.Modules
         /// </summary>
         public void OnX25Reset(ushort lcn, byte cause, byte diagnostic)
         {
+            // A reset does not end the call (X.25 4.4.3); until 2026-11-19 this said Disconnected.
             if (_currentLCN == lcn)
             {
-                _logger.LogInformation("PAD Client received X.25 reset: cause={Cause}, diagnostic={Diagnostic}", cause, diagnostic);
-                OnConnectionStateChanged(PadConnectionState.Disconnected, $"Reset: {cause}/{diagnostic}");
-                _state = PadState.Disconnected;
-                RestorePreCallParameters();
+                DeliverReset(lcn, cause, diagnostic);
             }
         }
 

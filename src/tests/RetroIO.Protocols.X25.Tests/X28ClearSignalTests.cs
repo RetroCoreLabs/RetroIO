@@ -86,6 +86,22 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// The reset signal (X.28 3.5.7, Table 5) for each X.25 resetting cause (Table 5-8); the causes Table 5 has
+        /// no word for give only RESET and the diagnostic.
+        /// </summary>
+        [TestCase((byte)0x00, (byte)0, false, "RESET DTE 0")]
+        [TestCase((byte)0x85, (byte)3, false, "RESET DTE 3")]
+        [TestCase((byte)0x05, (byte)0, true, "RESET ERR 0 - Reset by network, local procedure error, data may be lost")]
+        [TestCase((byte)0x07, (byte)0, true, "RESET NC 0 - Reset due to temporary network problem, data may be lost")]
+        [TestCase((byte)0x03, (byte)0, true, "RESET RPE 0 - Reset by network, remote procedure error, data may be lost")]
+        [TestCase((byte)0x00, (byte)0, true, "RESET DTE 0 - Reset by remote device, data may be lost")]
+        [TestCase((byte)0x09, (byte)0, true, "RESET 0")]
+        public void ResetSignal_HasTheTable5CauseAndText(byte cause, byte diagnostic, bool extended, string expected)
+        {
+            Assert.That(X28.ResetSignal(cause, diagnostic, extended), Is.EqualTo(expected));
+        }
+
+        /// <summary>
         /// STAT (X.28 3.5.11): FREE with no call, ENGAGED with one (also at the prompt after the escape, where the
         /// call stays), with the extended dialogue text when parameter 6 is 16 or more.
         /// </summary>
@@ -116,6 +132,28 @@ namespace RetroIO.Protocols.X25.Tests
             pad.DeliverClear(1, 9, 0);
 
             Assert.That(seen.ToString(), Does.Contain("\r\nCLR DER C:9 D:0\r\n"));
+        }
+
+        /// <summary>
+        /// A reset packet handed to the PAD (as the runtime does, OnEndpointReset) prints the reset signal with the
+        /// cause and diagnostic read from the packet, and the call is not ended.
+        /// </summary>
+        [Test]
+        public void PadClient_AResetPacket_PrintsTheResetSignal_AndTheCallStays()
+        {
+            PadClient pad = new PadClient(NullLogger.Instance, new NullTransport());
+            StringBuilder seen = new StringBuilder();
+            bool ended = false;
+            pad.DataReceived += (s, e) => seen.Append(e.Data);
+            pad.ConnectionStateChanged += (s, e) => ended = true;
+
+            // LCN 0: the PAD's current channel before any call, so the packet is taken.
+            var packet = new RetroIO.Protocols.X25.Models.X25Packet(
+                RetroIO.Protocols.X25.Models.X25PacketBuilder.CreateResetRequest(0, 0x07, 5)) { LCN = 0 };
+            pad.OnX25Event(new RetroIO.Protocols.X25.Models.X25PacketEventArgs { Packet = packet });
+
+            Assert.That(seen.ToString(), Is.EqualTo("\r\nRESET NC 5\r\n"));
+            Assert.That(ended, Is.False, "a reset does not end the call");
         }
 
         private sealed class NullTransport : IPadTransport
