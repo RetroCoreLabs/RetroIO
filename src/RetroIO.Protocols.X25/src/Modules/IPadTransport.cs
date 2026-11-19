@@ -126,5 +126,20 @@ namespace RetroIO.Protocols.X25.Modules
         /// <param name="diagnostic">Diagnostic code.</param>
         /// <returns>True when the Reset Request was sent.</returns>
         bool ResetCall(ushort lcn, byte cause, byte diagnostic) => false;
+
+        /// <summary>
+        /// The data packets sent and received on a call, for a PAD that prints them on a clear (BT PSS). The default
+        /// is false: the transport does not know them, and the PAD then leaves the counts out rather than print 0.
+        /// </summary>
+        /// <param name="lcn">Logical channel number.</param>
+        /// <param name="sent">Data packets sent.</param>
+        /// <param name="received">Data packets received.</param>
+        /// <returns>True when the counts are real.</returns>
+        bool TryGetPacketCounts(ushort lcn, out long sent, out long received)
+        {
+            sent = 0;
+            received = 0;
+            return false;
+        }
     }
 }

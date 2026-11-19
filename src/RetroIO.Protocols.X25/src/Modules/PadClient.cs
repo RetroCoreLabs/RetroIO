@@ -33,6 +33,10 @@ namespace RetroIO.Protocols.X25.Modules
         
         // Connection state
         private ushort _currentLCN = 0;
+        private DateTime _callStartUtc;
+
+        /// <summary>Which network's PAD texts to use. PSS: the clear line carries the call time and packet counts.</summary>
+        public Protocols.PadStyle Style { get; set; } = Protocols.PadStyle.X28;
         private PadState _state = PadState.Disconnected;
         private string _remoteAddress = "";
         private readonly StringBuilder _inputBuffer = new StringBuilder();
@@ -390,6 +394,8 @@ namespace RetroIO.Protocols.X25.Modules
             // very channel; if the PAD still thought the call was up, it would take that echo for a clear
             // from the far end, print "CLR DTE", draw a second prompt and report the disconnect twice.
             var clearedLCN = _currentLCN;
+            // PSS: the invited clear's line, made while the transport still knows the circuit's counts.
+            string? pssLine = invitedByHost && Style == Protocols.PadStyle.Pss ? PssClear(clearedLCN, "PAD", 0, 0) : null;
             _state = PadState.Disconnected;
             _currentLCN = 0;
 
@@ -404,7 +410,7 @@ namespace RetroIO.Protocols.X25.Modules
             _transport.ClearCall(clearedLCN, 0, 0);
 
             bool extended = X28.IsExtendedDialogue(_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
-            OnDataReceived("\r\n" + (invitedByHost ? X28.PadClearSignal(extended) : X28.ClearConfirmation(extended)) + "\r\n");
+            OnDataReceived("\r\n" + (pssLine ?? (invitedByHost ? X28.PadClearSignal(extended) : X28.ClearConfirmation(extended))) + "\r\n");
             OnConnectionStateChanged(PadConnectionState.Disconnected, invitedByHost ? "Invitation to clear" : "User initiated");
             return true;
         }
@@ -584,6 +590,7 @@ namespace RetroIO.Protocols.X25.Modules
         {
             _currentLCN = lcn;
             _state = PadState.DataTransfer;
+            _callStartUtc = DateTime.UtcNow;   // the call time on a PSS clear line
 
             // Switch X.28 protocol to data transfer mode.
             _x28Protocol.SwitchToDataTransferMode();
@@ -660,7 +667,21 @@ namespace RetroIO.Protocols.X25.Modules
         {
             // The extended dialogue text when parameter 6 asks for it (X.28 (12/97) 3.5).
             bool extended = X28.IsExtendedDialogue(_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
-            DeliverClear(lcn, X28.ClearSignal(cause, diagnostic, extended));
+            DeliverClear(lcn, Style == Protocols.PadStyle.Pss
+                ? PssClear(lcn, X28.ClearMnemonic(cause), cause, diagnostic)
+                : X28.ClearSignal(cause, diagnostic, extended));
+        }
+
+        /// <summary>
+        /// The PSS clear line for this call: the time since the call was connected, and the packet counts when the
+        /// transport knows them. Read before the transport is told to clear, which forgets the circuit.
+        /// </summary>
+        private string PssClear(ushort lcn, string? mnemonic, byte cause, byte diagnostic)
+        {
+            TimeSpan callTime = DateTime.UtcNow - _callStartUtc;
+            return _transport.TryGetPacketCounts(lcn, out long sent, out long received)
+                ? X28.PssClearSignal(mnemonic, cause, diagnostic, callTime, sent, received)
+                : X28.PssClearSignal(mnemonic, cause, diagnostic, callTime);
         }
 
         private void DeliverClear(ushort lcn, string signal)
