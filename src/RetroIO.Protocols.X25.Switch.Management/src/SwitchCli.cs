@@ -290,13 +290,10 @@ namespace RetroIO.Protocols.X25.Switch.Management
                 pktsOut += ct.PacketsOut;
             }
 
-            ulong bytesFwd = 0, bytesRev = 0;
-            System.Collections.Generic.List<VcStitch> stitches = _node.SnapshotStitches();
-            for (int i = 0; i < stitches.Count; i++)
-            {
-                bytesFwd += stitches[i].BytesForward;
-                bytesRev += stitches[i].BytesReverse;
-            }
+            // Since the switch started, like the call and packet counters above. Until 2026-11-19 these were summed over
+            // the calls up at that moment only, so with no call up they read 0 however much had passed.
+            ulong bytesFwd = _node.BytesForwardTotal;
+            ulong bytesRev = _node.BytesReverseTotal;
 
             StringBuilder sb = new StringBuilder();
             sb.Append("Switch: ").Append(string.IsNullOrEmpty(c.Name) ? "Switch" : c.Name)
