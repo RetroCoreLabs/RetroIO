@@ -643,6 +643,29 @@ namespace RetroIO.Protocols.X25.Client
         }
 
         /// <summary>
+        /// The data packets sent and received on a circuit's call (X25Layer.TryGetPacketCounts). Still readable in the
+        /// clear handler: the packet layer keeps the counts until the channel's next call.
+        /// </summary>
+        /// <param name="vc">The circuit.</param>
+        /// <param name="sent">Data packets sent.</param>
+        /// <param name="received">Data packets received.</param>
+        /// <returns>False when the circuit has no connection or no channel.</returns>
+        public bool TryGetPacketCounts(X25Vc vc, out long sent, out long received)
+        {
+            sent = 0;
+            received = 0;
+            if (vc == null || vc.Leg == null)
+            {
+                return false;
+            }
+
+            lock (_lock)
+            {
+                return vc.Leg.Layer.TryGetPacketCounts(vc.LegLci, out sent, out received);
+            }
+        }
+
+        /// <summary>
         /// Blocks the calling thread until <see cref="Close"/> is invoked (e.g. from a Ctrl+C handler).
         /// The transport services the wire on its own thread, so this simply blocks until
         /// <see cref="Close"/> is called.

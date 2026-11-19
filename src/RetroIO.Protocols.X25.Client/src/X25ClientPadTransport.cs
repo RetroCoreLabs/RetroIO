@@ -209,6 +209,22 @@ namespace RetroIO.Protocols.X25.Client
         }
 
         /// <summary>
+        /// The data packets sent and received on the PAD's call. Read it before <see cref="ClearCall"/>, which forgets
+        /// the circuit; after a clear from the far end the circuit is still known here until the next call.
+        /// </summary>
+        /// <param name="lcn">Logical channel number; must be the PAD's circuit.</param>
+        /// <param name="sent">Data packets sent.</param>
+        /// <param name="received">Data packets received.</param>
+        /// <returns>False when there is no such circuit.</returns>
+        public bool TryGetPacketCounts(ushort lcn, out long sent, out long received)
+        {
+            sent = 0;
+            received = 0;
+            X25Vc? vc = _vc;
+            return vc != null && vc.Lcn == lcn && _client.TryGetPacketCounts(vc, out sent, out received);
+        }
+
+        /// <summary>
         /// Refuses a request that names a channel other than the one circuit this adapter carries.
         /// </summary>
         /// <param name="vc">

@@ -378,6 +378,21 @@ namespace RetroIO.Protocols.X25.Protocols
                 + " " + sent.ToString(c) + " " + received.ToString(c);
         }
 
+        /// <summary>
+        /// As <see cref="PssClearSignal(string?, byte, byte, TimeSpan, long, long)"/> for a link that cannot count
+        /// packets: the line ends after the call time. Ours - printing 0 0 would be a count nobody made.
+        /// </summary>
+        /// <param name="mnemonic">The Table 6 cause, or null.</param>
+        /// <param name="cause">The cause octet.</param>
+        /// <param name="diagnostic">The diagnostic octet.</param>
+        /// <param name="callTime">How long the call was up.</param>
+        /// <returns>The signal, without line ends.</returns>
+        public static string PssClearSignal(string? mnemonic, byte cause, byte diagnostic, TimeSpan callTime)
+        {
+            string full = PssClearSignal(mnemonic, cause, diagnostic, callTime, 0, 0);
+            return full.Substring(0, full.Length - 4);
+        }
+
         /// <summary>The Table 6 mnemonic for a clearing cause, or null (the rule of <see cref="ClearSignal(byte, byte)"/>).</summary>
         /// <param name="cause">The cause octet.</param>
         /// <returns>The mnemonic, or null.</returns>

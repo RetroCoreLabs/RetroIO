@@ -195,6 +195,47 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// PSS style over a real XOT connection: the far end clears after one echoed line, and the PAD prints the PSS
+        /// clear line with the call time and the counts the packet layer made (one data packet each way).
+        /// </summary>
+        [Test]
+        public void PssStyle_RemoteClear_ShowsCallTimeAndPacketCounts()
+        {
+            using LoopbackX25Peer peer = new LoopbackX25Peer("200");
+            using X25Client client = new X25Client { ServiceName = "pad-test" };
+            X25ClientPadTransport transport = new X25ClientPadTransport(client);
+            PadClient pad = new PadClient(NullLogger.Instance, transport) { LocalAddress = "10000", Style = RetroIO.Protocols.X25.Protocols.PadStyle.Pss };
+            client.SetOnConnected((c, vc) => pad.NotifyCallAccepted(vc.Lcn));
+            client.SetOnData((c, vc, data, length, qBit, mBit, dBit) => pad.DeliverData(vc.Lcn, data, qBit));
+            client.SetOnClear((c, vc, cause, diagnostic) => pad.DeliverClear(vc.Lcn, cause, diagnostic));
+
+            ManualResetEventSlim connected = new ManualResetEventSlim(false);
+            StringBuilder received = new StringBuilder();
+            object gate = new object();
+            pad.ConnectionStateChanged += (sender, e) => { if (e.State == PadConnectionState.Connected) { connected.Set(); } };
+            pad.DataReceived += (sender, e) => { lock (gate) { received.Append(e.Data); } };
+            Func<string> text = () => { lock (gate) { return received.ToString(); } };
+
+            client.Open(new X25ClientConfig { Host = "127.0.0.1", Port = (ushort)peer.Port, LocalAddress = "10000", Framing = X25ClientFraming.Xot }, NullLogger.Instance);
+            pad.Initialize();
+            TypeLine(pad, "CALL 200");
+            Assert.That(connected.Wait(3000), Is.True);
+            // Enter as the x25pad console sends it: CR only (a CR LF would be two packets - CR forwards, then LF alone).
+            for (int i = 0; i < 5; i++)
+            {
+                pad.OnKey("HELLO"[i]);
+            }
+
+            pad.OnKey('\r');
+            Assert.That(SpinWait.SpinUntil(() => text().Contains("HELLO"), 3000), Is.True, text());
+
+            Assert.That(peer.ClearLastCall(0, 0), Is.True);
+            Assert.That(SpinWait.SpinUntil(() => System.Text.RegularExpressions.Regex.IsMatch(text(), @"CLR DTE \(00\) 00:00:00:\d\d 1 1\r\n"), 3000), Is.True, text());
+
+            pad.Dispose();
+        }
+
+        /// <summary>
         /// Feeds a line of characters to the PAD followed by Enter (CR+LF), matching how the console front-end
         /// drives it.
         /// </summary>

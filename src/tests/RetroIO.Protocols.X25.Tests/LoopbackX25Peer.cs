@@ -108,6 +108,15 @@ namespace RetroIO.Protocols.X25.Tests
             return _x25.ResetCall(_lastLci, cause, diagnostic);
         }
 
+        /// <summary>Clears the call the peer answered last (sends a Clear Request).</summary>
+        /// <param name="cause">Clearing cause.</param>
+        /// <param name="diagnostic">Diagnostic code.</param>
+        /// <returns>False when the packet layer would not send it.</returns>
+        public bool ClearLastCall(byte cause, byte diagnostic)
+        {
+            return _x25.ClearCall(_lastLci, cause, diagnostic);
+        }
+
         /// <summary>
         /// Closes and disposes the listening transport.
         /// </summary>
