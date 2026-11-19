@@ -64,11 +64,22 @@ namespace RetroIO.Storage.Local.Images
         /// Works out a disk's cylinders, heads and sectors per track from what is written on it.
         /// </summary>
         /// <remarks>
-        /// For a fixed VHD the geometry in its footer is used. Otherwise sector 0 is read: a FAT boot
-        /// sector gives heads and sectors per track in its parameter block (offsets 24 and 26); a
-        /// partition table gives them as the end head and end sector of a used partition (head + 1,
-        /// sector bits 0-5). Cylinders are then the disk sectors divided by heads x sectors, at most
-        /// 65535. A disk with neither gives <c>false</c>, and the caller must ask for the geometry.
+        /// <para>
+        /// For a fixed VHD the geometry in its footer is used. Otherwise, in this order: a FAT boot
+        /// sector in sector 0 (a floppy, or a disk without a partition table) gives sectors per track
+        /// and heads in its parameter block (offsets 24 and 26); then a used partition table entry whose
+        /// end position (cylinder, head, sector) agrees with its end sector number gives heads (end head
+        /// + 1) and sectors per track (end sector); then the FAT boot sector of the first partition.
+        /// Cylinders are the disk sectors divided by heads x sectors, at most 65535.
+        /// </para>
+        /// <para>
+        /// A partition table entry that does not agree with its own sector numbers is not used: many
+        /// tools write the filler FE FF FF ("use the sector numbers") there, which read as a position
+        /// would claim 255 heads and 63 sectors on any disk. An end position at cylinder 1023 is
+        /// accepted when the partition ends further out than 1024 cylinders reach (a large disk, where
+        /// the position is capped). A disk with none of these gives <c>false</c>, and the caller must
+        /// ask for the geometry.
+        /// </para>
         /// </remarks>
         /// <param name="path">
         /// The image file, raw or fixed VHD.
@@ -95,14 +106,34 @@ namespace RetroIO.Storage.Local.Images
                 return false;
             }
 
-            byte[] sector = new byte[FixedVhd.SectorBytes];
+            byte[] sector0 = new byte[FixedVhd.SectorBytes];
             file.Position = 0;
-            file.ReadExactly(sector, 0, sector.Length);
-            return TryDetectGeometry(sector, diskBytes / FixedVhd.SectorBytes, out geometry);
+            file.ReadExactly(sector0, 0, sector0.Length);
+
+            // The boot sector of the first used partition, when there is one inside the disk.
+            byte[]? partitionBoot = null;
+            for (int i = 0; i < 4 && partitionBoot == null; i++)
+            {
+                int e = MbrTableOffset + i * MbrEntryBytes;
+                if (sector0[e + 4] == 0)
+                {
+                    continue;
+                }
+                long start = ReadUInt32LE(sector0, e + 8);
+                if (start > 0 && (start + 1) * FixedVhd.SectorBytes <= diskBytes)
+                {
+                    partitionBoot = new byte[FixedVhd.SectorBytes];
+                    file.Position = start * FixedVhd.SectorBytes;
+                    file.ReadExactly(partitionBoot, 0, partitionBoot.Length);
+                }
+            }
+
+            return TryDetectGeometry(sector0, partitionBoot, diskBytes / FixedVhd.SectorBytes, out geometry);
         }
 
         /// <summary>
-        /// Works out a disk's geometry from its sector 0 (see <see cref="TryDetectGeometry(string, out DiskGeometry)"/>).
+        /// Works out a disk's geometry from its sector 0 alone (see
+        /// <see cref="TryDetectGeometry(string, out DiskGeometry)"/>).
         /// </summary>
         /// <param name="sector0">
         /// The disk's first 512 bytes.
@@ -118,48 +149,41 @@ namespace RetroIO.Storage.Local.Images
         /// </returns>
         public static bool TryDetectGeometry(ReadOnlySpan<byte> sector0, long totalSectors, out DiskGeometry geometry)
         {
+            return TryDetectGeometry(sector0, ReadOnlySpan<byte>.Empty, totalSectors, out geometry);
+        }
+
+        /// <summary>
+        /// Works out a disk's geometry from its sector 0 and the boot sector of its first partition
+        /// (see <see cref="TryDetectGeometry(string, out DiskGeometry)"/>).
+        /// </summary>
+        /// <param name="sector0">
+        /// The disk's first 512 bytes.
+        /// </param>
+        /// <param name="partitionBootSector">
+        /// The first 512 bytes of the first used partition, or empty when there is none.
+        /// </param>
+        /// <param name="totalSectors">
+        /// The disk size in sectors.
+        /// </param>
+        /// <param name="geometry">
+        /// The geometry, when found.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the geometry was found.
+        /// </returns>
+        public static bool TryDetectGeometry(ReadOnlySpan<byte> sector0, ReadOnlySpan<byte> partitionBootSector, long totalSectors, out DiskGeometry geometry)
+        {
             geometry = default;
             if (sector0.Length < FixedVhd.SectorBytes || sector0[510] != 0x55 || sector0[511] != 0xAA)
             {
                 return false;
             }
 
-            int heads = 0;
-            int spt = 0;
-
-            // A FAT boot sector starts with a jump (EB xx or E9 xx xx) and says 512 bytes per sector.
-            bool jump = sector0[0] == 0xEB || sector0[0] == 0xE9;
-            int bytesPerSector = sector0[11] | (sector0[12] << 8);
-            if (jump && bytesPerSector == 512)
-            {
-                spt = sector0[24] | (sector0[25] << 8);
-                heads = sector0[26] | (sector0[27] << 8);
-            }
-
-            if (heads < 1 || heads > 255 || spt < 1 || spt > 63)
-            {
-                heads = 0;
-                spt = 0;
-                // A partition table: the end of a used partition sits at the last head and sector.
-                for (int i = 0; i < 4; i++)
-                {
-                    int e = MbrTableOffset + i * MbrEntryBytes;
-                    byte type = sector0[e + 4];
-                    if (type == 0)
-                    {
-                        continue;
-                    }
-                    int endHead = sector0[e + 5];
-                    int endSector = sector0[e + 6] & 0x3F;
-                    if (endSector >= 1 && endHead + 1 > heads)
-                    {
-                        heads = endHead + 1;
-                        spt = endSector;
-                    }
-                }
-            }
-
-            if (heads < 1 || heads > 255 || spt < 1 || spt > 63)
+            int heads;
+            int spt;
+            if (!TryBootSectorGeometry(sector0, out heads, out spt)
+                && !TryPartitionTableGeometry(sector0, out heads, out spt)
+                && !TryBootSectorGeometry(partitionBootSector, out heads, out spt))
             {
                 return false;
             }
@@ -176,7 +200,6 @@ namespace RetroIO.Storage.Local.Images
             geometry = new DiskGeometry((int)cylinders, heads, spt);
             return true;
         }
-
         /// <summary>
         /// Converts in the direction the source asks for: a fixed VHD becomes raw, a raw image becomes a
         /// fixed VHD.
@@ -252,10 +275,7 @@ namespace RetroIO.Storage.Local.Images
             }
             else
             {
-                byte[] sector = new byte[FixedVhd.SectorBytes];
-                input.Position = 0;
-                input.ReadExactly(sector, 0, sector.Length);
-                if (!TryDetectGeometry(sector, diskBytes / FixedVhd.SectorBytes, out g))
+                if (!TryDetectGeometry(source, out g))
                 {
                     throw new InvalidDataException($"The disk shape of {source} cannot be read from its partition table or boot sector; give the cylinders, heads and sectors per track.");
                 }
@@ -296,6 +316,70 @@ namespace RetroIO.Storage.Local.Images
                 throw new InvalidDataException($"{source}: {problem}.");
             }
             WriteNew(target, input, footer.DiskBytes, null);
+        }
+
+        // A FAT boot sector: a jump (EB xx or E9 xx xx), 512 bytes per sector, the 55h AAh
+        // signature, and believable sectors per track (offset 24) and heads (offset 26).
+        private static bool TryBootSectorGeometry(ReadOnlySpan<byte> s, out int heads, out int spt)
+        {
+            heads = 0;
+            spt = 0;
+            if (s.Length < FixedVhd.SectorBytes || s[510] != 0x55 || s[511] != 0xAA)
+            {
+                return false;
+            }
+            bool jump = s[0] == 0xEB || s[0] == 0xE9;
+            int bytesPerSector = s[11] | (s[12] << 8);
+            int t = s[24] | (s[25] << 8);
+            int h = s[26] | (s[27] << 8);
+            if (!jump || bytesPerSector != 512 || t < 1 || t > 63 || h < 1 || h > 255)
+            {
+                return false;
+            }
+            heads = h;
+            spt = t;
+            return true;
+        }
+
+        // The used partition table entry with the most heads whose end position (cylinder, head,
+        // sector) is the same place as its end sector number, or is capped at cylinder 1023 on a
+        // partition that ends beyond what 1024 cylinders reach.
+        private static bool TryPartitionTableGeometry(ReadOnlySpan<byte> sector0, out int heads, out int spt)
+        {
+            heads = 0;
+            spt = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                int e = MbrTableOffset + i * MbrEntryBytes;
+                if (sector0[e + 4] == 0)
+                {
+                    continue;
+                }
+                int endHead = sector0[e + 5];
+                int endSector = sector0[e + 6] & 0x3F;
+                int endCylinder = ((sector0[e + 6] & 0xC0) << 2) | sector0[e + 7];
+                long start = ReadUInt32LE(sector0, e + 8);
+                long count = ReadUInt32LE(sector0, e + 12);
+                if (endSector < 1 || count == 0)
+                {
+                    continue;
+                }
+                int h = endHead + 1;
+                long endLba = start + count - 1;
+                long chsLba = ((long)endCylinder * h + endHead) * endSector + endSector - 1;
+                bool agrees = chsLba == endLba || (endCylinder == 1023 && endLba > chsLba);
+                if (agrees && h > heads)
+                {
+                    heads = h;
+                    spt = endSector;
+                }
+            }
+            return heads > 0;
+        }
+
+        private static long ReadUInt32LE(ReadOnlySpan<byte> b, int at)
+        {
+            return (uint)(b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24));
         }
 
         private static void CheckPaths(string source, string target)
