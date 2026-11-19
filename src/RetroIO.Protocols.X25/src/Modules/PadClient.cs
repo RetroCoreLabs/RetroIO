@@ -1360,7 +1360,7 @@ namespace RetroIO.Protocols.X25.Modules
 
         void SendPrompt()
         {
-            OnDataReceived("PAD> ");
+            OnDataReceived(X28.PromptText);
         }
 
 
