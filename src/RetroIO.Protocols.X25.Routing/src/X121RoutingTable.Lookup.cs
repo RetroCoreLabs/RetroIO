@@ -466,8 +466,33 @@ namespace RetroIO.Protocols.X25.Routing
         public X121RouteResult Resolve(string calledAddress, int inPort, Func<int, X121PortStatus>? ports,
             X121RouteDirection direction = X121RouteDirection.Both, byte[]? callUserData = null)
         {
+            return Resolve(calledAddress, inPort, ports, false, direction, callUserData);
+        }
+
+        /// <summary>
+        /// As <see cref="Resolve(string, int, Func{int, X121PortStatus}?, X121RouteDirection, byte[])"/>, for a call
+        /// whose called number may already be in international form.
+        /// </summary>
+        /// <remarks>
+        /// A call that came in on a link between networks (X.75) carries the international data number: X.75 joins
+        /// networks, and a number crossing one is DNIC + NTN (X.121 7.6.1), with no prefix. The international prefix is
+        /// what a user dials on an access line (X.121 7.8.1) to select that format. So such a number is taken as it is;
+        /// completing it with the own DNIC would turn 31109001 arriving at England into 2342 31109001. Until 2026-11-19
+        /// every number without the prefix was completed, which broke transit through any switch that also had a prefix
+        /// for its own users (found by demo/large-network in RetroX25).
+        /// </remarks>
+        /// <param name="calledAddress">The called number as it came in.</param>
+        /// <param name="inPort">The port the call came in on; -1 for none.</param>
+        /// <param name="ports">The state of each port, or null.</param>
+        /// <param name="receivedInternational">The call came in on a link between networks: the number is international.</param>
+        /// <param name="direction">Which routes may take it.</param>
+        /// <param name="callUserData">The call user data, for routes that look at it.</param>
+        /// <returns>The result.</returns>
+        public X121RouteResult Resolve(string calledAddress, int inPort, Func<int, X121PortStatus>? ports, bool receivedInternational,
+            X121RouteDirection direction = X121RouteDirection.Both, byte[]? callUserData = null)
+        {
             string received = calledAddress ?? string.Empty;
-            string international = ToInternational(received);
+            string international = receivedInternational ? received : ToInternational(received);
             X121RouteResult result = new X121RouteResult
             {
                 ReceivedAddress = received,

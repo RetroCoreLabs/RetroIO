@@ -13,7 +13,7 @@ using RetroIO.Protocols.X25.Routing;
 namespace RetroIO.Protocols.X25.Tests
 {
     /// <summary>
-    /// The one routing table's lookup, <see cref="X121RoutingTable.Resolve"/>, against the number analysis
+    /// The one routing table's lookup, <see cref="X121RoutingTable.Resolve(string, int, Func{int, X121PortStatus}?, bool, X121RouteDirection, byte[])"/>, against the number analysis
     /// of X.121 (10/2000) 7.6-7.12: the own network, the international prefix, the order the kinds win in,
     /// the port that is down, the hunt member that is down, the backup port, and the number sent on.
     /// </summary>

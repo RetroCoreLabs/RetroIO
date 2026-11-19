@@ -107,7 +107,7 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
-        /// The one lookup for a call through this node's lines (<see cref="X121RoutingTable.Resolve"/>), with
+        /// The one lookup for a call through this node's lines (<see cref="X121RoutingTable.Resolve(string, int, Func{int, X121PortStatus}?, bool, X121RouteDirection, byte[])"/>), with
         /// each port's state taken from its transport.
         /// </summary>
         /// <param name="called">

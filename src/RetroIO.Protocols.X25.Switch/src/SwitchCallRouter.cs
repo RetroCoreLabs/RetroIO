@@ -97,7 +97,7 @@ namespace RetroIO.Protocols.X25.Switch
         }
 
         /// <summary>
-        /// The full answer of the one lookup for a call (<see cref="X121RoutingTable.Resolve"/>): which route won,
+        /// The full answer of the one lookup for a call (<see cref="X121RoutingTable.Resolve(string, int, Func{int, X121PortStatus}?, bool, X121RouteDirection, byte[])"/>): which route won,
         /// why, the port, and the number to send on. Used by <see cref="Decide"/>, and by the console's
         /// "test an address".
         /// </summary>
@@ -117,7 +117,10 @@ namespace RetroIO.Protocols.X25.Switch
                 return X121RouteResult.ForThisNode(calledAddress, "A call to " + calledAddress + " is the switch's management address.");
             }
 
-            return _table.Resolve(calledAddress, inPortId, PortStatus);
+            // A number that came in on a link between networks (X.75) is already international (X121RoutingTable.Resolve).
+            ISwitchPort? arrival = inPortId >= 0 ? _portById(inPortId) : null;
+            bool international = arrival != null && arrival.Config.Type == PortType.Trunk && arrival.Config.BetweenNetworks;
+            return _table.Resolve(calledAddress, inPortId, PortStatus, international);
         }
 
         /// <summary>

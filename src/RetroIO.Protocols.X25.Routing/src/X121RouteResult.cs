@@ -91,7 +91,7 @@ namespace RetroIO.Protocols.X25.Routing
     }
 
     /// <summary>
-    /// The answer of <see cref="X121RoutingTable.Resolve"/>: the outcome, the route that decided it, the
+    /// The answer of <see cref="X121RoutingTable.Resolve(string, int, Func{int, X121PortStatus}?, bool, X121RouteDirection, byte[])"/>: the outcome, the route that decided it, the
     /// port, the number to send, and why, in words.
     /// </summary>
     public sealed class X121RouteResult

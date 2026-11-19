@@ -331,7 +331,7 @@ namespace RetroIO.Protocols.X25.Routing
 
         /// <summary>
         /// Resolves the egress port for a called address, advancing hunt-group round-robin state. Kept for
-        /// callers that need only the port; it is <see cref="Resolve"/> with every port taken to be in
+        /// callers that need only the port; it is <see cref="Resolve(string, int, Func{int, X121PortStatus}?, bool, X121RouteDirection, byte[])"/> with every port taken to be in
         /// service, and a local route counts as found.
         /// </summary>
         /// <param name="calledAddress">
