@@ -284,6 +284,31 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(X28.ParameterName(30), Is.Null);
         }
 
+        /// <summary>
+        /// HELP with the subjects of X.28 Table 10; an unknown subject is ERR. PROF takes the ITU-T profile numbers 90
+        /// and 91 (Table 3).
+        /// </summary>
+        [Test]
+        public void Help_TakesTheTable10Subjects_AndProfilesTakeTheItuNumbers()
+        {
+            var x3 = new X3();
+            var pad = new X28(x3);
+            Assert.That(Type(pad, "HELP"), Does.StartWith("PAD commands:").And.Contain("HELP <subject>"));
+            Assert.That(Type(pad, "HELP LIST"), Does.Contain("PROFILES").And.Contain("RESET"));
+            Assert.That(Type(pad, "HELP COMMAND"), Does.Contain("SET? n:v"));
+            Assert.That(Type(pad, "HELP PARAMETER 2"), Is.EqualTo("2:" + x3.GetParameter(2) + " - echo, Echo\r\n"));
+            Assert.That(Type(pad, "HELP PARAMETER"), Does.Contain("6:" + x3.GetParameter(6) + " - signals, Control of PAD service signals\r\n"));
+            Assert.That(Type(pad, "HELP CLR"), Does.StartWith("CLR "));
+            Assert.That(Type(pad, "HELP PROFILE 91"), Does.StartWith("91: PAR 1:"));
+            Assert.That(Type(pad, "HELP FROB"), Is.EqualTo("ERR\r\n"));
+
+            var expected = new X3();
+            expected.SetTransparentProfile();
+            Type(pad, "PROF 91");
+            Assert.That(x3.GetParameter(2), Is.EqualTo(expected.GetParameter(2)));
+            Assert.That(x3.GetParameter(3), Is.EqualTo(expected.GetParameter(3)));
+        }
+
         private sealed class ResetTransport : IPadTransport
         {
             public bool CanReset;

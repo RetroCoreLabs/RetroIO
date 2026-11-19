@@ -354,11 +354,15 @@ namespace RetroIO.Protocols.X25.Protocols
                     SetStandardProfile();
                     break;
                     
+                // X.28 (12/97) Table 3: the ITU-T standard profile identifiers are 90 (simple) and 91 (transparent).
+                // Until 2026-11-19 only this PAD's own names were taken, so "PROF 90" failed.
                 case Profiles.TRANSPARENT:
+                case "91":
                     SetTransparentProfile();
                     break;
-                    
+
                 case Profiles.SIMPLE:
+                case "90":
                     SetSimpleProfile();
                     break;
                     
