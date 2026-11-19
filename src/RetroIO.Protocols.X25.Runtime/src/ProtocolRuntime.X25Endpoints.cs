@@ -1240,6 +1240,25 @@ namespace RetroIO.Protocols.X25.Runtime
             return endpoint.SendBlocking(lci, payload, XotSendTimeoutMs) ? MappedSendOutcome.Sent : MappedSendOutcome.RefusedByFlowControl;
         }
 
+        /// <inheritdoc/>
+        public bool ResetCallByLocalLcn(ushort lcn, byte cause, byte diagnostic)
+        {
+            if (TryRouterCall(lcn, out XotOutgoingCall routerCall))
+            {
+                return routerCall.Reset(cause, diagnostic);
+            }
+
+            if (!TryCircuit(lcn, out X25Endpoint endpoint, out ushort lci))
+            {
+                return false;
+            }
+
+            lock (endpoint.Sync)
+            {
+                return endpoint.Layer.ResetCall(lci, cause, diagnostic);
+            }
+        }
+
         /// <summary>
         /// Clears a call on a local LCN carried by an XOT endpoint. False when the LCN is not XOT-mapped.
         /// </summary>

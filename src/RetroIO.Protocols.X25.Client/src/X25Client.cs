@@ -611,6 +611,28 @@ namespace RetroIO.Protocols.X25.Client
         }
 
         /// <summary>
+        /// Resets a circuit (X.25 (10/96) 4.4.3): a Reset Request goes out, the data in the network is thrown away, and
+        /// the call stays.
+        /// </summary>
+        /// <param name="vc">The circuit to reset.</param>
+        /// <param name="cause">Resetting cause (0 for a DTE).</param>
+        /// <param name="diagnostic">Diagnostic code.</param>
+        /// <returns>False when the packet layer would not send it (the circuit is not in data transfer).</returns>
+        public bool Reset(X25Vc vc, byte cause = 0, byte diagnostic = 0)
+        {
+            if (vc == null)
+            {
+                throw new ArgumentNullException(nameof(vc));
+            }
+
+            X25Layer x25 = LayerOf(vc);
+            lock (_lock)
+            {
+                return x25.ResetCall(vc.LegLci, cause, diagnostic);
+            }
+        }
+
+        /// <summary>
         /// Blocks the calling thread until <see cref="Close"/> is invoked (e.g. from a Ctrl+C handler).
         /// The transport services the wire on its own thread, so this simply blocks until
         /// <see cref="Close"/> is called.

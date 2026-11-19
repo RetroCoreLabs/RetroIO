@@ -341,6 +341,29 @@ namespace RetroIO.Protocols.X25.Modules
         /// there was no call to clear. It does not write the prompt: a caller that is in the middle of a
         /// typed line (the CLR command) gets its prompt when the line ends.
         /// </summary>
+        private void ResetCallFromTerminal()
+        {
+            // X.28 4.9.2.3: reset the call; acknowledge with a format effector (3.5.3) when parameter 6 is not 0. With
+            // no call X28 has already answered ERR. A transport that could not send the reset answers ERR (3.5.19)
+            // too: the person is never told a reset went out that did not.
+            if (_currentLCN == 0 || _state != PadState.DataTransfer)
+            {
+                return;
+            }
+
+            if (!_transport.ResetCall(_currentLCN, 0, 0))
+            {
+                _logger.LogWarning("PAD could not send a reset on LCN {LCN}", _currentLCN);
+                OnDataReceived("ERR\r\n");
+                return;
+            }
+
+            if (_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS) != 0)
+            {
+                OnDataReceived("\r\n");
+            }
+        }
+
         private bool ClearCallFromTerminal()
         {
             if (_currentLCN == 0 || _state == PadState.Disconnected)
@@ -1095,6 +1118,10 @@ namespace RetroIO.Protocols.X25.Modules
                         ClearCallFromTerminal();
                         break;
                         
+                    case "RESET":
+                        ResetCallFromTerminal();
+                        break;
+
                     case "SET":
                         ProcessSetParameterCommand(command);
                         break;
@@ -1232,8 +1259,10 @@ namespace RetroIO.Protocols.X25.Modules
         /// </summary>
         public void SendX25Reset(ushort lcn, byte cause, byte diagnostic)
         {
-            // TODO: Implement when ProtocolRuntime supports reset sending
-            _logger.LogWarning("PAD Client SendX25Reset not yet implemented");
+            if (_currentLCN == lcn && !_transport.ResetCall(lcn, cause, diagnostic))
+            {
+                _logger.LogWarning("PAD could not send a reset on LCN {LCN}", lcn);
+            }
         }
 
         /// <summary>

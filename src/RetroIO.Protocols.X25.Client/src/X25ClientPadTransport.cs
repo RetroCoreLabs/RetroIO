@@ -195,6 +195,19 @@ namespace RetroIO.Protocols.X25.Client
             }
         }
 
+        /// <inheritdoc/>
+        public bool ResetCall(ushort lcn, byte cause, byte diagnostic)
+        {
+            X25Vc? vc = _vc;
+            if (vc == null)
+            {
+                return false;
+            }
+
+            RequireOwnChannel(vc, lcn, "ResetCall");
+            return _client.Reset(vc, cause, diagnostic);
+        }
+
         /// <summary>
         /// Refuses a request that names a channel other than the one circuit this adapter carries.
         /// </summary>

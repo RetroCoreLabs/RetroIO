@@ -193,6 +193,54 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(ended, Is.False, "a reset does not end the call");
         }
 
+        /// <summary>
+        /// RESET typed at the prompt during a call (X.28 4.9.2.3) sends a reset with cause 0 on the call's channel and
+        /// is acknowledged; a transport that cannot reset gives ERR, never a false acknowledgement.
+        /// </summary>
+        [TestCase(true, "")]
+        [TestCase(false, "ERR\r\n")]
+        public void ResetCommand_DuringACall_SendsTheReset(bool transportCanReset, string expectedAfterAck)
+        {
+            var transport = new ResetTransport { CanReset = transportCanReset };
+            PadClient pad = new PadClient(NullLogger.Instance, transport);
+            pad.NotifyCallAccepted(5);
+            StringBuilder seen = new StringBuilder();
+            pad.DataReceived += (s, e) => seen.Append(e.Data);
+
+            foreach (char ch in "\u0010RESET\r")
+            {
+                pad.ProcessCharacter((byte)ch);
+            }
+
+            Assert.That(transport.Resets, Is.EqualTo(new[] { "5/0/0" }));
+            string screen = seen.ToString();
+            Assert.That(screen, Does.Not.Contain("RESET\r\n"), "the old answer");
+            if (transportCanReset)
+            {
+                Assert.That(screen, Does.Not.Contain("ERR"));
+            }
+            else
+            {
+                Assert.That(screen, Does.Contain(expectedAfterAck));
+            }
+        }
+
+        private sealed class ResetTransport : IPadTransport
+        {
+            public bool CanReset;
+            public readonly System.Collections.Generic.List<string> Resets = new System.Collections.Generic.List<string>();
+            public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData) => true;
+            public bool SendData(ushort lcn, byte[] data, bool mBit, bool qBit, bool dBit) => true;
+            public void ForwardData(ushort lcn, byte[] data, int length) { }
+            public void ClearCall(ushort lcn, byte cause, byte diagnostic) { }
+
+            public bool ResetCall(ushort lcn, byte cause, byte diagnostic)
+            {
+                Resets.Add(lcn + "/" + cause + "/" + diagnostic);
+                return CanReset;
+            }
+        }
+
         private sealed class NullTransport : IPadTransport
         {
             public bool PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData) => true;

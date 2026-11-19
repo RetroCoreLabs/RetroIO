@@ -225,6 +225,20 @@ namespace RetroIO.Protocols.X25.Transport
         }
 
         /// <summary>
+        /// Resets the call (X.25 (10/96) 4.4.3): a Reset Request goes out and the call stays.
+        /// </summary>
+        /// <param name="cause">Resetting cause.</param>
+        /// <param name="diagnostic">Diagnostic code.</param>
+        /// <returns>False when the call is not up or the packet layer would not send it.</returns>
+        public bool Reset(byte cause, byte diagnostic)
+        {
+            lock (_sync)
+            {
+                return _connected && !_ended && _layer.ResetCall(_lci, cause, diagnostic);
+            }
+        }
+
+        /// <summary>
         /// Stops the clock and closes the connection.
         /// </summary>
         public void Dispose()

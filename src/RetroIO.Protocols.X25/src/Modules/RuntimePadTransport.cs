@@ -150,5 +150,11 @@ namespace RetroIO.Protocols.X25.Modules
             // nothing on the wire (pinned by ProtocolRuntimeWirePinTests).
             _runtime.ClearCallByLocalLcn(lcn, cause, diagnostic);
         }
+
+        /// <inheritdoc/>
+        public bool ResetCall(ushort lcn, byte cause, byte diagnostic)
+        {
+            return _runtime.ResetCallByLocalLcn(lcn, cause, diagnostic);
+        }
     }
 }
