@@ -51,6 +51,18 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public byte RecvSeq { get; set; }
 
         /// <summary>
+        /// Data packets put on the wire on this call (each packet once, a refused send not counted). A reset does not
+        /// zero it: the count is for the call. Read by a PAD that prints packet counts on a clear (BT PSS).
+        /// </summary>
+        public long DataPacketsSent { get; set; }
+
+        /// <summary>
+        /// Data packets taken in sequence on this call (one rejected for a procedure error not counted). A reset does
+        /// not zero it.
+        /// </summary>
+        public long DataPacketsReceived { get; set; }
+
+        /// <summary>
         /// Last send sequence the peer has acknowledged, modulo 8. Used to enforce the send window.
         /// </summary>
         public byte AckedSeq { get; set; }

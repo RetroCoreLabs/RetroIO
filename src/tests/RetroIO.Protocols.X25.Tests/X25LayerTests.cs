@@ -105,6 +105,32 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_b.Circuits[incomingLci].State, Is.EqualTo(X25VcState.Ready));
         }
 
+        /// <summary>
+        /// Each side counts the data packets of the call: two from A to B and one back, kept over a reset, zeroed by the
+        /// next call on the same channel.
+        /// </summary>
+        [Test]
+        public void PacketCounts_PerCall_KeptOverReset()
+        {
+            ushort incomingLci = 0;
+            _b.IncomingCall += (layer, lci, called, calling, cud) => { incomingLci = lci; layer.AcceptCall(lci); };
+
+            ushort lciA = _a.PlaceCall("2341", "2340");
+            Assert.That(_a.SendData(lciA, Encoding.ASCII.GetBytes("a")), Is.True);
+            Assert.That(_a.SendData(lciA, Encoding.ASCII.GetBytes("b")), Is.True);
+            Assert.That(_b.SendData(incomingLci, Encoding.ASCII.GetBytes("c")), Is.True);
+            Assert.That(_a.ResetCall(lciA), Is.True);
+
+            Assert.That(_a.TryGetPacketCounts(lciA, out long aSent, out long aReceived), Is.True);
+            Assert.That(_b.TryGetPacketCounts(incomingLci, out long bSent, out long bReceived), Is.True);
+            Assert.That((aSent, aReceived, bSent, bReceived), Is.EqualTo((2L, 1L, 1L, 2L)));
+
+            _a.ClearCall(lciA, 0, 0);
+            ushort again = _a.PlaceCall("2341", "2340");
+            Assert.That(_a.TryGetPacketCounts(again, out aSent, out aReceived), Is.True);
+            Assert.That((aSent, aReceived), Is.EqualTo((0L, 0L)));
+        }
+
         [Test]
         public void IncomingCall_Rejected_ByClear()
         {

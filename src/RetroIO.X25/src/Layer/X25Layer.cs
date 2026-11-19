@@ -369,6 +369,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // is merely incoming again and the application may try again or clear it.
             vc.State = X25VcState.DataTransfer;
             vc.ResetFlow();
+            vc.DataPacketsSent = 0;       // a new call: the counts are for this call (a reset keeps them)
+            vc.DataPacketsReceived = 0;
             vc.TimerExpiryMs = 0;
             // Between networks the Call Connected always carries the network utility field (X.75 5.4.1), even empty.
             // The agreed sizes go in the utility field too (X.75 5.1, 5.3.4, 5.3.5), never in the user facility field.
@@ -618,7 +620,29 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return false;
             }
 
+            vc.DataPacketsSent++;
             return true;
+        }
+
+        /// <summary>
+        /// The data packets sent and received so far on a call (<see cref="X25Vc.DataPacketsSent"/>).
+        /// </summary>
+        /// <param name="lci">Logical channel.</param>
+        /// <param name="sent">Data packets sent.</param>
+        /// <param name="received">Data packets received.</param>
+        /// <returns>False when there is no call on the channel.</returns>
+        public bool TryGetPacketCounts(ushort lci, out long sent, out long received)
+        {
+            if (_vcs.TryGetValue(lci, out X25Vc? vc))
+            {
+                sent = vc.DataPacketsSent;
+                received = vc.DataPacketsReceived;
+                return true;
+            }
+
+            sent = 0;
+            received = 0;
+            return false;
         }
 
         /// <summary>
@@ -1879,6 +1903,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             vc.State = X25VcState.DataTransfer;
             vc.ResetFlow();
+            vc.DataPacketsSent = 0;       // a new call: the counts are for this call (a reset keeps them)
+            vc.DataPacketsReceived = 0;
             vc.TimerExpiryMs = 0;
             RaiseCallConnected(lci);
         }
@@ -2155,6 +2181,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             vc.RecvSeq = (byte)((info.PS + 1) & 0x07);
+            vc.DataPacketsReceived++;
 
             byte[] payload = new byte[payloadLen];
             if (payloadLen > 0)

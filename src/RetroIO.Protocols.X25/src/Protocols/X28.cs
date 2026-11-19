@@ -352,6 +352,42 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// The clear indication as BT PSS printed it (RetroX25 docs/research-os.md 1.2, a recorded 1987 session,
+        /// verbatim: <c>CLR PAD (00) 00:00:00:32 13 17</c>): CLR, the X.28 Table 6 cause, the diagnostic in brackets as
+        /// two decimal digits, the call time as days:hours:minutes:seconds, and two packet counts.
+        /// </summary>
+        /// <remarks>
+        /// NOT VERIFIED, and ours: which count is which. The sources give two numbers and no names; this writes the
+        /// packets the PAD sent first, then the ones it received. Also ours: a cause with no Table 6 mnemonic is written
+        /// as C:cause in its place, as the X.28 signal does.
+        /// </remarks>
+        /// <param name="mnemonic">The Table 6 cause (PAD for a clear the host invited), or null.</param>
+        /// <param name="cause">The cause octet, written when there is no mnemonic.</param>
+        /// <param name="diagnostic">The diagnostic octet.</param>
+        /// <param name="callTime">How long the call was up.</param>
+        /// <param name="sent">Data packets the PAD sent on the call.</param>
+        /// <param name="received">Data packets the PAD received on the call.</param>
+        /// <returns>The signal, without line ends.</returns>
+        public static string PssClearSignal(string? mnemonic, byte cause, byte diagnostic, TimeSpan callTime, long sent, long received)
+        {
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            string what = mnemonic ?? ("C:" + cause.ToString(c));
+            return "CLR " + what + " (" + diagnostic.ToString("00", c) + ") "
+                + callTime.Days.ToString("00", c) + ":" + callTime.Hours.ToString("00", c) + ":"
+                + callTime.Minutes.ToString("00", c) + ":" + callTime.Seconds.ToString("00", c)
+                + " " + sent.ToString(c) + " " + received.ToString(c);
+        }
+
+        /// <summary>The Table 6 mnemonic for a clearing cause, or null (the rule of <see cref="ClearSignal(byte, byte)"/>).</summary>
+        /// <param name="cause">The cause octet.</param>
+        /// <returns>The mnemonic, or null.</returns>
+        public static string? ClearMnemonic(byte cause)
+        {
+            StandardClearSignal(cause, 0, out string? mnemonic);
+            return mnemonic;
+        }
+
+        /// <summary>
         /// The clear indication PAD service signal for a call the PAD cleared because the host asked it to (the X.29
         /// invitation to clear): <c>CLR PAD</c>, and in extended dialogue mode <c> - Call cleared, remote request</c>
         /// (X.28 (12/97) 3.5.17.1, Table 6). The cause code and diagnostic fields are optional (3.5.17.1 note) and
@@ -2050,6 +2086,19 @@ namespace RetroIO.Protocols.X25.Protocols
             _commandBuffer.Clear();
             _inputBuffer.Clear();
         }
+    }
+
+    /// <summary>
+    /// Which network's PAD this PAD looks like where the networks differed from plain X.28 (RetroX25
+    /// docs/research-os.md section 1).
+    /// </summary>
+    public enum PadStyle
+    {
+        /// <summary>X.28 (12/97) as written.</summary>
+        X28 = 0,
+
+        /// <summary>BT PSS (UK): the clear indication carries the call time and the packet counts.</summary>
+        Pss = 1,
     }
 
     /// <summary>
