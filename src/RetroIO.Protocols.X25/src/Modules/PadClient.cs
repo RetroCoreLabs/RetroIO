@@ -357,7 +357,7 @@ namespace RetroIO.Protocols.X25.Modules
             _logger.LogDebug("PAD sending X.25 Clear Request on LCN {LCN}", clearedLCN);
             _transport.ClearCall(clearedLCN, 0, 0);
 
-            OnDataReceived("\r\nCLR CONF\r\n");
+            OnDataReceived("\r\n" + X28.ClearConfirmation(X28.IsExtendedDialogue(_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS))) + "\r\n");
             OnConnectionStateChanged(PadConnectionState.Disconnected, "User initiated");
             return true;
         }
@@ -611,7 +611,9 @@ namespace RetroIO.Protocols.X25.Modules
         /// </param>
         public void DeliverClear(ushort lcn, byte cause, byte diagnostic)
         {
-            DeliverClear(lcn, X28.ClearSignal(cause, diagnostic));
+            // The extended dialogue text when parameter 6 asks for it (X.28 (12/97) 3.5).
+            bool extended = X28.IsExtendedDialogue(_x3Protocol.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
+            DeliverClear(lcn, X28.ClearSignal(cause, diagnostic, extended));
         }
 
         private void DeliverClear(ushort lcn, string signal)

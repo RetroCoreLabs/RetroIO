@@ -60,6 +60,32 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// Extended dialogue mode (X.28 (12/97) 3.5.17.1, Table 6): " - " and the cause's text; none for a cause
+        /// without a mnemonic.
+        /// </summary>
+        [TestCase((byte)0x01, "CLR OCC C:1 D:0 - Call cleared, number busy")]
+        [TestCase((byte)0x0D, "CLR NP C:13 D:0 - Call cleared, number not assigned")]
+        [TestCase((byte)0x00, "CLR DTE C:0 D:0 - Call cleared, by remote device, data may be lost")]
+        [TestCase((byte)0x05, "CLR NC C:5 D:0 - Call cleared, temporary network problem")]
+        [TestCase((byte)21, "CLR C:21 D:0")]
+        public void ClearSignal_Extended_AddsTheTable6Text(byte cause, string expected)
+        {
+            Assert.That(X28.ClearSignal(cause, 0, true), Is.EqualTo(expected));
+        }
+
+        /// <summary>X.28 3.5: extended dialogue mode when the high 4 bits of parameter 6 are not all zero; Table 7.</summary>
+        [Test]
+        public void ExtendedDialogue_IsTheHighFourBitsOfParameter6_AndConfirmationHasTheTable7Text()
+        {
+            Assert.That(X28.IsExtendedDialogue(1), Is.False);
+            Assert.That(X28.IsExtendedDialogue(15), Is.False);
+            Assert.That(X28.IsExtendedDialogue(16), Is.True);
+            Assert.That(X28.IsExtendedDialogue(17), Is.True);
+            Assert.That(X28.ClearConfirmation(false), Is.EqualTo("CLR CONF"));
+            Assert.That(X28.ClearConfirmation(true), Is.EqualTo("CLR CONF - Call cleared, confirmed"));
+        }
+
+        /// <summary>
         /// A remote clear delivered to the PAD with cause and diagnostic shows the signal on the terminal.
         /// </summary>
         [Test]
