@@ -63,6 +63,14 @@ Two design decisions shape the whole package, and both were corrections:
 PC floppy sizes: 360 KB, 720 KB, 1.2 MB, 1.44 MB, 2.88 MB, plus arbitrary FAT partitions.
 `PcHddPreset` carries the classic IBM fixed BIOS drive-type geometries (all 17 sectors per track).
 
+PC hard-disk files: raw `.img` and `.hdd` (every byte a disk byte), and fixed VHD `.vhd` (the same
+bytes followed by a 512-byte footer, Microsoft's VHD spec 1.0). `Images/DiskImageFile` recognises a
+fixed VHD by its footer (the `conectix` cookie, disk type fixed, a correct checksum), not by its name,
+and hands every driver only the bytes before the footer, so a write can never change it. A damaged,
+dynamic or differencing VHD is refused with the reason. `Images/DiskImageConverter` converts raw to
+fixed VHD and back, always into a new file; the disk shape for the footer comes from the partition
+table or boot sector, or from the caller. Raw to VHD to raw gives the same file byte for byte.
+
 ## The block-device stack
 
 ```mermaid

@@ -47,8 +47,8 @@ namespace RetroIO.Storage.Local.Tests
             // .img and .dsk are claimed by several formats and must still appear only once.
             string[] expected =
             {
-                ".bsd", ".crt", ".d64", ".d71", ".d81", ".dmk", ".dsk", ".ffs", ".flp", ".ima",
-                ".img", ".jvc", ".p00", ".prg", ".t64", ".tap", ".ufs", ".vdk", ".vfd"
+                ".bsd", ".crt", ".d64", ".d71", ".d81", ".dmk", ".dsk", ".ffs", ".flp", ".hdd",
+                ".ima", ".img", ".jvc", ".p00", ".prg", ".t64", ".tap", ".ufs", ".vdk", ".vfd", ".vhd"
             };
             Assert.That(extensions, Is.EqualTo(expected));
         }

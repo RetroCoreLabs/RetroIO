@@ -482,8 +482,9 @@ namespace RetroIO.Storage.Local
 
             try
             {
-                FileInfo fileInfo = new FileInfo(imagePath);
-                hints.FileSize = fileInfo.Length;
+                // The disk bytes only: a fixed VHD's 512-byte footer is not part of the disk, and
+                // counting it would hide the size signal of, for example, a floppy kept as a VHD.
+                hints.FileSize = Images.DiskImageFile.GetDiskLength(imagePath);
 
                 // Read enough bytes to satisfy all registered providers
                 int maxHeaderBytes = GetMaxRequiredHeaderBytes();

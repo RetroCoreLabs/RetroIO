@@ -19,7 +19,10 @@ namespace RetroIO.Storage.Local.Drivers
     {
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
-        private static readonly string[] KnownExtensions = { ".img", ".ima", ".vfd", ".flp" };
+        // .hdd is a raw PC hard-disk image, the same bytes as .img. .vhd is a fixed VHD: the raw disk
+        // bytes plus a 512-byte footer, which DiskImageFile strips (by its contents, not this name)
+        // before any driver sees the image.
+        private static readonly string[] KnownExtensions = { ".img", ".ima", ".vfd", ".flp", ".hdd", ".vhd" };
 
         /// <summary>
         /// Gets the file system type identifier of this provider: <c>PC-Floppy</c>.
@@ -27,7 +30,7 @@ namespace RetroIO.Storage.Local.Drivers
         public override string FileSystemType => "PC-Floppy";
 
         /// <summary>
-        /// Gets the extensions this format is stored under: .img, .ima, .vfd, .flp.
+        /// Gets the extensions this format is stored under: .img, .ima, .vfd, .flp, and for hard disks .hdd and .vhd (fixed VHD).
         /// </summary>
         /// <remarks>
         /// Detection uses the same list as its extension signal.
