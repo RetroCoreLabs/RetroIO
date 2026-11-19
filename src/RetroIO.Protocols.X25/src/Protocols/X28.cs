@@ -180,6 +180,10 @@ namespace RetroIO.Protocols.X25.Protocols
         public event EventHandler<ErrorMessageEventArgs>? ErrorMessage;
 
         private PadMode _currentMode = PadMode.Command;
+
+        // A call is up: set when the call is connected, cleared when it is cleared. The escape to the prompt
+        // during a call leaves it set (the call stays), which is what STAT reports as ENGAGED.
+        private bool _callUp;
         private DateTime _lastCharacterTime = DateTime.Now;
         private System.Threading.Timer? _idleTimer;
 
@@ -214,6 +218,7 @@ namespace RetroIO.Protocols.X25.Protocols
         public void SwitchToDataTransferMode()
         {
             _logger?.LogDebug("🎯 X.28: SwitchToDataTransferMode() called!");
+            _callUp = true;
             SwitchMode(PadMode.DataTransfer);
         }
 
@@ -222,6 +227,7 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         public void SwitchToCommandMode()
         {
+            _callUp = false;
             SwitchMode(PadMode.Command);
         }
 
@@ -939,9 +945,25 @@ namespace RetroIO.Protocols.X25.Protocols
 
         private CommandResult HandleStatusCommand(X28Command command)
         {
-            var statusMessage = $"Mode: {_currentMode}, Parameters: {_x3Parameters}\r\n";
-            CommandResponse?.Invoke(this, new CommandResponseEventArgs(statusMessage, ResponseType.Success));
+            CommandResponse?.Invoke(this, new CommandResponseEventArgs(StatusSignal() + "\r\n", ResponseType.Success));
             return CommandResult.Success;
+        }
+
+        /// <summary>
+        /// The answer to STAT (X.28 (12/97) 3.5.11): <c>ENGAGED</c> while a call is up (also at the prompt after the
+        /// escape, where the call stays), <c>FREE</c> when there is none; in extended dialogue mode followed by
+        /// <c> - Call Established</c> or <c> - No Call Established</c>. No MAP status block: this PAD has no MAP.
+        /// </summary>
+        /// <returns>The service signal, without line ends.</returns>
+        public string StatusSignal()
+        {
+            bool extended = IsExtendedDialogue(_x3Parameters.GetParameter(X3.ParameterNumber.CONTROL_PAD_SERVICE_SIGNALS));
+            if (_callUp)
+            {
+                return extended ? "ENGAGED - Call Established" : "ENGAGED";
+            }
+
+            return extended ? "FREE - No Call Established" : "FREE";
         }
 
         private CommandResult HandleClearCommand(X28Command command)
@@ -1653,7 +1675,7 @@ namespace RetroIO.Protocols.X25.Protocols
             switch (cmd)
             {
                 case "STAT":
-                    CommandResponse?.Invoke(this, new CommandResponseEventArgs("CONNECTED\r\n", ResponseType.Success));
+                    CommandResponse?.Invoke(this, new CommandResponseEventArgs(StatusSignal() + "\r\n", ResponseType.Success));
                     return CommandResult.Success;
                 case "CLR":
                     return CommandResult.Success; // Clear - handled by disconnect
