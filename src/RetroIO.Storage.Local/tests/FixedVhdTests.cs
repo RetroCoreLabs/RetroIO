@@ -260,8 +260,9 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That(BinaryPrimitives.ReadUInt32BigEndian(tail.AsSpan(60)), Is.EqualTo(2u));
             Assert.That(BinaryPrimitives.ReadUInt64BigEndian(tail.AsSpan(48)), Is.EqualTo((ulong)new FileInfo(raw).Length));
             Assert.That(BinaryPrimitives.ReadUInt64BigEndian(tail.AsSpan(40)), Is.EqualTo((ulong)new FileInfo(raw).Length));
-            // Geometry read from the partition table PcImageFactory wrote.
+            // Geometry read from the partition table: 615/4/17.
             Assert.That(DiskImageConverter.TryDetectGeometry(raw, out DiskGeometry g), Is.True);
+            Assert.That(g.ToString(), Is.EqualTo("615/4/17"));
             Assert.That(BinaryPrimitives.ReadUInt16BigEndian(tail.AsSpan(56)), Is.EqualTo((ushort)g.Cylinders));
             Assert.That(tail[58], Is.EqualTo((byte)g.Heads));
             Assert.That(tail[59], Is.EqualTo((byte)g.SectorsPerTrack));
@@ -376,16 +377,78 @@ namespace RetroIO.Storage.Local.Tests
         [Test]
         public void TryDetectGeometry_FromPartitionTable()
         {
-            byte[] sector = new byte[512];
-            sector[510] = 0x55;
-            sector[511] = 0xAA;
-            sector[446 + 4] = 0x06;     // FAT16
-            sector[446 + 5] = 15;       // end head 15 -> 16 heads
-            sector[446 + 6] = 63;       // end sector 63
+            // 300/16/63: partition from sector 63 to the last sector; end position 299/15/63.
+            byte[] sector = Mbr(start: 63, count: 300 * 16 * 63 - 63, endCylinder: 299, endHead: 15, endSector: 63);
             Assert.That(DiskImageConverter.TryDetectGeometry(sector, 16 * 63 * 300, out DiskGeometry g), Is.True);
             Assert.That(g.ToString(), Is.EqualTo("300/16/63"));
         }
 
+        [Test]
+        public void TryDetectGeometry_TheMsDos622DiskOfRetroCore()
+        {
+            // The partition entry of RetroCore's MS-DOS 6.22 disk, as read from it: 80 01 01 00 06 07 D1 FE
+            // 11 00 00 00 67 1F 02 00, on a 139264-sector disk. That is 1024/8/17.
+            byte[] sector = new byte[512];
+            byte[] entry = { 0x80, 0x01, 0x01, 0x00, 0x06, 0x07, 0xD1, 0xFE, 0x11, 0x00, 0x00, 0x00, 0x67, 0x1F, 0x02, 0x00 };
+            entry.CopyTo(sector, 446);
+            sector[510] = 0x55;
+            sector[511] = 0xAA;
+            Assert.That(DiskImageConverter.TryDetectGeometry(sector, 139264, out DiskGeometry g), Is.True);
+            Assert.That(g.ToString(), Is.EqualTo("1024/8/17"));
+        }
+
+        [Test]
+        public void TryDetectGeometry_LbaFillerIsNotAShape()
+        {
+            // FE FF FF ("use the sector numbers") read as a position would say 255 heads, 63 sectors.
+            byte[] disk = PcImageFactory.CreateBlankHardDisk(PcHddPreset.At20MB);
+            byte[] sector = new byte[512];
+            Array.Copy(disk, sector, 512);
+            Assert.That(sector[446 + 5], Is.EqualTo(0xFE), "the factory still writes the filler");
+            Assert.That(DiskImageConverter.TryDetectGeometry(sector, disk.Length / 512, out _), Is.False);
+            string path = Path.Combine(_dir, "FILLER.img");
+            File.WriteAllBytes(path, disk);
+            Assert.That(DiskImageConverter.TryDetectGeometry(path, out _), Is.False);
+        }
+
+        [Test]
+        public void TryDetectGeometry_CappedAtCylinder1023_OnALargeDisk()
+        {
+            // An 8 GB partition: the end position stops at 1023/254/63, the sectors go further.
+            long total = 16450560L;     // 1024 x 255 x 63
+            byte[] sector = Mbr(start: 63, count: (uint)(total * 2 - 63), endCylinder: 1023, endHead: 254, endSector: 63);
+            Assert.That(DiskImageConverter.TryDetectGeometry(sector, total * 2, out DiskGeometry g), Is.True);
+            Assert.That(g.Heads + "/" + g.SectorsPerTrack, Is.EqualTo("255/63"));
+        }
+
+        [Test]
+        public void TryDetectGeometry_FromThePartitionsBootSector_WhenTheTableHasFiller()
+        {
+            byte[] sector = Mbr(start: 17, count: 1000, endCylinder: 1023, endHead: 254, endSector: 63);
+            byte[] boot = new byte[512];
+            boot[0] = 0xEB;
+            boot[12] = 2;
+            boot[24] = 17;
+            boot[26] = 6;
+            boot[510] = 0x55;
+            boot[511] = 0xAA;
+            Assert.That(DiskImageConverter.TryDetectGeometry(sector, boot, 615 * 6 * 17, out DiskGeometry g), Is.True);
+            Assert.That(g.ToString(), Is.EqualTo("615/6/17"));
+        }
+
+        private static byte[] Mbr(uint start, uint count, int endCylinder, int endHead, int endSector)
+        {
+            byte[] sector = new byte[512];
+            sector[510] = 0x55;
+            sector[511] = 0xAA;
+            sector[446 + 4] = 0x06;
+            sector[446 + 5] = (byte)endHead;
+            sector[446 + 6] = (byte)(endSector | ((endCylinder >> 8) << 6));
+            sector[446 + 7] = (byte)endCylinder;
+            BinaryPrimitives.WriteUInt32LittleEndian(sector.AsSpan(446 + 8), start);
+            BinaryPrimitives.WriteUInt32LittleEndian(sector.AsSpan(446 + 12), count);
+            return sector;
+        }
         // ---------------------------------------------------------------------------------------
         // Helpers
         // ---------------------------------------------------------------------------------------
@@ -405,7 +468,7 @@ namespace RetroIO.Storage.Local.Tests
 
         private string MakeDisk(string name, bool vhd)
         {
-            byte[] disk = PcImageFactory.CreateBlankHardDisk(PcHddPreset.At20MB, "TESTHDD");
+            byte[] disk = WithRealChs(PcImageFactory.CreateBlankHardDisk(PcHddPreset.At20MB, "TESTHDD"));
             string path = Path.Combine(_dir, name);
             using FileStream fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
             fs.Write(disk, 0, disk.Length);
@@ -415,6 +478,21 @@ namespace RetroIO.Storage.Local.Tests
                 fs.Write(footer, 0, footer.Length);
             }
             return path;
+        }
+
+        // PcImageFactory writes the filler FE FF FF in the partition table's start and end positions.
+        // Real disks carry the real positions (MS-DOS 6.22, Windows 95 and PC-DOS 3.3 disks read
+        // 2026-11-19 all do), so the test disk gets them: start cylinder 0 head 1 sector 1, end
+        // cylinder 614 head 3 sector 17 for 615/4/17.
+        private static byte[] WithRealChs(byte[] disk)
+        {
+            disk[446 + 1] = 1;      // start head
+            disk[446 + 2] = 1;      // start sector, cylinder bits 8-9 = 0
+            disk[446 + 3] = 0;      // start cylinder
+            disk[446 + 5] = 3;      // end head
+            disk[446 + 6] = 0x91;   // end sector 17, cylinder bits 8-9 = 2 (614 = 0x266)
+            disk[446 + 7] = 0x66;   // end cylinder bits 0-7
+            return disk;
         }
 
         // The footer RetroCore's PC/AT code writes, built here field by field from the spec.
