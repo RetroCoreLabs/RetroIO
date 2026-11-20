@@ -28,6 +28,7 @@
         "files": [
           "RetroIO.*/README.md",
           "RetroIO.Protocols.Econet/src/README.md",
+          "RetroIO.Protocols.X25/X121-ADDRESSING.md",
           "RetroIO.Protocols.Xmsg.Api/src/README.md",
           "RetroIO.Management.Api/src/README.md",
           "tools/*/README.md",
