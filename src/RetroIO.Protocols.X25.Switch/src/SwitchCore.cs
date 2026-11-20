@@ -572,13 +572,14 @@ namespace RetroIO.Protocols.X25.Switch
             // the caller think it had the sizes it asked for while the callee ran with others, and the first big packet
             // reset the call.
             ushort outLci;
+            X25CallDecision? portRefusal;
             if (haveParameters)
             {
                 // The NUI says who pays this network; it never goes on to the called DTE (X.25 6.21).
                 X25CallParameters toAsk = asked.Swapped().WithPacketSizeAtMost(outPort.Config.MaxPacketSize).WithoutNuiSelection()
                     .WithoutChargingRequest()    // Table 7-2: not in an Incoming Call; this DCE answers it (6.22)
                     .WithNetworkUtilities(onwardUtilities);
-                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, toAsk);
+                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, toAsk, out portRefusal);
             }
             else if (onwardUtilities != null || onwardCarried != null)
             {
@@ -587,24 +588,22 @@ namespace RetroIO.Protocols.X25.Switch
                 X25CallParameters defaults = WithCarriedUtilities(new X25CallParameters(
                     outPort.Config.DefaultWindowSize, outPort.Config.DefaultWindowSize,
                     outPort.Config.DefaultPacketSize, outPort.Config.DefaultPacketSize, null, onwardUtilities), onwardCarried);
-                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, defaults);
+                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, defaults, out portRefusal);
             }
             else
             {
-                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData);
+                outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, null, out portRefusal);
             }
 
             if (outLci == 0)
             {
-                // The router found the port in service and the port still could not place the call. If
-                // its line went down meanwhile (a link that dropped) that is Out of order (4.6.4);
-                // otherwise X.25 Table C.1 row 31, no logical channel available, is Number busy,
-                // diagnostic 71. A port does not say why PlaceCall failed, so its state is read again
-                // here; a failed XOT dial on a port that still has another connection up is reported as
-                // busy, which may be wrong (src/BUGS.md).
-                X25CallDecision failed = SwitchCallRouter.IsInService(outPort)
+                // The router found the port in service and the port still could not place the call. A port
+                // that knows why says so (the XOT port: far end unreachable is Out of order #0, X.25 Table
+                // C.3 a) item 30; no channel left is Number busy #71, item 31). Otherwise its state is read
+                // again: a line that went down meanwhile is Out of order (4.6.4), else Number busy #71.
+                X25CallDecision failed = portRefusal ?? (SwitchCallRouter.IsInService(outPort)
                     ? X25CallDecision.Busy()
-                    : X25CallDecision.DestinationOutOfOrder();
+                    : X25CallDecision.DestinationOutOfOrder());
                 inPort.ClearCall(inLci, failed.Cause, failed.Diagnostic);
                 return;
             }
