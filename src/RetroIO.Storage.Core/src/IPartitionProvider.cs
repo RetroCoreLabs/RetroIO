@@ -85,7 +85,7 @@ public class PartitionMetadata
     public required byte FileSystemTypeCode { get; init; }
 
     /// <summary>
-    /// Recommended URN for mounting this partition (e.g., "bsd:///E:/disk.img#a").
+    /// Recommended URN for mounting this partition (e.g., "bsd:///images/disk.img#a").
     /// </summary>
     public required string RecommendedUrn { get; init; }
 

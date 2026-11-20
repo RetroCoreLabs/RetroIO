@@ -27,4 +27,9 @@
     <ProjectReference Include="..\src\RetroIO.Storage.Local.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- One helper for finding test images, shared with RetroIO.Tests. -->
+    <Compile Include="..\..\tests\RetroIO.Tests\TestData.cs" Link="TestData.cs" />
+  </ItemGroup>
+
 </Project>

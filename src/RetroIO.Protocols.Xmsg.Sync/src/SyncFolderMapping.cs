@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
     /// <para><b>Folder to USER, because SINTRAN has no folders</b></para>
     /// <para>
     /// A SINTRAN machine keeps a FLAT directory per user, so there is nothing for a Windows path
-    /// to correspond to except the user itself: <c>E:\work\proj</c> maps to <c>D102</c> user
+    /// to correspond to except the user itself: <c>work/proj</c> maps to <c>D102</c> user
     /// <c>SYSTEM</c>, and every file in it becomes a file in that user's directory. Several local
     /// folders can be mapped to several users; each mapping is one of these.
     /// </para>
@@ -46,7 +46,7 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// Creates a mapping from a local folder to a user on a machine.
         /// </summary>
         /// <param name="localFolder">
-        /// The Windows folder, for example <c>E:\work\proj</c>.
+        /// The Windows folder, for example <c>work/proj</c>.
         /// </param>
         /// <param name="machine">
         /// The SINTRAN machine name as the remote knows it, for example <c>D102</c>.

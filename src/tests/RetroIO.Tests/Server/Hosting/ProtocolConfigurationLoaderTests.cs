@@ -30,14 +30,14 @@ public sealed class ProtocolConfigurationLoaderTests
             IConfiguration config = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Tnfs:RootDirectory"] = @"C:\tnfs-override",
+                    ["Tnfs:RootDirectory"] = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tnfs-override"),
                     ["Tnfs:UdpPort"] = "17000"
                 })
                 .Build();
 
             TnfsServerConfiguration result = ProtocolConfigurationLoader.LoadTnfsConfiguration(tempPath, config);
 
-            Assert.That(result.RootDirectory, Is.EqualTo(@"C:\tnfs-override"));
+            Assert.That(result.RootDirectory, Is.EqualTo(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tnfs-override")));
             Assert.That(result.UdpPort, Is.EqualTo(17000));
         }
         finally
@@ -116,14 +116,14 @@ public sealed class ProtocolConfigurationLoaderTests
             IConfiguration config = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Econet:RootDirectory"] = @"C:\econet-override",
+                    ["Econet:RootDirectory"] = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "econet-override"),
                     ["Econet:UdpPort"] = "33000"
                 })
                 .Build();
 
             EconetServerConfiguration result = ProtocolConfigurationLoader.LoadEconetConfiguration(tempPath, config);
 
-            Assert.That(result.RootDirectory, Is.EqualTo(@"C:\econet-override"));
+            Assert.That(result.RootDirectory, Is.EqualTo(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "econet-override")));
             Assert.That(result.UdpPort, Is.EqualTo(33000));
         }
         finally

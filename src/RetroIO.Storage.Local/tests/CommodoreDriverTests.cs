@@ -11,6 +11,7 @@ using NUnit.Framework;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local;
 using RetroIO.Storage.Local.Drivers;
+using RetroIO.Tests;
 
 namespace RetroIO.Storage.Local.Tests
 {
@@ -18,15 +19,13 @@ namespace RetroIO.Storage.Local.Tests
     /// Unit tests for Commodore disk image drivers (D64, D71, D81, T64).
     /// Tests detection, mounting, directory listing, and file reading.
     ///
-    /// IMPORTANT: Update the TEST_IMAGE_PATH constant to point to your test images directory.
+    /// The images come from the folder named by RETROIO_TEST_IMAGES (see src/eng/test-env.example.bat).
     /// </summary>
     [TestFixture]
     public class CommodoreDriverTests
     {
-        // ***** CONFIGURE THIS PATH FOR YOUR SYSTEM *****
-        // Windows: Use "C:\\Users\\ronny\\OneDrive\\Documents\\RetroFS\\test-images"
-        // Linux/WSL: Use "/mnt/c/Users/ronny/OneDrive/Documents/RetroFS/test-images"
-        private const string TEST_IMAGE_PATH = "/mnt/c/Users/ronny/OneDrive/Documents/RetroFS/test-images";
+        // The test-image folder, from RETROIO_TEST_IMAGES.
+        private static readonly string TEST_IMAGE_PATH = TestData.FromVariable(TestData.TestImagesVariable, string.Empty);
 
         // ***** CONFIGURE THESE FILENAMES FOR YOUR TEST IMAGES *****
         private const string D64_TEST_FILE = "d64/CARMEN.D64";       // Change to your D64 test file

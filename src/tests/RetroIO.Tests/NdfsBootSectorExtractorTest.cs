@@ -16,7 +16,7 @@ namespace RetroIO.Tests
     public class NdfsBootSectorExtractorTest
     {
         private const int BOOT_SECTOR_SIZE = 1024;
-        private static string ImagePath => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs");
+        private static string ImagePath => TestData.FromVariable(TestData.TestImagesVariable, "ndfs");
 
         [Test]
         public void ExtractFloppyBootSector()

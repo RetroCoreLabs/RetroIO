@@ -35,7 +35,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class NdixFilesystemReadTests
     {
-        private const string NdixDirectory = @"E:\Dev\Ronny\NDIX-C";
+        private static readonly string NdixDirectory = TestData.FromVariable(TestData.NdixDirectoryVariable, string.Empty);
 
         /// <summary>
         /// Filesystem base: 90 sectors of 1024 bytes (one di70 cylinder).

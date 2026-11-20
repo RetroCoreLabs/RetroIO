@@ -16,7 +16,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class BsdSunDiskDetectionTests
     {
-        private const string SunDiskImagePath = @"D:\ND\HDD\sun2-sunos-3.2.img";
+        private static readonly string SunDiskImagePath = TestData.FromVariable(TestData.HddImagesVariable, "sun2-sunos-3.2.img");
 
         [Test]
         [Category("SunOS")]

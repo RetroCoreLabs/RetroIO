@@ -31,13 +31,8 @@ namespace RetroIO.Tests
             _imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, REAL_DISK_IMAGE);
             if (!File.Exists(_imagePath))
             {
-                // Try absolute Windows path
-                _imagePath = TestPaths.Resolve(@"E:\Dev\Ronny\RetroFS\demo\test-images\ndfs\BIGDISK0-L.IMG");
-            }
-            if (!File.Exists(_imagePath))
-            {
-                // Try WSL mount
-                _imagePath = "/mnt/e/Dev/Ronny/RetroFS/demo/test-images/ndfs/BIGDISK0-L.IMG";
+                // Walk up to the downloaded test set
+                _imagePath = TestData.Demo("ndfs/BIGDISK0-L.IMG");
             }
 
             _factory = new DriverFactory();

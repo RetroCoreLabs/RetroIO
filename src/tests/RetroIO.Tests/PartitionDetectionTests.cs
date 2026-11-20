@@ -20,9 +20,9 @@ namespace RetroIO.Tests
     {
         // Test images - tests will be skipped if not found
         // Note: Both Sun Disk Labels and BSD Disk Labels are supported partition table formats
-        private const string SunDiskImagePath = @"D:\ND\HDD\sun2-sunos-3.2.img";
-        private const string SunDiskImagePath2 = @"D:\ND\HDD\SUN2.img";
-        private static string BsdDiskImagePath => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\bsd211.img");
+        private static readonly string SunDiskImagePath = TestData.FromVariable(TestData.HddImagesVariable, "sun2-sunos-3.2.img");
+        private static readonly string SunDiskImagePath2 = TestData.FromVariable(TestData.HddImagesVariable, "SUN2.img");
+        private static string BsdDiskImagePath => TestData.FromVariable(TestData.TestImagesVariable, "bsd211.img");
 
         // Valid partition table types for BSD-family partition detection tests
         private static bool IsValidPartitionTableType(PartitionTableType tableType)
@@ -38,8 +38,8 @@ namespace RetroIO.Tests
                 SunDiskImagePath,
                 SunDiskImagePath2,
                 BsdDiskImagePath,
-                TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\sun2-sunos-3.2.img"),
-                TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\sun2-s3.5-disk.img")
+                TestData.FromVariable(TestData.TestImagesVariable, "sun2-sunos-3.2.img"),
+                TestData.FromVariable(TestData.TestImagesVariable, "sun2-s3.5-disk.img")
             };
 
             for (int i = 0; i < candidates.Length; i++)
@@ -295,7 +295,7 @@ namespace RetroIO.Tests
         public void PartitionDetector_DetectFromFile_NonExistentFile_ReturnsEmpty()
         {
             // Arrange
-            string nonExistentPath = @"C:\this\path\does\not\exist\test.img";
+            string nonExistentPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "this", "path", "does", "not", "exist", "test.img");
 
             // Act
             var result = PartitionDetector.DetectFromFile(nonExistentPath);

@@ -56,7 +56,7 @@ namespace RetroIO.Protocols.X25.Tests
         [Test]
         public void X25emuInitiator_IsAcceptedByTheCSharpSwitch_AndItsDataCrosses()
         {
-            string emuDir = Environment.GetEnvironmentVariable("X25EMU_DIR") ?? CrossEnvCClientToCSharpSwitchTests.DefaultEmuDir;
+            string emuDir = CrossEnvCClientToCSharpSwitchTests.EmuDir();
             string hostIp = CrossEnvCClientToCSharpSwitchTests.HostAddressForWsl();
             if (string.IsNullOrWhiteSpace(hostIp))
             {
@@ -94,7 +94,7 @@ namespace RetroIO.Protocols.X25.Tests
         [Test]
         public void CSharpInitiator_IsAcceptedByTheX25emuSwitch_AndThePvcCarriesData()
         {
-            string emuDir = Environment.GetEnvironmentVariable("X25EMU_DIR") ?? CrossEnvCClientToCSharpSwitchTests.DefaultEmuDir;
+            string emuDir = CrossEnvCClientToCSharpSwitchTests.EmuDir();
 
             // x25emu: PVC channel 1 on XOT port 0 joined to channel 1 on XOT port 1. Window 2, packet 128 on both, the
             // same as the C# end, so the flow-control check (0x18) passes.

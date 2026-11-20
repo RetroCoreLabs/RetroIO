@@ -30,7 +30,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class FfsOffsetFilesystemTests
     {
-        private const string NdixImagePath = @"E:\Dev\Ronny\NDIX-C\rootfs_mkproto.img";
+        private static readonly string NdixImagePath = TestData.FromVariable(TestData.NdixDirectoryVariable, "rootfs_mkproto.img");
 
         /// <summary>
         /// Filesystem base: 90 sectors of 1024 bytes (one di70 cylinder).

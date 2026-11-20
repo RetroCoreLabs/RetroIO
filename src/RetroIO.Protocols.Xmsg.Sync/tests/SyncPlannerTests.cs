@@ -28,9 +28,15 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
     public sealed class SyncPlannerTests
     {
         /// <summary>
+        /// A root folder of this machine (the system temp folder), so no drive letter is written into
+        /// the tests. The paths under it are only compared as strings, never touched on disk.
+        /// </summary>
+        private static readonly string Root = System.IO.Path.GetTempPath().TrimEnd('\\', '/');
+
+        /// <summary>
         /// The folder the tests map. Never touched on disk - the planner only compares strings.
         /// </summary>
-        private const string LocalFolder = "E:\\work\\proj";
+        private static readonly string LocalFolder = Root + "\\work\\proj";
 
         /// <summary>
         /// A file that is not on the machine is created, with the name QUOTED.
@@ -358,14 +364,14 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         {
             SyncFolderMap map = new SyncFolderMap();
             SyncFolderMapping mine = new SyncFolderMapping(LocalFolder, "D102", "SYSTEM");
-            SyncFolderMapping other = new SyncFolderMapping("E:\\work\\other", "D102", "GUEST");
+            SyncFolderMapping other = new SyncFolderMapping(Root + "\\work\\other", "D102", "GUEST");
             map.Add(mine);
             map.Add(other);
 
             SyncPlanner planner = new SyncPlanner(map, new SyncLedger());
 
             LocalFileState stray = new LocalFileState(
-                "E:\\work\\other\\HELLO.SYMB", new byte[] { 1 });
+                Root + "\\work\\other\\HELLO.SYMB", new byte[] { 1 });
 
             SyncAction[] plan = planner.Plan(
                 mine, new LocalFileState[] { stray }, new RemoteFileState[0]);

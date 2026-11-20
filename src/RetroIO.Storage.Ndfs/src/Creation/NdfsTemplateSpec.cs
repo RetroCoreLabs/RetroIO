@@ -160,7 +160,7 @@ namespace RetroIO.Storage.Ndfs.Creation
         ///
         /// The physical drive is the Micropolis 1325 — a 5.25" ST-506/MFM drive, which on ND
         /// attaches to the WINCHESTER controller (IOX base 500 octal). MEASURED across 7 real
-        /// images (D:\ND\HDD\1325.img, c3_2024_*.img, tingo_raw_debug.img): device 36,864 pages
+        /// images (1325.img, c3_2024_*.img, tingo_raw_debug.img): device 36,864 pages
         /// = 75,497,472 bytes = exactly 72.0 MiB, declared capacity 36,396, spare 468 pages.
         ///
         /// BUG FIXED: FileBlocks used to be 36,360 — SMALLER than the 36,396 pages of capacity the
@@ -191,7 +191,7 @@ namespace RetroIO.Storage.Ndfs.Creation
         /// </summary>
         /// <remarks>
         /// DOCUMENTED against a real dump (NDInsight SINTRAN/Devices/SCSI/scsi-disk-format.md) and
-        /// verified byte-for-byte against the real image D:\ND\HDD\scsi-1.img:
+        /// verified byte-for-byte against the real image scsi-1.img:
         ///   raw = 129,312 blocks = 64,656 ND pages; usable filesystem = 61,036 pages;
         ///   the 3,620-page difference is a reserved top-of-disk region (defect/reallocation table,
         ///   disk-parameter block and spare-extent pool) unique to the ND-3201 SCSI controller.

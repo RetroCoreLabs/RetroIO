@@ -24,9 +24,15 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
     /// </remarks>
     public sealed class SyncPlannerExistenceTests
     {
+        /// <summary>
+        /// A root folder of this machine (the system temp folder), so no drive letter is written into
+        /// the tests. The paths under it are only compared as strings, never touched on disk.
+        /// </summary>
+        private static readonly string Root = System.IO.Path.GetTempPath().TrimEnd('\\', '/');
+
         private static SyncFolderMapping Mapping(SyncLedger ledger, out SyncPlanner planner)
         {
-            SyncFolderMapping mapping = new SyncFolderMapping("c:\\work", "D100", "SYSTEM");
+            SyncFolderMapping mapping = new SyncFolderMapping(Root + "\\work", "D100", "SYSTEM");
             mapping.Direction = SyncDirection.ToMachine;
 
             SyncFolderMap map = new SyncFolderMap();
@@ -55,7 +61,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncFolderMapping mapping = Mapping(ledger, out planner);
 
             SyncAction[] plan = planner.Plan(
-                mapping, One("c:\\work\\A.SYMB", 1), Array.Empty<RemoteFileState>());
+                mapping, One(Root + "\\work\\A.SYMB", 1), Array.Empty<RemoteFileState>());
 
             Assert.Single(plan);
             Assert.Equal(SyncActionKind.Create, plan[0].Kind);
@@ -72,14 +78,14 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         public void WithNoListingAFileAlreadyCarriedIsOverwritten()
         {
             SyncLedger ledger = new SyncLedger();
-            ledger.RecordTransfer("c:\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.ToMachine);
+            ledger.RecordTransfer(Root + "\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.ToMachine);
 
             SyncPlanner planner;
             SyncFolderMapping mapping = Mapping(ledger, out planner);
 
             // Edited since - a different hash, so it does need carrying.
             SyncAction[] plan = planner.Plan(
-                mapping, One("c:\\work\\A.SYMB", 2), Array.Empty<RemoteFileState>());
+                mapping, One(Root + "\\work\\A.SYMB", 2), Array.Empty<RemoteFileState>());
 
             Assert.Single(plan);
             Assert.Equal(SyncActionKind.Overwrite, plan[0].Kind);
@@ -96,13 +102,13 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         public void AFilePulledFromTheMachineCountsAsExisting()
         {
             SyncLedger ledger = new SyncLedger();
-            ledger.RecordTransfer("c:\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.FromMachine);
+            ledger.RecordTransfer(Root + "\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.FromMachine);
 
             SyncPlanner planner;
             SyncFolderMapping mapping = Mapping(ledger, out planner);
 
             SyncAction[] plan = planner.Plan(
-                mapping, One("c:\\work\\A.SYMB", 2), Array.Empty<RemoteFileState>());
+                mapping, One(Root + "\\work\\A.SYMB", 2), Array.Empty<RemoteFileState>());
 
             Assert.Single(plan);
             Assert.Equal(SyncActionKind.Overwrite, plan[0].Kind);
@@ -120,7 +126,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         public void ARealListingOverrulesTheLedger()
         {
             SyncLedger ledger = new SyncLedger();
-            ledger.RecordTransfer("c:\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.ToMachine);
+            ledger.RecordTransfer(Root + "\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.ToMachine);
 
             SyncPlanner planner;
             SyncFolderMapping mapping = Mapping(ledger, out planner);
@@ -131,7 +137,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
                 new RemoteFileState("SOMETHINGELSE", "SYMB"),
             };
 
-            SyncAction[] plan = planner.Plan(mapping, One("c:\\work\\A.SYMB", 2), listing);
+            SyncAction[] plan = planner.Plan(mapping, One(Root + "\\work\\A.SYMB", 2), listing);
 
             Assert.Single(plan);
             Assert.Equal(SyncActionKind.Create, plan[0].Kind);
@@ -153,7 +159,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
                 new RemoteFileState("A", "SYMB"),
             };
 
-            SyncAction[] plan = planner.Plan(mapping, One("c:\\work\\A.SYMB", 2), listing);
+            SyncAction[] plan = planner.Plan(mapping, One(Root + "\\work\\A.SYMB", 2), listing);
 
             Assert.Single(plan);
             Assert.Equal(SyncActionKind.Overwrite, plan[0].Kind);
@@ -166,13 +172,13 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         public void UnchangedContentIsStillNotCarried()
         {
             SyncLedger ledger = new SyncLedger();
-            ledger.RecordTransfer("c:\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.ToMachine);
+            ledger.RecordTransfer(Root + "\\work\\A.SYMB", new byte[] { 1 }, SyncDirection.ToMachine);
 
             SyncPlanner planner;
             SyncFolderMapping mapping = Mapping(ledger, out planner);
 
             SyncAction[] plan = planner.Plan(
-                mapping, One("c:\\work\\A.SYMB", 1), Array.Empty<RemoteFileState>());
+                mapping, One(Root + "\\work\\A.SYMB", 1), Array.Empty<RemoteFileState>());
 
             Assert.Empty(plan);
         }

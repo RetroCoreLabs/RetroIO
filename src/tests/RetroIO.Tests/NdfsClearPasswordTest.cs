@@ -18,7 +18,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class NdfsClearPasswordTest
     {
-        private static string TEST_IMAGE => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\FLOPPY-360KB.img");
+        private static string TEST_IMAGE => TestData.Demo("ndfs/FLOPPY-360KB.img");
 
         [Test]
         [Category("NDFS")]

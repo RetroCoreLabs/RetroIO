@@ -15,7 +15,7 @@ namespace RetroIO.Storage.Local.FFS.Core
     /// Handles inode location calculations and caching.
     ///
     /// REFERENCE: SunOS 3.4 source code
-    /// File: D:\data\Torrent2\sunos_3.4_src\squashfs-root\sun\sys\ufs\fs.h
+    /// File: sys/ufs/fs.h
     ///
     /// Key macros from fs.h:
     /// - INOPB(fs): fs->fs_inopb (number of inodes per block)

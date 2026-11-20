@@ -94,7 +94,8 @@ internal static class HostPathResolver
         return drive + joined;
     }
 
-    // Splits "C:/x" into drive "C:", rooted true, rest "x". The drive is empty when there is none.
+    // Splits a path that starts with a drive letter and a colon into that drive (letter plus colon),
+    // whether a slash follows it (rooted), and the rest. The drive is empty when there is none.
     private static void SplitRoot(string path, out string drive, out bool rooted, out string rest)
     {
         drive = string.Empty;

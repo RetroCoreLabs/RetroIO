@@ -20,7 +20,7 @@ namespace RetroIO.Tests.Commodore
         [Test]
         public void Mount_AussieGamesD81_ShouldSucceed()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\d81\Die_Hard_1_1989_Activision.d81");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "d81/Die_Hard_1_1989_Activision.d81");
 
             if (!File.Exists(testImagePath))
             {

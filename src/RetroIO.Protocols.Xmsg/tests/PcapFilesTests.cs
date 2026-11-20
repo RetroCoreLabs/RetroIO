@@ -41,7 +41,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         [InlineData(false)]
         public void WhenTheItemIsFound_ItIsReturnedUnchanged(bool optional)
         {
-            string found = @"E:\somewhere\pcap";
+            string found = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "somewhere", "pcap");
 
             Assert.Equal(found, PcapFiles.Apply(found, optional, "anything"));
         }
@@ -92,7 +92,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         [Fact]
         public void WhenTheNamedFolderDoesNotExist_ItThrowsRatherThanFallingBack()
         {
-            string missing = @"E:\this-path-does-not-exist-" + nameof(PcapFilesTests);
+            string missing = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "this-path-does-not-exist-" + nameof(PcapFilesTests));
 
             InvalidOperationException error = Assert.Throws<InvalidOperationException>(
                 () => PcapFiles.CheckNamedFolder(missing, false));
@@ -107,7 +107,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
         [Fact]
         public void WhenTheNamedFolderExistsOrIsUnset_ItDoesNotThrow()
         {
-            PcapFiles.CheckNamedFolder(@"E:\somewhere", true);
+            PcapFiles.CheckNamedFolder(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "somewhere"), true);
             PcapFiles.CheckNamedFolder(null, false);
             PcapFiles.CheckNamedFolder(string.Empty, false);
         }

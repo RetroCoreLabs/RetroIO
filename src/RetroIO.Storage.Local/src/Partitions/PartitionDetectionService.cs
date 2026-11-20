@@ -50,7 +50,7 @@ namespace RetroIO.Storage.Local.Partitions
         public PartitionTableType TableType { get; set; }
 
         /// <summary>
-        /// Recommended URN for mounting this partition (e.g., "bsd:///E:/disk.img#a").
+        /// Recommended URN for mounting this partition (e.g., "bsd:///images/disk.img#a").
         /// </summary>
         public string RecommendedUrn { get; set; } = "";
 

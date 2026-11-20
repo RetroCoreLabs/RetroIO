@@ -43,7 +43,7 @@
 .EXAMPLE
   .\build.ps1
   .\build.ps1 -Configuration Debug -SkipTests
-  .\build.ps1 -Runtime linux-x64 -Output E:\drop
+  .\build.ps1 -Runtime linux-x64 -Output ..\drop
 #>
 param(
     [ValidateSet('Release', 'Debug')]

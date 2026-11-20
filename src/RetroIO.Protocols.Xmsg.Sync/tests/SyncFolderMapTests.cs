@@ -22,6 +22,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
     /// </remarks>
     public sealed class SyncFolderMapTests
     {
+        /// <summary>
+        /// A root folder of this machine (the system temp folder), so no drive letter is written into
+        /// the tests. The paths under it are only compared as strings, never touched on disk.
+        /// </summary>
+        private static readonly string Root = System.IO.Path.GetTempPath().TrimEnd('\\', '/');
+
         private static SyncFolderMap MapWith(SyncFolderMapping mapping)
         {
             SyncFolderMap map = new SyncFolderMap();
@@ -35,15 +41,15 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void OnlyACreatedFileIsQuoted()
         {
-            SyncFolderMap map = MapWith(new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM"));
+            SyncFolderMap map = MapWith(new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM"));
 
             string spec;
             string problem;
 
-            Assert.True(map.TryResolve("E:\\work\\proj\\BLKT7777.DATA", true, out spec, out problem));
+            Assert.True(map.TryResolve(Root + "\\work\\proj\\BLKT7777.DATA", true, out spec, out problem));
             Assert.Equal("D102(SYSTEM).\"BLKT7777:DATA\"", spec);
 
-            Assert.True(map.TryResolve("E:\\work\\proj\\BLKT7777.DATA", false, out spec, out problem));
+            Assert.True(map.TryResolve(Root + "\\work\\proj\\BLKT7777.DATA", false, out spec, out problem));
             Assert.Equal("D102(SYSTEM).BLKT7777:DATA", spec);
         }
 
@@ -76,11 +82,11 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void ASubfolderFileIsRefusedByDefault()
         {
-            SyncFolderMap map = MapWith(new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM"));
+            SyncFolderMap map = MapWith(new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM"));
 
             string spec;
             string problem;
-            bool ok = map.TryResolve("E:\\work\\proj\\src\\LEX.SYMB", true, out spec, out problem);
+            bool ok = map.TryResolve(Root + "\\work\\proj\\src\\LEX.SYMB", true, out spec, out problem);
 
             Assert.False(ok);
             Assert.Equal(string.Empty, spec);
@@ -93,14 +99,14 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void FlatteningIsOptIn()
         {
-            SyncFolderMapping mapping = new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM");
+            SyncFolderMapping mapping = new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM");
             mapping.Subfolders = SyncSubfolderPolicy.FlattenAll;
 
             string spec;
             string problem;
 
             Assert.True(MapWith(mapping).TryResolve(
-                "E:\\work\\proj\\src\\LEX.SYMB", false, out spec, out problem));
+                Root + "\\work\\proj\\src\\LEX.SYMB", false, out spec, out problem));
             Assert.Equal("D102(SYSTEM).LEX:SYMB", spec);
         }
 
@@ -108,17 +114,17 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         /// A neighbouring folder with a shared prefix is NOT covered by the mapping.
         /// </summary>
         /// <remarks>
-        /// Without the separator check, <c>E:\work\proj2</c> would match a mapping for
-        /// <c>E:\work\proj</c> and its files would be carried to the wrong user - a silent wrong
+        /// Without the separator check, <c>work/proj2</c> would match a mapping for
+        /// <c>work/proj</c> and its files would be carried to the wrong user - a silent wrong
         /// destination rather than a visible failure.
         /// </remarks>
         [Fact]
         public void AFolderWithASharedPrefixIsNotCovered()
         {
-            SyncFolderMap map = MapWith(new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM"));
+            SyncFolderMap map = MapWith(new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM"));
 
-            Assert.Null(map.FindMapping("E:\\work\\proj2\\X.DATA"));
-            Assert.NotNull(map.FindMapping("E:\\work\\proj\\X.DATA"));
+            Assert.Null(map.FindMapping(Root + "\\work\\proj2\\X.DATA"));
+            Assert.NotNull(map.FindMapping(Root + "\\work\\proj\\X.DATA"));
         }
 
         /// <summary>
@@ -128,10 +134,10 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         public void TheMostSpecificMappingWins()
         {
             SyncFolderMap map = new SyncFolderMap();
-            map.Add(new SyncFolderMapping("E:\\work", "D102", "SYSTEM"));
-            map.Add(new SyncFolderMapping("E:\\work\\proj", "D102", "RONNY"));
+            map.Add(new SyncFolderMapping(Root + "\\work", "D102", "SYSTEM"));
+            map.Add(new SyncFolderMapping(Root + "\\work\\proj", "D102", "RONNY"));
 
-            SyncFolderMapping? found = map.FindMapping("E:\\work\\proj\\X.DATA");
+            SyncFolderMapping? found = map.FindMapping(Root + "\\work\\proj\\X.DATA");
 
             Assert.NotNull(found);
             Assert.Equal("RONNY", found!.User);
@@ -147,7 +153,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void AMappingPullsNothingUntilTypesAreNamed()
         {
-            SyncFolderMapping mapping = new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM");
+            SyncFolderMapping mapping = new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM");
 
             Assert.Empty(mapping.PullTypes);
             Assert.False(mapping.PullsType("BPUN"));
@@ -173,7 +179,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void RemoteDeleteIsOffByDefault()
         {
-            SyncFolderMapping mapping = new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM");
+            SyncFolderMapping mapping = new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM");
 
             Assert.False(mapping.DeleteRemoteWhenLocalDeleted);
             Assert.Equal(SyncDirection.ToMachine, mapping.Direction);
@@ -186,12 +192,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void AnImpossibleNameIsRefusedWithItsReason()
         {
-            SyncFolderMap map = MapWith(new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM"));
+            SyncFolderMap map = MapWith(new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM"));
 
             string spec;
             string problem;
             bool ok = map.TryResolve(
-                "E:\\work\\proj\\PROGRAM-WITH-A-VERY-LONG-NAME.SYMB", true, out spec, out problem);
+                Root + "\\work\\proj\\PROGRAM-WITH-A-VERY-LONG-NAME.SYMB", true, out spec, out problem);
 
             Assert.False(ok);
             Assert.NotEqual(string.Empty, problem);
@@ -203,12 +209,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void AnUnmappedPathIsRefused()
         {
-            SyncFolderMap map = MapWith(new SyncFolderMapping("E:\\work\\proj", "D102", "SYSTEM"));
+            SyncFolderMap map = MapWith(new SyncFolderMapping(Root + "\\work\\proj", "D102", "SYSTEM"));
 
             string spec;
             string problem;
 
-            Assert.False(map.TryResolve("E:\\elsewhere\\X.DATA", true, out spec, out problem));
+            Assert.False(map.TryResolve(Root + "\\elsewhere\\X.DATA", true, out spec, out problem));
             Assert.Contains("No mapping", problem);
         }
 
@@ -223,9 +229,9 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             Assert.Throws<ArgumentException>(
                 () => new SyncFolderMapping(string.Empty, "D102", "SYSTEM"));
             Assert.Throws<ArgumentException>(
-                () => new SyncFolderMapping("E:\\work", "D102", string.Empty));
+                () => new SyncFolderMapping(Root + "\\work", "D102", string.Empty));
 
-            SyncFolderMapping mapping = new SyncFolderMapping("E:\\work", "D102", "SYSTEM");
+            SyncFolderMapping mapping = new SyncFolderMapping(Root + "\\work", "D102", "SYSTEM");
             Assert.Throws<ArgumentException>(() => mapping.AddPullType("TOOLONG"));
         }
 
@@ -235,12 +241,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void ATrailingSeparatorIsIgnored()
         {
-            SyncFolderMap map = MapWith(new SyncFolderMapping("E:\\work\\proj\\", "D102", "SYSTEM"));
+            SyncFolderMap map = MapWith(new SyncFolderMapping(Root + "\\work\\proj\\", "D102", "SYSTEM"));
 
             string spec;
             string problem;
 
-            Assert.True(map.TryResolve("E:\\work\\proj\\X.DATA", false, out spec, out problem));
+            Assert.True(map.TryResolve(Root + "\\work\\proj\\X.DATA", false, out spec, out problem));
             Assert.Equal("D102(SYSTEM).X:DATA", spec);
         }
     }

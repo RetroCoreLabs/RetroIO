@@ -20,7 +20,7 @@ namespace RetroIO.Tests.PC
         [Test]
         public void Mount_720K_FAT12_ShouldSucceed()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\img\i1.img");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "img/i1.img");
 
             if (!File.Exists(testImagePath))
             {

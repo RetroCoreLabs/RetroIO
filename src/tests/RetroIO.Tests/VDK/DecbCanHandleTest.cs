@@ -22,7 +22,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void CanHandle_SyzygyDsk_Debug()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\dsk\syzygy.dsk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "dsk/syzygy.dsk");
 
             if (!File.Exists(testImagePath))
             {

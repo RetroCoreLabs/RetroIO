@@ -31,7 +31,7 @@ namespace RetroIO.Tests
         [SetUp]
         public void Setup()
         {
-            _testImagePath1 = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\WD0.img");
+            _testImagePath1 = TestData.Demo("ndfs/WD0.img");
             _factory = new DriverFactory();
             _factory.Register(new NdfsDriverProvider());
         }

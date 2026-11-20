@@ -349,8 +349,8 @@ namespace RetroIO.Protocols.Xmsg.Sync
         /// <c>true</c> when the path is the folder or below it.
         /// </returns>
         /// <remarks>
-        /// The separator check matters: without it <c>E:\work\project2\x</c> would count as being
-        /// inside a mapping for <c>E:\work\project</c>, and the file would be carried to the wrong
+        /// The separator check matters: without it <c>work/project2/x</c> would count as being
+        /// inside a mapping for <c>work/project</c>, and the file would be carried to the wrong
         /// user.
         /// </remarks>
         private static bool IsUnder(string path, string folder)

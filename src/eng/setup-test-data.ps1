@@ -1,10 +1,13 @@
 # Creates the directory junctions that make today's test data appear where the walk-up code expects it.
 # Nothing is copied. See Migration/RetroIO code migration.md section 8. Idempotent.
+# Every folder is named on the command line; the places differ from machine to machine. Example:
+#   .\setup-test-data.ps1 -RetroFsImages <RetroFS repo>\demo\test-images -XmsgDoc <NDInsight repo>\SINTRAN\XMSG\DOC `
+#                          -X25Pcap <X25Emulator repo>\pcap -RclRoot <folder that holds the RetroIO checkout>
 param(
-  [string]$RetroFsImages = 'E:\Dev\Ronny\RetroFS\demo\test-images',
-  [string]$XmsgDoc       = 'E:\Dev\Ronny\NDInsight\SINTRAN\XMSG\DOC',
-  [string]$X25Pcap       = 'E:\Dev\Ronny\X25Emulator\pcap',
-  [string]$RclRoot       = 'E:\Dev\RCL'
+  [Parameter(Mandatory = $true)][string]$RetroFsImages,
+  [Parameter(Mandatory = $true)][string]$XmsgDoc,
+  [Parameter(Mandatory = $true)][string]$X25Pcap,
+  [Parameter(Mandatory = $true)][string]$RclRoot
 )
 # Every junction sits BESIDE the repos, never inside RetroIO. The test code walks UP from its own
 # binary to the drive root looking for these folder names, so one level above the repo is found

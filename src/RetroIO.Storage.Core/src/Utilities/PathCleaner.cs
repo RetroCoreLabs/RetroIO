@@ -19,10 +19,10 @@ namespace RetroIO.Storage.Core.Utilities
         /// Extracts a clean file path from a URN by removing scheme and fragment.
         /// </summary>
         /// <param name="uri">
-        /// URN (e.g., "bsd:///E:/path#a", "file:///C:/test.txt")
+        /// URN (e.g., "bsd:///images/disk.img#a", "file:///images/test.txt"; a Windows drive letter may follow the third slash)
         /// </param>
         /// <returns>
-        /// Clean file path (e.g., "E:/path", "C:/test.txt")
+        /// Clean file path (e.g., "/images/disk.img", "/images/test.txt"; on Windows a drive letter keeps no leading slash)
         /// </returns>
         public static string ExtractFilePathFromUri(string uri)
         {
@@ -53,10 +53,10 @@ namespace RetroIO.Storage.Core.Utilities
         /// Normalizes a file path by converting separators and removing invalid prefixes.
         /// </summary>
         /// <param name="path">
-        /// Input path (e.g., "/E:/path", "/C:/folder/file.txt", "/home/user/file")
+        /// Input path: a slash, a drive letter and a colon, then the rest; or a plain rooted path such as "/images/file"
         /// </param>
         /// <returns>
-        /// Normalized path (e.g., "E:/path", "C:/folder/file.txt", "/home/user/file")
+        /// Normalized path: on Windows the slash in front of a drive letter is removed; a plain rooted path such as "/images/file" is returned as it is
         /// </returns>
         public static string NormalizePath(string path)
         {
@@ -66,14 +66,14 @@ namespace RetroIO.Storage.Core.Utilities
             // Windows-specific: Remove leading slash for Windows drive letters only
             if (OperatingSystem.IsWindows())
             {
-                // Handle cases like "/E:/path" -> "E:/path"
+                // A slash, a drive letter and a colon: drop the slash
                 if (path.Length >= 3 && path[0] == '/' && char.IsLetter(path[1]) && path[2] == ':')
                 {
                     path = path.Substring(1);
                 }
 
                 // Handle double leading slash for custom schemes on Windows
-                // Handles cases like "//E:/path" -> "E:/path" (from bsd:///E:/path)
+                // Two slashes, a drive letter and a colon (left by a URN with three slashes): drop both slashes
                 if (path.Length >= 4 && path[0] == '/' && path[1] == '/' && char.IsLetter(path[2]) && path[3] == ':')
                 {
                     path = path.Substring(2);
@@ -139,7 +139,7 @@ namespace RetroIO.Storage.Core.Utilities
         /// Optional fragment (e.g., "a", "partition1")
         /// </param>
         /// <returns>
-        /// Complete URN (e.g., "bsd:///E:/path#a")
+        /// Complete URN (e.g., "bsd:///images/disk.img#a")
         /// </returns>
         public static string CreateUri(string scheme, string path, string? fragment = null)
         {

@@ -19,7 +19,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class NdfsBootLoaderTingoTest
     {
-        private static string TEST_IMAGE => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\tingo_raw_debug.img");
+        private static string TEST_IMAGE => TestData.FromVariable(TestData.TestImagesVariable, "ndfs/tingo_raw_debug.img");
 
         [Test]
         [Category("NDFS")]

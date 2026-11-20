@@ -25,6 +25,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
     /// </remarks>
     public sealed class SyncLedgerFileTests
     {
+        /// <summary>
+        /// A root folder of this machine (the system temp folder), so no drive letter is written into
+        /// the tests. The paths under it are only compared as strings, never touched on disk.
+        /// </summary>
+        private static readonly string Root = System.IO.Path.GetTempPath().TrimEnd('\\', '/');
+
         private static string TempPath()
         {
             return Path.Combine(Path.GetTempPath(), "xmsg-ledger-" + Guid.NewGuid().ToString("N") + ".state");
@@ -42,12 +48,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
                 byte[] hash = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
 
                 SyncLedger saved = new SyncLedger();
-                saved.RecordTransfer("c:\\work\\a.symb", hash, SyncDirection.ToMachine);
+                saved.RecordTransfer(Root + "\\work\\a.symb", hash, SyncDirection.ToMachine);
                 SyncLedgerFile.Save(saved, path);
 
                 SyncLedger loaded = SyncLedgerFile.Load(path);
 
-                Assert.False(loaded.NeedsTransfer("c:\\work\\a.symb", hash));
+                Assert.False(loaded.NeedsTransfer(Root + "\\work\\a.symb", hash));
             }
             finally
             {
@@ -70,12 +76,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             try
             {
                 SyncLedger saved = new SyncLedger();
-                saved.RecordTransfer("c:\\work\\a.symb", new byte[] { 1, 1 }, SyncDirection.ToMachine);
+                saved.RecordTransfer(Root + "\\work\\a.symb", new byte[] { 1, 1 }, SyncDirection.ToMachine);
                 SyncLedgerFile.Save(saved, path);
 
                 SyncLedger loaded = SyncLedgerFile.Load(path);
 
-                Assert.True(loaded.NeedsTransfer("c:\\work\\a.symb", new byte[] { 2, 2 }));
+                Assert.True(loaded.NeedsTransfer(Root + "\\work\\a.symb", new byte[] { 2, 2 }));
             }
             finally
             {
@@ -93,13 +99,13 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             try
             {
                 SyncLedger saved = new SyncLedger();
-                saved.RecordTransfer("c:\\work\\out.lst", new byte[] { 7 }, SyncDirection.FromMachine);
+                saved.RecordTransfer(Root + "\\work\\out.lst", new byte[] { 7 }, SyncDirection.FromMachine);
                 SyncLedgerFile.Save(saved, path);
 
                 SyncLedger loaded = SyncLedgerFile.Load(path);
 
                 SyncDirection direction;
-                Assert.True(loaded.TryGetDirection("c:\\work\\out.lst", out direction));
+                Assert.True(loaded.TryGetDirection(Root + "\\work\\out.lst", out direction));
                 Assert.Equal(SyncDirection.FromMachine, direction);
             }
             finally
@@ -121,7 +127,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             string path = TempPath();
             try
             {
-                string awkward = "c:\\work\\odd|name.symb";
+                string awkward = Root + "\\work\\odd|name.symb";
 
                 SyncLedger saved = new SyncLedger();
                 saved.RecordTransfer(awkward, new byte[] { 5 }, SyncDirection.ToMachine);
@@ -163,15 +169,15 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             {
                 File.WriteAllLines(path, new string[]
                 {
-                    "1|DEAD|c:\\work\\good.symb",
+                    "1|DEAD|" + Root + "\\work\\good.symb",
                     "this line is nonsense",
-                    "1|NOTHEX|c:\\work\\bad.symb",
+                    "1|NOTHEX|" + Root + "\\work\\bad.symb",
                 });
 
                 SyncLedger loaded = SyncLedgerFile.Load(path);
 
                 Assert.Equal(1, loaded.Count);
-                Assert.False(loaded.NeedsTransfer("c:\\work\\good.symb", new byte[] { 0xDE, 0xAD }));
+                Assert.False(loaded.NeedsTransfer(Root + "\\work\\good.symb", new byte[] { 0xDE, 0xAD }));
             }
             finally
             {

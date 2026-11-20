@@ -57,17 +57,17 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         public void ExistenceLearnedFromARefusalSurvivesARestart()
         {
             SyncLedger before = new SyncLedger();
-            before.RecordRemoteExistence(@"C:\watch\THING.TXT");
+            before.RecordRemoteExistence(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT"));
 
             SyncLedgerFile.Save(before, _path);
             SyncLedger after = SyncLedgerFile.Load(_path);
 
-            Assert.True(after.KnownToExistRemotely(@"C:\watch\THING.TXT"));
+            Assert.True(after.KnownToExistRemotely(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT")));
 
             // Still not a transfer: the content question stays open, so the file is still due to
             // be sent. Recording it as carried would drop it for good.
-            Assert.False(after.HasCarried(@"C:\watch\THING.TXT"));
-            Assert.True(after.NeedsTransfer(@"C:\watch\THING.TXT", new byte[] { 1, 2, 3 }));
+            Assert.False(after.HasCarried(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT")));
+            Assert.True(after.NeedsTransfer(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT"), new byte[] { 1, 2, 3 }));
         }
 
         /// <summary>
@@ -81,9 +81,9 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         public void ACarriedFileIsNotAlsoWrittenAsExistenceOnly()
         {
             SyncLedger before = new SyncLedger();
-            before.RecordTransfer(@"C:\watch\A.TXT", new byte[] { 9 }, SyncDirection.ToMachine);
-            before.RecordRemoteExistence(@"C:\watch\A.TXT");
-            before.RecordRemoteExistence(@"C:\watch\B.TXT");
+            before.RecordTransfer(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "A.TXT"), new byte[] { 9 }, SyncDirection.ToMachine);
+            before.RecordRemoteExistence(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "A.TXT"));
+            before.RecordRemoteExistence(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "B.TXT"));
 
             SyncLedgerFile.Save(before, _path);
 
@@ -102,8 +102,8 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             Assert.Equal(1, existenceLines);
 
             SyncLedger after = SyncLedgerFile.Load(_path);
-            Assert.True(after.KnownToExistRemotely(@"C:\watch\A.TXT"));
-            Assert.True(after.KnownToExistRemotely(@"C:\watch\B.TXT"));
+            Assert.True(after.KnownToExistRemotely(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "A.TXT")));
+            Assert.True(after.KnownToExistRemotely(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "B.TXT")));
         }
 
         /// <summary>
@@ -118,13 +118,13 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         {
             File.WriteAllLines(_path, new string[]
             {
-                "0|0102|C:\\watch\\OLD.TXT",
+                "0|0102|" + System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "OLD.TXT"),
             });
 
             SyncLedger loaded = SyncLedgerFile.Load(_path);
 
-            Assert.True(loaded.HasCarried(@"C:\watch\OLD.TXT"));
-            Assert.True(loaded.KnownToExistRemotely(@"C:\watch\OLD.TXT"));
+            Assert.True(loaded.HasCarried(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "OLD.TXT")));
+            Assert.True(loaded.KnownToExistRemotely(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "OLD.TXT")));
         }
 
         /// <summary>
@@ -137,7 +137,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         [Fact]
         public void APathContainingTheSeparatorRoundTrips()
         {
-            string awkward = @"C:\watch\odd|name.TXT";
+            string awkward = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "odd|name.TXT");
 
             SyncLedger before = new SyncLedger();
             before.RecordRemoteExistence(awkward);

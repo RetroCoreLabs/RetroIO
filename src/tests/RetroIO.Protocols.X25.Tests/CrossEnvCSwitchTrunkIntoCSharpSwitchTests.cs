@@ -69,7 +69,7 @@ namespace RetroIO.Protocols.X25.Tests
         [Test]
         public void CSwitchTrunk_CallsIntoTheCSharpSwitch_AndTheDataArrives()
         {
-            string emuDir = Environment.GetEnvironmentVariable("X25EMU_DIR") ?? CrossEnvCClientToCSharpSwitchTests.DefaultEmuDir;
+            string emuDir = CrossEnvCClientToCSharpSwitchTests.EmuDir();
             string hostIp = CrossEnvCClientToCSharpSwitchTests.HostAddressForWsl();
             if (string.IsNullOrWhiteSpace(hostIp))
             {

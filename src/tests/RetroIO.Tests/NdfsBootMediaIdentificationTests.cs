@@ -17,9 +17,9 @@ namespace RetroIO.Tests
     /// </summary>
     /// <remarks>
     /// The fixtures are the genuine bootstraps embedded in <see cref="NdfsBootBlobs"/> — the SMD blob
-    /// is byte-identical to D:\ND\HDD\BIGDISK0-K.IMG (PACK-ONE), the Winchester blob to 1325.img, and
+    /// is byte-identical to BIGDISK0-K.IMG (PACK-ONE), the Winchester blob to 1325.img, and
     /// the SCSI blob to scsi-1.img (provenance confirmed by SHA-256 in
-    /// E:\Dev\Ronny\NDInsight\tools\boot-floppy\DISC-BOOT-SECTOR-ANATOMY.md §1.1). Using the compiled-in
+    /// the NDInsight repository, tools/boot-floppy/DISC-BOOT-SECTOR-ANATOMY.md §1.1). Using the compiled-in
     /// blobs keeps the test self-contained (no external .bin files, no NuGet-relative path reads),
     /// matching the repo convention that the boot regions live as base64 inside the assembly.
     ///

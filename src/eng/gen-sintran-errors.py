@@ -9,7 +9,7 @@ what SINTRAN error 137 says. The source file IS the authority, so it is read.
 
 SOURCE
 ------
-E:\\Dev\\Ronny\\NDIX-C\\baseline\\bin\\cps\\systemerrors.h - NDIX release 3, stamped
+bin/cps/systemerrors.h in the NDIX source tree - NDIX release 3, stamped
 "3.1 88/08/12". It holds two things:
 
   #define ERR30  "NO SUCH FILE NAME"     /* 046 */      <- macro to text
@@ -21,14 +21,14 @@ differ the table wins, because the table is what NDIX itself indexes.
 
 USAGE
 -----
-    python SRC/tools/gen-sintran-errors.py
+    python src/eng/gen-sintran-errors.py <NDIX source tree>/bin/cps/systemerrors.h
 """
 
 import re
 import sys
 from pathlib import Path
 
-SOURCE = Path(r"E:\Dev\Ronny\NDIX-C\baseline\bin\cps\systemerrors.h")
+# The source file is named on the command line: where it lives differs from machine to machine.
 TARGET = Path(__file__).resolve().parent.parent / "Xmsg.Protocol" / "Errors" / "SintranErrors.cs"
 
 # ND's dispositions, mapped onto ours. Same names as the XMSG import already uses.
@@ -72,7 +72,9 @@ def escape(text):
 
 
 def main():
-    texts, rows = read_source(SOURCE)
+    if len(sys.argv) != 2:
+        sys.exit("usage: gen-sintran-errors.py <path to systemerrors.h>")
+    texts, rows = read_source(Path(sys.argv[1]))
 
     if not rows:
         sys.exit("no table rows parsed - has the file format changed?")

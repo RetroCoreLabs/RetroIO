@@ -15,6 +15,7 @@ using RetroIO.Storage.Local.BSD.Partitions;
 using RetroIO.Storage.Local.Drivers;
 using RetroIO.Storage.Local.Sun.Partitions;
 using RetroIO.Storage.Local.V7.FileSystems;
+using RetroIO.Tests;
 
 namespace RetroIO.Storage.Local.Tests
 {
@@ -37,11 +38,11 @@ namespace RetroIO.Storage.Local.Tests
     public class DirectoryTraversalTests
     {
         // Test image paths
-        private const string BsdCleanInstall = @"E:\Dev\Ronny\BSD\Boot\1.FromTape\backup\clean_install";
-        private const string Bsd211Image = @"D:\211bsd.img";
-        private const string SunS20DiskImage = @"D:\sun2-s2.0-disk.img";
-        private const string SunS32DiskImage = @"D:\ND\HDD\sun2-sunos-3.2.img";
-        private const string SunS35DiskImage = @"D:\ND\HDD\SUN2.img";
+        private static readonly string BsdCleanInstall = TestData.FromVariable(TestData.BsdImagesVariable, "1.FromTape/backup/clean_install");
+        private static readonly string Bsd211Image = TestData.FromVariable(TestData.LooseImagesVariable, "211bsd.img");
+        private static readonly string SunS20DiskImage = TestData.FromVariable(TestData.LooseImagesVariable, "sun2-s2.0-disk.img");
+        private static readonly string SunS32DiskImage = TestData.FromVariable(TestData.HddImagesVariable, "sun2-sunos-3.2.img");
+        private static readonly string SunS35DiskImage = TestData.FromVariable(TestData.HddImagesVariable, "SUN2.img");
 
         /// <summary>
         /// Recursively traverses all directories in a filesystem and counts total files/directories.
