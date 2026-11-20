@@ -314,6 +314,8 @@ def source_stamp(source):
     to run --check, or on python being installed wherever the tests run.
     """
     raw = io.open(os.path.join(HERE, source), "rb").read()
+    # Line ends taken as LF: a CRLF checkout (the Windows build runner) must give the same stamp.
+    raw = raw.replace(b"\r\n", b"\n")
     return hashlib.sha256(raw).hexdigest()
 
 

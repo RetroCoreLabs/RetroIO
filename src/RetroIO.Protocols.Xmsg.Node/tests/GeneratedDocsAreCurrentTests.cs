@@ -129,10 +129,46 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// <returns>
         /// The lower-case hex SHA-256 of its bytes.
         /// </returns>
+        [Fact]
+        public void TheStamp_IsTheSame_WhetherTheCheckoutHasCrlfOrLf()
+        {
+            // The GitHub Windows runner checks text files out with CRLF; this machine has LF. The stamp in the
+            // page was written from LF bytes, so a hash of the raw CRLF bytes never matched (RetroIO build red on
+            // tad-wire.md from 2026-11-19 to 2026-11-20).
+            string lf = Path.Combine(Path.GetTempPath(), "retroio-stamp-lf-" + Guid.NewGuid().ToString("N") + ".json");
+            string crlf = Path.Combine(Path.GetTempPath(), "retroio-stamp-crlf-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                File.WriteAllText(lf, "{\n  \"a\": 1\n}\n");
+                File.WriteAllText(crlf, "{\r\n  \"a\": 1\r\n}\r\n");
+                Assert.Equal(HashOf(lf), HashOf(crlf));
+            }
+            finally
+            {
+                File.Delete(lf);
+                File.Delete(crlf);
+            }
+        }
+
         private static string HashOf(string path)
         {
+            // Line ends are taken as LF, the same as generate.py, so a CRLF checkout (the Windows build runner)
+            // hashes the same as the LF bytes the stamp was written from.
+            byte[] raw = File.ReadAllBytes(path);
+            byte[] lf = new byte[raw.Length];
+            int n = 0;
+            for (int i = 0; i < raw.Length; i++)
+            {
+                if (raw[i] == (byte)'\r' && i + 1 < raw.Length && raw[i + 1] == (byte)'\n')
+                {
+                    continue;
+                }
+
+                lf[n++] = raw[i];
+            }
+
             using SHA256 sha = SHA256.Create();
-            byte[] hash = sha.ComputeHash(File.ReadAllBytes(path));
+            byte[] hash = sha.ComputeHash(lf, 0, n);
 
             StringBuilder text = new StringBuilder(hash.Length * 2);
             for (int i = 0; i < hash.Length; i++)
