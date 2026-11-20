@@ -39,6 +39,54 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(HostScripts.Get("nothere"), Is.Null);
         }
 
+        /// <summary>
+        /// The SiteLine setting (not in the original; the script only) puts one line before the 1987 welcome text, and
+        /// changes nothing else: after that line the script sends exactly what the C# engine sends. Unset, it sends
+        /// nothing extra (every other test here runs without it).
+        /// </summary>
+        [Test]
+        public void SiteLine_IsOneLineBeforeTheWelcome_AndTheRestIsTheSame()
+        {
+            var settings = new AltosChatSettings();
+            var pair = new Pair(settings);
+
+            var site = new AltosChatActionList();
+            var hs = new ScriptedHostSettings { LineEnd = settings.LineEnd };
+            hs.Values["SiteLine"] = "Altos Chat System, Hamburg";
+            var host = new ScriptedHost(Script(), hs, new HostToList(site));
+            host.Start(T0);
+
+            pair.Apply(new Step(Op.Connect, 1, "anna", 0, "24227001"));
+            host.Connect(1, "anna", "24227001");
+
+            IReadOnlyList<AltosChatAction> plain = pair.Script.Items;
+            IReadOnlyList<AltosChatAction> withSite = site.Items;
+            Assert.That(withSite.Count, Is.EqualTo(plain.Count + 1), "one action more: the site line");
+
+            // The first send to the caller is the site line, then the original's welcome as before.
+            int at = -1;
+            for (int i = 0; i < withSite.Count; i++)
+            {
+                if (withSite[i].Kind == AltosChatActionKind.Send)
+                {
+                    at = i;
+                    break;
+                }
+            }
+
+            Assert.That(at, Is.GreaterThanOrEqualTo(0), "nothing sent to the caller");
+            Assert.That(Sent(withSite[at]), Does.StartWith("Altos Chat System, Hamburg"));
+            Assert.That(Sent(withSite[at + 1]), Does.StartWith("Welcome to the original, evergreen"));
+            for (int i = 0; i < plain.Count; i++)
+            {
+                AltosChatAction w = withSite[i < at ? i : i + 1];
+                Assert.That(SameAction(plain[i], w), Is.True, "action " + i + " differs: " + Show(plain[i]) + " / " + Show(w));
+            }
+        }
+
+        // The bytes of a send action as text (the chat speaks Latin-1).
+        private static string Sent(AltosChatAction a) => a.Data == null ? string.Empty : Encoding.Latin1.GetString(a.Data);
+
         /// <summary>A step given to both engines.</summary>
         private enum Op
         {

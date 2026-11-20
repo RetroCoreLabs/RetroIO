@@ -68,4 +68,7 @@ What happens when a script fails:
 ## Example
 
 `scripts/altos-chat.js` is the Altos CHAT 3.1 conference written against this API only. A test runs it and the
-C# `AltosChatEngine` side by side and checks they produce the same bytes, clears and log lines.
+C# `AltosChatEngine` side by side and checks they produce the same bytes, clears and log lines. Its settings are
+`MaxUsers`, `OutputLimitBytes`, `StartingNickname`, `WaitPauseMs` and `SiteLine`; the last is not in the original:
+one line sent before the 1987 welcome text to say which chat answered (for example `Altos Chat System, Hamburg`
+for a second chat beside the Munich one). The welcome text itself is never changed.

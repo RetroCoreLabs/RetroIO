@@ -9,7 +9,12 @@
 // C# comments do. Bugs a, b, d of the original are fixed and e guarded, bug c kept, exactly as in the C# engine.
 //
 // Settings (machine.settings, all strings): MaxUsers (30), OutputLimitBytes (4096), StartingNickname (guest),
-// WaitPauseMs (3000).
+// WaitPauseMs (3000), SiteLine (none).
+//
+// SiteLine is not in the original: one line printed before the 1987 welcome text, to say which machine answered
+// (e.g. "Altos Chat System, Hamburg" when a second chat runs on the Hamburg number beside the Munich one). The
+// welcome text itself stays the original's - its "Muenchen" is where the author worked, not where a chat stood.
+// Unset (the default), the script sends exactly what the C# engine sends.
 
 'use strict';
 
@@ -22,6 +27,7 @@ var maxUsers = intSetting('MaxUsers', 30);
 var outputLimit = intSetting('OutputLimitBytes', 4096);
 var startingNickname = cfg.StartingNickname === undefined ? 'guest' : cfg.StartingNickname;
 var waitPauseMs = intSetting('WaitPauseMs', 3000);
+var siteLine = cfg.SiteLine === undefined ? '' : String(cfg.SiteLine);
 
 if (maxUsers < 1) {
     throw new Error('MaxUsers must be at least 1.');
@@ -60,6 +66,11 @@ function onConnect(s) {
     };
     sessions.push(st);
     byId[s.id] = st;
+
+    // Not in the original: the SiteLine setting, when given (see the top of this file).
+    if (siteLine.length > 0) {
+        msg(st, siteLine + '\n');
+    }
 
     // chat.c:248-250, then chat.c:277.
     msg(st, 'Welcome to the original, evergreen\n');
