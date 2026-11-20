@@ -86,7 +86,7 @@ public sealed class FileServerCommandHandler
 
         EconetMessage? response;
 
-        // fs.c line 9911: with the MdfsFunctions flag clear every operation from 64 up, the PiBridge calls
+        // With the MdfsFunctions flag clear every operation from 64 up, the PiBridge calls
         // included, is answered with error 0xFF "Unsupported" before anything else is looked at.
         if (fsRequest.Opcode >= 64 && !_context.Configuration.MdfsFunctions)
             response = BuildReply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Unsupported, "Unsupported"));

@@ -72,8 +72,8 @@ public sealed class CatHeaderOperation : IFileServerOperation
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
         }
 
-        // PiFS (fs.c:10388): "$" names the DISC ROOT only; every other directory reports its own
-        // leaf. This used to report "$" for the user's HOME, which disagreed with PiFS and left the
+        // "$" names the DISC ROOT only; every other directory reports its own
+        // leaf. This used to report "$" for the user's HOME, which was wrong and left the
         // disc root printing its host folder name. Kept in step with
         // CatalogueEnumerator.WriteCatalogueDirName10 so *CAT's header and directory block agree.
         string tail = context.FileSystem.GetFileName(unixPath);

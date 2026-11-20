@@ -30,7 +30,7 @@ public static class EconetLogRedaction
 
     // Verbs of the form "<verb> <username> <password>" — the FINAL token is a password to mask.
     // Upper-case; matched case-insensitively. SETPASS (SYST sets another user's password) has the same
-    // shape as login, and PiFS logs it in the clear (fs.c:10921) — so we mask it here too. Every
+    // shape as login, and would otherwise be logged in the clear — so we mask it here too. Every
     // SETPASS abbreviation down to its minimum (4: SETP) is listed, because this matcher is text-based
     // and would otherwise leak the password when the command is abbreviated.
     private static readonly string[] LoginPrefixes =

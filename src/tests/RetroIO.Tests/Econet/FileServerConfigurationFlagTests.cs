@@ -18,8 +18,8 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// What each configuration flag bit changes in the file server, checked against the PiFS reference
-/// (PiEconetBridge utilities/fs.c). One section per flag. The default flag value is 0x82 (MdfsFunctions
+/// What each configuration flag bit changes in the file server, checked against the reference
+/// behaviour. One section per flag. The default flag value is 0x82 (MdfsFunctions
 /// and AcornDir set), so each test sets the bits it needs.
 /// </summary>
 [TestFixture]
@@ -45,14 +45,14 @@ public sealed class FileServerConfigurationFlagTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // ManyHandle 0x10. fs.c 71 and 72 (FS_DIVHANDLE and FS_MULHANDLE), 1464 and 1495 (handle limit),
-    // 9329 (open reply), 9941 to 9946 (request header handles), 11367 to 11401 (channel handles).
+    // ManyHandle 0x10. Wire handle bytes (mask or plain number), the handle limit,
+    // the open reply, the request header handles and the channel handles.
     // ---------------------------------------------------------------------------------------------
 
     [Test]
     public void Login_ManyHandleClear_RepliesWithBitMaskHandles()
     {
-        // fs.c 4833 to 4835: FS_MULHANDLE of root, current and library. Handles 1, 2, 3 become 0x01, 0x02, 0x04.
+        // Root, current and library go out as wire bytes. Handles 1, 2, 3 become 0x01, 0x02, 0x04.
         SetFlags(0x82);
 
         byte[] reply = _harness.LoginAsSyst().Payload;
@@ -65,7 +65,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Login_ManyHandleSet_RepliesWithPlainHandleNumbers()
     {
-        // fs.c 72: with fs_manyhandle set FS_MULHANDLE gives the number itself.
+        // With ManyHandle set the wire byte is the number itself.
         SetFlags(0x82 | FileServerConfiguration.FlagManyHandle);
 
         byte[] reply = _harness.LoginAsSyst().Payload;
@@ -78,7 +78,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Open_ManyHandleClear_RepliesWithTheHandleAsABitMask()
     {
-        // fs.c 9329: the open reply carries FS_MULHANDLE(userhandle). The first file handle is 4, so 1 << 3 = 0x08.
+        // The open reply carries the handle as a wire byte. The first file handle is 4, so 1 << 3 = 0x08.
         SetFlags(0x82);
         _harness.LoginAsSyst();
 
@@ -103,7 +103,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Open_ManyHandleClear_RefusesTheSixthFile()
     {
-        // fs.c 1464: without manyhandle no handle above 8 is given out. Handles 1 to 3 are the directories,
+        // Without ManyHandle no handle above 8 is given out. Handles 1 to 3 are the directories,
         // so files get 4 to 8, which is five files.
         SetFlags(0x82);
         _harness.LoginAsSyst();
@@ -118,7 +118,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Open_ManyHandleSet_AllowsMoreThanFiveFiles()
     {
-        // fs.c 1464: with manyhandle the limit is FS_MAX_OPEN_FILES (33 slots, slot 0 unused).
+        // With ManyHandle the limit is 33 slots, slot 0 unused.
         SetFlags(0x82 | FileServerConfiguration.FlagManyHandle);
         _harness.LoginAsSyst();
         for (int i = 0; i < 6; i++)
@@ -128,7 +128,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void EndOfFile_ManyHandleClear_TakesTheHandleAsABitMask()
     {
-        // fs.c 11401: FS_DIVHANDLE(data+5) turns the mask 0x08 back into handle 4.
+        // Request byte 5: the mask 0x08 is turned back into handle 4.
         SetFlags(0x82);
         _harness.LoginAsSyst();
         byte handle = Open("HELLO")[2];
@@ -170,7 +170,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void GetByte_ManyHandleSet_TakesThePlainHandleNumberFromTheFirstHandleByte()
     {
-        // fs.c 11373: FS_DIVHANDLE(data+2). With manyhandle set the byte is the handle itself.
+        // Request byte 2. With ManyHandle set the byte is the handle itself.
         SetFlags(0x82 | FileServerConfiguration.FlagManyHandle);
         _harness.LoginAsSyst();
         byte handle = Open("HELLO")[2];
@@ -186,7 +186,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void LibCommand_ManyHandleClear_RepliesWithTheLibraryHandleAsABitMask()
     {
-        // fs.c 6804 to 6806: FS_MULHANDLE on the root, current and library handle in the reply.
+        // The root, current and library handle in the reply are wire bytes.
         SetFlags(0x82);
         _harness.LoginAsSyst();
 
@@ -254,14 +254,14 @@ public sealed class FileServerConfigurationFlagTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // AcornDir 0x80. fs.c 1110 (fs_perm_to_acorn), 5117 and 5174 (EXAMINE text), 7191 (*INFO), 216 (FS_ACORN_DIR_MASK).
+    // AcornDir 0x80. Access conversion, EXAMINE text and *INFO.
     // ---------------------------------------------------------------------------------------------
 
     [Test]
     public void Examine_AcornDirSet_HidesTheImpliedAccessLettersOfADirectory()
     {
-        // The default directory access is owner write, owner read, other read (0x13). With fs_mask_dir_wrr set and
-        // other write clear, fs.c clears those three bits before it builds the letters, so the directory shows D/.
+        // The default directory access is owner write, owner read, other read (0x13). With AcornDir set and
+        // other write clear, the server clears those three bits before it builds the letters, so the directory shows D/.
         _harness.FileSystem.AddDirectory("/econet-root/0RetroFS/USER/SUBDIR");
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornDir);
         _harness.LoginAsSyst();
@@ -282,7 +282,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Examine_AcornDirSet_KeepsTheLettersWhenOtherWriteIsSet()
     {
-        // fs.c 1110: the test includes FS_PERM_OTH_W, so a directory that others may write is shown in full.
+        // The test includes other write, so a directory that others may write is shown in full.
         _harness.FileSystem.AddDirectory("/econet-root/0RetroFS/USER/SUBDIR");
         _harness.Configuration.DefaultDirPerm = 0x33;
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornDir);
@@ -294,7 +294,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Examine_AcornDirSet_KeepsTheLettersWhenNotAllThreeBitsAreSet()
     {
-        // fs.c 1110: the mask only applies when owner write, owner read and other read are all set.
+        // The mask only applies when owner write, owner read and other read are all set.
         _harness.FileSystem.AddDirectory("/econet-root/0RetroFS/USER/SUBDIR");
         _harness.Configuration.DefaultDirPerm = 0x03;
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornDir);
@@ -306,7 +306,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Examine_AcornDirSet_DoesNotChangeAFileWithTheSameAccessBits()
     {
-        // fs.c 1110 and 5174 test the object type: only directories are masked. The file has access 0x13, the
+        // The object type is tested: only directories are masked. The file has access 0x13, the
         // same bits that a directory shows as D/.
         AcornAttributeStore.WriteAttributes(_harness.FileSystem, "/econet-root/0RetroFS/USER/HELLO", 0, 0, 0x13);
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornDir);
@@ -316,8 +316,8 @@ public sealed class FileServerConfigurationFlagTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // MdfsFunctions 0x02. fs.c 9911 (operations from 64 up), 5392 (get object info command 0x40),
-    // 8176 to 8178 (library search on load), 9195 to 9197 (library search on open).
+    // MdfsFunctions 0x02. Operations from 64 up, get object info command 0x40,
+    // library search on load, library search on open.
     // ---------------------------------------------------------------------------------------------
 
     // Makes the current directory a directory that holds no files, so a file name only resolves in the library
@@ -346,7 +346,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void SjOperation_MdfsFunctionsClear_IsRefusedAsUnsupported()
     {
-        // fs.c 9911 to 9915: fsop 64 and up with fs_sjfunc clear answers error 0xFF "Unsupported".
+        // Fsop 64 and up with MdfsFunctions clear answers error 0xFF "Unsupported".
         SetFlags(0x80);
         _harness.LoginAsSyst();
 
@@ -370,7 +370,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void PiBridgeCall_MdfsFunctionsClear_IsRefusedAsUnsupportedToo()
     {
-        // fs.c 9911 tests every fsop from 64 up, and the PiBridge calls (fsop 0x60, fs.c 11786) come after that test.
+        // Every fsop from 64 up is tested, and the PiBridge calls (fsop 0x60) come after that test.
         SetFlags(0x80);
         _harness.LoginAsSyst();
 
@@ -394,7 +394,6 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void GetObjectInfo_Command0x40_MdfsFunctionsClear_IsRefusedAsMdfsUnsupported()
     {
-        // fs.c 5392 to 5396.
         SetFlags(0x80);
         _harness.LoginAsSyst();
         byte[] parameters = Encoding.ASCII.GetBytes("@HELLO\r");
@@ -408,7 +407,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Load_MdfsFunctionsSet_SearchesTheLibraryWhenTheCurrentDirectoryHasNoSuchFile()
     {
-        // fs.c 8176 to 8178: with fs_sjfunc set a load that finds nothing in the current directory looks in the library.
+        // With MdfsFunctions set a load that finds nothing in the current directory looks in the library.
         SetFlags(0x82);
         LoginWithCurrentDirectoryElsewhere();
 
@@ -431,7 +430,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Open_ExistingFile_MdfsFunctionsSet_SearchesTheLibraryWhenTheCurrentDirectoryHasNoSuchFile()
     {
-        // fs.c 9195 to 9197: the library is searched when the file must exist.
+        // The library is searched when the file must exist.
         SetFlags(0x82);
         LoginWithCurrentDirectoryElsewhere();
 
@@ -441,7 +440,7 @@ public sealed class FileServerConfigurationFlagTests
     [Test]
     public void Open_FileThatNeedNotExist_MdfsFunctionsSet_DoesNotOpenTheLibraryFile()
     {
-        // fs.c 9197 searches the library only when existingfile is true. With must-exist clear the library file is
+        // The library is searched only when the file must exist. With must-exist clear the library file is
         // not used. (This server cannot make a new file through OPEN, so the answer is Not found, as it is with the
         // flag clear.)
         SetFlags(0x82);

@@ -152,8 +152,8 @@ public sealed class EconetActivityRecordingTests
     [Test]
     public void GetObjectInfo_FilenameOnly_WireCwdZero_RecordsSoftNotFound()
     {
-        // Handles (payload bytes 2-4) default to 0, i.e. wire CWD handle 0. PiFS ground truth
-        // (utilities/fs.c:9951, 2341, 5641-5642) makes that a soft not-found [00 00 00] for
+        // Handles (payload bytes 2-4) default to 0, i.e. wire CWD handle 0. The reference
+        // behaviour makes that a soft not-found [00 00 00] for
         // commands 1-5, not a resolved file block. The request detail still parses as cmd=1
         // (filename-only, command byte omitted); only the reply summary changes to not-found.
         Login();

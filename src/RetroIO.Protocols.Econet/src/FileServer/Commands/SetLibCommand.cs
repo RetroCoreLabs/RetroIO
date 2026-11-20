@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>*SETLIB</c> — permanently sets a user's library directory (takes effect at their next login).
 /// </summary>
 /// <remarks>
-/// Reference behaviour (PiFS): any logged-in user may set their OWN library with <c>*SETLIB dir</c>;
+/// Reference behaviour: any logged-in user may set their OWN library with <c>*SETLIB dir</c>;
 /// a System user may additionally set another user's with <c>*SETLIB user dir</c>. A
 /// non-System user supplying a space (i.e. attempting the two-argument form) is rejected with
 /// <c>0xFF "Bad parameters"</c>. In the System two-argument form the directory may not name a disc
@@ -25,12 +25,12 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>%</c> clears the library (reverting to the disc-layout default). A directory that does not
 /// resolve to an existing directory is <c>0xA8 "Bad library"</c>.
 /// <para>
-/// Like PiFS this is PERSIST-ONLY: it writes the user's <c>econet.lib</c> record and does not touch the
+/// This is PERSIST-ONLY: it writes the user's <c>econet.lib</c> record and does not touch the
 /// caller's live session; the new library takes effect at the target user's next login, where the login
 /// path resolves it (see <see cref="LoginCommand"/>).
 /// </para>
 /// <para>
-/// Divergence: RetroFS does not enforce PiFS's "library must be on the user's home disc" rule beyond
+/// Divergence: RetroFS does not enforce the "library must be on the user's home disc" rule beyond
 /// what path resolution already gives; the single-disc case is unaffected.
 /// </para>
 /// </remarks>
@@ -55,7 +55,7 @@ public sealed class SetLibCommand : IOsCliCommand
     public bool RequiresLogin => true;
 
     // Self-service is allowed for any user; the two-argument "set another user" form is System-gated
-    // inside Execute (so a non-admin still gets the PiFS "Bad parameters" answer, not "Insufficient
+    // inside Execute (so a non-admin still gets the "Bad parameters" answer, not "Insufficient
     // access").
     /// <summary>
     /// Gets <c>false</c>: any logged-in user may set their own library. The two-word form that sets

@@ -46,7 +46,7 @@ public sealed class FileServerReplyTests
     }
 
     [Test]
-    public void SaveComplete_MatchesPiFsClosePacketShape()
+    public void SaveComplete_MatchesClosePacketShape()
     {
         byte[] reply = FileServerReply.SaveComplete(0x33, 15, 0x46, "MYTEST");
 

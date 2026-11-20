@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// <summary>
 /// <c>GetByte</c> (fsop 0x08) — reads one byte from an open channel, honouring the AUN retransmit
 /// sequence bit. Reply is <c>[0, 0, value, flags]</c> (flags bit7 = at-EOF); a directory or exhausted
-/// channel returns the PiFS <c>0xFE/0xC0</c> get-byte sentinel; an unknown channel is <c>0xDE</c>.
+/// channel returns the <c>0xFE/0xC0</c> get-byte sentinel; an unknown channel is <c>0xDE</c>.
 /// </summary>
 /// <remarks>
 /// Migrated from <c>MiscOpcodeHandler.HandleGetByte</c>, unchanged. The channel handle comes from the

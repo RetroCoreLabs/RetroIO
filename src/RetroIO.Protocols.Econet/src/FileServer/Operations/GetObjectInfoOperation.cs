@@ -59,7 +59,7 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
     ///  - the canonical form (<see cref="FileServerOpcodes.GetObjectInfoCanonical"/>) adds the path and a
     ///    CR after the info reply.
     ///  - command 6 fills in the 10-byte directory name and the entry count, capped at 255.
-    /// The owner byte is 0 when the caller owns the object (see ObjectOwnership) and 0xFF when not. For commands 4, 5 and 96 a system user counts as owner (fs.c line 5694). For command 6 only the owner does (fs.c line 5735).
+    /// The owner byte is 0 when the caller owns the object (see ObjectOwnership) and 0xFF when not. For commands 4, 5 and 96 a system user counts as owner. For command 6 only the owner does.
     /// </remarks>
     /// <param name="call">
     /// Everything the operation needs: the request, the decoded header, the session, and services.
@@ -77,7 +77,7 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
         if (!GetObjectInfoRequestParser.TryParse(fsRequest, out byte command, out ReadOnlySpan<byte> pathBytes))
             return FileServerReply.Error(FileServerErrors.BadPath, "Bad filename");
 
-        // fs.c lines 5392 to 5396: command 0x40 is an MDFS call and needs the MdfsFunctions flag.
+        // Command 0x40 is an MDFS call and needs the MdfsFunctions flag.
         if (command == 0x40 && !context.Configuration.MdfsFunctions)
             return FileServerReply.Error(FileServerErrors.Unsupported, "MDFS Unsupported");
 
@@ -85,8 +85,8 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
             ? string.Empty
             : AcornPath.ReadCrTerminatedString(pathBytes);
 
-        // PiFS conformance (utilities/fs.c fs_normalize_path_wildcard:2341): the relative-to
-        // handle (request byte 3 / CWD) must reference an OPEN handle. PiFS returns NODIR ->
+        // The relative-to
+        // handle (request byte 3 / CWD) must reference an OPEN handle. The server returns "no directory" ->
         // "Not found" (0xd6 for cmd 6) when it is 0/unopened. BeebEm's *CAT sends CWD handle 0,
         // so we must NOT silently substitute the session CWD here: doing so produced a success
         // directory block that BeebEm rejects and re-requests forever -> "Net error".
@@ -157,8 +157,8 @@ public sealed class GetObjectInfoOperation : IFileServerOperation
             }
         }
 
-        // fs.c line 5694: the owner byte of commands 4, 5 and 96 is 0 for the owner or a system user, 0xFF for anyone else.
-        // fs.c line 5735: the owner byte of command 6 is 0 for the owner only, a system user is not counted.
+        // The owner byte of commands 4, 5 and 96 is 0 for the owner or a system user, 0xFF for anyone else.
+        // The owner byte of command 6 is 0 for the owner only, a system user is not counted.
         ushort owner = ObjectOwnership.GetOwner(context, unixPath);
         bool isOwner = ObjectOwnership.IsEffectiveOwner(session, owner);
         bool isDirectoryOwner = ObjectOwnership.IsOwner(session, owner);

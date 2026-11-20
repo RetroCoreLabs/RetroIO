@@ -32,7 +32,7 @@ internal sealed class ReadUserEnvFsopTests : FsopProtocolTestBase
 
         EconetMessage reply = Harness.Send(FileServerOpcodes.ReadUserEnv);
 
-        // PiFS layout: 00 00 + disc-name-length(16) + disc[16] + CSD leaf[10] + lib leaf[10] = 39 bytes.
+        // Layout: 00 00 + disc-name-length(16) + disc[16] + CSD leaf[10] + lib leaf[10] = 39 bytes.
         Assert.That(reply.Payload, Has.Length.EqualTo(39));
         Assert.That(StatusOf(reply), Is.EqualTo(0x00));
         Assert.That(reply.Payload[2], Is.EqualTo(16), "disc-name-length field");

@@ -36,8 +36,8 @@ public sealed class EconetFileServerService : BackgroundService
     private readonly AunOutboundRetryQueue _retryQueue = new();
     private readonly AunReplyRetransmitter _replyRetransmitter;
 
-    // Per-server outbound AUN sequence for FS reply DATA. PiFS assigns a FRESH server sequence
-    // (get_local_seq, += 4) to every reply — it does NOT echo the client's request seq. BeebEm ACKs
+    // Per-server outbound AUN sequence for FS reply DATA. The server assigns a FRESH server sequence
+    // (+= 4) to every reply — it does NOT echo the client's request seq. BeebEm ACKs
     // the reply by that server seq, which is what lets the retransmit loop terminate. See
     // AunOutboundSequence and Econet_Message_Protocol_Analysis.md §7.7.2 / §7.7.5.
     private readonly AunOutboundSequence _outboundSequence = new();
@@ -218,10 +218,10 @@ public sealed class EconetFileServerService : BackgroundService
 
             if (response?.Transport != null)
             {
-                // FS reply DATA gets a FRESH server sequence (PiFS get_local_seq, += 4) — NOT the client's
-                // request seq. Verified against econet-hpbridge.c: BeebEm ACKs a server-originated reply by
-                // quoting the reply's server seq, and the bridge matches that ACK to stop retransmitting
-                // (econet-hpbridge.c:3725, 5891). Echoing the request seq (the old behaviour) is why an
+                // FS reply DATA gets a FRESH server sequence (+= 4) — NOT the client's
+                // request seq. BeebEm ACKs a server-originated reply by
+                // quoting the reply's server seq, and the server matches that ACK to stop retransmitting.
+                // Echoing the request seq (the old behaviour) is why an
                 // earlier trace saw "reply not acknowledged" — BeebEm did not treat the echoed-seq reply as
                 // a new server transaction to ACK. Independent confirmation: RISC OS PRM Vol 5a Ch.122 and
                 // BeebWiki "Econet over IP" (seq += 4 per transaction; ACK/NAK quote the seq). See
@@ -238,7 +238,7 @@ public sealed class EconetFileServerService : BackgroundService
 
                     // Retransmit the reply (≤ AunMaxTransmits, ~AunRetransmitIntervalMs apart) until the
                     // client ACKs it by the server seq, then Acknowledge() cancels it (see the Ack branch
-                    // above). Mirrors the bridge's EB_CONFIG_AUN_RETX / EB_CONFIG_AUN_RETRIES loop.
+                    // above).
                     if (trackReplyForRetransmit)
                         _replyRetransmitter.Track(response);
                 }

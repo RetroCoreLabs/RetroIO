@@ -41,7 +41,7 @@ internal sealed class SetBootOptFsopTests : FsopProtocolTestBase
     {
         LoginAdmin();
 
-        // PiFS fs_set_bootopt rejects options above 7 with 0xBD.
+        // Options above 7 are rejected with 0xBD.
         EconetMessage reply = Harness.Send(FileServerOpcodes.SetBootOpt, [8]);
 
         AssertInsufficientAccess(reply);

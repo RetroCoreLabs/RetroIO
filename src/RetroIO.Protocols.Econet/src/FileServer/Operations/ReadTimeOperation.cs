@@ -11,7 +11,7 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Protocols.Econet.FileServer.Operations;
 
 /// <summary>
-/// <c>ReadTime</c> (fsop 0x10) — returns the server clock as the PiFS 7-byte reply
+/// <c>ReadTime</c> (fsop 0x10) — returns the server clock as the 7-byte reply
 /// <c>[0, 0, day, monthYear, hour, min, sec]</c>. A pure clock read: it touches no filesystem.
 /// </summary>
 /// <remarks>

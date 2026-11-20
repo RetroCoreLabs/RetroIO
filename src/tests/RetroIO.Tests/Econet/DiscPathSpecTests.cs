@@ -11,8 +11,7 @@ using RetroIO.Protocols.Econet.Common;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Locks the ':'-prefixed (disc-qualified) Acorn path rules against PiFS ground truth
-/// (E:\Dev\Emulators\6502\PiEconetBridge\utilities\fs.c, fs_normalize_path_wildcard:2377-2406).
+/// Locks the ':'-prefixed (disc-qualified) Acorn path rules against the reference behaviour.
 /// </summary>
 /// <remarks>
 /// REGRESSION GUARD. Found live in BeebEm on 2026-07-17: "*DIR :" was accepted and set the CSD to
@@ -22,20 +21,20 @@ namespace RetroIO.Tests.Econet;
 /// "$"-clamp in OsCliCommandHandler.ParentAcorn only fires on paths containing '$' and ":" has none,
 /// so "*DIR ^" could not climb back out.
 ///
-/// The reference rejects a bare ":" because a disc name must be 1-16 characters long (fs.c:3409) —
-/// a zero-length name cannot match, so path normalisation fails with FS_PATH_ERR_NODISC (fs.c:2399).
-/// The *DIR handler then errors and leaves the CSD untouched (fs.c:10365, 10419).
+/// The reference rejects a bare ":" because a disc name must be 1-16 characters long —
+/// a zero-length name cannot match, so path normalisation fails with a "no disc" error.
+/// The *DIR handler then errors and leaves the CSD untouched.
 /// Do not "fix" this back to accepting ":".
 /// </remarks>
 [TestFixture]
 public sealed class DiscPathSpecTests
 {
-    // ---- Rejections: PiFS FS_PATH_ERR_NODISC / FS_PATH_ERR_FORMAT ----
+    // ---- Rejections: "no disc" / format errors ----
 
     [Test]
     public void BareColon_IsRejected_BecauseDiscNameRegexRequiresAtLeastOneChar()
     {
-        // fs.c:2379 - a zero-length disc name cannot match -> fs.c:2399 FS_PATH_ERR_NODISC.
+        // A zero-length disc name cannot match -> "no disc" error.
         // This is THE bug: ":" used to resolve to the disc container and strand the session.
         Assert.That(AcornPath.TryParseDiscPath(":", out _, out _), Is.False);
     }
@@ -55,7 +54,7 @@ public sealed class DiscPathSpecTests
     [Test]
     public void DiscNameLongerThanSixteen_IsRejected()
     {
-        // PiFS regex is {1,16}; 17 characters cannot be a disc name.
+        // A disc name is 1 to 16 characters; 17 characters cannot be a disc name.
         string tooLong = ":" + new string('A', 17);
         Assert.That(AcornPath.TryParseDiscPath(tooLong, out _, out _), Is.False);
     }
@@ -81,12 +80,12 @@ public sealed class DiscPathSpecTests
         Assert.That(AcornPath.TryParseDiscPath("$.USER", out _, out _), Is.False);
     }
 
-    // ---- Acceptances: PiFS normalisation of a valid disc spec ----
+    // ---- Acceptances: normalisation of a valid disc spec ----
 
     [Test]
     public void DiscNameAlone_BecomesDiscRoot()
     {
-        // fs.c:2387 - a ':' plus a disc name and nothing else resolves to the disc root "$".
+        // A ':' plus a disc name and nothing else resolves to the disc root "$".
         Assert.That(AcornPath.TryParseDiscPath(":RetroFS", out string discName, out string rooted), Is.True);
         Assert.That(discName, Is.EqualTo("RetroFS"));
         Assert.That(rooted, Is.EqualTo("$"));
@@ -95,7 +94,7 @@ public sealed class DiscPathSpecTests
     [Test]
     public void DiscNameWithTail_GetsDollarInserted()
     {
-        // fs.c:2392 - no '$' after the disc name, so PiFS prepends "$.".
+        // No '$' after the disc name, so "$." is put in front.
         Assert.That(AcornPath.TryParseDiscPath(":RetroFS.USER", out string discName, out string rooted), Is.True);
         Assert.That(discName, Is.EqualTo("RetroFS"));
         Assert.That(rooted, Is.EqualTo("$.USER"));
@@ -104,7 +103,7 @@ public sealed class DiscPathSpecTests
     [Test]
     public void DiscNameWithExplicitDollar_IsPreserved()
     {
-        // fs.c:2384-2386 - an explicit '$' after the disc name is kept verbatim.
+        // An explicit '$' after the disc name is kept verbatim.
         Assert.That(AcornPath.TryParseDiscPath(":RetroFS.$.USER", out string discName, out string rooted), Is.True);
         Assert.That(discName, Is.EqualTo("RetroFS"));
         Assert.That(rooted, Is.EqualTo("$.USER"));

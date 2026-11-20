@@ -11,7 +11,7 @@ using RetroIO.Protocols.Econet.FileServer.Sessions;
 namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 
 /// <summary>
-/// Parses fsop <c>0x12</c> requests per PiFS <c>fs_get_object_info</c> (command at byte 5, path at byte 6).
+/// Parses fsop <c>0x12</c> requests (command at byte 5, path at byte 6).
 /// DNFS/BeebEm often omit the command byte: catalogue step sends <c>.</c> or CR-only at byte 5 (implicit arg 6);
 /// per-file step sends the filename at byte 5 (implicit arg 1).
 /// </summary>

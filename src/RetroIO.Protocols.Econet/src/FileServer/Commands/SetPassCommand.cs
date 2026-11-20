@@ -16,14 +16,14 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>*SETPASS</c> — a System user sets ANOTHER user's password (no current-password check).
 /// </summary>
 /// <remarks>
-/// Reference behaviour (PiFS, facts only): System-only, abbreviation 4. Argument is
+/// Reference behaviour: System-only, abbreviation 4. Argument is
 /// <c>username password</c>; missing either is <c>0xFF "Bad parameter"</c>; an unknown
 /// user is <c>0xFF "Unknown user"</c>. Unlike <c>*PASS</c> there is no old-password verification — this
 /// is the admin override used to reset a locked-out user. The empty marker <c>""</c> clears the password
 /// (only where the account permits an empty password, else <c>0xFF "Bad password"</c>).
 /// <para>
-/// The password argument is masked from every log by <see cref="EconetLogRedaction"/> (PiFS logs it in
-/// the clear at <c>fs.c:10921</c> — RetroFS does not).
+/// The password argument is masked from every log by <see cref="EconetLogRedaction"/>, so it
+/// is never logged in the clear.
 /// </para>
 /// </remarks>
 public sealed class SetPassCommand : IOsCliCommand

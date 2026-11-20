@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Mirrors PiEconetBridge <c>fs_access</c> (fs.c:7270-7310). The permission string is
+/// The permission string is
 /// <c>owner-perms[/other-perms]</c>: before the slash the letters <c>W R H/P L</c> set the
 /// owner bits plus hidden/locked; after the slash only <c>W</c> and <c>R</c> are legal and set the
 /// public bits. An empty string clears every bit (<c>perm = 0</c>). An unrecognised letter is
@@ -79,7 +79,7 @@ public sealed class AccessCommand : IOsCliCommand
         string fsp = parts[0];
         string accessSpec = parts.Length > 1 ? parts[1] : string.Empty;
 
-        // Parse before resolving the object, exactly as fs.c: a bad permission letter is reported
+        // Parse before resolving the object: a bad permission letter is reported
         // even for an object that does not exist.
         byte parseError = TryParseAccess(accessSpec, out byte newAccess);
         if (parseError != 0)
@@ -119,7 +119,7 @@ public sealed class AccessCommand : IOsCliCommand
 
         string trimmed = spec.Trim();
         if (trimmed.Length == 0)
-            return 0; // empty string clears every bit — fs.c treats this as perm 0.
+            return 0; // empty string clears every bit — it means access 0.
 
         // Split owner side from public side on the single legal '/'. More than one slash is malformed.
         string[] sides = trimmed.Split('/');

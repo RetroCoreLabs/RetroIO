@@ -16,7 +16,7 @@ The implementation aims at being **compatible rather than reasonable**, and that
 Acorn file server has behaviour nobody would design today: the same command spelled four ways
 (`*I AM`, `*IAM`, `*LOGIN`, `*LOGON`), metadata in the property bag of each object (extended attribute mechanism, `.xat` file as the fallback), bulk transfers that repurpose
 bytes 2–4 of the packet instead of the documented fields, and `*INFO` with several MDFS sub-forms. All of
-that is implemented as it is, with PiFS and the PiEconetBridge sources cited at the decisions, because a
+that is implemented as it is, because a
 cleaner version would simply not work with the ROM.
 
 One more thing that pushed the design: machines differ on the wire. `WireProfileResolver` picks a profile
@@ -146,15 +146,15 @@ than a switch that grows, and adding an operation does not edit a giant method.
 | `0x15` | `ReadUserEnv` | Current disc, directory and library |
 | `0x16` | `SetBootOpt` | The `*OPT 4` value; above 7 is `0xBD Bad option` |
 | `0x18` | `ReadUserInfo` | Where a named user is logged on |
-| `0x1A` / `0x1E` / `0x1F` | Free space | `fs_free`, the user stub, and setting a quota (System-only) |
+| `0x1A` / `0x1E` / `0x1F` | Free space | Disc free space, the user stub, and setting a quota (System-only) |
 | `0x20` | `ReadClientId` | The caller's own username, raw ASCII, `0x0D`-terminated, **no status bytes** |
-| `0x40` / `0x41` | SJ opcodes | PiFS compatibility stubs |
-| `0x60` | PiBridge | PiFS extensions |
+| `0x40` / `0x41` | SJ opcodes | Compatibility stubs |
+| `0x60` | PiBridge | PiBridge protocol extensions |
 
 ## Bulk transfers
 
 A Level-3 bulk opcode **repurposes bytes 2–4** of the request instead of using the URD/CWD/LIB fields —
-`FileServerBulkPacketLayout` is where that is written down, matching PiFS and Acorn DFS. Transfers are
+`FileServerBulkPacketLayout` is where that is written down, matching Acorn DFS. Transfers are
 managed by `BulkTransferManager` with `OutboundLoadTransfer` and `InboundSaveTransfer`, and AUN's
 unreliability is handled by `AunOutboundRetryQueue` and `AunReplyRetransmitter`.
 
@@ -184,6 +184,5 @@ credentials is a defect rather than a feature.
 
 ## Sources
 
-PiFS / PiEconetBridge (`utilities/fs.c`, with line numbers cited at several operations), the Acorn DFS
-and MDFS documentation, and the protocol analysis notes referenced by section. When extending this, match
-the source rather than the reasonable behaviour — the ROM is the specification, and it cannot be changed.
+The Acorn DFS and MDFS documentation, captures of real traffic, and the protocol analysis notes referenced
+by section. When extending this, match what real clients and servers do rather than the reasonable behaviour — the ROM is the specification, and it cannot be changed.

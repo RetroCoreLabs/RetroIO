@@ -16,11 +16,11 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <summary>
 /// Shared argument parsing for <c>*SETLIB</c> and <c>*SETHOME</c>, which take either a single
 /// <c>dir</c> (target = the caller) or a System-only <c>user dir</c> (target =
-/// the named user). Mirrors the PiFS <c>sscanf("%10s %80s")</c> split and its error codes.
+/// the named user). The user name is at most 10 characters and the directory at most 80.
 /// </summary>
 internal static class SetDirectoryArguments
 {
-    // PiFS returns 0xFF with a specific message for every parse failure in these commands.
+    // The server returns 0xFF with a specific message for every parse failure in these commands.
     private const byte ParseError = 0xFF;
 
     /// <summary>
@@ -31,13 +31,13 @@ internal static class SetDirectoryArguments
     /// </param>
     /// <param name="systemOnlyTwoArg">
     /// When true (SETLIB), the two-argument "set another user" form requires the caller to be a System
-    /// user — a non-System caller supplying a space gets PiFS's <c>"Bad parameters"</c>, not
+    /// user — a non-System caller supplying a space gets <c>"Bad parameters"</c>, not
     /// <c>"Insufficient access"</c>. When false (SETHOME, already System-gated by the dispatcher) the
     /// two-argument form is always accepted.
     /// </param>
     /// <param name="rejectDiscInTwoArg">
     /// When true (SETLIB), a directory naming a disc (leading <c>:</c>) in the two-argument form is
-    /// rejected with <c>"Can't specify disc"</c>, matching PiFS.
+    /// rejected with <c>"Can't specify disc"</c>.
     /// </param>
     /// <param name="targetUserId">
     /// The resolved target user (caller or named user).

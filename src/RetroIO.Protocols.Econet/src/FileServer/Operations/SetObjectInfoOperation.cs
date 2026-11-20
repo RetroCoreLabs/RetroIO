@@ -84,7 +84,7 @@ public sealed class SetObjectInfoOperation : IFileServerOperation
             {
                 uint load = (uint)(parameters[1] | (parameters[2] << 8) | (parameters[3] << 16) | (parameters[4] << 24));
                 uint exec = (uint)(parameters[5] | (parameters[6] << 8) | (parameters[7] << 16) | (parameters[8] << 24));
-                // Bytes 9 to 11 are the length. They are skipped: the length of a file is the size of the file, as in fs.c (struct objattr has no length).
+                // Bytes 9 to 11 are the length. They are skipped: the length of a file is the size of the file (no length is stored).
                 byte access = parameters.Length > 12 ? parameters[12] : context.Configuration.DefaultFilePerm;
                 AcornAttributeStore.WriteAttributes(context.FileSystem, unixPath, load, exec, access);
             }

@@ -4,11 +4,10 @@ Acorn **Level-3 Econet file server** over **AUN (Acorn Universal Networking)** f
 
 This library implements the file-server application protocol used by BBC Micro, Master, and RISC OS machines when they talk to an Econet file server on **Econet port `0x99`**. Traffic arrives over **UDP AUN** (default port **32768**), not over a physical Econet bus.
 
-Design concepts and on-disk **disc layout** follow **PiFS / PiEconetBridge** (`0{DiscName}` directories). **User accounts** use **RetroIDP** (shared with TNFS), not a separate `Passwords` file. This is **not** a port of `fs.c` and **not** a drop-in replacement for PiEconetBridge.
+The on-disk **disc layout** keeps one host folder per disc (`0{DiscName}` directories). **User accounts** use **RetroIDP** (shared with TNFS), not a separate `Passwords` file. This is **not** a port of another file server and **not** a drop-in replacement for one.
 
-**Clean-room spec:** `docs/econet/PiFS-Behavior-Spec.md` in the pre-migration RetroFS tree and
-`docs/econet/Conformance-Matrix.md` there too. **Both still live in the pre-migration tree** - they
-were not carried across with the code, so these are absolute paths rather than links. TLS transport is planned
+**Clean-room spec:** `docs/econet/Conformance-Matrix.md` in the pre-migration RetroFS tree. **It still
+lives in the pre-migration tree** - it was not carried across with the code, so this is a path rather than a link. TLS transport is planned
 for a later phase.
 
 ---
@@ -22,7 +21,6 @@ for a later phase.
 | **AUN UDP file server** (Level-3 FS on port `0x99`) | **Yes** |
 | **BBC Econet protocol stack** (ADLC wire, four-way handshake) | **No** |
 | **Econet bridge** (routing between wire networks / trunks) | **No** |
-| **PiEconetBridge-compatible bridge** (`econet-hpbridge`) | **No** |
 | **Physical BBC Micro-facing service** (direct bus attachment) | **No** |
 | **LAN AUN client-facing service** (RISC OS, emulators, other AUN stacks) | **Yes** (UDP AUN) |
 | **RetroFS storage backend** (`IFileSystemBackend`) | **Yes** |
@@ -47,7 +45,7 @@ rather than links because a relative link across repositories would 404 on GitHu
 - Inbound **auto-ACK** on UDP DATA/BCAST (before processing)
 - Level-3 dispatch on Econet port **`0x99`**
 - Bulk transfer on dynamic Econet ports (SAVE inbound, LOAD outbound with client ACK)
-- PiFS-style disc layout bootstrap (`0{DiscName}/USER`)
+- Disc layout bootstrap (`0{DiscName}/USER`)
 - Login via `*I AM` / `LOGIN` / `LOGON` through **RetroIDP** (`EconetUserDirectory`)
 - **AUN client** (`AunFileServerClient`) and **RetroVFS volume provider** (`EconetVolumeProvider` in `RetroIO.Storage.Providers`)
 - Rate limiting and audit hooks on inbound AUN (when host registers `InMemoryRateLimiter` / `SecurityEventEmitter`)
@@ -59,7 +57,7 @@ rather than links because a relative link across repositories would 404 on GitHu
 - Physical Econet wire / GPIO / ADLC
 - Bridge forwarding, `EXPOSE`, trunks, station maps beyond simple IP mapping
 - Full outbound AUN DATA **retransmit** (basic retry queue on send failure only)
-- Full PiFS permission model (`*ACCESS`, owner/other bits, wildcards)
+- Full permission model (`*ACCESS`, owner/other bits, wildcards)
 - Admin OSCLI (`*NETCONF`, user management, `*SDISC`, `*COPY`, …)
 - Real hardware interop testing in this repository
 
@@ -132,7 +130,7 @@ On the BBC, the user types OS commands (`*I AM`, `*CAT`, …). The DFS/OS file s
 flowchart TB
     subgraph NotImplemented["Not in RetroIO.Protocols.Econet"]
         Wire["Physical Econet bus / 68B54"]
-        Bridge["econet-hpbridge routing"]
+        Bridge["Econet bridge routing"]
     end
 
     subgraph Implemented["Implemented"]
@@ -146,7 +144,7 @@ flowchart TB
     UDP --> AUN --> FS --> Store
 ```
 
-**External reference:** the PiEconetBridge documentation (`docs/ECONET-AUN-FILESERVER-DEVELOPER.md` in that project) describes the full wire + bridge + AUN model. Only the **AUN UDP → port 0x99 → PiFS-style files** slice is implemented here.
+Only the **AUN UDP → port 0x99 → files** slice of the full wire + bridge + AUN model is implemented here.
 
 ---
 
@@ -235,19 +233,19 @@ flowchart TB
 |-------|----------------|---------|
 | `AunPacket` | 8-byte AUN header + payload encode/decode | Acorn AUN UDP format |
 | `AunAddressMapper` | IPv4 → `(Net, station)` | RISC OS AUNMap convention (station = IP octet) |
-| `EconetMessage` | Decoded datagram + client UDP endpoint + `ClientNet`/`ClientStation` | Internal; Pi bridge `__econet_packet_aun` (partial) |
-| `UdpAunTransport` | UDP recv/send, firewall check | Pi `EXPOSE` listener (subset) |
-| `EconetFileServerService` | Route ACK/NAK/DATA/BCAST; auto-ACK | Pi `eb_process_incoming_aun` + `handle_fs_traffic` entry |
-| `FileServerCommandHandler` | Opcode dispatch on port `0x99` | Pi `handle_fs_traffic` |
+| `EconetMessage` | Decoded datagram + client UDP endpoint + `ClientNet`/`ClientStation` | Internal AUN packet |
+| `UdpAunTransport` | UDP recv/send, firewall check | AUN UDP listener |
+| `EconetFileServerService` | Route ACK/NAK/DATA/BCAST; auto-ACK | Incoming AUN handling + FS traffic entry |
+| `FileServerCommandHandler` | Opcode dispatch on port `0x99` | FS traffic on port `0x99` |
 | `FileServerRequest` | Parse `reply_port`, `fsop`, URD/CWD/LIB, parameters | Level-3 request layout |
-| `OsCliCommandHandler` | Text commands in opcode `0x00` | Pi `fs_login`, OSCLI subset |
-| `ExamineCommandHandler` | Opcode `0x03` catalogue | Pi examine |
-| `FileIoCommandHandler` | Load/save/open/close/delete/mkdir/bye | Pi file ops |
-| `BulkTransferHandler` | Non-`0x99` ports + client ACK for LOAD | Pi `handle_fs_bulk_traffic` |
-| `EconetUserDirectory` | RetroIDP auth + Acorn profile metadata | Replaces PiFS `Passwords` file |
-| `DiscCatalog` | Scan `0{NAME}` directories | PiFS disc layout |
-| `PathResolver` | Acorn paths → host paths | PiFS path logic (simplified) |
-| `FileServerSessionManager` | Sessions keyed by `ClientNet.ClientStation` | Pi `active[server][slot]` |
+| `OsCliCommandHandler` | Text commands in opcode `0x00` | Login, OSCLI subset |
+| `ExamineCommandHandler` | Opcode `0x03` catalogue | Examine |
+| `FileIoCommandHandler` | Load/save/open/close/delete/mkdir/bye | File operations |
+| `BulkTransferHandler` | Non-`0x99` ports + client ACK for LOAD | Bulk traffic |
+| `EconetUserDirectory` | RetroIDP auth + Acorn profile metadata | Replaces a `Passwords` file |
+| `DiscCatalog` | Scan `0{NAME}` directories | Disc layout |
+| `PathResolver` | Acorn paths → host paths | Acorn path rules (simplified) |
+| `FileServerSessionManager` | Sessions keyed by `ClientNet.ClientStation` | One session per station |
 
 ---
 
@@ -363,7 +361,7 @@ Unit tests use a dedicated **`SYST`** RetroIDP user with `econet.allowEmptyPassw
 
 Sessions are keyed by **`(ClientNet, ClientStation)`**, not username. One session per Econet station address.
 
-### On-disk layout (PiFS-style)
+### On-disk layout
 
 ```
 {econet-root}/
@@ -381,11 +379,11 @@ User accounts live in **RetroIDP** (`Documents/RetroFS/idp/users.json`), not und
 | `*LOGIN` / `*LOGON` | Login | same | **Yes** | |
 | `*BYE` | Logout | `OsCliCommandHandler` / `FileIoCommandHandler` opcode `0x17` | **Yes** | |
 | `*CAT` | Catalogue | `OsCliCommandHandler` → examine prelude; opcode `0x03` | **Yes** | OSCLI returns examine trigger, not full cat |
-| `*DIR dir` | Change directory | `OsCliCommandHandler.HandleChangeDir` | **Yes** | Returns `0x07` + CSD handle; updates unix + Acorn CSD path (supports `^` parent). PiFS-aligned |
-| `*LIB dir` | Set library | `OsCliCommandHandler.HandleChangeLib` | **Yes** | Returns `0x09` + library handle; updates library path. PiFS-aligned |
+| `*DIR dir` | Change directory | `OsCliCommandHandler.HandleChangeDir` | **Yes** | Returns `0x07` + CSD handle; updates unix + Acorn CSD path (supports `^` parent). matches the reference behaviour |
+| `*LIB dir` | Set library | `OsCliCommandHandler.HandleChangeLib` | **Yes** | Returns `0x09` + library handle; updates library path. Matches the reference behaviour |
 | `*LOAD file` | Load file | `OsCliCommandHandler.HandleLoadOsCli` (prelude); `FileIoCommandHandler` `0x02`/`0x05` (data) | **Yes** | FS load opcode carries real load/exec/access/date; ACK-paced bulk burst |
 | `*SAVE file` | Save file | `FileIoCommandHandler` `0x01`/`0x1d` | **Yes** | FS save opcode + bulk; 21-byte FS3 close packet |
-| `*RUN` | Run program | `FileIoCommandHandler` `0x05` | **Yes** | Load-as with library search (PiFS `loadas`) |
+| `*RUN` | Run program | `FileIoCommandHandler` `0x05` | **Yes** | Load-as with library search |
 | `*EXEC` | Exec script | — | **No** | |
 | `*DELETE` | Delete file | `FileIoCommandHandler` opcode `0x14` | **Partial** | Opcode only, not OSCLI text |
 | `*RENAME` | Rename | `OsCliCommandHandler.HandleRename` | **Yes** | |
@@ -481,10 +479,10 @@ User accounts live in **RetroIDP** (`Documents/RetroFS/idp/users.json`), not und
 
 Acorn `*I AM` passes a **10-character space-padded** username and password (`AcornPath.PadUsername` / `PadPassword`). Trailing spaces are stripped from the password before verification.
 
-| Field | RetroFS | PiFS (reference) |
+| Field | RetroFS | Reference behaviour |
 |-------|---------|------------------|
-| **Username** | **Case-insensitive** — RetroIDP `Username` (`AcornPath.UsernamesEqual`). | Case-insensitive (`strncasecmp`). |
-| **Password** | **Case-sensitive** — Argon2id verifies exact bytes after trim. `secret` ≠ `SECRET`. | Case-insensitive (`strncasecmp`). |
+| **Username** | **Case-insensitive** — RetroIDP `Username` (`AcornPath.UsernamesEqual`). | Case-insensitive. |
+| **Password** | **Case-sensitive** — Argon2id verifies exact bytes after trim. `secret` ≠ `SECRET`. | Case-insensitive. |
 
 **Examples (default RetroServer bootstrap):**
 
@@ -494,7 +492,7 @@ Acorn `*I AM` passes a **10-character space-padded** username and password (`Aco
 | `*I AM ADMIN retroadmin` | OK (username case-insensitive) |
 | `*I AM admin RETROADMIN` | **Fails** (password case) |
 
-Passwords are intentionally stricter than PiFS for RetroIDP security. Usernames match PiFS client expectations.
+Passwords are intentionally stricter than the reference behaviour for RetroIDP security. Usernames match what clients expect.
 
 ### Authorization
 
@@ -535,7 +533,7 @@ Written/read from the RetroFS data directory:
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
-| `RootDirectory` | `.../RetroFS/econet-root` | PiFS root |
+| `RootDirectory` | `.../RetroFS/econet-root` | File server root |
 | `DiscName` | `RetroFS` | Creates/scans `0RetroFS` |
 | `VersionString` | `null` → built-in default | `*FSLIST` / opcode `0x19` |
 | `UdpPort` | `32768` | AUN UDP listen port |
@@ -577,7 +575,7 @@ Loaded in `RetroServer.Program.LoadEconetConfiguration`.
 ### Not configurable in current code
 
 - Outbound AUN retry interval
-- Per-station AUN remote table (Pi bridge `aun_remotes`)
+- Per-station AUN remote table
 - Bridge / `EXPOSE` / wire device paths
 - Econet-level firewall (only IP firewall on UDP)
 
@@ -635,17 +633,17 @@ dotnet test --filter "FullyQualifiedName~RetroIO.Tests.Econet"
 
 ### RISC OS AUN setup (external reference)
 
-See PiEconetBridge `docs/NETWORK-v2.1`: route pseudo-subnet, `AddMap` in AUNMap, station = last IP octet. Match `"Net"` in `econet-config.json`.
+Route a pseudo-subnet, add a map entry in AUNMap, station = last IP octet. Match `"Net"` in `econet-config.json`.
 
-### PiEconetBridge compatibility
+### Bridge features
 
-| Pi bridge feature | This project |
-|-------------------|--------------|
-| `EXPOSE HOST 1.254 PORT *:32768` | Similar: UDP listen on 32768 |
-| `FILESERVER ON 1.254` | Similar: Level-3 FS at station 254 |
+| Feature | This project |
+|---------|--------------|
+| AUN on UDP 32768 | Yes: UDP listen on 32768 |
+| File server at 1.254 | Yes: Level-3 FS at station 254 |
 | Wire / bridge / trunk | **Not present** |
-| Dynamic `aun_remotes` | **Not present** — IP octet mapping only |
-| Full `fs.c` opcode set | **Not present** |
+| Dynamic remote station table | **Not present** — IP octet mapping only |
+| Full Level-3 opcode set | **Not present** |
 
 ### Example session (supported commands only)
 
@@ -680,11 +678,11 @@ For load/save, the DFS client uses FS opcodes + bulk ports after login — not p
 | IP → station mapping | **Done** | `AunAddressMapperTests` | Last octet default |
 | FS login | **Done** | `FileServerCommandHandlerTests`, `OsCliCommandHandler` | |
 | Catalogue / examine | **Done** | `ExamineCommandHandler`, tests | |
-| Directory navigation | **Done** | `DirectoryNavigationTests` | `*DIR`/`*LIB` return `0x07`/`0x09` + handle; PiFS-aligned |
+| Directory navigation | **Done** | `DirectoryNavigationTests` | `*DIR`/`*LIB` return `0x07`/`0x09` + handle; matches the reference behaviour |
 | Load (bulk) | **Done** | `BulkLoadTests`, `LoadHello…` | Real load/exec/access/date metadata; ACK-paced burst |
 | Save (bulk) | **Done** | `BulkSaveReplyTests`, `BulkSaveUdpTests` | UDP round-trip; 5-byte create close + 21-byte FS3 close |
 | Run / library search | **Done** | `RunAndInfoTests` | `*RUN` (`0x05`) falls back to library |
-| Object info (`0x12`) | **Done** | `RunAndInfoTests`, `OsCliIamCatTests` | Cmds 1–6 field ordering matches PiFS |
+| Object info (`0x12`) | **Done** | `RunAndInfoTests`, `OsCliIamCatTests` | Cmds 1–6 field ordering matches the reference behaviour |
 | Delete / mkdir | **Implemented** | `FileIoCommandHandler` | No dedicated tests |
 | Open / close | **Implemented** | `FileIoCommandHandler`, `FileServerHandleManager` | |
 | Rename | **Implemented** | `OsCliCommandHandler.HandleRename` | |
@@ -708,14 +706,14 @@ For load/save, the DFS client uses FS opcodes + bulk ports after login — not p
 
 - **Server-only** — no routing between Econet networks
 - **AUN UDP only** — no physical bus, no TCP AUN
-- **Subset of PiFS opcodes** — most `0x08`–`0x20` return `Bad command`
+- **Subset of Level-3 opcodes** — most `0x08`–`0x20` return `Bad command`
 - **OSCLI subset** — `BYE`, `CAT`, `DIR`, `LOAD` prelude, `I AM` only
 - **No `.inf` metadata** — load/exec addresses mostly zero/stub
 - **No outbound AUN retransmit** — unreliable LAN may drop replies
 - **LOAD queue keyed by station only** — `BulkTransferManager._loadTransfers[station]` ignores net in dequeue
 - **Catalogue** — 27-byte entries, simplified dates/attributes
 - **Passwords file** — removed; users are RetroIDP only
-- **Station in config** — banner shows `Net.Station` but UDP bind is `*` on port, not per-station IP binding like Pi `EXPOSE` per address
+- **Station in config** — banner shows `Net.Station` but UDP bind is `*` on port, not per-station IP binding per address
 - **RetroAdmin.Desktop** — Econet monitor tab and settings panel (`Views\EconetMonitorView.axaml`,
 
 ---
@@ -800,16 +798,6 @@ Use `InMemoryAunTransport` + `EconetFileServerService` as in `EconetInMemoryTran
 | UI host | `RetroServer/src/RetroAdmin.Desktop/Services/ServerControl/` (separate repo) |
 | Unit tests | `../../tests/RetroIO.Tests/Econet/` |
 
-### External reference material (not implemented behaviour)
-
-| Document | Location |
-|----------|----------|
-| Econet / AUN / FS developer guide | `PiEconetBridge/docs/ECONET-AUN-FILESERVER-DEVELOPER.md` |
-| AUN network setup | `PiEconetBridge/docs/NETWORK-v2.1` |
-| FS opcode reference | `PiEconetBridge/docs/filserver.md` |
-| PiFS FSOP | `PiEconetBridge/docs/PIFS-v2.1-FSOP` |
-| Pi bridge architecture | `PiEconetBridge/docs/architecture.md` |
-| C reference (`fs.c`, `econet-hpbridge.c`) | PiEconetBridge `utilities/` |
 
 ---
 

@@ -12,11 +12,11 @@ namespace RetroIO.Protocols.Econet.Server.Transport;
 
 /// <summary>
 /// Retransmits a file-server reply until the client returns a matching AUN ACK,
-/// aligned with PiEconetBridge's AUN despatcher (econet-hpbridge.c).
+/// following the usual AUN retransmit model.
 ///
-/// PiEconetBridge model:
-///   * EB_CONFIG_AUN_RETX    = 1000 ms between (re)transmissions of an AUN DATA packet.
-///   * EB_CONFIG_AUN_RETRIES = 5    total transmissions (the "(p->tx)++ is less than RETRIES" loop),
+/// The model:
+///   * 1000 ms between (re)transmissions of an AUN DATA packet.
+///   * 5 total transmissions,
 ///                                  ~1 s apart, then the packet is dropped.
 ///   * Only ECONET_AUN_DATA is retransmitted; ACK/NAK are single-shot.
 ///   * When the inbound AUN listener sees the matching ACK it removes the queued packet,
@@ -38,8 +38,8 @@ public sealed class AunReplyRetransmitter
     }
 
     private readonly ConcurrentDictionary<ReplyKey, Pending> _pending = new();
-    private readonly TimeSpan _retransmitInterval; // EB_CONFIG_AUN_RETX
-    private readonly int _maxTransmits;             // EB_CONFIG_AUN_RETRIES (total, including initial)
+    private readonly TimeSpan _retransmitInterval; // time between transmissions
+    private readonly int _maxTransmits;             // total transmissions, including the initial one
 
     /// <summary>
     /// Creates the retransmitter.
@@ -93,7 +93,7 @@ public sealed class AunReplyRetransmitter
         try
         {
             // Transmission 1 was the initial send in the service; do up to (_maxTransmits - 1) more,
-            // each EB_CONFIG_AUN_RETX apart, mirroring PiEconetBridge's "(p->tx)++ < RETRIES" loop.
+            // each 1 s apart.
             for (int tx = 1; tx < _maxTransmits; tx++)
             {
                 await Task.Delay(_retransmitInterval, token).ConfigureAwait(false);

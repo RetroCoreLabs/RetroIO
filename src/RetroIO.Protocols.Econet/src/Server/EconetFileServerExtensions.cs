@@ -188,8 +188,8 @@ public sealed class EconetFileServerOptions
     public byte Net { get; set; } = 1;
     /// <summary>
     /// Gets or sets the station number of the server. The default is 254.
-    /// The server reports its own address, Net and this station, in the text of the PiBridge shut down reply
-    /// (PiFS utilities/fs.c line 4301). An AUN datagram has no station field (it holds the packet type, the port,
+    /// The server reports its own address, Net and this station, in the text of the PiBridge shut down reply.
+    /// An AUN datagram has no station field (it holds the packet type, the port,
     /// the control byte, a pad byte and the sequence number), so the station is not written into any UDP datagram;
     /// the address a client sends to is the IP address of the host, not this number.
     /// </summary>

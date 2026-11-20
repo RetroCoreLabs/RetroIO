@@ -36,7 +36,7 @@ public static class EconetMetadataKeys
     /// Metadata key of the flag that lets a user log in with a blank password.
     /// </summary>
     public const string AllowEmptyPassword = "econet.allowEmptyPassword";
-    // Locked account (PiFS FS_PRIV_LOCKED): the password verifies but login is refused.
+    // Locked account: the password verifies but login is refused.
     /// <summary>
     /// Metadata key of the flag that marks an account as locked.
     /// </summary>

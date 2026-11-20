@@ -89,7 +89,7 @@ public sealed class FileServerHandleManager
     private const byte FirstHandle = 4;
     private const byte LastHandle = 32;
 
-    // Without the ManyHandle flag no handle above 8 is given out (fs.c lines 1464 and 1495: the limit is 9
+    // Without the ManyHandle flag no handle above 8 is given out (the limit is 9
     // slots counted from 1, so the largest handle is 8). Handles 1 to 3 are the directory handles.
     private const byte LastHandleWithoutManyHandle = 8;
 

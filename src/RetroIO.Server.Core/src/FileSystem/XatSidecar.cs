@@ -22,8 +22,8 @@ namespace RetroIO.Server.Core.FileSystem;
 /// The .xat file lies in the same directory as the object it describes. For the object <c>HELLO</c> it is <c>HELLO.xat</c>.
 /// </para>
 /// <para>
-/// Why a listing may hide it: PiFS hides its own side file because an Acorn name cannot hold a dot, since the dot is the directory separator in the Acorn world
-/// (PiEconetBridge utilities/fs.c, comment above pathname_to_dotfile, lines 1589 to 1595). The suffix of a .xat file starts with a dot, so no Acorn name can be
+/// Why a listing may hide it: an Acorn name cannot hold a dot, since the dot is the directory separator in the Acorn world.
+/// The suffix of a .xat file starts with a dot, so no Acorn name can be
 /// the name of a .xat file. <see cref="IsXatName"/> is the test for that.
 /// </para>
 /// <para>

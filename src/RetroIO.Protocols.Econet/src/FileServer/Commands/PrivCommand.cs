@@ -16,12 +16,12 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>*PRIV</c> — a System user sets another user's privilege.
 /// </summary>
 /// <remarks>
-/// Reference behaviour (PiFS, facts only): System-only, abbreviation 4. Argument is
+/// Reference behaviour: System-only, abbreviation 4. Argument is
 /// <c>username priv</c> where <c>priv</c> is a letter, optionally with a <c>+</c>/<c>-</c>
 /// set/unset prefix. Missing username or priv is <c>0xFE "Bad command"</c>; an unknown user is
 /// <c>0xBC "User not found"</c>.
 /// <para>
-/// Supported privilege states (mutually exclusive, as in PiFS): <c>S</c>/<c>+S</c> System (admin,
+/// Supported privilege states (mutually exclusive): <c>S</c>/<c>+S</c> System (admin,
 /// unlocked); <c>U</c> or <c>-S</c>/<c>-L</c> Normal; <c>L</c>/<c>+L</c> Locked (password verifies but
 /// login is refused with <c>0xBC "Account locked"</c>). System maps to <see cref="RetroIO.Identity.RetroUser.IsAdmin"/>,
 /// Locked to the <c>econet.locked</c> flag checked in the login path. Persisted immediately; a live
@@ -70,7 +70,7 @@ public sealed class PrivCommand : IOsCliCommand
     ///  - <c>L</c>: Locked; with <c>-</c>, a Normal user.
     ///  - any other letter: 0xFF "Unsupported privilege".
     /// When the user store refuses the change (the user was removed after it was found), <c>S</c>,
-    /// <c>U</c> and <c>L</c> reply 0xBC "User not found", as PiFS does for a user it cannot find.
+    /// <c>U</c> and <c>L</c> reply 0xBC "User not found", the answer for a user that cannot be found.
     /// </remarks>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
@@ -107,7 +107,7 @@ public sealed class PrivCommand : IOsCliCommand
         if (!call.Context.Users.TryGetProfileByUsername(username, out EconetUserProfile? profile) || profile == null)
             return FileServerReply.Error(0xBC, "User not found");
 
-        // PiFS privileges are mutually-exclusive states, so each maps to a full (isAdmin, isLocked) pair.
+        // Privileges are mutually-exclusive states, so each maps to a full (isAdmin, isLocked) pair.
         // A "-" prefix (setPriv false) demotes to the Normal user in every case.
         bool stored;
         switch (privChar)
@@ -129,7 +129,7 @@ public sealed class PrivCommand : IOsCliCommand
                 return FileServerReply.Error(FileServerErrors.Unsupported, "Unsupported privilege");
         }
 
-        // The user was found a moment ago; a refused store means it has gone since (PiFS 0xBC).
+        // The user was found a moment ago; a refused store means it has gone since (0xBC).
         if (!stored)
             return FileServerReply.Error(0xBC, "User not found");
 

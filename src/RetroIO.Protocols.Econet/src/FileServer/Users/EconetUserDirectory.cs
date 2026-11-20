@@ -114,7 +114,7 @@ public sealed class EconetUserDirectory
     }
 
     /// <summary>
-    /// Persist a user's boot option (PiFS fs_set_bootopt writes it to the user record), so it
+    /// Persist a user's boot option to the user record, so it
     /// survives logout/login and is reported on the next login handshake.
     /// </summary>
     public bool TrySetBootOpt(Guid userId, byte bootOpt)
@@ -275,7 +275,7 @@ public sealed class EconetUserDirectory
     }
 
     /// <summary>
-    /// Sets a user's privilege STATE for <c>*PRIV</c>. PiFS treats System / Normal / Locked as mutually
+    /// Sets a user's privilege STATE for <c>*PRIV</c>. System / Normal / Locked are mutually
     /// exclusive, so both flags are written together: System maps to <see cref="RetroIO.Identity.RetroUser.IsAdmin"/>,
     /// Locked to the <c>econet.locked</c> metadata (refused at login by
     /// <c>FileServerSessionManager</c>). Persisted immediately; a live session keeps its

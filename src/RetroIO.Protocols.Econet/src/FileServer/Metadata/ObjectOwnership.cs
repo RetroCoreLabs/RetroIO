@@ -10,7 +10,7 @@ using RetroIO.Protocols.Econet.FileServer.Sessions;
 namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 
 /// <summary>
-/// Works out who owns an object and whether a session is that owner, following the PiFS reference (PiEconetBridge utilities/fs.c).
+/// Works out who owns an object and whether a session is that owner.
 /// </summary>
 /// <remarks>
 /// The owner of each object is stored in its property bag (see AcornAttributeStore). With the AcornHome flag set, the owner of everything at or below a home directory is the user whose home it is.
@@ -18,7 +18,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 public static class ObjectOwnership
 {
     /// <summary>
-    /// The name of the system manager account, which fs.c puts in user entry 0 (line 3541).
+    /// The name of the system manager account, which is user entry 0.
     /// </summary>
     public const string SystemManagerName = "SYST";
 
@@ -35,7 +35,7 @@ public static class ObjectOwnership
     /// The stored owner, or the user number whose home directory holds the object when the AcornHome flag is set and a home directory is found on the way down to the object.
     /// </returns>
     /// <remarks>
-    /// Source: fs.c fs_normalize_path, lines 3061 to 3065 (non wildcard) and 2781 to 2800 (wildcard). The first directory with a home owner, met from the disc root down and counting the object itself, gives its home owner to the object (homeof_found). Without the flag, the stored owner stands (the tests at lines 2784, 2928 and 3061 all include fs_acorn_home).
+    /// The first directory with a home owner, met from the disc root down and counting the object itself, gives its home owner to the object. Without the AcornHome flag, the stored owner stands.
     /// </remarks>
     public static ushort GetOwner(FileServerContext context, string unixPath)
     {
@@ -60,8 +60,8 @@ public static class ObjectOwnership
     /// True when the user number of the session is the owner.
     /// </returns>
     /// <remarks>
-    /// Source: fs.c FS_PERM_ISOWNER, line 364: the user number of the user is the owner.
-    /// In PiFS the system manager SYST is always user number 0 (a new password file is made with SYST in entry 0, lines 3538 to 3544), and 0 is the owner an object has when nothing is stored (line 1678, and line 2633 "Always SYST if root directory not owned"). So an object with the default owner belongs to SYST.
+    /// The user number of the user is the owner.
+    /// The system manager SYST is user number 0 (a new password file is made with SYST in entry 0), and 0 is the owner an object has when nothing is stored (also an unowned root directory belongs to SYST). So an object with the default owner belongs to SYST.
     /// The user numbers here come from the account (EconetUserProfile.UserIndex) and SYST has no fixed number, so the system manager (the administrator named SYST) counts as owner of an object with the default owner.
     /// </remarks>
     public static bool IsOwner(FileServerSession session, ushort owner)
@@ -86,9 +86,6 @@ public static class ObjectOwnership
     /// <returns>
     /// True when the user has system privilege or is the owner.
     /// </returns>
-    /// <remarks>
-    /// Source: fs.c FS_PERM_EFFOWNER, line 366.
-    /// </remarks>
     public static bool IsEffectiveOwner(FileServerSession session, ushort owner)
     {
         return session.IsAdmin || IsOwner(session, owner);
@@ -122,7 +119,7 @@ public static class ObjectOwnership
     /// The session that was just created.
     /// </param>
     /// <remarks>
-    /// Source: fs.c login, lines 4677 to 4685: with fs_acorn_home set, a user directory whose homeof is 0 gets the user number of the user who logged in, and keeps its owner.
+    /// At login, with the AcornHome flag set, a user directory whose homeof is 0 gets the user number of the user who logged in, and keeps its owner.
     /// </remarks>
     public static void ClaimHomeOnLogin(FileServerContext context, FileServerSession session)
     {
@@ -151,7 +148,7 @@ public static class ObjectOwnership
     /// The user number whose home directory it is, 0 to clear.
     /// </param>
     /// <remarks>
-    /// Source: fs.c *SETHOME, lines 10715 to 10751, which writes the new homeof with the owner it read.
+    /// *SETHOME writes the new homeof with the owner it read.
     /// </remarks>
     public static void SetHomeOwner(FileServerContext context, string unixPath, ushort homeOf)
     {

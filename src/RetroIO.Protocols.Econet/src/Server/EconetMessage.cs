@@ -82,7 +82,7 @@ public sealed class EconetMessage
 
     /// <summary>
     /// Return a copy of this message carrying a different AUN sequence number. Used to stamp a fresh
-    /// server sequence (PiFS get_local_seq analogue) onto outbound FS reply DATA — see
+    /// server sequence onto outbound FS reply DATA — see
     /// <see cref="RetroIO.Protocols.Econet.Server.Transport.AunOutboundSequence"/>.
     /// </summary>
     public EconetMessage WithSequence(uint sequence) => new()

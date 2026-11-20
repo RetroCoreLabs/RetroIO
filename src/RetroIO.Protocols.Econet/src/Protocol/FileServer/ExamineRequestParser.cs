@@ -10,7 +10,7 @@ using RetroIO.Protocols.Econet.Common;
 namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 
 /// <summary>
-/// Parses fsop <c>0x03</c> per PiFS <c>fs_examine</c> (arg/start/count then path at byte 8).
+/// Parses fsop <c>0x03</c> (arg/start/count then path at byte 8).
 /// DNFS often omits arg/start/count and places the path at byte 5 (same layout as CatHeader).
 /// </summary>
 internal static class ExamineRequestParser

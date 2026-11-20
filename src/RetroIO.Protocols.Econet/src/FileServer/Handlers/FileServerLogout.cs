@@ -10,8 +10,8 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Protocols.Econet.FileServer.Handlers;
 
 /// <summary>
-/// PiFS <c>fs_bye</c> equivalent — close handles, release bulk ports, clear session, reply <c>[0,0]</c>.
-/// Caller must enforce login (PiFS returns <c>0xBF</c> when not logged in).
+/// BYE — close handles, release bulk ports, clear session, reply <c>[0,0]</c>.
+/// Caller must enforce login (the reply is <c>0xBF</c> when not logged in).
 /// </summary>
 internal static class FileServerLogout
 {

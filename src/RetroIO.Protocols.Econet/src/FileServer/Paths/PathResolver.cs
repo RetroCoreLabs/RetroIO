@@ -113,8 +113,8 @@ public sealed class PathResolver
         string trimmed = acornPath.Trim();
         if (trimmed.StartsWith(':'))
         {
-            // PiFS (fs.c:2377-2406) validates the disc name BEFORE resolving: a bare ":" — or any
-            // ":" without a 1-16 character disc name — is FS_PATH_ERR_NODISC and resolves to nothing.
+            // The disc name is checked BEFORE resolving: a bare ":" — or any
+            // ":" without a 1-16 character disc name — is a "no disc" error and resolves to nothing.
             // Previously this branch threw the disc spec away and resolved the empty remainder against
             // the session's CURRENT disc, so ":" silently landed on the disc container directory,
             // escaping the user's root. See AcornPath.TryParseDiscPath.
@@ -125,7 +125,7 @@ public sealed class PathResolver
                 return false;
             }
 
-            // The disc name must name a disc we actually have (PiFS fs.c:2411-2424).
+            // The disc name must name a disc we actually have.
             if (!_discs.TryFind(discName, out DiscEntry? namedDisc) || namedDisc == null)
             {
                 errorCode = FileServerErrors.NotFound;

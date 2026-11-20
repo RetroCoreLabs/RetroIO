@@ -15,7 +15,7 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Validates the LOAD (fsop 0x02) metadata reply against the PiFS reference (utilities/fs.c fs_load):
+/// Validates the LOAD (fsop 0x02) metadata reply against the reference behaviour:
 /// 16-byte reply [00 00, load(4 LE), exec(4 LE), length(3), access, day, monthyear] carrying the file's
 /// real attributes so the BBC can place the image and (for CHAIN/*RUN) obtain the execution address.
 /// </summary>

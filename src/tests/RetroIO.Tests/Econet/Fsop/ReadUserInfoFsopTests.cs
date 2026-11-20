@@ -34,7 +34,7 @@ internal sealed class ReadUserInfoFsopTests : FsopProtocolTestBase
 
         EconetMessage reply = Harness.Send(FileServerOpcodes.ReadUserInfo, Encoding.ASCII.GetBytes("SYST\r"));
 
-        // PiFS layout: [0, 0, flag, station, net]; flag = 0x40 for a System user.
+        // Layout: [0, 0, flag, station, net]; flag = 0x40 for a System user.
         Assert.That(StatusOf(reply), Is.EqualTo(0x00));
         Assert.That(reply.Payload[2], Is.EqualTo(0x40), "System-user flag");
         Assert.That(reply.Payload[3], Is.EqualTo(1), "client station (harness uses 1)");

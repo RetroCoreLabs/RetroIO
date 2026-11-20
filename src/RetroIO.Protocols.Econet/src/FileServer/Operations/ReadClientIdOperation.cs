@@ -12,7 +12,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 
 /// <summary>
 /// <c>ReadClientId</c> (fsop 0x20) — returns the caller's OWN username as raw ASCII terminated by
-/// <c>0x0D</c>, with no leading status bytes (PiFS <c>fs.c:11482</c>).
+/// <c>0x0D</c>, with no leading status bytes.
 /// </summary>
 /// <remarks>
 /// Migrated from <c>MiscOpcodeHandler.HandleReadClientId</c>. The login gate is now the dispatcher's

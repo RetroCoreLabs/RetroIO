@@ -19,8 +19,8 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 /// <c>0xDE</c>.
 /// </summary>
 /// <remarks>
-/// Migrated from <c>MiscOpcodeHandler.HandleGetRandomAccessInfo</c>, unchanged. PiFS dispatch
-/// (utilities/fs.c:11384): handle = <c>data[5]</c>, function = <c>data[6]</c>.
+/// Migrated from <c>MiscOpcodeHandler.HandleGetRandomAccessInfo</c>, unchanged. Request
+/// layout: handle = <c>data[5]</c>, function = <c>data[6]</c>.
 /// </remarks>
 public sealed class GetRandomAccessInfoOperation : IFileServerOperation
 {
@@ -47,7 +47,7 @@ public sealed class GetRandomAccessInfoOperation : IFileServerOperation
     /// the first parameter byte, cut to 24 bits. Any other function value returns 0.
     /// </summary>
     /// <remarks>
-    /// PiFS (fs_get_random_access_info) handles only functions 0, 1 and 2 and sends the three data
+    /// The reference server handles only functions 0, 1 and 2 and sends the three data
     /// bytes unset for any other value; this operation sends zeros for those.
     /// </remarks>
     /// <param name="call">
@@ -59,15 +59,15 @@ public sealed class GetRandomAccessInfoOperation : IFileServerOperation
     public byte[] Execute(in FsOpCall call)
     {
         ReadOnlySpan<byte> parameters = call.FsRequest.Parameters;
-        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11385).
+        // The handle byte on the wire is a bit mask unless ManyHandle is set.
         byte handle = AcornFileHandles.DivHandle(parameters.Length > 0 ? parameters[0] : (byte)0, call.Context.Configuration.ManyHandles);
         byte function = parameters.Length > 1 ? parameters[1] : (byte)0;
         OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)
             return FileServerReply.Error(FileServerErrors.BadChannel, "Channel ?");
 
-        // function 0 = cursor position; 1/2 = extent (file length); anything else = 0 (PiFS leaves the
-        // value unset). Reply is a single 24-bit value.
+        // function 0 = cursor position; 1/2 = extent (file length); anything else = 0 (the reference
+        // server leaves the value unset). Reply is a single 24-bit value.
         long value = function == 0 ? open.Cursor : (function == 1 || function == 2 ? open.Stream.Length : 0);
         return FileServerReply.RandomAccessInfo((int)(value & 0xFFFFFF));
     }

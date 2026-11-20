@@ -18,8 +18,8 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 /// (see IFileSystemBackend.GetObjectProperties and XatSidecar). The keys follow the NDFS pattern of a prefix, a dot and a lower case name.
 /// </para>
 /// <para>
-/// Source for the values: PiEconetBridge utilities/fs.c, struct objattr (line 318), which holds owner, load, exec, perm and homeof. The length is not in
-/// that structure, because PiFS takes the length from the file. This server does the same: the length is never stored, it is the size of the file.
+/// The values: owner, load, exec, perm and homeof. The length is not one of them,
+/// because it is taken from the file: the length is never stored, it is the size of the file.
 /// </para>
 /// </remarks>
 public static class AcornProperties
@@ -37,7 +37,7 @@ public static class AcornProperties
     public const string Exec = Prefix + "exec";
 
     /// <summary>
-    /// The access byte of the object (fs.c calls it perm).
+    /// The access byte of the object (also called perm).
     /// </summary>
     public const string Access = Prefix + "access";
 
@@ -47,7 +47,7 @@ public static class AcornProperties
     public const string Owner = Prefix + "owner";
 
     /// <summary>
-    /// The user number whose home directory the object is, 0 for none (fs.c calls it homeof).
+    /// The user number whose home directory the object is, 0 for none (also called homeof).
     /// </summary>
     public const string HomeOf = Prefix + "homeof";
 

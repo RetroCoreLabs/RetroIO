@@ -76,7 +76,7 @@ public sealed class OsCliCommandHandler
         if (session == null)
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.WhoAreYou, "Who are you ?"));
 
-        // PiFS (fs.c:11302 / :11327) does NOT error here — it replies with return code 0x08
+        // The server does NOT error here — it replies with return code 0x08
         // ("Unknown command") plus the original command text, which tells the NFS/ANFS ROM to handle
         // it, i.e. to *RUN a file of that name. Returning &FE "Bad command" instead is final to the
         // ROM and breaks *OPT 4,n / SHIFT-BREAK autoboot (the ROM issues "*!BOOT" after login) as

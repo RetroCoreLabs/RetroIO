@@ -83,7 +83,7 @@ public sealed class CopyCommand : IOsCliCommand
         byte[] data = ReadAll(call.Context, sourcePath);
         WriteAll(call.Context, destPath, data);
 
-        // fs.c line 6474: the copy is owned by the user who made it.
+        // The copy is owned by the user who made it.
         ObjectOwnership.SetOwner(call.Context, call.Session!, destPath);
         return FileServerReply.Success();
     }

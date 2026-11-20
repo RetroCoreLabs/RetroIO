@@ -67,7 +67,7 @@ public sealed class PutBytesOperation : IFileServerOperation
         if (parameters.Length < 8)
             return FileServerReply.Error(FileServerErrors.BadCommand, "Bad server request");
 
-        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11382).
+        // The handle byte on the wire is a bit mask unless ManyHandle is set.
         byte handle = AcornFileHandles.DivHandle(parameters[0], context.Configuration.ManyHandles);
         byte offsetStatus = parameters[1];
         int bytes = parameters[2] | (parameters[3] << 8) | (parameters[4] << 16);

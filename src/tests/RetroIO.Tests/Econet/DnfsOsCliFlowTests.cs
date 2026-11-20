@@ -88,7 +88,7 @@ public sealed class DnfsOsCliFlowTests
     }
 
     [Test]
-    public void Bye_WithoutLogin_ReturnsWhoAreYou_PiFsAligned()
+    public void Bye_WithoutLogin_ReturnsWhoAreYou()
     {
         for (int attempt = 0; attempt < 3; attempt++)
         {
@@ -98,7 +98,7 @@ public sealed class DnfsOsCliFlowTests
     }
 
     [Test]
-    public void Bye_OpcodeWithoutLogin_ReturnsWhoAreYou_PiFsAligned()
+    public void Bye_OpcodeWithoutLogin_ReturnsWhoAreYou()
     {
         DnfsReply bye = _client.Opcode(FileServerOpcodes.Bye, []);
         Assert.That(bye.Payload[1], Is.EqualTo(FileServerErrors.WhoAreYou));
@@ -128,8 +128,8 @@ public sealed class DnfsOsCliFlowTests
         Assert.That(cat.DirectoryInfo.Payload[1], Is.EqualTo(0));
         Assert.That(cat.Examine.Payload[1], Is.EqualTo(0));
         Assert.That(cat.Header.Payload[^1], Is.EqualTo(0x80));
-        // PiFS fs.c:10388 - "$" is the disc root; the logged-in home ($.USER) reports "USER".
-        // Re-baselined 2026-07-17 (PiFS naming parity).
+        // "$" is the disc root; the logged-in home ($.USER) reports "USER".
+        // Re-baselined 2026-07-17 (naming rule).
         Assert.That(Encoding.ASCII.GetString(cat.Header.Payload, 2, 11).TrimEnd(), Is.EqualTo("USER"));
     }
 
@@ -170,7 +170,7 @@ public sealed class DnfsOsCliFlowTests
     public void Cat_NonAdminUser_Cmd6ReportsTheRealOwnerAndSucceeds()
     {
         // The catalogue works for a user without system privilege. The owner byte of the directory header follows
-        // the owner stored for the directory (fs.c line 5735): the sample home directory has no stored owner, so it
+        // the owner stored for the directory: the sample home directory has no stored owner, so it
         // belongs to the system manager and this user is not the owner.
         DnfsReply login = _client.OsCli("I AM USER \r");
         Assert.That(login.IsLoginSuccess, Is.True);

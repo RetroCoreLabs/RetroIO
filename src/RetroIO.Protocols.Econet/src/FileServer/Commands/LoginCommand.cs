@@ -117,7 +117,7 @@ public sealed class LoginCommand : IOsCliCommand
             // wrong-home window. Every override is guarded (see ApplyProfileDirectories).
             ApplyProfileDirectories(context, session!);
 
-            // fs.c lines 4677 to 4685: with the AcornHome flag set, the home directory of the user gets the user as its home owner.
+            // With the AcornHome flag set, the home directory of the user gets the user as its home owner.
             ObjectOwnership.ClaimHomeOnLogin(context, session!);
 
             EconetSecurityAudit.EmitAuthAsync(context.SecurityEvents, session!.RetroUserId, session.Username, true, clientIp)

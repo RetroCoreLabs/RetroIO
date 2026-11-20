@@ -15,7 +15,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 
 /// <summary>
 /// <c>ReadLoggedOnUsers</c> (fsop 0x0F) — returns a variable-length block describing the users
-/// currently logged on, starting at a caller-supplied index (PiFS <c>fs_read_logged_on_users</c>).
+/// currently logged on, starting at a caller-supplied index.
 /// </summary>
 /// <remarks>
 /// Migrated from <c>MiscOpcodeHandler.HandleReadLoggedOnUsers</c>, unchanged. The
@@ -71,7 +71,7 @@ public sealed class ReadLoggedOnUsersOperation : IFileServerOperation
         if (profile == WireProfile.Classic1983)
             return FileServerReply.LoggedOnUsers(sessions.Length, BuildClassic1983Entries(sessions));
 
-        // PiFS fs_read_logged_on_users (utilities/fs.c:7546-7618) writes a VARIABLE-length per-user entry:
+        // The reply holds a VARIABLE-length per-user entry:
         //   [station][net][username chars (space-trimmed)][0x0D][priv]  -> 4 + strlen(username) bytes.
         // (The username is copied up to 10 chars and terminated at the first space.) NOT a fixed
         // [net][stn][10-char-padded-name] block. Two passes: size the buffer, then fill it (no LINQ/foreach).
@@ -92,7 +92,7 @@ public sealed class ReadLoggedOnUsersOperation : IFileServerOperation
             names[i].CopyTo(entries.AsSpan(offset));
             offset += names[i].Length;
             entries[offset++] = FileServerReply.CarriageReturn;
-            entries[offset++] = sessions[i].IsAdmin ? (byte)1 : (byte)0; // FS_PRIV_SYSTEM ? 1 : 0
+            entries[offset++] = sessions[i].IsAdmin ? (byte)1 : (byte)0; // System user ? 1 : 0
         }
 
         return FileServerReply.LoggedOnUsers(sessions.Length, entries);
@@ -129,15 +129,15 @@ public sealed class ReadLoggedOnUsersOperation : IFileServerOperation
             for (int p = 0; p < copy; p++)
                 entries[offset + 2 + p] = name[p];
 
-            entries[offset + 12] = sessions[i].IsAdmin ? (byte)1 : (byte)0; // FS_PRIV_SYSTEM ? 1 : 0
+            entries[offset + 12] = sessions[i].IsAdmin ? (byte)1 : (byte)0; // System user ? 1 : 0
             offset += frameSize;
         }
         return entries;
     }
 
     /// <summary>
-    /// Copy an Acorn username, terminated at the first space, to at most 10 ASCII bytes — mirrors PiFS's
-    /// "strncpy 10 then cut at first space" convention (utilities/fs.c:7597-7600, 11491-11493).
+    /// Copy an Acorn username, terminated at the first space, to at most 10 ASCII bytes — the
+    /// "copy 10 then cut at first space" rule.
     /// </summary>
     private static byte[] TrimAcornUsername(string? username)
     {

@@ -14,10 +14,8 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// The file server configuration flags and their wire form, checked against the PiFS reference
-/// (PiEconetBridge utilities/fs.c: fs_get_parameters line 555, fs_set_parameters line 574, the
-/// PiBridge calls 0x11 and 0x12 at lines 4240 to 4300, the new-configuration defaults at lines 3460 to 3467,
-/// and include/econet-fs-hpbridge-common.h lines 10 to 17).
+/// The file server configuration flags and their wire form, checked against the reference
+/// behaviour (the PiBridge calls 0x11 and 0x12 and the new-configuration defaults).
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -29,9 +27,9 @@ public sealed class FileServerConfigurationTests
     public void SetUp() => _harness = new EconetFsTestHarness();
 
     [Test]
-    public void DefaultFlags_AreThePiFsNewConfiguration_SjFunctionsAndAcornDirectoryDisplay()
+    public void DefaultFlags_AreTheNewConfiguration_SjFunctionsAndAcornDirectoryDisplay()
     {
-        // fs.c 3460 to 3464: a new configuration sets fs_sjfunc (0x02) and fs_mask_dir_wrr (0x80); the rest are 0.
+        // A new configuration sets MDFS (0x02) and ACORNDIR (0x80); the rest are 0.
         FileServerConfiguration configuration = new FileServerConfiguration();
 
         Assert.That(configuration.ConfigBits, Is.EqualTo(0x82));
@@ -39,10 +37,10 @@ public sealed class FileServerConfigurationTests
     }
 
     [Test]
-    public void DefaultPermissions_ArePiFsDirectoryOwnWriteReadOtherRead_FileOwnWriteRead()
+    public void DefaultPermissions_AreDirectoryOwnWriteReadOtherRead_FileOwnWriteRead()
     {
-        // fs.c 3466 and 3467: directory = FS_PERM_OWN_W | FS_PERM_OWN_R | FS_PERM_OTH_R (0x02 | 0x01 | 0x10),
-        // file = FS_PERM_OWN_W | FS_PERM_OWN_R (0x02 | 0x01).
+        // Directory = owner write | owner read | other read (0x02 | 0x01 | 0x10),
+        // file = owner write | owner read (0x02 | 0x01).
         FileServerConfiguration configuration = new FileServerConfiguration();
 
         Assert.That(configuration.DefaultDirPerm, Is.EqualTo(0x13));
@@ -52,8 +50,8 @@ public sealed class FileServerConfigurationTests
     [Test]
     public void PiBridgeGetParameters_ReplyIsFourParameterBytesThenTheFilenameLength()
     {
-        // fs.c 4254 to 4266: data[0..3] = the 32-bit params value, low byte first, data[4] = filename length.
-        // fs_get_parameters (555 to 571) puts the flags in bits 0 to 7, the default file permission in bits 16 to 23
+        // data[0..3] = the 32-bit params value, low byte first, data[4] = filename length.
+        // The 32-bit value holds the flags in bits 0 to 7, the default file permission in bits 16 to 23
         // and the default directory permission in bits 24 to 31.
         _harness.LoginAsSyst();
         _harness.Configuration.ConfigBits = 0x82;
@@ -69,7 +67,7 @@ public sealed class FileServerConfigurationTests
     [Test]
     public void PiBridgeSetParameters_ReadsFourParameterBytesThenTheFilenameLength()
     {
-        // fs.c 4272 to 4291: params = data[6] + data[7] << 8 + data[8] << 16 + data[9] << 24, filename length = data[10].
+        // params = data[6] + data[7] << 8 + data[8] << 16 + data[9] << 24, filename length = data[10].
         _harness.LoginAsSyst();
 
         byte[] reply = _harness.Send(FileServerOpcodes.PiBridge, [18, 0x56, 0x00, 0x23, 0x31, 20]).Payload;
@@ -85,7 +83,7 @@ public sealed class FileServerConfigurationTests
     [TestCase((byte)80)]
     public void PiBridgeSetParameters_RefusesAFilenameLengthOutsideTenToSeventyNine(byte filenameLength)
     {
-        // fs.c 4281 to 4285: fnlength < 10 or > 79 answers error 0xFF "Bad filename length" and changes nothing.
+        // fnlength < 10 or > 79 answers error 0xFF "Bad filename length" and changes nothing.
         _harness.LoginAsSyst();
 
         byte[] reply = _harness.Send(FileServerOpcodes.PiBridge, [18, 0x01, 0x00, 0x23, 0x31, filenameLength]).Payload;
@@ -109,7 +107,7 @@ public sealed class FileServerConfigurationTests
     [Test]
     public void SaveSetup_WithBigChunksClear_AdvertisesTheSmallWindow0x500()
     {
-        // fs.c 9023 and 9024: the maximum transfer size is 0x500 with fs_bigchunks clear.
+        // The maximum transfer size is 0x500 with BigChunks clear.
         _harness.LoginAsSyst();
         _harness.Configuration.ConfigBits = 0x82;
 
@@ -123,7 +121,7 @@ public sealed class FileServerConfigurationTests
     [Test]
     public void SaveSetup_WithBigChunksSet_AdvertisesTheFourKilobyteWindow0x1000()
     {
-        // fs.c 184, 9023 and 9024: FS_MAX_BULK_SIZE is 0x1000 and is sent, low byte first, with fs_bigchunks set.
+        // 0x1000 is sent, low byte first, with BigChunks set.
         _harness.LoginAsSyst();
         _harness.Configuration.ConfigBits = 0x82 | FileServerConfiguration.FlagBigChunks;
 

@@ -11,7 +11,7 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Protocols.Econet.Protocol.Aun;
 
 /// <summary>
-/// PiFS AUN outbound framing for file-server replies (see <c>fs_get_object_info</c> in PiFS <c>fs.c</c>).
+/// AUN outbound framing for file-server replies.
 /// </summary>
 internal static class AunFsReply
 {
@@ -26,7 +26,7 @@ internal static class AunFsReply
         if (payload.Length < 2 || payload[0] != 0 || payload[1] != 0)
             return 0x80;
 
-        // Soft not-found for cmd 1–5 is exactly 3 bytes [00 00 00] — still ctrl 0x80 in PiFS.
+        // Soft not-found for cmd 1–5 is exactly 3 bytes [00 00 00] — still ctrl 0x80.
         if (payload.Length == 3 && payload[2] == 0)
             return 0x80;
 

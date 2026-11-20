@@ -14,7 +14,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Configuration;
 /// </summary>
 /// <remarks>
 /// <para>
-/// RetroFS emits the later-FS format by default — the shapes ANFS / DNFS 3.60 and PiFS expect,
+/// RetroFS emits the later-FS format by default — the shapes ANFS / DNFS 3.60 expect,
 /// and what every live BeebEm capture and golden test locks. A handful of frames deliberately diverge
 /// from the original 1983 Level-2/3 format, so a client hard-wired to the 1983 frames would
 /// misread them. This enum lets an operator pin such a client to the classic shapes without changing

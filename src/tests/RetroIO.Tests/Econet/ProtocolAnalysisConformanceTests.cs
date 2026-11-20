@@ -17,7 +17,7 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Conformance tests derived from PiEconetBridge/docs/Econet_Message_Protocol_Analysis.md §6.3 / §7.1.
+/// Conformance tests derived from the protocol analysis notes §6.3 / §7.1.
 /// </summary>
 [TestFixture]
 [Category("Unit")]

@@ -10,7 +10,7 @@ using System.Text;
 namespace RetroIO.Protocols.Econet.Common;
 
 /// <summary>
-/// Acorn path parsing and Unix path mapping for PiFS-style layouts.
+/// Acorn path parsing and Unix path mapping.
 /// </summary>
 public static class AcornPath
 {
@@ -204,25 +204,22 @@ public static class AcornPath
     }
 
     /// <summary>
-    /// Maximum disc-name length. PiFS compiles its disc-name regex as <c>^(FSREGEX{1,16})</c>
-    /// (utilities/fs.c:3409), so a disc name is 1-16 characters — never zero.
+    /// Maximum disc-name length. A disc name is 1-16 characters — never zero.
     /// </summary>
     private const int MaxDiscNameLength = 16;
 
     /// <summary>
-    /// Split and normalise a <c>:</c>-prefixed (disc-qualified) Acorn path, byte-faithfully to PiFS
-    /// <c>fs_normalize_path_wildcard</c> (utilities/fs.c:2377-2406).
+    /// Split and normalise a <c>:</c>-prefixed (disc-qualified) Acorn path, byte for byte as the
+    /// file server does.
     /// </summary>
     /// <remarks>
     /// <para><b>Rules</b></para>
     /// The reference behaviour this reproduces:
     ///  - A disc name is 1 to 16 characters, so it can never be empty. A bare <c>":"</c> names nothing
-    ///    and is rejected with <c>FS_PATH_ERR_NODISC</c> (fs.c:2399); it never resolves to a directory.
-    ///  - The disc name must be followed by a dot or end-of-string, else <c>FS_PATH_ERR_FORMAT</c>
-    ///    (fs.c:2402-2406).
-    ///  - <c>":DISC"</c> with nothing after it becomes <c>"$"</c>, the disc root (fs.c:2387).
-    ///  - <c>":DISC.X"</c> becomes <c>"$.X"</c>, while an explicit <c>":DISC.$..."</c> is kept as-is
-    ///    (fs.c:2384-2394).
+    ///    and is rejected as "no disc"; it never resolves to a directory.
+    ///  - The disc name must be followed by a dot or end-of-string, else it is a format error.
+    ///  - <c>":DISC"</c> with nothing after it becomes <c>"$"</c>, the disc root.
+    ///  - <c>":DISC.X"</c> becomes <c>"$.X"</c>, while an explicit <c>":DISC.$..."</c> is kept as-is.
     /// <para><b>Why this exists</b></para>
     /// Accepting a bare <c>":"</c> let <c>*DIR :</c> set the current directory to the raw string
     /// <c>":"</c>, which resolved to the disc container directory above the user's root, leaked the
@@ -251,14 +248,14 @@ public static class AcornPath
 
         string path = acornPath.Trim();
         if (path.Length < 2 || path[0] != ':')
-            return false; // A bare ":" (length 1) has no disc name -> PiFS FS_PATH_ERR_NODISC.
+            return false; // A bare ":" (length 1) has no disc name -> "no disc" error.
 
         // Disc name runs to the first '.' or to end-of-string.
         int dot = path.IndexOf('.', 1);
         int nameEnd = dot < 0 ? path.Length : dot;
         int nameLength = nameEnd - 1;
         if (nameLength < 1 || nameLength > MaxDiscNameLength)
-            return false; // Zero-length (":" or ":.") or longer than PiFS's {1,16} -> reject.
+            return false; // Zero-length (":" or ":.") or longer than 16 -> reject.
 
         discName = path.Substring(1, nameLength);
 
@@ -307,9 +304,8 @@ public static class AcornPath
     }
 
     /// <summary>
-    /// Encode Acorn/ADFS day and month-year bytes from a timestamp, byte-for-byte matching PiFS
-    /// <c>fs_date_to_two_bytes</c> (utilities/fs.c:1143) with its DEFAULT <c>fs_sevenbitbodge = 1</c>
-    /// (utilities/econet-hpbridge.c:9321 — only disabled by an explicit CLI option). This is the standard
+    /// Encode Acorn/ADFS day and month-year bytes from a timestamp, byte for byte, using the seven-bit
+    /// year packing (the usual default; a server can be told to turn it off). This is the standard
     /// Acorn date packing:
     ///  - 7-bit year relative to 1981: <c>yearBits = year - 1981</c>.
     ///  - <c>day byte = (day AND 0x1f) OR ((yearBits AND 0x70) shifted left by 1)</c>, so the top 3 year bits
@@ -318,7 +314,7 @@ public static class AcornPath
     ///    sits in the low nibble and the low 4 year bits in the high nibble.
     /// NOTE: the previous RetroFS packing put month in the HIGH nibble and a 2-digit year in the LOW
     /// nibble (no year bits in the day byte) — the opposite nibble order and wrong epoch, so it did not
-    /// match PiFS. Fixed 2026-07-01.
+    /// match the standard packing. Fixed 2026-07-01.
     /// </summary>
     public static void EncodeFileDate(DateTime utc, out byte day, out byte monthYear)
     {

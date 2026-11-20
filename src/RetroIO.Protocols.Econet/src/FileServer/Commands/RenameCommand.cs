@@ -84,7 +84,7 @@ public sealed class RenameCommand : IOsCliCommand
         else
             return FileServerReply.Error(FileServerErrors.NotFound, "Not found");
 
-        // fs.c lines 6981 to 6986: the attribute file (here the property bag with the owner and the other Acorn attributes) is renamed with the object.
+        // The attribute file (here the property bag with the owner and the other Acorn attributes) is renamed with the object.
         AcornAttributeStore.MoveAttributes(call.Context.FileSystem, fromPath, toPath);
 
         return FileServerReply.Success();
