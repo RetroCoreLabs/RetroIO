@@ -276,14 +276,9 @@ namespace RetroIO.Protocols.X25.Runtime
                 _logger.LogInformation("[Timers] Central timer management enabled - timers will be started on-demand");
             }
 
-            // Start statistics update timer (every 5 seconds)
-            StartTimer("STATS_UPDATE", TimeSpan.FromSeconds(5), () =>
-            {
-                if (!_disposed)
-                {
-                    UpdateStatistics();
-                }
-            });
+            // Statistics update every 5 seconds. TimerManager timers are one-shot, so the callback starts the next
+            // one; before 2026-11-20 it did not, and the update ran once only.
+            StartStatisticsTimer();
 
             _logger.LogInformation("[ProtocolRuntime] Protocol runtime initialized and started successfully");
 
@@ -856,6 +851,9 @@ namespace RetroIO.Protocols.X25.Runtime
         {
             lock (_statsLock)
             {
+                // The counts read from live state are filled now, so a reader sees the calls there are, not the
+                // calls there were at the last update (a cleared call stayed "active" until some other event).
+                FillLiveCounts();
                 return _currentStats.Clone();
             }
         }
@@ -4318,27 +4316,50 @@ namespace RetroIO.Protocols.X25.Runtime
 
 
         /// <summary>
+        /// Starts the 5-second statistics update. Each run starts the next, because TimerManager timers fire once.
+        /// </summary>
+        private void StartStatisticsTimer()
+        {
+            StartTimer("STATS_UPDATE", TimeSpan.FromSeconds(5), () =>
+            {
+                if (!_disposed)
+                {
+                    UpdateStatistics();
+                    StartStatisticsTimer();
+                }
+            });
+        }
+
+        /// <summary>
+        /// Copies the values that are read from live state (bindings, timers, modules, history, uptime) into the
+        /// statistics. The caller holds <c>_statsLock</c>.
+        /// </summary>
+        private void FillLiveCounts()
+        {
+            _currentStats.Runtime.TotalHistoryItems = _historyBuffer.Count;
+            _currentStats.Runtime.HistoryCapacity = _historyCapacity;
+            _currentStats.Runtime.ActiveTimers = _timerManager.RunningTimerCount;
+            _currentStats.Runtime.RegisteredModules = _registeredModules.Count;
+            _currentStats.Runtime.ActiveLcnBindings = _lcnBindings.Count;
+            _currentStats.Uptime = DateTime.UtcNow - _startTime;
+
+            // LAPB state is per-link now (multi-link); no single legacy LAPB state at the runtime level.
+
+            // X.25 active virtual circuits: one per LCN binding.
+            _currentStats.X25.ActiveVirtualCircuits = _lcnBindings.Count;
+
+            // X.25 state (simplified - in real implementation this would come from X.25 layer)
+            _currentStats.X25.CurrentState = _lcnBindings.Count > 0 ? "ACTIVE" : "IDLE";
+        }
+
+        /// <summary>
         /// Update statistics
         /// </summary>
         private void UpdateStatistics()
         {
             lock (_statsLock)
             {
-                // Update runtime statistics
-                _currentStats.Runtime.TotalHistoryItems = _historyBuffer.Count;
-                _currentStats.Runtime.HistoryCapacity = _historyCapacity;
-                _currentStats.Runtime.ActiveTimers = _timerManager.RunningTimerCount;
-                _currentStats.Runtime.RegisteredModules = _registeredModules.Count;
-                _currentStats.Runtime.ActiveLcnBindings = _lcnBindings.Count;
-                _currentStats.Uptime = DateTime.UtcNow - _startTime;
-
-                // LAPB state is per-link now (multi-link); no single legacy LAPB state at the runtime level.
-
-                // Update X.25 active virtual circuits count
-                _currentStats.X25.ActiveVirtualCircuits = _lcnBindings.Count;
-
-                // Update X.25 state (simplified - in real implementation this would come from X.25 layer)
-                _currentStats.X25.CurrentState = _lcnBindings.Count > 0 ? "ACTIVE" : "IDLE";
+                FillLiveCounts();
 
                 // Fire statistics updated event
                 StatisticsUpdated?.Invoke(this, _currentStats.Clone());
@@ -4366,6 +4387,14 @@ namespace RetroIO.Protocols.X25.Runtime
                 // Bind the new module
                 _lcnBindings[lcn] = module;
                 module.OnBound(lcn);
+
+                // One binding is one virtual circuit; count it in the total. Nothing set this counter before
+                // 2026-11-20, so the "virtual circuits in total" row always read 0. Lock order: _routingLock then
+                // _statsLock; nothing takes them the other way round (FillLiveCounts reads the bindings unlocked).
+                lock (_statsLock)
+                {
+                    _currentStats.X25.TotalVirtualCircuits++;
+                }
 
                 _logger.LogInformation($"[Routing] Bound LCN {lcn} to module {module.Name}");
                 ModuleBound?.Invoke(this, (lcn, module));
