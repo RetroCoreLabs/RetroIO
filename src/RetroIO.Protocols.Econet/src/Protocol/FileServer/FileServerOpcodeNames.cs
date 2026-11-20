@@ -175,7 +175,7 @@ public static class FileServerOpcodeNames
             return "*BYE";
 
         // CAT (shortest abbreviation 2) and "." (shortest 1) are one catalogue command, in the command
-        // table here and in PiFS (fs_parse_cmd(command, "CAT", 2, ...) || fs_parse_cmd(command, ".", 1, ...)).
+        // table here.
         // Use the matcher the dispatcher uses, so the label names a command the server would actually run.
         if (OsCliCommandMatcher.TryMatch(normalized, "CAT", 2, out _) ||
             OsCliCommandMatcher.TryMatch(normalized, ".", 1, out _))

@@ -81,7 +81,7 @@ public sealed class CdirCommand : IOsCliCommand
 
         call.Context.FileSystem.CreateDirectory(unixPath);
 
-        // fs.c line 7131: a new directory is owned by the user who made it.
+        // A new directory is owned by the user who made it.
         ObjectOwnership.SetOwner(call.Context, call.Session!, unixPath);
         return FileServerReply.Success();
     }

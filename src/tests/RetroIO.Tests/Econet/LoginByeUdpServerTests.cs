@@ -78,7 +78,7 @@ public sealed class LoginByeUdpServerTests
         {
             byte[] extraBye = _client.Bye(sendWireHandles: false);
             Assert.That(extraBye[1], Is.EqualTo(FileServerErrors.WhoAreYou),
-                () => $"PiFS: BYE without session attempt {attempt}\n{monitor.FormatTrace()}");
+                () => $"BYE without session attempt {attempt}\n{monitor.FormatTrace()}");
         }
 
         IReadOnlyList<EconetCommandEntry> extraByeLines = monitor.CommandsSinceMark();

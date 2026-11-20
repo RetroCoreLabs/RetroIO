@@ -55,8 +55,8 @@ public sealed class GoldenWireFormatTests
         Assert.That(env[1], Is.EqualTo(0));
         Assert.That(env[2], Is.EqualTo(16), "disc name field length");
         Assert.That(Encoding.ASCII.GetString(env, 3, 16), Is.EqualTo("RetroFS         "), "16-char disc name");
-        // GOLDEN BYTES — re-baselined 2026-07-17 to PiFS naming parity (fs.c:10388): the CSD/library
-        // 10-byte leaf is "$" ONLY at the disc root (npath == 0). The logged-in home is $.USER, so
+        // GOLDEN BYTES — re-baselined 2026-07-17 to the naming rule: the CSD/library
+        // 10-byte leaf is "$" ONLY at the disc root. The logged-in home is $.USER, so
         // both leaves are "USER". The previous baseline reported home as "$", which had the side
         // effect of the disc root falling through to its HOST folder name ("0RetroFS") on the wire —
         // caught live in BeebEm. The 39-byte structure and field offsets are unchanged.
@@ -76,7 +76,7 @@ public sealed class GoldenWireFormatTests
         Assert.That(header, Has.Length.EqualTo(35));
         Assert.That(header[0], Is.EqualTo(0));
         Assert.That(header[1], Is.EqualTo(0));
-        // GOLDEN BYTES — re-baselined 2026-07-17 to PiFS naming parity (fs.c:10388). The CSD after
+        // GOLDEN BYTES — re-baselined 2026-07-17 to the naming rule. The CSD after
         // login is the home dir $.USER, whose tail is "USER"; "$" would mean the DISC ROOT. Layout,
         // 35-byte length, padding width and every other field are unchanged.
         Assert.That(Encoding.ASCII.GetString(header, 2, 11), Is.EqualTo("USER       "), "directory tail padded to 11");
@@ -101,7 +101,7 @@ public sealed class GoldenWireFormatTests
         Assert.That(examine[2], Is.EqualTo(3), "three catalogue entries examined");
         Assert.That(examine[^1], Is.EqualTo(0x80), "terminal byte");
 
-        // Entries are NUL-separated PiFS "%-10s %4s/%-2s" records between the 4-byte header and 0x80.
+        // Entries are NUL-separated "%-10s %4s/%-2s" records between the 4-byte header and 0x80.
         string body = Encoding.ASCII.GetString(examine, 4, examine.Length - 5);
         string[] entries = body.Split('\0', StringSplitOptions.RemoveEmptyEntries);
 

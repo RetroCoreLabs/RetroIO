@@ -19,9 +19,7 @@ namespace RetroIO.Tests.Econet;
 ///
 /// These complement <see cref="GoldenWireFormatTests"/>: that file locks the formats that once broke
 /// *CAT; this file locks the exact request/reply PAIRS observed live, so that a change which is
-/// "plausible" against fs.c but wrong against the real ROM still gets caught.
-///
-/// Each fixture cites the PiFS reference at E:\Dev\Emulators\6502\PiEconetBridge\utilities\fs.c.
+/// "plausible" on paper but wrong against the real ROM still gets caught.
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -36,7 +34,7 @@ public sealed class LiveCaptureGoldenTests
     /// LIVE CAPTURE — request <c>90 12 01 02 04 06 0D</c> (fsop 0x12 GetObjectInfo, command byte 6,
     /// empty path), reply <c>00 00 02 00 0A 55 53 45 52 20 20 20 20 20 20 00 04</c>.
     ///
-    /// PiFS dispatches this at fs.c:11408 -> fs_get_object_info. Command 6 is the directory-info variant
+    /// Command 6 is the directory-info variant
     /// the ROM uses for *CAT. Layout (17 bytes):
     ///   [0..1]  = 00 00  (status: OK)
     ///   [2]     = object type (0x02 = directory)
@@ -46,8 +44,8 @@ public sealed class LiveCaptureGoldenTests
     ///   [15]    = owner/access flag
     ///   [16]    = number of entries in the directory
     ///
-    /// The name is "USER" because the CSD immediately after login is the home dir $.USER, and PiFS
-    /// reports "$" only at the disc root (npath == 0, fs.c:10388) — see handoff §4a item 4.
+    /// The name is "USER" because the CSD immediately after login is the home dir $.USER, and the server
+    /// reports "$" only at the disc root — see handoff §4a item 4.
     /// </summary>
     [Test]
     public void GetObjectInfo_Cmd6_AfterLogin_MatchesLiveCaptureSeventeenBytes()
@@ -86,7 +84,7 @@ public sealed class LiveCaptureGoldenTests
     /// LIVE CAPTURE — fsop 0x15 (Read user environment), reply is 39 bytes:
     /// <c>00 00 10 "RetroFS         " "USER      " "USER      "</c>.
     ///
-    /// PiFS dispatches at fs.c:11417 -> fs_read_user_env. Layout:
+    /// Layout:
     ///   [0..1]   = 00 00
     ///   [2]      = 0x10 (16) — the disc-name field width
     ///   [3..18]  = current disc name, space padded to 16
@@ -119,7 +117,7 @@ public sealed class LiveCaptureGoldenTests
     /// start=0, n=11, empty path). Reply is 81 bytes: <c>00 00 04 04</c> then four 19-byte text entries
     /// then the <c>0x80</c> terminator.
     ///
-    /// PiFS dispatches at fs.c:11356 -> fs_examine. Arg 3 is the HUMAN-READABLE variant (fixed-width
+    /// Arg 3 is the HUMAN-READABLE variant (fixed-width
     /// text the ROM prints verbatim); arg 0 is machine-readable and takes an entirely different code
     /// path. Serving arg-3 requests with arg-0 data was another of the original *CAT Net Error causes.
     ///
@@ -201,7 +199,7 @@ public sealed class LiveCaptureGoldenTests
     /// parameter byte is the boot option (2 = *RUN !BOOT); the trailing bytes are ROM padding that must
     /// be ignored. Reply: <c>00 00</c>.
     ///
-    /// PiFS dispatches at fs.c:11420 -> fs_set_bootopt. The capture then shows the NEXT login returning
+    /// The capture then shows the NEXT login returning
     /// <c>05 00 01 02 04 02</c> — proving the option persisted across the *BYE. That persistence is what
     /// <see cref="BootOptionTests"/> covers; this fixture only locks the reply bytes and the tolerance
     /// for trailing ROM padding.
@@ -228,8 +226,8 @@ public sealed class LiveCaptureGoldenTests
     /// LIVE CAPTURE — request <c>90 17 01 02</c> (fsop 0x17 BYE, note the SHORT 4-byte request with no
     /// LIB handle byte), reply <c>00 00</c>.
     ///
-    /// PiFS dispatches at fs.c:11423 -> fs_bye. The short request matters: the handle-fixup loop at
-    /// fs.c:9942-9950 is length-guarded (<c>if (datalen >= 5)</c>), so a 4-byte BYE must not be treated
+    /// The short request matters: the server only reads the request handles when the request
+    /// is at least 5 bytes long, so a 4-byte BYE must not be treated
     /// as malformed. RetroFS must tolerate the same truncation.
     /// </summary>
     [Test]
@@ -241,7 +239,7 @@ public sealed class LiveCaptureGoldenTests
 
         Assert.That(reply.Payload, Is.EqualTo(new byte[] { 0x00, 0x00 }));
 
-        // Session must be gone: any subsequent OSCLI gets &BF (fs.c:9988-9989).
+        // Session must be gone: any subsequent OSCLI gets &BF.
         EconetMessage after = _harness.HandleOsCli("CAT\r");
         Assert.That(after.Payload[1], Is.EqualTo(FileServerErrors.WhoAreYou));
     }
@@ -252,16 +250,16 @@ public sealed class LiveCaptureGoldenTests
     ///
     /// NOTE on the message bytes: the 2026-07-17 capture showed RetroFS emitting <c>"Who are you?"</c>
     /// (no space). The message text was later aligned to the reference's <c>"Who are you ?"</c> (space
-    /// before '?', fs.c:9989) for byte-exact parity, so the golden bytes below now carry the extra
+    /// before '?') for byte-exact parity, so the golden bytes below now carry the extra
     /// 0x20 and no longer match that older capture for this one cosmetic field. The BBC only prints
     /// the text, so this is display-only. The gate itself (which opcodes are refused pre-login) is
     /// unchanged and still what the capture proves.
     ///
-    /// PiFS applies this gate per-case in the big switch (e.g. fs.c:11420 for 0x16); RetroFS applies it
+    /// The reference applies this gate per operation; RetroFS applies it
     /// centrally in FileServerCommandHandler.Handle using
     /// <c>FileServerOpcodes.IsAllowedWithoutLogin</c> (OsCli / ReadDiscNames / ReadVersion). Those three
-    /// exemptions match PiFS: case 0x00 handles its own gate at fs.c:9988, and cases 0x0E (fs.c:11386)
-    /// and 0x19 (fs.c:11432) have no login check at all.
+    /// exemptions match the reference: operation 0x00 handles its own gate, and operations 0x0E
+    /// and 0x19 have no login check at all.
     /// </summary>
     [Test]
     public void SetBootOpt_BeforeLogin_ReturnsWhoAreYouGoldenBytes()

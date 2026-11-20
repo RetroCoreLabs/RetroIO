@@ -11,7 +11,7 @@ namespace RetroIO.Protocols.Econet.Protocol.FileServer;
 
 /// <summary>
 /// Level-3 bulk opcodes (SAVE, LOAD, …) repurpose bytes 2–4 instead of URD/CWD/LIB.
-/// Layout matches PiFS / Acorn DFS (see PiEconetBridge utilities/fs.c).
+/// Layout matches Acorn DFS.
 /// </summary>
 public static class FileServerBulkPacketLayout
 {

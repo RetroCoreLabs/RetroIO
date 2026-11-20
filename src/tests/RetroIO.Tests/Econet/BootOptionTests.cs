@@ -11,7 +11,7 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Validates SetBootOpt (fsop 0x16) against the PiFS reference (utilities/fs.c fs_set_bootopt):
+/// Validates SetBootOpt (fsop 0x16) against the reference behaviour:
 /// updates the live session, persists to the user record (survives re-login), and rejects options > 7.
 /// This is the server side of the SHIFT-BREAK / !BOOT autoboot handshake (the boot option is reported
 /// back in the login reply so the NFS ROM can LOAD/RUN/EXEC !BOOT).
@@ -27,9 +27,9 @@ public sealed class BootOptionTests
     [SetUp]
     public void SetUp() => _harness = new EconetFsTestHarness();
 
-    // NOTE: the boot option is NOT observable via ReadUserInfo (fsop 0x18) — PiFS 0x18 returns the user's
-    // network location, not the boot option (utilities/fs.c:7622). The boot option is reported in the
-    // login reply byte 5 (fs_login), which is what the NFS ROM reads for the SHIFT-BREAK handshake. These
+    // NOTE: the boot option is NOT observable via ReadUserInfo (fsop 0x18) — 0x18 returns the user's
+    // network location, not the boot option. The boot option is reported in the
+    // login reply byte 5, which is what the NFS ROM reads for the SHIFT-BREAK handshake. These
     // tests therefore verify persistence/effect via a re-login.
 
     [Test]

@@ -53,7 +53,7 @@ public sealed class EndOfFileOperation : IFileServerOperation
     /// </returns>
     public byte[] Execute(in FsOpCall call)
     {
-        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11401).
+        // The handle byte on the wire is a bit mask unless ManyHandle is set.
         byte handle = AcornFileHandles.DivHandle(call.FsRequest.Parameters.Length > 0 ? call.FsRequest.Parameters[0] : (byte)0, call.Context.Configuration.ManyHandles);
         OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);
         if (open == null)

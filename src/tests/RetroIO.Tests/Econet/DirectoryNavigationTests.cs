@@ -15,7 +15,7 @@ namespace RetroIO.Tests.Econet;
 /// <summary>
 /// Validates DNFS-style <c>*DIR</c> / <c>*LIB</c> directory navigation over OSCLI (fsop 0x00).
 /// Reply return codes and the resulting <c>read-user-environment</c> leaf names are matched against
-/// the PiFS reference (utilities/fs.c: *DIR returns 0x07, *LIB returns 0x09, plus the new handle).
+/// the reference behaviour (*DIR returns 0x07, *LIB returns 0x09, plus the new handle).
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -39,9 +39,9 @@ public sealed class DirectoryNavigationTests
     /// </summary>
     /// <remarks>
     /// Found live in BeebEm 2026-07-17: "*DIR :RetroFS" then "*CAT" reported the directory as
-    /// "0RetroFS" — PiFS's on-disk "disc index + disc name" folder, leaked to the BBC as though it
-    /// were an Acorn directory name. PiFS names the tail "$" whenever npath == 0, i.e. at the disc
-    /// root (fs.c:10388). The host layout must never be visible on the wire.
+    /// "0RetroFS" — the on-disk "disc index + disc name" folder, leaked to the BBC as though it
+    /// were an Acorn directory name. The server names the tail "$" when the path has no components, i.e. at the disc
+    /// root. The host layout must never be visible on the wire.
     /// </remarks>
     [Test]
     public void Dir_ToDiscRoot_ReportsDollar_NotTheHostFolderName()
@@ -54,7 +54,7 @@ public sealed class DirectoryNavigationTests
         byte[] env = _harness.HandleLoggedIn(FileServerOpcodes.ReadUserEnv, []).Payload;
         string csdLeaf = Encoding.ASCII.GetString(env, 19, 10).TrimEnd();
 
-        Assert.That(csdLeaf, Is.EqualTo("$"), "disc root is '$' (PiFS npath == 0)");
+        Assert.That(csdLeaf, Is.EqualTo("$"), "disc root is '$' (path has no components)");
         Assert.That(csdLeaf, Is.Not.EqualTo("0RetroFS"), "the host folder name must never reach the client");
     }
 
@@ -64,9 +64,9 @@ public sealed class DirectoryNavigationTests
     /// <remarks>
     /// Found live in BeebEm 2026-07-17. The bare ":" was accepted and stored as the CSD, resolving to
     /// the disc CONTAINER above the user's root and trapping the session — ParentAcorn's "$" clamp
-    /// cannot fire on a path with no '$' in it, so "*DIR ^" could not escape. PiFS rejects it: its
-    /// disc-name regex requires 1-16 chars (fs.c:3409), so the match fails and fs.c:2399 returns
-    /// FS_PATH_ERR_NODISC; the CSD is only updated after a SUCCESSFUL normalize (fs.c:10365).
+    /// cannot fire on a path with no '$' in it, so "*DIR ^" could not escape. The reference rejects it: a
+    /// disc name must be 1-16 chars, so ":" is a "no disc" error;
+    /// the CSD is only updated after a path is resolved without error.
     /// </remarks>
     [Test]
     public void DirBareColon_IsRejected_AndLeavesCsdUnchanged()
@@ -94,7 +94,7 @@ public sealed class DirectoryNavigationTests
 
         byte[] payload = _harness.HandleOsCli($"DIR {SubDirName}\r").Payload;
 
-        Assert.That(payload[0], Is.EqualTo(0x07), "PiFS *DIR return code");
+        Assert.That(payload[0], Is.EqualTo(0x07), "*DIR return code");
         Assert.That(payload[1], Is.EqualTo(0));
         Assert.That(payload[2], Is.EqualTo(AcornFileHandles.WireCwd), "new CSD handle (bit-encoded CWD)");
     }
@@ -123,8 +123,8 @@ public sealed class DirectoryNavigationTests
 
         byte[] env = _harness.HandleLoggedIn(FileServerOpcodes.ReadUserEnv, []).Payload;
         string csdLeaf = Encoding.ASCII.GetString(env, 19, 10).TrimEnd();
-        // PiFS fs.c:10388 names the CSD tail "$" ONLY at the disc root (npath == 0); the user's home
-        // is $.USER, so its leaf is "USER". Re-baselined 2026-07-17 when RetroFS moved to PiFS parity
+        // The CSD tail is "$" ONLY at the disc root; the user's home
+        // is $.USER, so its leaf is "USER". Re-baselined 2026-07-17 when RetroFS moved to this rule
         // (previously home was reported as "$", which made the disc root leak its host folder name).
         Assert.That(csdLeaf, Is.EqualTo("USER"), "empty *DIR returns to the user root ($.USER -> leaf USER)");
     }
@@ -140,8 +140,8 @@ public sealed class DirectoryNavigationTests
 
         byte[] env = _harness.HandleLoggedIn(FileServerOpcodes.ReadUserEnv, []).Payload;
         string csdLeaf = Encoding.ASCII.GetString(env, 19, 10).TrimEnd();
-        // Parent of $.USER.GAMES is $.USER, whose PiFS leaf is "USER" (fs.c:10388 - "$" is the disc
-        // root only). Re-baselined 2026-07-17 with the move to PiFS naming parity.
+        // Parent of $.USER.GAMES is $.USER, whose leaf is "USER" ("$" is the disc
+        // root only). Re-baselined 2026-07-17 with the move to that naming rule.
         Assert.That(csdLeaf, Is.EqualTo("USER"), "parent of $.USER.GAMES is the user home ($.USER)");
     }
 
@@ -170,7 +170,7 @@ public sealed class DirectoryNavigationTests
 
         byte[] payload = _harness.HandleOsCli($"LIB {SubDirName}\r").Payload;
 
-        Assert.That(payload[0], Is.EqualTo(0x09), "PiFS *LIB return code");
+        Assert.That(payload[0], Is.EqualTo(0x09), "*LIB return code");
         Assert.That(payload[1], Is.EqualTo(0));
         Assert.That(payload[2], Is.EqualTo(AcornFileHandles.WireLib), "new library handle (bit-encoded LIB)");
     }

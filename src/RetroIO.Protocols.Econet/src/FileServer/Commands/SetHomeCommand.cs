@@ -18,19 +18,18 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>*SETHOME</c> — permanently sets a user's home (URD) directory (takes effect at their next login).
 /// </summary>
 /// <remarks>
-/// Reference behaviour (PiFS): this is a System-only command (in fs.c it lives inside the System-user
-/// command block). It accepts <c>*SETHOME dir</c> (the System user's own home) or
+/// Reference behaviour: this is a System-only command. It accepts <c>*SETHOME dir</c> (the System user's own home) or
 /// <c>*SETHOME user dir</c> (another user's); an unknown user is <c>0xFF "No such
 /// user"</c> and a missing directory token is <c>0xFF "Bad parameters"</c>. <c>%</c> clears the home
 /// (reverting to the disc-layout default). A directory that does not resolve to an existing directory
 /// is <c>0xA8 "Bad directory"</c>.
 /// <para>
 /// The System gate is enforced centrally by the dispatcher (<see cref="RequiresSystem"/>), so a
-/// non-System caller gets <c>0xBD "Insufficient access"</c> — a deliberate, honest divergence from
-/// PiFS, where the command is simply not recognised for a non-System user.
+/// non-System caller gets <c>0xBD "Insufficient access"</c> — a deliberate divergence from
+/// the reference behaviour, where the command is simply not recognised for a non-System user.
 /// </para>
 /// <para>
-/// Like PiFS this is PERSIST-ONLY (writes <c>econet.home</c>, does not touch the live session); the new
+/// This is PERSIST-ONLY (writes <c>econet.home</c>, does not touch the live session); the new
 /// home takes effect at the target user's next login. Divergence: RetroFS does not update the target's
 /// home DISC here, so a cross-disc home set for another user relies on that user's existing home disc.
 /// </para>
@@ -112,7 +111,7 @@ public sealed class SetHomeCommand : IOsCliCommand
         bool stored = call.Context.Users.TrySetHome(targetUserId, acorn);
         if (stored && target != null)
         {
-            // fs.c lines 10715 to 10751: the old home loses its home owner and the new home gets the user,
+            // The old home loses its home owner and the new home gets the user,
             // except a disc root ("Don't set it on root!"). This is done whatever the AcornHome flag says.
             if (oldHomeUnix != null)
                 ObjectOwnership.SetHomeOwner(call.Context, oldHomeUnix, 0);

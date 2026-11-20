@@ -36,7 +36,7 @@ public static class FileServerErrors
     /// Error 0xA8, bad directory.
     /// </summary>
     public const byte BadDirectory = 0xA8;
-    // PiFS uses the same 0xA8 for "Bad library" (*SETLIB) as for "Bad directory" (*SETHOME/*DIR).
+    // The server uses the same 0xA8 for "Bad library" (*SETLIB) as for "Bad directory" (*SETHOME/*DIR).
     /// <summary>
     /// Error 0xA8, bad library. It has the same value as BadDirectory.
     /// </summary>
@@ -57,7 +57,7 @@ public static class FileServerErrors
     /// Error 0xCC, bad path.
     /// </summary>
     public const byte BadPath = 0xCC;
-    // *ACCESS reports an unrecognised permission letter with 0xCF "Bad attribute" (PiFS fs.c:7270-7310).
+    // *ACCESS reports an unrecognised permission letter with 0xCF "Bad attribute".
     /// <summary>
     /// Error 0xCF, bad attribute.
     /// </summary>

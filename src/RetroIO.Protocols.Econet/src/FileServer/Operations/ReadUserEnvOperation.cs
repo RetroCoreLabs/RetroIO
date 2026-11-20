@@ -16,7 +16,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 
 /// <summary>
 /// <c>ReadUserEnv</c> (fsop 0x15) — returns the caller's environment: current disc name, current
-/// directory leaf, and library directory leaf (PiFS <c>fs_read_user_env</c>).
+/// directory leaf, and library directory leaf.
 /// </summary>
 /// <remarks>
 /// Migrated from <c>MiscOpcodeHandler.HandleReadUserEnv</c>, unchanged. Reply layout:
@@ -61,7 +61,7 @@ public sealed class ReadUserEnvOperation : IFileServerOperation
         DiscEntry? disc = context.Discs.GetByIndex(session.CurrentDisc);
         string discName = disc?.AcornName ?? context.DiscName;
 
-        // PiFS fs_read_user_env: 00 00 + disc-name-length(16) + disc[16] + CSD leaf[10] + lib leaf[10]
+        // Reply: 00 00 + disc-name-length(16) + disc[16] + CSD leaf[10] + lib leaf[10]
         byte[] reply = new byte[39];
         reply[2] = 16;
         reply.AsSpan(3, 16).Fill((byte)' ');

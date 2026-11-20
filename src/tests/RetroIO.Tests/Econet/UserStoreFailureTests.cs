@@ -17,8 +17,8 @@ namespace RetroIO.Tests.Econet;
 
 /// <summary>
 /// When the user store refuses a write (the user was removed after the command found it), the
-/// commands that write to it must reply an error and not success. The codes and texts follow PiFS
-/// (fs.c) for the same failure: PRIV "User not found" 0xBC, DISCMASK "Unknown user" 0xFF,
+/// commands that write to it must reply an error and not success. The codes and texts are the reference
+/// answers for the same failure: PRIV "User not found" 0xBC, DISCMASK "Unknown user" 0xFF,
 /// SETHOME and SETLIB "No such user" 0xFF, and the boot option "Bad user ID" 0xBD.
 /// </summary>
 [TestFixture]

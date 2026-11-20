@@ -14,17 +14,17 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Byte-for-byte parity tests for the OSCLI (fsop 0x00) command surface against the PiFS C reference
-/// implementation at <c>E:\Dev\Emulators\6502\PiEconetBridge\utilities\fs.c</c>.
+/// Byte-for-byte parity tests for the OSCLI (fsop 0x00) command surface against the reference
+/// behaviour.
 ///
-/// PiFS dispatches every <c>*</c> command through <c>fs_parse_cmd(command, "NAME", min, param)</c>
-/// (fs.c:9778-9849), whose contract is:
+/// Every <c>*</c> command is matched against a command name with a minimum abbreviation length
+/// <c>min</c>, by this rule:
 ///
-///   1. Scan from <c>parse+min</c> for the FIRST ' ' or '.' (fs.c:9801-9803). Everything before it is
-///      <c>workstr</c>; everything after (with leading spaces skipped, fs.c:9816-9822) is the parameter.
-///   2. Match iff <c>workstr</c> is a case-insensitive PREFIX OF THE COMMAND NAME (fs.c:9828), AND
-///      EITHER it is a full-length match (fs.c:9829-9830) OR the separator was a '.' and
-///      <c>strlen(workstr) >= min</c> (fs.c:9831-9834) — i.e. dot-abbreviation.
+///   1. Scan from position <c>min</c> for the FIRST ' ' or '.'. Everything before it is the typed
+///      word; everything after (with leading spaces skipped) is the parameter.
+///   2. Match iff the typed word is a case-insensitive PREFIX OF THE COMMAND NAME, AND
+///      EITHER it is a full-length match OR the separator was a '.' and
+///      the typed word is at least <c>min</c> long — i.e. dot-abbreviation.
 ///
 /// The direction of that prefix test is the crux: it asks "is what the user typed a prefix of my
 /// command name?", not "does what the user typed start with my command name?". RetroFS now reproduces
@@ -50,8 +50,8 @@ public sealed class OsCliParityTests
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// fs.c:11302-11321 (and the identical block at fs.c:11327-11345): an unrecognised OSCLI command is
-    /// NOT an error. PiFS builds a reply with <c>data[0]=0x08</c> / <c>data[1]=0x00</c> and then copies
+    /// An unrecognised OSCLI command is
+    /// NOT an error. The server builds a reply with <c>data[0]=0x08</c> / <c>data[1]=0x00</c> and then copies
     /// <c>datalen-5</c> bytes verbatim from <c>data+5</c> — the raw parameter bytes after the 5-byte
     /// request header (reply_port, fsop, URD, CWD, LIB), INCLUDING the terminating CR.
     ///
@@ -73,14 +73,14 @@ public sealed class OsCliParityTests
         // Golden: 08 00 21 42 4F 4F 54 0D  ("!BOOT" + CR echoed after the 08 00 header).
         Assert.That(reply.Payload, Is.EqualTo(new byte[]
         {
-            0x08, 0x00,                         // fs.c:11305-11306 — "unknown command", no error
-            0x21, 0x42, 0x4F, 0x4F, 0x54, 0x0D, // "!BOOT" + CR, verbatim from data+5 (fs.c:11308-11313)
+            0x08, 0x00,                         // "unknown command", no error
+            0x21, 0x42, 0x4F, 0x4F, 0x54, 0x0D, // "!BOOT" + CR, verbatim from data+5
         }));
     }
 
     /// <summary>
     /// Same fall-through for an ordinary program name — this is how <c>*MYPROG</c> reaches the ROM's
-    /// *RUN path. fs.c:11302.
+    /// *RUN path.
     /// </summary>
     [Test]
     public void UnknownCommand_ArbitraryProgram_ReturnsZeroEightPrefix()
@@ -89,8 +89,8 @@ public sealed class OsCliParityTests
 
         EconetMessage reply = _harness.HandleOsCli("MYPROG\r");
 
-        Assert.That(reply.Payload[0], Is.EqualTo(0x08), "fs.c:11305 — unknown command return code");
-        Assert.That(reply.Payload[1], Is.EqualTo(0x00), "fs.c:11306 — not an error");
+        Assert.That(reply.Payload[0], Is.EqualTo(0x08), "unknown command return code");
+        Assert.That(reply.Payload[1], Is.EqualTo(0x00), "not an error");
         Assert.That(Encoding.ASCII.GetString(reply.Payload, 2, 6), Is.EqualTo("MYPROG"));
         Assert.That(reply.Payload[8], Is.EqualTo(0x0D), "trailing CR echoed verbatim");
     }
@@ -100,8 +100,8 @@ public sealed class OsCliParityTests
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// fs.c:9988-9989: any OSCLI command other than the four login spellings, issued by a station that is
-    /// not logged in, gets <c>fs_error(..., 0xbf, "Who are you ?")</c>.
+    /// Any OSCLI command other than the four login spellings, issued by a station that is
+    /// not logged in, gets error <c>0xBF "Who are you ?"</c>.
     ///
     /// The message text is now byte-exact with the reference: <c>"Who are you ?"</c> (space before the
     /// '?'). It was previously emitted without the space; that divergence was closed on 2026-07-17, so
@@ -117,14 +117,14 @@ public sealed class OsCliParityTests
         // Golden (spec-exact): 00 BF 57 68 6F 20 61 72 65 20 79 6F 75 20 3F 0D
         Assert.That(reply.Payload, Is.EqualTo(new byte[]
         {
-            0x00, FileServerErrors.WhoAreYou, // 0x00 0xBF — fs.c:9989
+            0x00, FileServerErrors.WhoAreYou, // 0x00 0xBF
             0x57, 0x68, 0x6F, 0x20, 0x61, 0x72, 0x65, 0x20, 0x79, 0x6F, 0x75, 0x20, 0x3F, // "Who are you ?"
             0x0D,
         }));
     }
 
     /// <summary>
-    /// The login spellings are tested BEFORE the logged-in gate (fs.c:9984-9987), so a wrong password
+    /// The login spellings are tested BEFORE the logged-in gate, so a wrong password
     /// must produce 0xBC, not 0xBF. LIVE CAPTURE 2026-07-17: <c>00 BC "Wrong password" 0D</c>.
     /// </summary>
     [Test]
@@ -146,7 +146,7 @@ public sealed class OsCliParityTests
     /// <summary>
     /// LIVE CAPTURE 2026-07-17: <c>*I AM SYST pw</c> -> <c>05 00 01 02 04 00</c>, and after
     /// <c>*OPT 4,2</c> the same login returned <c>05 00 01 02 04 02</c> — i.e. the last byte is the
-    /// persisted boot option. fs_login builds this reply in fs.c (return code 5 = "logged on").
+    /// persisted boot option (return code 5 = "logged on").
     /// </summary>
     [Test]
     public void Login_Syst_GoldenSixBytesWithBootOptionInLastByte()
@@ -157,7 +157,7 @@ public sealed class OsCliParityTests
     }
 
     /// <summary>
-    /// fs.c:10488-10492 — a successful <c>*DIR</c> replies <c>[0x07, 0x00, FS_MULHANDLE(n_handle)]</c>.
+    /// A successful <c>*DIR</c> replies <c>[0x07, 0x00, new handle]</c> (the handle as a wire byte).
     /// LIVE CAPTURE 2026-07-17 (<c>*DIR :RETROFS</c>): <c>07 00 02</c>.
     /// </summary>
     [Test]
@@ -171,8 +171,8 @@ public sealed class OsCliParityTests
     }
 
     /// <summary>
-    /// fs.c:10318-10322 — a successful <c>*LIB</c> replies <c>[0x09, 0x00, FS_MULHANDLE(n_handle)]</c>.
-    /// Note PiFS uses a DIFFERENT return code for LIB (0x09) than for DIR (0x07), and RetroFS matches.
+    /// A successful <c>*LIB</c> replies <c>[0x09, 0x00, new handle]</c> (the handle as a wire byte).
+    /// Note the server uses a DIFFERENT return code for LIB (0x09) than for DIR (0x07), and RetroFS matches.
     /// </summary>
     [Test]
     public void Lib_NoArgument_ReturnsGoldenNineZeroHandle()
@@ -181,13 +181,13 @@ public sealed class OsCliParityTests
 
         EconetMessage reply = _harness.HandleOsCli("LIB\r");
 
-        Assert.That(reply.Payload[0], Is.EqualTo(0x09), "fs.c:10320 — 'changed library' return code");
+        Assert.That(reply.Payload[0], Is.EqualTo(0x09), "'changed library' return code");
         Assert.That(reply.Payload[1], Is.EqualTo(0x00));
         Assert.That(reply.Payload, Has.Length.EqualTo(3));
     }
 
     // =============================================================================================
-    // KNOWN DIVERGENCES — each test below encodes the VERIFIED PiFS behaviour and is [Ignore]d
+    // KNOWN DIVERGENCES — each test below encodes the VERIFIED reference behaviour and is [Ignore]d
     // because RetroFS does not currently implement it. Do NOT weaken these to make them pass;
     // remove the [Ignore] when the production code is fixed.
     // =============================================================================================
@@ -206,7 +206,7 @@ public sealed class OsCliParityTests
 
         EconetMessage reply = _harness.HandleOsCli("CA.\r");
 
-        // fs.c:10000 — *CAT replies with return code 3 (Examine) plus the CR-terminated path.
+        // *CAT replies with return code 3 (Examine) plus the CR-terminated path.
         Assert.That(reply.Payload[0], Is.EqualTo(FileServerOpcodes.Examine));
         Assert.That(reply.Payload[1], Is.EqualTo(0x00));
     }
@@ -227,7 +227,7 @@ public sealed class OsCliParityTests
 
         EconetMessage reply = _harness.HandleOsCli("I.\r");
 
-        // fs.c:10226 -> fs_info(...). RetroFS's own INFO arm redirects with return code 0x12.
+        // *INFO. RetroFS's own INFO arm redirects with return code 0x12.
         Assert.That(reply.Payload[0], Is.EqualTo(FileServerOpcodes.GetObjectInfo));
     }
 
@@ -247,15 +247,15 @@ public sealed class OsCliParityTests
 
         EconetMessage reply = _harness.HandleOsCli("EXEC !BOOT\r");
 
-        Assert.That(reply.Payload[0], Is.EqualTo(0x08), "fs.c:11305 — must reach the unknown-command arm");
+        Assert.That(reply.Payload[0], Is.EqualTo(0x08), "must reach the unknown-command arm");
     }
 
     /// <summary>
     /// DIVERGENCE — <c>*CAT</c> with no argument sends one byte too many.
     ///
-    /// Behaviour observed at fs.c:10029-10034: the reply carries the return code, a status byte, the
+    /// The reference reply carries the return code, a status byte, the
     /// path argument, and a terminating CR — its length being the argument length plus three. For a
-    /// bare <c>*CAT</c> the argument is the empty string (fs.c:9815), so the reference reply is
+    /// bare <c>*CAT</c> the argument is the empty string, so the reference reply is
     /// exactly three bytes: <c>03 00 0D</c>.
     ///
     /// RetroFS substitutes a literal "." for the empty path (in <c>CatCommand</c>) and therefore
@@ -263,7 +263,7 @@ public sealed class OsCliParityTests
     /// anyway, which is why *CAT is live-verified working — but it is not the reference's bytes.
     /// </summary>
     [Test]
-    [Ignore("DIVERGENCE: bare *CAT must reply 03 00 0D (fs.c:10029-10034, param is the empty string). " +
+    [Ignore("DIVERGENCE: bare *CAT must reply 03 00 0D (param is the empty string). " +
             "RetroFS injects a literal '.' in CatCommand and replies 03 00 2E 0D. " +
             "Harmless in practice (the ROM's Examine resolves '.' to the CSD) but not byte-exact.")]
     public void Cat_NoArgument_ReplyIsThreeBytesWithEmptyPath()
@@ -290,13 +290,13 @@ public sealed class OsCliParityTests
 
         EconetMessage reply = _harness.HandleOsCli("CDIR NEWDIR\r");
 
-        // fs_cdir replies via fs_reply_ok => [0x00, 0x00].
+        // *CDIR replies OK => [0x00, 0x00].
         Assert.That(reply.Payload, Is.EqualTo(new byte[] { 0x00, 0x00 }));
     }
 
     // ---------------------------------------------------------------------------------------------
     // *ACCESS — parses "<object> [<perms>]" and writes the access byte through the property bag,
-    // matching PiFS fs_access (fs.c:7270-7310). Owner letters W R H/P L before the slash; only W R
+    // as the reference does. Owner letters W R H/P L before the slash; only W R
     // after it (public). Empty perms => 0. A bad letter => 0xCF "Bad attribute". See AccessCommand.
     // Ownership is relaxed to "any logged-in session may set access on a resolvable object" because
     // RetroFS has no per-object owner model (documented divergence).
@@ -386,28 +386,28 @@ public sealed class OsCliParityTests
     /// <summary>
     /// DIVERGENCE (already recorded in the handoff §4a; VERIFIED here, not rediscovered).
     ///
-    /// fs.c:10419 — the final <c>else</c> of the <c>*DIR</c> arm is
-    /// <c>fs_error(server, reply_port, net, stn, 0xFE, "Not found")</c>. RetroFS returns
+    /// The reference <c>*DIR</c> answers a missing directory with
+    /// error <c>0xFE "Not found"</c>. RetroFS returns
     /// <c>FileServerErrors.NotFound</c> = <c>0xD6</c> with the same text.
     ///
-    /// For the record, PiFS's *DIR arm uses THREE distinct codes that RetroFS should eventually mirror:
-    /// 0xAF "Types don't match" (fs.c:10390), 0xC7 "Dir unreadable" (fs.c:10415), 0xBD "Insufficient
-    /// access" (fs.c:10417), 0xFE "Not found" (fs.c:10419). Note the *LIB arm deliberately uses 0xD6 for
-    /// "Dir unreadable" (fs.c:10327) where *DIR uses 0xC7 — the two arms are NOT symmetric in the C.
+    /// For the record, the reference *DIR uses distinct codes that RetroFS should eventually mirror:
+    /// 0xAF "Types don't match", 0xC7 "Dir unreadable", 0xBD "Insufficient
+    /// access", 0xFE "Not found". Note *LIB uses 0xD6 for
+    /// "Dir unreadable" where *DIR uses 0xC7 — the two commands are NOT symmetric.
     /// </summary>
     [Test]
     [Ignore("KNOWN DIVERGENCE (handoff §4a): the LaterFS DEFAULT *DIR not-found returns &D6 (RetroFS's " +
-            "live-verified golden); PiFS's arm returns &FE 'Not found' (fs.c:10419). Task 0.4 makes &FE " +
+            "live-verified golden); the reference returns &FE 'Not found'. Task 0.4 makes &FE " +
             "reachable via WireProfile.Classic1983 (see DirCommandWireProfileTests) WITHOUT changing the " +
-            "default byte. OPEN QUESTION: whether &FE is really the later-FS code (per this fs.c cite) or " +
+            "default byte. OPEN QUESTION: whether &FE is really the later-FS code or " +
             "the 1983 code (per wire-format-verification.md) is unresolved — needs a BeebEm re-test before " +
             "the default could flip. This test still asserts the default = &FE, so it stays ignored.")]
-    public void Dir_NotFound_ReturnsFeNotFoundLikePiFs()
+    public void Dir_NotFound_ReturnsFeNotFound()
     {
         _harness.HandleOsCli("I AM SYST \r");
 
         EconetMessage reply = _harness.HandleOsCli("DIR NOSUCHDIR\r");
 
-        Assert.That(reply.Payload[1], Is.EqualTo(0xFE), "fs.c:10419");
+        Assert.That(reply.Payload[1], Is.EqualTo(0xFE), "reference *DIR not-found code");
     }
 }

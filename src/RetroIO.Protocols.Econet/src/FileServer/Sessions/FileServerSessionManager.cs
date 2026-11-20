@@ -169,13 +169,13 @@ public sealed class FileServerSessionManager
                 return false;
             }
 
-            // PiFS (fs.c:4560): a valid password on a LOCKED account is refused with 0xBC "Account
+            // A valid password on a LOCKED account is refused with 0xBC "Account
             // locked" — checked AFTER the password, so a wrong password still reads "Wrong password".
             // Only accounts an admin has locked via *PRIV L carry this; a default user is unaffected,
             // so the golden login bytes are unchanged.
             if (profile.IsLocked)
             {
-                errorCode = FileServerErrors.WrongPassword; // 0xBC, shared with "Wrong password" in PiFS
+                errorCode = FileServerErrors.WrongPassword; // 0xBC, shared with "Wrong password"
                 errorMessage = "Account locked";
                 return false;
             }

@@ -57,7 +57,7 @@ public sealed class SetRandomAccessInfoOperation : IFileServerOperation
         if (parameters.Length < 5)
             return FileServerReply.Error(FileServerErrors.BadCommand, "Bad command");
 
-        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11388).
+        // The handle byte on the wire is a bit mask unless ManyHandle is set.
         byte handle = AcornFileHandles.DivHandle(parameters[0], call.Context.Configuration.ManyHandles);
         long cursor = (long)(uint)(parameters[1] | (parameters[2] << 8) | (parameters[3] << 16) | (parameters[4] << 24));
         OpenFileHandle? open = call.Context.Handles.Get(call.Request.ClientNet, call.Request.ClientStation, handle);

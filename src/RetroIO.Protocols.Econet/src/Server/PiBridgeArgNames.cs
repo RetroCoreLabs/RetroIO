@@ -8,7 +8,7 @@
 namespace RetroIO.Protocols.Econet.Server;
 
 /// <summary>
-/// PiBridge FS op 0x60 argument names (PiFS FSOP).
+/// PiBridge FS op 0x60 argument names.
 /// </summary>
 public static class PiBridgeArgNames
 {

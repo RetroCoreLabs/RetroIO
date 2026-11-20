@@ -139,7 +139,7 @@ public sealed class LoginProfileDirectoryTests
         CreatePlainUser("NA2");
         Login("NA2");
 
-        // A non-System user supplying a space (the two-argument form) is PiFS "Bad parameters" (0xFF).
+        // A non-System user supplying a space (the two-argument form) is "Bad parameters" (0xFF).
         Assert.That(StatusOf(SendOsCli("SETLIB SOMEONE $.LIBDIR")), Is.EqualTo(0xFF));
     }
 

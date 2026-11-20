@@ -16,14 +16,14 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>*FLOG</c> / <c>*LOGOFF</c> — a System user force-logs-off another station or user.
 /// </summary>
 /// <remarks>
-/// Reference behaviour (PiFS, facts only): System-only. The argument is EITHER a station
+/// Reference behaviour: System-only. The argument is EITHER a station
 /// (<c>net.stn</c>, or a bare <c>stn</c> which defaults net to 0) OR a username. A malformed station is
 /// <c>0xFF "Bad station specification"</c>; an unknown username is <c>0xFF "Unknown user"</c>. Every
 /// matching active session gets a silent <c>*BYE</c> (handles closed, bulk transfers released, session
 /// dropped); the command always replies OK. Registered under two spellings: <c>FLOG</c> (min 3) and
 /// <c>LOGOFF</c> (min 5).
 /// <para>
-/// Divergence: a bare station number matches net 0 (as in PiFS); a station on a non-zero Econet net must
+/// Divergence: a bare station number matches net 0; a station on a non-zero Econet net must
 /// be given as <c>net.stn</c>.
 /// </para>
 /// </remarks>
@@ -116,8 +116,8 @@ public sealed class FlogCommand : IOsCliCommand
     }
 
     /// <summary>
-    /// Parses <c>net.stn</c> or a bare <c>stn</c> (net defaults to 0), matching PiFS's
-    /// <c>sscanf("%hd.%hd")</c> then <c>sscanf("%hd")</c> fallback.
+    /// Parses <c>net.stn</c> or a bare <c>stn</c> (net defaults to 0): first
+    /// <c>net.stn</c> is tried, then a bare <c>stn</c>.
     /// </summary>
     private static bool TryParseStation(string argument, out byte targetNet, out byte targetStation)
     {

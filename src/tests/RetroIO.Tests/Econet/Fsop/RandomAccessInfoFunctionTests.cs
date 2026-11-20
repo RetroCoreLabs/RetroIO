@@ -12,7 +12,7 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Tests.Econet.Fsop;
 
 /// <summary>
-/// <c>GetRandomAccessInfo</c> (0x0C) function values. PiFS (fs.c, fs_get_random_access_info) answers
+/// <c>GetRandomAccessInfo</c> (0x0C) function values. The reference answers
 /// function 0 with the cursor, 1 and 2 with the file length, and sends the three data bytes unset for
 /// any other value.
 /// </summary>

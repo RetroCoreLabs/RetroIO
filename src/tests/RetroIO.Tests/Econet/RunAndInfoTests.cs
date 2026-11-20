@@ -16,7 +16,7 @@ namespace RetroIO.Tests.Econet;
 
 /// <summary>
 /// Validates *RUN library search (fsop 0x05) and GetObjectInfo (fsop 0x12) command variants 2/4/5
-/// against the PiFS reference (utilities/fs.c fs_load loadas + fs_get_object_info field ordering).
+/// against the reference behaviour (load as command + get object info field ordering).
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -82,7 +82,7 @@ public sealed class RunAndInfoTests
     {
         _harness.HandleOsCli("I AM SYST \r");
 
-        // "PROG ARG1 ARG2" must resolve to PROG (PiFS truncates the command line at the first space).
+        // "PROG ARG1 ARG2" must resolve to PROG (the server truncates the command line at the first space).
         byte[] metadata = RunAsRequest("PROG ARG1 ARG2");
 
         Assert.That(metadata, Has.Length.EqualTo(16));

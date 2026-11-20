@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Commands;
 /// <c>*DISCMASK</c> (a.k.a. <c>*DISKMASK</c>) — a System user sets which discs a user can see.
 /// </summary>
 /// <remarks>
-/// Reference behaviour (PiFS, facts only): System-only, abbreviation 5. Argument is
+/// Reference behaviour: System-only, abbreviation 5. Argument is
 /// <c>username discs</c> where <c>discs</c> is <c>ALL</c> (0xFFFF), <c>NONE</c> (0x0000),
 /// or up to four hex digits. Fewer than two tokens is <c>0xFF "Bad parameters"</c>; an unknown user is
 /// <c>0xFF "Unknown user"</c>; a value that leaves the mask unchanged (including an unparseable one) is
@@ -68,7 +68,7 @@ public sealed class SetDiscMaskCommand : IOsCliCommand
     /// <remarks>
     /// The new mask is stored for the user's next login; the live session is not changed. When the
     /// user store refuses the change (the user was removed after it was found) the reply is 0xFF
-    /// "Unknown user", the PiFS answer for a user that cannot be found.
+    /// "Unknown user", the answer for a user that cannot be found.
     /// </remarks>
     /// <param name="call">
     /// Everything the command needs, including the already-split argument.
@@ -97,9 +97,9 @@ public sealed class SetDiscMaskCommand : IOsCliCommand
         else if (string.Equals(discs, "NONE", StringComparison.OrdinalIgnoreCase))
             mask = 0x0000;
         else if (!ushort.TryParse(discs, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out mask))
-            mask = current; // Unparseable -> unchanged (matches PiFS), rejected below.
+            mask = current; // Unparseable -> unchanged, rejected below.
 
-        // PiFS treats "no net change" (including a bad value) as an error rather than a silent no-op.
+        // The server treats "no net change" (including a bad value) as an error rather than a silent no-op.
         if (mask == current)
             return FileServerReply.Error(FileServerErrors.Unsupported, "Bad parameter or mask unchanged");
 

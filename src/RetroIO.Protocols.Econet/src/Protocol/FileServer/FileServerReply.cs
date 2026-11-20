@@ -205,18 +205,17 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// *DIR reply (PiFS utilities/fs.c: return code 0x07 "changed directory" + new CSD handle).
+    /// *DIR reply (return code 0x07 "changed directory" + new CSD handle).
     /// </summary>
     public static byte[] DirectoryChanged(byte cwdHandle) => [0x07, 0x00, cwdHandle];
 
     /// <summary>
-    /// *LIB reply (PiFS utilities/fs.c: return code 0x09 "changed library" + new library handle).
+    /// *LIB reply (return code 0x09 "changed library" + new library handle).
     /// </summary>
     public static byte[] LibraryChanged(byte libHandle) => [0x09, 0x00, libHandle];
 
     /// <summary>
-    /// Unrecognised OSCLI reply — PiFS <c>utilities/fs.c:11302</c> and <c>:11327</c> ("Unknown
-    /// command"): return code <c>0x08</c>, then the ORIGINAL command text echoed back verbatim.
+    /// Unrecognised OSCLI reply ("Unknown command"): return code <c>0x08</c>, then the ORIGINAL command text echoed back verbatim.
     /// </summary>
     /// <remarks>
     /// This is NOT an error. <c>0x08</c> tells the NFS/ANFS ROM "I don't know this command — you deal
@@ -229,7 +228,7 @@ public static class FileServerReply
     /// BeebEm 2026-07-17: right after a successful login carrying boot option 02, the client sent
     /// OSCLI "!BOOT" and got "Bad command".
     ///
-    /// PiFS copies from <c>data+5</c> for <c>datalen-5</c> bytes — i.e. the raw parameter bytes after
+    /// The server copies from <c>data+5</c> for <c>datalen-5</c> bytes — i.e. the raw parameter bytes after
     /// the 5-byte request header (reply_port, fsop, URD, CWD, LIB), INCLUDING the terminating CR.
     /// </remarks>
     /// <param name="rawCommand">
@@ -375,7 +374,7 @@ public static class FileServerReply
     /// The port the client sends the data to.
     /// </param>
     /// <param name="maxTransferSize">
-    /// The largest data size in one packet, sent low byte first. PiFS sends 0x1000 with the big chunks flag set and 0x500 otherwise (utilities/fs.c lines 9023 and 9024).
+    /// The largest data size in one packet, sent low byte first. The server sends 0x1000 with the big chunks flag set and 0x500 otherwise.
     /// </param>
     /// <returns>
     /// The bytes 0, 0, the port, then the low and high byte of the size.
@@ -386,7 +385,7 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// CREATE / zero-length SAVE completion (PiFS utilities/fs.c fs_save create_only / length==0 path):
+    /// CREATE / zero-length SAVE completion (create only, or length 0):
     /// a 5-byte reply [00 00, access, day, monthyear] with return code 0 (no name / junk tail).
     /// </summary>
     public static byte[] SaveCreateComplete(byte access, byte day, byte monthYear)
@@ -395,7 +394,7 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// SAVE completion reply (PiFS / Level-3 close packet after bulk data received).
+    /// SAVE completion reply (Level-3 close packet after bulk data received).
     /// </summary>
     public static byte[] SaveComplete(byte access, byte day, byte monthYear, string acornFilename)
     {
@@ -525,10 +524,10 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// PiFS/MDFS variable-length get-object-info reply (fsop 0x12).
+    /// MDFS variable-length get-object-info reply (fsop 0x12).
     /// </summary>
     /// <remarks>
-    /// The owner byte after the access byte (commands 4, 5 and 96) is 0 when isOwner is true and 0xFF otherwise (fs.c line 5694). The owner byte of the directory header (command 6) is 0 when isDirectoryOwner is true and 0xFF otherwise (fs.c line 5735). When isDirectoryOwner is not given, it is the same as isOwner.
+    /// The owner byte after the access byte (commands 4, 5 and 96) is 0 when isOwner is true and 0xFF otherwise. The owner byte of the directory header (command 6) is 0 when isDirectoryOwner is true and 0xFF otherwise. When isDirectoryOwner is not given, it is the same as isOwner.
     /// </remarks>
     public static byte[] ObjectInfoForCommand(
         byte command,
@@ -652,7 +651,7 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// Get random access info (fsop 0x0C). PiFS <c>fs_get_random_access_info</c> (utilities/fs.c:8460)
+    /// Get random access info (fsop 0x0C). The server
     /// returns a 5-byte reply <c>[0, 0, value_u24_LE]</c> where the value is chosen by the request's
     /// function byte (0 = cursor position, 1/2 = extent/file length). NOT the 14-byte cursor+length block
     /// the previous implementation emitted.
@@ -729,16 +728,15 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// Read file server time (fsop 0x10). PiFS <c>fs_read_time</c> (utilities/fs.c:7513-7543) returns a
+    /// Read file server time (fsop 0x10). The server returns a
     /// 7-byte reply <c>[0, 0, day, monthyear, hour, min, sec]</c> — the Acorn two-byte date pair
     /// (same packing as file catalogue dates via <see cref="AcornPath.EncodeFileDate"/>) followed by
     /// hour/min/sec. NOT the 9-byte RISC-OS-style block the previous implementation emitted.
     /// </summary>
     public static byte[] ReadTime(DateTime time)
     {
-        // Reuse the same day/monthyear packing as every other RetroFS date field, exactly as PiFS reuses
-        // fs_date_to_two_bytes for both file dates and read-time. (PiFS uses localtime; RetroFS uses the
-        // server clock supplied by the caller.)
+        // Reuse the same day/monthyear packing as every other RetroFS date field: file dates and
+        // read-time use one packing. (RetroFS uses the server clock supplied by the caller.)
         AcornPath.EncodeFileDate(time, out byte day, out byte monthYear);
         return
         [
@@ -753,11 +751,11 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// Read user info (fsop 0x18). PiFS <c>fs_read_user_info</c> (utilities/fs.c:7622) locates the session
+    /// Read user info (fsop 0x18). The server locates the session
     /// where the *named* user is logged on and returns a 5-byte reply
     /// <c>[0, 0, flag, station, net]</c> — flag = 0x40 for a System (privileged) user, else 0. It is NOT a
-    /// username/boot-option block; PiFS returns the user's network *location*. If the named user is not
-    /// logged on, PiFS replies with error 0xBC "No such user or not logged on".
+    /// username/boot-option block; it returns the user's network *location*. If the named user is not
+    /// logged on, the server replies with error 0xBC "No such user or not logged on".
     /// </summary>
     public static byte[] UserLocation(byte systemFlag, byte station, byte net)
     {
@@ -765,13 +763,13 @@ public static class FileServerReply
     }
 
     /// <summary>
-    /// Read client ID (fsop 0x20). PiFS (utilities/fs.c:11482) returns the caller's own username as raw
+    /// Read client ID (fsop 0x20). The server returns the caller's own username as raw
     /// ASCII terminated by 0x0D, with NO leading status bytes (reply length = username length + 1). The
     /// previous <c>[0,0,net,stn,index]</c> form was wrong.
     /// </summary>
     public static byte[] ClientUsername(string username)
     {
-        // Trim at the first space (PiFS copies up to 10 chars then terminates at the first space with 0x0D).
+        // Trim at the first space (the server copies up to 10 chars then terminates at the first space with 0x0D).
         string trimmed = username;
         int space = trimmed.IndexOf(' ');
         if (space >= 0)
@@ -831,7 +829,7 @@ public static class FileServerReply
         if (isDirectory)
         {
             destination[18] = perm;
-            // PiFS fs_examine arg 0: directory length is &200 (FS3 catalogue entry size)
+            // Examine arg 0: directory length is &200 (FS3 catalogue entry size)
             destination[24] = 0x00;
             destination[25] = 0x02;
             destination[26] = 0x00;

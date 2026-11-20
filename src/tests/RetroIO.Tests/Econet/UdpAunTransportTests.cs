@@ -164,14 +164,14 @@ public sealed class UdpAunTransportTests
     [Test]
     public async Task GetObjectInfo_Cmd6_WireCwdZero_ReturnsNotFound()
     {
-        // PiFS ground truth (utilities/fs.c):
-        //  - fs.c:9944 applies FS_DIVHANDLE to request byte 3; DIVHANDLE(0)==0.
-        //  - fs.c:9951 overwrites the session's current handle with that wire byte -> 0.
-        //  - fs_get_object_info reads relative_to = *(data+3) == 0 (fs.c:5598).
-        //  - fs_normalize_path_wildcard finds fhandles[0].handle == -1 (slot 0 is never an
-        //    open handle) and returns FS_PATH_ERR_NODIR (fs.c:2341).
-        //  - For command 6 that NODIR is reported as the hard error 0xD6 "Not found"
-        //    (fs.c:5635-5638), NOT a success directory block.
+        // Reference behaviour:
+        //  - request byte 3 is turned from a wire mask into a handle; 0 stays 0.
+        //  - that wire byte replaces the session's current handle -> 0.
+        //  - get object info reads relative-to = request byte 3 == 0.
+        //  - path lookup finds handle slot 0, which is never an
+        //    open handle, and fails with "no directory".
+        //  - For command 6 that is reported as the hard error 0xD6 "Not found",
+        //    NOT a success directory block.
         // BeebEm's *CAT sends wire CWD handle 0, so this not-found reply is exactly what keeps
         // *CAT working; a success dir block here made BeebEm loop forever -> "Net error".
         const byte replyPort = 0x90;
@@ -213,10 +213,10 @@ public sealed class UdpAunTransportTests
     [Test]
     public async Task FsReply_UsesFreshServerSequence_NotEchoedRequestSeq_IncrementingByFour()
     {
-        // PiFS/PiEconetBridge ground truth: every FS reply DATA carries a FRESH server sequence from
-        // get_local_seq() (+= 4), NOT the client's request seq (fs.c:1291; econet-hpbridge.c:9974/9981).
-        // BeebEm ACKs the reply by that server seq so the bridge can stop retransmitting
-        // (econet-hpbridge.c:3725, 5891). Independent confirmation: RISC OS PRM Vol 5a Ch.122 and
+        // Every FS reply DATA carries a FRESH server sequence
+        // (+= 4), NOT the client's request seq.
+        // BeebEm ACKs the reply by that server seq so the server can stop retransmitting.
+        // Confirmation: RISC OS PRM Vol 5a Ch.122 and
         // BeebWiki "Econet over IP" ("increments by 4 on each transaction; Acks/Naks quote back the seq").
         // Use fsop 0x19 (read version) — allowed without login, single self-contained reply.
         const byte replyPort = 0x91;

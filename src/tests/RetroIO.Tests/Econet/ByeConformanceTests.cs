@@ -12,11 +12,11 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// PiFS-aligned BYE matrix (utilities/fs.c: OSCLI case 0 + opcode 0x17).
+/// BYE matrix (OSCLI *BYE + opcode 0x17).
 /// </summary>
 [TestFixture]
 [Category("Unit")]
-public sealed class PifsByeConformanceTests
+public sealed class ByeConformanceTests
 {
     private EconetFsTestHarness _harness = null!;
     private DnfsClientSimulator _client = null!;

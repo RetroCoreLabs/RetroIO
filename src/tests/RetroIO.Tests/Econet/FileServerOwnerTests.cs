@@ -26,8 +26,7 @@ using RetroIO.Tests.TNFS;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// The owner kept for each object in its property bag, checked against the PiFS reference (PiEconetBridge utilities/fs.c):
-/// struct objattr at line 318, fs_read_attr_from_file and fs_write_attr_to_file at lines 1608 to 1648, fs_read_xattr at line 1675.
+/// The owner kept for each object in its property bag, checked against the reference behaviour.
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -319,7 +318,7 @@ public sealed class AcornAttributeStoreOwnerTests
     [Test]
     public void TryReadAttributes_LengthFollowsTheFileWhenItGrows()
     {
-        // fs.c struct objattr has no length: the length is the size of the file, never a stored number.
+        // No length is stored: the length is the size of the file, never a stored number.
         AcornAttributeStore.WriteAttributes(_fileSystem, FilePath, 0x1900, 0x8023, 0x13);
         AcornAttributeStore.TryReadAttributes(_fileSystem, FilePath, out _, out _, out int before, out _);
 
@@ -356,8 +355,8 @@ public sealed class AcornAttributeStoreOwnerTests
 
 /// <summary>
 /// What the file server does with the owner: who gets 0 in the owner byte, who becomes the owner of what is made,
-/// the AcornHome flag (fs.c lines 2784, 2928, 3061, 4677 and 10715 to 10751), the MdfsInfo flag (lines 5180 to 5187)
-/// and the owner bytes of the MdfsFunctions flag (lines 5089 to 5094).
+/// the AcornHome flag, the MdfsInfo flag
+/// and the owner bytes of the MdfsFunctions flag.
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -405,7 +404,7 @@ public sealed class FileServerOwnerTests
         return request;
     }
 
-    // The owner byte of get object info command 4, which comes last in the reply (fs.c line 5694).
+    // The owner byte of get object info command 4, which comes last in the reply.
     private byte OwnerByteOfHello()
     {
         byte[] reply = _harness.Send(FileServerOpcodes.GetObjectInfo, InfoRequest(4, "HELLO")).Payload;
@@ -414,7 +413,7 @@ public sealed class FileServerOwnerTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Owner byte of get object info. fs.c 5694 (commands 4, 5 and 96) and 5735 (command 6).
+    // Owner byte of get object info: commands 4, 5 and 96, and command 6.
     // ---------------------------------------------------------------------------------------------
 
     [Test]
@@ -438,7 +437,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void GetObjectInfo_Cmd4_FileOwnedBySomeoneElse_SystemUserStillGetsZero()
     {
-        // fs.c 5694 tests the owner or FS_ACTIVE_SYST.
+        // Commands 4, 5 and 96 test the owner or a system user.
         _harness.LoginAsSyst();
         SeedHello(0x13, OtherUser);
 
@@ -448,7 +447,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void GetObjectInfo_Cmd4_FileWithNoStoredOwner_BelongsToTheSystemManager()
     {
-        // fs.c 1678: owner 0 when nothing is stored, and user 0 is SYST (lines 3538 to 3544).
+        // Owner 0 when nothing is stored, and user 0 is SYST.
         _harness.LoginAsUser();
         Assert.That(OwnerByteOfHello(), Is.EqualTo(0xFF), "a normal user is not the owner");
 
@@ -459,7 +458,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void GetObjectInfo_Cmd6_DirectoryOwnedBySomeoneElse_SystemUserGetsFF()
     {
-        // fs.c 5735 tests the owner only, a system user is not counted for the directory header.
+        // Command 6 tests the owner only, a system user is not counted for the directory header.
         _harness.LoginAsSyst();
         AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, OtherUser, 0);
 
@@ -480,7 +479,7 @@ public sealed class FileServerOwnerTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Who becomes the owner. fs.c 5873 (save), 7131 (cdir), 6474 (copy), 6981 to 6986 (rename), 7087 (delete).
+    // Who becomes the owner: save, cdir, copy, rename, delete.
     // ---------------------------------------------------------------------------------------------
 
     private void SaveRequest(string filename, int length)
@@ -546,7 +545,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void Save_OverAnExistingFile_TheSaverBecomesTheOwner()
     {
-        // fs.c 5873 writes the user number of the saver whether or not the file was there.
+        // Save writes the user number of the saver whether or not the file was there.
         _harness.LoginAsUser();
         SeedHello(0x13, OtherUser);
 
@@ -726,7 +725,7 @@ public sealed class FileServerOwnerTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // MdfsInfo 0x20. fs.c 5170 (is_owner) and 5180 to 5187 (letters of EXAMINE argument 3).
+    // MdfsInfo 0x20. The owner test and the letters of EXAMINE argument 3.
     // ---------------------------------------------------------------------------------------------
 
     [Test]
@@ -762,7 +761,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void Examine_MdfsInfoSet_SystemUserCountsAsTheOwner()
     {
-        // fs.c 5170 uses FS_PERM_EFFOWNER, so a system user is the owner of every object.
+        // The effective owner test is used, so a system user is the owner of every object.
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagMdfsInfo);
         _harness.LoginAsSyst();
         SeedHello(0x13, OtherUser);
@@ -793,7 +792,7 @@ public sealed class FileServerOwnerTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // MdfsFunctions 0x02, owner bytes of the binary catalogue entry. fs.c 5089 to 5094.
+    // MdfsFunctions 0x02, owner bytes of the binary catalogue entry.
     // ---------------------------------------------------------------------------------------------
 
     // Returns the 27 bytes of the binary catalogue entry of a name.
@@ -820,7 +819,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void Examine_Binary_MdfsFunctionsSet_EntryCarriesTheOwnerBytes()
     {
-        // fs.c 5091 to 5093: owner low byte, bits 8 to 10 shifted down by 3, then the auxiliary account 0.
+        // Owner low byte, bits 8 to 10 shifted down by 3, then the auxiliary account 0.
         SetFlags(FileServerConfiguration.FlagMdfsFunctions);
         _harness.LoginAsUser();
         SeedHello(0x13, 0x0523);
@@ -848,7 +847,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void Examine_Binary_MdfsFunctionsClear_OwnerBytesAreNotWritten()
     {
-        // With the flag clear PiFS puts the internal number there (line 5097 onward), which this server has not, so 0.
+        // With the flag clear the reference puts an internal number there, which this server has not, so 0.
         SetFlags(0x00);
         _harness.LoginAsUser();
         SeedHello(0x13, 0x0523);
@@ -861,7 +860,7 @@ public sealed class FileServerOwnerTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // AcornHome 0x01. fs.c 4677 to 4685 (login), 2781 to 2800, 2928 to 2932 and 3061 to 3065 (owner), 10715 to 10751 (*SETHOME).
+    // AcornHome 0x01. Login, the owner of objects below a home, and *SETHOME.
     // ---------------------------------------------------------------------------------------------
 
     private ushort HomeOwnerOf(string unixPath)
@@ -941,7 +940,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void GetOwner_AcornHomeSet_TheHomeDirectoryNearestTheRootWins()
     {
-        // fs.c 2781 and 3061: homeof_found is set by the first directory with a home owner on the way down and is not replaced.
+        // The home owner is taken from the first directory with a home owner on the way down and is not replaced.
         SetFlags(FileServerConfiguration.FlagMdfsFunctions | FileServerConfiguration.FlagAcornHome);
         AcornAttributeStore.WriteOwnership(_harness.FileSystem, DiscRoot, 0, 0x0011);
         AcornAttributeStore.WriteOwnership(_harness.FileSystem, UserDirectory, 0, 0x0022);
@@ -982,7 +981,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void SetHome_MarksTheNewHomeEvenWhenAcornHomeIsClear()
     {
-        // fs.c 10747 to 10752 do not look at fs_acorn_home.
+        // *SETHOME does not look at the AcornHome flag.
         SetFlags(FileServerConfiguration.FlagMdfsFunctions);
         _harness.LoginAsSyst();
         _harness.FileSystem.AddDirectory(UserDirectory + "/HOME1");
@@ -996,7 +995,6 @@ public sealed class FileServerOwnerTests
     [Test]
     public void SetHome_TakesTheMarkOffTheOldHome()
     {
-        // fs.c 10715 to 10724.
         _harness.LoginAsSyst();
         _harness.FileSystem.AddDirectory(UserDirectory + "/HOME1");
         _harness.FileSystem.AddDirectory(UserDirectory + "/HOME2");
@@ -1011,7 +1009,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void SetHome_Percent_TakesTheMarkOffTheOldHome()
     {
-        // fs.c 10715 to 10724 run before the "%" case at line 10726.
+        // This is checked before the "%" case.
         _harness.LoginAsSyst();
         _harness.FileSystem.AddDirectory(UserDirectory + "/HOME1");
         _harness.HandleOsCli("SETHOME USER HOME1\r");
@@ -1024,7 +1022,7 @@ public sealed class FileServerOwnerTests
     [Test]
     public void SetHome_DiscRoot_IsNotMarked()
     {
-        // fs.c 10745 to 10746: "Don't set it on root!".
+        // "Don't set it on root!".
         _harness.LoginAsSyst();
 
         _harness.HandleOsCli("SETHOME USER $\r");

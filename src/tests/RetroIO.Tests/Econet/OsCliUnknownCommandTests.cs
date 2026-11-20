@@ -12,8 +12,7 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Locks the unrecognised-OSCLI reply against PiFS ground truth
-/// (E:\Dev\Emulators\6502\PiEconetBridge\utilities\fs.c:11302 and :11327 — "Unknown command").
+/// Locks the unrecognised-OSCLI reply ("Unknown command").
 /// </summary>
 /// <remarks>
 /// REGRESSION GUARD. An OSCLI command the file server does not recognise is NOT an error. The
@@ -27,7 +26,7 @@ namespace RetroIO.Tests.Econet;
 /// RetroFS previously replied <c>0xFE "Bad command"</c>, which the ROM treats as final — so autoboot
 /// and every <c>*program</c> invocation failed. Caught live in BeebEm on 2026-07-17: a login carrying
 /// boot option 02 was followed by OSCLI "!BOOT" and answered "Bad command". Captured wire log:
-/// E:\Dev\Ronny\RetroFS\docs\econet-captures\beebem-session-20260717-bdmzuib2v.log
+/// beebem-session-20260717-bdmzuib2v.log (RetroFS repository, docs/econet-captures)
 ///
 /// Do NOT "fix" this back to an error reply.
 /// </remarks>
@@ -53,9 +52,9 @@ public sealed class OsCliUnknownCommandTests
 
         byte[] payload = _harness.HandleOsCli("!BOOT\r").Payload;
 
-        // GOLDEN: 08 00 '!' 'B' 'O' 'O' 'T' 0D  (fs.c:11302)
+        // GOLDEN: 08 00 '!' 'B' 'O' 'O' 'T' 0D
         byte[] expected = [0x08, 0x00, 0x21, 0x42, 0x4F, 0x4F, 0x54, FileServerReply.CarriageReturn];
-        Assert.That(payload, Is.EqualTo(expected), "PiFS replies 0x08 + original command text");
+        Assert.That(payload, Is.EqualTo(expected), "server replies 0x08 + original command text");
         Assert.That(payload[1], Is.Not.EqualTo(FileServerErrors.BadCommand),
             "&FE would be final to the NFS ROM and would break autoboot");
     }
@@ -67,12 +66,12 @@ public sealed class OsCliUnknownCommandTests
 
         byte[] payload = _harness.HandleOsCli("WIBBLE\r").Payload;
 
-        Assert.That(payload[0], Is.EqualTo(0x08), "PiFS 'Unknown command' return code (fs.c:11302)");
+        Assert.That(payload[0], Is.EqualTo(0x08), "'Unknown command' return code");
         Assert.That(payload[1], Is.EqualTo(0x00));
     }
 
     /// <summary>
-    /// PiFS echoes the raw command bytes from data+5, INCLUDING the terminating CR.
+    /// The server echoes the raw command bytes from data+5, INCLUDING the terminating CR.
     /// </summary>
     [Test]
     public void UnknownCommand_EchoesOriginalTextVerbatim_IncludingCr()
@@ -87,7 +86,7 @@ public sealed class OsCliUnknownCommandTests
     }
 
     /// <summary>
-    /// Case must NOT be folded: PiFS copies the raw bytes, and Acorn filenames are case-preserving.
+    /// Case must NOT be folded: the server copies the raw bytes, and Acorn filenames are case-preserving.
     /// </summary>
     [Test]
     public void UnknownCommand_PreservesCaseOfOriginalText()
@@ -126,6 +125,6 @@ public sealed class OsCliUnknownCommandTests
 
         byte[] payload = _harness.HandleOsCli("DIR\r").Payload;
 
-        Assert.That(payload[0], Is.EqualTo(0x07), "*DIR is recognised: PiFS return code 0x07");
+        Assert.That(payload[0], Is.EqualTo(0x07), "*DIR is recognised: return code 0x07");
     }
 }

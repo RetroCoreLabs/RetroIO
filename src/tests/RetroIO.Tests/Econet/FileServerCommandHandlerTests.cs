@@ -191,8 +191,8 @@ public sealed class FileServerCommandHandlerTests
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Payload, Has.Length.EqualTo(17));
         Assert.That(response.Payload[2], Is.EqualTo(0x02));
-        // PiFS fs.c:10388: the 10-byte dir name is "$" only at the disc root; the logged-in home is
-        // $.USER and reports "USER". Re-baselined 2026-07-17 (PiFS naming parity).
+        // The 10-byte dir name is "$" only at the disc root; the logged-in home is
+        // $.USER and reports "USER". Re-baselined 2026-07-17 (naming rule).
         Assert.That(Encoding.ASCII.GetString(response.Payload, 5, 10), Is.EqualTo("USER      "));
     }
 

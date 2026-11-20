@@ -69,7 +69,7 @@ public sealed class ExamineCommandHandler
 
         List<string> names = CatalogueEnumerator.ListSortedNames(_context.FileSystem, unixPath);
 
-        // arg 3 = human-readable "long" text format used by *CAT (PiFS fs_examine: "%-10s %4s/%-2s\0").
+        // arg 3 = human-readable "long" text format used by *CAT ("%-10s %4s/%-2s\0").
         if (arg == 3)
             return BuildTextExamine(request, fsRequest, session, unixPath, names, start, count);
 
@@ -86,9 +86,9 @@ public sealed class ExamineCommandHandler
                 names[i],
                 defaultPerm);
 
-            // fs.c lines 5089 to 5094: with the MdfsFunctions flag set, the three bytes after the date hold the owner
+            // With the MdfsFunctions flag set, the three bytes after the date hold the owner
             // (main account, then bits 8 to 10 of the number moved down by 3, then 0 for the auxiliary account).
-            // With the flag clear PiFS puts the internal number there, which this server does not have (bytes stay 0).
+            // With the flag clear the reference puts an internal number there, which this server does not have (bytes stay 0).
             if (_context.Configuration.MdfsFunctions)
             {
                 ushort owner = ObjectOwnership.GetOwner(_context, _context.FileSystem.CombinePath(unixPath, names[i]));
@@ -130,7 +130,7 @@ public sealed class ExamineCommandHandler
             if (!isDirectory && !AcornAttributeStore.TryReadAttributes(_context.FileSystem, fullPath, out _, out _, out _, out perm))
                 perm = defaultFilePerm;
 
-            // fs.c line 5170: is_owner is the effective owner test, so a system user counts as the owner.
+            // The owner test is the effective owner test, so a system user counts as the owner.
             bool isOwner = ObjectOwnership.IsEffectiveOwner(session, ObjectOwnership.GetOwner(_context, fullPath));
             entries.AddRange(Encoding.ASCII.GetBytes(FormatTextEntry(name, isDirectory, perm, _context.Configuration, isOwner)));
             entries.Add(0);
@@ -141,11 +141,11 @@ public sealed class ExamineCommandHandler
         return Reply(request, fsRequest.ReplyPort, payload);
     }
 
-    // Renders one *CAT entry exactly as PiFS fs_examine arg 3: "%-10s %4s/%-2s" (owner left, public right).
+    // Renders one *CAT entry exactly as examine arg 3: "%-10s %4s/%-2s" (owner left, public right).
     // Bit meanings come from the shared EconetAccess flags (the same byte *ACCESS writes).
-    // The AcornDir flag changes the letters (fs.c lines 5174 and 5175): a directory whose access is exactly owner write,
+    // The AcornDir flag changes the letters: a directory whose access is exactly owner write,
     // owner read and other read (other write clear) is shown with none of those letters, because the Acorn clients
-    // take them as implied. The MdfsInfo flag also changes the letters (fs.c lines 5180 to 5187), by whether the viewer
+    // take them as implied. The MdfsInfo flag also changes the letters, by whether the viewer
     // owns the object: with the flag set the owner letters are lower case for a viewer who is not the owner, and the
     // other-user letters are lower case for the owner. With the flag clear every letter is upper case.
     private static string FormatTextEntry(string name, bool isDirectory, byte perm, FileServerConfiguration configuration, bool isOwner)

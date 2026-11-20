@@ -82,7 +82,7 @@ public sealed class FileIoCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.BadCommand, "Bad command"));
 
         // fsop 0x05 (*RUN / load-and-run): BBCs send the whole command line — truncate at the first space,
-        // then search the library if the file is not found in the current directory (PiFS fs_load loadas).
+        // then search the library if the file is not found in the current directory.
         bool loadAsCommand = fsRequest.Opcode == FileServerOpcodes.LoadAs;
         if (loadAsCommand)
         {
@@ -91,11 +91,11 @@ public sealed class FileIoCommandHandler
                 filename = filename.Substring(0, space);
         }
 
-        // The directory handle in the request is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 9944).
+        // The directory handle in the request is a bit mask unless ManyHandle is set.
         relativeTo = AcornFileHandles.DivHandle(relativeTo, _context.Configuration.ManyHandles);
         bool found = _context.Paths.TryResolve(session, filename, relativeTo, out string unixPath, out _, out _) &&
             _context.FileSystem.FileExists(unixPath);
-        // fs.c lines 8176 to 8178: the library is searched when the file is not in the current directory, for a
+        // The library is searched when the file is not in the current directory, for a
         // *RUN (load as command) and also for every load when the MdfsFunctions flag is set.
         if (!found && (loadAsCommand || _context.Configuration.MdfsFunctions))
         {
@@ -163,7 +163,7 @@ public sealed class FileIoCommandHandler
             Username = session.Username,
         });
 
-        // PiFS fs_load: metadata reply carries the file's real load/exec/length/access/date so the
+        // Load: the metadata reply carries the file's real load/exec/length/access/date so the
         // BBC can place the image and (for CHAIN/*RUN) obtain the execution address.
         AcornAttributeStore.TryReadAttributes(_context.FileSystem, unixPath, out uint load, out uint exec, out _, out byte access);
         byte day = 0;
@@ -202,10 +202,10 @@ public sealed class FileIoCommandHandler
             {
             }
 
-            // fs.c line 5873: the user who saves a file becomes its owner.
+            // The user who saves a file becomes its owner.
             AcornAttributeStore.WriteAttributes(_context.FileSystem, unixPath, load, exec, defaultAccess, session.UserIndex);
             AcornPath.EncodeFileDate(_context.ServerClock.UtcNow, out byte day, out byte monthYear);
-            // PiFS create_only / length==0 path sends the short 5-byte completion (return code 0),
+            // Create only / length 0 sends the short 5-byte completion (return code 0),
             // not the 21-byte FS3 data-transfer close packet.
             return Reply(
                 request,
@@ -251,7 +251,7 @@ public sealed class FileIoCommandHandler
 
         bool resolved = _context.Paths.TryResolve(session, filename, out string unixPath, out _, out _);
 
-        // fs.c lines 9195 to 9197: with the MdfsFunctions flag set, a file that has to exist and is not in the
+        // With the MdfsFunctions flag set, a file that has to exist and is not in the
         // current directory is looked for in the library.
         if (mustExist && _context.Configuration.MdfsFunctions &&
             (!resolved || !_context.FileSystem.FileExists(unixPath)) &&
@@ -271,7 +271,7 @@ public sealed class FileIoCommandHandler
         FileMode mode = mustExist ? FileMode.Open : FileMode.Create;
         FileAccess access = readOnly ? FileAccess.Read : FileAccess.ReadWrite;
 
-        // PiFS answers 0xC0 "Too many open files" when no handle is free.
+        // The server answers 0xC0 "Too many open files" when no handle is free.
         byte handle = _context.Handles.AllocateHandle(request.ClientNet, request.ClientStation, _context.Configuration.ManyHandles);
         if (handle == 0)
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Locked, "Too many open files"));
@@ -283,14 +283,14 @@ public sealed class FileIoCommandHandler
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.AlreadyOpen, "Already open"));
         }
 
-        // The reply carries the handle as a bit mask unless ManyHandle is set (fs.c FS_MULHANDLE, line 9329).
+        // The reply carries the handle as a bit mask unless ManyHandle is set.
         byte[] payload = [0, 0, AcornFileHandles.MulHandle(handle, _context.Configuration.ManyHandles)];
         return Reply(request, fsRequest.ReplyPort, payload);
     }
 
     private EconetMessage HandleClose(EconetMessage request, FileServerRequest fsRequest)
     {
-        // The handle byte on the wire is a bit mask unless ManyHandle is set (fs.c FS_DIVHANDLE, line 11367).
+        // The handle byte on the wire is a bit mask unless ManyHandle is set.
         byte handle = AcornFileHandles.DivHandle(fsRequest.Parameters.Length > 0 ? fsRequest.Parameters[0] : (byte)0, _context.Configuration.ManyHandles);
         if (handle == 0)
         {
@@ -325,7 +325,7 @@ public sealed class FileIoCommandHandler
         else
             return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.NotFound, "Not found"));
 
-        // fs.c lines 7087 and 7088: the attribute file goes with the object, so a new object of the same name does not get the old owner.
+        // The attribute file goes with the object, so a new object of the same name does not get the old owner.
         AcornAttributeStore.DeleteAttributes(_context.FileSystem, unixPath);
 
         return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
@@ -347,7 +347,7 @@ public sealed class FileIoCommandHandler
         bool existed = _context.FileSystem.DirectoryExists(unixPath);
         _context.FileSystem.CreateDirectory(unixPath);
 
-        // fs.c line 7131: a new directory is owned by the user who made it. A directory that was there keeps its owner.
+        // A new directory is owned by the user who made it. A directory that was there keeps its owner.
         if (!existed)
             ObjectOwnership.SetOwner(_context, session, unixPath);
 

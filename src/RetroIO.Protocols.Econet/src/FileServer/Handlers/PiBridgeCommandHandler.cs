@@ -16,7 +16,7 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Protocols.Econet.FileServer.Handlers;
 
 /// <summary>
-/// PiBridge FS operation 0x60 (PiFS extensions).
+/// PiBridge FS operation 0x60 (protocol extensions).
 /// </summary>
 public sealed class PiBridgeCommandHandler
 {
@@ -64,13 +64,13 @@ public sealed class PiBridgeCommandHandler
             case 17:
                 return Reply(request, fsRequest.ReplyPort, FileServerReply.WithReturnCode(0, _context.Configuration.ToConfigReplyBytes()));
             case 18:
-                // PiFS answers 0xFF "Bad filename length" and changes nothing (utilities/fs.c lines 4281 to 4285).
+                // The server answers 0xFF "Bad filename length" and changes nothing.
                 if (fsRequest.Parameters.Length > 1 && !_context.Configuration.ApplyConfigBytes(fsRequest.Parameters.Slice(1)))
                     return Reply(request, fsRequest.ReplyPort, FileServerReply.Error(FileServerErrors.Unsupported, "Bad filename length"));
                 return Reply(request, fsRequest.ReplyPort, FileServerReply.Success());
             case 19:
-                // PiFS answers with the text "Fileserver at net.stn shutting down" and a carriage return
-                // (utilities/fs.c lines 4296 to 4304), then fs_shutdown logs off every station (lines 3819 to 3840).
+                // The server answers with the text "Fileserver at net.stn shutting down" and a carriage return,
+                // then logs off every station.
                 string shutdownText = "Fileserver at " + _context.ServerNet + "." + _context.ServerStation + " shutting down";
                 EconetMessage shutdownReply = Reply(request, fsRequest.ReplyPort, FileServerReply.Version(shutdownText));
                 LogOffAllStations();

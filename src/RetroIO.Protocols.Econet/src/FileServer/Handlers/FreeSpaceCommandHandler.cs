@@ -16,7 +16,7 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Protocols.Econet.FileServer.Handlers;
 
 /// <summary>
-/// PiFS <c>fs_free</c> (0x1A) and user free-space stub (0x1E) per protocol analysis §6.3.
+/// Free space (0x1A) and user free-space stub (0x1E) per protocol analysis §6.3.
 /// </summary>
 public sealed class FreeSpaceCommandHandler
 {

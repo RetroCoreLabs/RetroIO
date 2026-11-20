@@ -16,8 +16,8 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Validates SAVE / CREATE (fsop 0x01 / 0x1D) reply formats against the PiFS reference
-/// (utilities/fs.c fs_save + bulk close): setup = [00 00 port 00 05], create/zero-length close =
+/// Validates SAVE / CREATE (fsop 0x01 / 0x1D) reply formats against the reference
+/// behaviour (save + bulk close): setup = [00 00 port 00 05], create/zero-length close =
 /// 5-byte [00 00 access day monthyear], data-transfer close = 21-byte FS3 packet with trailing junk.
 /// </summary>
 [TestFixture]
@@ -30,7 +30,7 @@ public sealed class BulkSaveReplyTests
     public void SetUp() => _harness = new EconetFsTestHarness();
 
     [Test]
-    public void SaveSetup_MatchesPiFsBulkPortAnd1280Window()
+    public void SaveSetup_MatchesBulkPortAnd1280Window()
     {
         byte[] reply = FileServerReply.SaveSetup(0x93);
         Assert.That(reply, Is.EqualTo(new byte[] { 0, 0, 0x93, 0x00, 0x05 }));
@@ -83,7 +83,7 @@ public sealed class BulkSaveReplyTests
 
         byte[] reply = SaveRequest("EMPTY", load: 0, exec: 0, length: 0);
 
-        Assert.That(reply, Has.Length.EqualTo(5), "PiFS create/zero-length close is 5 bytes");
+        Assert.That(reply, Has.Length.EqualTo(5), "create/zero-length close is 5 bytes");
         Assert.That(reply[0], Is.EqualTo(0), "return code 0 (not the FS3 code 3)");
         Assert.That(reply[1], Is.EqualTo(0));
     }

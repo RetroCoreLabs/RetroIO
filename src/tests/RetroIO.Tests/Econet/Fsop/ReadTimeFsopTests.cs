@@ -39,7 +39,7 @@ internal sealed class ReadTimeFsopTests : FsopProtocolTestBase
 
         EconetMessage reply = Harness.Send(FileServerOpcodes.ReadTime);
 
-        // PiFS 7-byte layout: [0, 0, day, monthYear, hour, min, sec] (see FileServerReply.ReadTime).
+        // 7-byte layout: [0, 0, day, monthYear, hour, min, sec] (see FileServerReply.ReadTime).
         Assert.That(reply.Payload, Has.Length.EqualTo(7));
         Assert.That(StatusOf(reply), Is.EqualTo(0x00));
     }

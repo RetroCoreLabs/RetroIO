@@ -14,7 +14,7 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// Byte-for-byte parity checks for miscellaneous file-server opcodes against PiFS (utilities/fs.c).
+/// Byte-for-byte parity checks for miscellaneous file-server opcodes against the reference behaviour.
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -30,21 +30,21 @@ public sealed class MiscOpcodeParityTests
     }
 
     [Test]
-    public void ReadTime_ReturnsSevenBytePiFsLayout()
+    public void ReadTime_ReturnsSevenByteLayout()
     {
-        // PiFS fs_read_time (utilities/fs.c:7513-7543) returns EXACTLY 7 bytes:
+        // Read time returns EXACTLY 7 bytes:
         //   [0]=0 [1]=0 [2]=day [3]=monthyear [4]=hour [5]=min [6]=sec
-        // (fs_aun_send(..., 7, ...)). The previous RetroFS build wrongly returned 9 bytes in a
+        // The previous RetroFS build wrongly returned 9 bytes in a
         // RISC-OS-style order ([0,0,sec,min,hour,day,month,year,centis]). This test locks the length,
         // the two status bytes, and the day-before-hour field order so the regression cannot return.
         byte[] payload = _harness.HandleLoggedIn(FileServerOpcodes.ReadTime, Array.Empty<byte>()).Payload;
 
-        Assert.That(payload.Length, Is.EqualTo(7), "PiFS read-time reply is 7 bytes");
+        Assert.That(payload.Length, Is.EqualTo(7), "read-time reply is 7 bytes");
         Assert.That(payload[0], Is.EqualTo(0));
         Assert.That(payload[1], Is.EqualTo(0));
 
         // Byte 2 is the Acorn day byte: low 5 bits = day-of-month, top 3 bits carry high year bits
-        // (fs_date_to_two_bytes, sevenbitbodge on), so mask before range-checking the day.
+        // (seven-bit year packing), so mask before range-checking the day.
         int day = payload[2] & 0x1F;
         byte hour = payload[4];
         byte minute = payload[5];
@@ -58,13 +58,12 @@ public sealed class MiscOpcodeParityTests
         Assert.That(second, Is.InRange(0, 59), "byte 6 is the second");
     }
 
-    // Expected values computed directly from PiFS fs_date_to_two_bytes (utilities/fs.c:1143) with the
-    // DEFAULT fs_sevenbitbodge = 1 (econet-hpbridge.c:9321): yearBits = year - 1981;
+    // Expected values computed from the seven-bit date packing (the usual default): yearBits = year - 1981;
     // day = (day & 0x1f) | ((yearBits & 0x70) << 1); monthyear = (month & 0x0f) | ((yearBits & 0x0f) << 4).
     [TestCase(2026, 7, 15, 0x4F, 0xD7)] // yearBits 45 (0x2D): day 15|0x40; my 7|0xD0
     [TestCase(1993, 12, 25, 0x19, 0xCC)] // yearBits 12 (0x0C): day 25|0; my 12|0xC0
     [TestCase(1981, 7, 1, 0x01, 0x07)] // yearBits 0: day 1; my 7
-    public void EncodeFileDate_MatchesPiFsSevenBitBodge(int year, int month, int dayOfMonth, int expectedDay, int expectedMonthYear)
+    public void EncodeFileDate_MatchesSevenBitBodge(int year, int month, int dayOfMonth, int expectedDay, int expectedMonthYear)
     {
         AcornPath.EncodeFileDate(new DateTime(year, month, dayOfMonth), out byte day, out byte monthYear);
 
@@ -75,7 +74,7 @@ public sealed class MiscOpcodeParityTests
     [Test]
     public void ReadClientId_ReturnsRawUsernameCrTerminated()
     {
-        // PiFS "read client ID" (utilities/fs.c:11482) returns the caller's username as raw ASCII + 0x0D,
+        // "Read client ID" returns the caller's username as raw ASCII + 0x0D,
         // with NO [0,0] status prefix. The harness logs in as SYST.
         byte[] payload = _harness.HandleLoggedIn(FileServerOpcodes.ReadClientId, Array.Empty<byte>()).Payload;
 
@@ -87,7 +86,7 @@ public sealed class MiscOpcodeParityTests
     [Test]
     public void ReadUserInfo_ReturnsFiveByteNetworkLocation()
     {
-        // PiFS fs_read_user_info (utilities/fs.c:7622): [0, 0, flag, station, net] for the session where
+        // Read user info: [0, 0, flag, station, net] for the session where
         // the named user is logged on. The harness client is net 1, station 1.
         byte[] payload = _harness.HandleLoggedIn(FileServerOpcodes.ReadUserInfo, Encoding.ASCII.GetBytes("SYST\r")).Payload;
 
@@ -108,9 +107,9 @@ public sealed class MiscOpcodeParityTests
     }
 
     [Test]
-    public void ReadLoggedOnUsers_UsesPiFsVariableEntryLayout()
+    public void ReadLoggedOnUsers_UsesVariableEntryLayout()
     {
-        // PiFS fs_read_logged_on_users (utilities/fs.c:7546): [0,0,count] then per user
+        // Read logged-on users: [0,0,count] then per user
         // [station][net][username chars][0x0D][priv]. Only SYST is logged on (net 1, station 1).
         byte[] payload = _harness.HandleLoggedIn(FileServerOpcodes.ReadLoggedOnUsers, [(byte)0, (byte)8]).Payload;
 
@@ -128,7 +127,7 @@ public sealed class MiscOpcodeParityTests
     [Test]
     public void GetRandomAccessInfo_InvalidHandle_ReturnsChannelError()
     {
-        // fs_get_random_access_info returns 0xDE "Channel ?" for an unopened handle (utilities/fs.c:8467).
+        // Get random access info returns 0xDE "Channel ?" for an unopened handle.
         byte[] payload = _harness.HandleLoggedIn(FileServerOpcodes.GetRandomAccessInfo, [(byte)0x99, (byte)0]).Payload;
 
         Assert.That(payload[1], Is.EqualTo(FileServerErrors.BadChannel));

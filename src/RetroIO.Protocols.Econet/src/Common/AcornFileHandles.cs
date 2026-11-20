@@ -11,7 +11,7 @@ using RetroIO.Protocols.Econet.Protocol.FileServer;
 namespace RetroIO.Protocols.Econet.Common;
 
 /// <summary>
-/// Acorn Level-3 wire handle encoding (PiFS FS_MULHANDLE / FS_DIVHANDLE, NFS3/BBC B mode).
+/// Acorn Level-3 wire handle encoding (NFS3/BBC B mode).
 /// Login returns bit-mask handles; requests carry the same masks on the wire.
 /// </summary>
 public static class AcornFileHandles
@@ -54,9 +54,6 @@ public static class AcornFileHandles
     /// <returns>
     /// The internal handle number. In the bit mask mode any byte that is not a power of two is returned as it is.
     /// </returns>
-    /// <remarks>
-    /// Source: PiEconetBridge utilities/fs.c line 71 (FS_DIVHANDLE).
-    /// </remarks>
     public static byte DivHandle(byte wireHandle, bool manyHandles)
     {
         if (manyHandles)
@@ -88,9 +85,6 @@ public static class AcornFileHandles
     /// <returns>
     /// The wire byte. In the bit mask mode a number outside 1 to 8 is returned as it is.
     /// </returns>
-    /// <remarks>
-    /// Source: PiEconetBridge utilities/fs.c line 72 (FS_MULHANDLE).
-    /// </remarks>
     public static byte MulHandle(byte internalHandle, bool manyHandles)
     {
         if (manyHandles)
@@ -179,7 +173,7 @@ public static class AcornFileHandles
             or FileServerOpcodes.PutBytes;
 
     /// <summary>
-    /// Get/Put byte (0x08/0x09) omit the usual three handle bytes — PiFS §7.1.
+    /// Get/Put byte (0x08/0x09) omit the usual three handle bytes.
     /// </summary>
     public static bool SkipsWireHandleUpdate(byte opcode) =>
         opcode is FileServerOpcodes.GetByte or FileServerOpcodes.PutByte;

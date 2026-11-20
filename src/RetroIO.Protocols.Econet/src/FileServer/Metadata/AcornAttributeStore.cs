@@ -17,15 +17,15 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 /// <para>
 /// The attributes are kept in the property bag of the object (see <see cref="AcornProperties"/>), through the shared extended-attribute mechanism of
 /// IFileSystemBackend, the one NDFS uses. Where the backend cannot store attributes on the object, the bag lives in the .xat file of the object.
-/// This follows PiFS (PiEconetBridge utilities/fs.c, fs_read_xattr and the functions above it, lines 1589 to 1690): the attributes go in an extended
+/// The attributes go in an extended
 /// attribute, and a side file is used only where extended attributes are not available.
 /// </para>
 /// <para>
-/// Defaults follow fs_read_xattr (lines 1675 to 1686): owner, load, exec and home owner start at 0, and only what the store holds replaces them.
+/// Defaults: owner, load, exec and home owner start at 0, and only what the store holds replaces them.
 /// The access byte defaults to 0x33 here, as it always has in this server.
 /// </para>
 /// <para>
-/// The length is not an attribute: fs.c struct objattr has none, and PiFS takes the length from the file. It is always the size of the file.
+/// The length is not an attribute: it is taken from the file. It is always the size of the file.
 /// </para>
 /// <para>
 /// A damaged .xat file reads as no property bag (the defaults apply) and is moved aside to a .xat.bad file by XatSidecar.Read, so the next write
@@ -35,7 +35,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Metadata;
 public static class AcornAttributeStore
 {
     /// <summary>
-    /// The owner of an object that has no stored owner. The value is 0, which fs.c calls syst (fs_read_xattr, line 1678).
+    /// The owner of an object that has no stored owner. The value is 0, which is SYST.
     /// </summary>
     public const ushort DefaultOwner = 0;
 
@@ -165,7 +165,7 @@ public static class AcornAttributeStore
     /// Receives the user number whose home directory this is, 0 when none is stored.
     /// </param>
     /// <remarks>
-    /// Source: fs.c fs_read_xattr, lines 1675 to 1686: owner and homeof start at 0 and are replaced only by what the attribute store holds.
+    /// Owner and homeof start at 0 and are replaced only by what the attribute store holds.
     /// </remarks>
     public static void ReadOwnership(IFileSystemBackend fileSystem, string unixPath, out ushort owner, out ushort homeOf)
     {
@@ -218,7 +218,7 @@ public static class AcornAttributeStore
     /// The host path the object has now.
     /// </param>
     /// <remarks>
-    /// Source: fs.c lines 6982 and 6983 (olddot and newdot), which rename the attribute file with the object.
+    /// The attribute file is renamed with the object.
     /// </remarks>
     public static void MoveAttributes(IFileSystemBackend fileSystem, string fromPath, string toPath)
     {
@@ -235,7 +235,7 @@ public static class AcornAttributeStore
     /// The host path of the object that was deleted.
     /// </param>
     /// <remarks>
-    /// Source: fs.c lines 7087 and 7088 (dotfile and unlink), which remove the attribute file with the object.
+    /// The attribute file is removed with the object.
     /// </remarks>
     public static void DeleteAttributes(IFileSystemBackend fileSystem, string unixPath)
     {
@@ -252,7 +252,7 @@ public static class AcornAttributeStore
     /// True when the name ends in <c>.xat</c> or <c>.xat.bad</c> (a damaged .xat file that was moved aside).
     /// </returns>
     /// <remarks>
-    /// PiFS keeps its own side file out of sight because an Acorn name cannot hold a dot (fs.c comment at lines 1589 to 1595: the dot is a directory
+    /// The side file is kept out of sight because an Acorn name cannot hold a dot (the dot is a directory
     /// separator in the Acorn world). The suffix <c>.xat</c> has a dot, so no Acorn name can be the name of a .xat file, and hiding it cannot hide an Acorn object.
     /// </remarks>
     public static bool IsStoreName(string name)

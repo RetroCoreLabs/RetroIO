@@ -13,7 +13,7 @@ namespace RetroIO.Protocols.Econet.FileServer.Operations;
 
 /// <summary>
 /// <c>SetBootOpt</c> (fsop 0x16) — sets the caller's boot option (the *OPT 4 value). Options above 7
-/// are rejected with <c>0xBD "Bad option"</c> (PiFS <c>fs_set_bootopt</c>).
+/// are rejected with <c>0xBD "Bad option"</c>.
 /// </summary>
 /// <remarks>
 /// Migrated from <c>MiscOpcodeHandler.HandleSetBootOpt</c>, unchanged. The login gate is the
@@ -48,7 +48,7 @@ public sealed class SetBootOptOperation : IFileServerOperation
     /// <remarks>
     /// With no parameter bytes nothing changes and the reply is success. When the user store refuses
     /// the change (the user was removed while logged in) the live session is left as it was and the
-    /// reply is 0xBD "Bad user ID", the PiFS answer for a missing user.
+    /// reply is 0xBD "Bad user ID", the answer for a missing user.
     /// </remarks>
     /// <param name="call">
     /// Everything the operation needs: the request, the decoded header, the session, and services.
@@ -64,12 +64,12 @@ public sealed class SetBootOptOperation : IFileServerOperation
         if (call.FsRequest.Parameters.Length > 0)
         {
             byte newBootOpt = call.FsRequest.Parameters[0];
-            // PiFS fs_set_bootopt rejects options above 7.
+            // Options above 7 are rejected.
             if (newBootOpt > 7)
                 return FileServerReply.Error(FileServerErrors.InsufficientAccess, "Bad option");
 
             // Persist to the user record so it is remembered across logins (and reported at login).
-            // PiFS fs_set_bootopt answers 0xBD "Bad user ID" when the user cannot be found.
+            // The server answers 0xBD "Bad user ID" when the user cannot be found.
             if (!call.Context.Users.TrySetBootOpt(session.RetroUserId, newBootOpt))
                 return FileServerReply.Error(FileServerErrors.InsufficientAccess, "Bad user ID");
 

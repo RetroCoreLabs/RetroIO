@@ -32,7 +32,7 @@ public sealed class OsCliIamCatTests
     }
 
     [Test]
-    public void Iam_Syst_ReturnsPiFsLoginSuccessPacket()
+    public void Iam_Syst_ReturnsLoginSuccessPacket()
     {
         byte[] payload = _harness.HandleOsCli("I AM SYST \r").Payload;
 
@@ -200,9 +200,9 @@ public sealed class OsCliIamCatTests
             Encoding.ASCII.GetBytes(".\r")).Payload;
         Assert.That(header, Has.Length.EqualTo(35));
         Assert.That(header[^1], Is.EqualTo(0x80));
-        // PiFS fs.c:10388 - "$" names the disc root only; the home dir ($.USER) reports "USER".
+        // "$" names the disc root only; the home dir ($.USER) reports "USER".
         // The CatHeader (0x04) and the cmd6 directory block below MUST agree on this name.
-        // Re-baselined 2026-07-17 (PiFS naming parity).
+        // Re-baselined 2026-07-17 (naming rule).
         Assert.That(Encoding.ASCII.GetString(header, 2, 11).TrimEnd(), Is.EqualTo("USER"));
 
         byte[] directoryInfo = _harness.HandleLoggedIn(
@@ -264,10 +264,10 @@ public sealed class OsCliIamCatTests
     [Test]
     public void GetObjectInfo_Cmd1_WireCwdZero_ReturnsNotFound()
     {
-        // PiFS ground truth (utilities/fs.c): a wire CWD handle of 0 overwrites the session's
-        // current handle (fs.c:9951) and then fs_normalize_path_wildcard rejects it because
-        // fhandles[0] is never an open handle (fs.c:2341, FS_PATH_ERR_NODIR). For commands 1-5
-        // that NODIR is returned as the 3-byte soft not-found [0,0,0] (fs.c:5641-5642), NOT a
+        // Reference behaviour: a wire CWD handle of 0 replaces the session's
+        // current handle and then path lookup rejects it because
+        // handle slot 0 is never an open handle ("no directory"). For commands 1-5
+        // that is returned as the 3-byte soft not-found [0,0,0], NOT a
         // resolved file block. Do not "resolve to the session CSD" here - that reintroduces the
         // BeebEm *CAT "Net error".
         _harness.HandleOsCli("I AM SYST \r");
@@ -286,14 +286,14 @@ public sealed class OsCliIamCatTests
         Assert.That(payload, Has.Length.EqualTo(3));
         Assert.That(payload[0], Is.EqualTo(0));
         Assert.That(payload[1], Is.EqualTo(0));
-        Assert.That(payload[2], Is.EqualTo(0), "PiFS flags cmd 1-5 not-found with a single 0 byte");
+        Assert.That(payload[2], Is.EqualTo(0), "cmd 1-5 not-found is flagged with a single 0 byte");
     }
 
     [Test]
     public void GetObjectInfo_FilenameAtByteFiveWithoutCommandByte_WireCwdZero_ReturnsNotFound()
     {
-        // See GetObjectInfo_Cmd1_WireCwdZero_ReturnsNotFound: wire CWD 0 -> PiFS NODIR ->
-        // 3-byte soft not-found (fs.c:2341, 5641-5642), regardless of the parsed command.
+        // See GetObjectInfo_Cmd1_WireCwdZero_ReturnsNotFound: wire CWD 0 -> "no directory" ->
+        // 3-byte soft not-found, regardless of the parsed command.
         _harness.HandleOsCli("I AM SYST \r");
 
         byte[] parameters = Encoding.ASCII.GetBytes("HELLO\r");

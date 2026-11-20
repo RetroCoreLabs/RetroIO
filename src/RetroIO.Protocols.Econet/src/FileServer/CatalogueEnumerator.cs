@@ -31,8 +31,8 @@ internal static class CatalogueEnumerator
                 string name = fileSystem.GetFileName(entries.Current);
 
                 // The .xat file that keeps a property bag, and a damaged one that was moved aside to .xat.bad, are not objects of the Acorn tree.
-                // An Acorn name cannot hold a dot, so no Acorn name can be such a name (fs.c hides its own side file for the same reason;
-                // see AcornAttributeStore.IsStoreName). A name like FILE,inf is an ordinary file and is listed.
+                // An Acorn name cannot hold a dot, so no Acorn name can be such a name
+                // (see AcornAttributeStore.IsStoreName). A name like FILE,inf is an ordinary file and is listed.
                 if (AcornAttributeStore.IsStoreName(name))
                     continue;
 
@@ -45,20 +45,20 @@ internal static class CatalogueEnumerator
     }
 
     /// <summary>
-    /// PiFS/DNFS catalogue dir name. Behaviour observed at <c>fs.c:10388</c>: when the normalised path
-    /// has no components (<c>npath == 0</c>) the tail is <c>$</c>; otherwise it is the LAST component
+    /// DNFS catalogue dir name. When the normalised path
+    /// has no components the tail is <c>$</c>; otherwise it is the LAST component
     /// of the path.
     /// </summary>
     /// <remarks>
     /// "$" means the DISC ROOT — nothing else. A directory below it reports its own leaf name,
     /// so the user's home <c>USER</c> reports as <c>"USER"</c> (it is <c>$.USER</c> in Acorn terms).
     ///
-    /// This previously keyed off the user's HOME directory instead of the disc root, which inverted
-    /// PiFS: home printed as <c>$</c>, while the disc root — having no special case — fell through to
-    /// the unix leaf and leaked the HOST folder name <c>0RetroFS</c> (PiFS's on-disk "disc index +
+    /// This previously keyed off the user's HOME directory instead of the disc root, which was
+    /// wrong: home printed as <c>$</c>, while the disc root — having no special case — fell through to
+    /// the unix leaf and leaked the HOST folder name <c>0RetroFS</c> (an on-disk "disc index +
     /// disc name" convention) to the BBC as if it were an Acorn directory name. Seen live in BeebEm
     /// 2026-07-17 via <c>*DIR :RetroFS</c> then <c>*CAT</c>. It also meant two different directories
-    /// both called themselves <c>$</c>. Changed to PiFS parity on the user's instruction 2026-07-17.
+    /// both called themselves <c>$</c>. Changed on the user's instruction 2026-07-17.
     ///
     /// <paramref name="discRootUnix"/> is the unix path of the current disc's root directory
     /// (<c>DiscCatalog.GetDiscDirectoryPath(session.CurrentDisc)</c>).
@@ -67,7 +67,7 @@ internal static class CatalogueEnumerator
     {
         destination.Fill((byte)' ');
 
-        // npath == 0 in PiFS terms: we are AT the disc root.
+        // The path has no components: we are AT the disc root.
         if (IsDiscRootDirectory(unixPath, discRootUnix))
         {
             destination[0] = (byte)'$';
@@ -95,8 +95,8 @@ internal static class CatalogueEnumerator
     /// The host path of the current disc's root directory.
     /// </param>
     /// <returns>
-    /// True when the two name the same directory, which is the condition the reference calls
-    /// <c>npath == 0</c> and reports as <c>$</c>.
+    /// True when the two name the same directory, which is the case of a path with
+    /// no components, reported as <c>$</c>.
     /// </returns>
     public static bool IsDiscRootDirectory(string unixPath, string discRootUnix) =>
         string.Equals(unixPath.TrimEnd('/', '\\'), discRootUnix.TrimEnd('/', '\\'), StringComparison.OrdinalIgnoreCase);
@@ -140,7 +140,7 @@ internal static class CatalogueEnumerator
         {
             RetroIO.Server.Core.FileSystem.BackendFileInfo? info = fileSystem.GetFileInfo(fullPath);
             length = info?.Length ?? 0;
-            // The length is the size of the file (fs.c has no stored length), so only the attributes are taken here.
+            // The length is the size of the file (no length is stored), so only the attributes are taken here.
             if (!AcornAttributeStore.TryReadAttributes(fileSystem, fullPath, out load, out exec, out _, out perm))
                 perm = defaultPerm;
         }

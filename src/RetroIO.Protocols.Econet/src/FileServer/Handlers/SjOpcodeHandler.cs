@@ -13,7 +13,7 @@ using RetroIO.Protocols.Econet.Server;
 namespace RetroIO.Protocols.Econet.FileServer.Handlers;
 
 /// <summary>
-/// SJ file server operations 0x40 / 0x41 — PiFS compatibility stubs (protocol analysis §6.3).
+/// SJ file server operations 0x40 / 0x41 — compatibility stubs (protocol analysis §6.3).
 /// </summary>
 public sealed class SjOpcodeHandler
 {

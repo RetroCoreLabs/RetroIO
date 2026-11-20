@@ -35,7 +35,7 @@ internal sealed class ReadClientIdFsopTests : FsopProtocolTestBase
 
         EconetMessage reply = Harness.Send(FileServerOpcodes.ReadClientId);
 
-        // Raw username + 0x0D, NO [0,0] status prefix (PiFS fs.c:11482).
+        // Raw username + 0x0D, NO [0,0] status prefix.
         Assert.That(Encoding.ASCII.GetString(reply.Payload), Is.EqualTo("SYST\r"));
     }
 

@@ -19,11 +19,10 @@ using RetroIO.Tests.TNFS;
 namespace RetroIO.Tests.Econet;
 
 /// <summary>
-/// The station number of the file server itself. The reference is PiFS in PiEconetBridge utilities/fs.c:
-/// PiBridge call 19 answers "Fileserver at net.stn shutting down" and then logs every station off
-/// (lines 4296 to 4304, fs_shutdown lines 3819 to 3840, fs_reply_ok_with_data lines 3909 to 3924).
-/// An AUN datagram has no station field: include/econet-gpio-consumer.h lines 155 to 165 (struct
-/// __econet_packet_udp) holds ptype, port, ctrl, pad and the 32-bit seq, then the data.
+/// The station number of the file server itself.
+/// PiBridge call 19 answers "Fileserver at net.stn shutting down" and then logs every station off.
+/// An AUN datagram has no station field: it
+/// holds ptype, port, ctrl, pad and the 32-bit seq, then the data.
 /// </summary>
 [TestFixture]
 [Category("Unit")]
@@ -66,7 +65,7 @@ public sealed class FileServerStationTests
 
         byte[] reply = harness.Send(FileServerOpcodes.PiBridge, [19]).Payload;
 
-        // fs_reply_ok_with_data: two zero bytes, then the text. The text ends with a carriage return.
+        // The reply: two zero bytes, then the text. The text ends with a carriage return.
         Assert.That(reply[0], Is.EqualTo(0));
         Assert.That(reply[1], Is.EqualTo(0));
         Assert.That(Encoding.ASCII.GetString(reply, 2, reply.Length - 2), Is.EqualTo("Fileserver at 5.200 shutting down\r"));
@@ -86,7 +85,7 @@ public sealed class FileServerStationTests
     [Test]
     public void PiBridgeShutDown_LogsEveryStationOff()
     {
-        // fs_shutdown (3819 to 3840) calls fs_bye for every active station, not only the caller.
+        // Shut down logs off every active station, not only the caller.
         EconetFsTestHarness harness = new EconetFsTestHarness();
         harness.LoginAsSyst();
         Assert.That(harness.Sessions.GetActiveSessionCount(), Is.EqualTo(1));
@@ -99,7 +98,7 @@ public sealed class FileServerStationTests
     [Test]
     public void PiBridgeShutDown_NeedsAnAdministrator()
     {
-        // fs.c 4160 to 4165: arguments 16 to 31 need the SYST privilege.
+        // Arguments 16 to 31 need the SYST privilege.
         EconetFsTestHarness harness = new EconetFsTestHarness();
         harness.LoginAsUser();
 
