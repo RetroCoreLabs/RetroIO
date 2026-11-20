@@ -154,6 +154,42 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         }
 
         /// <summary>
+        /// Places an outgoing call and, when it cannot be placed, says why.
+        /// </summary>
+        /// <remarks>
+        /// The switch clears the calling side with the cause given here. A port that knows only that the call failed
+        /// gives <c>null</c>, and the switch then judges from whether the port is in service. The XOT port says "out of
+        /// order" when the far end cannot be reached (X.25 Table C.3 a) item 30) and "number busy" when it has no
+        /// channel left (item 31); before 2026-11-20 every failure on a port with a connection up was called busy.
+        /// </remarks>
+        /// <param name="calledAddress">
+        /// Destination X.121 address.
+        /// </param>
+        /// <param name="callingAddress">
+        /// Originating X.121 address.
+        /// </param>
+        /// <param name="callUserData">
+        /// Optional call user data.
+        /// </param>
+        /// <param name="requested">
+        /// The window and packet sizes to ask for, or <c>null</c> for the port's own.
+        /// </param>
+        /// <param name="refusal">
+        /// When the call could not be placed: the cause and diagnostic to clear the caller with, or <c>null</c> when
+        /// the port cannot tell.
+        /// </param>
+        /// <returns>
+        /// The allocated logical channel, or 0 if the call could not be placed.
+        /// </returns>
+        ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters? requested, out X25CallDecision? refusal)
+        {
+            refusal = null;
+            return requested.HasValue
+                ? PlaceCall(calledAddress, callingAddress, callUserData, requested.Value)
+                : PlaceCall(calledAddress, callingAddress, callUserData);
+        }
+
+        /// <summary>
         /// Returns the window and packet sizes a call on a logical channel runs with.
         /// </summary>
         /// <remarks>

@@ -764,13 +764,19 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </returns>
         public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData)
         {
-            return PlaceCallWith(calledAddress, callingAddress, callUserData, null);
+            return PlaceCallWith(calledAddress, callingAddress, callUserData, null, out _);
         }
 
         /// <inheritdoc/>
         public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters requested)
         {
-            return PlaceCallWith(calledAddress, callingAddress, callUserData, requested);
+            return PlaceCallWith(calledAddress, callingAddress, callUserData, requested, out _);
+        }
+
+        /// <inheritdoc/>
+        public ushort PlaceCall(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters? requested, out X25CallDecision? refusal)
+        {
+            return PlaceCallWith(calledAddress, callingAddress, callUserData, requested, out refusal);
         }
 
         /// <inheritdoc/>
@@ -791,9 +797,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
-        private ushort PlaceCallWith(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters? requested)
+        private ushort PlaceCallWith(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters? requested, out X25CallDecision? refusal)
         {
             XotConnection? dialled = null;
+
+            // X.25 Table C.3 a): a far end that cannot be reached is item 30, "Called DTE out of order" (Out of order,
+            // #0); no channel left is item 31 (Number busy, #71). Our reading: the text does not name XOT.
+            refusal = X25CallDecision.DestinationOutOfOrder();
 
             if (_config.Mode != PortMode.Dce)
             {
@@ -851,6 +861,8 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 CloseConnection(dialled, "the call could not be placed");
             }
 
+            // Reached and connected, so a refusal now is the packet layer's: no logical channel left.
+            refusal = lci == 0 ? X25CallDecision.Busy() : null;
             return lci;
         }
 
