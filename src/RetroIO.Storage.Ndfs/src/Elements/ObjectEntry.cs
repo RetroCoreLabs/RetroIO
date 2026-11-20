@@ -394,7 +394,7 @@ namespace RetroIO.Storage.Ndfs.Elements
             // When SINTRAN clears it is UNKNOWN.
             //
             // Full write-up:
-            // E:\Dev\Ronny\NDInsight\SINTRAN\Filesystem\on-disk-format\OBJECT-ENTRY-CARVE-BYTES-32-35-2026-07-30.md
+            // NDInsight repository, SINTRAN/Filesystem/on-disk-format/OBJECT-ENTRY-CARVE-BYTES-32-35-2026-07-30.md
             entry.ReservingUserDirectoryIndex = data[offset + 32];
             entry.UserIndexOfReservingUser = data[offset + 33];
             entry.CurrentOpenCount = BE16(36);

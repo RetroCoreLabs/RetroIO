@@ -180,7 +180,7 @@ namespace RetroIO.Storage.Local
 
             // Parse URI to extract scheme, path, and partition fragment
             // Format: scheme:///path#partition
-            // Examples: bsd:///E:/disk.img#a, d64:///C:/game.d64, ndfs:///disk.ndfs
+            // Examples: bsd:///images/disk.img#a, d64:///images/game.d64, ndfs:///disk.ndfs
 
             FileSystemScheme scheme = ExtractScheme(uri);
 

@@ -36,7 +36,7 @@ public class ConsoleBoxTests
     [Test]
     public void FormatLine_TruncatesLongContentToInnerWidth()
     {
-        string longPath = "C:\\Users\\ronny\\OneDrive\\Documents\\RetroFS\\econet-root";
+        string longPath = "/var/lib/retroio/econet/shared/documents/retrofs/econet-root";
         string label = "  Root Directory:  ";
         string line = ConsoleBox.FormatLine(label + longPath);
         Assert.That(ContentLength(line), Is.EqualTo(ConsoleBox.InnerWidth));
@@ -56,7 +56,7 @@ public class ConsoleBoxTests
     public void LabelValue_TruncatesValueWhenLabelAndValueExceedInnerWidth()
     {
         string label = "  Root Directory:  ";
-        string longPath = "C:\\Users\\ronny\\OneDrive\\Documents\\RetroFS\\econet-root-extra";
+        string longPath = "/var/lib/retroio/econet/shared/documents/retrofs/econet-root-extra";
         string valueText = longPath;
         int maxValueLength = ConsoleBox.InnerWidth - label.Length;
         if (valueText.Length > maxValueLength)

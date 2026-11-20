@@ -17,7 +17,7 @@ namespace RetroIO.Protocols.Xmsg.Tests
     /// <remarks>
     /// <para>
     /// Carved 2026-07-31 from the XMSG kernel routine at <c>137314</c> and verified against every
-    /// FCS-valid frame in <c>E:\Dev\Ronny\X25Emulator\pcap</c> - 3595 of 3595, across all
+    /// FCS-valid frame in the recorded pcap set (see <see cref="PcapFiles"/>) - 3595 of 3595, across all
     /// eight observed subtypes, both directions and every link, with no special cases.
     /// </para>
     /// <para>

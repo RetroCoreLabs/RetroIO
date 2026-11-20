@@ -16,7 +16,7 @@ namespace RetroIO.Storage.Local.FFS.Structures
     /// Uses 12 direct blocks + 3 indirect blocks (single, double, triple).
     ///
     /// REFERENCE: SunOS 3.4 source code
-    /// File: D:\data\Torrent2\sunos_3.4_src\squashfs-root\sun\sys\ufs\inode.h
+    /// File: sys/ufs/inode.h
     ///
     /// Original structure (struct icommon):
     /// struct icommon {

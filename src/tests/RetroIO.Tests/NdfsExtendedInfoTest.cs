@@ -20,10 +20,10 @@ namespace RetroIO.Tests
     [TestFixture]
     public class NdfsExtendedInfoTest
     {
-        private static string SMD_100_IMAGE => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\SMD-ID-100.IMG");
-        private static string SMD_102_IMAGE => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\SMD-ID-102.IMG");
-        private static string WD0_IMAGE => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\WD0.img");
-        private static string FLOPPY_360_IMAGE => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\FLOPPY-360KB.img");
+        private static string SMD_100_IMAGE => TestData.Demo("ndfs/SMD-ID-100.IMG");
+        private static string SMD_102_IMAGE => TestData.Demo("ndfs/SMD-ID-102.IMG");
+        private static string WD0_IMAGE => TestData.Demo("ndfs/WD0.img");
+        private static string FLOPPY_360_IMAGE => TestData.Demo("ndfs/FLOPPY-360KB.img");
 
         [Test]
         [Category("NDFS")]

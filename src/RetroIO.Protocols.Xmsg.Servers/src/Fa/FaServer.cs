@@ -1700,7 +1700,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             //
             //  - NDIX's cps client adds one when it reads this field off a connect reply and takes
             //    one off when it sends it, and tags that line /* kludge factor !! */
-            //    (E:\Dev\Ronny\NDIX-C\baseline\bin\cps\xmsg.c:588, :824).
+            //    (NDIX source, bin/cps/xmsg.c lines 588 and 824).
             //  - capture-read.txt: the OPEN reply for the same file carries A4 000045F1 = 17905
             //    where SetEndOfFile carries 45F0 = 17904.
             //  - Live on D100 2026-08-06: it copied a 12690-byte file to us - its own

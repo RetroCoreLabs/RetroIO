@@ -16,7 +16,7 @@ namespace RetroIO.Storage.Local.FFS.Structures
     /// Directory entries are 4-byte aligned.
     ///
     /// REFERENCE: SunOS 3.4 source code
-    /// File: D:\data\Torrent2\sunos_3.4_src\squashfs-root\sun\sys\ufs\fsdir.h
+    /// File: sys/ufs/fsdir.h
     ///
     /// Original structure (OLD SunOS format):
     /// struct direct {

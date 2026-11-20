@@ -5,7 +5,7 @@
     "source_file": "SINTRAN/XMSG/XMSG-PL-VALUES-M.INCL",
     "source_date": "1988-08-18",
     "note": "Machine-generated from the official ND include file. Values decimal. option_bits values are BIT NUMBERS (0-15) in the MON 200B T-register high byte, not masks.",
-    "supplementary_source_file": "F:/ND/SINTRAN-K05-XMSG-2026/XMSG-Symb/XMSG-VALUES-L.SYMB",
+    "supplementary_source_file": "SINTRAN K05 XMSG symbol files: XMSG-VALUES-L.SYMB",
     "supplementary_source_version": "L",
     "supplementary_note": "Entries carrying \"source\": \"L\" were added on 2026-07-29 from the XMSG L symbol files and are NOT present in the M include this file is otherwise generated from. They are real symbols, not inventions: the XEF* XMFIDO status family and XSSRT. Any regenerator MUST preserve entries marked \"source\": \"L\" or they will be silently lost - that is exactly what happened before this note existed. Whether they are absent from M because the M .INCL omits them (as the L .INCL also does - XSSRT appears only in the L .SYMB) or because they were removed in M is UNKNOWN; check an M .SYMB before deleting any of them."
   },

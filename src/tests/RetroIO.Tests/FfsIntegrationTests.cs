@@ -21,7 +21,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class FfsIntegrationTests
     {
-        private const string TestImagePath = @"D:\ND\HDD\sun2-sunos-3.2.img";
+        private static readonly string TestImagePath = TestData.FromVariable(TestData.HddImagesVariable, "sun2-sunos-3.2.img");
         private DriverFactory? _factory;
 
         [SetUp]
@@ -730,7 +730,7 @@ namespace RetroIO.Tests
         public void FfsFileSystem_PartitionG_NavigateBinDirectory()
         {
             // Arrange
-            const string testImage = TestImagePath;
+            string testImage = TestImagePath;
             if (!File.Exists(testImage))
             {
                 Assert.Ignore($"Test skipped: SunOS image not found at {testImage}");

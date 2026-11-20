@@ -27,7 +27,7 @@ namespace RetroIO.Protocols.X25.Tests
     /// </para>
     /// <para>
     /// The engine is driven single-threaded through a recording <see cref="IX25PacketSink"/>; time is
-    /// injected through <see cref="X25Layer.Tick"/>. Spec text: <c>E:\Dev\RCL\Specs\X25</c>,
+    /// injected through <see cref="X25Layer.Tick"/>. Spec text: ITU-T
     /// T-REC-X.25-199610-I (10/96) unless another document is named.
     /// </para>
     /// </remarks>

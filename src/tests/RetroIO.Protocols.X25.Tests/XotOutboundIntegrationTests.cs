@@ -9,7 +9,7 @@
 // XOT Outbound Integration Tests
 //
 // PREREQUISITES: The C x25emu demo network must be running before executing:
-//   cd /home/ronny/repos/os/x25emu && make demo-start
+//   cd <x25emu folder> && make demo-start
 //
 // This starts:
 //   Switch A (DNIC 2340) - ports 2001 (PAD), 2007 (C# emulator)

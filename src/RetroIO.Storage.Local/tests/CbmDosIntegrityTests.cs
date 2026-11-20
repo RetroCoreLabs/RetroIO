@@ -66,14 +66,7 @@ namespace RetroIO.Storage.Local.Tests
             {
                 return env;
             }
-            string[] candidates = { @"F:\Prog\GTK3VICE-3.5-win64\bin\c1541.exe" };
-            for (int i = 0; i < candidates.Length; i++)
-            {
-                if (File.Exists(candidates[i]))
-                {
-                    return candidates[i];
-                }
-            }
+            // No install path is guessed: set C1541 to the c1541 program (see src/eng/test-env.example.bat).
             return null;
         }
 

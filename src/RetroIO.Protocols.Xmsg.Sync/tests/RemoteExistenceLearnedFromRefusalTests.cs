@@ -38,7 +38,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         {
             SyncLedger ledger = new SyncLedger();
 
-            Assert.False(ledger.KnownToExistRemotely(@"C:\watch\THING.TXT"));
+            Assert.False(ledger.KnownToExistRemotely(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT")));
         }
 
         /// <summary>
@@ -49,9 +49,9 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         {
             SyncLedger ledger = new SyncLedger();
 
-            ledger.RecordRemoteExistence(@"C:\watch\THING.TXT");
+            ledger.RecordRemoteExistence(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT"));
 
-            Assert.True(ledger.KnownToExistRemotely(@"C:\watch\THING.TXT"));
+            Assert.True(ledger.KnownToExistRemotely(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT")));
         }
 
         /// <summary>
@@ -73,13 +73,13 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
         {
             SyncLedger ledger = new SyncLedger();
 
-            ledger.RecordRemoteExistence(@"C:\watch\THING.TXT");
+            ledger.RecordRemoteExistence(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT"));
 
-            Assert.False(ledger.HasCarried(@"C:\watch\THING.TXT"));
+            Assert.False(ledger.HasCarried(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT")));
 
             // And the content question is still open, so the file is still due to be sent.
             byte[] hash = new byte[] { 1, 2, 3, 4 };
-            Assert.True(ledger.NeedsTransfer(@"C:\watch\THING.TXT", hash));
+            Assert.True(ledger.NeedsTransfer(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT"), hash));
         }
 
         /// <summary>
@@ -95,9 +95,9 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncLedger ledger = new SyncLedger();
             byte[] hash = new byte[] { 9, 9, 9, 9 };
 
-            ledger.RecordTransfer(@"C:\watch\THING.TXT", hash, SyncDirection.ToMachine);
+            ledger.RecordTransfer(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT"), hash, SyncDirection.ToMachine);
 
-            Assert.True(ledger.KnownToExistRemotely(@"C:\watch\THING.TXT"));
+            Assert.True(ledger.KnownToExistRemotely(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watch", "THING.TXT")));
         }
 
         /// <summary>

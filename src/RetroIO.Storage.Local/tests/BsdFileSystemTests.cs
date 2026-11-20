@@ -16,6 +16,7 @@ using RetroIO.Storage.Local.Drivers;
 using RetroIO.Storage.Local.V7.Boot;
 using RetroIO.Storage.Local.V7.FileSystems;
 using RetroIO.Storage.Local.V7.Structures;
+using RetroIO.Tests;
 
 namespace RetroIO.Storage.Local.Tests
 {
@@ -550,7 +551,7 @@ namespace RetroIO.Storage.Local.Tests
     [TestFixture]
     public class BsdIntegrationTests
     {
-        private const string TestImagePath = @"E:\Dev\Ronny\BSD\Boot\1b.FromTape\2.11BSD";
+        private static readonly string TestImagePath = TestData.FromVariable(TestData.BsdImagesVariable, "1b.FromTape/2.11BSD");
 
         [SetUp]
         public void Setup()

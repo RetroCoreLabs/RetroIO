@@ -20,7 +20,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void ReadFile_RealVdkImage_ShouldSucceed()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\vdk\6809TUT1.vdk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "vdk/6809TUT1.vdk");
 
             if (!File.Exists(testImagePath))
             {
@@ -73,7 +73,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void ReadFile_AllFiles_ShouldSucceed()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\vdk\6809TUT1.vdk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "vdk/6809TUT1.vdk");
 
             if (!File.Exists(testImagePath))
             {

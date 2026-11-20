@@ -55,24 +55,13 @@ namespace RetroIO.Storage.Local.Tests
             return File.Exists(p) ? p : null;
         }
 
-        // Locates a VICE c1541 binary via the C1541 env var or known install paths.
+        // Locates a VICE c1541 binary through the C1541 environment variable (see src/eng/test-env.example.bat).
         private static string? FindC1541()
         {
             string? env = Environment.GetEnvironmentVariable("C1541");
             if (!string.IsNullOrEmpty(env) && File.Exists(env))
             {
                 return env;
-            }
-            string[] candidates =
-            {
-                @"F:\Prog\GTK3VICE-3.5-win64\bin\c1541.exe"
-            };
-            for (int i = 0; i < candidates.Length; i++)
-            {
-                if (File.Exists(candidates[i]))
-                {
-                    return candidates[i];
-                }
             }
             return null;
         }

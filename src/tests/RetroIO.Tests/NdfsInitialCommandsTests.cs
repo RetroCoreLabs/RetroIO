@@ -190,8 +190,7 @@ namespace RetroIO.Tests
             string[] candidates =
             {
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\..\demo\test-images\ndfs\BIGDISK0-L.IMG"),
-                @"E:\Dev\Ronny\RetroFS\demo\test-images\ndfs\BIGDISK0-L.IMG",
-                "/mnt/e/Dev/Ronny/RetroFS/demo/test-images/ndfs/BIGDISK0-L.IMG",
+                TestData.Demo("ndfs/BIGDISK0-L.IMG"),
             };
             for (int i = 0; i < candidates.Length; i++)
                 if (File.Exists(candidates[i])) return candidates[i];

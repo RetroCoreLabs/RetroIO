@@ -19,7 +19,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class XatFileTests
     {
-        private static string TestImagePath1 => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs\nd-disk1-75mb.ndfs");
+        private static string TestImagePath1 => TestData.FromVariable(TestData.TestImagesVariable, "ndfs/nd-disk1-75mb.ndfs");
 
         [Test]
         public void NdfsXatSerializer_SerializeToJson_Success()

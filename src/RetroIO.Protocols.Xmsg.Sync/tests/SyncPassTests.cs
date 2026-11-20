@@ -21,6 +21,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
     public sealed class SyncPassTests
     {
         /// <summary>
+        /// A root folder of this machine (the system temp folder), so no drive letter is written into
+        /// the tests. The paths under it are only compared as strings, never touched on disk.
+        /// </summary>
+        private static readonly string Root = System.IO.Path.GetTempPath().TrimEnd('\\', '/');
+
+        /// <summary>
         /// An agent that accepts everything, so a pass can be tested without a machine.
         /// </summary>
         private sealed class AcceptingAgent : ISyncTransferAgent
@@ -46,7 +52,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
 
         private static SyncFolderMapping Mapping()
         {
-            SyncFolderMapping mapping = new SyncFolderMapping("c:\\work", "D100", "SYSTEM");
+            SyncFolderMapping mapping = new SyncFolderMapping(Root + "\\work", "D100", "SYSTEM");
             mapping.Direction = SyncDirection.ToMachine;
             return mapping;
         }
@@ -89,17 +95,17 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncPass pass = BuildPass(mapping, out runner, out ledger);
 
             List<LocalFileState> files = new List<LocalFileState>();
-            files.Add(new LocalFileState("c:\\work\\A.SYMB", new byte[] { 1 }));
+            files.Add(new LocalFileState(Root + "\\work\\A.SYMB", new byte[] { 1 }));
 
             Dictionary<string, FileSizeAndTime> stamps = new Dictionary<string, FileSizeAndTime>();
 
             // First sight of the file: the clock starts, nothing is settled yet.
-            stamps["c:\\work\\A.SYMB"] = new FileSizeAndTime(100, 5);
+            stamps[Root + "\\work\\A.SYMB"] = new FileSizeAndTime(100, 5);
             int queued = pass.Run(mapping, files, stamps, Array.Empty<RemoteFileState>(), runner, 0);
             Assert.Equal(0, queued);
 
             // It grew, so the clock restarts even though time has passed.
-            stamps["c:\\work\\A.SYMB"] = new FileSizeAndTime(400, 900);
+            stamps[Root + "\\work\\A.SYMB"] = new FileSizeAndTime(400, 900);
             queued = pass.Run(mapping, files, stamps, Array.Empty<RemoteFileState>(), runner, 900);
             Assert.Equal(0, queued);
 
@@ -124,7 +130,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncPass pass = BuildPass(mapping, out runner, out ledger);
 
             List<LocalFileState> files = new List<LocalFileState>();
-            files.Add(new LocalFileState("c:\\work\\B.SYMB", new byte[] { 2 }));
+            files.Add(new LocalFileState(Root + "\\work\\B.SYMB", new byte[] { 2 }));
 
             int queued = pass.Run(
                 mapping, files, new Dictionary<string, FileSizeAndTime>(),
@@ -149,10 +155,10 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncPass pass = BuildPass(mapping, out runner, out ledger);
 
             byte[] hash = new byte[] { 3, 3, 3 };
-            ledger.RecordTransfer("c:\\work\\C.SYMB", hash, SyncDirection.ToMachine);
+            ledger.RecordTransfer(Root + "\\work\\C.SYMB", hash, SyncDirection.ToMachine);
 
             List<LocalFileState> files = new List<LocalFileState>();
-            files.Add(new LocalFileState("c:\\work\\C.SYMB", hash));
+            files.Add(new LocalFileState(Root + "\\work\\C.SYMB", hash));
 
             int queued = pass.Run(
                 mapping, files, new Dictionary<string, FileSizeAndTime>(),
@@ -177,8 +183,8 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncPass pass = BuildPass(mapping, out runner, out ledger);
 
             List<LocalFileState> files = new List<LocalFileState>();
-            files.Add(new LocalFileState("c:\\work\\D.SYMB", new byte[] { 4 }));
-            files.Add(new LocalFileState("c:\\work\\E.SYMB", new byte[] { 5 }));
+            files.Add(new LocalFileState(Root + "\\work\\D.SYMB", new byte[] { 4 }));
+            files.Add(new LocalFileState(Root + "\\work\\E.SYMB", new byte[] { 5 }));
 
             int queued = pass.Run(
                 mapping, files, new Dictionary<string, FileSizeAndTime>(),

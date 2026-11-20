@@ -8,8 +8,8 @@
 // NOTE (hand-completion pass): the generated JSON only carried XEFOK and X412B.
 // The remaining XEF* members below were added by hand from the authoritative
 // version-L symbol files, which DO contain the whole XMFIDO status family:
-//   F:\ND\SINTRAN-K05-XMSG-2026\XMSG-Symb\XMSG-VALUES-L.SYMB     (SYMBOL ...)
-//   F:\ND\SINTRAN-K05-XMSG-2026\XMSG-Symb\XMSG-PL-VALUES-L.INCL  (CONSTANT ...)
+//   XMSG-VALUES-L.SYMB (SINTRAN K05 XMSG symbols)     (SYMBOL ...)
+//   XMSG-PL-VALUES-L.INCL (SINTRAN K05 XMSG symbols)  (CONSTANT ...)
 // Those files are in DECIMAL (the .SYMB switches to @DEC at the top and back to
 // @OCT at the end), so X412B = 17024 decimal = 41200 octal. All XEF* values are
 // literal "n+X412B" in the source and are expanded to decimal here.

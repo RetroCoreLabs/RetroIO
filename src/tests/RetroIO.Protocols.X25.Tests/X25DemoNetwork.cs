@@ -9,7 +9,7 @@
 // Precondition for the tests that need the C reference demo network.
 //
 // The demo is three C switches in series plus an echo service, started with:
-//   wsl -e sh -c "cd /home/ronny/repos/os/x25emu && make demo-start"
+//   wsl -e sh -c "cd <x25emu folder> && make demo-start"
 // It listens on 127.0.0.1 ports 2007 (switch A), 2008 (B) and 2009 (C) for C#
 // clients, with the echo service reachable at X.121 address 23420001. Each
 // switch also has a management CLI on 9001, 9002 and 9003, and the probe below
@@ -117,7 +117,7 @@ namespace RetroIO.Protocols.X25.Tests
             {
                 Assert.Ignore(
                     "The C reference demo network is not running (" + reason + "). Start it with:  " +
-                    "wsl -e sh -c \"cd /home/ronny/repos/os/x25emu && make demo-start\"  " +
+                    "wsl -e sh -c \"cd <x25emu folder> && make demo-start\"  " +
                     "or run tools\\run-with-demo.ps1, which starts it, runs these tests and stops it again. " +
                     "Set " + SkipVariable + "=1 to skip without probing, or " + HostVariable +
                     " to point at another host.");

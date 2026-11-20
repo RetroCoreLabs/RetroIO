@@ -10,6 +10,7 @@ using System.IO;
 using NUnit.Framework;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.Drivers;
+using RetroIO.Tests;
 
 namespace RetroIO.Storage.Local.Tests
 {
@@ -34,7 +35,7 @@ namespace RetroIO.Storage.Local.Tests
     [TestFixture]
     public class V7PartitionOffsetRegressionTests
     {
-        private const string CleanInstallImage = @"E:\Dev\Ronny\BSD\Boot\1.FromTape\backup\clean_install";
+        private static readonly string CleanInstallImage = TestData.FromVariable(TestData.BsdImagesVariable, "1.FromTape/backup/clean_install");
 
         [Test]
         [Category("V7")]

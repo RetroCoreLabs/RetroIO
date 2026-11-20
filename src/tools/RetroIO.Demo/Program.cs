@@ -330,8 +330,8 @@ namespace RetroIO.Demo
             Console.WriteLine("║  Mount a local Windows/Linux directory or UNC network share          ║");
             Console.WriteLine("║                                                                       ║");
             Console.WriteLine("║  Supported paths:                                                     ║");
-            Console.WriteLine("║    • Windows drive:     C:\\data, D:\\files                            ║");
-            Console.WriteLine("║    • Linux path:        /mnt/data, /home/user/files                  ║");
+            Console.WriteLine("║    • Windows drive:     <drive letter>:\\folder                      ║");
+            Console.WriteLine("║    • Linux path:        /folder/subfolder                           ║");
             Console.WriteLine("║    • UNC share:         \\\\server\\share\\folder                         ║");
             Console.WriteLine("║                                                                       ║");
             Console.WriteLine("║  NOTE: All file operations run under application identity            ║");
@@ -511,7 +511,7 @@ namespace RetroIO.Demo
                     Console.WriteLine("Troubleshooting:");
                     Console.WriteLine("  • Make sure Azurite is running: azurite --silent");
                     Console.WriteLine("  • Check if port 10000 is available");
-                    Console.WriteLine("  • Try: azurite --location c:\\azurite --silent");
+                    Console.WriteLine("  • Try: azurite --location <a folder of your choice> --silent");
                 }
             }
 

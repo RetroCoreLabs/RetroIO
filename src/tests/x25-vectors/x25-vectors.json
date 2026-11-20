@@ -1,7 +1,7 @@
 {
   "_about": [
     "X.25 conformance vectors shared by the C# stack (RetroIO) and the C emulator (x25emu).",
-    "Every vector names the clause it was read from. Text sources: E:\\Dev\\RCL\\Specs\\X25 -",
+    "Every vector names the clause it was read from. Text source: ITU-T",
     "T-REC-X.25-199610-I (10/96) unless another document is named. Packet type identifier values",
     "were cross-checked between the C# builder and the C header src/x25/x25.h because the",
     "pdftotext rendering of Table 5-2 is unreadable; both agree and both have been seen on the wire.",

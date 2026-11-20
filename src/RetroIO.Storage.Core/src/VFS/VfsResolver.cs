@@ -112,7 +112,7 @@ namespace RetroIO.Storage.Core.VFS
         /// Resolves a URN to the appropriate volume provider based on scheme.
         /// </summary>
         /// <param name="urn">
-        /// URN string (e.g., "ftp://server/path" or "file:///C:/path")
+        /// URN string (e.g., "ftp://server/path" or "file:///images/path")
         /// </param>
         /// <returns>
         /// Volume provider that handles the URN scheme, or null if no provider found

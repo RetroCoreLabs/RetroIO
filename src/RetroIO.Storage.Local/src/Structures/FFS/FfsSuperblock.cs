@@ -14,8 +14,8 @@ namespace RetroIO.Storage.Local.FFS.Structures
     /// Berkeley Fast File System (FFS) / Unix File System (UFS) superblock structure.
     ///
     /// REFERENCE: SunOS 3.4 source code
-    /// File: D:\data\Torrent2\sunos_3.4_src\squashfs-root\sun\sys\ufs\fs.h
-    /// Also: D:\data\Torrent2\sunos_3.4_src\squashfs-root\sun\sys\h\types.h (quad type definition)
+    /// File: sys/ufs/fs.h
+    /// Also: sys/h/types.h (quad type definition)
     ///
     /// IMPORTANT NAMING NOTE:
     /// FFS (Fast File System) = UFS (Unix File System) - they are the SAME filesystem!

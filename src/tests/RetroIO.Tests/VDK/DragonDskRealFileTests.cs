@@ -20,7 +20,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void Mount_SyzygyDsk_ShouldSucceed()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\dsk\syzygy.dsk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "dsk/syzygy.dsk");
 
             if (!File.Exists(testImagePath))
             {
@@ -45,7 +45,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void ListDirectory_SyzygyDsk_ShouldShowFiles()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\dsk\syzygy.dsk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "dsk/syzygy.dsk");
 
             if (!File.Exists(testImagePath))
             {
@@ -74,7 +74,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void ReadFile_SyzygyDsk_ShouldSucceed()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\dsk\syzygy.dsk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "dsk/syzygy.dsk");
 
             if (!File.Exists(testImagePath))
             {
@@ -121,7 +121,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void DetectFormat_SyzygyDsk_ShouldIdentifyCorrectly()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\dsk\syzygy.dsk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "dsk/syzygy.dsk");
 
             if (!File.Exists(testImagePath))
             {
@@ -147,7 +147,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void Mount_SyzygyDsk_ShouldDetectDECB()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\dsk\syzygy.dsk");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "dsk/syzygy.dsk");
 
             if (!File.Exists(testImagePath))
             {

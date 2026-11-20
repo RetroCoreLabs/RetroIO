@@ -13,7 +13,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
     /// </summary>
     /// <remarks>
     /// Only the codes the engine actually emits are listed; the table has many more. Text:
-    /// <c>E:\Dev\RCL\Specs\X25\T-REC-X.25-199610-I!!PDF-E.txt</c>, "Coding of X.25 network
+    /// ITU-T Recommendation X.25 (10/1996), "Coding of X.25 network
     /// generated diagnostic fields".
     /// </remarks>
     public static class X25Diagnostic

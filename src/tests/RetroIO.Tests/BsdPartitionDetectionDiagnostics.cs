@@ -25,11 +25,11 @@ namespace RetroIO.Tests
             // Try multiple possible paths
             string[] candidates = new string[]
             {
-                @"D:\ND\HDD\sun2-sunos-3.2.img",
-                @"D:\ND\HDD\SUN2.img",
-                TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\bsd211.img"),
-                TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\sun2-sunos-3.2.img"),
-                TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\sun2-s3.5-disk.img")
+                TestData.FromVariable(TestData.HddImagesVariable, "sun2-sunos-3.2.img"),
+                TestData.FromVariable(TestData.HddImagesVariable, "SUN2.img"),
+                TestData.FromVariable(TestData.TestImagesVariable, "bsd211.img"),
+                TestData.FromVariable(TestData.TestImagesVariable, "sun2-sunos-3.2.img"),
+                TestData.FromVariable(TestData.TestImagesVariable, "sun2-s3.5-disk.img")
             };
 
             string? imagePath = null;

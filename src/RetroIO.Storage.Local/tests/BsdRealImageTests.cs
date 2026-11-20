@@ -15,6 +15,7 @@ using RetroIO.Storage.Local.BSD.Structures;
 using RetroIO.Storage.Local.Drivers;
 using RetroIO.Storage.Local.V7.FileSystems;
 using RetroIO.Storage.Local.V7.Structures;
+using RetroIO.Tests;
 
 namespace RetroIO.Storage.Local.Tests
 {
@@ -29,8 +30,8 @@ namespace RetroIO.Storage.Local.Tests
     [TestFixture]
     public class BsdRealImageValidationTests
     {
-        private const string CleanInstallImage = @"E:\Dev\Ronny\BSD\Boot\1.FromTape\backup\clean_install";
-        private const string TapeImage = @"E:\Dev\Ronny\BSD\Boot\1b.FromTape\2.11BSD";
+        private static readonly string CleanInstallImage = TestData.FromVariable(TestData.BsdImagesVariable, "1.FromTape/backup/clean_install");
+        private static readonly string TapeImage = TestData.FromVariable(TestData.BsdImagesVariable, "1b.FromTape/2.11BSD");
 
         [Test]
         [Description("Validates clean_install image has disk label with 3 partitions (2 BSD + 1 swap)")]

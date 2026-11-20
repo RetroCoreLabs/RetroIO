@@ -36,10 +36,10 @@ namespace RetroIO.Tests.TNFS;
 ///      export TNFS_TEST_ROOT=/tmp/tnfs
 ///
 ///    Windows (PowerShell):
-///      $env:TNFS_TEST_ROOT = "C:\tmp\tnfs"
+///      $env:TNFS_TEST_ROOT = "$env:TEMP\tnfs"
 ///
 ///    Windows (Command Prompt):
-///      set TNFS_TEST_ROOT=C:\tmp\tnfs
+///      set TNFS_TEST_ROOT=%TEMP%\tnfs
 ///
 /// 3. Test Setup:
 ///    - Tests will automatically create required directory structure:
@@ -73,7 +73,9 @@ public class TnfsTcpProtocolTests
     private string _testRoot = null!;
 
     // Default test root if TNFS_TEST_ROOT env var is not set (for where tnfsd version 24.0522.1 is pointing at)
-    private string WIN_DEFAULT_ROOT_FOLDER = "F:\\ROMS\\c64\\D64\\Z"; // ← CHANGE THIS PATH AS NEEDED
+    // Default when TNFS_TEST_ROOT is not set. It must be the folder the tnfsd server serves, so on a
+    // real run set TNFS_TEST_ROOT (see src/eng/test-env.example.bat).
+    private string WIN_DEFAULT_ROOT_FOLDER = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tnfs");
     private string X_DEFAULT_ROOT_FOLDER = "/tmp/tnfs"; // ← CHANGE THIS PATH AS NEEDED
 
     [OneTimeSetUp]

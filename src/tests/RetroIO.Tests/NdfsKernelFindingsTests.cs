@@ -667,7 +667,7 @@ namespace RetroIO.Tests
         [Test]
         public void BootController_EarlyWinchesterIox_BeatsLaterIoxtLookingDATA()
         {
-            // REGRESSION GUARD, modelled on the real Micropolis 1325 (D:\ND\HDD\1325.img) — an
+            // REGRESSION GUARD, modelled on the real Micropolis 1325 (1325.img) — an
             // ST-506/MFM drive on the WINCHESTER controller. Its boot CODE issues literal IOX in
             // the Winchester window (octal 500-507) from word 79, and its later DATA region happens
             // to contain words equal to 0xD10D, the IOXT opcode.

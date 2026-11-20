@@ -20,7 +20,7 @@ namespace RetroIO.Tests.VDK
         [Test]
         public void Mount_ValidVdkImage_ShouldSucceed()
         {
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\vdk\PLANETFALL.VDK");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "vdk/PLANETFALL.VDK");
 
             if (!File.Exists(testImagePath))
             {
@@ -46,7 +46,7 @@ namespace RetroIO.Tests.VDK
         public void Mount_ValidVdkImage_ShouldListFiles()
         {
             // 6809TUT1.VDK is a DragonDOS disk. PLANETFALL.VDK is not: its sector 0 holds 6809 boot code and it is a DECB disk with one file (see DragonDosNonDosDiskTests).
-            string testImagePath = TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\vdk\6809TUT1.VDK");
+            string testImagePath = TestData.FromVariable(TestData.TestImagesVariable, "vdk/6809TUT1.VDK");
 
             if (!File.Exists(testImagePath))
             {

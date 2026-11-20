@@ -25,3 +25,6 @@ src/tests/RetroIO.Tests/TestData/*.img.gz
 
 # Working notes for coding agents stay on disk, never in the repository
 CLAUDE.md
+
+# Machine-specific test-data folders (copy of src/eng/test-env.example.bat filled in)
+src/eng/test-env.local.bat

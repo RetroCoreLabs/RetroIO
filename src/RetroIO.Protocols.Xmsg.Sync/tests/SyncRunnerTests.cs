@@ -21,6 +21,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
     public sealed class SyncRunnerTests
     {
         /// <summary>
+        /// A root folder of this machine (the system temp folder), so no drive letter is written into
+        /// the tests. The paths under it are only compared as strings, never touched on disk.
+        /// </summary>
+        private static readonly string Root = System.IO.Path.GetTempPath().TrimEnd('\\', '/');
+
+        /// <summary>
         /// A transfer agent that does nothing, so the QUEUE can be tested without a machine.
         /// </summary>
         /// <remarks>
@@ -102,7 +108,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncRunner runner = new SyncRunner(agent, ledger);
 
             byte[] hash = new byte[] { 1, 2, 3 };
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\work\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\work\\a.txt", "A:TXT"), "D100");
 
             runner.Pump();                                  // starts it
             agent.CompleteWith(SyncTransferResult.Ok(hash, 20400));
@@ -110,7 +116,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
 
             Assert.Equal(1, runner.Completed);
             Assert.Equal(0, runner.Failed);
-            Assert.False(ledger.NeedsTransfer("c:\\work\\a.txt", hash));
+            Assert.False(ledger.NeedsTransfer(Root + "\\work\\a.txt", hash));
         }
 
         /// <summary>
@@ -130,7 +136,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncRunner runner = new SyncRunner(agent, ledger);
 
             byte[] hash = new byte[] { 9, 9 };
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\work\\b.txt", "B:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\work\\b.txt", "B:TXT"), "D100");
 
             runner.Pump();
             agent.CompleteWith(SyncTransferResult.Failed("the peer refused the name"));
@@ -138,7 +144,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
 
             Assert.Equal(0, runner.Completed);
             Assert.Equal(1, runner.Failed);
-            Assert.True(ledger.NeedsTransfer("c:\\work\\b.txt", hash));
+            Assert.True(ledger.NeedsTransfer(Root + "\\work\\b.txt", hash));
         }
 
         /// <summary>
@@ -152,8 +158,8 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             SyncRunner runner = new SyncRunner(agent, ledger);
 
             List<SyncAction> actions = new List<SyncAction>();
-            actions.Add(new SyncAction(SyncActionKind.Create, "c:\\w\\1.txt", "ONE:TXT", string.Empty));
-            actions.Add(new SyncAction(SyncActionKind.Create, "c:\\w\\2.txt", "TWO:TXT", string.Empty));
+            actions.Add(new SyncAction(SyncActionKind.Create, Root + "\\w\\1.txt", "ONE:TXT", string.Empty));
+            actions.Add(new SyncAction(SyncActionKind.Create, Root + "\\w\\2.txt", "TWO:TXT", string.Empty));
             runner.Enqueue(actions, "D100");
 
             runner.Pump();
@@ -184,7 +190,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             agent.Ready = false;
             SyncRunner runner = new SyncRunner(agent, ledger);
 
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
 
             runner.Pump();
             runner.Pump();
@@ -210,7 +216,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             agent.AcceptBegin = false;
             SyncRunner runner = new SyncRunner(agent, ledger);
 
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
             runner.Pump();
 
             Assert.Equal(1, runner.Failed);
@@ -233,7 +239,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
 
             List<SyncAction> actions = new List<SyncAction>();
             actions.Add(new SyncAction(
-                SyncActionKind.Skip, "c:\\w\\toolonganame.txt", "TOOLONG:TXT", "name will not fit"));
+                SyncActionKind.Skip, Root + "\\w\\toolonganame.txt", "TOOLONG:TXT", "name will not fit"));
 
             int queued = runner.Enqueue(actions, "D100");
 
@@ -261,7 +267,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
 
             List<SyncAction> actions = new List<SyncAction>();
             actions.Add(new SyncAction(
-                SyncActionKind.DeleteRemote, "c:\\w\\gone.txt", "GONE:TXT", "local file removed"));
+                SyncActionKind.DeleteRemote, Root + "\\w\\gone.txt", "GONE:TXT", "local file removed"));
 
             int queued = runner.Enqueue(actions, "D100");
 
@@ -285,14 +291,14 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             FakeAgent agent = new FakeAgent();
             SyncRunner runner = new SyncRunner(agent, ledger);
 
-            runner.Enqueue(One(SyncActionKind.Pull, "c:\\w\\r.txt", "R:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Pull, Root + "\\w\\r.txt", "R:TXT"), "D100");
 
             runner.Pump();
             agent.CompleteWith(SyncTransferResult.Ok(new byte[] { 4, 5 }, 99));
             runner.Pump();
 
             SyncDirection direction;
-            Assert.True(ledger.TryGetDirection("c:\\w\\r.txt", out direction));
+            Assert.True(ledger.TryGetDirection(Root + "\\w\\r.txt", out direction));
             Assert.Equal(SyncDirection.FromMachine, direction);
         }
 
@@ -310,7 +316,7 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             FakeAgent agent = new FakeAgent();
             SyncRunner runner = new SyncRunner(agent, ledger);
 
-            runner.Enqueue(One(SyncActionKind.Overwrite, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Overwrite, Root + "\\w\\a.txt", "A:TXT"), "D100");
             runner.Pump();
 
             Assert.NotNull(agent.LastRequest);
@@ -337,8 +343,8 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             agent.Ready = false;                       // nothing drains, so both offers pile up
             SyncRunner runner = new SyncRunner(agent, ledger);
 
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
 
             Assert.Equal(1, runner.Queued);
         }
@@ -353,11 +359,11 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             FakeAgent agent = new FakeAgent();
             SyncRunner runner = new SyncRunner(agent, ledger);
 
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
             runner.Pump();                              // now running, queue empty
             Assert.True(runner.Busy);
 
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
 
             Assert.Equal(0, runner.Queued);
         }
@@ -377,12 +383,12 @@ namespace RetroIO.Protocols.Xmsg.Sync.Tests
             FakeAgent agent = new FakeAgent();
             SyncRunner runner = new SyncRunner(agent, ledger);
 
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
             runner.Pump();
             agent.CompleteWith(SyncTransferResult.Failed("link went down"));
             runner.Pump();
 
-            runner.Enqueue(One(SyncActionKind.Create, "c:\\w\\a.txt", "A:TXT"), "D100");
+            runner.Enqueue(One(SyncActionKind.Create, Root + "\\w\\a.txt", "A:TXT"), "D100");
 
             Assert.Equal(1, runner.Queued);
         }

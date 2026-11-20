@@ -44,7 +44,22 @@ namespace RetroIO.Protocols.X25.Tests
     [Category("CrossEnvLive")]
     public class CrossEnvCClientToCSharpSwitchTests
     {
-        internal const string DefaultEmuDir = "/home/ronny/repos/os/x25emu";
+        /// <summary>
+        /// The x25emu folder as WSL sees it, from X25EMU_DIR. Skips the test when it is not set.
+        /// </summary>
+        /// <returns>
+        /// The folder.
+        /// </returns>
+        internal static string EmuDir()
+        {
+            string? dir = Environment.GetEnvironmentVariable("X25EMU_DIR");
+            if (string.IsNullOrEmpty(dir))
+            {
+                Assert.Ignore("Set X25EMU_DIR to the x25emu folder as WSL sees it (see src/eng/test-env.example.bat).");
+            }
+
+            return dir!;
+        }
 
         /// <summary>
         /// The address WSL uses to reach this machine: the default gateway of its own interface.
@@ -97,7 +112,7 @@ namespace RetroIO.Protocols.X25.Tests
         [Test]
         public void CClient_CallsThroughTheCSharpSwitch_AndItsDataArrives()
         {
-            string emuDir = Environment.GetEnvironmentVariable("X25EMU_DIR") ?? DefaultEmuDir;
+            string emuDir = EmuDir();
             string hostIp = HostAddressForWsl();
             if (string.IsNullOrWhiteSpace(hostIp))
             {

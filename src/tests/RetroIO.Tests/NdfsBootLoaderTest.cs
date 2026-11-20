@@ -19,7 +19,7 @@ namespace RetroIO.Tests
     [TestFixture]
     public class NdfsBootLoaderTest
     {
-        private static string TEST_IMAGES_PATH => TestPaths.Resolve(@"C:\Users\ronny\OneDrive\Documents\RetroFS\test-images\ndfs");
+        private static string TEST_IMAGES_PATH => TestData.FromVariable(TestData.TestImagesVariable, "ndfs");
 
         private IBlockDevice MountNdfsImage(string imagePath)
         {

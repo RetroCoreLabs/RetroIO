@@ -9,7 +9,7 @@
 // XOT Performance Tests - Mirrors x25traffic from C x25emu
 //
 // PREREQUISITES: C demo network must be running:
-//   cd /home/ronny/repos/os/x25emu && make demo-start
+//   cd <x25emu folder> && make demo-start
 //
 // Run:
 //   dotnet test --filter "Category=Integration&FullyQualifiedName~Performance"
