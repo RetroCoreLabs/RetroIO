@@ -73,6 +73,11 @@ namespace RetroIO.Protocols.X25.Tests
 
         /// <summary>How many times this exact N(S) has been seen going this way on this connection, counting from 1.</summary>
         public int TimesSeen;
+
+        /// <summary>
+        /// The whole frame, unstuffed: address, control, information field, then the two FCS octets.
+        /// </summary>
+        public byte[] Body = Array.Empty<byte>();
     }
 
     /// <summary>
@@ -89,6 +94,7 @@ namespace RetroIO.Protocols.X25.Tests
         private readonly TcpListener _listener;
         private readonly Func<ProxiedFrame, FrameFate> _rule;
         private readonly ushort _targetPort;
+        private readonly string _targetHost;
         private readonly List<ProxiedFrame> _seen = new List<ProxiedFrame>();
         private readonly object _gate = new object();
         private readonly List<TcpClient> _open = new List<TcpClient>();
@@ -98,10 +104,21 @@ namespace RetroIO.Protocols.X25.Tests
         private NetworkStream? _toDte;
 
         public HdlcFaultProxy(ushort targetPort, Func<ProxiedFrame, FrameFate>? rule = null)
+            : this("127.0.0.1", targetPort, IPAddress.Loopback, rule)
         {
+        }
+
+        /// <summary>
+        /// A proxy that dials <paramref name="targetHost"/> (the DCE side) and listens on <paramref name="listenOn"/>
+        /// for the DTE side. The cross tests use it between this machine and a WSL process, which 127.0.0.1 does not
+        /// reach in either direction.
+        /// </summary>
+        public HdlcFaultProxy(string targetHost, ushort targetPort, IPAddress listenOn, Func<ProxiedFrame, FrameFate>? rule = null)
+        {
+            _targetHost = targetHost;
             _targetPort = targetPort;
             _rule = rule ?? (f => FrameFate.Pass);
-            _listener = new TcpListener(IPAddress.Loopback, 0);
+            _listener = new TcpListener(listenOn, 0);
             _listener.Start();
             Port = (ushort)((IPEndPoint)_listener.LocalEndpoint).Port;
             Thread accepter = new Thread(AcceptLoop) { IsBackground = true, Name = "HdlcFaultProxy.accept" };
@@ -193,7 +210,7 @@ namespace RetroIO.Protocols.X25.Tests
                 try
                 {
                     TcpClient dce = new TcpClient();
-                    dce.Connect(IPAddress.Loopback, _targetPort);
+                    dce.Connect(_targetHost, _targetPort);
                     dte.NoDelay = true;
                     dce.NoDelay = true;
                     lock (_gate)
@@ -287,12 +304,27 @@ namespace RetroIO.Protocols.X25.Tests
                 head[got++] = v;
             }
 
+            byte[] body = new byte[raw.Length];
+            int bodyLength = 0;
+            for (int i = 0; i < raw.Length; i++)
+            {
+                byte v = raw[i];
+                if (v == 0x7D && i + 1 < raw.Length)
+                {
+                    v = (byte)(raw[++i] ^ 0x20);
+                }
+
+                body[bodyLength++] = v;
+            }
+
+            Array.Resize(ref body, bodyLength);
             ProxiedFrame info = new ProxiedFrame
             {
                 Direction = direction,
                 Index = index,
                 Address = got > 0 ? head[0] : (byte)0,
                 Control = got > 1 ? head[1] : (byte)0,
+                Body = body,
             };
 
             if (info.IsInformation)
