@@ -1073,7 +1073,10 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
             _logger.LogWarning("Port {Id} ({Mode} {Type}, HDLC over {Medium}): LAPB link reset; restarting X.25",
                 Id, _config.Mode, _config.Type, _mediumName);
-            _layer.Restart();
+            // X.25 4.6.2: a reset of the data link layer is an out of order condition; 4.6.5: on recovery the DCE
+            // sends a restart with "Network operational" (Table 5-9 gives a DCE only 01, 03, 07). A DTE port's
+            // cause is turned into 0 by the layer's cause rule (Table 5-9 note a).
+            _layer.Restart(X25Cause.RestartingNetworkOperational);
         }
 
         private void AbortAllCircuits()

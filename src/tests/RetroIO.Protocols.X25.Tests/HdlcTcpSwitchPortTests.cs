@@ -511,6 +511,47 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// A SABM on a link that is up resets the data link; the DCE's Restart Indication then carries "Network
+        /// operational", 0x07, never 0. X.25 4.6.2 names a "reset of the data link layer" as an out of order
+        /// condition, 4.6.5 says that on recovery "the DCE will send a restart indication packet with the cause
+        /// 'Network operational'", and Table 5-9 gives a DCE only 01, 03 and 07. Before 2026-11-20 the switch
+        /// sent `10 00 FB 00 00` here (RetroIO BUGS 31, RetroX25 PLAN H4-1).
+        /// </summary>
+        [Test]
+        public void ALinkResetOnAnUpLink_TheDceRestartsWithNetworkOperational()
+        {
+            using TrunkPair pair = TrunkPair.Create(rule: f => FrameFate.Pass);
+            pair.WaitBothUp();
+            Assert.That(SpinWait.SpinUntil(() => TrunkPair.Count(pair.DceOut, X25PacketType.RestartRequest) == 1, 5000), Is.True);
+            int before;
+            lock (pair.DceOut)
+            {
+                before = pair.DceOut.Count;
+            }
+
+            // A SABM from the DTE side (address 0x01, control 0x3F) on the up link.
+            pair.Proxy!.Inject(TrunkDirection.ToDce, new byte[] { 0x01, 0x3F });
+            Assert.That(SpinWait.SpinUntil(() => TrunkPair.Count(pair.DceOut, X25PacketType.RestartRequest) >= 2, 5000), Is.True,
+                "the reset restarts the packet layer" + Environment.NewLine + pair.DceLog.All());
+
+            byte[]? restart = null;
+            lock (pair.DceOut)
+            {
+                for (int i = before; i < pair.DceOut.Count; i++)
+                {
+                    if (pair.DceOut[i].Length >= 4 && pair.DceOut[i][2] == 0xFB)
+                    {
+                        restart = pair.DceOut[i];
+                        break;
+                    }
+                }
+            }
+
+            Assert.That(restart, Is.Not.Null);
+            Assert.That(restart![3], Is.EqualTo(0x07), "cause Network operational (Table 5-9), got " + BitConverter.ToString(restart));
+        }
+
+        /// <summary>
         /// Only one end is reset: the other end finds the sequence numbers do not fit (LAPB answers with FRMR), the link is
         /// set up again with a new SABM, the X.25 layers restart, and the link is good again.
         /// </summary>
