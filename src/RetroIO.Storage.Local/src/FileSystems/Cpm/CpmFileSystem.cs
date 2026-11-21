@@ -83,6 +83,83 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         public IReadOnlyList<CpmFile> Files => _files;
 
         /// <summary>
+        /// Checks every entry of a directory against the CP/M directory format.
+        /// </summary>
+        /// <remarks>
+        /// Used to recognise a CP/M disk that carries no mark of its own (the C128 BIOS treats every
+        /// 1581 disk in CP/M mode as CP/M). An entry passes when it is one of:
+        ///  - an empty entry, E5h;
+        ///  - a file entry, user 0 to 15: printable name and type, extent low bits 0 to 31, record
+        ///    count 0 to 128, and every block number 0 or inside the data area after the directory;
+        ///  - a CP/M 3 password entry (10h to 1Fh), the disk label (20h) or a time stamp entry (21h).
+        /// Anything else fails the whole directory.
+        /// </remarks>
+        /// <param name="directory">
+        /// The directory bytes, <see cref="CpmDiskParameters.DirectoryEntries"/> times 32.
+        /// </param>
+        /// <param name="parameters">
+        /// The disk parameters to check block numbers against.
+        /// </param>
+        /// <param name="fileEntries">
+        /// Set to the number of file entries found.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when every entry passes.
+        /// </returns>
+        public static bool LooksLikeDirectory(ReadOnlySpan<byte> directory, CpmDiskParameters parameters, out int fileEntries)
+        {
+            fileEntries = 0;
+            if (directory.Length < parameters.DirectoryEntries * EntrySize)
+            {
+                return false;
+            }
+
+            for (int e = 0; e < parameters.DirectoryEntries; e++)
+            {
+                ReadOnlySpan<byte> entry = directory.Slice(e * EntrySize, EntrySize);
+                byte status = entry[0];
+                if (status == EmptyEntry || (status >= 0x10 && status <= 0x21))
+                {
+                    continue;
+                }
+
+                if (status > 15)
+                {
+                    return false;
+                }
+
+                for (int i = 1; i <= 11; i++)
+                {
+                    int c = entry[i] & 0x7F;
+                    if (c < 0x20 || c > 0x7E)
+                    {
+                        return false;
+                    }
+                }
+
+                if (entry[12] > 31 || entry[15] > 128)
+                {
+                    return false;
+                }
+
+                bool wide = parameters.WideBlockNumbers;
+                int slots = wide ? 8 : 16;
+                for (int s = 0; s < slots; s++)
+                {
+                    int block = wide ? entry[16 + s * 2] | (entry[17 + s * 2] << 8) : entry[16 + s];
+                    if (block != 0 && (block < parameters.DirectoryBlocks || block >= parameters.BlockCount))
+                    {
+                        return false;
+                    }
+                }
+
+                fileEntries++;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Finds a file by user number and name.
         /// </summary>
         /// <param name="user">

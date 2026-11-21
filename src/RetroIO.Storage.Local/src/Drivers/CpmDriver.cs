@@ -14,7 +14,7 @@ using RetroIO.Storage.Local.FileSystems.Cpm;
 namespace RetroIO.Storage.Local.Drivers
 {
     /// <summary>
-    /// Reads CP/M disks. Today: Commodore 128 CP/M 3 disks on 1541 (D64) and 1571 (D71) images.
+    /// Reads CP/M disks. Today: Commodore 128 CP/M 3 disks on 1541 (D64), 1571 (D71) and 1581 (D81) images.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -28,6 +28,12 @@ namespace RetroIO.Storage.Local.Drivers
     ///  - single-sided: <c>dpb 1024,1,170,1024,64,0</c> (1 KB blocks, 64 directory entries);
     ///  - double-sided: <c>dpb 1024,1,340,2048,128,0</c> (2 KB blocks, 128 directory entries).
     /// Where each record lies is <see cref="C128CpmRecordMap"/>.
+    /// </para>
+    /// <para>
+    /// A 1581 disk carries no CP/M mark: in CP/M mode the C128 BIOS picks its layout from the
+    /// drive's sector size alone (CXDISK, <c>commodore$type</c>). Here a D81 image is read as CP/M
+    /// when its first 4 KB, the CP/M directory, passes <see cref="CpmFileSystem.LooksLikeDirectory"/>.
+    /// The layout is <c>dpb 1024,5,159,2048,128,0</c>, placed by <see cref="C1581CpmRecordMap"/>.
     /// </para>
     /// <para>
     /// Read-only for now; writing is planned.
@@ -103,6 +109,26 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
+        /// Tells whether an image length is a D81 image: 3200 sectors of 256 bytes, with or without
+        /// one error byte per sector.
+        /// </summary>
+        /// <param name="length">
+        /// Image length in bytes.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> for 819200 or 822400 bytes.
+        /// </returns>
+        public static bool IsD81Size(long length) => length == 3200 * 256 || length == 3200 * 257;
+
+        /// <summary>
+        /// Gets the C128 BIOS layout for a 1581 disk, <c>dpb 1024,5,159,2048,128,0</c>.
+        /// </summary>
+        /// <returns>
+        /// 397 blocks of 2 KB with 128 directory entries; the directory is the first 4 KB of the image.
+        /// </returns>
+        public static CpmDiskParameters C1581Parameters() => CpmDiskParameters.FromCpm3Macro(1024, 5, 159, 2048, 128, 0);
+
+        /// <summary>
         /// Returns <c>null</c>: there is no metadata descriptor for CP/M yet.
         /// </summary>
         /// <returns>
@@ -135,6 +161,18 @@ namespace RetroIO.Storage.Local.Drivers
             byte[] image = new byte[imageStream.Length];
             imageStream.Position = 0;
             imageStream.ReadExactly(image, 0, image.Length);
+
+            if (IsD81Size(image.Length))
+            {
+                CpmDiskParameters p1581 = C1581Parameters();
+                if (!CpmFileSystem.LooksLikeDirectory(image.AsSpan(0, p1581.DirectoryEntries * 32), p1581, out _))
+                {
+                    throw new InvalidDataException("Not a C128 CP/M 1581 disk: track 1 does not hold a CP/M directory.");
+                }
+
+                _fileSystem = new CpmFileSystem(image, p1581, new C1581CpmRecordMap(p1581.BlockCount * (p1581.BlockSize / 256)));
+                return;
+            }
 
             if (!IsC128CpmBootSector(image, out bool doubleSided))
             {

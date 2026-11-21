@@ -145,6 +145,72 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That(driver.GetMetadata("/CPM+.SYS")!.Size, Is.GreaterThan(0));
         }
 
+        // CXDISK c1581$adj: track 78 and up moves one on; drive track = track / 2, odd = top side;
+        // first 512-byte drive sector = 2 * sector + 1.
+        [TestCase(0, 0, 0, false, 1, TestName = "CP/M track 0 sector 0 is drive track 0 bottom, sector 1")]
+        [TestCase(77, 4, 38, true, 9, TestName = "CP/M track 77 is drive track 38 top")]
+        [TestCase(78, 0, 39, true, 1, TestName = "CP/M track 78 skips the bottom of drive track 39 (the Commodore directory)")]
+        [TestCase(79, 0, 40, false, 1)]
+        [TestCase(158, 4, 79, true, 9, TestName = "CP/M track 158 is the top of the last drive track")]
+        public void C1581DriveAddress_FollowsTheBios(int cpmTrack, int cpmSector, int expectedTrack, bool expectedTop, int expectedSector)
+        {
+            C1581CpmRecordMap.DriveAddress(cpmTrack, cpmSector, out int track, out bool top, out int sector);
+            Assert.That(track, Is.EqualTo(expectedTrack), "drive track");
+            Assert.That(top, Is.EqualTo(expectedTop), "top side");
+            Assert.That(sector, Is.EqualTo(expectedSector), "drive sector");
+        }
+
+        [Test]
+        public void DiskParameters_1581_AreWhatTheBiosMacroGives()
+        {
+            // CXDISK dpb$1581: dpb 1024,5,159,2048,128,0.
+            CpmDiskParameters p = CpmDriver.C1581Parameters();
+            Assert.That(p.BlockSize, Is.EqualTo(2048));
+            Assert.That(p.BlockCount, Is.EqualTo(397), "DSM 396");
+            Assert.That(p.ExtentMask, Is.EqualTo(0));
+            Assert.That(p.WideBlockNumbers, Is.True, "DSM above 255 gives two-byte block numbers");
+        }
+
+        [Test]
+        public void TurboPascalD81_IsDetectedAsCpm()
+        {
+            string path = Image("TurboPascal.d81");
+            RequireImage(path);
+            DriverFactory factory = new DriverFactory();
+            factory.Register(new CommodoreDiskDriverProvider());
+            factory.Register(new CpmDriverProvider());
+            Assert.That(factory.Detect(path)!.FileSystemType, Is.EqualTo("CPM"));
+        }
+
+        [Test]
+        public void OrdinaryCbmD81_IsNotClaimedAsCpm()
+        {
+            string path = TestData.FromVariable(TestData.TestImagesVariable, Path.Combine("d81", "Die_Hard_1_1989_Activision.d81"));
+            RequireImage(path);
+            DriverFactory factory = new DriverFactory();
+            factory.Register(new CommodoreDiskDriverProvider());
+            factory.Register(new CpmDriverProvider());
+            Assert.That(factory.Detect(path)!.FileSystemType, Is.EqualTo("CBM-DOS"));
+        }
+
+        // STUDRECS.PAS and TRACK.PAS lie past CP/M track 78; without the skip they read damaged.
+        [TestCase("/STUDRECS.PAS")]
+        [TestCase("/TRACK.PAS")]
+        [TestCase("/HANGMAN.PAS")]
+        public void TurboPascalD81_SourcePastTheSkippedTrackReadsAsCleanText(string file)
+        {
+            CpmDriver driver = Mount("TurboPascal.d81");
+            byte[] data = driver.ReadFile(file);
+            int end = Array.IndexOf(data, (byte)0x1A);
+            Assert.That(end, Is.GreaterThan(0), "a CP/M text file ends with Ctrl-Z");
+            for (int i = 0; i < end; i++)
+            {
+                byte c = data[i];
+                bool text = (c >= 0x20 && c < 0x7F) || c == 9 || c == 10 || c == 12 || c == 13;
+                Assert.That(text, Is.True, file + ": byte " + c + " at " + i + " is not Pascal source text");
+            }
+        }
+
         private static CpmDriver Mount(string name)
         {
             string path = Image(name);
