@@ -1896,13 +1896,31 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Check if character is the escape character for returning to command mode
-        /// X.3 Parameter 1: 0 = no escape, 1 = escape enabled (DLE character 0x10)
+        /// True when a character typed in the data transfer state is the PAD recall character set in parameter 1.
         /// </summary>
+        /// <remarks>
+        /// X.3 (03/2000) 3.1, PAD recall using a character:
+        ///  - 0: not possible.
+        ///  - 1: the character 1/0, DLE (Ctrl-P).
+        ///  - 32 to 126: "graphic character defined by the user", the character whose T.50 code is that value (43 is '+').
+        /// Until 2026-11-21 only value 1 recalled: <see cref="X3.IsValidParameter"/> accepted 32 to 126 and the PAD then
+        /// never recalled on that character (RetroIO BUGS 47).
+        /// </remarks>
+        /// <param name="c">
+        /// The character from the terminal.
+        /// </param>
+        /// <returns>
+        /// True when <paramref name="c"/> recalls the PAD.
+        /// </returns>
         private bool IsEscapeCharacter(char c)
         {
             byte escapeParam = _x3Parameters.GetParameter(X3.ParameterNumber.ESCAPE);
-            return escapeParam == 1 && c == 0x10; // DLE (Data Link Escape)
+            if (escapeParam == 1)
+            {
+                return c == 0x10; // DLE
+            }
+
+            return escapeParam >= 32 && escapeParam <= 126 && c == (char)escapeParam;
         }
 
         /// <summary>

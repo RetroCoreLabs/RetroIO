@@ -145,5 +145,31 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(forwarded[0], Is.EqualTo("!"));
             x28.Dispose();
         }
+
+        /// <summary>
+        /// A recall character chosen by the user (parameter 1 set to 32 to 126) takes the PAD out of the data transfer
+        /// state, and DLE then does not.
+        /// </summary>
+        /// <remarks>
+        /// X.3 (03/2000) 3.1, PAD recall using a character: 0 not possible, 1 DLE, "possible by graphic character
+        /// defined by the user - represented by decimal 32 to 126", "the binary representation of the decimal value in
+        /// accordance with Recommendation T.50". So 43 is '+'. Until 2026-11-21 the PAD accepted 43 for parameter 1 and
+        /// then never recalled on any character but DLE (RetroIO BUGS 47, RetroX25 PLAN H2).
+        /// </remarks>
+        [Test]
+        public void AUserChosenRecallCharacter_RecallsThePad_AndDleNoLonger()
+        {
+            X3 x3 = new X3();
+            Assert.That(x3.SetParameter(1, 43), Is.True, "X.3 3.1 allows 32 to 126");
+            X28 x28 = new X28(x3);
+            x28.SwitchToDataTransferMode();
+
+            x28.ProcessCharacter((char)0x10);
+            Assert.That(x28.CurrentMode, Is.EqualTo(X28.PadMode.DataTransfer), "DLE is not the recall character now");
+
+            x28.ProcessCharacter('+');
+            Assert.That(x28.CurrentMode, Is.EqualTo(X28.PadMode.Command), "'+' (43) recalls the PAD");
+            x28.Dispose();
+        }
     }
 }
