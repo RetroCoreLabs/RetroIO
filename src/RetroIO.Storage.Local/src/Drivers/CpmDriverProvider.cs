@@ -29,7 +29,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// </remarks>
     public sealed class CpmDriverProvider : FileSystemDriverProviderBase
     {
-        private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81", ".img" };
+        private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81", ".img", ".dsk" };
 
         /// <summary>
         /// Gets the filesystem type name, "CPM".
@@ -44,7 +44,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// <summary>
         /// Gets a short description of the format.
         /// </summary>
-        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 raw images)";
+        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 raw images; Amstrad CPC DSK)";
 
         /// <summary>
         /// Gets the number of first bytes detection needs: 12800, which holds the C64 CP/M directory
@@ -66,6 +66,11 @@ namespace RetroIO.Storage.Local.Drivers
         /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
+            if (IsAmstradDsk(hints.HeaderBytes))
+            {
+                return 0.95f;
+            }
+
             if (CpmDriver.TryKaypro(hints.FileSize, out CpmDiskParameters? kaypro, out ICpmRecordMap? kayproMap))
             {
                 // The Kaypro directory is the 2 KB after the first 5120-byte track.
@@ -104,5 +109,51 @@ namespace RetroIO.Storage.Local.Drivers
         /// A new <see cref="CpmDriver"/>.
         /// </returns>
         public override IFileSystemDriver CreateDriver() => new CpmDriver();
+
+        // A CPC DSK file, one side, whose first track has the Amstrad sector IDs 41h-49h (system
+        // format) or C1h-C9h (data format). The full check of every track is done at mount.
+        private static bool IsAmstradDsk(ReadOnlySpan<byte> header)
+        {
+            if (header.Length < 512 || header[0x31] != 1 || !StartsWithText(header, "EXTENDED CPC DSK") && !StartsWithText(header, "MV - CPC"))
+            {
+                return false;
+            }
+
+            ReadOnlySpan<byte> track = header.Slice(256);
+            if (!StartsWithText(track, "Track-Info") || track[0x15] != 9)
+            {
+                return false;
+            }
+
+            byte lowest = 0xFF;
+            for (int s = 0; s < 9; s++)
+            {
+                byte id = track[0x18 + s * 8 + 2];
+                if (id < lowest)
+                {
+                    lowest = id;
+                }
+            }
+
+            return lowest == 0x41 || lowest == 0xC1;
+        }
+
+        private static bool StartsWithText(ReadOnlySpan<byte> data, string text)
+        {
+            if (data.Length < text.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (data[i] != text[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 }

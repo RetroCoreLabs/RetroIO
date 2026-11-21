@@ -15,7 +15,8 @@ namespace RetroIO.Storage.Local.Drivers
 {
     /// <summary>
     /// Reads and writes CP/M disks: Commodore 128 CP/M 3 disks on 1541 (D64), 1571 (D71) and 1581
-    /// (D81) images, Commodore 64 CP/M 2.2 disks (D64), and Kaypro II and Kaypro 4 raw images.
+    /// (D81) images, Commodore 64 CP/M 2.2 disks (D64), Kaypro II and Kaypro 4 raw images, and Amstrad CPC
+    /// system and data format disks in DSK files.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -142,6 +143,29 @@ namespace RetroIO.Storage.Local.Drivers
         public static bool IsD81Size(long length) => length == 3200 * 256 || length == 3200 * 257;
 
         /// <summary>
+        /// Gives the CP/M disk parameters of an Amstrad CPC system or data format disk.
+        /// </summary>
+        /// <remarks>
+        /// Both formats have 1 KB blocks and 64 directory entries (two blocks), and every 512-byte
+        /// sector is used: the data area is the 40 tracks (data format) or the 38 after the two
+        /// system tracks (system format), so DSM is 179 or 170. The directory was found at the start
+        /// of the first data track on real system-format disks.
+        /// </remarks>
+        /// <param name="recordCount">
+        /// Number of 128-byte records in the data area.
+        /// </param>
+        /// <param name="firstSectorId">
+        /// 41h (system format) or C1h (data format).
+        /// </param>
+        /// <returns>
+        /// The parameters.
+        /// </returns>
+        public static CpmDiskParameters AmstradParameters(int recordCount, byte firstSectorId)
+        {
+            return new CpmDiskParameters(1024, recordCount / 8, 64, 0, firstSectorId == 0x41 ? 2 : 0);
+        }
+
+        /// <summary>
         /// Gives the Kaypro layout for a raw Kaypro disk image of this length, if there is one.
         /// </summary>
         /// <remarks>
@@ -263,6 +287,19 @@ namespace RetroIO.Storage.Local.Drivers
             imageStream.ReadExactly(image, 0, image.Length);
             _stream = imageStream;
             _readOnly = readOnly || !imageStream.CanWrite;
+
+            AmstradCpmRecordMap? amstrad = AmstradCpmRecordMap.TryRead(image, out byte firstSectorId, out _);
+            if (amstrad != null)
+            {
+                CpmDiskParameters amstradParameters = AmstradParameters(amstrad.RecordCount, firstSectorId);
+                if (!CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, amstradParameters, amstrad), amstradParameters, out _))
+                {
+                    throw new InvalidDataException("Not an Amstrad CP/M disk: the first data track does not hold a CP/M directory.");
+                }
+
+                _fileSystem = new CpmFileSystem(image, amstradParameters, amstrad);
+                return;
+            }
 
             if (TryKaypro(image.Length, out CpmDiskParameters? kaypro, out ICpmRecordMap? kayproMap))
             {

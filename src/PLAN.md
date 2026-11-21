@@ -31,13 +31,14 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      the Z80 ROM routine, `CpmFileSystem`), tested in `C128CpmTests`. Writing (write, delete, rename) works on all
      four, checked by cpmtools on a flat copy. Still open for the C128: CP/M 3 time stamps.
      Kaypro II and 4 raw images done (2026-11-21): layouts from ROM 81-232, `KayproCpmTests`, checked by cpmtools.
+     Amstrad CPC system and data format in DSK files done (2026-11-21), `AmstradCpmTests`; the layout is not yet checked against the Amstrad manual, and no data-format disk was tested.
    - **Machines, in this order.**
      1. **Commodore 128 CP/M** on 1541, 1571 and 1581 images. The disk has a normal CBM header
         named "CP/M" and CP/M data elsewhere; we already have one real image (a C128 CP/M D71).
         Layout from Commodore's C128 CP/M documentation.
      2. **CP/M-86 on PC floppies**: the 160/320 KB IBM layouts, the 360 KB and 1.2 MB later ones.
         Uses the existing PC floppy images.
-     3. **Z80/8080 machines**: Osborne 1, Amstrad CPC/PCW (data and system formats),
+     3. **Z80/8080 machines**: Osborne 1, Amstrad PCW,
         Epson QX-10, and the 8-inch IBM 3740 standard layout CP/M was born on. Each layout from the
         maker's technical manual.
    - **Image containers.** Raw images first. Then the containers these machines' images come in:
