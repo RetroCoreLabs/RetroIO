@@ -189,9 +189,15 @@ namespace RetroIO.Protocols.X25.Runtime
         /// </para>
         /// <para>
         /// The role is DTE. Neither <c>ILink</c> nor the runtime configuration carries an X.25
-        /// role today, and every link here dials a switch or a front end, which is the DCE. It
-        /// decides the direction the engine searches for a free channel (Annex A) and which side
-        /// wins a call collision (clause 4.1.3), so it has to be stated rather than left to chance.
+        /// role today. It decides the direction the engine searches for a free channel (Annex A),
+        /// which side wins a call collision (clause 4.1.3) and which clearing causes may be sent
+        /// (Table 5-7 note a), so it has to be stated rather than left to chance.
+        /// </para>
+        /// <para>
+        /// Corrected 2026-11-21: this comment said "every link here dials a switch or a front end".
+        /// That is not so. A TCP LAPB link and an XOT link can be set to listen (<c>TcpMode.Server</c>),
+        /// and then the machine that dials in is the DTE, so this end should be the DCE. Open in
+        /// RetroIO BUGS.md ("DTE cause on a link manager link").
         /// </para>
         /// </remarks>
         /// <param name="link">
