@@ -43,12 +43,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// <summary>
         /// Gets a short description of the format.
         /// </summary>
-        public override string Description => "CP/M disk (Commodore 128 CP/M 3 on 1541, 1571 and 1581 images)";
+        public override string Description => "CP/M disk (Commodore 128 CP/M 3 on 1541, 1571 and 1581 images; Commodore 64 CP/M 2.2)";
 
         /// <summary>
-        /// Gets the number of first bytes detection needs: 4096, the whole 1581 CP/M directory.
+        /// Gets the number of first bytes detection needs: 12800, which holds the C64 CP/M directory
+        /// on Commodore track 3 and the whole 1581 CP/M directory.
         /// </summary>
-        public override int RequiredHeaderBytes => 4096;
+        public override int RequiredHeaderBytes => 12800;
 
         /// <summary>
         /// Says how sure the provider is that an image is a C128 CP/M disk.
@@ -58,7 +59,8 @@ namespace RetroIO.Storage.Local.Drivers
         /// </param>
         /// <returns>
         /// 0.95 for a D64 or D71 sized image whose track 1 sector 0 starts with "CBM", or a D81 sized
-        /// image whose first 4 KB is a CP/M directory with files; otherwise 0.
+        /// image whose first 4 KB is a CP/M directory with files, or a D64 sized image without the mark
+        /// whose track 3 holds a C64 CP/M directory with files; otherwise 0.
         /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
@@ -71,7 +73,15 @@ namespace RetroIO.Storage.Local.Drivers
 
             if (!CpmDriver.IsC128CpmBootSector(hints.HeaderBytes, out bool doubleSided))
             {
-                return 0.0f;
+                if (!CpmDriver.IsD64Size(hints.FileSize))
+                {
+                    return 0.0f;
+                }
+
+                // A C64 CP/M 2.2 disk: its directory is on Commodore track 3, inside the first 12800 bytes.
+                CpmDiskParameters c64 = CpmDriver.C64Parameters();
+                byte[] directory = CpmFileSystem.DirectoryBytes(hints.HeaderBytes, c64, new C64CpmRecordMap(c64.BlockCount * 4));
+                return CpmFileSystem.LooksLikeDirectory(directory, c64, out int c64Files) && c64Files > 0 ? 0.95f : 0.0f;
             }
 
             long sectors = doubleSided ? 1366 : 683;

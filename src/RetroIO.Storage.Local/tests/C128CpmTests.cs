@@ -211,6 +211,76 @@ namespace RetroIO.Storage.Local.Tests
             }
         }
 
+        // CXDISK set$up$c64: the CP/M track is the Commodore track, plus 1 from track 18 up.
+        [TestCase(3, 0, 3, 0, TestName = "C64 CP/M track 3, the first data track, is Commodore track 3")]
+        [TestCase(17, 16, 17, 16)]
+        [TestCase(18, 0, 19, 0, TestName = "C64 CP/M track 18 steps over the Commodore directory track")]
+        [TestCase(33, 16, 34, 16, TestName = "C64 CP/M track 33, the last, is Commodore track 34")]
+        public void C64TrackAndSector_FollowsTheBios(int cpmTrack, int cpmSector, int expectedTrack, int expectedSector)
+        {
+            C64CpmRecordMap.TrackAndSector(cpmTrack, cpmSector, out int track, out int sector);
+            Assert.That(track, Is.EqualTo(expectedTrack), "track");
+            Assert.That(sector, Is.EqualTo(expectedSector), "sector");
+        }
+
+        [Test]
+        public void DiskParameters_C64_AreWhatTheBiosMacroGives()
+        {
+            // CXDISK dpb$c64$cpm: dpb 256,17,34,1024,64,3.
+            CpmDiskParameters p = CpmDriver.C64Parameters();
+            Assert.That(p.BlockSize, Is.EqualTo(1024));
+            Assert.That(p.BlockCount, Is.EqualTo(131), "DSM 130");
+            Assert.That(p.DirectoryEntries, Is.EqualTo(64));
+            Assert.That(p.ReservedTracks, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void C64CpmD64_IsDetectedAsCpmAndListsTheCpm22Programs()
+        {
+            string path = Image("cpm.d64");
+            RequireImage(path);
+            DriverFactory factory = new DriverFactory();
+            factory.Register(new CommodoreDiskDriverProvider());
+            factory.Register(new CpmDriverProvider());
+            IFileSystemDriver driver = factory.Detect(path)!;
+            Assert.That(driver.FileSystemType, Is.EqualTo("CPM"));
+            using FileStream stream = File.OpenRead(path);
+            driver.Mount(stream, readOnly: true);
+            Assert.That(Names(driver.ListDirectory("/")), Does.Contain("|PIP.COM|").And.Contain("|DDT.COM|").And.Contain("|DUMP.ASM|"));
+        }
+
+        [Test]
+        public void C64CpmD64_DumpAsmReadsAsAssemblerSource()
+        {
+            CpmDriver driver = Mount("cpm.d64");
+            byte[] data = driver.ReadFile("/DUMP.ASM");
+            int end = Array.IndexOf(data, (byte)0x1A);
+            Assert.That(end, Is.GreaterThan(0), "a CP/M text file ends with Ctrl-Z");
+            string text = Encoding.ASCII.GetString(data, 0, end);
+            Assert.That(text, Does.Contain("ORG").IgnoreCase.And.Contain("BDOS").IgnoreCase);
+        }
+
+        [Test]
+        public void OrdinaryCbmD64_IsNotClaimedAsCpm()
+        {
+            string folder = TestData.FromVariable(TestData.TestImagesVariable, "d64");
+            if (!Directory.Exists(folder))
+            {
+                Assert.Ignore("D64 test images not found: " + folder);
+            }
+
+            string[] images = Directory.GetFiles(folder, "*.d64");
+            Assert.That(images.Length, Is.GreaterThan(0), "no D64 images in " + folder);
+            DriverFactory factory = new DriverFactory();
+            factory.Register(new CommodoreDiskDriverProvider());
+            factory.Register(new CpmDriverProvider());
+            for (int i = 0; i < images.Length; i++)
+            {
+                IFileSystemDriver? driver = factory.Detect(images[i]);
+                Assert.That(driver?.FileSystemType, Is.Not.EqualTo("CPM"), Path.GetFileName(images[i]) + " is a CBM DOS disk");
+            }
+        }
+
         private static CpmDriver Mount(string name)
         {
             string path = Image(name);

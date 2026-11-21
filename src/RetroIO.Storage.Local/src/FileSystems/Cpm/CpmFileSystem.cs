@@ -83,6 +83,42 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         public IReadOnlyList<CpmFile> Files => _files;
 
         /// <summary>
+        /// Gathers the directory of a CP/M disk image through its record map.
+        /// </summary>
+        /// <param name="image">
+        /// The disk image, or at least its start up to the end of the directory.
+        /// </param>
+        /// <param name="parameters">
+        /// The disk parameters, which give the directory size.
+        /// </param>
+        /// <param name="map">
+        /// Where each data record lies in the image.
+        /// </param>
+        /// <returns>
+        /// The directory, <see cref="CpmDiskParameters.DirectoryEntries"/> times 32 bytes, or an empty
+        /// array when <paramref name="image"/> ends before the directory does.
+        /// </returns>
+        public static byte[] DirectoryBytes(ReadOnlySpan<byte> image, CpmDiskParameters parameters, ICpmRecordMap map)
+        {
+            int bytes = parameters.DirectoryEntries * EntrySize;
+            byte[] directory = new byte[bytes];
+            int records = (bytes + map.RecordSize - 1) / map.RecordSize;
+            for (int r = 0; r < records; r++)
+            {
+                long offset = map.ImageOffset(r);
+                int count = Math.Min(map.RecordSize, bytes - r * map.RecordSize);
+                if (offset + count > image.Length)
+                {
+                    return Array.Empty<byte>();
+                }
+
+                image.Slice((int)offset, count).CopyTo(directory.AsSpan(r * map.RecordSize, count));
+            }
+
+            return directory;
+        }
+
+        /// <summary>
         /// Checks every entry of a directory against the CP/M directory format.
         /// </summary>
         /// <remarks>
@@ -216,7 +252,7 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         // Reads every directory entry and groups the file entries by user number and name.
         private void ReadDirectory()
         {
-            byte[] directory = ReadDirectoryBytes();
+            byte[] directory = DirectoryBytes(_image, _parameters, _map);
             Dictionary<string, CpmFileBuilder> byKey = new Dictionary<string, CpmFileBuilder>(StringComparer.Ordinal);
             List<CpmFileBuilder> order = new List<CpmFileBuilder>();
             for (int e = 0; e < _parameters.DirectoryEntries; e++)
@@ -250,22 +286,6 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
             {
                 _files.Add(order[i].Build(_parameters));
             }
-        }
-
-        // The directory blocks, read through the record map.
-        private byte[] ReadDirectoryBytes()
-        {
-            int bytes = _parameters.DirectoryEntries * EntrySize;
-            byte[] directory = new byte[bytes];
-            int records = (bytes + _map.RecordSize - 1) / _map.RecordSize;
-            for (int r = 0; r < records; r++)
-            {
-                long offset = _map.ImageOffset(r);
-                int count = Math.Min(_map.RecordSize, bytes - r * _map.RecordSize);
-                Array.Copy(_image, offset, directory, r * _map.RecordSize, count);
-            }
-
-            return directory;
         }
 
         // NAME.TYP from an entry, attribute bits removed, padding spaces dropped.

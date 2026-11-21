@@ -14,7 +14,8 @@ using RetroIO.Storage.Local.FileSystems.Cpm;
 namespace RetroIO.Storage.Local.Drivers
 {
     /// <summary>
-    /// Reads CP/M disks. Today: Commodore 128 CP/M 3 disks on 1541 (D64), 1571 (D71) and 1581 (D81) images.
+    /// Reads CP/M disks. Today: Commodore 128 CP/M 3 disks on 1541 (D64), 1571 (D71) and 1581 (D81)
+    /// images, and Commodore 64 CP/M 2.2 disks (D64).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -34,6 +35,12 @@ namespace RetroIO.Storage.Local.Drivers
     /// drive's sector size alone (CXDISK, <c>commodore$type</c>). Here a D81 image is read as CP/M
     /// when its first 4 KB, the CP/M directory, passes <see cref="CpmFileSystem.LooksLikeDirectory"/>.
     /// The layout is <c>dpb 1024,5,159,2048,128,0</c>, placed by <see cref="C1581CpmRecordMap"/>.
+    /// </para>
+    /// <para>
+    /// A 1541 disk without the "CBM" mark is, to the C128 BIOS, a C64 CP/M 2.2 disk (CXDISK
+    /// <c>login$154X</c> keeps the C64 layout when <c>FR$check$CBM</c> fails). Here it is read so
+    /// only when its directory on track 3 passes <see cref="CpmFileSystem.LooksLikeDirectory"/>.
+    /// The layout is <c>dpb 256,17,34,1024,64,3</c>, placed by <see cref="C64CpmRecordMap"/>.
     /// </para>
     /// <para>
     /// Read-only for now; writing is planned.
@@ -121,6 +128,26 @@ namespace RetroIO.Storage.Local.Drivers
         public static bool IsD81Size(long length) => length == 3200 * 256 || length == 3200 * 257;
 
         /// <summary>
+        /// Tells whether an image length is a D64 image: 683 sectors of 256 bytes, with or without
+        /// one error byte per sector.
+        /// </summary>
+        /// <param name="length">
+        /// Image length in bytes.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> for 174848 or 175531 bytes.
+        /// </returns>
+        public static bool IsD64Size(long length) => length == 683 * 256 || length == 683 * 257;
+
+        /// <summary>
+        /// Gets the C128 BIOS layout for a C64 CP/M 2.2 disk, <c>dpb 256,17,34,1024,64,3</c>.
+        /// </summary>
+        /// <returns>
+        /// 131 blocks of 1 KB with 64 directory entries and three reserved tracks.
+        /// </returns>
+        public static CpmDiskParameters C64Parameters() => CpmDiskParameters.FromCpm3Macro(256, 17, 34, 1024, 64, 3);
+
+        /// <summary>
         /// Gets the C128 BIOS layout for a 1581 disk, <c>dpb 1024,5,159,2048,128,0</c>.
         /// </summary>
         /// <returns>
@@ -176,7 +203,19 @@ namespace RetroIO.Storage.Local.Drivers
 
             if (!IsC128CpmBootSector(image, out bool doubleSided))
             {
-                throw new InvalidDataException("Not a C128 CP/M disk: track 1 sector 0 does not start with \"CBM\".");
+                // No "CBM" mark: the C128 BIOS reads a 1541 disk like this as a C64 CP/M 2.2 disk.
+                if (IsD64Size(image.Length))
+                {
+                    CpmDiskParameters c64 = C64Parameters();
+                    C64CpmRecordMap c64Map = new C64CpmRecordMap(c64.BlockCount * (c64.BlockSize / 256));
+                    if (CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, c64, c64Map), c64, out _))
+                    {
+                        _fileSystem = new CpmFileSystem(image, c64, c64Map);
+                        return;
+                    }
+                }
+
+                throw new InvalidDataException("Not a C128 or C64 CP/M disk: no \"CBM\" mark on track 1 sector 0 and no CP/M directory on track 3.");
             }
 
             // 683 or 1366 sectors of 256 bytes; an image may carry one error byte per sector after them.
