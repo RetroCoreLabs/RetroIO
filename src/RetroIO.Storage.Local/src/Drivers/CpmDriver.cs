@@ -1,0 +1,371 @@
+//
+// SPDX-License-Identifier: MIT
+// Copyright (c) 1985-2026 Ronny Hansen
+// RetroCore Labs — https://github.com/RetroCoreLabs
+// RetroIO - Accessing yesterday's data with today's standards
+//
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using RetroIO.Storage.Core;
+using RetroIO.Storage.Local.FileSystems.Cpm;
+
+namespace RetroIO.Storage.Local.Drivers
+{
+    /// <summary>
+    /// Reads CP/M disks. Today: Commodore 128 CP/M 3 disks on 1541 (D64) and 1571 (D71) images.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Files of user 0 are in the root; files of user 1 to 15 are in folders <c>USER1</c> to
+    /// <c>USER15</c>, which appear only when they hold files.
+    /// </para>
+    /// <para>
+    /// A C128 CP/M disk is recognised the way the C128 BIOS does it at log-in (CXDISK,
+    /// <c>login$154X</c>, and the Z80 ROM routine at 046Bh): track 1 sector 0 starts with "CBM",
+    /// and its last byte is FFh on a double-sided disk. The layouts are the BIOS's own:
+    ///  - single-sided: <c>dpb 1024,1,170,1024,64,0</c> (1 KB blocks, 64 directory entries);
+    ///  - double-sided: <c>dpb 1024,1,340,2048,128,0</c> (2 KB blocks, 128 directory entries).
+    /// Where each record lies is <see cref="C128CpmRecordMap"/>.
+    /// </para>
+    /// <para>
+    /// Read-only for now; writing is planned.
+    /// </para>
+    /// </remarks>
+    public sealed class CpmDriver : IFileSystemDriver
+    {
+        private CpmFileSystem? _fileSystem;
+
+        private const string UserFolderPrefix = "USER";
+
+        /// <summary>
+        /// Gets the filesystem type name, "CPM".
+        /// </summary>
+        public string FileSystemType => "CPM";
+
+        /// <summary>
+        /// Gets the separator between name and type, a dot.
+        /// </summary>
+        public string ExtensionSeparator => ".";
+
+        /// <summary>
+        /// Gets the CP/M 3 disk label, or an empty string.
+        /// </summary>
+        public string VolumeLabel => _fileSystem?.Label ?? string.Empty;
+
+        /// <summary>
+        /// Gets what this driver can do: read and list.
+        /// </summary>
+        public DriverCapabilities Capabilities => DriverCapabilities.Read | DriverCapabilities.ListDirectory;
+
+        /// <summary>
+        /// Gets a value indicating whether files can be read; always <c>true</c>.
+        /// </summary>
+        public bool CanRead => true;
+
+        /// <summary>
+        /// Gets a value indicating whether files can be written; <c>false</c> until writing is built.
+        /// </summary>
+        public bool CanWrite => false;
+
+        /// <summary>
+        /// Gets a value indicating whether raw blocks can be read; <c>false</c>.
+        /// </summary>
+        public bool HasBlockAccess => false;
+
+        /// <summary>
+        /// Tells whether an image's first sector carries the C128 CP/M mark, and how many sides it has.
+        /// </summary>
+        /// <remarks>
+        /// The test of the C128 Z80 ROM routine at 046Bh: bytes 0-2 are "CBM"; the routine then
+        /// returns byte 255, which is FFh on a double-sided disk.
+        /// </remarks>
+        /// <param name="firstSector">
+        /// Track 1 sector 0: the first 256 bytes of the image.
+        /// </param>
+        /// <param name="doubleSided">
+        /// Set to <c>true</c> when byte 255 is FFh.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the sector starts with "CBM".
+        /// </returns>
+        public static bool IsC128CpmBootSector(ReadOnlySpan<byte> firstSector, out bool doubleSided)
+        {
+            doubleSided = false;
+            if (firstSector.Length < 256 || firstSector[0] != (byte)'C' || firstSector[1] != (byte)'B' || firstSector[2] != (byte)'M')
+            {
+                return false;
+            }
+
+            doubleSided = firstSector[255] == 0xFF;
+            return true;
+        }
+
+        /// <summary>
+        /// Returns <c>null</c>: there is no metadata descriptor for CP/M yet.
+        /// </summary>
+        /// <returns>
+        /// Always <c>null</c>.
+        /// </returns>
+        public IFileSystemMetadataDescriptor? GetMetadataDescriptor() => null;
+
+        /// <summary>
+        /// Reads the whole image and its CP/M directory.
+        /// </summary>
+        /// <param name="imageStream">
+        /// The disk image.
+        /// </param>
+        /// <param name="readOnly">
+        /// Ignored: the driver only reads.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/> is null.
+        /// </exception>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when the image is not a C128 CP/M disk of a known size.
+        /// </exception>
+        public void Mount(Stream imageStream, bool readOnly)
+        {
+            if (imageStream == null)
+            {
+                throw new ArgumentNullException(nameof(imageStream));
+            }
+
+            byte[] image = new byte[imageStream.Length];
+            imageStream.Position = 0;
+            imageStream.ReadExactly(image, 0, image.Length);
+
+            if (!IsC128CpmBootSector(image, out bool doubleSided))
+            {
+                throw new InvalidDataException("Not a C128 CP/M disk: track 1 sector 0 does not start with \"CBM\".");
+            }
+
+            // 683 or 1366 sectors of 256 bytes; an image may carry one error byte per sector after them.
+            int sectors = doubleSided ? 1366 : 683;
+            if (image.Length != sectors * 256 && image.Length != sectors * 257)
+            {
+                throw new InvalidDataException(
+                    "A " + (doubleSided ? "double" : "single") + "-sided C128 CP/M disk image is " + sectors * 256
+                    + " bytes (or " + sectors * 257 + " with error bytes), not " + image.Length + ".");
+            }
+
+            CpmDiskParameters parameters = doubleSided
+                ? CpmDiskParameters.FromCpm3Macro(1024, 1, 340, 2048, 128, 0)
+                : CpmDiskParameters.FromCpm3Macro(1024, 1, 170, 1024, 64, 0);
+            int records = parameters.BlockCount * (parameters.BlockSize / 256);
+            _fileSystem = new CpmFileSystem(image, parameters, new C128CpmRecordMap(doubleSided, records));
+        }
+
+        /// <summary>
+        /// Lists the root (user 0 files and the user folders) or a <c>USERn</c> folder.
+        /// </summary>
+        /// <param name="path">
+        /// "/" or "/USERn".
+        /// </param>
+        /// <returns>
+        /// The entries of that folder.
+        /// </returns>
+        /// <exception cref="DirectoryNotFoundException">
+        /// Thrown when <paramref name="path"/> is not the root or a user folder.
+        /// </exception>
+        public DirectoryEntry[] ListDirectory(string path)
+        {
+            CpmFileSystem fs = EnsureMounted();
+            int user = UserOfFolder(path);
+            List<DirectoryEntry> entries = new List<DirectoryEntry>();
+            bool[] usersWithFiles = new bool[16];
+            IReadOnlyList<CpmFile> files = fs.Files;
+            for (int i = 0; i < files.Count; i++)
+            {
+                usersWithFiles[files[i].User] = true;
+                if (files[i].User == user)
+                {
+                    entries.Add(new DirectoryEntry { Name = files[i].Name, Metadata = Metadata(files[i]) });
+                }
+            }
+
+            if (user == 0)
+            {
+                for (int u = 1; u < 16; u++)
+                {
+                    if (usersWithFiles[u])
+                    {
+                        string name = UserFolderPrefix + u;
+                        entries.Add(new DirectoryEntry
+                        {
+                            Name = name,
+                            Metadata = new FileMetadata { Name = name, Path = "/" + name, IsDirectory = true, UrnIdentifier = UrnIdentifier.Encode(name) },
+                        });
+                    }
+                }
+            }
+
+            return entries.ToArray();
+        }
+
+        /// <summary>
+        /// Reads a file.
+        /// </summary>
+        /// <param name="path">
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
+        /// </param>
+        /// <returns>
+        /// The file's bytes, a whole number of 128-byte records.
+        /// </returns>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no file at <paramref name="path"/>.
+        /// </exception>
+        public byte[] ReadFile(string path)
+        {
+            CpmFileSystem fs = EnsureMounted();
+            CpmFile file = Find(fs, path) ?? throw new FileNotFoundException("File not found: " + path);
+            return fs.Read(file);
+        }
+
+        /// <summary>
+        /// Describes a file, or returns <c>null</c> when there is none at the path.
+        /// </summary>
+        /// <param name="path">
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
+        /// </param>
+        /// <returns>
+        /// The file's metadata, or <c>null</c>.
+        /// </returns>
+        public FileMetadata? GetMetadata(string path)
+        {
+            CpmFile? file = Find(EnsureMounted(), path);
+            return file == null ? null : Metadata(file);
+        }
+
+        /// <summary>
+        /// Not supported yet: the driver only reads.
+        /// </summary>
+        /// <param name="path">
+        /// Unused.
+        /// </param>
+        /// <param name="data">
+        /// Unused.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Always thrown.
+        /// </exception>
+        public void WriteFile(string path, byte[] data)
+            => throw new UnauthorizedAccessException("The CP/M driver has no write support yet, so the volume is read-only");
+
+        /// <summary>
+        /// Not supported yet: the driver only reads.
+        /// </summary>
+        /// <param name="path">
+        /// Unused.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Always thrown.
+        /// </exception>
+        public void DeleteFile(string path)
+            => throw new UnauthorizedAccessException("The CP/M driver has no write support yet, so the volume is read-only");
+
+        /// <summary>
+        /// Not supported: the driver gives files, not raw blocks.
+        /// </summary>
+        /// <param name="address">
+        /// Unused.
+        /// </param>
+        /// <param name="buffer">
+        /// Unused.
+        /// </param>
+        /// <returns>
+        /// Never returns.
+        /// </returns>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
+        public int ReadBlock(BlockAddress address, Span<byte> buffer)
+            => throw new NotSupportedException("The CP/M driver has no block access.");
+
+        /// <summary>
+        /// Not supported: the driver gives files, not raw blocks.
+        /// </summary>
+        /// <param name="address">
+        /// Unused.
+        /// </param>
+        /// <param name="data">
+        /// Unused.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        /// Always thrown.
+        /// </exception>
+        public void WriteBlock(BlockAddress address, ReadOnlySpan<byte> data)
+            => throw new NotSupportedException("The CP/M driver has no block access.");
+
+        /// <summary>
+        /// Returns <c>null</c>: the driver has no block access.
+        /// </summary>
+        /// <returns>
+        /// Always <c>null</c>.
+        /// </returns>
+        public BlockDeviceInfo? GetBlockDeviceInfo() => null;
+
+        /// <summary>
+        /// Lets go of the image.
+        /// </summary>
+        public void Dispose()
+        {
+            _fileSystem = null;
+        }
+
+        private CpmFileSystem EnsureMounted()
+            => _fileSystem ?? throw new InvalidOperationException("The CP/M disk is not mounted.");
+
+        // 0 for the root, n for "/USERn"; anything else is not a folder.
+        private static int UserOfFolder(string path)
+        {
+            string trimmed = path.Trim('/');
+            if (trimmed.Length == 0)
+            {
+                return 0;
+            }
+
+            if (trimmed.StartsWith(UserFolderPrefix, StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(trimmed.AsSpan(UserFolderPrefix.Length), out int user) && user >= 1 && user <= 15)
+            {
+                return user;
+            }
+
+            throw new DirectoryNotFoundException("A CP/M disk has the root and USER1 to USER15 only: " + path);
+        }
+
+        // "/NAME.TYP" is user 0; "/USERn/NAME.TYP" is user n.
+        private static CpmFile? Find(CpmFileSystem fs, string path)
+        {
+            string trimmed = path.Trim('/');
+            int slash = trimmed.IndexOf('/');
+            int user = 0;
+            string name = trimmed;
+            if (slash >= 0)
+            {
+                user = UserOfFolder(trimmed.Substring(0, slash));
+                name = trimmed.Substring(slash + 1);
+            }
+
+            return fs.Find(user, name);
+        }
+
+        private static FileMetadata Metadata(CpmFile file)
+        {
+            string path = file.User == 0 ? "/" + file.Name : "/" + UserFolderPrefix + file.User + "/" + file.Name;
+            FileMetadata metadata = new FileMetadata
+            {
+                Name = file.Name,
+                Path = path,
+                IsDirectory = false,
+                Size = file.Size,
+                Attributes = (file.ReadOnly ? "R" : string.Empty) + (file.System ? "S" : string.Empty),
+                UrnIdentifier = UrnIdentifier.Encode(file.Name),
+            };
+            metadata.SetProperty("User", file.User);
+            metadata.SetProperty("Blocks", file.Blocks.Count);
+            return metadata;
+        }
+    }
+}

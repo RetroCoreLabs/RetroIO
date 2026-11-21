@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2): write the CP/M reader with the C128 1571 layout, read-only, tested on TurboPascal.d71.
+Next: CP/M (item 2): C128 1581 (D81) CP/M disks, then the C64 CP/M 2.2 disk, then writing.
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -26,6 +26,12 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
    - **CP/M 2.2 and CP/M 3 (CP/M Plus).** CP/M 3 adds date and time stamps, passwords and a disk
      label in the directory (the C128 runs CP/M 3). Read both; write CP/M 2.2 first, CP/M 3 stamps
      after.
+   - **Built (2026-11-21)**: `CpmDriver` + `CpmDriverProvider` read C128 CP/M disks on D64 and D71
+     (`FileSystems/Cpm`: `CpmDiskParameters` from the CPM3.LIB `dpb` macro, `C128CpmRecordMap` from
+     the Z80 ROM routine, `CpmFileSystem`), tested in `C128CpmTests`. Still open for the C128:
+     1581 disks (no "CBM" mark; directory at track 1 sector 0; layout `dpb 1024,5,159,2048,128,0`
+     and the 1581 record rule still to be read), the C64 CP/M 2.2 format (`cpm.d64`), CP/M 3 time
+     stamps, and writing.
    - **Machines, in this order.**
      1. **Commodore 128 CP/M** on 1541, 1571 and 1581 images. The disk has a normal CBM header
         named "CP/M" and CP/M data elsewhere; we already have one real image (a C128 CP/M D71).
