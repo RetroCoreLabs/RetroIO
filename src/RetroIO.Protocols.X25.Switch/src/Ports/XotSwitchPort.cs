@@ -813,17 +813,27 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// on a connection the peer opened and has not used, or is held until the peer opens one (see
         /// <see cref="HoldPacket"/>; until 2026-11-21 this method waited for it instead).
         /// </remarks>
-        /// <param name="calledAddress">The X.121 address called.</param>
-        /// <param name="callingAddress">The X.121 address calling.</param>
-        /// <param name="callUserData">The call user data, or null.</param>
-        /// <param name="requested">The window and packet sizes to ask for, or null for the port's own.</param>
+        /// <param name="calledAddress">
+        /// The X.121 address called.
+        /// </param>
+        /// <param name="callingAddress">
+        /// The X.121 address calling.
+        /// </param>
+        /// <param name="callUserData">
+        /// The call user data, or null.
+        /// </param>
+        /// <param name="requested">
+        /// The window and packet sizes to ask for, or null for the port's own.
+        /// </param>
         /// <param name="refusal">
         /// When the call is not placed (0 returned): the cause to clear the caller with. Out of order #0 when the far
         /// end cannot be reached (X.25 Table C.3 a) item 30: no peer, or the dial failed); Number busy #71 when it was
         /// reached but no logical channel is left (item 31). Null when the call was placed. Before 2026-11-20 the
         /// switch called every failure on a port with a connection up busy (RetroIO BUGS 33).
         /// </param>
-        /// <returns>The engine's logical channel for the call, or 0 when it was not placed.</returns>
+        /// <returns>
+        /// The engine's logical channel for the call, or 0 when it was not placed.
+        /// </returns>
         private ushort PlaceCallWith(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters? requested, out X25CallDecision? refusal)
         {
             XotConnection? dialled = null;
@@ -1788,6 +1798,18 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </summary>
         private sealed class HeldPacket
         {
+            /// <summary>
+            /// Records one held packet.
+            /// </summary>
+            /// <param name="lci">
+            /// The engine's channel the packet belongs to.
+            /// </param>
+            /// <param name="packet">
+            /// A copy of the packet, as the engine wrote it.
+            /// </param>
+            /// <param name="sinceMs">
+            /// The time it was held (Environment.TickCount64).
+            /// </param>
             public HeldPacket(ushort lci, byte[] packet, long sinceMs)
             {
                 Lci = lci;
@@ -1827,6 +1849,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// thread is another port's reader (through the switch core), so every circuit on that port stood still
         /// meanwhile (RetroX25 PLAN H3-8).
         /// </remarks>
+        /// <param name="lci">
+        /// The engine's channel of the call.
+        /// </param>
+        /// <param name="packet">
+        /// A copy of the Call Request.
+        /// </param>
         private void HoldPacket(ushort lci, byte[] packet)
         {
             _held.Add(new HeldPacket(lci, packet, Environment.TickCount64));
@@ -1836,6 +1864,12 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// <summary>
         /// True when packets of this channel are held, so a later one must queue behind them.
         /// </summary>
+        /// <param name="lci">
+        /// The engine's channel.
+        /// </param>
+        /// <returns>
+        /// True when at least one packet of <paramref name="lci"/> is waiting.
+        /// </returns>
         private bool IsHeld(ushort lci)
         {
             for (int i = 0; i < _held.Count; i++)
@@ -1888,6 +1922,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// C.3 a) item 31, no logical channel available), as x25emu does. Nothing is written: there is no connection
         /// to write on. The lock is held.
         /// </summary>
+        /// <param name="nowMs">
+        /// The time now (Environment.TickCount64).
+        /// </param>
         private void ClearExpiredHeldCalls(long nowMs)
         {
             while (_held.Count > 0 && nowMs - _held[0].SinceMs >= HeldCallTimeoutMs)

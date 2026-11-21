@@ -44,6 +44,18 @@ namespace RetroIO.Protocols.X25.Tests
         private const int CManagementPort = 41290;
         private const int CMonitorPort = 41291;
 
+        /// <summary>
+        /// Runs a bash script in WSL and returns what it printed.
+        /// </summary>
+        /// <param name="script">
+        /// The script, given to <c>bash -c</c>.
+        /// </param>
+        /// <param name="timeoutMs">
+        /// How long to wait for WSL to exit after its output has ended, in milliseconds.
+        /// </param>
+        /// <returns>
+        /// Standard output, then standard error.
+        /// </returns>
         private static string RunInWsl(string script, int timeoutMs)
         {
             ProcessStartInfo psi = new ProcessStartInfo("wsl")
@@ -67,6 +79,17 @@ namespace RetroIO.Protocols.X25.Tests
         /// <summary>
         /// Starts an x25emu switch with one HDLC-over-TCP trunk port and returns the folder it runs in.
         /// </summary>
+        /// <remarks>
+        /// The folder is under WSL's /tmp, named after this process, and holds the config, the log and the process id
+        /// file that <see cref="StopCSwitch"/> kills by. The switch is started detached (setsid nohup) so it outlives
+        /// the wsl call that started it.
+        /// </remarks>
+        /// <param name="portLines">
+        /// The lines of the trunk port that differ between the tests: the mode, and the port or host and port.
+        /// </param>
+        /// <returns>
+        /// The WSL path of the run folder.
+        /// </returns>
         private static string StartCSwitch(string portLines)
         {
             string emuDir = CrossEnvCClientToCSharpSwitchTests.EmuDir();
@@ -82,6 +105,12 @@ namespace RetroIO.Protocols.X25.Tests
             return dir;
         }
 
+        /// <summary>
+        /// Stops the x25emu switch by the process id it wrote down (never by name) and deletes its run folder.
+        /// </summary>
+        /// <param name="dir">
+        /// The run folder <see cref="StartCSwitch"/> returned.
+        /// </param>
         private static void StopCSwitch(string dir)
         {
             RunInWsl("kill $(cat " + dir + "/pid) 2>/dev/null; sleep 1; rm -rf " + dir + "; echo stopped", 10000);
@@ -91,6 +120,15 @@ namespace RetroIO.Protocols.X25.Tests
         /// The restart packets (Restart Indication or Request, type 0xFB) the proxy saw in one direction, in order, as
         /// "cause diagnostic" hex pairs.
         /// </summary>
+        /// <param name="proxy">
+        /// The proxy between the two switches.
+        /// </param>
+        /// <param name="direction">
+        /// Which way: toward the DTE end shows the DCE's restarts, toward the DCE end the DTE's.
+        /// </param>
+        /// <returns>
+        /// One "cause diagnostic" string, for example "07 00", for each restart packet, in the order seen.
+        /// </returns>
         private static List<string> Restarts(HdlcFaultProxy proxy, TrunkDirection direction)
         {
             List<string> found = new List<string>();
@@ -98,7 +136,8 @@ namespace RetroIO.Protocols.X25.Tests
             for (int i = 0; i < seen.Count; i++)
             {
                 byte[] b = seen[i].Body;
-                // address, control, then the packet: GFI+LCG, LCN, type, cause, diagnostic (then 2 FCS octets)
+                // LAPB address, control, then the packet: GFI+LCG, LCN, type, cause, diagnostic (then 2 FCS octets).
+                // 9 octets at least; type 0xFB is Restart Request (DTE) and Restart Indication (DCE), X.25 Table 5-1.
                 if (seen[i].Direction == direction && seen[i].IsInformation && b.Length >= 9 && b[4] == 0xFB)
                 {
                     found.Add(b[5].ToString("X2") + " " + b[6].ToString("X2"));
@@ -108,6 +147,15 @@ namespace RetroIO.Protocols.X25.Tests
             return found;
         }
 
+        /// <summary>
+        /// Every frame the proxy saw, one line each, for the failure messages.
+        /// </summary>
+        /// <param name="proxy">
+        /// The proxy between the two switches.
+        /// </param>
+        /// <returns>
+        /// The direction and the frame's octets in hex (address, control, packet, FCS), a line per frame.
+        /// </returns>
         private static string Dump(HdlcFaultProxy proxy)
         {
             StringBuilder text = new StringBuilder();
@@ -212,6 +260,15 @@ namespace RetroIO.Protocols.X25.Tests
         /// <summary>
         /// The number of Restart Confirmation packets (type 0xFF) the proxy saw in one direction.
         /// </summary>
+        /// <param name="proxy">
+        /// The proxy between the two switches.
+        /// </param>
+        /// <param name="direction">
+        /// Which way: toward the DCE end counts the DTE's confirmations.
+        /// </param>
+        /// <returns>
+        /// How many were seen.
+        /// </returns>
         private static int Confirmations(HdlcFaultProxy proxy, TrunkDirection direction)
         {
             int count = 0;
