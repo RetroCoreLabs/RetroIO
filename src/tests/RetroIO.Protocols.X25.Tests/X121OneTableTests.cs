@@ -126,6 +126,49 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(r.Port, Is.EqualTo(4));
         }
 
+        /// <summary>
+        /// A number that starts with an escape code (8, 9 or 0) is not a national number and is not given the own
+        /// DNIC in front; it is carried forward as it came.
+        /// </summary>
+        /// <remarks>
+        /// X.121 (10/2000) 7.9: an escape code "indicates that the following digits represent a number from a
+        /// different numbering plan" and "has to be carried forward through the originating network"; Table 2: 8 is
+        /// F.69 (Note 4: "for further study"), 9 and 0 are E.164; 7.2 Note 2: 8, 9 and 0 are "not being part of the
+        /// DNIC". Ronny decided on 2026-11-20 to treat all three as the standard says. Before, such a number became
+        /// 2422 plus the number (RetroIO BUGS 37, RetroX25 PLAN H3-1).
+        /// </remarks>
+        [TestCase("947221234567")]
+        [TestCase("047221234567")]
+        [TestCase("8123456")]
+        public void ANumberStartingWithAnEscapeCode_IsCarriedForwardUnchanged(string called)
+        {
+            X121RoutingTable t = new X121RoutingTable();
+            t.SetOwnDnics(new[] { "2422" });
+            t.InternationalPrefix = "1";
+            t.AddRoute(Default(9));
+
+            Assert.That(t.ToInternational(called), Is.EqualTo(called));
+            X121RouteResult r = t.Resolve(called, 0, PortsUp());
+            Assert.That(r.InternationalAddress, Is.EqualTo(called));
+            Assert.That(r.Port, Is.EqualTo(9), "no route knows another numbering plan: the default (the gateway) takes it");
+        }
+
+        /// <summary>
+        /// When the international prefix is itself an escape digit (0 is common), a number starting with it is the
+        /// prefix: X.121 7.8.2 makes the prefix "a national matter", so the network's own choice comes first.
+        /// </summary>
+        [Test]
+        public void APrefixOfZero_StillWins_OverTheEscapeCodeZero()
+        {
+            X121RoutingTable t = new X121RoutingTable();
+            t.SetOwnDnics(new[] { "2422" });
+            t.InternationalPrefix = "0";
+
+            Assert.That(t.ToInternational("023421234"), Is.EqualTo("23421234"), "the prefix is taken off");
+            Assert.That(t.ToInternational("947221234567"), Is.EqualTo("947221234567"), "9 is still an escape code");
+            Assert.That(t.ToInternational("0947221234567"), Is.EqualTo("947221234567"), "prefix, then an escape code");
+        }
+
         [Test]
         public void AnExactLocalNumberRoute_MatchesTheNumberWrittenWithTheOwnDnic()
         {

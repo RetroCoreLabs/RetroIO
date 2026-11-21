@@ -26,7 +26,8 @@ namespace RetroIO.Protocols.X25.Routing
     ///    boundaries" (7.8.1, lines 557-561). When a prefix is set, a number without it is a national number
     ///    (the network terminal number, 7.6.2) and is completed with the first own DNIC
     ///    (international data number = DNIC + NTN, 7.6.1, line 508). With no prefix set, numbers are taken
-    ///    as they come.
+    ///    as they come. A number that starts with an escape code, 8, 9 or 0, is from another numbering plan
+    ///    and is carried forward unchanged (7.9 and Table 2), unless it starts with the prefix itself.
     ///  - One lookup over that international number, most exact first: an exact number or a hunt group, a
     ///    pattern route, the longest full-address prefix, a DNIC with the digit after it, a DNIC, a country
     ///    code (DCC), and last the default route - usually the X.75 gateway. An originating or transit
