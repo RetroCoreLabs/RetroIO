@@ -110,7 +110,7 @@ namespace RetroIO.Protocols.X25.Tests
             List<string> lines = Lines(Sample);
             SwitchConfig before = Load(lines);
 
-            SwitchRouteWriter.ReplaceRoutes(lines, before.Routing.Routes, before.Routing);
+            SwitchRouteWriter.ReplaceRoutes(lines, before.Routing);
 
             AssertSameRoutes(before.Routing.Routes, Load(lines).Routing.Routes);
         }
@@ -121,7 +121,7 @@ namespace RetroIO.Protocols.X25.Tests
             List<string> lines = Lines(Sample);
             SwitchConfig before = Load(lines);
 
-            SwitchRouteWriter.ReplaceRoutes(lines, before.Routing.Routes, before.Routing);
+            SwitchRouteWriter.ReplaceRoutes(lines, before.Routing);
             string text = string.Join("\n", lines);
 
             Assert.That(text, Does.StartWith("# header comment\n[switch]\nname = S\ndnic = 2350\n"));
@@ -150,6 +150,32 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(string.Join("\n", lines), Does.Not.Contain("[route.3]"), "a removed route leaves no section behind");
         }
 
+        /// <summary>
+        /// A hunt route names a [hunt.N] section by its number; the [hunt.N] section is left as it was.
+        /// </summary>
+        [Test]
+        public void AHuntRoute_KeepsItsGroup_AndTheHuntSectionIsLeftAlone()
+        {
+            string text =
+                "[switch]\nname = S\ndnic = 2350\n" +
+                "[port.0]\ntype = access\ntransport = xot\nport = 2200\n" +
+                "[port.1]\ntype = access\ntransport = xot\nport = 2201\n" +
+                "[hunt.0]\nmembers = 0, 1\n" +
+                "[route.0]\nhunt = 23500100\nhunt_group = 0\n" +
+                "[route.1]\ndefault = yes\nport = 1\n";
+            List<string> lines = Lines(text);
+            SwitchConfig before = Load(lines);
+
+            SwitchRouteWriter.ReplaceRoutes(lines, before.Routing);
+            SwitchConfig after = Load(lines);
+
+            List<X121Route> beforeRoutes = new List<X121Route>(before.Routing.Routes);
+            List<X121Route> afterRoutes = new List<X121Route>(after.Routing.Routes);
+            AssertSameRoutes(beforeRoutes, afterRoutes);
+            Assert.That(after.Routing.HuntGroups.Count, Is.EqualTo(1));
+            Assert.That(after.Routing.HuntGroups[0].Members, Is.EqualTo(new[] { 0, 1 }));
+        }
+
         [Test]
         public void TheDemoSwitchFiles_RoundTrip()
         {
@@ -162,7 +188,7 @@ namespace RetroIO.Protocols.X25.Tests
                 List<string> lines = new List<string>(File.ReadAllLines(path));
                 SwitchConfig before = Load(lines);
 
-                SwitchRouteWriter.ReplaceRoutes(lines, before.Routing.Routes, before.Routing);
+                SwitchRouteWriter.ReplaceRoutes(lines, before.Routing);
 
                 AssertSameRoutes(before.Routing.Routes, Load(lines).Routing.Routes);
             }

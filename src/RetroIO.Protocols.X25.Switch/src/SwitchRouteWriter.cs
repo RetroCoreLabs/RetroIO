@@ -42,6 +42,25 @@ namespace RetroIO.Protocols.X25.Switch
     public static class SwitchRouteWriter
     {
         /// <summary>
+        /// Replaces the [route.N] sections of the file text with the routes of <paramref name="table"/>.
+        /// </summary>
+        /// <param name="lines">
+        /// The file's lines; changed in place.
+        /// </param>
+        /// <param name="table">
+        /// The switch's table: its routes, in their order, and its port names.
+        /// </param>
+        /// <remarks>
+        /// The [hunt.N] and [pvc.N] sections are not touched. A hunt route names its group by number, and the groups
+        /// stay as the file has them.
+        /// </remarks>
+        public static void ReplaceRoutes(List<string> lines, X121RoutingTable table)
+        {
+            ArgumentNullException.ThrowIfNull(table);
+            ReplaceRoutes(lines, table.Routes, table);
+        }
+
+        /// <summary>
         /// Replaces the [route.N] sections of the file text with <paramref name="routes"/>.
         /// </summary>
         /// <param name="lines">
