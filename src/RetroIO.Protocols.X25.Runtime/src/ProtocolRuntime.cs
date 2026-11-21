@@ -3453,7 +3453,9 @@ namespace RetroIO.Protocols.X25.Runtime
                 for (ushort lcn = 1; lcn <= 4095; lcn++)
                 {
                     if (!_lcnBindings.ContainsKey(lcn) && !_lcnServiceBindings.ContainsKey(lcn)
-                        && !_circuitByLocalLcn.ContainsKey(lcn) && !_routerCalls.ContainsKey(lcn))
+                        && !_circuitByLocalLcn.ContainsKey(lcn) && !_routerCalls.ContainsKey(lcn)
+                        // A channel reserved for a call joined between two lines (CallJoin.cs, 2026-11-21, BUGS 32).
+                        && !_joins.ContainsKey(lcn))
                     {
                         return lcn;
                     }

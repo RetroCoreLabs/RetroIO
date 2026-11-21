@@ -162,6 +162,12 @@ namespace RetroIO.Protocols.X25.Runtime
                 endpoint.Layer.RestartOccurred += OnEndpointRestart;
                 endpoint.Layer.RestartTimedOut += OnEndpointRestartTimedOut;
 
+                // Used only by a call joined between two lines (ProtocolRuntime.CallJoin.cs, 2026-11-21, BUGS 32): the
+                // whole packet sequences it passes on, the window that lets a held side go, and interrupts.
+                endpoint.Layer.MessageReceived += OnEndpointMessage;
+                endpoint.Layer.WindowOpened += OnEndpointWindowOpened;
+                endpoint.Layer.InterruptReceived += OnEndpointInterrupt;
+
                 _endpoints[connection] = endpoint;
                 _localLcnByCircuit[endpoint] = new Dictionary<ushort, ushort>();
                 _endpointTicker ??= new Timer(TickEndpoints, null, EndpointTickMs, EndpointTickMs);
@@ -720,6 +726,15 @@ namespace RetroIO.Protocols.X25.Runtime
                 return;
             }
 
+            // The route points at another line: a call is placed there and joined to this one
+            // (ProtocolRuntime.CallJoin.cs; decided by Ronny 2026-11-21, BUGS 32). This call waits, unanswered, until
+            // the far call is connected or cleared. Until 2026-11-21 the router never answered Forward here.
+            if (decision.Action == X25CallAction.Forward)
+            {
+                StartJoin(endpoint, lci, request, decision.OutPort);
+                return;
+            }
+
             // Offered through the transport's IncomingCall event; the call stays in p3 until the program
             // calls AcceptCall or RejectCall (AcceptOfferedCall / RejectOfferedCall below), or until the
             // engine's T11 runs out and clears it (X.25 4.1.4, Table D.1: 180 s). Nothing is routed to a
@@ -941,6 +956,17 @@ namespace RetroIO.Protocols.X25.Runtime
                 return;
             }
 
+            // The far call of a join is connected: the waiting incoming call is accepted (CallJoin.cs, BUGS 32).
+            if (TryJoinOf(endpoint, lci, out CallJoin join, out bool isIncoming))
+            {
+                if (!isIncoming)
+                {
+                    JoinCallConnected(join);
+                }
+
+                return;
+            }
+
             Modules.PadClient? pad = null;
             lock (_routingLock)
             {
@@ -957,6 +983,13 @@ namespace RetroIO.Protocols.X25.Runtime
         {
             X25Endpoint? endpoint = EndpointOf(layer);
             if (endpoint == null || !TryLocalLcn(endpoint, lci, out ushort localLcn))
+            {
+                return;
+            }
+
+            // A joined circuit passes whole packet sequences on from MessageReceived (CallJoin.cs, BUGS 32), so the
+            // single packets reported here are not used for it.
+            if (TryJoinOf(endpoint, lci, out _, out _))
             {
                 return;
             }
@@ -1012,6 +1045,19 @@ namespace RetroIO.Protocols.X25.Runtime
             // A call still waiting for the program's answer is gone (the caller cleared it, or T11
             // ran out): a late AcceptCall or RejectCall for it must find nothing.
             ForgetOfferedCalls(endpoint, lci);
+
+            // One side of a join was cleared: the other side is cleared with the same cause (CallJoin.cs, BUGS 32).
+            if (TryJoinOf(endpoint, lci, out CallJoin join, out bool isIncoming))
+            {
+                JoinCleared(join, isIncoming, cause, diagnostic);
+                if (!isIncoming)
+                {
+                    CloseDialledLinkAfterClear(endpoint);
+                }
+
+                return;
+            }
+
             if (!TryLocalLcn(endpoint, lci, out ushort localLcn))
             {
                 return;
@@ -1156,6 +1202,13 @@ namespace RetroIO.Protocols.X25.Runtime
 
             _logger.LogWarning("X.25 circuit reset on {Name} channel {Lci} (local LCN {Local}): cause 0x{Cause:X2} diag 0x{Diag:X2}",
                 endpoint.Name, lci, localLcn, cause, diagnostic);
+
+            // One side of a join was reset: the other side is reset too (CallJoin.cs, BUGS 32).
+            if (TryJoinOf(endpoint, lci, out CallJoin join, out bool isIncoming))
+            {
+                JoinReset(join, isIncoming, cause, diagnostic);
+                return;
+            }
 
             // X.25 (10/96) 4.4.3: the reset "removes in each direction all data and interrupt packets which may be in the
             // network". Data a service queued on this call and not yet sent goes too; a clear still waiting stays. Then

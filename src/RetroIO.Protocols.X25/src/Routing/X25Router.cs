@@ -463,6 +463,28 @@ namespace RetroIO.Protocols.X25.Transport
             return PlaceOutboundCall(callRequest).Succeeded;
         }
 
+        /// <summary>
+        /// Places a call on one given line, the one a routing decision named, without looking at the routes again.
+        /// </summary>
+        /// <remarks>
+        /// Added 2026-11-21 for a joined call (RetroIO BUGS 32): <see cref="DecideIncomingCall"/> has already chosen the
+        /// line, so the call goes there and nowhere else.
+        /// </remarks>
+        /// <param name="port">
+        /// The line's port number, from <see cref="X25CallDecision.OutPort"/>.
+        /// </param>
+        /// <param name="callRequest">
+        /// The call.
+        /// </param>
+        /// <returns>
+        /// What became of the call, as for <see cref="PlaceOutboundCall"/>.
+        /// </returns>
+        public X25CallOutcome PlaceCallOnPort(int port, X25CallRequest callRequest)
+        {
+            ArgumentNullException.ThrowIfNull(callRequest);
+            return TryPlace(port, callRequest);
+        }
+
         private X25CallOutcome TryPlace(int port, X25CallRequest callRequest)
         {
             string name = _table.GetPortName(port);
@@ -534,8 +556,10 @@ namespace RetroIO.Protocols.X25.Transport
         /// with 0x0D.
         /// </para>
         /// <para>
-        /// An inbound route whose destination is another line is treated like a local route: this node
-        /// does not forward an incoming call out of another line (see src/BUGS.md).
+        /// An inbound route whose destination is another line of this node answers "forward to that line", checked
+        /// after the barring and route checks and before the program and service checks: the runtime then places a
+        /// call on that line and joins the two (decided by Ronny 2026-11-21, RetroIO BUGS 32). Until 2026-11-21 such a
+        /// route was treated like a local one. A route back to the line the call came in on stays local.
         /// </para>
         /// </remarks>
         /// <param name="callRequest">
@@ -548,7 +572,7 @@ namespace RetroIO.Protocols.X25.Transport
         /// True when the line is set to offer its calls to a program and wait for its answer.
         /// </param>
         /// <returns>
-        /// Deliver locally, or a refusal.
+        /// Deliver locally, forward to another line (the runtime joins the call there), or a refusal.
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="callRequest"/> is null.
@@ -573,6 +597,28 @@ namespace RetroIO.Protocols.X25.Transport
             {
                 _logger.LogWarning("Incoming call to {Called} on {Line}: no inbound route - not obtainable", called, line);
                 return X25CallDecision.NoRoute();
+            }
+
+            // A route that points at ANOTHER line of this node: the call is joined to a call placed on that line
+            // (decided by Ronny 2026-11-21, RetroIO BUGS 32; the runtime does the joining). Until 2026-11-21 such a route
+            // was treated like a local one and the call went to the local service lookup. A route that points back at
+            // the line the call came in on is still local: sending the call back where it came from is not a join. A
+            // line that is not registered here (a dynamic XOT_Client route) cannot carry a joined call yet: refused as
+            // out of order (BUGS.md, open entry).
+            if (winner.DestPort != X121RoutingTable.LocalPort)
+            {
+                string target = _table.GetPortName(winner.DestPort);
+                if (!string.Equals(target, sourceInterface?.Name, StringComparison.Ordinal))
+                {
+                    if (!_interfaces.ContainsKey(target))
+                    {
+                        _logger.LogWarning("Incoming call to {Called} on {Line}: route {Route} points at {Target}, which is not a line a call can be joined to - out of order", called, line, winner.Name, target);
+                        return X25CallDecision.DestinationOutOfOrder();
+                    }
+
+                    _logger.LogInformation("Incoming call to {Called} on {Line} passed by route {Route}; joined to a call on {Target}", called, line, winner.Name, target);
+                    return X25CallDecision.Forward(winner.DestPort);
+                }
             }
 
             if (programWaits)

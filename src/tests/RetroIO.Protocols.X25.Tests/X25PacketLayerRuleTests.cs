@@ -1438,6 +1438,29 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(joined, Is.EqualTo(message));
         }
 
+        /// <summary>
+        /// A piece of a sequence sent with "more follows" ends with M = 1, and a length that is not whole packets is
+        /// refused (X.25 4.3.4, 4.3.5: every M = 1 packet is full). Added 2026-11-21 for the call joined between two
+        /// lines (RetroIO BUGS 32).
+        /// </summary>
+        [Test]
+        public void R21_SendMessage_WithMoreFollows_LeavesTheSequenceOpen()
+        {
+            ushort fresh = ConnectOutgoing();   // 128 / window 2
+
+            Assert.That(_layer.SendMessage(fresh, Filled(200, 1), false, false, moreFollows: true), Is.False, "200 is not whole packets of 128");
+            Assert.That(_sink.CountOfType(X25PacketType.Data), Is.EqualTo(0), "nothing sent for a refused piece");
+
+            Assert.That(_layer.SendMessage(fresh, Filled(256, 1), false, false, moreFollows: true), Is.True);
+            Assert.That(_sink.CountOfType(X25PacketType.Data), Is.EqualTo(2));
+            Assert.That(X25PacketParser.ParsePacket(_sink.Sent[0]).MBit, Is.True);
+            Assert.That(X25PacketParser.ParsePacket(_sink.Sent[1]).MBit, Is.True, "the last packet of the piece keeps M = 1");
+            Assert.That(_layer.PendingPacketCount(fresh), Is.EqualTo(0));
+
+            Assert.That(_layer.SendMessage(fresh, Filled(10, 1), false, false, moreFollows: false), Is.True);
+            Assert.That(_layer.PendingPacketCount(fresh), Is.EqualTo(1), "the window of 2 is full, so the tail waits");
+        }
+
         [Test]
         public void R21_AMessageThatIsAnExactMultiple_EndsWithAFullPacketWithoutM()
         {
