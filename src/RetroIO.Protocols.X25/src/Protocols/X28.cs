@@ -1695,10 +1695,32 @@ namespace RetroIO.Protocols.X25.Protocols
             char shown = echo >= 32 && echo <= 126 ? (char)echo : c;
             CharacterEcho?.Invoke(this, new CharacterEchoEventArgs(shown, EchoType.Normal));
 
+            // X.28 4.12 (added 2026-11-21, BUGS 44; before, an echoed CR or LF had no padding at all): parameter 9
+            // padding characters "after each character 0/13 (CR) transmitted or echoed". X.28 4.16: parameter 14 after
+            // each LF "transmitted or echoed ... during the data transfer state". The padding character is NUL (3.5.20).
+            if (shown == '\r')
+            {
+                EchoPadding(_x3Parameters.GetParameter(X3.ParameterNumber.PADDING_AFTER_CR));
+            }
+            else if (shown == '\n')
+            {
+                EchoPadding(_x3Parameters.GetParameter(X3.ParameterNumber.PADDING_AFTER_LINE_FEED));
+            }
+
             // X.3 3.13 value 4: "insert linefeed after each carriage return in the echo stream to the start-stop mode DTE".
+            // The inserted LF is an LF echoed to the terminal, so 4.16's padding follows it too.
             if (c == '\r' && shown == '\r' && (_x3Parameters.GetParameter(X3.ParameterNumber.LINE_FEED_INSERTION) & 4) != 0)
             {
                 CharacterEcho?.Invoke(this, new CharacterEchoEventArgs('\n', EchoType.Normal));
+                EchoPadding(_x3Parameters.GetParameter(X3.ParameterNumber.PADDING_AFTER_LINE_FEED));
+            }
+        }
+
+        private void EchoPadding(int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                CharacterEcho?.Invoke(this, new CharacterEchoEventArgs('\0', EchoType.Normal));
             }
         }
 

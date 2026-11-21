@@ -267,6 +267,35 @@ namespace RetroIO.Protocols.X25.Tests
         /// to the current value of that parameter"; 3.5.20, the padding character is NUL). Added 2026-11-21.
         /// </summary>
         [Test]
+        public void AnEchoedCarriageReturn_GetsParameter9Padding()
+        {
+            // X.28 4.12: parameter 9 padding "after each character 0/13 (CR) transmitted or echoed". Added 2026-11-21.
+            using Rig rig = new Rig();
+            rig.Host(ChatProtocolService.SetPadMessage);
+            rig.Host(0x02, 9, 2);
+            rig.ClearScreen();
+            rig.Type("a\r");
+
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show("a\r\0\0\n")), "the set message turns on the LF after an echoed CR (13 = 4); parameter 14 is 0");
+        }
+
+        /// <summary>
+        /// X.3 3.13 value 4 puts an LF after the echoed CR; X.28 4.16 pads that LF with parameter 14, after the CR's own
+        /// parameter 9 padding. Added 2026-11-21.
+        /// </summary>
+        [Test]
+        public void TheLinefeedInsertedInTheEcho_GetsParameter14Padding_AfterTheCarriageReturnsPadding()
+        {
+            using Rig rig = new Rig();
+            rig.Host(ChatProtocolService.SetPadMessage);
+            rig.Host(0x02, 9, 1, 13, 4, 14, 3);
+            rig.ClearScreen();
+            rig.Type("a\r");
+
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show("a\r\0\n\0\0\0")));
+        }
+
+        [Test]
         public void LineDelete_WithParameter9_PadsTheFormatEffector()
         {
             using Rig rig = new Rig();

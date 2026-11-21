@@ -492,7 +492,7 @@ namespace RetroIO.Protocols.X25.Modules
         private void HandleLoopbackEcho(TadSession session, string text)
         {
             // Echo back the received text
-            var echoText = ProcessTextForEcho(session, text);
+            var echoText = ProcessTextForEcho(session.X3Parameters, text);
             
             if (!string.IsNullOrEmpty(echoText))
             {
@@ -532,59 +532,64 @@ namespace RetroIO.Protocols.X25.Modules
         }
 
         /// <summary>
-        /// Process text for echo according to X.3 parameters
+        /// The echo of text the terminal typed, with the X.3 parameters of the session applied.
         /// </summary>
-        private string ProcessTextForEcho(TadSession session, string text)
+        /// <param name="x3">
+        /// The session's X.3 parameters.
+        /// </param>
+        /// <param name="text">
+        /// The typed text.
+        /// </param>
+        /// <returns>
+        /// What is sent back to the terminal; empty when parameter 2 turns echo off.
+        /// </returns>
+        /// <remarks>
+        /// Changed 2026-11-21 (BUGS 44). Before, the padding after CR and LF was SPACES and the linefeed was inserted
+        /// for any non-zero parameter 13 and ahead of the CR's padding. Now, by the spec:
+        ///  - X.28 3.5.20: the padding character is NUL.
+        ///  - X.28 4.12: parameter 9 padding characters after each CR echoed.
+        ///  - X.3 3.13: a linefeed goes into the ECHO only when parameter 13 has value 4 (bit 4); values 1 and 2 are
+        ///    about the data sent to the terminal and the data sent to the host.
+        ///  - X.28 4.16: parameter 14 padding characters after each LF echoed, the inserted one too, so the order is
+        ///    CR, its padding, LF, its padding (the same order as X3.ProcessIncomingText).
+        /// </remarks>
+        public static string ProcessTextForEcho(X3Parameters x3, string text)
         {
-            if (session.X3Parameters.GetParameter(X3Parameters.ParameterNumber.ECHO) == 0)
-                return ""; // Echo disabled
-
-            var result = new StringBuilder();
-            
-            foreach (char c in text)
+            ArgumentNullException.ThrowIfNull(x3);
+            ArgumentNullException.ThrowIfNull(text);
+            if (x3.GetParameter(X3Parameters.ParameterNumber.ECHO) == 0)
             {
-                // Apply X.3 parameter processing
+                return string.Empty;
+            }
+
+            int crPadding = x3.GetParameter(X3Parameters.ParameterNumber.PADDING_AFTER_CR);
+            int lfPadding = x3.GetParameter(X3Parameters.ParameterNumber.PADDING_AFTER_LINE_FEED);
+            bool lfAfterEchoedCr = (x3.GetParameter(X3Parameters.ParameterNumber.LINE_FEED_INSERTION) & 4) != 0;
+            byte echoMask = x3.GetParameter(X3Parameters.ParameterNumber.ECHO_MASK);
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
                 if (c == '\r')
                 {
-                    result.Append(c);
-                    
-                    // Check for line feed insertion
-                    if (session.X3Parameters.GetParameter(X3Parameters.ParameterNumber.LINE_FEED_INSERTION) > 0)
+                    result.Append('\r').Append('\0', crPadding);
+                    if (lfAfterEchoedCr)
                     {
-                        result.Append('\n');
-                    }
-                    
-                    // Add padding after CR
-                    var padding = session.X3Parameters.GetParameter(X3Parameters.ParameterNumber.PADDING_AFTER_CR);
-                    if (padding > 0)
-                    {
-                        result.Append(new string(' ', padding));
+                        result.Append('\n').Append('\0', lfPadding);
                     }
                 }
                 else if (c == '\n')
                 {
-                    result.Append(c);
-                    
-                    // Add padding after LF
-                    var padding = session.X3Parameters.GetParameter(X3Parameters.ParameterNumber.PADDING_AFTER_LINE_FEED);
-                    if (padding > 0)
-                    {
-                        result.Append(new string(' ', padding));
-                    }
+                    result.Append('\n').Append('\0', lfPadding);
                 }
-                else
+                else if (ShouldEchoCharacter(c, echoMask))
                 {
-                    // Check echo mask for this character
-                    if (ShouldEchoCharacter(c, session.X3Parameters.GetParameter(X3Parameters.ParameterNumber.ECHO_MASK)))
-                    {
-                        result.Append(c);
-                    }
+                    result.Append(c);
                 }
             }
 
             return result.ToString();
         }
-
         #endregion
 
         #region Private Methods - Message Sending
@@ -835,7 +840,7 @@ namespace RetroIO.Protocols.X25.Modules
         /// <summary>
         /// Check if character should be echoed based on echo mask
         /// </summary>
-        private bool ShouldEchoCharacter(char c, byte echoMask)
+        private static bool ShouldEchoCharacter(char c, byte echoMask)
         {
             // Simplified implementation - full X.3 echo mask is more complex
             if (echoMask == 0) return true; // Echo all characters
