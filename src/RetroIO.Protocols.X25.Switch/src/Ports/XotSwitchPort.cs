@@ -804,6 +804,26 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             }
         }
 
+        /// <summary>
+        /// Places a call out of this port, the body of every PlaceCall overload.
+        /// </summary>
+        /// <remarks>
+        /// A dialling port (Mode Dte) opens a new TCP connection for the call first, outside the lock (RFC 1613
+        /// section 5: one connection for each circuit). A listening port (Mode Dce) cannot dial; its Call Request goes
+        /// on a connection the peer opened and has not used, or is held until the peer opens one (see
+        /// <see cref="HoldPacket"/>; until 2026-11-21 this method waited for it instead).
+        /// </remarks>
+        /// <param name="calledAddress">The X.121 address called.</param>
+        /// <param name="callingAddress">The X.121 address calling.</param>
+        /// <param name="callUserData">The call user data, or null.</param>
+        /// <param name="requested">The window and packet sizes to ask for, or null for the port's own.</param>
+        /// <param name="refusal">
+        /// When the call is not placed (0 returned): the cause to clear the caller with. Out of order #0 when the far
+        /// end cannot be reached (X.25 Table C.3 a) item 30: no peer, or the dial failed); Number busy #71 when it was
+        /// reached but no logical channel is left (item 31). Null when the call was placed. Before 2026-11-20 the
+        /// switch called every failure on a port with a connection up busy (RetroIO BUGS 33).
+        /// </param>
+        /// <returns>The engine's logical channel for the call, or 0 when it was not placed.</returns>
         private ushort PlaceCallWith(string calledAddress, string callingAddress, byte[]? callUserData, X25CallParameters? requested, out X25CallDecision? refusal)
         {
             XotConnection? dialled = null;
@@ -2051,12 +2071,24 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             ushort channel = ChannelOf(packet);
             if (channel != 0 && IsHeld(channel))
             {
-                // Behind its own held Call Request.
+                // This channel's Call Request is still held (see HoldPacket), so this packet has no connection either.
+                // It queues behind the Call Request and goes out with it, in the order the engine wrote them. Only a
+                // Clear Request can come here in practice: until the call is accepted (state p2) the engine sends no
+                // data. Copied, because the span belongs to the engine.
                 _held.Add(new HeldPacket(channel, packet.ToArray(), Environment.TickCount64));
                 return X25SendResult.Sent;
             }
 
             XotConnection? connection = ConnectionFor(channel, isCallRequest, out ushort wire);
+
+            // Hold rather than refuse when all of these are true:
+            //  - no connection was found for it (every connection the peer opened already carries a call);
+            //  - it is a Call Request, the only packet that starts a circuit and so can wait for a new connection;
+            //  - channel 0 is never a call (restart and diagnostic packets use it);
+            //  - the port listens (Mode Dce): a dialling port opens its own connection in PlaceCallWith and never
+            //    gets here without one;
+            //  - the peer is connected at all: with no peer the call is refused at once as Out of order, as before;
+            //  - no dial is pending (a dialled connection is never missing here; this keeps that path untouched).
             if (connection == null && isCallRequest && channel != 0 && _config.Mode == PortMode.Dce && _peerConnected && _pendingDial == null)
             {
                 HoldPacket(channel, packet.ToArray());
