@@ -53,7 +53,13 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when <paramref name="blockSize"/> is not a CP/M block size, or a count is not positive.
         /// </exception>
-        public CpmDiskParameters(int blockSize, int blockCount, int directoryEntries, int extentMask, int reservedTracks)
+        /// <param name="directoryBlocks">
+        /// Blocks from block 0 kept for the directory: the number of set bits, from the top, in AL0 and
+        /// AL1. Leave it 0 to take just the blocks the directory entries fill, as the CP/M 3
+        /// <c>dpb</c> macro does. A BIOS may keep more: the Kaypro II keeps four 1 KB blocks for 64
+        /// entries.
+        /// </param>
+        public CpmDiskParameters(int blockSize, int blockCount, int directoryEntries, int extentMask, int reservedTracks, int directoryBlocks = 0)
         {
             if (blockSize != 1024 && blockSize != 2048 && blockSize != 4096 && blockSize != 8192 && blockSize != 16384)
             {
@@ -70,6 +76,7 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
             DirectoryEntries = directoryEntries;
             ExtentMask = extentMask;
             ReservedTracks = reservedTracks;
+            DirectoryBlocks = directoryBlocks > 0 ? directoryBlocks : (directoryEntries * 32 + blockSize - 1) / blockSize;
         }
 
         /// <summary>
@@ -107,9 +114,60 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         public bool WideBlockNumbers => BlockCount - 1 > 255;
 
         /// <summary>
-        /// Gets the number of blocks the directory takes, counted from block 0.
+        /// Gets the number of blocks kept for the directory, counted from block 0 (the set bits of
+        /// AL0 and AL1). No file is given these blocks.
         /// </summary>
-        public int DirectoryBlocks => (DirectoryEntries * 32 + BlockSize - 1) / BlockSize;
+        public int DirectoryBlocks { get; }
+
+        /// <summary>
+        /// Builds the parameters from the bytes of a Disk Parameter Block as a BIOS or ROM holds it.
+        /// </summary>
+        /// <remarks>
+        /// The 15 DPB bytes (CP/M 2.2 Alteration Guide, section 10): SPT (2 bytes, low first), BSH,
+        /// BLM, EXM, DSM (2), DRM (2), AL0, AL1, CKS (2), OFF (2). BLM must be 2 to the power BSH,
+        /// minus 1, and AL0/AL1 must be set bits from the top with no gap; anything else is not a DPB.
+        /// </remarks>
+        /// <param name="dpb">
+        /// At least 15 bytes, starting at SPT.
+        /// </param>
+        /// <returns>
+        /// The parameters the DPB describes.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the bytes are not a consistent DPB.
+        /// </exception>
+        public static CpmDiskParameters FromDpbBytes(ReadOnlySpan<byte> dpb)
+        {
+            if (dpb.Length < 15)
+            {
+                throw new ArgumentException("A DPB is 15 bytes", nameof(dpb));
+            }
+
+            int bsh = dpb[2];
+            int blm = dpb[3];
+            int exm = dpb[4];
+            int dsm = dpb[5] | (dpb[6] << 8);
+            int drm = dpb[7] | (dpb[8] << 8);
+            int allocation = (dpb[9] << 8) | dpb[10];
+            int off = dpb[13] | (dpb[14] << 8);
+            if (bsh < 3 || bsh > 7 || blm != (1 << bsh) - 1)
+            {
+                throw new ArgumentException("BSH " + bsh + " and BLM " + blm + " do not match", nameof(dpb));
+            }
+
+            int directoryBlocks = 0;
+            while (directoryBlocks < 16 && (allocation & (0x8000 >> directoryBlocks)) != 0)
+            {
+                directoryBlocks++;
+            }
+
+            if (directoryBlocks == 0 || (allocation & ~(0xFFFF << (16 - directoryBlocks)) & 0xFFFF) != 0)
+            {
+                throw new ArgumentException("AL0/AL1 " + allocation.ToString("X4") + " are not directory bits from the top", nameof(dpb));
+            }
+
+            return new CpmDiskParameters(128 << bsh, dsm + 1, drm + 1, exm, off, directoryBlocks);
+        }
 
         /// <summary>
         /// Works out the disk parameters the way the CP/M 3 <c>dpb</c> macro (CPM3.LIB) does.

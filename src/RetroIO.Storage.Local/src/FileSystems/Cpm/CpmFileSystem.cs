@@ -416,7 +416,7 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
             }
 
             byte[] directory = DirectoryBytes(_image, _parameters, _map);
-            MarkEntriesEmpty(directory, user, EncodeName(file.Name));
+            MarkEntriesEmpty(directory, user, OnDiskName(file.Name));
             StoreDirectory(directory);
         }
 
@@ -452,7 +452,7 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
                 throw new IOException("File R/O: " + file.Name + " is read-only.");
             }
 
-            byte[] source = EncodeName(file.Name);
+            byte[] source = OnDiskName(file.Name);
             byte[] directory = DirectoryBytes(_image, _parameters, _map);
             for (int e = 0; e < _parameters.DirectoryEntries; e++)
             {
@@ -560,6 +560,29 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         // characters and a type up to 3, none of them a space or one of: less-than, greater-than,
         // dot, comma, semicolon, colon, equals, question mark, star, square brackets (CP/M 2.2
         // Interface Guide, section 2).
+        // The 11 name bytes of a file already in the directory. No rule is checked: a disk can hold
+        // names CP/M's own command line will not take (a real Kaypro disk has ".PRN"), and such a
+        // file must still be deletable and renamable.
+        private static byte[] OnDiskName(string name)
+        {
+            int dot = name.LastIndexOf('.');
+            string baseName = dot >= 0 ? name.Substring(0, dot) : name;
+            string type = dot >= 0 ? name.Substring(dot + 1) : string.Empty;
+            byte[] encoded = new byte[11];
+            Array.Fill(encoded, (byte)' ');
+            for (int i = 0; i < baseName.Length && i < 8; i++)
+            {
+                encoded[i] = (byte)baseName[i];
+            }
+
+            for (int i = 0; i < type.Length && i < 3; i++)
+            {
+                encoded[8 + i] = (byte)type[i];
+            }
+
+            return encoded;
+        }
+
         private static byte[] EncodeName(string name)
         {
             string upper = name.Trim().ToUpperInvariant();

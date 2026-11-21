@@ -14,8 +14,8 @@ using RetroIO.Storage.Local.FileSystems.Cpm;
 namespace RetroIO.Storage.Local.Drivers
 {
     /// <summary>
-    /// Reads CP/M disks. Today: Commodore 128 CP/M 3 disks on 1541 (D64), 1571 (D71) and 1581 (D81)
-    /// images, and Commodore 64 CP/M 2.2 disks (D64).
+    /// Reads and writes CP/M disks: Commodore 128 CP/M 3 disks on 1541 (D64), 1571 (D71) and 1581
+    /// (D81) images, Commodore 64 CP/M 2.2 disks (D64), and Kaypro II and Kaypro 4 raw images.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -49,6 +49,14 @@ namespace RetroIO.Storage.Local.Drivers
     /// </remarks>
     public sealed class CpmDriver : IFileSystemDriver
     {
+        // Kaypro ROM 81-232, 0165h: Kaypro II SSDD DPB (SPT 40, BSH 3, BLM 7, EXM 0, DSM 194, DRM 63,
+        // AL0 F0h, AL1 0, CKS 16, OFF 1).
+        private static readonly byte[] KayproIiDpb = { 0x28, 0x00, 0x03, 0x07, 0x00, 0xC2, 0x00, 0x3F, 0x00, 0xF0, 0x00, 0x10, 0x00, 0x01, 0x00 };
+
+        // Kaypro ROM 81-232, 0186h: Kaypro 4 DSDD DPB (SPT 40, BSH 4, BLM 15, EXM 1, DSM 196, DRM 63,
+        // AL0 C0h, AL1 0, CKS 16, OFF 1).
+        private static readonly byte[] Kaypro4Dpb = { 0x28, 0x00, 0x04, 0x0F, 0x01, 0xC4, 0x00, 0x3F, 0x00, 0xC0, 0x00, 0x10, 0x00, 0x01, 0x00 };
+
         private CpmFileSystem? _fileSystem;
         private Stream? _stream;
         private bool _readOnly = true;
@@ -134,6 +142,64 @@ namespace RetroIO.Storage.Local.Drivers
         public static bool IsD81Size(long length) => length == 3200 * 256 || length == 3200 * 257;
 
         /// <summary>
+        /// Gives the Kaypro layout for a raw Kaypro disk image of this length, if there is one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The Disk Parameter Blocks are copied byte for byte from the Kaypro ROM 81-232 (Kaypro 4),
+        /// which holds them at 0165h and 0186h; the Kaypro II ROM 81-149c has the same SSDD table at
+        /// 0165h:
+        ///  - Kaypro II, single-sided double density, 40 tracks of 10 sectors of 512 bytes:
+        ///    SPT 40, 1 KB blocks, DSM 194, 64 entries, AL0 F0h (four directory blocks), one
+        ///    reserved track;
+        ///  - Kaypro 4, double-sided: SPT 40, 2 KB blocks, EXM 1, DSM 196, 64 entries, AL0 C0h, one
+        ///    reserved track.
+        /// In both, the data area is the image from the second 5120-byte track on, in order
+        /// (<see cref="LinearCpmRecordMap"/>).
+        /// </para>
+        /// <para>
+        /// A raw image is 204800 bytes (Kaypro II) or 409600 bytes (Kaypro 4). Images found online carry
+        /// a few bytes more after the last track (1024 and 128 have been seen); up to one track more is
+        /// accepted, and those bytes are neither read nor changed.
+        /// </para>
+        /// </remarks>
+        /// <param name="length">
+        /// Image length in bytes.
+        /// </param>
+        /// <param name="parameters">
+        /// The Kaypro disk parameters, or <c>null</c>.
+        /// </param>
+        /// <param name="map">
+        /// The record map, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the length is a Kaypro II or Kaypro 4 raw image.
+        /// </returns>
+        public static bool TryKaypro(long length, out CpmDiskParameters? parameters, out ICpmRecordMap? map)
+        {
+            const int Track = 5120;
+            ReadOnlySpan<byte> dpb;
+            if (length >= 204800 && length < 204800 + Track)
+            {
+                dpb = KayproIiDpb;
+            }
+            else if (length >= 409600 && length < 409600 + Track)
+            {
+                dpb = Kaypro4Dpb;
+            }
+            else
+            {
+                parameters = null;
+                map = null;
+                return false;
+            }
+
+            parameters = CpmDiskParameters.FromDpbBytes(dpb);
+            map = new LinearCpmRecordMap(Track, parameters.BlockCount * (parameters.BlockSize / 128));
+            return true;
+        }
+
+        /// <summary>
         /// Tells whether an image length is a D64 image: 683 sectors of 256 bytes, with or without
         /// one error byte per sector.
         /// </summary>
@@ -197,6 +263,17 @@ namespace RetroIO.Storage.Local.Drivers
             imageStream.ReadExactly(image, 0, image.Length);
             _stream = imageStream;
             _readOnly = readOnly || !imageStream.CanWrite;
+
+            if (TryKaypro(image.Length, out CpmDiskParameters? kaypro, out ICpmRecordMap? kayproMap))
+            {
+                if (!CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, kaypro!, kayproMap!), kaypro!, out _))
+                {
+                    throw new InvalidDataException("Not a Kaypro CP/M disk: track 1 does not hold a CP/M directory.");
+                }
+
+                _fileSystem = new CpmFileSystem(image, kaypro!, kayproMap!);
+                return;
+            }
 
             if (IsD81Size(image.Length))
             {

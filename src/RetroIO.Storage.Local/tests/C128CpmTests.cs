@@ -442,7 +442,7 @@ namespace RetroIO.Storage.Local.Tests
                     "diskdef c128flat\n  seclen 256\n  tracks " + map.RecordCount + "\n  sectrk 1\n  blocksize 2048\n"
                     + "  maxdir 128\n  skew 0\n  boottrk 0\n  os 3\nend\n");
 
-                string output = RunCpmtools(folder,
+                string output = Cpmtools.Run(folder,
                     "cpmcp -f c128flat flat.img 0:BIG.DAT big.out && cpmcp -f c128flat flat.img 3:SMALL.TXT small.out && cpmls -f c128flat flat.img");
                 Assert.That(output, Does.Contain("big.dat").IgnoreCase.And.Contain("turbo.com").IgnoreCase, output);
 
@@ -456,44 +456,6 @@ namespace RetroIO.Storage.Local.Tests
             {
                 Directory.Delete(folder, recursive: true);
             }
-        }
-
-        // Runs a command line in WSL in the given Windows folder; the test is ignored when WSL or
-        // cpmtools is not installed.
-        private static string RunCpmtools(string folder, string commands)
-        {
-            string wslFolder = "/mnt/" + char.ToLowerInvariant(folder[0]) + folder.Substring(2).Replace('\\', '/');
-            System.Diagnostics.ProcessStartInfo start = new System.Diagnostics.ProcessStartInfo("wsl")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            start.ArgumentList.Add("-e");
-            start.ArgumentList.Add("sh");
-            start.ArgumentList.Add("-c");
-            start.ArgumentList.Add("command -v cpmcp >/dev/null || exit 99; cd '" + wslFolder + "' && " + commands);
-            System.Diagnostics.Process? process;
-            try
-            {
-                process = System.Diagnostics.Process.Start(start);
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                Assert.Ignore("WSL is not installed; this check needs cpmtools in WSL.");
-                return string.Empty;
-            }
-
-            using System.Diagnostics.Process running = process!;
-            string output = running.StandardOutput.ReadToEnd() + running.StandardError.ReadToEnd();
-            running.WaitForExit();
-            if (running.ExitCode == 99)
-            {
-                Assert.Ignore("cpmtools is not installed in WSL (apt install cpmtools).");
-            }
-
-            Assert.That(running.ExitCode, Is.EqualTo(0), "cpmtools failed: " + output);
-            return output;
         }
 
         private static byte[] LoadImage(string name)

@@ -13,7 +13,8 @@ using RetroIO.Storage.Local.FileSystems.Cpm;
 namespace RetroIO.Storage.Local.Drivers
 {
     /// <summary>
-    /// Finds CP/M disks for <see cref="CpmDriver"/>. Today: Commodore 128 CP/M disks on D64, D71 and D81 images.
+    /// Finds CP/M disks for <see cref="CpmDriver"/>: Commodore CP/M disks on D64, D71 and D81 images, and
+    /// Kaypro II and Kaypro 4 raw images.
     /// </summary>
     /// <remarks>
     /// A C128 CP/M disk is also a readable CBM DOS disk (it has a Commodore header), so it matches
@@ -28,7 +29,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// </remarks>
     public sealed class CpmDriverProvider : FileSystemDriverProviderBase
     {
-        private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81" };
+        private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81", ".img" };
 
         /// <summary>
         /// Gets the filesystem type name, "CPM".
@@ -43,7 +44,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// <summary>
         /// Gets a short description of the format.
         /// </summary>
-        public override string Description => "CP/M disk (Commodore 128 CP/M 3 on 1541, 1571 and 1581 images; Commodore 64 CP/M 2.2)";
+        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 raw images)";
 
         /// <summary>
         /// Gets the number of first bytes detection needs: 12800, which holds the C64 CP/M directory
@@ -58,12 +59,20 @@ namespace RetroIO.Storage.Local.Drivers
         /// Size and first bytes of the image.
         /// </param>
         /// <returns>
-        /// 0.95 for a D64 or D71 sized image whose track 1 sector 0 starts with "CBM", or a D81 sized
+        /// 0.95 for a Kaypro II or Kaypro 4 sized raw image whose second track is a CP/M directory with
+        /// files, a D64 or D71 sized image whose track 1 sector 0 starts with "CBM", or a D81 sized
         /// image whose first 4 KB is a CP/M directory with files, or a D64 sized image without the mark
         /// whose track 3 holds a C64 CP/M directory with files; otherwise 0.
         /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
+            if (CpmDriver.TryKaypro(hints.FileSize, out CpmDiskParameters? kaypro, out ICpmRecordMap? kayproMap))
+            {
+                // The Kaypro directory is the 2 KB after the first 5120-byte track.
+                byte[] kayproDirectory = CpmFileSystem.DirectoryBytes(hints.HeaderBytes, kaypro!, kayproMap!);
+                return CpmFileSystem.LooksLikeDirectory(kayproDirectory, kaypro!, out int kayproFiles) && kayproFiles > 0 ? 0.95f : 0.0f;
+            }
+
             if (CpmDriver.IsD81Size(hints.FileSize))
             {
                 CpmDiskParameters p1581 = CpmDriver.C1581Parameters();
