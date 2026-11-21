@@ -730,7 +730,8 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </para>
         /// <para>
         /// Invitation to clear and indication of break are not answered here (3.2, 3.3); the caller acts on them.
-        /// Reselection (codes 0111, 1000) is not implemented by this PAD; it is returned as null and the caller logs it.
+        /// Reselection (codes 0111, 1000) is not implemented by this PAD, so it is invalid here (3.6 Note 2) and answered
+        /// with an error PAD message, unrecognized message code (Table 4 b).
         /// </para>
         /// </remarks>
         public byte[]? AnswerHostPadMessage(byte[] data, X3 x3, Action initialProfile)
@@ -756,9 +757,16 @@ namespace RetroIO.Protocols.X25.Protocols
 
                 case (byte)X29MessageType.InvitationToClear:
                 case (byte)X29MessageType.IndicationOfBreak:
+                    return null;
+
                 case 0x07: // reselection
                 case 0x08: // reselection with TOA/NPI
-                    return null;
+                    // X.29 3.6 Note 2: "PADs which do not implement this feature will consider reselection and
+                    // reselection with TOA/NPI PAD messages as invalid", and 3.5.2 a) answers an invalid message code
+                    // with an error PAD message: Table 4 case b (00000010), octet 3 the code. Not case g (unauthorized
+                    // reselection): that is for a PAD that does reselect and refuses this one (3.6 a to c). Until
+                    // 2026-11-21 nothing was sent (RetroIO BUGS 46).
+                    return new byte[] { (byte)X29MessageType.Error, ErrorType.UnrecognizedMessageCode, code };
 
                 default:
                     // 3.5.2 a: an unrecognizable message code.
