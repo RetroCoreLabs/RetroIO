@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2), C128 first: disassemble FR$trk$sect and FR$check$CBM from the C128 ROM.
+Next: CP/M (item 2): write the CP/M reader with the C128 1571 layout, read-only, tested on TurboPascal.d71.
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -60,11 +60,16 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
    - **Found so far**: the C128 CP/M 3 BIOS disk module source (CXDISK, 15 Apr 86) lists the
      C64 CP/M 2.2, C128 single-sided, C128 double-sided (1571) and 1581 layouts, with no skew on the
      Commodore formats, and recognises a C128 CP/M disk by "CBM" in the first bytes of track 1
-     sector 0. The `dpb` macro (CPM3.LIB) and the constants (CXEQU) are read. The routine that turns a
-     CP/M 256-byte record into a Commodore track and sector (`FR$trk$sect`, offset 50h) and the
-     disk check (`FR$check$CBM`, 52h) are in the C128 ROM, not in the published source: the next
-     step is to disassemble them from the C128 ROMs, which RetroCore's ROM folder has (Z80 BIOS ROM,
-     kernal, BASIC; which one holds these two routines is not yet known). Measured on real
+     sector 0. The `dpb` macro (CPM3.LIB) and the constants (CXEQU) are read. The routine that turns a CP/M
+     256-byte record into a Commodore track and sector is in the C128 Z80 ROM (4 KB): RST 5 jumps
+     through a table at 0100h; entry 50h = 03E3h (track and sector), 52h = 046Bh (the "CBM" check,
+     returns the sector's last byte, FF = double-sided). 03E3h, disassembled: record 680 and up is
+     side 2 (subtract 680, track + 35); add 2 (track 1 positions 0 and 1 are never CP/M); zones of
+     355+2 records at 21 sectors (tracks 1-17), then +1 (track 18 position 0 = the CBM header is
+     skipped, the rest of track 18 IS CP/M), 133 at 19 (18-24), 108 at 18 (25-30), the rest at 17;
+     the position in the track goes through a skew table at 0FB5h (21, 19, 18, 17 entries, steps of
+     5). Checked by replaying it on TurboPascal.d71: the directory and TURBO.MSG read back right.
+     Two directory entries there have blank names; look at them when writing the reader. Measured on real
      images: 1541/1571 C128 CP/M disks have "CBM" at track 1 sector 0 and its last byte FF on a
      double-sided disk; the directory starts on track 1 sector 10 and goes 10, 15, 20, 4 (steps of
      5 around the track); 1581 disks have no "CBM" mark and the directory at track 1 sector 0.
@@ -72,5 +77,4 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      MBASIC, WordStar 4, CP/M 3 system disks, C64 CP/M 2.2, utilities; five Kaypro disks.
      cpmtools 2.20 is installed in WSL as the check tool; its built-in format list has no Commodore
      entries.
-   - **Still needed before code**: the C128 ROM routines above; Amstrad images (approved, not yet
-     downloaded).
+   - **Still needed**: Amstrad images (approved, not yet downloaded).
