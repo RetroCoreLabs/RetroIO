@@ -78,7 +78,7 @@ namespace RetroIO.Protocols.X25.Tests
         /// <returns>
         /// The port of line A.
         /// </returns>
-        private int Start()
+        private int Start(bool openClient = true)
         {
             int portA = FreePort();
             _farListener = new TcpListener(IPAddress.Loopback, 0);
@@ -118,6 +118,10 @@ namespace RetroIO.Protocols.X25.Tests
 
             _runtime = new ProtocolRuntime(NullLogger.Instance, config);
             Assert.That(_runtime.StartTransportInterfaces(), Is.True, "both lines should start");
+            if (!openClient)
+            {
+                return portA;
+            }
 
             _client = new X25Client { ServiceName = "caller" };
             _client.Open(new X25ClientConfig
@@ -456,6 +460,71 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_client.Call(FarAddress), Is.Not.Null);
             Assert.That(cleared.Wait(15000), Is.True, "the caller is told when the far line cannot be dialled (port " + farPort + " closed)");
             Assert.That(clearCause, Is.EqualTo(0x09), "X.25 Table 5-7: out of order");
+        }
+
+        /// <summary>
+        /// When the far end's window is full and data waits in line B's queue, the caller is told this end is busy
+        /// (Receive Not Ready, X.25 4.4.1.3), and told it may send again (Receive Ready) when the far end acknowledges
+        /// and the queue is empty.
+        /// </summary>
+        /// <remarks>
+        /// Added 2026-11-21: until then no test checked the hold-back of the join (RetroIO BUGS.md). The caller is raw
+        /// XOT here so the test sees the Receive Not Ready itself. Both lines use the default window of 2 (X.25 7.1.2),
+        /// so three data packets from the caller leave one in line B's queue.
+        /// </remarks>
+        [Test]
+        public void AFullFarWindow_HoldsTheCallerBack_UntilTheFarEndAcknowledges()
+        {
+            int portA = Start(openClient: false);
+            using TcpClient caller = new TcpClient();
+            caller.Connect(IPAddress.Loopback, portA);
+            caller.ReceiveTimeout = 5000;
+            NetworkStream near = caller.GetStream();
+
+            // Call Request on channel 1: GFI 1 (modulo 8), lengths calling 8 / called 5, the BCD digits of 55512 and
+            // 23430001 run together (X.25 5.2.1), no facilities.
+            WriteXot(near, new byte[] { 0x10, 0x01, 0x0B, 0x85, 0x55, 0x51, 0x22, 0x34, 0x30, 0x00, 0x10, 0x00 });
+            byte[] call = AcceptFarCall();
+            NetworkStream far = _far!.GetStream();
+            WriteXot(far, new byte[] { call[0], call[1], 0x0F });
+            Assert.That(ReadUntil(near, t => t == 0x0F)[2], Is.EqualTo(0x0F), "the caller is connected");
+
+            // Three data packets, P(S) 0, 1, 2, P(R) 0.
+            for (int ps = 0; ps < 3; ps++)
+            {
+                WriteXot(near, new byte[] { 0x10, 0x01, (byte)(ps << 1), (byte)('A' + ps) });
+            }
+
+            Assert.That(ReadUntil(far, IsData)[3], Is.EqualTo((byte)'A'));
+            Assert.That(ReadUntil(far, IsData)[3], Is.EqualTo((byte)'B'));
+            _far!.ReceiveTimeout = 1000;
+            bool thirdTooEarly = true;
+            try
+            {
+                ReadUntil(far, IsData);
+            }
+            catch (System.IO.IOException)
+            {
+                thirdTooEarly = false;
+            }
+
+            _far.ReceiveTimeout = 5000;
+            Assert.That(thirdTooEarly, Is.False, "line B sent a third packet into a window of 2");
+            // Receive Not Ready is 0x05 with P(R) in bits 8 to 6 (X.25 5.4.2), so only bits 5 to 1 are compared.
+            Assert.That(ReadUntil(near, t => (t & 0x1F) == 0x05)[2] & 0x1F, Is.EqualTo(0x05), "the caller gets Receive Not Ready while data waits for the far window");
+
+            // The far end has taken two packets and acknowledges them: Receive Ready, P(R) 2.
+            WriteXot(far, new byte[] { call[0], call[1], 0x41 });
+            Assert.That(ReadUntil(far, IsData)[3], Is.EqualTo((byte)'C'), "the third packet goes out when the window opens");
+            WriteXot(far, new byte[] { call[0], call[1], 0x61 });
+
+            byte[] ready = ReadXot(near);
+            for (int i = 0; i < 10 && (ready[2] & 0x1F) != 0x01; i++)
+            {
+                ready = ReadXot(near);
+            }
+
+            Assert.That(ready[2] & 0x1F, Is.EqualTo(0x01), "the caller gets Receive Ready once the queue is empty");
         }
     }
 }
