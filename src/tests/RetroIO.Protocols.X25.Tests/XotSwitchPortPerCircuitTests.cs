@@ -228,6 +228,80 @@ namespace RetroIO.Protocols.X25.Tests
         /// Two peers on two connections that both call on channel 5 are two circuits, and each keeps
         /// its own data.
         /// </summary>
+        /// <summary>
+        /// A listening port whose only connection already carries a call: the peer is connected, but has no fresh
+        /// connection for a new call.
+        /// </summary>
+        private static XotSwitchPort DceWithNoFreshConnection(out RawPeer busy)
+        {
+            XotSwitchPort dce = NewDce();
+            dce.IncomingCall += (port, lci, called, calling, cud) => port.AcceptCall(lci);
+            busy = new RawPeer(dce.BoundPort);
+            busy.Send(X25PacketBuilder.CreateCallRequest(5, Called, Calling));
+            Assert.That(busy.WaitForPacket(0x0F, out _), Is.True, "the first call takes the only connection");
+            return dce;
+        }
+
+        /// <summary>
+        /// A call out of a listening port that has no fresh connection is HELD, and the thread placing it returns at
+        /// once; the Call Request goes on the next connection the peer opens. x25emu does the same (tools/x25switch.c,
+        /// conn_for_tx, the held queue). Before 2026-11-21 the placing thread - another port's reader - waited up to
+        /// five seconds inside PlaceCall, and every circuit on that other port stood still meanwhile (RetroX25 PLAN
+        /// H3-8).
+        /// </summary>
+        [Test]
+        public void ACallWithNoFreshConnection_IsHeldWithoutBlocking_AndGoesOnTheNextConnection()
+        {
+            using XotSwitchPort dce = DceWithNoFreshConnection(out RawPeer busy);
+            using (busy)
+            {
+                long start = Environment.TickCount64;
+                ushort lci = dce.PlaceCall(Called, Calling, null);
+                long took = Environment.TickCount64 - start;
+
+                Assert.That(lci, Is.Not.EqualTo((ushort)0), "the call is placed (held), not refused");
+                Assert.That(took, Is.LessThan(1000), "PlaceCall must not wait for a connection; it took " + took + " ms");
+
+                using RawPeer fresh = new RawPeer(dce.BoundPort);
+                Assert.That(fresh.WaitForPacket(0x0B, out _), Is.True, "the held Call Request goes on the new connection: " + fresh.Dump());
+                Thread.Sleep(200);
+                Assert.That(busy.Dump().Contains("-0B-"), Is.False, "the busy connection gets no second call: " + busy.Dump());
+            }
+        }
+
+        /// <summary>
+        /// A held call for which no connection comes is cleared after five seconds with Number busy #71 (X.25 Table
+        /// C.3 a) item 31, no logical channel available), as x25emu clears it (SW_UNDELIVERABLE_MS).
+        /// </summary>
+        [Test]
+        public void AHeldCall_WithNoConnectionComing_IsClearedNumberBusyAfterFiveSeconds()
+        {
+            using XotSwitchPort dce = DceWithNoFreshConnection(out RawPeer busy);
+            using (busy)
+            {
+                byte cause = 0xFF;
+                byte diag = 0xFF;
+                ushort clearedLci = 0;
+                long clearedAt = 0;
+                dce.CallCleared += (port, l, c, d) =>
+                {
+                    clearedLci = l;
+                    cause = c;
+                    diag = d;
+                    clearedAt = Environment.TickCount64;
+                };
+
+                long start = Environment.TickCount64;
+                ushort lci = dce.PlaceCall(Called, Calling, null);
+                Assert.That(lci, Is.Not.EqualTo((ushort)0));
+                Assert.That(WaitFor(() => clearedLci == lci, 9000), Is.True, "the held call is cleared");
+                Assert.That(cause, Is.EqualTo(0x01), "Number busy");
+                Assert.That(diag, Is.EqualTo(71), "#71, no logical channel available");
+                Assert.That(clearedAt - start, Is.GreaterThanOrEqualTo(4500), "held for the full five seconds");
+                Assert.That(busy.Dump().Contains("-0B-"), Is.False, "nothing was sent on the busy connection");
+            }
+        }
+
         [Test]
         public void TwoConnections_UsingTheSameChannelNumber_AreTwoCircuits()
         {
@@ -688,16 +762,20 @@ namespace RetroIO.Protocols.X25.Tests
             busy.Send(X25PacketBuilder.CreateCallRequest(5, Called, Calling));
             Assert.That(busy.WaitForPacket(0x0F, out _), Is.True, "the peer's call was not accepted: " + busy.Dump());
 
-            ushort refused = dce.PlaceCall(Called, Calling, null);
-            Assert.That(refused, Is.EqualTo(0), "the port placed a second call on a connection that carries one");
+            // With no fresh connection the call is held (see ACallWithNoFreshConnection_IsHeldWithoutBlocking_...),
+            // never put on the busy one. Before 2026-11-21 it was refused here after a five-second wait.
+            ushort held = dce.PlaceCall(Called, Calling, null);
+            Assert.That(held, Is.Not.EqualTo(0), "the call is held, not refused");
             Thread.Sleep(200);
-            Assert.That(busy.WaitForPacket(0x0B, out _), Is.False, "a Call Request went out on the busy connection: " + busy.Dump());
+
+            // Read the dump, not WaitForPacket: that waits five seconds for a packet that must not come, and the held
+            // call would be cleared meanwhile.
+            Assert.That(busy.Dump().Contains("-0B-"), Is.False, "a Call Request went out on the busy connection: " + busy.Dump());
 
             using RawPeer spare = new RawPeer(dce.BoundPort);
             Assert.That(WaitFor(() => dce.ConnectionCount == 2), Is.True, "the spare never reached the port");
-            ushort placed = dce.PlaceCall(Called, Calling, null);
-            Assert.That(placed, Is.Not.EqualTo(0), "the port did not use the fresh connection");
-            Assert.That(spare.WaitForPacket(0x0B, out _), Is.True, "the Call Request did not go out on the fresh connection: " + spare.Dump());
+            Assert.That(spare.WaitForPacket(0x0B, out _), Is.True, "the held Call Request did not go out on the fresh connection: " + spare.Dump());
+            Assert.That(busy.Dump().Contains("-0B-"), Is.False, "a Call Request went out on the busy connection: " + busy.Dump());
         }
 
         private static string Dump(List<byte[]> packets)
