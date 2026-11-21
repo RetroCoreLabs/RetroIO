@@ -71,7 +71,12 @@ namespace RetroIO.Storage.Local.Tests
 
             // Assert
             Assert.That(driver, Is.Not.Null, "Driver should be detected");
-            Assert.That(driver!.FileSystemType, Is.EqualTo("D64"), "Should detect D64 format");
+            // D64, D71 and D81 are all CBM DOS; one driver reads the three. What tells them apart is
+            // the shape of the disk, so that is what is checked.
+            using FileStream stream = File.OpenRead(imagePath);
+            driver!.Mount(stream, readOnly: true);
+            Assert.That(driver.FileSystemType, Is.EqualTo("CBM-DOS"), "a D64 is a CBM DOS disk");
+            Assert.That(driver.GetBlockDeviceInfo()!.TrackCount, Is.EqualTo(35), "a D64 has 35 tracks");
         }
 
         [Test]
@@ -209,7 +214,12 @@ namespace RetroIO.Storage.Local.Tests
 
             // Assert
             Assert.That(driver, Is.Not.Null, "Driver should be detected");
-            Assert.That(driver!.FileSystemType, Is.EqualTo("D71"), "Should detect D71 format");
+            // D64, D71 and D81 are all CBM DOS; one driver reads the three. What tells them apart is
+            // the shape of the disk, so that is what is checked.
+            using FileStream stream = File.OpenRead(imagePath);
+            driver!.Mount(stream, readOnly: true);
+            Assert.That(driver.FileSystemType, Is.EqualTo("CBM-DOS"), "a D71 is a CBM DOS disk");
+            Assert.That(driver.GetBlockDeviceInfo()!.TrackCount, Is.EqualTo(70), "a D71 has 70 tracks");
         }
 
         [Test]
@@ -248,13 +258,23 @@ namespace RetroIO.Storage.Local.Tests
             }
         }
 
+        /// <summary>
+        /// The D71 test image is a C128 CP/M disk (its header says "CP/M PLUS"), not a CBM DOS file disk.
+        /// </summary>
+        /// <remarks>
+        /// CP/M keeps its own data where CBM DOS expects the directory (track 18 sector 1). Read as CBM
+        /// DOS, that sector's first two bytes - the link to the next directory sector - say track 41
+        /// sector 209, and no 1571 track has more than 21 sectors. A real drive reports this as
+        /// "66, ILLEGAL TRACK OR SECTOR"; VICE's c1541 stops on the same link. Listing it must give that
+        /// error, naming the link, and not an argument error from deep inside the geometry code.
+        /// A listing test with real files needs an ordinary CBM DOS D71 image, which the test-image
+        /// collection does not have yet.
+        /// </remarks>
         [Test]
         [Category("D71")]
-        public void D71_ListDirectory_ValidImage_ReturnsEntries()
+        public void D71_CpmDisk_ListDirectory_ReportsIllegalTrackOrSector()
         {
-            // Arrange
             string imagePath = Path.Combine(TEST_IMAGE_PATH, D71_TEST_FILE);
-
             if (!File.Exists(imagePath))
             {
                 Assert.Ignore($"Test image not found: {imagePath}");
@@ -262,41 +282,14 @@ namespace RetroIO.Storage.Local.Tests
             }
 
             IFileSystemDriver? driver = _factory!.Detect(imagePath);
-            if (driver == null)
-            {
-                Assert.Fail("Failed to detect D71 driver");
-                return;
-            }
+            Assert.That(driver, Is.Not.Null, "Driver should be detected");
 
             using FileStream stream = File.OpenRead(imagePath);
-            driver.Mount(stream, readOnly: true);
+            driver!.Mount(stream, readOnly: true);
 
-            // Act & Assert
-            try
-            {
-                DirectoryEntry[] entries = driver.ListDirectory("/");
-                Assert.That(entries, Is.Not.Null, "Directory entries should not be null");
-                Console.WriteLine($"D71 Directory contains {entries.Length} entries:");
-
-                for (int i = 0; i < entries.Length && i < 10; i++)
-                {
-                    DirectoryEntry entry = entries[i];
-                    // Display blocks (Commodore standard) instead of bytes
-                    ushort blocks = entry.Metadata.GetProperty<ushort>("Blocks");
-                    Console.WriteLine($"  [{blocks,3}] \"{entry.Name}\" - {entry.Metadata.FileType}");
-                }
-
-                if (entries.Length > 10)
-                {
-                    Console.WriteLine($"  ... and {entries.Length - 10} more files");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"D71 ListDirectory Exception: {ex.GetType().Name}");
-                Console.WriteLine($"  Message: {ex.Message}");
-                throw;
-            }
+            InvalidDataException error = Assert.Throws<InvalidDataException>(() => driver.ListDirectory("/"))!;
+            Assert.That(error.Message, Does.StartWith("66, ILLEGAL TRACK OR SECTOR"));
+            Assert.That(error.Message, Does.Contain("track 41 sector 209"));
         }
 
         #endregion
@@ -321,7 +314,12 @@ namespace RetroIO.Storage.Local.Tests
 
             // Assert
             Assert.That(driver, Is.Not.Null, "Driver should be detected");
-            Assert.That(driver!.FileSystemType, Is.EqualTo("D81"), "Should detect D81 format");
+            // D64, D71 and D81 are all CBM DOS; one driver reads the three. What tells them apart is
+            // the shape of the disk, so that is what is checked.
+            using FileStream stream = File.OpenRead(imagePath);
+            driver!.Mount(stream, readOnly: true);
+            Assert.That(driver.FileSystemType, Is.EqualTo("CBM-DOS"), "a D81 is a CBM DOS disk");
+            Assert.That(driver.GetBlockDeviceInfo()!.TrackCount, Is.EqualTo(80), "a D81 has 80 tracks");
         }
 
         [Test]

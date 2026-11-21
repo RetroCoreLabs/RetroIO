@@ -83,9 +83,8 @@ Found by a read-only review on 2026-10-15. Each one is a real defect, not a plan
 - **Many real-image tests need images that are not in git.** Apart from the downloaded test set, they
   find their images through environment variables (see `src/eng/test-env.example.bat`) and skip when
   those are not set, so FFS and V7 have no active real-image test on GitHub.
-- **The GitHub test run is red.** Four `CommodoreDriverTests` fail (they ran for the first time on
-  2026-11-20), and `GeneratedDocsAreCurrentTests` reports that `tad-wire.md` is out of date. The
-  Commodore failures are in `src/BUGS.md`.
+- **The GitHub test run is red.** `GeneratedDocsAreCurrentTests` reports that `tad-wire.md` is out of
+  date. Two tests also fail now and then in a full run; both are listed in `src/BUGS.md`.
 - **DragonDOS is unchecked.** Its free-block count and extent handling were not compared with a real
   disk.
 
