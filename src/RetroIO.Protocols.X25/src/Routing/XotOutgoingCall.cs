@@ -123,6 +123,23 @@ namespace RetroIO.Protocols.X25.Transport
         public event Action<XotOutgoingCall, byte, byte>? CallEnded;
 
         /// <summary>
+        /// The packet layer that carries the call.
+        /// </summary>
+        /// <remarks>
+        /// Added 2026-11-21 for the runtime's call join, which drives the call the way it drives a call on one of its own
+        /// lines: it subscribes to the layer's events before <see cref="Place"/> (so nothing that arrives right after
+        /// the Call Connected is missed) and calls the layer's methods. Every call on the layer must hold
+        /// <see cref="SyncRoot"/>, as this class does; the layer raises its events while that lock is held, on the
+        /// connection's read thread or the clock's thread.
+        /// </remarks>
+        public X25Layer Layer => _layer;
+
+        /// <summary>
+        /// The lock every use of <see cref="Layer"/> holds.
+        /// </summary>
+        public object SyncRoot => _sync;
+
+        /// <summary>
         /// The connection the call is on.
         /// </summary>
         public XotClientCircuit Circuit => _circuit;

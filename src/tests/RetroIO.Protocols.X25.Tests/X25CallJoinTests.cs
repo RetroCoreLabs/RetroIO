@@ -16,6 +16,7 @@ using NUnit.Framework;
 using RetroIO.Protocols.X25.Client;
 using RetroIO.Protocols.X25.Routing;
 using RetroIO.Protocols.X25.Runtime;
+using RetroIO.Protocols.X25.Transport;
 
 namespace RetroIO.Protocols.X25.Tests
 {
@@ -460,6 +461,169 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_client.Call(FarAddress), Is.Not.Null);
             Assert.That(cleared.Wait(15000), Is.True, "the caller is told when the far line cannot be dialled (port " + farPort + " closed)");
             Assert.That(clearCause, Is.EqualTo(0x09), "X.25 Table 5-7: out of order");
+        }
+
+        /// <summary>
+        /// Starts the runtime with line A only, and a route that sends calls to 555 on a NEW XOT connection to the far
+        /// listener for each call (an XOT_Client route, RFC 1613 section 5).
+        /// </summary>
+        private XotClientTransport StartWithXotClientRoute()
+        {
+            int portA = FreePort();
+            _farListener = new TcpListener(IPAddress.Loopback, 0);
+            _farListener.Start();
+            int farPort = ((IPEndPoint)_farListener.LocalEndpoint).Port;
+
+            RuntimeConfig config = new RuntimeConfig();
+            config.X25.LocalMachineId = LocalAddress;
+            config.Routing.Enabled = true;
+            config.Routing.XotInterfaces.Add(new XotInterfaceConfig
+            {
+                Name = "A",
+                Enabled = true,
+                Mode = XotMode.Server,
+                LocalPort = portA,
+                RemoteMachineId = "23430001",
+            });
+
+            _runtime = new ProtocolRuntime(NullLogger.Instance, config);
+            Assert.That(_runtime.StartTransportInterfaces(), Is.True, "line A should start");
+            XotClientTransport dialler = new XotClientTransport(NullLogger.Instance, new XotClientConfig { Name = "xotc", ConnectTimeout = 2000 });
+            Assert.That(dialler.Start(), Is.True);
+            _runtime.Router.RegisterInterface(dialler);
+            _runtime.Router.AddRoute(new X25Route
+            {
+                Name = "ToFarByXot",
+                X121AddressPattern = "^555",
+                Type = RetroIO.Protocols.X25.Transport.RouteType.XOT_Client,
+                Destination = "127.0.0.1:" + farPort,
+                Direction = RetroIO.Protocols.X25.Transport.RouteDirection.Bidirectional,
+            });
+
+            _client = new X25Client { ServiceName = "caller" };
+            _client.Open(new X25ClientConfig
+            {
+                Host = "127.0.0.1",
+                Port = (ushort)portA,
+                LocalAddress = "23430001",
+                Framing = X25ClientFraming.Xot,
+            }, NullLogger.Instance);
+            return dialler;
+        }
+
+        /// <summary>
+        /// A call whose route opens a new XOT connection for each call is joined like a call to a line: it is placed
+        /// on its own connection, the caller is connected when the far end answers, data crosses both ways, and a clear
+        /// from the far end clears the caller.
+        /// </summary>
+        /// <remarks>
+        /// Added 2026-11-21. Until then such a call was refused as out of order (RetroIO BUGS.md, open entry).
+        /// </remarks>
+        [Test]
+        public void ACallRoutedToANewXotConnection_IsJoined_AndCarriesDataBothWays()
+        {
+            XotClientTransport dialler = StartWithXotClientRoute();
+            try
+            {
+                ManualResetEventSlim connected = new ManualResetEventSlim(false);
+                ManualResetEventSlim gotData = new ManualResetEventSlim(false);
+                ManualResetEventSlim cleared = new ManualResetEventSlim(false);
+                List<string> received = new List<string>();
+                X25Vc? callerVc = null;
+                _client!.SetOnConnected((c, vc) => { callerVc = vc; connected.Set(); });
+                _client.SetOnData((c, vc, data, length, q, m, d) =>
+                {
+                    lock (received)
+                    {
+                        received.Add(Encoding.ASCII.GetString(data, 0, length));
+                    }
+
+                    gotData.Set();
+                });
+                _client.SetOnClear((c, vc, cause, diag) => cleared.Set());
+
+                Assert.That(_client.Call(FarAddress), Is.Not.Null);
+                byte[] call = AcceptFarCall();
+                NetworkStream far = _far!.GetStream();
+                Assert.That(connected.IsSet, Is.False, "the caller is not connected before the far end answers");
+                WriteXot(far, new byte[] { call[0], call[1], 0x0F });
+                Assert.That(connected.Wait(5000), Is.True, "the far end's Call Connected connects the caller");
+
+                Assert.That(_client.SendText(callerVc!, "HELLO"), Is.True);
+                byte[] data = ReadUntil(far, IsData);
+                Assert.That(Encoding.ASCII.GetString(data, 3, data.Length - 3), Is.EqualTo("HELLO"));
+
+                byte[] world = Encoding.ASCII.GetBytes("WORLD");
+                byte[] packet = new byte[3 + world.Length];
+                packet[0] = call[0];
+                packet[1] = call[1];
+                packet[2] = 0x20;
+                Array.Copy(world, 0, packet, 3, world.Length);
+                WriteXot(far, packet);
+                Assert.That(gotData.Wait(5000), Is.True, "the far end's data reaches the caller");
+                lock (received)
+                {
+                    Assert.That(string.Concat(received), Is.EqualTo("WORLD"));
+                }
+
+                WriteXot(far, new byte[] { call[0], call[1], 0x13, 0x00, 0x00 });
+                Assert.That(cleared.Wait(5000), Is.True, "a clear from the far end clears the caller");
+            }
+            finally
+            {
+                dialler.Stop();
+            }
+        }
+
+        /// <summary>
+        /// The far end refuses a call on an XOT_Client route: the caller is cleared with the far end's cause and
+        /// diagnostic.
+        /// </summary>
+        [Test]
+        public void ACallOnANewXotConnection_TheFarEndRefuses_ClearsTheCallerWithItsCause()
+        {
+            XotClientTransport dialler = StartWithXotClientRoute();
+            try
+            {
+                ManualResetEventSlim cleared = new ManualResetEventSlim(false);
+                int clearCause = -1;
+                int clearDiagnostic = -1;
+                _client!.SetOnClear((c, vc, cause, diag) => { clearCause = cause; clearDiagnostic = diag; cleared.Set(); });
+
+                Assert.That(_client.Call(FarAddress), Is.Not.Null);
+                byte[] call = AcceptFarCall();
+                WriteXot(_far!.GetStream(), new byte[] { call[0], call[1], 0x13, 0x00, 0x41 });
+                Assert.That(cleared.Wait(5000), Is.True, "the caller is told the call is refused");
+                Assert.That(clearCause, Is.EqualTo(0x00), "X.25 Table 5-7: DTE originated");
+                Assert.That(clearDiagnostic, Is.EqualTo(0x41), "the far end's diagnostic goes through unchanged");
+            }
+            finally
+            {
+                dialler.Stop();
+            }
+        }
+
+        /// <summary>
+        /// The caller clears while the call on the XOT_Client route still waits for its answer: the far call is
+        /// cleared at once, not left until T21 (200 s) runs out.
+        /// </summary>
+        [Test]
+        public void TheCallerClearingBeforeTheAnswer_ClearsTheCallOnTheNewXotConnection()
+        {
+            XotClientTransport dialler = StartWithXotClientRoute();
+            try
+            {
+                X25Vc? vc = _client!.Call(FarAddress);
+                Assert.That(vc, Is.Not.Null);
+                AcceptFarCall();
+                _client.Clear(vc!, 0x00, 0x00);
+                byte[] clear = ReadUntil(_far!.GetStream(), t => t == 0x13);
+                Assert.That(clear[2], Is.EqualTo(0x13), "the far call is cleared when the caller gives up");
+            }
+            finally
+            {
+                dialler.Stop();
+            }
         }
 
         /// <summary>

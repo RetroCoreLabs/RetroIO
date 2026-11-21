@@ -476,16 +476,22 @@ namespace RetroIO.Protocols.X25.Transport
         /// <param name="callRequest">
         /// The call.
         /// </param>
+        /// <param name="beforeXotPlace">
+        /// For a port that is an XOT_Client route: called with the new <see cref="XotOutgoingCall"/> after its connection
+        /// is open and before its Call Request is sent, so the caller can take its packet layer's events from the
+        /// first one (added 2026-11-21 for the call join). Not called for a registered line. May be null.
+        /// </param>
         /// <returns>
-        /// What became of the call, as for <see cref="PlaceOutboundCall"/>.
+        /// What became of the call, as for <see cref="PlaceOutboundCall"/>. On an XOT_Client route this blocks until
+        /// the answer, up to T21.
         /// </returns>
-        public X25CallOutcome PlaceCallOnPort(int port, X25CallRequest callRequest)
+        public X25CallOutcome PlaceCallOnPort(int port, X25CallRequest callRequest, Action<XotOutgoingCall>? beforeXotPlace = null)
         {
             ArgumentNullException.ThrowIfNull(callRequest);
-            return TryPlace(port, callRequest);
+            return TryPlace(port, callRequest, beforeXotPlace);
         }
 
-        private X25CallOutcome TryPlace(int port, X25CallRequest callRequest)
+        private X25CallOutcome TryPlace(int port, X25CallRequest callRequest, Action<XotOutgoingCall>? beforeXotPlace = null)
         {
             string name = _table.GetPortName(port);
             try
@@ -511,7 +517,7 @@ namespace RetroIO.Protocols.X25.Transport
 
                 if (dynamic)
                 {
-                    return PlaceXotCall(name, callRequest);
+                    return PlaceXotCall(name, callRequest, beforeXotPlace);
                 }
 
                 _logger.LogWarning("Transport interface not found for destination: {Destination}", name);
@@ -602,15 +608,22 @@ namespace RetroIO.Protocols.X25.Transport
             // A route that points at ANOTHER line of this node: the call is joined to a call placed on that line
             // (decided by Ronny 2026-11-21, RetroIO BUGS 32; the runtime does the joining). Until 2026-11-21 such a route
             // was treated like a local one and the call went to the local service lookup. A route that points back at
-            // the line the call came in on is still local: sending the call back where it came from is not a join. A
-            // line that is not registered here (a dynamic XOT_Client route) cannot carry a joined call yet: refused as
-            // out of order (BUGS.md, open entry).
+            // the line the call came in on is still local: sending the call back where it came from is not a join. An
+            // XOT_Client route (a new XOT connection for each call, RFC 1613 section 5) is joined as well since
+            // 2026-11-21; until then it was refused as out of order. A name that is neither a line nor such a route is
+            // refused as out of order.
             if (winner.DestPort != X121RoutingTable.LocalPort)
             {
                 string target = _table.GetPortName(winner.DestPort);
                 if (!string.Equals(target, sourceInterface?.Name, StringComparison.Ordinal))
                 {
-                    if (!_interfaces.ContainsKey(target))
+                    bool dynamicXot;
+                    lock (_routeLock)
+                    {
+                        dynamicXot = _dynamicXotPorts.Contains(winner.DestPort);
+                    }
+
+                    if (!_interfaces.ContainsKey(target) && !dynamicXot)
                     {
                         _logger.LogWarning("Incoming call to {Called} on {Line}: route {Route} points at {Target}, which is not a line a call can be joined to - out of order", called, line, winner.Name, target);
                         return X25CallDecision.DestinationOutOfOrder();
@@ -668,11 +681,14 @@ namespace RetroIO.Protocols.X25.Transport
         /// <param name="callRequest">
         /// The call.
         /// </param>
+        /// <param name="beforePlace">
+        /// Called with the new call before its Call Request is sent; may be null.
+        /// </param>
         /// <returns>
         /// The outcome; for an accepted call <see cref="X25CallOutcome.Call"/> is the <see cref="XotOutgoingCall"/> that
         /// carries it, and <see cref="X25CallRequest.UsedTransport"/> is set to it.
         /// </returns>
-        private X25CallOutcome PlaceXotCall(string destination, X25CallRequest callRequest)
+        private X25CallOutcome PlaceXotCall(string destination, X25CallRequest callRequest, Action<XotOutgoingCall>? beforePlace = null)
         {
             _logger.LogInformation("Placing XOT call to {Destination} for X.121 address {CalledAddress}", destination, callRequest.CalledAddress);
 
@@ -692,6 +708,7 @@ namespace RetroIO.Protocols.X25.Transport
             }
 
             XotOutgoingCall call = new XotOutgoingCall(_logger, xotClient, circuit, OutgoingCallConfig);
+            beforePlace?.Invoke(call);
             X25CallOutcome outcome = call.Place(callRequest);
             _logger.LogInformation("XOT call to {CalledAddress} via {Destination}: {Outcome}", callRequest.CalledAddress, destination, outcome);
             if (outcome.Kind == X25CallOutcomeKind.Accepted)
