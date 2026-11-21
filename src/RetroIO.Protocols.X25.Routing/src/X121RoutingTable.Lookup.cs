@@ -36,8 +36,8 @@ namespace RetroIO.Protocols.X25.Routing
         /// X.121 7.8.1 and 7.8.2: the prefix selects the international format and "does not form a part of
         /// the data number"; 7.6.1 and 7.6.2: international data number = DNIC + NTN, and the NTN is the
         /// number used inside the network. With no prefix set nothing can tell the two formats apart, so the
-        /// number is returned as it is. A number that starts with an escape code (8, 9 or 0, X.121 7.9) is from
-        /// another numbering plan and is returned as it is too, unless it starts with the prefix.
+        /// number is returned as it is. An escape code (8, 9 or 0, X.121 7.9) counts only behind the prefix,
+        /// where it is kept with the number after it (Figure 2).
         /// </remarks>
         /// <param name="calledAddress">
         /// The called number as it came in.
@@ -60,47 +60,17 @@ namespace RetroIO.Protocols.X25.Routing
                 return called.Substring(_internationalPrefix.Length);
             }
 
-            // An escape code: the number is from another numbering plan, not a national number of ours, and "has to
-            // be carried forward through the originating network" as it is (X.121 7.9, Table 2). Until 2026-11-21 it
-            // was given the own DNIC in front (RetroIO BUGS 37, RetroX25 PLAN H3-1).
-            if (IsEscapeCode(called))
-            {
-                return called;
-            }
-
+            // No prefix: a national data number, whatever its first digit. An escape code (8, 9 or 0, X.121 7.9) is
+            // part of the international X.121 format and is dialled behind the prefix (Figure 2), where the branch
+            // above keeps it. From 2026-11-21 (BUGS 37) until the fix the same day, a national number starting with
+            // 8, 9 or 0 was also taken as an escape code and lost its DNIC, so 9001 (an echo service) was not
+            // obtainable.
             if (_ownDnics.Count > 0 && called.Length > 0)
             {
                 return _ownDnics[0].Substring(0, DnicLength) + called;
             }
 
             return called;
-        }
-
-        /// <summary>
-        /// True when a number starts with an X.121 escape code: 8, 9 or 0.
-        /// </summary>
-        /// <remarks>
-        /// X.121 (10/2000) Table 2: 8 means the digits that follow are from the F.69 plan (Note 4: its use is "for
-        /// further study"); 9 and 0 from the E.164 plan (9 asks for an analogue interface, 0 for a digital one). 7.2
-        /// Note 2: these digits are "not being part of the DNIC", so no DNIC starts with them and a number that does
-        /// cannot be a DNIC plus a terminal number. All three count, as decided by Ronny on 2026-11-20 ("everything
-        /// according to the spec"), although Note 3 asks networks only for 9 and 0.
-        /// </remarks>
-        /// <param name="number">
-        /// The called number, without any international prefix.
-        /// </param>
-        /// <returns>
-        /// True for a number whose first digit is 8, 9 or 0.
-        /// </returns>
-        private static bool IsEscapeCode(string number)
-        {
-            if (number.Length == 0)
-            {
-                return false;
-            }
-
-            char first = number[0];
-            return first == '8' || first == '9' || first == '0';
         }
 
         /// <summary>
