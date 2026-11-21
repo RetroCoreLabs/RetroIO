@@ -30,6 +30,7 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      (`FileSystems/Cpm`: `CpmDiskParameters` from the CPM3.LIB `dpb` macro, `C128CpmRecordMap` from
      the Z80 ROM routine, `CpmFileSystem`), tested in `C128CpmTests`. Writing (write, delete, rename) works on all
      four, checked by cpmtools on a flat copy. Still open for the C128: CP/M 3 time stamps.
+     Kaypro II and 4 raw images done (2026-11-21): layouts from ROM 81-232, `KayproCpmTests`, checked by cpmtools.
    - **Machines, in this order.**
      1. **Commodore 128 CP/M** on 1541, 1571 and 1581 images. The disk has a normal CBM header
         named "CP/M" and CP/M data elsewhere; we already have one real image (a C128 CP/M D71).
