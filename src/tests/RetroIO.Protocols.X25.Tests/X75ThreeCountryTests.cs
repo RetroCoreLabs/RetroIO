@@ -523,6 +523,78 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(offered.Facilities, Is.EqualTo(sizes), "the hop count is the network's own and never reaches a DTE");
         }
 
+        /// <summary>
+        /// A chain of networks, a PAD in the first and a TAD in the last (added 2026-11-21). Four international links pass;
+        /// five are refused by the last transit network with Network congestion # 120 (X.110 3.2, X.75 Table E.1 item 40).
+        /// </summary>
+        [TestCase(4, false)]
+        [TestCase(5, true)]
+        public void MoreThanFourInternationalLinks_AreRefused(int links, bool refused)
+        {
+            const string called = "2999589004";
+
+            // Built from the far end, so each network can dial the one after it.
+            HdlcTcpSwitchPort lastIn = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+            XotSwitchPort tadLine = new XotSwitchPort(Subscriber(1));
+            Build("2999", "2999", lastIn, tadLine);
+            Assert.That(lastIn.Start() && tadLine.Start(), Is.True);
+            List<HdlcTcpSwitchPort> linkPorts = new List<HdlcTcpSwitchPort> { lastIn };
+            ushort next = lastIn.BoundPort;
+            for (int n = 0; n < links - 1; n++)
+            {
+                HdlcTcpSwitchPort fromPrev = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+                HdlcTcpSwitchPort toNext = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, next), NullLogger.Instance);
+                Build((2900 + n).ToString(System.Globalization.CultureInfo.InvariantCulture), "2999", fromPrev, toNext);
+                Assert.That(fromPrev.Start() && toNext.Start(), Is.True);
+                linkPorts.Add(fromPrev);
+                linkPorts.Add(toNext);
+                next = fromPrev.BoundPort;
+            }
+
+            XotSwitchPort padLine = new XotSwitchPort(Subscriber(0));
+            HdlcTcpSwitchPort firstOut = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, next), NullLogger.Instance);
+            Build("2422", "2999", padLine, firstOut);
+            Assert.That(padLine.Start() && firstOut.Start(), Is.True);
+            linkPorts.Add(firstOut);
+            Assert.That(SpinWait.SpinUntil(() =>
+            {
+                for (int i = 0; i < linkPorts.Count; i++)
+                {
+                    if (!linkPorts[i].PeerConnected)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }, 15000), Is.True, "the links did not come up");
+
+            TcpClient tad = new TcpClient { NoDelay = true };
+            _disposables.Add(tad);
+            tad.Connect("127.0.0.1", tadLine.BoundPort);
+            TcpClient pad = new TcpClient { NoDelay = true };
+            _disposables.Add(pad);
+            pad.Connect("127.0.0.1", padLine.BoundPort);
+            Assert.That(SpinWait.SpinUntil(() => padLine.PeerConnected && tadLine.PeerConnected, 5000), Is.True);
+            NetworkStream padStream = pad.GetStream();
+            NetworkStream tadStream = tad.GetStream();
+            padStream.ReadTimeout = 10000;
+            tadStream.ReadTimeout = 10000;
+
+            SendXot(padStream, X25PacketBuilder.CreateCallRequest(1, called, "24220001",
+                new byte[] { 0x42, 0x07, 0x07, 0x43, 0x02, 0x02 }, new byte[] { 0x01, 0x00, 0x00, 0x00 }));
+
+            if (refused)
+            {
+                X25PacketInfo clear = ReadUntilClear(padStream);
+                Assert.That(clear.ClearingCause, Is.EqualTo((byte)0x05), "Network congestion");
+                Assert.That(clear.DiagnosticCode, Is.EqualTo((byte)120));
+                return;
+            }
+
+            Assert.That(ReadUntil(tadStream, X25PacketType.CallRequest).CalledAddress, Is.EqualTo(called));
+        }
+
         private static bool HasType(List<byte[]> packets, X25PacketType type)
         {
             lock (packets)

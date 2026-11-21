@@ -801,6 +801,18 @@ namespace RetroIO.Protocols.X25.Switch
             {
                 // A transit network: the call entered from another network (it carries that network's identifier).
                 u.TransitNetworks.Add(ownDnic);
+
+                // X.110 (11/88) 3.2: a route "should be so planned as to encompass no more than four international data
+                // links in tandem". The list now names every transit network up to and including this one, each entered
+                // by one international link, and the originating network's link came first, so the link this call would
+                // leave on is number Count + 1. Past four it is refused: X.75 (10/96) Table E.1 item 40, "the routing
+                // indicated in the received call request packet is too long for an overall routing conforming to X.110",
+                // Network congestion # 120. Added 2026-11-21 (RetroIO BUGS.md); until then any length was sent on.
+                if (u.TransitNetworks.Count + 1 > MaxInternationalLinks)
+                {
+                    refuseDiagnostic = 120;
+                    return false;
+                }
             }
             else
             {
@@ -858,6 +870,11 @@ namespace RetroIO.Protocols.X25.Switch
         /// (<c>SW_FAC_HOPS</c> in its <c>tools/x25switch.h</c>).
         /// </summary>
         private const byte HopsCode = 0x3F;
+
+        /// <summary>
+        /// The most international data links a route may hold in tandem (X.110 (11/88) 3.2).
+        /// </summary>
+        private const int MaxInternationalLinks = 4;
 
         /// <summary>
         /// The diagnostic of a call cleared for crossing more than max_hops switches: x25emu's <c>SW_DIAG_HOP_LIMIT</c>,
