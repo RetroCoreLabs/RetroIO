@@ -125,7 +125,7 @@ namespace RetroIO.Protocols.X25.Tests
             string text = string.Join("\n", lines);
 
             Assert.That(text, Does.StartWith("# header comment\n[switch]\nname = S\ndnic = 2350\n"));
-            Assert.That(text, Does.Contain("# routes follow\n"), "a comment after the last key of a port section stays");
+            Assert.That(text, Does.Contain("# routes follow\n[route.0]\n"), "a comment above the first route stays against it");
             Assert.That(text, Does.Contain("# after the routes\n[user.0]\nname = admin"), "the sections after the routes stay");
             Assert.That(text, Does.Not.Contain("# inside the route"), "a comment inside a route goes with the route (see the class remarks)");
             Assert.That(text.IndexOf("# routes follow", StringComparison.Ordinal), Is.LessThan(text.IndexOf("[route.0]", StringComparison.Ordinal)),

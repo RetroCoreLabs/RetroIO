@@ -85,7 +85,9 @@ namespace RetroIO.Protocols.X25.Switch
             List<string> written = new List<string>();
             for (int i = 0; i < routes.Count; i++)
             {
-                if (written.Count > 0 || (insertAt > 0 && Trim(lines[insertAt - 1]).Length > 0))
+                // A blank line between sections; none after a comment line, because a comment right above the first
+                // route is that route's heading and stays against it.
+                if (written.Count > 0 || (insertAt > 0 && IsKeyOrHeader(lines[insertAt - 1])))
                 {
                     written.Add(string.Empty);
                 }
@@ -267,6 +269,11 @@ namespace RetroIO.Protocols.X25.Switch
         {
             string p = Trim(line);
             return p.Length > 0 && p[0] != '#' && p[0] != ';' && p[0] != '[' && p.IndexOf('=') >= 0;
+        }
+
+        private static bool IsKeyOrHeader(string line)
+        {
+            return IsKeyLine(line) || IsHeader(line);
         }
 
         private static string Trim(string s)
