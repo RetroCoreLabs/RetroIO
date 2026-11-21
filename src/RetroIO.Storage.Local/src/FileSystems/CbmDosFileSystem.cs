@@ -82,40 +82,6 @@ namespace RetroIO.Storage.Local.FileSystems
             ParseHeader();
         }
 
-        /// <summary>
-        /// Reads a sector whose track and sector came from a link on the disk itself.
-        /// </summary>
-        /// <remarks>
-        /// A directory or file chain gives the next sector in the first two bytes of each sector. On a
-        /// damaged disk, or a disk that is not CBM DOS at all (a C128 CP/M disk keeps its own data on the
-        /// directory track), that link can point outside the disk. A real drive answers that with
-        /// "66, ILLEGAL TRACK OR SECTOR" (one of the drive error messages in the Commodore 1541 user's
-        /// guide), so the same is
-        /// reported here, naming the link, instead of an argument error from the geometry code.
-        /// </remarks>
-        /// <param name="track">
-        /// Track read from the link.
-        /// </param>
-        /// <param name="sector">
-        /// Sector read from the link.
-        /// </param>
-        /// <param name="buffer">
-        /// Receives the sector.
-        /// </param>
-        /// <exception cref="InvalidDataException">
-        /// Thrown when <paramref name="track"/> and <paramref name="sector"/> name a sector that is not on
-        /// this disk.
-        /// </exception>
-        private void ReadLinkedBlock(byte track, byte sector, Span<byte> buffer)
-        {
-            int tracks = _disk!.GetBlockDeviceInfo().TrackCount;
-            if (track < 1 || track > tracks || sector >= _disk.GetBlocksPerTrack(track))
-            {
-                throw new InvalidDataException(
-                    "66, ILLEGAL TRACK OR SECTOR: a link on the disk points to track " + track + " sector " + sector
-                    + ", which is not on this disk. The disk is damaged or is not a CBM DOS disk.");
-            }
-
             _disk.ReadBlock(BlockAddress.FromTrackSector(track, sector), buffer);
         }
 
@@ -1660,6 +1626,40 @@ namespace RetroIO.Storage.Local.FileSystems
 
             return sb.ToString().TrimEnd();
         }
+
+        /// <summary>
+        /// Reads a sector whose track and sector came from a link on the disk itself.
+        /// </summary>
+        /// <remarks>
+        /// A directory or file chain gives the next sector in the first two bytes of each sector. On a
+        /// damaged disk, or a disk that is not CBM DOS at all (a C128 CP/M disk keeps its own data on the
+        /// directory track), that link can point outside the disk. A real drive answers that with
+        /// "66, ILLEGAL TRACK OR SECTOR" (one of the drive error messages in the Commodore 1541 user's
+        /// guide), so the same is
+        /// reported here, naming the link, instead of an argument error from the geometry code.
+        /// </remarks>
+        /// <param name="track">
+        /// Track read from the link.
+        /// </param>
+        /// <param name="sector">
+        /// Sector read from the link.
+        /// </param>
+        /// <param name="buffer">
+        /// Receives the sector.
+        /// </param>
+        /// <exception cref="InvalidDataException">
+        /// Thrown when <paramref name="track"/> and <paramref name="sector"/> name a sector that is not on
+        /// this disk.
+        /// </exception>
+        private void ReadLinkedBlock(byte track, byte sector, Span<byte> buffer)
+        {
+            int tracks = _disk!.GetBlockDeviceInfo().TrackCount;
+            if (track < 1 || track > tracks || sector >= _disk.GetBlocksPerTrack(track))
+            {
+                throw new InvalidDataException(
+                    "66, ILLEGAL TRACK OR SECTOR: a link on the disk points to track " + track + " sector " + sector
+                    + ", which is not on this disk. The disk is damaged or is not a CBM DOS disk.");
+            }
 
         /// <summary>
         /// Gets file type string from type flags.
