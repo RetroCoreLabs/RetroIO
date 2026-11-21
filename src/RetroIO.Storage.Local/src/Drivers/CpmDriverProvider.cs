@@ -47,10 +47,10 @@ namespace RetroIO.Storage.Local.Drivers
         public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 and Osborne 1 raw or ImageDisk images; Amstrad CPC DSK; CP/M-86 on 160 KB IBM PC floppies)";
 
         /// <summary>
-        /// Gets the number of first bytes detection needs: 12800, which holds the C64 CP/M directory
-        /// on Commodore track 3 and the whole 1581 CP/M directory.
+        /// Gets the number of first bytes detection needs: 80 KB, which holds every directory detection
+        /// looks at; the largest is the TIKI-100 hard disk's, 64 KB from 4000h.
         /// </summary>
-        public override int RequiredHeaderBytes => 65536;
+        public override int RequiredHeaderBytes => 81920;
 
         /// <summary>
         /// Says how sure the provider is that an image is a C128 CP/M disk.

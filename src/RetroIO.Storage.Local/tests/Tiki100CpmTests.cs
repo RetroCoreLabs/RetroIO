@@ -30,6 +30,8 @@ namespace RetroIO.Storage.Local.Tests
         [TestCase("AR-games.dsk", "TIKIJSW.COM")]
         [TestCase("ar-games-200k.dsk", "TIKIJSW.COM")]
         [TestCase("FD0054.dsk", "SJAKK.COM")]
+        [TestCase("HD0.dsk", "KOPI.COM")]
+        [TestCase("HD1.dsk", "KOPI.COM")]
         public void RealDisk_IsDetectedAsCpmWithTheTikiLayout(string name, string expectedFile)
         {
             string path = RequireImage(Image(name));
@@ -64,6 +66,7 @@ namespace RetroIO.Storage.Local.Tests
         [TestCase(204800, 190, 64, 2)]
         [TestCase(409600, 195, 128, 1)]
         [TestCase(819200, 395, 128, 1)]
+        [TestCase(8388608, 1022, 2048, 1)]
         public void Layouts_AreTheKernelAndMeasuredValues(int length, int blocks, int entries, int reserved)
         {
             Assert.That(CpmDriver.TryTiki100(length, out CpmDiskParameters? p, out _), Is.True);
@@ -105,6 +108,32 @@ namespace RetroIO.Storage.Local.Tests
             fs.Write(0, "HEI.TXT", text);
             CpmFileSystem again = new CpmFileSystem(fs.Image, p!, map!);
             Assert.That(again.Read(again.Find(0, "HEI.TXT")!).AsSpan(0, text.Length).SequenceEqual(text), Is.True);
+        }
+
+        [Test]
+        public void HardDisk_InfocomSourceAndWordStarText_ReadBack()
+        {
+            CpmDriver driver = Mount(Image("HD0.dsk"));
+            string source = Encoding.ASCII.GetString(driver.ReadFile("/USER1/2XEROX.ASM"));
+            Assert.That(source, Does.StartWith(";Copyright 1982 Infocom, Inc."));
+            Assert.That(source, Does.Contain("Configured for the XEROX 820"));
+        }
+
+        [Test]
+        public void HardDisk_Write_ReadsBack()
+        {
+            byte[] image = File.ReadAllBytes(RequireImage(Image("HD1.dsk")));
+            CpmDriver.TryTiki100(image.Length, out CpmDiskParameters? p, out ICpmRecordMap? map);
+            CpmFileSystem fs = new CpmFileSystem(image, p!, map!);
+            byte[] data = new byte[70000];
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = (byte)(i / 7);
+            }
+
+            fs.Write(4, "STOR.DAT", data);
+            CpmFileSystem again = new CpmFileSystem(fs.Image, p!, map!);
+            Assert.That(again.Read(again.Find(4, "STOR.DAT")!).AsSpan(0, data.Length).SequenceEqual(data), Is.True);
         }
 
         private static CpmDriver Mount(string path)

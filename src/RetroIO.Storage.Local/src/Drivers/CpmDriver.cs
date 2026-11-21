@@ -67,6 +67,10 @@ namespace RetroIO.Storage.Local.Drivers
 
         // TIKO 4.01 kernel (boot disk 1754h): drive C DPB for the 400 KB disk (SPT 80, BSH 4, BLM 15,
         // EXM 1, DSM 194, DRM 127, AL0 C0h, AL1 0, CKS 32, OFF 1).
+        // TIKO kernel on the TIKI-100 hard disk (its system cylinder, 1745h): the 8 MB hard disk DPB
+        // (SPT 128, BSH 6, BLM 63, EXM 3, DSM 1021, DRM 2047, AL0 FFh, AL1 0, CKS 0, OFF 1).
+        private static readonly byte[] TikiHardDiskDpb = { 0x80, 0x00, 0x06, 0x3F, 0x03, 0xFD, 0x03, 0xFF, 0x07, 0xFF, 0x00, 0x00, 0x00, 0x01, 0x00 };
+
         private static readonly byte[] Tiki400Dpb = { 0x50, 0x00, 0x04, 0x0F, 0x01, 0xC2, 0x00, 0x7F, 0x00, 0xC0, 0x00, 0x20, 0x00, 0x01, 0x00 };
 
         private CpmFileSystem? _fileSystem;
@@ -267,7 +271,8 @@ namespace RetroIO.Storage.Local.Drivers
         /// Length of the whole flat image in bytes.
         /// </param>
         /// <param name="image">
-        /// The flat image, or at least its first 64 KB (every candidate directory lies in it).
+        /// The flat image, or at least its first 80 KB (every candidate directory lies in it; the TIKI-100
+        /// hard disk directory ends at 14000h).
         /// </param>
         /// <param name="parameters">
         /// The chosen disk parameters, or <c>null</c>.
@@ -333,6 +338,12 @@ namespace RetroIO.Storage.Local.Drivers
         ///    reserved track. The kernel and games disks read back with it.
         /// </para>
         /// <para>
+        /// The 8 MB hard disk (256 cylinders, 2 heads, 16 sectors of 512 bytes): the DPB in the TIKO
+        /// kernel on the hard disk's own system cylinder (1745h): SPT 128 (one CP/M track is a 16 KB
+        /// cylinder), 8 KB blocks, EXM 3, DSM 1021, 2048 entries in eight blocks, one reserved
+        /// cylinder. Two real hard disks read back with it, no block in two files.
+        /// </para>
+        /// <para>
         /// The 800 KB disk (two sides, 80 cylinders) is not in the kernel's tables, as the kernel sets the
         /// drive table when a disk goes in. Measured on a real library disk (FD0054): one reserved
         /// cylinder (directory at 2800h), 2 KB blocks with two-byte block numbers, 128 entries in
@@ -363,6 +374,10 @@ namespace RetroIO.Storage.Local.Drivers
                 case 204800:
                     parameters = new CpmDiskParameters(1024, 190, 64, 0, 2);
                     map = new LinearCpmRecordMap(2 * 5120, 190 * 8);
+                    return true;
+                case 8388608:
+                    parameters = CpmDiskParameters.FromDpbBytes(TikiHardDiskDpb);
+                    map = new LinearCpmRecordMap(16384, parameters.BlockCount * 64);
                     return true;
                 case 819200:
                     parameters = new CpmDiskParameters(2048, 395, 128, 0, 1);
@@ -849,7 +864,7 @@ namespace RetroIO.Storage.Local.Drivers
         // A size one of the raw layouts in TrySelectFlatLayout uses.
         internal static bool HasFlatLayouts(long length)
         {
-            return length == 163840 || length == 92160 || length == 819200 || TryKaypro(length, out _, out _);
+            return length == 163840 || length == 92160 || length == 819200 || length == 8388608 || TryKaypro(length, out _, out _);
         }
 
         private static bool HasFilesFor(byte[] image)
