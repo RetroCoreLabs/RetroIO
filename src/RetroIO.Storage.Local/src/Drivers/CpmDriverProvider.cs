@@ -29,7 +29,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// </remarks>
     public sealed class CpmDriverProvider : FileSystemDriverProviderBase
     {
-        private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81", ".img", ".dsk" };
+        private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81", ".img", ".dsk", ".imd" };
 
         /// <summary>
         /// Gets the filesystem type name, "CPM".
@@ -44,13 +44,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// <summary>
         /// Gets a short description of the format.
         /// </summary>
-        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 raw images; Amstrad CPC DSK; CP/M-86 on 160 KB IBM PC floppies)";
+        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 and Osborne 1 raw or ImageDisk images; Amstrad CPC DSK; CP/M-86 on 160 KB IBM PC floppies)";
 
         /// <summary>
         /// Gets the number of first bytes detection needs: 12800, which holds the C64 CP/M directory
         /// on Commodore track 3 and the whole 1581 CP/M directory.
         /// </summary>
-        public override int RequiredHeaderBytes => 12800;
+        public override int RequiredHeaderBytes => 65536;
 
         /// <summary>
         /// Says how sure the provider is that an image is a C128 CP/M disk.
@@ -66,23 +66,25 @@ namespace RetroIO.Storage.Local.Drivers
         /// </returns>
         public override float DetectConfidence(DetectionHints hints)
         {
+            if (ImdDiskImage.IsImd(hints.HeaderBytes))
+            {
+                // The whole file is needed to lay an ImageDisk image out flat; Mount does the full
+                // check. Here: the CP/M layouts for the flat size, tried on the first tracks.
+                return CpmDriver.ImdLooksLikeCpm(hints.FilePath) ? 0.95f : 0.0f;
+            }
+
             if (IsAmstradDsk(hints.HeaderBytes))
             {
                 return 0.95f;
             }
 
-            if (CpmDriver.TryIbmPcCpm86(hints.FileSize, hints.HeaderBytes, out CpmDiskParameters? pc, out ICpmRecordMap? pcMap))
+            if (CpmDriver.HasFlatLayouts(hints.FileSize))
             {
-                // The directory is the 2 KB at 1000h, inside the header bytes.
-                byte[] pcDirectory = CpmFileSystem.DirectoryBytes(hints.HeaderBytes, pc!, pcMap!);
-                return CpmFileSystem.LooksLikeDirectory(pcDirectory, pc!, out int pcFiles) && pcFiles > 0 ? 0.95f : 0.0f;
-            }
-
-            if (CpmDriver.TryKaypro(hints.FileSize, out CpmDiskParameters? kaypro, out ICpmRecordMap? kayproMap))
-            {
-                // The Kaypro directory is the 2 KB after the first 5120-byte track.
-                byte[] kayproDirectory = CpmFileSystem.DirectoryBytes(hints.HeaderBytes, kaypro!, kayproMap!);
-                return CpmFileSystem.LooksLikeDirectory(kayproDirectory, kaypro!, out int kayproFiles) && kayproFiles > 0 ? 0.95f : 0.0f;
+                // CP/M-86, Kaypro, Osborne and TIKI-100 raw images: every candidate directory lies in
+                // the header bytes.
+                byte[] start = hints.HeaderBytes;
+                return CpmDriver.TrySelectFlatLayout(hints.FileSize, start, out CpmDiskParameters? flat, out ICpmRecordMap? flatMap)
+                    && CpmDriver.HasFiles(start, flat!, flatMap!) ? 0.95f : 0.0f;
             }
 
             if (CpmDriver.IsD81Size(hints.FileSize))

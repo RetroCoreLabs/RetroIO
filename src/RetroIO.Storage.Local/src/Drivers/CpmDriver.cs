@@ -58,8 +58,20 @@ namespace RetroIO.Storage.Local.Drivers
         // AL0 C0h, AL1 0, CKS 16, OFF 1).
         private static readonly byte[] Kaypro4Dpb = { 0x28, 0x00, 0x04, 0x0F, 0x01, 0xC4, 0x00, 0x3F, 0x00, 0xC0, 0x00, 0x10, 0x00, 0x01, 0x00 };
 
+        // TIKO 4.01 kernel (boot disk 1736h): drive A DPB for the 90 KB disk (SPT 18, BSH 3, BLM 7,
+        // EXM 0, DSM 82, DRM 31, AL0 80h, AL1 0, CKS 8, OFF 3).
+        private static readonly byte[] Tiki90Dpb = { 0x12, 0x00, 0x03, 0x07, 0x00, 0x52, 0x00, 0x1F, 0x00, 0x80, 0x00, 0x08, 0x00, 0x03, 0x00 };
+
+        // TIKO 4.01 kernel (boot disk 1708h): the drive A skew table, logical to physical sector.
+        private static readonly byte[] Tiki90Skew = { 0x01, 0x06, 0x0B, 0x10, 0x03, 0x08, 0x0D, 0x12, 0x05, 0x0A, 0x0F, 0x02, 0x07, 0x0C, 0x11, 0x04, 0x09, 0x0E };
+
+        // TIKO 4.01 kernel (boot disk 1754h): drive C DPB for the 400 KB disk (SPT 80, BSH 4, BLM 15,
+        // EXM 1, DSM 194, DRM 127, AL0 C0h, AL1 0, CKS 32, OFF 1).
+        private static readonly byte[] Tiki400Dpb = { 0x50, 0x00, 0x04, 0x0F, 0x01, 0xC2, 0x00, 0x7F, 0x00, 0xC0, 0x00, 0x20, 0x00, 0x01, 0x00 };
+
         private CpmFileSystem? _fileSystem;
         private Stream? _stream;
+        private ImdDiskImage? _imd;
         private bool _readOnly = true;
 
         private const string UserFolderPrefix = "USER";
@@ -211,6 +223,191 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
+        /// Tells whether an ImageDisk file holds a CP/M disk of a layout this driver knows.
+        /// </summary>
+        /// <remarks>
+        /// The file is decoded and its flat image tried against the layouts that come as ImageDisk
+        /// files (see <see cref="TrySelectFlatLayout"/>). Only a disk with at least one file counts, as
+        /// an empty directory gives no sign of CP/M.
+        /// </remarks>
+        /// <param name="path">
+        /// Path of the .IMD file.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when one of the layouts fits.
+        /// </returns>
+        public static bool ImdLooksLikeCpm(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return false;
+            }
+
+            ImdDiskImage? imd = ImdDiskImage.TryDecode(File.ReadAllBytes(path), out _);
+            if (imd == null)
+            {
+                return false;
+            }
+
+            return HasFilesFor(imd.Flat);
+        }
+
+        /// <summary>
+        /// Picks the CP/M layout of a raw image (or an ImageDisk image laid out flat) of a size that
+        /// several machines share.
+        /// </summary>
+        /// <remarks>
+        /// The candidates for the size are tried in this order: CP/M-86 160 KB, Kaypro, Osborne 1,
+        /// TIKI-100. Each puts its directory somewhere else (1000h, 1400h, 3C00h, 2800h), so the first
+        /// whose directory passes the check and holds a file is taken. When none holds a file (an empty
+        /// disk), the first whose directory passes the check is taken: an empty disk does not tell
+        /// which machine formatted it.
+        /// </remarks>
+        /// <param name="length">
+        /// Length of the whole flat image in bytes.
+        /// </param>
+        /// <param name="image">
+        /// The flat image, or at least its first 64 KB (every candidate directory lies in it).
+        /// </param>
+        /// <param name="parameters">
+        /// The chosen disk parameters, or <c>null</c>.
+        /// </param>
+        /// <param name="map">
+        /// The chosen record map, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when a layout was found.
+        /// </returns>
+        public static bool TrySelectFlatLayout(long length, byte[] image, out CpmDiskParameters? parameters, out ICpmRecordMap? map)
+        {
+            parameters = null;
+            map = null;
+            for (int candidate = 0; candidate < 4; candidate++)
+            {
+                CpmDiskParameters? p;
+                ICpmRecordMap? m;
+                bool fits = candidate switch
+                {
+                    0 => TryIbmPcCpm86(length, image, out p, out m),
+                    1 => TryKaypro(length, out p, out m),
+                    2 => TryOsborne(length, out p, out m),
+                    _ => TryTiki100(length, out p, out m),
+                };
+                if (!fits || !CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, p!, m!), p!, out int files))
+                {
+                    continue;
+                }
+
+                if (files > 0)
+                {
+                    parameters = p;
+                    map = m;
+                    return true;
+                }
+
+                if (parameters == null)
+                {
+                    // Remember the first empty one, in case no candidate holds a file.
+                    parameters = p;
+                    map = m;
+                }
+            }
+
+            return parameters != null;
+        }
+
+        /// <summary>
+        /// Gives the TIKI-100 (TIKO) layout for a raw image of this length, if there is one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The image is the sectors in order, both sides of a cylinder before the next. The layouts:
+        ///  - 90 KB, 40 tracks of 18 sectors of 128 bytes: the DPB and skew table of drive A in the
+        ///    TIKO 4.01 kernel (on its boot disk at 1736h and 1708h): SPT 18, 1 KB blocks, DSM 82,
+        ///    32 entries in one block, three reserved tracks. Only an empty disk was at hand to check.
+        ///  - 200 KB, one side of 40 tracks of ten 512-byte sectors: measured on a real games disk:
+        ///    two reserved tracks (directory at 2800h), 1 KB blocks (sixteen to a 16 KB entry),
+        ///    64 entries in blocks 0 and 1, so DSM 189.
+        ///  - 400 KB, two sides: the DPB of drive C in the TIKO 4.01 kernel (1754h): SPT 80 (one CP/M
+        ///    track is both sides of a cylinder), 2 KB blocks, EXM 1, DSM 194, 128 entries, one
+        ///    reserved track. The kernel and games disks read back with it.
+        /// </para>
+        /// <para>
+        /// The 800 KB disk is not here: the kernel holds no table for it and the only 800 KB image at
+        /// hand is empty, so its layout is not known.
+        /// </para>
+        /// </remarks>
+        /// <param name="length">
+        /// Image length in bytes.
+        /// </param>
+        /// <param name="parameters">
+        /// The disk parameters, or <c>null</c>.
+        /// </param>
+        /// <param name="map">
+        /// The record map, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the length is a TIKI-100 floppy of a known layout.
+        /// </returns>
+        public static bool TryTiki100(long length, out CpmDiskParameters? parameters, out ICpmRecordMap? map)
+        {
+            switch (length)
+            {
+                case 92160:
+                    parameters = CpmDiskParameters.FromDpbBytes(Tiki90Dpb);
+                    map = new SkewedCpmRecordMap(3 * 18 * 128, parameters.BlockCount * 8, (byte[])Tiki90Skew.Clone());
+                    return true;
+                case 204800:
+                    parameters = new CpmDiskParameters(1024, 190, 64, 0, 2);
+                    map = new LinearCpmRecordMap(2 * 5120, 190 * 8);
+                    return true;
+                case 409600:
+                    parameters = CpmDiskParameters.FromDpbBytes(Tiki400Dpb);
+                    map = new LinearCpmRecordMap(2 * 5120, parameters.BlockCount * 16);
+                    return true;
+                default:
+                    parameters = null;
+                    map = null;
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Gives the Osborne 1 double-density layout for a flat image of this length, if there is one.
+        /// </summary>
+        /// <remarks>
+        /// Single-sided, 40 tracks of five 1024-byte sectors (200 KB, the same size as a Kaypro II disk).
+        /// Measured on three Osborne user group disks (ImageDisk images): three reserved tracks, the
+        /// directory at 3C00h, 1 KB blocks and 64 entries, and block 184 in use, so DSM is 184. Every
+        /// text file on those disks reads back clean with this layout.
+        /// </remarks>
+        /// <param name="length">
+        /// Flat image length in bytes.
+        /// </param>
+        /// <param name="parameters">
+        /// The disk parameters, or <c>null</c>.
+        /// </param>
+        /// <param name="map">
+        /// The record map, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the length is 204800 bytes.
+        /// </returns>
+        public static bool TryOsborne(long length, out CpmDiskParameters? parameters, out ICpmRecordMap? map)
+        {
+            if (length != 204800)
+            {
+                parameters = null;
+                map = null;
+                return false;
+            }
+
+            parameters = new CpmDiskParameters(1024, 185, 64, 0, 3);
+            map = new LinearCpmRecordMap(3 * 5120, 185 * 8);
+            return true;
+        }
+
+        /// <summary>
         /// Gives the Kaypro layout for a raw Kaypro disk image of this length, if there is one.
         /// </summary>
         /// <remarks>
@@ -332,6 +529,14 @@ namespace RetroIO.Storage.Local.Drivers
             imageStream.ReadExactly(image, 0, image.Length);
             _stream = imageStream;
             _readOnly = readOnly || !imageStream.CanWrite;
+            _imd = null;
+            if (ImdDiskImage.IsImd(image))
+            {
+                // An ImageDisk file: the CP/M layouts below work on its sectors laid out flat, and
+                // a change is encoded back to ImageDisk form when it is saved.
+                _imd = ImdDiskImage.Decode(image);
+                image = _imd.Flat;
+            }
 
             AmstradCpmRecordMap? amstrad = AmstradCpmRecordMap.TryRead(image, out byte firstSectorId, out _);
             if (amstrad != null)
@@ -346,25 +551,14 @@ namespace RetroIO.Storage.Local.Drivers
                 return;
             }
 
-            if (TryIbmPcCpm86(image.Length, image, out CpmDiskParameters? pc, out ICpmRecordMap? pcMap))
+            if (HasFlatLayouts(image.Length))
             {
-                if (!CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, pc!, pcMap!), pc!, out _))
+                if (!TrySelectFlatLayout(image.Length, image, out CpmDiskParameters? flat, out ICpmRecordMap? flatMap))
                 {
-                    throw new InvalidDataException("Not a CP/M-86 disk: track 1 does not hold a CP/M directory.");
+                    throw new InvalidDataException("Not a CP/M disk: no CP/M-86, Kaypro, Osborne or TIKI-100 layout of this size has a CP/M directory where it should be.");
                 }
 
-                _fileSystem = new CpmFileSystem(image, pc!, pcMap!);
-                return;
-            }
-
-            if (TryKaypro(image.Length, out CpmDiskParameters? kaypro, out ICpmRecordMap? kayproMap))
-            {
-                if (!CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, kaypro!, kayproMap!), kaypro!, out _))
-                {
-                    throw new InvalidDataException("Not a Kaypro CP/M disk: track 1 does not hold a CP/M directory.");
-                }
-
-                _fileSystem = new CpmFileSystem(image, kaypro!, kayproMap!);
+                _fileSystem = new CpmFileSystem(image, flat!, flatMap!);
                 return;
             }
 
@@ -632,9 +826,33 @@ namespace RetroIO.Storage.Local.Drivers
         // The whole image goes back to the stream after each change (at most 822400 bytes).
         private void Save(CpmFileSystem fs)
         {
+            byte[] bytes = fs.Image;
+            if (_imd != null)
+            {
+                // fs.Image is the ImageDisk image's own flat array, so the change is already in it.
+                bytes = _imd.Encode();
+                _stream!.SetLength(bytes.Length);
+            }
+
             _stream!.Position = 0;
-            _stream.Write(fs.Image, 0, fs.Image.Length);
+            _stream.Write(bytes, 0, bytes.Length);
             _stream.Flush();
+        }
+
+        // A size one of the raw layouts in TrySelectFlatLayout uses.
+        internal static bool HasFlatLayouts(long length)
+        {
+            return length == 163840 || length == 92160 || TryKaypro(length, out _, out _);
+        }
+
+        private static bool HasFilesFor(byte[] image)
+        {
+            return TrySelectFlatLayout(image.Length, image, out CpmDiskParameters? p, out ICpmRecordMap? m) && HasFiles(image, p!, m!);
+        }
+
+        internal static bool HasFiles(byte[] image, CpmDiskParameters parameters, ICpmRecordMap map)
+        {
+            return CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, parameters, map), parameters, out int files) && files > 0;
         }
 
         // "/NAME.TYP" is user 0; "/USERn/NAME.TYP" is user n.
