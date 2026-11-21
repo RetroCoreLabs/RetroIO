@@ -37,7 +37,7 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
         Layout from Commodore's C128 CP/M documentation.
      2. **CP/M-86 on PC floppies**: the 160/320 KB IBM layouts, the 360 KB and 1.2 MB later ones.
         Uses the existing PC floppy images.
-     3. **Z80/8080 machines**: Kaypro II/4, Osborne 1, Amstrad CPC/PCW (data and system formats),
+     3. **Z80/8080 machines**: Osborne 1, Amstrad CPC/PCW (data and system formats),
         Epson QX-10, and the 8-inch IBM 3740 standard layout CP/M was born on. Each layout from the
         maker's technical manual.
    - **Image containers.** Raw images first. Then the containers these machines' images come in:
