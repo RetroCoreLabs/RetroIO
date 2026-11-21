@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2), C128 first: read the remaining C128 CP/M BIOS files, then get test images.
+Next: CP/M (item 2), C128 first: disassemble FR$trk$sect and FR$check$CBM from the C128 ROM.
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -58,8 +58,17 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
    - **Found so far**: the C128 CP/M 3 BIOS disk module source (CXDISK, 15 Apr 86) lists the
      C64 CP/M 2.2, C128 single-sided, C128 double-sided (1571) and 1581 layouts, with no skew on the
      Commodore formats, and recognises a C128 CP/M disk by "CBM" in the first bytes of track 1
-     sector 0. The macro field order and the routine that maps CP/M sectors to Commodore track and
-     sector are in other files (CPM3.LIB, CXEQU, the fast-read module); they are still to be read.
+     sector 0. The `dpb` macro (CPM3.LIB) and the constants (CXEQU) are read. The routine that turns a
+     CP/M 256-byte record into a Commodore track and sector (`FR$trk$sect`, offset 50h) and the
+     disk check (`FR$check$CBM`, 52h) are in the C128 ROM, not in the published source: the next
+     step is to disassemble them from the C128 ROMs, which RetroCore's ROM folder has (Z80 BIOS ROM,
+     kernal, BASIC; which one holds these two routines is not yet known). Measured on real
+     images: 1541/1571 C128 CP/M disks have "CBM" at track 1 sector 0 and its last byte FF on a
+     double-sided disk; the directory starts on track 1 sector 10 and goes 10, 15, 20, 4 (steps of
+     5 around the track); 1581 disks have no "CBM" mark and the directory at track 1 sector 0.
+     Images downloaded (corpus `cpm/c128`, `cpm/kaypro`): Turbo Pascal (D71, D81, lessons D81),
+     MBASIC, WordStar 4, CP/M 3 system disks, C64 CP/M 2.2, utilities; five Kaypro disks.
      cpmtools 2.20 is installed in WSL as the check tool; its built-in format list has no Commodore
      entries.
-   - **Still needed before code**: real disk images for each machine (we have one C128 image).
+   - **Still needed before code**: the C128 ROM routines above; Amstrad images (approved, not yet
+     downloaded).
