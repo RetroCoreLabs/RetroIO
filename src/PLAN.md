@@ -45,7 +45,9 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      CP/M disk tool used only as a check in the tests (as VICE c1541 and Toolshed are used for
      Commodore and OS-9), never as the design source. The design cites only the Digital Research
      manuals and the makers' documentation.
-   - **Mount in RetroCommander** (the sibling RetroCommander repository). A CP/M disk opens like any
+   - **Mount in RetroCommander** (the sibling RetroCommander repository). Done by the RetroCommander session,
+     not here: when the RetroIO CP/M reading and writing is finished and its tests pass, send that
+     session a message (SendMessage) asking it to add CP/M disk support, with what follows. A CP/M disk opens like any
      other image. When detection finds one layout, it is used. When several fit, or none, the user
      picks the machine from a list ("Kaypro II", "Osborne 1 double density", "C128 1571", ...) and
      the choice is remembered for that image. An "advanced" panel lets a user enter an unknown
