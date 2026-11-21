@@ -194,6 +194,13 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private XotConnection? _pendingDial;
 
         /// <summary>
+        /// Packets of calls going out of a listening port that had no fresh connection to go on, oldest first. Each
+        /// call's Call Request is first, then whatever the engine wrote on that channel after it (a Clear Request if
+        /// the caller gave up). See <see cref="HoldPacket"/>. Only touched with the lock held.
+        /// </summary>
+        private readonly List<HeldPacket> _held = new List<HeldPacket>();
+
+        /// <summary>
         /// Creates the port. Nothing happens on the network until <see cref="Start"/>.
         /// </summary>
         /// <param name="config">
@@ -831,11 +838,6 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                     return 0;
                 }
 
-                if (dialled == null)
-                {
-                    WaitForFreshConnection();
-                }
-
                 // No restart first. X.25 4.1 restarts a link before its first call, but this link is a
                 // TCP connection, and RFC 1613 6.4 says Restart "MUST NOT be sent over the TCP
                 // connection" and, if received, "MUST be silently discarded". A conforming XOT peer
@@ -1296,8 +1298,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 _connections.Add(connection);
                 _peerConnected = true;
 
-                // A call waiting for a fresh connection (see WaitForFreshConnection) may go now.
+                // AcceptOne may be waiting for a free slot; and a held call (see HoldPacket) may go now.
                 Monitor.PulseAll(_sync);
+                SendHeldCalls();
             }
 
             Interlocked.Exchange(ref _lastConnectedMs, Environment.TickCount64);
@@ -1483,7 +1486,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         {
             lock (_sync)
             {
-                _layer.Tick(Environment.TickCount64);
+                long now = Environment.TickCount64;
+                ClearExpiredHeldCalls(now);
+                _layer.Tick(now);
             }
         }
 
@@ -1752,45 +1757,132 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         }
 
         /// <summary>
-        /// How long a call going out of a listening port waits for the peer to open a fresh connection, in
+        /// How long a call going out of a listening port is held for the peer to open a fresh connection, in
         /// milliseconds. The same as x25emu's switch (SW_UNDELIVERABLE_MS in tools/x25switch.h), which holds such a
         /// call for this long and then clears it.
         /// </summary>
-        private const int FreshConnectionWaitMs = 5000;
+        private const int HeldCallTimeoutMs = 5000;
 
         /// <summary>
-        /// Waits, with the lock held (Monitor.Wait gives it up while waiting), until the port has a connection that
-        /// has never carried a call, or <see cref="FreshConnectionWaitMs"/> has passed.
+        /// One packet waiting for a connection.
+        /// </summary>
+        private sealed class HeldPacket
+        {
+            public HeldPacket(ushort lci, byte[] packet, long sinceMs)
+            {
+                Lci = lci;
+                Packet = packet;
+                SinceMs = sinceMs;
+            }
+
+            /// <summary>
+            /// The engine's channel.
+            /// </summary>
+            public ushort Lci { get; }
+
+            /// <summary>
+            /// The packet as the engine wrote it.
+            /// </summary>
+            public byte[] Packet { get; }
+
+            /// <summary>
+            /// When it was held (Environment.TickCount64). The call's Call Request is the first held, so the oldest
+            /// entry of a channel says how long its call has waited.
+            /// </summary>
+            public long SinceMs { get; }
+        }
+
+        /// <summary>
+        /// Holds the Call Request of a call that has no connection to go on. The lock is held.
         /// </summary>
         /// <remarks>
         /// A listening port cannot dial: a call can go out only on a connection the peer opened and has not used. A
         /// peer that keeps one spare connection opens the next one only after a call has taken the last, so a second
         /// call that comes right after the first finds none for a moment. x25emu holds such a call until a connection
         /// comes (tools/x25switch.c, conn_for_tx: "a DTE that has no idle connection at this instant may open one a
-        /// moment later, so the caller of this holds the packet rather than dropping it"). This does the same by
-        /// waiting; the accept path pulses the lock when a connection is added. The thread that waits is the one
-        /// placing the call (another port's reader, through the switch core).
+        /// moment later, so the caller of this holds the packet rather than dropping it"), and clears it with Number
+        /// busy #71 after <see cref="HeldCallTimeoutMs"/>. This does the same. The packet is reported to the engine as
+        /// sent, so its circuit waits for the far end (X.25 state p2) as after any Call Request.
+        /// Until 2026-11-21 the thread placing the call waited for a connection instead, up to five seconds. That
+        /// thread is another port's reader (through the switch core), so every circuit on that port stood still
+        /// meanwhile (RetroX25 PLAN H3-8).
         /// </remarks>
-        private void WaitForFreshConnection()
+        private void HoldPacket(ushort lci, byte[] packet)
         {
-            long deadline = Environment.TickCount64 + FreshConnectionWaitMs;
-            while (_running && _peerConnected)
-            {
-                for (int i = 0; i < _connections.Count; i++)
-                {
-                    if (IsFresh(_connections[i]))
-                    {
-                        return;
-                    }
-                }
+            _held.Add(new HeldPacket(lci, packet, Environment.TickCount64));
+            _logger.LogInformation("Port {Id}: no fresh connection for LCI={Lci}; the call is held until the peer opens one", Id, lci);
+        }
 
-                long left = deadline - Environment.TickCount64;
-                if (left <= 0)
+        /// <summary>
+        /// True when packets of this channel are held, so a later one must queue behind them.
+        /// </summary>
+        private bool IsHeld(ushort lci)
+        {
+            for (int i = 0; i < _held.Count; i++)
+            {
+                if (_held[i].Lci == lci)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Sends the held calls, oldest first, each on a fresh connection, for as long as there is one. The lock is
+        /// held.
+        /// </summary>
+        private void SendHeldCalls()
+        {
+            while (_held.Count > 0)
+            {
+                XotConnection? fresh = PickConnectionForNewCall();
+                if (fresh == null)
                 {
                     return;
                 }
 
-                Monitor.Wait(_sync, (int)left);
+                ushort lci = _held[0].Lci;
+                AddRoute(lci, fresh, lci);
+                int i = 0;
+                while (i < _held.Count)
+                {
+                    if (_held[i].Lci != lci)
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    byte[] packet = _held[i].Packet;
+                    _held.RemoveAt(i);
+                    SendOnConnection(fresh, packet);
+                }
+
+                _logger.LogInformation("Port {Id}: held call LCI={Lci} sent on connection {Conn}", Id, lci, fresh.Number);
+            }
+        }
+
+        /// <summary>
+        /// Clears every held call that has waited <see cref="HeldCallTimeoutMs"/> with Number busy #71 (X.25 Table
+        /// C.3 a) item 31, no logical channel available), as x25emu does. Nothing is written: there is no connection
+        /// to write on. The lock is held.
+        /// </summary>
+        private void ClearExpiredHeldCalls(long nowMs)
+        {
+            while (_held.Count > 0 && nowMs - _held[0].SinceMs >= HeldCallTimeoutMs)
+            {
+                ushort lci = _held[0].Lci;
+                for (int i = _held.Count - 1; i >= 0; i--)
+                {
+                    if (_held[i].Lci == lci)
+                    {
+                        _held.RemoveAt(i);
+                    }
+                }
+
+                _logger.LogWarning("Port {Id}: no connection for held call LCI={Lci} after {Ms} ms; it is cleared", Id, lci, HeldCallTimeoutMs);
+                _layer.AbortCircuit(lci, X25Cause.NumberBusy, X25Diagnostic.NoLogicalChannelAvailable);
             }
         }
 
@@ -1956,7 +2048,21 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 return X25SendResult.LinkDown;
             }
 
-            XotConnection? connection = ConnectionFor(ChannelOf(packet), isCallRequest, out ushort wire);
+            ushort channel = ChannelOf(packet);
+            if (channel != 0 && IsHeld(channel))
+            {
+                // Behind its own held Call Request.
+                _held.Add(new HeldPacket(channel, packet.ToArray(), Environment.TickCount64));
+                return X25SendResult.Sent;
+            }
+
+            XotConnection? connection = ConnectionFor(channel, isCallRequest, out ushort wire);
+            if (connection == null && isCallRequest && channel != 0 && _config.Mode == PortMode.Dce && _peerConnected && _pendingDial == null)
+            {
+                HoldPacket(channel, packet.ToArray());
+                return X25SendResult.Sent;
+            }
+
             if (connection == null || connection.Closed)
             {
                 return X25SendResult.LinkDown;
