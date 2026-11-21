@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M plan (item 2) waits on the user's approval; NuGet publish waits on "not yet".
+Next: CP/M (item 2), C128 first: read the remaining C128 CP/M BIOS files, then get test images.
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -11,7 +11,7 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
 ## RetroIO
 
 1. **NuGet publish**: needs the `NUGET_API_KEY` secret and tag `v0.1.0`; the user said "not yet".
-2. **CP/M disks** (plan, waiting for the user's approval). Read, then write, CP/M disks from the
+2. **CP/M disks** (approved 2026-11-21, C128 first). Read, then write, CP/M disks from the
    Commodore 128, from CP/M-86 on the PC, and from Z80/8080 machines.
 
    - **Why it is one job, not three.** Every CP/M disk uses the same filesystem: a directory of
@@ -45,5 +45,21 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      CP/M disk tool used only as a check in the tests (as VICE c1541 and Toolshed are used for
      Commodore and OS-9), never as the design source. The design cites only the Digital Research
      manuals and the makers' documentation.
-   - **Still needed before code**: real disk images for each machine (we have one C128 image), and
-     the independent check tool installed in WSL.
+   - **Mount in RetroCommander** (the sibling RetroCommander repository). A CP/M disk opens like any
+     other image. When detection finds one layout, it is used. When several fit, or none, the user
+     picks the machine from a list ("Kaypro II", "Osborne 1 double density", "C128 1571", ...) and
+     the choice is remembered for that image. An "advanced" panel lets a user enter an unknown
+     layout by hand (sector size, sectors per track, reserved tracks, block size, directory entries,
+     skew) and save it as a new named layout.
+   - **CP/M machines in RetroCore** (the sibling RetroCore repository), so these disks can be mounted
+     and booted: today it has one simple 8080 CP/M machine and the C128; an x86 machine exists for
+     CP/M-86. New Z80 machines (Kaypro, Osborne, Amstrad) are separate work there, planned in
+     RetroCore when the RetroIO side reads their disks.
+   - **Found so far**: the C128 CP/M 3 BIOS disk module source (CXDISK, 15 Apr 86) lists the
+     C64 CP/M 2.2, C128 single-sided, C128 double-sided (1571) and 1581 layouts, with no skew on the
+     Commodore formats, and recognises a C128 CP/M disk by "CBM" in the first bytes of track 1
+     sector 0. The macro field order and the routine that maps CP/M sectors to Commodore track and
+     sector are in other files (CPM3.LIB, CXEQU, the fast-read module); they are still to be read.
+     cpmtools 2.20 is installed in WSL as the check tool; its built-in format list has no Commodore
+     entries.
+   - **Still needed before code**: real disk images for each machine (we have one C128 image).
