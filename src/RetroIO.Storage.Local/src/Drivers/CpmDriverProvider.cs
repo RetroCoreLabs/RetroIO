@@ -78,7 +78,7 @@ namespace RetroIO.Storage.Local.Drivers
                 return 0.95f;
             }
 
-            if (CpmDriver.HasFlatLayouts(hints.FileSize))
+            if (CpmDriver.HasFlatLayouts(hints.FileSize) && !CpmDriver.IsC1581CpmWithFiles(hints.FileSize, hints.HeaderBytes))
             {
                 // CP/M-86, Kaypro, Osborne and TIKI-100 raw images: every candidate directory lies in
                 // the header bytes.

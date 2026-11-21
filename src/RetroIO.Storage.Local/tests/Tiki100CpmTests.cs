@@ -29,6 +29,7 @@ namespace RetroIO.Storage.Local.Tests
         [TestCase("tiko_kjerne_v4.01.dsk", "KOPI.COM")]
         [TestCase("AR-games.dsk", "TIKIJSW.COM")]
         [TestCase("ar-games-200k.dsk", "TIKIJSW.COM")]
+        [TestCase("FD0054.dsk", "SJAKK.COM")]
         public void RealDisk_IsDetectedAsCpmWithTheTikiLayout(string name, string expectedFile)
         {
             string path = RequireImage(Image(name));
@@ -62,6 +63,7 @@ namespace RetroIO.Storage.Local.Tests
         [TestCase(92160, 83, 32, 3)]
         [TestCase(204800, 190, 64, 2)]
         [TestCase(409600, 195, 128, 1)]
+        [TestCase(819200, 395, 128, 1)]
         public void Layouts_AreTheKernelAndMeasuredValues(int length, int blocks, int entries, int reserved)
         {
             Assert.That(CpmDriver.TryTiki100(length, out CpmDiskParameters? p, out _), Is.True);
@@ -71,10 +73,12 @@ namespace RetroIO.Storage.Local.Tests
         }
 
         [Test]
-        public void Disk800K_IsNotGivenALayout()
+        public void Disk800K_HelpFileOnAHardDiskTopic_ReadsBack()
         {
-            // The TIKO kernel has no 800 KB table and the only 800 KB image is empty.
-            Assert.That(CpmDriver.TryTiki100(819200, out _, out _), Is.False);
+            CpmDriver driver = Mount(Image("FD0054.dsk"));
+            string text = Encoding.ASCII.GetString(driver.ReadFile("/LES.MEG"));
+            Assert.That(text, Does.Contain("TIKI-100 SYSTEM FOR WINCHESTER HARDDISK"));
+            Assert.That(driver.GetMetadata("/ROBOT.DOC"), Is.Not.Null);
         }
 
         [Test]
@@ -90,6 +94,7 @@ namespace RetroIO.Storage.Local.Tests
         [TestCase("t90.dsk")]
         [TestCase("t200.dsk")]
         [TestCase("t400.dsk")]
+        [TestCase("t800.dsk")]
         public void EmptyDisk_WriteThenReadBack(string name)
         {
             byte[] image = File.ReadAllBytes(RequireImage(Image(name)));

@@ -333,8 +333,11 @@ namespace RetroIO.Storage.Local.Drivers
         ///    reserved track. The kernel and games disks read back with it.
         /// </para>
         /// <para>
-        /// The 800 KB disk is not here: the kernel holds no table for it and the only 800 KB image at
-        /// hand is empty, so its layout is not known.
+        /// The 800 KB disk (two sides, 80 cylinders) is not in the kernel's tables, as the kernel sets the
+        /// drive table when a disk goes in. Measured on a real library disk (FD0054): one reserved
+        /// cylinder (directory at 2800h), 2 KB blocks with two-byte block numbers, 128 entries in
+        /// blocks 0 and 1, EXM 0; every text file reads back clean. DSM is 394, all of the disk after
+        /// the reserved cylinder, the same rule as in the kernel's 400 KB table.
         /// </para>
         /// </remarks>
         /// <param name="length">
@@ -360,6 +363,10 @@ namespace RetroIO.Storage.Local.Drivers
                 case 204800:
                     parameters = new CpmDiskParameters(1024, 190, 64, 0, 2);
                     map = new LinearCpmRecordMap(2 * 5120, 190 * 8);
+                    return true;
+                case 819200:
+                    parameters = new CpmDiskParameters(2048, 395, 128, 0, 1);
+                    map = new LinearCpmRecordMap(2 * 5120, 395 * 16);
                     return true;
                 case 409600:
                     parameters = CpmDiskParameters.FromDpbBytes(Tiki400Dpb);
@@ -551,7 +558,7 @@ namespace RetroIO.Storage.Local.Drivers
                 return;
             }
 
-            if (HasFlatLayouts(image.Length))
+            if (HasFlatLayouts(image.Length) && !IsC1581CpmWithFiles(image.Length, image))
             {
                 if (!TrySelectFlatLayout(image.Length, image, out CpmDiskParameters? flat, out ICpmRecordMap? flatMap))
                 {
@@ -842,12 +849,19 @@ namespace RetroIO.Storage.Local.Drivers
         // A size one of the raw layouts in TrySelectFlatLayout uses.
         internal static bool HasFlatLayouts(long length)
         {
-            return length == 163840 || length == 92160 || TryKaypro(length, out _, out _);
+            return length == 163840 || length == 92160 || length == 819200 || TryKaypro(length, out _, out _);
         }
 
         private static bool HasFilesFor(byte[] image)
         {
             return TrySelectFlatLayout(image.Length, image, out CpmDiskParameters? p, out ICpmRecordMap? m) && HasFiles(image, p!, m!);
+        }
+
+        // 819200 bytes is both a Commodore 1581 (D81) image and a TIKI-100 800 KB disk. A 1581 CP/M
+        // disk has its directory in the first 4 KB of the image; when that holds files, it is a 1581.
+        internal static bool IsC1581CpmWithFiles(long length, byte[] image)
+        {
+            return IsD81Size(length) && CpmFileSystem.LooksLikeDirectory(image, C1581Parameters(), out int files) && files > 0;
         }
 
         internal static bool HasFiles(byte[] image, CpmDiskParameters parameters, ICpmRecordMap map)
