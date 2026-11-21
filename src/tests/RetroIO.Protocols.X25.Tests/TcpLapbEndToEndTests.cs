@@ -7,6 +7,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
@@ -50,6 +52,25 @@ namespace RetroIO.Protocols.X25.Tests
             _loggerFactory?.Dispose();
         }
 
+        /// <summary>
+        /// A port the system says is free at this moment.
+        /// </summary>
+        /// <remarks>
+        /// Until 2026-11-21 these tests used the fixed ports 55600 to 55613, so a run beside another program or another
+        /// test run on one of them failed for a reason that had nothing to do with the code (RetroIO BUGS.md item 36).
+        /// </remarks>
+        /// <returns>
+        /// The port number.
+        /// </returns>
+        private static int FreePort()
+        {
+            TcpListener probe = new TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            int port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            return port;
+        }
+
         #region Multi-Link Independence Tests
 
         [Test]
@@ -67,7 +88,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link1",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55600,
+                Port = FreePort(),
                 RemoteMachineId = "100"
             });
 
@@ -76,7 +97,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link2",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55601,
+                Port = FreePort(),
                 RemoteMachineId = "101"
             });
 
@@ -114,7 +135,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link1",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55602,
+                Port = FreePort(),
                 RemoteMachineId = "100"
             });
 
@@ -123,7 +144,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link2",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55603,
+                Port = FreePort(),
                 RemoteMachineId = "101"
             });
 
@@ -166,7 +187,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link100",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55604,
+                Port = FreePort(),
                 RemoteMachineId = "100"
             });
 
@@ -175,7 +196,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link101",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55605,
+                Port = FreePort(),
                 RemoteMachineId = "101"
             });
 
@@ -254,7 +275,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "NewLink",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55606,
+                Port = FreePort(),
                 RemoteMachineId = "100"
             });
 
@@ -287,7 +308,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link1",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55607,
+                Port = FreePort(),
                 RemoteMachineId = "100"
             });
 
@@ -296,7 +317,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "Link2",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55608,
+                Port = FreePort(),
                 RemoteMachineId = "101"
             });
 
@@ -334,7 +355,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "X25Link",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55609,
+                Port = FreePort(),
                 RemoteMachineId = "100",
                 ProtocolMode = ProtocolDetectionMode.X25Only
             });
@@ -364,7 +385,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "SintranLink",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55610,
+                Port = FreePort(),
                 RemoteMachineId = "100",
                 ProtocolMode = ProtocolDetectionMode.SintranOnly
             });
@@ -394,7 +415,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "AutoLink",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55611,
+                Port = FreePort(),
                 RemoteMachineId = "100",
                 ProtocolMode = ProtocolDetectionMode.AutoDetect
             });
@@ -428,7 +449,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "RestartLink",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55612,
+                Port = FreePort(),
                 RemoteMachineId = "100"
             });
 
@@ -466,7 +487,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "ResetLink",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55613,
+                Port = FreePort(),
                 RemoteMachineId = "100"
             });
 
