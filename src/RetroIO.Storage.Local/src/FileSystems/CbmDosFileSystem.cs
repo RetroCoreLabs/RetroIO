@@ -82,9 +82,6 @@ namespace RetroIO.Storage.Local.FileSystems
             ParseHeader();
         }
 
-            _disk.ReadBlock(BlockAddress.FromTrackSector(track, sector), buffer);
-        }
-
         /// <summary>
         /// Checks whether the device looks like a CBM DOS disk with the directory track this instance expects.
         /// </summary>
@@ -1660,6 +1657,9 @@ namespace RetroIO.Storage.Local.FileSystems
                     "66, ILLEGAL TRACK OR SECTOR: a link on the disk points to track " + track + " sector " + sector
                     + ", which is not on this disk. The disk is damaged or is not a CBM DOS disk.");
             }
+
+            _disk.ReadBlock(BlockAddress.FromTrackSector(track, sector), buffer);
+        }
 
         /// <summary>
         /// Gets file type string from type flags.
