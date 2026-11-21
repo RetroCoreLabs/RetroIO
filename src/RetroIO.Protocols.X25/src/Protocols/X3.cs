@@ -808,6 +808,87 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
+        /// True when parameter 20 (echo mask, X.3 3.20) or its notes say a typed character is not echoed.
+        /// </summary>
+        /// <param name="c">
+        /// The character the terminal sent.
+        /// </param>
+        /// <param name="isEditingCharacter">
+        /// True when the character is doing an editing function of parameter 16, 17 or 18 with editing on (Note 6: value
+        /// 64 "does not apply if editing is not enabled").
+        /// </param>
+        /// <param name="parameter">
+        /// Reads a parameter by its number.
+        /// </param>
+        /// <returns>
+        /// True when the character is not to be echoed.
+        /// </returns>
+        /// <remarks>
+        /// Moved here 2026-11-21 from <c>X28.IsEchoMasked</c> so the PAD and <c>TadServer</c> share one reading of the
+        /// clause (TadServer had its own stand-in that echoed only printable characters when any bit was set). "A
+        /// character need only be specified by a single value of parameter 20 in order for it not to be echoed" (Note 4).
+        /// </remarks>
+        public static bool IsEchoMasked(char c, bool isEditingCharacter, Func<byte, byte> parameter)
+        {
+            ArgumentNullException.ThrowIfNull(parameter);
+
+            // Note 2: "If parameter 5, 12 or 22 is set to a non-zero value, then X-ON and X-OFF are not echoed."
+            if ((c == (char)0x11 || c == (char)0x13)
+                && (parameter(ParameterNumber.ANCILLARY_DEVICE_CONTROL) != 0
+                    || parameter(ParameterNumber.FLOW_CONTROL_X_ON_X_OFF) != 0
+                    || parameter(ParameterNumber.PAGE_WAIT) != 0))
+            {
+                return true;
+            }
+
+            byte mask = parameter(ParameterNumber.ECHO_MASK);
+            if (mask == 0)
+            {
+                return false;
+            }
+
+            // 64: "no echo of editing characters as designated by parameters 16, 17 and 18".
+            if ((mask & 64) != 0 && isEditingCharacter)
+            {
+                return true;
+            }
+
+            switch (c)
+            {
+                case '\r':
+                    return (mask & 1) != 0;   // "no echo of character CR"
+                case '\n':
+                    return (mask & 2) != 0;   // "no echo of character LF"
+                case (char)0x0B:
+                case '\t':
+                case (char)0x0C:
+                    return (mask & 4) != 0;   // "no echo of characters VT, HT, FF"
+                case (char)0x07:
+                case (char)0x08:
+                    return (mask & 8) != 0;   // "no echo of characters BEL, BS"
+                case (char)0x1B:
+                case (char)0x05:
+                    return (mask & 16) != 0;  // "no echo of characters ESC, ENQ"
+                case (char)0x06:
+                case (char)0x15:
+                case (char)0x02:
+                case (char)0x01:
+                case (char)0x04:
+                case (char)0x17:
+                case (char)0x03:
+                    return (mask & 32) != 0;  // "no echo of characters ACK, NAK, STX, SOH, EOT, ETB, ETX"
+            }
+
+            // 128: "no echo of all other characters in columns 0 and 1 of IA5 not mentioned above, and the character DEL".
+            if (c < (char)0x20 || c == (char)0x7F)
+            {
+                return (mask & 128) != 0;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// The number of padding characters after the CR LF that ends a PAD service signal (the format effector).
         /// </summary>
         /// <remarks>

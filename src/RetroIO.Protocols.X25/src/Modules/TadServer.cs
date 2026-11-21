@@ -565,11 +565,16 @@ namespace RetroIO.Protocols.X25.Modules
             int crPadding = x3.GetParameter(X3Parameters.ParameterNumber.PADDING_AFTER_CR);
             int lfPadding = x3.GetParameter(X3Parameters.ParameterNumber.PADDING_AFTER_LINE_FEED);
             bool lfAfterEchoedCr = (x3.GetParameter(X3Parameters.ParameterNumber.LINE_FEED_INSERTION) & 4) != 0;
-            byte echoMask = x3.GetParameter(X3Parameters.ParameterNumber.ECHO_MASK);
             StringBuilder result = new StringBuilder();
             for (int i = 0; i < text.Length; i++)
             {
                 char c = text[i];
+                if (!ShouldEchoCharacter(c, x3))
+                {
+                    // X.3 3.20: a masked character is not echoed, and so gets no padding or linefeed after it.
+                    continue;
+                }
+
                 if (c == '\r')
                 {
                     result.Append('\r').Append('\0', crPadding);
@@ -582,7 +587,7 @@ namespace RetroIO.Protocols.X25.Modules
                 {
                     result.Append('\n').Append('\0', lfPadding);
                 }
-                else if (ShouldEchoCharacter(c, echoMask))
+                else
                 {
                     result.Append(c);
                 }
@@ -840,13 +845,14 @@ namespace RetroIO.Protocols.X25.Modules
         /// <summary>
         /// Check if character should be echoed based on echo mask
         /// </summary>
-        private static bool ShouldEchoCharacter(char c, byte echoMask)
+        // X.3 3.20, read by X3.IsEchoMasked (2026-11-21). Before, this echoed every character when the mask was 0 and
+        // otherwise only printable ones, whatever the mask's bits said. A character is an editing character when editing
+        // is on (parameter 15) and it is the character delete, line delete or line display character (16, 17, 18).
+        private static bool ShouldEchoCharacter(char c, X3Parameters x3)
         {
-            // Simplified implementation - full X.3 echo mask is more complex
-            if (echoMask == 0) return true; // Echo all characters
-            
-            // For now, echo printable characters
-            return c >= 32 && c <= 126;
+            bool editing = x3.GetParameter(15) != 0
+                && (c == (char)x3.GetParameter(16) || c == (char)x3.GetParameter(17) || c == (char)x3.GetParameter(18));
+            return !RetroIO.Protocols.X25.Protocols.X3.IsEchoMasked(c, editing, x3.GetParameter);
         }
 
         #endregion

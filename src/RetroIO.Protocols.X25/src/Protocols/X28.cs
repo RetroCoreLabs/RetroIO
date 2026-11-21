@@ -1730,60 +1730,8 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </summary>
         private bool IsEchoMasked(char c, bool isEditingCharacter)
         {
-            // Note 2: "If parameter 5, 12 or 22 is set to a non-zero value, then X-ON and X-OFF are not echoed."
-            if ((c == (char)0x11 || c == (char)0x13)
-                && (_x3Parameters.GetParameter(X3.ParameterNumber.ANCILLARY_DEVICE_CONTROL) != 0
-                    || _x3Parameters.GetParameter(X3.ParameterNumber.FLOW_CONTROL_X_ON_X_OFF) != 0
-                    || _x3Parameters.GetParameter(X3.ParameterNumber.PAGE_WAIT) != 0))
-            {
-                return true;
-            }
-
-            byte mask = _x3Parameters.GetParameter(X3.ParameterNumber.ECHO_MASK);
-            if (mask == 0)
-            {
-                return false;
-            }
-
-            // 64: "no echo of editing characters as designated by parameters 16, 17 and 18".
-            if ((mask & 64) != 0 && isEditingCharacter)
-            {
-                return true;
-            }
-
-            switch (c)
-            {
-                case '\r':
-                    return (mask & 1) != 0;   // "no echo of character CR"
-                case '\n':
-                    return (mask & 2) != 0;   // "no echo of character LF"
-                case (char)0x0B:
-                case '\t':
-                case (char)0x0C:
-                    return (mask & 4) != 0;   // "no echo of characters VT, HT, FF"
-                case (char)0x07:
-                case (char)0x08:
-                    return (mask & 8) != 0;   // "no echo of characters BEL, BS"
-                case (char)0x1B:
-                case (char)0x05:
-                    return (mask & 16) != 0;  // "no echo of characters ESC, ENQ"
-                case (char)0x06:
-                case (char)0x15:
-                case (char)0x02:
-                case (char)0x01:
-                case (char)0x04:
-                case (char)0x17:
-                case (char)0x03:
-                    return (mask & 32) != 0;  // "no echo of characters ACK, NAK, STX, SOH, EOT, ETB, ETX"
-            }
-
-            // 128: "no echo of all other characters in columns 0 and 1 of IA5 not mentioned above, and the character DEL".
-            if (c < (char)0x20 || c == (char)0x7F)
-            {
-                return (mask & 128) != 0;
-            }
-
-            return false;
+            // The clause is read in one place, shared with TadServer (2026-11-21).
+            return X3.IsEchoMasked(c, isEditingCharacter, _x3Parameters.GetParameter);
         }
 
         /// <summary>
