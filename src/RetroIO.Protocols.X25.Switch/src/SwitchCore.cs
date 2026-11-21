@@ -535,6 +535,27 @@ namespace RetroIO.Protocols.X25.Switch
                 return;
             }
 
+            // The hop count (added 2026-11-21; until then [switch] max_hops was read, shown and written back and limited
+            // nothing, RetroIO BUGS.md). x25emu's rule (tools/x25switch.c, the check after the transit loop check): a call
+            // that comes in on an internal trunk carries how many of our switches it has crossed in a private facility
+            // (HopsCode, after the marker); this switch is one more. Past max_hops it is cleared. X.110 3.2 keeps an
+            // international route to "no more than four international data links in tandem"; this is the same kind of
+            // limit inside our network, which ITU does not specify. The clear is Network congestion (X.25 Table 5-7,
+            // "temporary network congestion or fault condition within the network") with x25emu's diagnostic 128
+            // (SW_DIAG_HOP_LIMIT), so both switches answer a looping call the same way. A call from anywhere else starts
+            // at 0.
+            int hops = 0;
+            if (IsInternalTrunk(inPort) && haveParameters && TryFindPrivate(asked.OtherFacilities, HopsCode, out byte[] carriedHops, out _, out _)
+                && carriedHops.Length == 1)
+            {
+                hops = carriedHops[0] + 1;
+                if (hops > _node.Config.MaxHops)
+                {
+                    inPort.ClearCall(inLci, CauseNetworkCongestion, DiagnosticHopLimit);
+                    return;
+                }
+            }
+
             X25CallDecision decision = Router.Decide(calledAddress, inPort.Id);
             if (decision.Action != X25CallAction.Forward)
             {
@@ -560,9 +581,12 @@ namespace RetroIO.Protocols.X25.Switch
                 return;
             }
 
+            // The hop count goes on only to another of our switches; toward a subscriber or another network it is taken
+            // out, as x25emu does (sw_hops_set / sw_hops_strip): what follows the marker is our network's own signalling.
+            byte[]? onwardHops = IsInternalTrunk(outPort) ? new[] { (byte)Math.Min(hops, 255) } : null;
             if (haveParameters)
             {
-                asked = WithCarriedUtilities(asked, onwardCarried);
+                asked = WithPrivate(WithCarriedUtilities(asked, onwardCarried), HopsCode, onwardHops);
             }
 
             // Place the onward call; a zero LCI means the egress port could not initiate it.
@@ -581,13 +605,14 @@ namespace RetroIO.Protocols.X25.Switch
                     .WithNetworkUtilities(onwardUtilities);
                 outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, toAsk, out portRefusal);
             }
-            else if (onwardUtilities != null || onwardCarried != null)
+            else if (onwardUtilities != null || onwardCarried != null || onwardHops != null)
             {
-                // No values from the caller's side, but the next network (or switch) still needs the utility field: ask
-                // for the out port's own defaults with it.
-                X25CallParameters defaults = WithCarriedUtilities(new X25CallParameters(
+                // No values from the caller's side, but the next network (or switch) still needs the utility field or the
+                // hop count: ask for the out port's own defaults with them.
+                X25CallParameters defaults = WithPrivate(WithCarriedUtilities(new X25CallParameters(
                     outPort.Config.DefaultWindowSize, outPort.Config.DefaultWindowSize,
-                    outPort.Config.DefaultPacketSize, outPort.Config.DefaultPacketSize, null, onwardUtilities), onwardCarried);
+                    outPort.Config.DefaultPacketSize, outPort.Config.DefaultPacketSize, null, onwardUtilities), onwardCarried),
+                    HopsCode, onwardHops);
                 outLci = outPort.PlaceCall(onwardCalled, callingAddress, callUserData, defaults, out portRefusal);
             }
             else
@@ -615,7 +640,7 @@ namespace RetroIO.Protocols.X25.Switch
             stitch.CalledAddress = calledAddress;
             stitch.StartTimeMs = NowMs();
             stitch.StartWallSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            stitch.HopCount = 0;
+            stitch.HopCount = hops;
             stitch.PayingAccount = paying;
             stitch.PayingNui = payingNui;
 
@@ -810,18 +835,55 @@ namespace RetroIO.Protocols.X25.Switch
         /// </summary>
         private static bool TryFindCarried(byte[] field, out byte[] utilities, out int at, out int length)
         {
+            return TryFindPrivate(field, CarriedUtilitiesCode, out utilities, out at, out length);
+        }
+
+        /// <summary>
+        /// Returns the values with any carried utility field removed (and the marker too when nothing else follows it),
+        /// then, when <paramref name="carried"/> is given, a new one added after a marker.
+        /// </summary>
+        private static X25CallParameters WithCarriedUtilities(X25CallParameters values, byte[]? carried)
+        {
+            if (carried != null && carried.Length > 255)
+            {
+                throw new InvalidOperationException("a carried utility field is longer than a class D element holds");
+            }
+
+            return WithPrivate(values, CarriedUtilitiesCode, carried);
+        }
+
+        /// <summary>
+        /// The private facility that carries the hop count across an internal trunk: code 3F after the marker, one value
+        /// octet (class A, X.25 7.1: codes 00 to 3F carry one parameter octet). The same coding as x25emu
+        /// (<c>SW_FAC_HOPS</c> in its <c>tools/x25switch.h</c>).
+        /// </summary>
+        private const byte HopsCode = 0x3F;
+
+        /// <summary>
+        /// The diagnostic of a call cleared for crossing more than max_hops switches: x25emu's <c>SW_DIAG_HOP_LIMIT</c>,
+        /// 128, from the range X.25 Annex E leaves to networks.
+        /// </summary>
+        private const byte DiagnosticHopLimit = 128;
+
+        /// <summary>
+        /// Finds a private element by its code after the first marker; its parameter octets come back without the code
+        /// (and without the length octet of a class D element).
+        /// </summary>
+        private static bool TryFindPrivate(byte[] field, byte wanted, out byte[] value, out int at, out int length)
+        {
             int i = 0;
             bool afterMarker = false;
             while (i < field.Length)
             {
                 byte code = field[i];
                 int n;
+                int head;
                 switch (code >> 6)
                 {
-                    case 0: n = 2; break;
-                    case 1: n = 3; break;
-                    case 2: n = 4; break;
-                    default: n = i + 1 < field.Length ? 2 + field[i + 1] : field.Length - i; break;
+                    case 0: n = 2; head = 1; break;
+                    case 1: n = 3; head = 1; break;
+                    case 2: n = 4; head = 1; break;
+                    default: n = i + 1 < field.Length ? 2 + field[i + 1] : field.Length - i; head = 2; break;
                 }
 
                 if (i + n > field.Length)
@@ -829,10 +891,10 @@ namespace RetroIO.Protocols.X25.Switch
                     break;
                 }
 
-                if (afterMarker && code == CarriedUtilitiesCode && n >= 2)
+                if (afterMarker && code == wanted && n >= head)
                 {
-                    utilities = new byte[n - 2];
-                    Array.Copy(field, i + 2, utilities, 0, utilities.Length);
+                    value = new byte[n - head];
+                    Array.Copy(field, i + head, value, 0, value.Length);
                     at = i;
                     length = n;
                     return true;
@@ -846,27 +908,29 @@ namespace RetroIO.Protocols.X25.Switch
                 i += n;
             }
 
-            utilities = Array.Empty<byte>();
+            value = Array.Empty<byte>();
             at = -1;
             length = 0;
             return false;
         }
 
         /// <summary>
-        /// Returns the values with any carried utility field removed (and the marker too when nothing else follows it),
-        /// then, when <paramref name="carried"/> is given, a new one added after a marker.
+        /// Returns the values with the private element of <paramref name="code"/> removed (and the marker too when
+        /// nothing else follows it), then, when <paramref name="value"/> is given, a new one added after a marker.
         /// </summary>
-        private static X25CallParameters WithCarriedUtilities(X25CallParameters values, byte[]? carried)
+        /// <remarks>
+        /// <paramref name="value"/> must have the length the code's class gives (1, 2 or 3 octets for classes A, B and
+        /// C); a class D value is given without its length octet.
+        /// </remarks>
+        private static X25CallParameters WithPrivate(X25CallParameters values, byte code, byte[]? value)
         {
             byte[] field = values.OtherFacilities;
-            if (TryFindCarried(field, out _, out int at, out int length))
+            if (TryFindPrivate(field, code, out _, out int at, out int length))
             {
                 byte[] kept = new byte[field.Length - length];
                 Array.Copy(field, 0, kept, 0, at);
                 Array.Copy(field, at + length, kept, at, field.Length - at - length);
                 field = kept;
-
-                // A marker (00 00) left as the last element marks nothing.
                 if (field.Length >= 2 && field[field.Length - 2] == 0x00 && field[field.Length - 1] == 0x00)
                 {
                     byte[] shorter = new byte[field.Length - 2];
@@ -875,15 +939,11 @@ namespace RetroIO.Protocols.X25.Switch
                 }
             }
 
-            if (carried != null)
+            if (value != null)
             {
-                if (carried.Length > 255)
-                {
-                    throw new InvalidOperationException("a carried utility field is longer than a class D element holds");
-                }
-
+                bool classD = (code >> 6) == 3;
                 bool hasMarker = HasMarker(field);
-                int extra = (hasMarker ? 0 : 2) + 2 + carried.Length;
+                int extra = (hasMarker ? 0 : 2) + 1 + (classD ? 1 : 0) + value.Length;
                 byte[] grown = new byte[field.Length + extra];
                 field.CopyTo(grown, 0);
                 int pos = field.Length;
@@ -893,9 +953,13 @@ namespace RetroIO.Protocols.X25.Switch
                     grown[pos++] = 0x00;
                 }
 
-                grown[pos++] = CarriedUtilitiesCode;
-                grown[pos++] = (byte)carried.Length;
-                carried.CopyTo(grown, pos);
+                grown[pos++] = code;
+                if (classD)
+                {
+                    grown[pos++] = (byte)value.Length;
+                }
+
+                value.CopyTo(grown, pos);
                 field = grown;
             }
 

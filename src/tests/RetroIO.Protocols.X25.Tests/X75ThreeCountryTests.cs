@@ -454,6 +454,107 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(Utilities(Captured(noLinkIn, X25PacketType.CallAccepted)).TransitNetworks, Is.EqualTo(new[] { "2342" }));
         }
 
+        /// <summary>
+        /// The hop count (added 2026-11-21; [switch] max_hops limited nothing before). Two of our switches joined by an
+        /// internal trunk, a subscriber on each end. The first switch writes the count, 0, after the marker as 3F 00 (x25emu's
+        /// SW_FAC_HOPS); the second makes it 1, which passes max_hops 1 and is cleared by max_hops 0 with Network
+        /// congestion, diagnostic 128 (x25emu's SW_DIAG_HOP_LIMIT). The count never reaches the called DTE.
+        /// </summary>
+        [TestCase(1, false)]
+        [TestCase(0, true)]
+        public void TheHopCount_CrossesAnInternalTrunk_AndMaxHopsClearsTheCall(int secondMaxHops, bool cleared)
+        {
+            // Switch 2: internal trunk from switch 1 on port 0 (listens), the TAD on port 1.
+            PortConfig internalIn = NetworkLink(0, PortMode.Dce, 0);
+            internalIn.BetweenNetworks = false;
+            HdlcTcpSwitchPort s2FromS1 = new HdlcTcpSwitchPort(internalIn, NullLogger.Instance);
+            XotSwitchPort s2Tad = new XotSwitchPort(Subscriber(1));
+            Country second = Build("2342", "2342589004", s2FromS1, s2Tad);
+            second.Node.Config.MaxHops = secondMaxHops;
+            Assert.That(s2FromS1.Start() && s2Tad.Start(), Is.True);
+
+            // Switch 1: the PAD on port 0, internal trunk to switch 2 on port 1 (dials).
+            PortConfig internalOut = NetworkLink(1, PortMode.Dte, s2FromS1.BoundPort);
+            internalOut.BetweenNetworks = false;
+            XotSwitchPort s1Pad = new XotSwitchPort(Subscriber(0));
+            HdlcTcpSwitchPort s1ToS2 = new HdlcTcpSwitchPort(internalOut, NullLogger.Instance);
+            Build("2342", "2342589004", s1Pad, s1ToS2);
+            Assert.That(s1Pad.Start() && s1ToS2.Start(), Is.True);
+
+            List<byte[]> trunkOut = new List<byte[]>();
+            List<byte[]> unused = new List<byte[]>();
+            Capture(s1ToS2, unused, trunkOut);
+            Assert.That(SpinWait.SpinUntil(() => s1ToS2.PeerConnected && s2FromS1.PeerConnected, 10000), Is.True, "the trunk did not come up");
+
+            TcpClient tad = new TcpClient { NoDelay = true };
+            _disposables.Add(tad);
+            tad.Connect("127.0.0.1", s2Tad.BoundPort);
+            TcpClient pad = new TcpClient { NoDelay = true };
+            _disposables.Add(pad);
+            pad.Connect("127.0.0.1", s1Pad.BoundPort);
+            Assert.That(SpinWait.SpinUntil(() => s1Pad.PeerConnected && s2Tad.PeerConnected, 5000), Is.True);
+            NetworkStream padStream = pad.GetStream();
+            NetworkStream tadStream = tad.GetStream();
+            padStream.ReadTimeout = 10000;
+            tadStream.ReadTimeout = 10000;
+
+            byte[] sizes = { 0x42, 0x07, 0x07, 0x43, 0x02, 0x02 };
+            SendXot(padStream, X25PacketBuilder.CreateCallRequest(1, "2342589004", "23420001", sizes, new byte[] { 0x01, 0x00, 0x00, 0x00 }));
+
+            // On the trunk: the X.25 sizes, then the marker and the hop count 0.
+            bool sent = SpinWait.SpinUntil(() => HasType(trunkOut, X25PacketType.CallRequest), 5000);
+            if (!sent)
+            {
+                X25PacketInfo why = ReadUntilClear(padStream);
+                Assert.Fail("no Call Request on the trunk; the caller was cleared with cause " + why.ClearingCause + " diagnostic " + why.DiagnosticCode);
+            }
+            byte[] f = Captured(trunkOut, X25PacketType.CallRequest, x75: false).Facilities ?? Array.Empty<byte>();
+            Assert.That(f, Is.EqualTo(new byte[] { 0x42, 0x07, 0x07, 0x43, 0x02, 0x02, 0x00, 0x00, 0x3F, 0x00 }), BitConverter.ToString(f));
+
+            if (cleared)
+            {
+                X25PacketInfo clear = ReadUntilClear(padStream);
+                Assert.That(clear.ClearingCause, Is.EqualTo((byte)0x05), "Network congestion");
+                Assert.That(clear.DiagnosticCode, Is.EqualTo((byte)128));
+                return;
+            }
+
+            X25PacketInfo offered = ReadUntil(tadStream, X25PacketType.CallRequest);
+            Assert.That(offered.Facilities, Is.EqualTo(sizes), "the hop count is the network's own and never reaches a DTE");
+        }
+
+        private static bool HasType(List<byte[]> packets, X25PacketType type)
+        {
+            lock (packets)
+            {
+                for (int i = 0; i < packets.Count; i++)
+                {
+                    if (X25PacketParser.ParsePacket(packets[i], false).PacketType == type)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // Reads XOT packets until a Clear Request arrives.
+        private static X25PacketInfo ReadUntilClear(NetworkStream stream)
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                byte[] header = ReadExactly(stream, 4);
+                X25PacketInfo info = X25PacketParser.ParsePacket(ReadExactly(stream, (header[2] << 8) | header[3]));
+                if (info.PacketType == X25PacketType.ClearRequest)
+                {
+                    return info;
+                }
+            }
+
+            throw new AssertionException("the call was not cleared");
+        }
+
         // True when an X.25 facility field holds an element with the given code before the first marker (X.25 7.1).
         private static bool X25FacilityContains(byte[]? field, byte code)
         {
