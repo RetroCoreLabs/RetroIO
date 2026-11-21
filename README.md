@@ -104,14 +104,18 @@ The fix list is kept in the maintainer's notes and will be worked through after 
 | P6 | Python 3 | `src\eng\gen-*.py` (the code generators in this repository), and `src\eng\check-docs.py` (the documentation checker) | `python --version` - on Windows here the command is `python`; `python3` does not exist |
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |
 
-**CP/M test images** (for the planned CP/M support, `src/PLAN.md` item 2) go in a `cpm` folder of the
-image corpus, one folder per machine. Where they come from:
+**CP/M test images** (for the CP/M driver, `src/PLAN.md` item 2) go in a `cpm` folder of the image
+corpus, one folder per machine (`c128`, `kaypro`, `amstrad`, `cpm86`, `osborne`, `tiki100`). Where
+they come from:
 
 | Machine | Source | What is there |
 |---|---|---|
 | Commodore 128 | [Funet CP/M archive](https://ftp.funet.fi/pub/cpm/) (file list: [ALLFILES](https://ftp.funet.fi/pub/cpm/ALLFILES)) | C128 CP/M programs as gzipped `.d64`, `.d71` and `.d81` images (Turbo Pascal, WordStar, MBASIC, HI-TECH C, Infocom games) |
 | Kaypro II / 4 | [izkaypro on GitHub](https://github.com/ivanizag/izkaypro/tree/main/disks) | raw Kaypro images: CP/M 2.2 system disks, blank disks, applications and games (204800 bytes single-sided, 409600 double-sided, some with extra bytes at the end) |
-| Amstrad CPC / PCW | [archive.org](https://archive.org) (search "Amstrad CPC CP/M") | CPC `.dsk` images of CP/M games and data disks; take game and data disks only, the licence of CP/M system disks there is unclear |
+| Amstrad CPC | [archive.org](https://archive.org) (the Infocom "cpm version" items, such as `Enchanter_1984_Infocom_cpm_version`) | CPC `.dsk` images (both the standard and the extended container) of CP/M games; take game and data disks only, the licence of CP/M system disks there is unclear |
+| IBM PC CP/M-86 | [archive.org item `cpm-86`](https://archive.org/details/cpm-86) | CP/M-86 1.00 for the IBM PC, 160 KB, as a raw `.IMG` and an ImageDisk `.IMD` of the same disk |
+| Osborne 1 | [archive.org item `wizard-of-osz-osborne-imd-disks`](https://archive.org/details/wizard-of-osz-osborne-imd-disks) | Osborne user group disks, double density, as ImageDisk `.IMD` files |
+| TIKI-100 | [Tiki-100-emulator on GitHub](https://github.com/ovesennet/Tiki-100-emulator) (`src/plater`) | TIKO 4.01 boot disk, games disks, empty 90/200/400/800 KB disks and two 8 MB hard disks; an 800 KB disk with files (FD0054) comes from a private TIKI-100 disk library |
 
 ```powershell
 # from the repository root
