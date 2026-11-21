@@ -369,13 +369,22 @@ namespace RetroIO.Protocols.X25.Models
         }
 
         /// <summary>
-        /// Create X.29 READ PARAMETERS message
+        /// Creates an X.29 read PAD message for the given parameters; none reads them all.
         /// </summary>
+        /// <remarks>
+        /// Each reference goes with a value of zero: X.29 (12/97) 4.4.5.3, "Value fields in read PAD messages are coded
+        /// as all binary 0s". Until 2026-11-21 the references were sent bare (04 02 03), which a PAD reads as parameter
+        /// 2 with the value 3 ignored (RetroIO BUGS 45).
+        /// </remarks>
+        /// <param name="parameterNumbers">
+        /// The X.3 references to read.
+        /// </param>
+        /// <returns>
+        /// The PAD message, to send with Q = 1.
+        /// </returns>
         public static byte[] CreateReadParameters(byte[] parameterNumbers)
         {
-            var data = new List<byte> { READ_PARAMETERS };
-            data.AddRange(parameterNumbers);
-            return data.ToArray();
+            return X29ParameterField.BuildRead(READ_PARAMETERS, parameterNumbers ?? Array.Empty<byte>());
         }
 
         /// <summary>
@@ -436,18 +445,15 @@ namespace RetroIO.Protocols.X25.Models
             {
                 case SET_PARAMETERS:
                 case SET_AND_READ_PARAMETERS:
-                case PARAMETER_INDICATION:
-                    message.Parameters = ParseParameterPairs(data, 1);
-                    break;
-                    
                 case READ_PARAMETERS:
-                    message.ParameterNumbers = new List<byte>();
-                    for (int i = 1; i < data.Length; i++)
-                    {
-                        message.ParameterNumbers.Add(data[i]);
-                    }
+                case PARAMETER_INDICATION:
+                    // One reader for the field (X29ParameterField, X.29 4.4.5). A read is pairs with zero values
+                    // (4.4.5.3), so its references come out of the same loop; only an indication has the error bit
+                    // (4.4.5.2). Until 2026-11-21 a read was taken as bare references and the error bit was read as
+                    // part of the reference (RetroIO BUGS 45).
+                    X29ParameterField.Read(data, 1, data[0] == PARAMETER_INDICATION, message.ParameterNumbers, message.Parameters, message.ParametersInError);
                     break;
-                    
+
                 case ERROR:
                     if (data.Length >= 2)
                         message.ErrorType = data[1];
@@ -457,22 +463,6 @@ namespace RetroIO.Protocols.X25.Models
             return message;
         }
 
-        /// <summary>
-        /// Parse parameter number/value pairs
-        /// </summary>
-        private static Dictionary<byte, byte> ParseParameterPairs(byte[] data, int offset)
-        {
-            var parameters = new Dictionary<byte, byte>();
-            
-            for (int i = offset; i < data.Length - 1; i += 2)
-            {
-                byte paramNumber = data[i];
-                byte paramValue = data[i + 1];
-                parameters[paramNumber] = paramValue;
-            }
-            
-            return parameters;
-        }
     }
 
     /// <summary>
@@ -492,6 +482,16 @@ namespace RetroIO.Protocols.X25.Models
         /// Gets or sets the parameter number and value pairs carried by the message.
         /// </summary>
         public Dictionary<byte, byte> Parameters { get; set; } = new Dictionary<byte, byte>();
+
+        /// <summary>
+        /// Gets or sets the parameters a parameter indication reports in error, reference to reason.
+        /// </summary>
+        /// <remarks>
+        /// X.29 (12/97) 4.4.5.2 and 4.4.5.3: bit 8 of a reference in a parameter indication is the error bit, and the
+        /// value is then the reason (Table 3), not a value. Such a parameter is here and not in
+        /// <see cref="Parameters"/>.
+        /// </remarks>
+        public Dictionary<byte, byte> ParametersInError { get; set; } = new Dictionary<byte, byte>();
         /// <summary>
         /// Gets or sets the parameter numbers listed in the message, in the order they appeared.
         /// </summary>

@@ -68,45 +68,51 @@ namespace RetroIO.Protocols.X25.Models
     }
 
     /// <summary>
-    /// X.29 Error Codes used in Error messages according to ITU-T X.29 specification.
-    /// These codes provide specific information about errors encountered during PAD operation.
+    /// The error type of an X.29 error PAD message, octet 2: X.29 (12/97) Table 4.
     /// </summary>
+    /// <remarks>
+    /// Until 2026-11-21 this enum held five made-up codes (01 parameter unavailable, 02 parameter value invalid, 03
+    /// message too long, 04 procedure error, 05 system error): 01, 03 and 05 do not exist in Table 4, and 02 and 04 mean
+    /// other things there (RetroIO BUGS 45). A parameter that cannot be set or read is not an error PAD message at all:
+    /// Table 1 answers it with a parameter indication whose reference has the error bit (4.4.5.2).
+    /// </remarks>
     public enum X29ErrorCode : byte
     {
         /// <summary>
-        /// Parameter Unavailable (0x01) - Parameter not available.
-        /// The requested parameter is not supported by this PAD implementation
-        /// or is not accessible in the current operational context.
+        /// Table 4 case a, 00000000: "Received PAD message contained less than eight bits". No octet 3 (Figure 3, Note).
         /// </summary>
-        ParameterUnavailable = 0x01,
+        LessThanEightBits = 0x00,
 
         /// <summary>
-        /// Parameter Value Invalid (0x02) - Invalid parameter value.
-        /// The parameter value provided is outside the valid range or
-        /// is incompatible with the parameter type or current PAD configuration.
+        /// Table 4 case b, 00000010: "Unrecognized message code in received PAD message" (3.5.2 a).
         /// </summary>
-        ParameterValueInvalid = 0x02,
+        UnrecognizedMessageCode = 0x02,
 
         /// <summary>
-        /// Message Too Long (0x03) - Message exceeds limit.
-        /// The X.29 control message exceeds the maximum allowed length
-        /// for this PAD implementation or network configuration.
+        /// Table 4 case c, 00000100: "Parameter field format of received PAD message was incorrect or incompatible with
+        /// message code" (3.5.2 b and c).
         /// </summary>
-        MessageTooLong = 0x03,
+        ParameterFieldFormat = 0x04,
 
         /// <summary>
-        /// Procedure Error (0x04) - Protocol procedure error.
-        /// An error in the X.29 protocol sequence has been detected,
-        /// such as receiving a message in an inappropriate state.
+        /// Table 4 case d, 00000110: "Received PAD message did not contain an integral number of octets".
         /// </summary>
-        ProcedureError = 0x04,
+        NotIntegralOctets = 0x06,
 
         /// <summary>
-        /// System Error (0x05) - PAD system error.
-        /// An internal error has occurred within the PAD system
-        /// that prevents normal operation or message processing.
+        /// Table 4 case e, 00001000: "Received parameter indication PAD message was unsolicited" (3.5.2 d).
         /// </summary>
-        SystemError = 0x05
+        UnsolicitedParameterIndication = 0x08,
+
+        /// <summary>
+        /// Table 4 case f, 00001010: "Received PAD message was too long" (3.5.2 e).
+        /// </summary>
+        TooLong = 0x0A,
+
+        /// <summary>
+        /// Table 4 case g, 00001100: "Unauthorized reselection PAD message", only from a PAD that does reselection (3.6).
+        /// </summary>
+        UnauthorizedReselection = 0x0C,
     }
 
     /// <summary>
@@ -215,13 +221,16 @@ namespace RetroIO.Protocols.X25.Models
         /// </returns>
         public static string GetDescription(this X29ErrorCode errorCode)
         {
+            // The words of X.29 (12/97) Table 4.
             return errorCode switch
             {
-                X29ErrorCode.ParameterUnavailable => "Requested parameter not supported or accessible",
-                X29ErrorCode.ParameterValueInvalid => "Parameter value outside valid range or incompatible",
-                X29ErrorCode.MessageTooLong => "X.29 message exceeds maximum allowed length",
-                X29ErrorCode.ProcedureError => "Protocol sequence error or inappropriate message state",
-                X29ErrorCode.SystemError => "Internal PAD system error prevents normal operation",
+                X29ErrorCode.LessThanEightBits => "Received PAD message contained less than eight bits",
+                X29ErrorCode.UnrecognizedMessageCode => "Unrecognized message code in received PAD message",
+                X29ErrorCode.ParameterFieldFormat => "Parameter field format of received PAD message was incorrect or incompatible with message code",
+                X29ErrorCode.NotIntegralOctets => "Received PAD message did not contain an integral number of octets",
+                X29ErrorCode.UnsolicitedParameterIndication => "Received parameter indication PAD message was unsolicited",
+                X29ErrorCode.TooLong => "Received PAD message was too long",
+                X29ErrorCode.UnauthorizedReselection => "Unauthorized reselection PAD message",
                 _ => "Unknown X.29 error code"
             };
         }

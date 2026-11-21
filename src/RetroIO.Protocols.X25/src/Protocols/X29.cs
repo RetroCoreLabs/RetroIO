@@ -81,31 +81,25 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Create X.29 READ PARAMETERS message  
+        /// Creates an X.29 read PAD message for the given parameters; none reads them all.
         /// </summary>
+        /// <remarks>
+        /// Each reference goes with a value of zero: X.29 (12/97) 4.4.5.3, "Value fields in read PAD messages are coded
+        /// as all binary 0s". The references are sorted (4.4.5.1 allows any order; sorted keeps the message the same for
+        /// the same set). Until 2026-11-21 they were sent bare (04 02 03), which a PAD reads as parameter 2 with the
+        /// value 3 ignored (RetroIO BUGS 45).
+        /// </remarks>
         /// <param name="parameterNumbers">
-        /// Parameter numbers to read (empty for all)
+        /// The X.3 references to read; empty or null reads every parameter.
         /// </param>
         /// <returns>
-        /// X.29 message bytes
+        /// The PAD message, to send with Q = 1.
         /// </returns>
         public byte[] CreateReadParameters(params byte[] parameterNumbers)
         {
-            var message = new List<byte> { (byte)X29MessageType.ReadParameters };
-
-            if (parameterNumbers != null && parameterNumbers.Length > 0)
-            {
-                var sorted = new byte[parameterNumbers.Length];
-                Array.Copy(parameterNumbers, sorted, parameterNumbers.Length);
-                Array.Sort(sorted);
-                for (int i = 0; i < sorted.Length; i++)
-                {
-                    message.Add(sorted[i]);
-                }
-            }
-            // If no parameters specified, request all (empty parameter list)
-
-            var result = message.ToArray();
+            byte[] sorted = parameterNumbers == null ? Array.Empty<byte>() : (byte[])parameterNumbers.Clone();
+            Array.Sort(sorted);
+            byte[] result = X29ParameterField.BuildRead((byte)X29MessageType.ReadParameters, sorted);
             _logger?.LogDebug("X.29: Created READ PARAMETERS message for {Count} parameters",
                 parameterNumbers?.Length ?? 0);
 
@@ -273,16 +267,17 @@ namespace RetroIO.Protocols.X25.Protocols
                 {
                     case (byte)X29MessageType.SetParameters:
                     case (byte)X29MessageType.SetAndReadParameters:
-                    case (byte)X29MessageType.ParameterIndication:
-                        message.Parameters = ParseParameterPairs(data, 1);
-                        _logger?.LogTrace("X.29: Parsed {MessageType} with {Count} parameters", 
-                            GetMessageTypeName(data[0]), message.Parameters.Count);
-                        break;
-                        
                     case (byte)X29MessageType.ReadParameters:
-                        message.ParameterNumbers = ParseParameterNumbers(data, 1);
-                        _logger?.LogTrace("X.29: Parsed READ PARAMETERS for {Count} parameters", 
-                            message.ParameterNumbers.Count);
+                    case (byte)X29MessageType.ParameterIndication:
+                        // The shared reader of the parameter field (X29ParameterField, X.29 4.4.5): a read is pairs
+                        // with zero values (4.4.5.3); only an indication has the error bit (4.4.5.2); nothing is dropped,
+                        // what to do with a value is the receiver's business (AnswerHostPadMessage for the PAD). Until
+                        // 2026-11-21 a read was taken as bare references and a pair whose value looked invalid was
+                        // dropped (RetroIO BUGS 45).
+                        X29ParameterField.Read(data, 1, data[0] == (byte)X29MessageType.ParameterIndication,
+                            message.ParameterNumbers, message.Parameters, message.ParametersInError);
+                        _logger?.LogTrace("X.29: Parsed {MessageType} with {Count} parameters",
+                            GetMessageTypeName(data[0]), message.ParameterNumbers.Count);
                         break;
                         
                     case (byte)X29MessageType.InvitationToClear:
@@ -323,77 +318,6 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Parse parameter number/value pairs from message data
-        /// </summary>
-        /// <param name="data">
-        /// Message data
-        /// </param>
-        /// <param name="offset">
-        /// Starting offset in data
-        /// </param>
-        /// <returns>
-        /// Dictionary of parameter number → value
-        /// </returns>
-        private Dictionary<byte, byte> ParseParameterPairs(byte[] data, int offset)
-        {
-            var parameters = new Dictionary<byte, byte>();
-            
-            for (int i = offset; i < data.Length - 1; i += 2)
-            {
-                byte paramNumber = data[i];
-                byte paramValue = data[i + 1];
-                
-                // Validate parameter
-                if (X3.IsValidParameter(paramNumber, paramValue))
-                {
-                    parameters[paramNumber] = paramValue;
-                }
-                else
-                {
-                    _logger?.LogWarning("X.29: Invalid parameter {ParamNum}={Value} in message", 
-                        paramNumber, paramValue);
-                }
-            }
-            
-            return parameters;
-        }
-
-        /// <summary>
-        /// Parse parameter numbers from READ PARAMETERS message
-        /// </summary>
-        /// <param name="data">
-        /// Message data
-        /// </param>
-        /// <param name="offset">
-        /// Starting offset in data
-        /// </param>
-        /// <returns>
-        /// List of parameter numbers
-        /// </returns>
-        private List<byte> ParseParameterNumbers(byte[] data, int offset)
-        {
-            var parameters = new List<byte>();
-            
-            for (int i = offset; i < data.Length; i++)
-            {
-                byte paramNumber = data[i];
-                
-                // Validate parameter number exists
-                if (paramNumber >= 1 && paramNumber <= 22)
-                {
-                    parameters.Add(paramNumber);
-                }
-                else
-                {
-                    _logger?.LogWarning("X.29: Invalid parameter number {ParamNum} in READ message", 
-                        paramNumber);
-                }
-            }
-            
-            return parameters;
-        }
-
-        /// <summary>
         /// Get human-readable message type name
         /// </summary>
         /// <param name="messageType">
@@ -428,15 +352,14 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </returns>
         public static string GetErrorTypeName(byte errorType)
         {
-            return errorType switch
+            // The words of X.29 Table 4, from the one list (X29ErrorCodeExtensions.GetDescription). Until 2026-11-21
+            // this named five codes that are not in Table 4 (RetroIO BUGS 45).
+            if (Enum.IsDefined(typeof(X29ErrorCode), errorType))
             {
-                (byte)X29ErrorCode.ParameterUnavailable => "Parameter unavailable",
-                (byte)X29ErrorCode.ParameterValueInvalid => "Parameter value invalid",
-                (byte)X29ErrorCode.MessageTooLong => "Message too long",
-                (byte)X29ErrorCode.ProcedureError => "Procedure error",
-                (byte)X29ErrorCode.SystemError => "System error",
-                _ => $"Unknown error (0x{errorType:X2})"
-            };
+                return ((X29ErrorCode)errorType).GetDescription();
+            }
+
+            return $"Unknown error (0x{errorType:X2})";
         }
 
         /// <summary>
@@ -540,144 +463,37 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Create error response for invalid parameter
+        /// The codes of octet 2 of an error PAD message, X.29 (12/97) Table 4, as byte constants.
         /// </summary>
-        /// <param name="parameterNumber">
-        /// Invalid parameter number
-        /// </param>
-        /// <param name="parameterValue">
-        /// Invalid parameter value
-        /// </param>
-        /// <returns>
-        /// X.29 ERROR message
-        /// </returns>
-        public byte[] CreateParameterError(byte parameterNumber, byte parameterValue)
-        {
-            return CreateError((byte)X29ErrorCode.ParameterValueInvalid, new byte[] { parameterNumber, parameterValue });
-        }
-
-        /// <summary>
-        /// Process X.29 control message and generate appropriate response
-        /// </summary>
-        /// <param name="message">
-        /// Parsed X.29 message
-        /// </param>
-        /// <param name="x3Parameters">
-        /// Current X.3 parameters
-        /// </param>
-        /// <returns>
-        /// Response message or null if no response needed
-        /// </returns>
-        public byte[]? ProcessControlMessage(X29Message message, X3 x3Parameters)
-        {
-            if (!message.IsValid)
-            {
-                return CreateError((byte)X29ErrorCode.ProcedureError);
-            }
-
-            switch (message.Type)
-            {
-                case (byte)X29MessageType.SetParameters:
-                    return ProcessSetParameters(message, x3Parameters);
-                    
-                case (byte)X29MessageType.ReadParameters:
-                    return ProcessReadParameters(message, x3Parameters);
-                    
-                case (byte)X29MessageType.SetAndReadParameters:
-                    {
-                        // X.29: the answer carries the parameters named in the message, with their values
-                        // after the SET (not all 22), or an ERROR when a value could not be taken.
-                        byte[]? setError = ProcessSetParameters(message, x3Parameters);
-                        if (setError != null)
-                        {
-                            return setError;
-                        }
-
-                        return message.Parameters.Count == 0
-                            ? ProcessReadParameters(message, x3Parameters)
-                            : CreateParameterIndication(x3Parameters.GetParameters(new List<byte>(message.Parameters.Keys)));
-                    }
-                    
-                case (byte)X29MessageType.InvitationToClear:
-                case (byte)X29MessageType.IndicationOfBreak:
-                    // These messages typically don't require responses
-                    return null;
-                    
-                default:
-                    return CreateError((byte)X29ErrorCode.ProcedureError);
-            }
-        }
-
-        /// <summary>
-        /// Process SET PARAMETERS message
-        /// </summary>
-        private byte[]? ProcessSetParameters(X29Message message, X3 x3Parameters)
-        {
-            var errors = new List<byte>();
-
-            foreach (var param in message.Parameters)
-            {
-                if (!x3Parameters.SetParameter(param.Key, param.Value))
-                {
-                    errors.Add(param.Key);
-                    errors.Add(param.Value);
-                }
-            }
-
-            if (errors.Count > 0)
-            {
-                return CreateError((byte)X29ErrorCode.ParameterValueInvalid, errors.ToArray());
-            }
-
-            return null; // Success, no response needed
-        }
-
-        /// <summary>
-        /// Process READ PARAMETERS message  
-        /// </summary>
-        private byte[] ProcessReadParameters(X29Message message, X3 x3Parameters)
-        {
-            Dictionary<byte, byte> responseParams;
-
-            if (message.ParameterNumbers.Count > 0)
-            {
-                // Read specific parameters
-                responseParams = x3Parameters.GetParameters(message.ParameterNumbers);
-            }
-            else
-            {
-                // Read all parameters
-                responseParams = x3Parameters.GetAllParameters();
-            }
-
-            return CreateParameterIndication(responseParams);
-        }
-
-        /// <summary>
-        /// The codes of octet 2 of an error PAD message, X.29 (12/97) Table 4. The <see cref="X29ErrorCode"/> enum does
-        /// NOT hold these values (its 0x01 "parameter unavailable" and the rest are not in Table 4), so a PAD answering a
-        /// host uses these.
-        /// </summary>
+        /// <remarks>
+        /// Each takes its value from <see cref="X29ErrorCode"/>, so the table is written down once. Until 2026-11-21
+        /// the enum held made-up codes and this class was the only correct copy (RetroIO BUGS 45).
+        /// </remarks>
         public static class ErrorType
         {
             /// <summary>Table 4 case a: "Received PAD message contained less than eight bits", 00000000.</summary>
-            public const byte LessThanEightBits = 0x00;
+            public const byte LessThanEightBits = (byte)X29ErrorCode.LessThanEightBits;
 
             /// <summary>Table 4 case b: "Unrecognized message code in received PAD message", 00000010.</summary>
-            public const byte UnrecognizedMessageCode = 0x02;
+            public const byte UnrecognizedMessageCode = (byte)X29ErrorCode.UnrecognizedMessageCode;
 
             /// <summary>Table 4 case c: "Parameter field format of received PAD message was incorrect or incompatible with
             /// message code", 00000100.</summary>
-            public const byte ParameterFieldFormat = 0x04;
+            public const byte ParameterFieldFormat = (byte)X29ErrorCode.ParameterFieldFormat;
 
             /// <summary>Table 4 case d: "Received PAD message did not contain an integral number of octets", 00000110.</summary>
-            public const byte NotIntegralOctets = 0x06;
+            public const byte NotIntegralOctets = (byte)X29ErrorCode.NotIntegralOctets;
 
             /// <summary>Table 4 case e: "Received parameter indication PAD message was unsolicited", 00001000.</summary>
-            public const byte UnsolicitedParameterIndication = 0x08;
+            public const byte UnsolicitedParameterIndication = (byte)X29ErrorCode.UnsolicitedParameterIndication;
 
             /// <summary>Table 4 case f: "Received PAD message was too long", 00001010.</summary>
-            public const byte TooLong = 0x0A;
+            public const byte TooLong = (byte)X29ErrorCode.TooLong;
+
+            /// <summary>
+            /// Table 4 case g: "Unauthorized reselection PAD message", 00001100.
+            /// </summary>
+            public const byte UnauthorizedReselection = (byte)X29ErrorCode.UnauthorizedReselection;
         }
 
         /// <summary>
@@ -930,7 +746,7 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Parameter numbers for read operations
         /// </param>
         /// <param name="errorCode">
-        /// Error code for error messages
+        /// The X.29 Table 4 error type; required for an error message.
         /// </param>
         /// <param name="errorData">
         /// Additional error data
@@ -953,7 +769,9 @@ namespace RetroIO.Protocols.X25.Protocols
                 X29MessageType.ParameterIndication => CreateParameterIndicationEnum(parameters ?? new Dictionary<byte, byte>()),
                 X29MessageType.InvitationToClear => CreateInvitationToClearEnum(),
                 X29MessageType.IndicationOfBreak => CreateIndicationOfBreakEnum(),
-                X29MessageType.Error => CreateErrorEnum(errorCode ?? X29ErrorCode.SystemError, errorData),
+                // X.29 Table 4 has no general error code; until 2026-11-21 a missing code became the made-up 05
+                // "system error" (RetroIO BUGS 45). The caller must name the Table 4 case.
+                X29MessageType.Error => CreateErrorEnum(errorCode ?? throw new ArgumentNullException(nameof(errorCode), "an error PAD message needs its X.29 Table 4 error type"), errorData),
                 X29MessageType.SetAndReadParameters => CreateSetAndReadParametersEnum(parameters ?? new Dictionary<byte, byte>(), parameterNumbers ?? Array.Empty<byte>()),
                 _ => throw new ArgumentException($"Unknown X.29 message type: {messageType}")
             };
@@ -1015,24 +833,9 @@ namespace RetroIO.Protocols.X25.Protocols
         /// </returns>
         public byte[] CreateReadParametersEnum(params byte[] parameterNumbers)
         {
-            var message = new List<byte> { (byte)X29MessageType.ReadParameters };
-
-            if (parameterNumbers != null && parameterNumbers.Length > 0)
-            {
-                var sorted = new byte[parameterNumbers.Length];
-                Array.Copy(parameterNumbers, sorted, parameterNumbers.Length);
-                Array.Sort(sorted);
-                for (int i = 0; i < sorted.Length; i++)
-                {
-                    message.Add(sorted[i]);
-                }
-            }
-
-            var result = message.ToArray();
-            _logger?.LogDebug("X.29: Created READ PARAMETERS message for {Count} parameters ({Length} bytes)",
-                parameterNumbers?.Length ?? 0, result.Length);
-
-            return result;
+            // The same message as CreateReadParameters; one builder, so the two cannot differ again (until 2026-11-21
+            // both sent bare references, RetroIO BUGS 45).
+            return CreateReadParameters(parameterNumbers);
         }
 
         /// <summary>
@@ -1236,8 +1039,19 @@ namespace RetroIO.Protocols.X25.Protocols
         /// Gets or sets the parameter number and value pairs carried by the message.
         /// </summary>
         public Dictionary<byte, byte> Parameters { get; set; } = new Dictionary<byte, byte>();
+
         /// <summary>
-        /// Gets or sets the parameter numbers listed in the message.
+        /// Gets or sets the parameters a parameter indication reports in error, reference to reason.
+        /// </summary>
+        /// <remarks>
+        /// X.29 (12/97) 4.4.5.2 and 4.4.5.3: bit 8 of a reference in a parameter indication is the error bit, and the
+        /// value is then the reason (Table 3), not a value. Such a parameter is here and not in
+        /// <see cref="Parameters"/>.
+        /// </remarks>
+        public Dictionary<byte, byte> ParametersInError { get; set; } = new Dictionary<byte, byte>();
+
+        /// <summary>
+        /// Gets or sets the parameter references in the message, in the order they appeared.
         /// </summary>
         public List<byte> ParameterNumbers { get; set; } = new List<byte>();
         
