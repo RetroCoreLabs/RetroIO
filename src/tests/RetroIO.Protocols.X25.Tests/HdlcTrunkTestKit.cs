@@ -113,6 +113,18 @@ namespace RetroIO.Protocols.X25.Tests
         /// for the DTE side. The cross tests use it between this machine and a WSL process, which 127.0.0.1 does not
         /// reach in either direction.
         /// </summary>
+        /// <param name="targetHost">
+        /// The host the proxy dials for each connection it accepts: the DCE end of the trunk.
+        /// </param>
+        /// <param name="targetPort">
+        /// The TCP port on <paramref name="targetHost"/>.
+        /// </param>
+        /// <param name="listenOn">
+        /// The local address the proxy listens on for the DTE end; IPAddress.Any lets a WSL process reach it.
+        /// </param>
+        /// <param name="rule">
+        /// What to do with each frame (pass, drop, corrupt); null passes every frame.
+        /// </param>
         public HdlcFaultProxy(string targetHost, ushort targetPort, IPAddress listenOn, Func<ProxiedFrame, FrameFate>? rule = null)
         {
             _targetHost = targetHost;

@@ -232,6 +232,12 @@ namespace RetroIO.Protocols.X25.Tests
         /// A listening port whose only connection already carries a call: the peer is connected, but has no fresh
         /// connection for a new call.
         /// </summary>
+        /// <param name="busy">
+        /// The peer whose one connection carries the call; the caller disposes of it.
+        /// </param>
+        /// <returns>
+        /// The started port; the caller disposes of it.
+        /// </returns>
         private static XotSwitchPort DceWithNoFreshConnection(out RawPeer busy)
         {
             XotSwitchPort dce = NewDce();
