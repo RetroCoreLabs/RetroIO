@@ -513,6 +513,45 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </remarks>
         public bool SendMessage(ushort lci, byte[] data, bool qBit = false, bool dBit = false)
         {
+            return SendMessage(lci, data, qBit, dBit, moreFollows: false);
+        }
+
+        /// <summary>
+        /// Sends user data as part of a complete packet sequence (X.25 4.3.5), and says whether the sequence ends with
+        /// it or goes on in the next call.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Added 2026-11-21 for a call joined between two lines (RetroIO BUGS 32): the receiving line hands a long
+        /// sequence on in pieces (<see cref="X25LayerBase.MessageReceived"/> with "more data"), and each piece must go
+        /// out as part of ONE sequence on the other line, not as a sequence of its own. X.25 4.3.4 and 4.3.5: every
+        /// packet with the M bit set must be full ("a full data packet", category A), so a piece that leaves the
+        /// sequence open must be a whole number of packets of this circuit's size; anything else is refused here and
+        /// the caller keeps the rest for the next piece.
+        /// </para>
+        /// </remarks>
+        /// <param name="lci">
+        /// Logical channel, in data transfer.
+        /// </param>
+        /// <param name="data">
+        /// The data. Empty is refused.
+        /// </param>
+        /// <param name="qBit">
+        /// Qualifier bit, applied to every packet (4.3.3).
+        /// </param>
+        /// <param name="dBit">
+        /// Delivery confirmation bit, carried in every packet, as <see cref="SendMessage(ushort, byte[], bool, bool)"/>.
+        /// </param>
+        /// <param name="moreFollows">
+        /// True when the sequence goes on after this data: the last packet then carries M = 1, and the length must be a
+        /// whole number of packets of the circuit's packet size.
+        /// </param>
+        /// <returns>
+        /// True when the data has been accepted - sent or queued; false when the channel is not in data transfer, the
+        /// data is empty, or <paramref name="moreFollows"/> is true and the length is not a whole number of packets.
+        /// </returns>
+        public bool SendMessage(ushort lci, byte[] data, bool qBit, bool dBit, bool moreFollows)
+        {
             if (data == null || data.Length == 0)
             {
                 return false;
@@ -529,11 +568,16 @@ namespace RetroIO.Protocols.X25.PacketLayer
             }
 
             int size = vc.PacketSizeOut;
+            if (moreFollows && data.Length % size != 0)
+            {
+                return false;
+            }
+
             int offset = 0;
             while (offset < data.Length)
             {
                 int take = data.Length - offset < size ? data.Length - offset : size;
-                bool more = offset + take < data.Length;
+                bool more = moreFollows || offset + take < data.Length;
                 byte[] segment = new byte[take];
                 Array.Copy(data, offset, segment, 0, take);
                 vc.PendingSegments.Enqueue(new X25PendingSegment(segment, more, qBit, dBit));
@@ -542,6 +586,25 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             DrainPending(vc);
             return true;
+        }
+
+        /// <summary>
+        /// Says how many packets of a channel are queued and not yet sent, because the window or the peer's busy
+        /// condition holds them (<see cref="SendMessage(ushort, byte[], bool, bool, bool)"/>).
+        /// </summary>
+        /// <remarks>
+        /// Added 2026-11-21 so a call joined between two lines can hold back the sending side while the other side's
+        /// queue is full, instead of letting the queue grow without end (RetroIO BUGS 32).
+        /// </remarks>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <returns>
+        /// The number of queued packets; 0 for a channel that is not in use.
+        /// </returns>
+        public int PendingPacketCount(ushort lci)
+        {
+            return _vcs.TryGetValue(lci, out X25Vc? vc) ? vc.PendingSegments.Count : 0;
         }
 
         /// <summary>
