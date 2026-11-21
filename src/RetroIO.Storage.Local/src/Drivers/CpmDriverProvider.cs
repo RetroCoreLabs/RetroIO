@@ -44,7 +44,7 @@ namespace RetroIO.Storage.Local.Drivers
         /// <summary>
         /// Gets a short description of the format.
         /// </summary>
-        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 raw images; Amstrad CPC DSK)";
+        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 raw images; Amstrad CPC DSK; CP/M-86 on 160 KB IBM PC floppies)";
 
         /// <summary>
         /// Gets the number of first bytes detection needs: 12800, which holds the C64 CP/M directory
@@ -69,6 +69,13 @@ namespace RetroIO.Storage.Local.Drivers
             if (IsAmstradDsk(hints.HeaderBytes))
             {
                 return 0.95f;
+            }
+
+            if (CpmDriver.TryIbmPcCpm86(hints.FileSize, hints.HeaderBytes, out CpmDiskParameters? pc, out ICpmRecordMap? pcMap))
+            {
+                // The directory is the 2 KB at 1000h, inside the header bytes.
+                byte[] pcDirectory = CpmFileSystem.DirectoryBytes(hints.HeaderBytes, pc!, pcMap!);
+                return CpmFileSystem.LooksLikeDirectory(pcDirectory, pc!, out int pcFiles) && pcFiles > 0 ? 0.95f : 0.0f;
             }
 
             if (CpmDriver.TryKaypro(hints.FileSize, out CpmDiskParameters? kaypro, out ICpmRecordMap? kayproMap))

@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2): CP/M-86 on PC floppies (machine 2 in the list).
+Next: CP/M (item 2): ImageDisk (.IMD) reader, then Osborne 1 disks.
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -32,6 +32,7 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      four, checked by cpmtools on a flat copy. Still open for the C128: CP/M 3 time stamps.
      Kaypro II and 4 raw images done (2026-11-21): layouts from ROM 81-232, `KayproCpmTests`, checked by cpmtools.
      Amstrad CPC system and data format in DSK files done (2026-11-21), `AmstradCpmTests`; the layout is not yet checked against the Amstrad manual, and no data-format disk was tested.
+     CP/M-86 on 160 KB IBM PC floppies done (2026-11-21), `Cpm86Tests`, layout measured on the IBM CP/M-86 1.00 disk. Not yet: 320 KB double-sided, 360 KB, 1.2 MB (no images). Osborne images downloaded (`cpm/osborne`, ImageDisk .IMD); next is the IMD reader.
    - **Machines, in this order.**
      1. **Commodore 128 CP/M** on 1541, 1571 and 1581 images. The disk has a normal CBM header
         named "CP/M" and CP/M data elsewhere; we already have one real image (a C128 CP/M D71).

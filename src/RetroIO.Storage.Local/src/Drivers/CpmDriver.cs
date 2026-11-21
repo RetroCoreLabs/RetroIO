@@ -166,6 +166,51 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
+        /// Gives the CP/M-86 layout of a 160 KB IBM PC floppy image, if the image is one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// One side, 40 tracks of eight 512-byte sectors, stored in order. Measured on the IBM PC
+        /// CP/M-86 1.00 system disk: one reserved track (the loader), the directory at 1000h, 1 KB
+        /// blocks, 64 entries in blocks 0 and 1, so DSM is 155. Every text file on that disk reads
+        /// back clean with this layout.
+        /// </para>
+        /// <para>
+        /// A DOS disk of the same size has its FAT at 200h, starting FEh FFh FFh (the 160 KB media
+        /// byte); an image that starts that way is not taken as CP/M-86.
+        /// </para>
+        /// </remarks>
+        /// <param name="length">
+        /// Image length in bytes.
+        /// </param>
+        /// <param name="image">
+        /// The image, or at least its first 1 KB.
+        /// </param>
+        /// <param name="parameters">
+        /// The disk parameters, or <c>null</c>.
+        /// </param>
+        /// <param name="map">
+        /// The record map, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the image has the size of a 160 KB PC floppy and no DOS FAT.
+        /// </returns>
+        public static bool TryIbmPcCpm86(long length, ReadOnlySpan<byte> image, out CpmDiskParameters? parameters, out ICpmRecordMap? map)
+        {
+            const int Track = 8 * 512;
+            parameters = null;
+            map = null;
+            if (length != 163840 || image.Length < 0x203 || (image[0x200] == 0xFE && image[0x201] == 0xFF && image[0x202] == 0xFF))
+            {
+                return false;
+            }
+
+            parameters = new CpmDiskParameters(1024, 156, 64, 0, 1);
+            map = new LinearCpmRecordMap(Track, 156 * 8);
+            return true;
+        }
+
+        /// <summary>
         /// Gives the Kaypro layout for a raw Kaypro disk image of this length, if there is one.
         /// </summary>
         /// <remarks>
@@ -298,6 +343,17 @@ namespace RetroIO.Storage.Local.Drivers
                 }
 
                 _fileSystem = new CpmFileSystem(image, amstradParameters, amstrad);
+                return;
+            }
+
+            if (TryIbmPcCpm86(image.Length, image, out CpmDiskParameters? pc, out ICpmRecordMap? pcMap))
+            {
+                if (!CpmFileSystem.LooksLikeDirectory(CpmFileSystem.DirectoryBytes(image, pc!, pcMap!), pc!, out _))
+                {
+                    throw new InvalidDataException("Not a CP/M-86 disk: track 1 does not hold a CP/M directory.");
+                }
+
+                _fileSystem = new CpmFileSystem(image, pc!, pcMap!);
                 return;
             }
 
