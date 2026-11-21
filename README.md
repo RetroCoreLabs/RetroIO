@@ -104,6 +104,15 @@ The fix list is kept in the maintainer's notes and will be worked through after 
 | P6 | Python 3 | `src\eng\gen-*.py` (the code generators in this repository), and `src\eng\check-docs.py` (the documentation checker) | `python --version` - on Windows here the command is `python`; `python3` does not exist |
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |
 
+**CP/M test images** (for the planned CP/M support, `src/PLAN.md` item 2) go in a `cpm` folder of the
+image corpus, one folder per machine. Where they come from:
+
+| Machine | Source | What is there |
+|---|---|---|
+| Commodore 128 | [Funet CP/M archive](https://ftp.funet.fi/pub/cpm/) (file list: [ALLFILES](https://ftp.funet.fi/pub/cpm/ALLFILES)) | C128 CP/M programs as gzipped `.d64`, `.d71` and `.d81` images (Turbo Pascal, WordStar, MBASIC, HI-TECH C, Infocom games) |
+| Kaypro II / 4 | [izkaypro on GitHub](https://github.com/ivanizag/izkaypro/tree/main/disks) | raw Kaypro images: CP/M 2.2 system disks, blank disks, applications and games (204800 bytes single-sided, 409600 double-sided, some with extra bytes at the end) |
+| Amstrad CPC / PCW | [archive.org](https://archive.org) (search "Amstrad CPC CP/M") | CPC `.dsk` images of CP/M games and data disks; take game and data disks only, the licence of CP/M system disks there is unclear |
+
 ```powershell
 # from the repository root
 .\src\build.ps1                                # build, test, publish the four tools
