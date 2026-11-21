@@ -39,7 +39,7 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 ## What you can use it for
 
 - **Read and write vintage disk images** — NDFS, D64/T64/TAP/CRT/PRG/P00, DragonDOS, FAT12/16/32,
-  V7, FFS, ADFS and more — without knowing their on-disk layouts.
+  V7, FFS, DECB, OS-9 RBF and more — without knowing their on-disk layouts.
 - **Serve files to a real 8-bit machine** over **TNFS**, or to a BBC Micro over **Econet/AUN**.
 - **Build an X.25 network**: packet layer, LAPB, a switching engine, routing, monitoring, and XOT
   (X.25 over TCP, RFC 1613). XOT carries real traffic through `XotSwitchPort`, `XotPeerTransport`
@@ -59,8 +59,8 @@ Version `0.1.0`, published to the local folder feed as `0.1.0-local.<timestamp>`
 on nuget.org yet, and `src/CHANGELOG.md` has only an `[Unreleased]` section so far.
 
 - **Fifty-one packages.** Nothing in `src/` has a `Main` - the library and application split is
-  enforced by the layout, not by convention. A clean restore and build give no warnings, and the
-  GitHub build and test run is green.
+  enforced by the layout, not by convention. A clean restore and build give no warnings. The
+  GitHub test run is not green: see Known problems.
 - **Eighteen test projects.** The X.25 packet layer and the C emulator `x25emu` read the
   **same** conformance vectors, so a disagreement between the two implementations is a
   failing test rather than an argument.
@@ -80,8 +80,12 @@ Found by a read-only review on 2026-10-15. Each one is a real defect, not a plan
   the source comment says so.
 - **Some tests assert nothing.** A handful call `Assert.Pass` or `Assert.True(true)`. They count in the
   test total and prove nothing.
-- **Many real-image tests only run on one machine.** They open disk images at fixed local paths and
-  skip everywhere else, so FFS and V7 have no active real-image test off that machine.
+- **Many real-image tests need images that are not in git.** Apart from the downloaded test set, they
+  find their images through environment variables (see `src/eng/test-env.example.bat`) and skip when
+  those are not set, so FFS and V7 have no active real-image test on GitHub.
+- **The GitHub test run is red.** Four `CommodoreDriverTests` fail (they ran for the first time on
+  2026-11-20), and `GeneratedDocsAreCurrentTests` reports that `tad-wire.md` is out of date. The
+  Commodore failures are in `src/BUGS.md`.
 - **DragonDOS is unchecked.** Its free-block count and extent handling were not compared with a real
   disk.
 
