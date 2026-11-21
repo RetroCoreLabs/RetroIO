@@ -682,5 +682,30 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(rig.Transport.Sent.Count, Is.EqualTo(1));
             Assert.That(rig.Transport.Sent[0].Data, Is.EqualTo(new byte[] { 0x05, 0x02, 0x0C }));
         }
+
+        /// <summary>
+        /// A reselection request (code 0x07) or a reselection with TOA/NPI (0x08) is answered as an invalid message,
+        /// because this PAD does not do reselection.
+        /// </summary>
+        /// <remarks>
+        /// X.29 (12/97) 3.6 Note 2: reselection "is an optional feature of the PAD. PADs which do not implement this
+        /// feature will consider reselection and reselection with TOA/NPI PAD messages as invalid"; 3.5.2 a) answers an
+        /// invalid message code with an error PAD message, Table 4 case b (00000010), octet 3 the code received. Table 4
+        /// case g (unauthorized reselection) is only for a PAD that does reselect (3.6 a to c). Until 2026-11-21 the
+        /// PAD sent nothing and only logged it (RetroIO BUGS 46, RetroX25 PLAN H2).
+        /// </remarks>
+        /// <param name="code">
+        /// The message code: 0x07 reselection, 0x08 reselection with TOA/NPI.
+        /// </param>
+        [TestCase((byte)0x07)]
+        [TestCase((byte)0x08)]
+        public void AReselectionRequest_IsAnsweredAsAnInvalidMessage(byte code)
+        {
+            using Rig rig = new Rig();
+            rig.Host(code);
+
+            Assert.That(rig.Transport.Sent.Count, Is.EqualTo(1));
+            Assert.That(rig.Transport.Sent[0].Data, Is.EqualTo(new byte[] { 0x05, 0x02, code }));
+        }
     }
 }
