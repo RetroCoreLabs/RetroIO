@@ -1785,13 +1785,18 @@ namespace RetroIO.Protocols.X25.Protocols
 
         /// <summary>
         /// The format effector, X.28 3.5.2: "The characters 0/13 (CR) 0/10 (LF) will be sent by the PAD", followed by
-        /// padding. The padding is NOT sent: no PAD service signal of this PAD pads (X.28 3.5.2, parameter 9); see
-        /// RetroIO BUGS.md.
+        /// padding: parameter 9's count, or when it is 0 a count set by the terminal speed (<see cref="X3.ServiceSignalPadding"/>).
+        /// The padding character is NUL (3.5.20). Until 2026-11-21 no padding was sent (RetroIO BUGS.md).
         /// </summary>
         private void SendFormatEffector()
         {
             SendSignal('\r');
             SendSignal('\n');
+            int padding = _x3Parameters.ServiceSignalPadding();
+            for (int i = 0; i < padding; i++)
+            {
+                SendSignal('\0');
+            }
         }
 
         private static bool IsGraphic(char c)

@@ -262,6 +262,22 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// With parameter 9 = 3 the format effector after XXX is CR LF and three NULs (X.28 3.5.2: "If parameter 9 is
+        /// not set to 0, then the number of padding characters transmitted after the character 0/10 (LF) will be equal
+        /// to the current value of that parameter"; 3.5.20, the padding character is NUL). Added 2026-11-21.
+        /// </summary>
+        [Test]
+        public void LineDelete_WithParameter9_PadsTheFormatEffector()
+        {
+            using Rig rig = new Rig();
+            rig.Host(ChatProtocolService.SetPadMessage);
+            rig.Host(0x02, 19, 1, 9, 3);
+            rig.Type("abc" + Can);
+
+            Assert.That(Show(rig.Screen), Is.EqualTo(Show("abc" + Can + "XXX\r\n\0\0\0")));
+        }
+
+        /// <summary>
         /// Line delete with parameter 19 = 2: BS SP BS once per graphic character deleted (X.28 3.5.25, "Value 2: the
         /// characters 0/8 (BS), 2/0 (SP), 0/8 (BS) will be sent the number of times equal to the number of graphic
         /// characters being deleted from the buffer").

@@ -175,12 +175,14 @@ namespace RetroIO.Protocols.X25.Protocols
             /// </summary>
             public const byte LINE_FOLDING = 0;             // Disabled
             /// <summary>
-            /// Default value of the binary speed parameter: 0.
+            /// Default value of the binary speed parameter: 14, 9600 bit/s (X.3 3.11).
             /// Parameter 11 is read only (the speed of the terminal, known to the PAD) and Table 1/X.28
-            /// says only "indicate speed of DTE", with no number. The PAD that owns the line has to set the
-            /// real speed; 0 is kept as the table-less starting value (X.3 3.11 reads 0 as 110 bit/s).
+            /// says only "indicate speed of DTE", with no number. Our PAD runs over TCP or telnet, not a
+            /// slow line, so it reports 9600 (decided by Ronny 2026-11-21). The speed decides the padding of
+            /// the PAD service signals (X.28 3.5.2): none at 9600. Until 2026-11-21 the default was 0, which
+            /// X.3 3.11 reads as 110 bit/s.
             /// </summary>
-            public const byte BINARY_SPEED = 0;             // Not used
+            public const byte BINARY_SPEED = 14;            // 9600 bit/s
             /// <summary>
             /// Default value of the flow control parameter: 1 (use of X-ON and X-OFF).
             /// Simple standard profile, Table 1/X.28.
@@ -803,6 +805,43 @@ namespace RetroIO.Protocols.X25.Protocols
                 paramStrings.Add($"{nonDefaultParams[i].Key}:{nonDefaultParams[i].Value}");
             }
             return $"X.3 Parameters: {string.Join(", ", paramStrings)}";
+        }
+
+        /// <summary>
+        /// The number of padding characters after the CR LF that ends a PAD service signal (the format effector).
+        /// </summary>
+        /// <remarks>
+        /// X.28 3.5.2: the CR LF is "followed by, when parameter 9 is set to 0, two padding characters if the start-stop
+        /// mode DTE operates at a data rate of 110 bit/s and four padding characters if the start-stop mode DTE operates
+        /// at 200 bit/s, 300 bit/s, 1200 bit/s, 75/1200 bit/s or 2400 bit/s. If parameter 9 is not set to 0, then the
+        /// number of padding characters transmitted after the character 0/10 (LF) will be equal to the current value of
+        /// that parameter." The speed is parameter 11 (X.3 3.11: 0 = 110, 8 = 200, 2 = 300, 3 = 1200, 11 = 75/1200,
+        /// 12 = 2400). 3.5.2 names no padding for any other speed, so there is none. Added 2026-11-21 (RetroIO BUGS.md);
+        /// before that no service signal was padded.
+        /// </remarks>
+        /// <returns>
+        /// The count; the padding character is NUL (X.28 3.5.20).
+        /// </returns>
+        public int ServiceSignalPadding()
+        {
+            byte padAfterCr = GetParameter(ParameterNumber.PADDING_AFTER_CR);
+            if (padAfterCr != 0)
+            {
+                return padAfterCr;
+            }
+
+            byte speed = GetParameter(ParameterNumber.BINARY_SPEED);
+            if (speed == 0)
+            {
+                return 2;
+            }
+
+            if (speed == 8 || speed == 2 || speed == 3 || speed == 11 || speed == 12)
+            {
+                return 4;
+            }
+
+            return 0;
         }
 
         /// <summary>

@@ -22,7 +22,7 @@ namespace RetroIO.Protocols.X25.Tests
     {
         /// <summary>
         /// Table 1/X.28, transparent standard profile, parameters 1 to 22 in order.
-        /// Parameter 11 is read only (the speed of the terminal), the table gives no number, so 0 is used.
+        /// Parameter 11 is read only (the speed of the terminal) and the table gives no number; the PAD reports 14, 9600 bit/s (decided by Ronny 2026-11-21; until then 0, which X.3 3.11 reads as 110 bit/s).
         /// </summary>
         private static readonly byte[] TransparentProfile =
         {
@@ -36,7 +36,7 @@ namespace RetroIO.Protocols.X25.Tests
             0,   // 8  discard output: normal delivery
             0,   // 9  padding after CR: none
             0,   // 10 line folding: none
-            0,   // 11 binary speed: read only
+            14,  // 11 binary speed: read only; 9600 bit/s, decided by Ronny 2026-11-21 (was 0)
             0,   // 12 flow control of the PAD: no X-ON / X-OFF
             0,   // 13 linefeed insertion: none
             0,   // 14 linefeed padding: none
@@ -65,7 +65,7 @@ namespace RetroIO.Protocols.X25.Tests
             0,   // 8  discard output: normal delivery
             0,   // 9  padding after CR: none
             0,   // 10 line folding: none
-            0,   // 11 binary speed: read only
+            14,  // 11 binary speed: read only; 9600 bit/s, decided by Ronny 2026-11-21 (was 0)
             1,   // 12 flow control of the PAD: use X-ON / X-OFF
             0,   // 13 linefeed insertion: none
             0,   // 14 linefeed padding: none
@@ -128,7 +128,7 @@ namespace RetroIO.Protocols.X25.Tests
 
         /// <summary>
         /// The default of every parameter is the simple standard profile of Table 1/X.28 (parameter 11 is
-        /// read only and the table gives no number, so it stays 0). Replaces the old test that pinned
+        /// read only and the table gives no number; it is 14, 9600 bit/s, since 2026-11-21). Replaces the old test that pinned
         /// parameter 3 at 2: the simple profile sets parameter 3 to 126.
         /// </summary>
         [Test]

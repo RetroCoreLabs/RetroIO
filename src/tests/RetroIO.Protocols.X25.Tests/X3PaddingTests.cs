@@ -62,6 +62,51 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
+        /// The padding after the CR LF of a PAD service signal (X.28 3.5.2): parameter 9 when it is not 0; when it is 0,
+        /// two at 110 bit/s, four at 200, 300, 1200, 75/1200 or 2400 bit/s, and none at any other speed (3.5.2 names no
+        /// other).
+        /// </summary>
+        /// <param name="padAfterCr">
+        /// Parameter 9.
+        /// </param>
+        /// <param name="speed">
+        /// Parameter 11 (X.3 3.11 codes: 0 = 110, 8 = 200, 2 = 300, 3 = 1200, 11 = 75/1200, 12 = 2400, 14 = 9600).
+        /// </param>
+        /// <param name="expected">
+        /// The number of padding characters.
+        /// </param>
+        [TestCase(3, 14, 3)]
+        [TestCase(0, 0, 2)]
+        [TestCase(0, 8, 4)]
+        [TestCase(0, 2, 4)]
+        [TestCase(0, 3, 4)]
+        [TestCase(0, 11, 4)]
+        [TestCase(0, 12, 4)]
+        [TestCase(0, 14, 0)]
+        [TestCase(0, 13, 0)]
+        public void ServiceSignalPadding_FollowsX28Clause352(int padAfterCr, int speed, int expected)
+        {
+            X3 x3 = new X3();
+            x3.SetParameter(X3.ParameterNumber.PADDING_AFTER_CR, (byte)padAfterCr);
+            x3.SetParameter(X3.ParameterNumber.BINARY_SPEED, (byte)speed);
+
+            Assert.That(x3.ServiceSignalPadding(), Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// The PAD reports 9600 bit/s unless it is told otherwise (decided by Ronny 2026-11-21: the PAD runs over TCP
+        /// or telnet, not a slow line), so its service signals carry no padding by default.
+        /// </summary>
+        [Test]
+        public void ThePadReports9600_SoItsServiceSignalsAreNotPadded()
+        {
+            X3 x3 = new X3();
+
+            Assert.That(x3.GetParameter(X3.ParameterNumber.BINARY_SPEED), Is.EqualTo(14), "X.3 3.11: 14 is 9600 bit/s");
+            Assert.That(x3.ServiceSignalPadding(), Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// With both parameters 0 the text is unchanged.
         /// </summary>
         [Test]
