@@ -281,6 +281,258 @@ namespace RetroIO.Storage.Local.Tests
             }
         }
 
+        [TestCase("TurboPascal.d71")]
+        [TestCase("28may87-1.d64")]
+        [TestCase("TurboPascal.d81")]
+        [TestCase("cpm.d64")]
+        public void Write_NewFile_ReadsBackOnAFreshMountAndLeavesOtherFilesAlone(string imageName)
+        {
+            byte[] original = LoadImage(imageName);
+            CpmDriver before = MountBytes(original, writable: false);
+            DirectoryEntry[] filesBefore = before.ListDirectory("/");
+            string someFile = "/" + filesBefore[0].Name;
+            byte[] someFileBefore = before.ReadFile(someFile);
+
+            byte[] data = Pattern(5000);
+            using MemoryStream stream = new MemoryStream();
+            stream.Write(original, 0, original.Length);
+            CpmDriver writer = new CpmDriver();
+            writer.Mount(stream, readOnly: false);
+            writer.WriteFile("/NEW.DAT", data);
+
+            CpmDriver after = MountBytes(stream.ToArray(), writable: false);
+            byte[] back = after.ReadFile("/NEW.DAT");
+            Assert.That(back.Length, Is.EqualTo(5120), "5000 bytes are 40 records of 128");
+            Assert.That(back.AsSpan(0, data.Length).SequenceEqual(data), Is.True, "the data comes back");
+            for (int i = data.Length; i < back.Length; i++)
+            {
+                Assert.That(back[i], Is.EqualTo(0x1A), "the last record is filled with Ctrl-Z");
+            }
+
+            Assert.That(after.ReadFile(someFile), Is.EqualTo(someFileBefore), someFile + " is not changed");
+            Assert.That(after.ListDirectory("/").Length, Is.EqualTo(filesBefore.Length + 1));
+        }
+
+        [Test]
+        public void Write_FileOfTwoEntries_GetsTheExtentNumbersCpmUses()
+        {
+            // Double-sided C128: 2 KB blocks, EXM 1, 16 one-byte block numbers, so one entry holds
+            // 32 KB = 256 records = two logical extents. 40 KB = 320 records: the first entry ends
+            // in extent 1 with RC 128, the second is extent 2 with RC 64.
+            byte[] original = LoadImage("TurboPascal.d71");
+            CpmDiskParameters p = CpmDiskParameters.FromCpm3Macro(1024, 1, 340, 2048, 128, 0);
+            CpmFileSystem fs = new CpmFileSystem(original, p, new C128CpmRecordMap(true, p.BlockCount * 8));
+            byte[] data = Pattern(40 * 1024);
+            fs.Write(0, "BIG.DAT", data);
+
+            byte[] directory = CpmFileSystem.DirectoryBytes(fs.Image, p, new C128CpmRecordMap(true, p.BlockCount * 8));
+            int entries = 0;
+            for (int e = 0; e < p.DirectoryEntries; e++)
+            {
+                int at = e * 32;
+                if (directory[at] == 0 && Encoding.ASCII.GetString(directory, at + 1, 11) == "BIG     DAT")
+                {
+                    int extent = directory[at + 12] | (directory[at + 14] << 5);
+                    if (entries == 0)
+                    {
+                        Assert.That(extent, Is.EqualTo(1), "first entry extent");
+                        Assert.That(directory[at + 15], Is.EqualTo(128), "first entry RC");
+                    }
+                    else
+                    {
+                        Assert.That(extent, Is.EqualTo(2), "second entry extent");
+                        Assert.That(directory[at + 15], Is.EqualTo(64), "second entry RC");
+                    }
+
+                    entries++;
+                }
+            }
+
+            Assert.That(entries, Is.EqualTo(2));
+            CpmFileSystem again = new CpmFileSystem(fs.Image, p, new C128CpmRecordMap(true, p.BlockCount * 8));
+            Assert.That(again.Read(again.Find(0, "BIG.DAT")!), Is.EqualTo(data));
+        }
+
+        [Test]
+        public void Write_TooBigForTheDisk_IsDiskFullAndChangesNothing()
+        {
+            byte[] original = LoadImage("TurboPascal.d71");
+            byte[] copy = (byte[])original.Clone();
+            CpmDiskParameters p = CpmDiskParameters.FromCpm3Macro(1024, 1, 340, 2048, 128, 0);
+            CpmFileSystem fs = new CpmFileSystem(copy, p, new C128CpmRecordMap(true, p.BlockCount * 8));
+            IOException error = Assert.Throws<IOException>(() => fs.Write(0, "HUGE.DAT", new byte[400 * 1024]))!;
+            Assert.That(error.Message, Does.StartWith("Disk full"));
+            Assert.That(copy, Is.EqualTo(original), "a failed write leaves the image as it was");
+        }
+
+        [Test]
+        public void Delete_ThenWrite_ReusesTheFreedBlocks()
+        {
+            byte[] image = LoadImage("TurboPascal.d71");
+            CpmDiskParameters p = CpmDiskParameters.FromCpm3Macro(1024, 1, 340, 2048, 128, 0);
+            CpmFileSystem fs = new CpmFileSystem(image, p, new C128CpmRecordMap(true, p.BlockCount * 8));
+            fs.Write(0, "ONE.DAT", Pattern(6000));
+            int[] firstBlocks = Copy(fs.Find(0, "ONE.DAT")!.Blocks);
+            fs.Delete(0, "ONE.DAT");
+            Assert.That(fs.Find(0, "ONE.DAT"), Is.Null);
+            fs.Write(0, "TWO.DAT", Pattern(6000));
+            Assert.That(Copy(fs.Find(0, "TWO.DAT")!.Blocks), Is.EqualTo(firstBlocks), "the lowest free blocks are the ones just freed");
+        }
+
+        [Test]
+        public void Rename_KeepsTheDataUnderTheNewName()
+        {
+            byte[] image = LoadImage("TurboPascal.d71");
+            CpmDiskParameters p = CpmDiskParameters.FromCpm3Macro(1024, 1, 340, 2048, 128, 0);
+            CpmFileSystem fs = new CpmFileSystem(image, p, new C128CpmRecordMap(true, p.BlockCount * 8));
+            byte[] msg = fs.Read(fs.Find(0, "TURBO.MSG")!);
+            fs.Rename(0, "TURBO.MSG", "ERRORS.TXT");
+            Assert.That(fs.Find(0, "TURBO.MSG"), Is.Null);
+            Assert.That(fs.Read(fs.Find(0, "ERRORS.TXT")!), Is.EqualTo(msg));
+        }
+
+        [Test]
+        public void Write_OnAReadOnlyMount_IsRefused()
+        {
+            CpmDriver driver = MountBytes(LoadImage("TurboPascal.d71"), writable: false);
+            Assert.That(driver.CanWrite, Is.False);
+            Assert.Throws<UnauthorizedAccessException>(() => driver.WriteFile("/X.DAT", new byte[10]));
+        }
+
+        [TestCase("A B.TXT")]
+        [TestCase("TOOLONGNAME.TXT")]
+        [TestCase("A.TEXT")]
+        [TestCase("A*.TXT")]
+        public void Write_BadCpmName_IsRefused(string name)
+        {
+            byte[] image = LoadImage("TurboPascal.d71");
+            CpmDiskParameters p = CpmDiskParameters.FromCpm3Macro(1024, 1, 340, 2048, 128, 0);
+            CpmFileSystem fs = new CpmFileSystem(image, p, new C128CpmRecordMap(true, p.BlockCount * 8));
+            Assert.Throws<ArgumentException>(() => fs.Write(0, name, new byte[1]));
+        }
+
+        // An independent check of the directory entries RetroIO writes: the data area, laid out flat in
+        // record order, is handed to cpmtools (run in WSL) with a matching disk definition. cpmtools
+        // knows nothing of Commodore track layouts, so the record map is not what this checks; the
+        // CP/M directory, extents and block lists are.
+        [Test]
+        public void Write_FilesWrittenByRetroIO_AreReadBackByCpmtools()
+        {
+            byte[] image = LoadImage("TurboPascal.d71");
+            CpmDiskParameters p = CpmDiskParameters.FromCpm3Macro(1024, 1, 340, 2048, 128, 0);
+            C128CpmRecordMap map = new C128CpmRecordMap(true, p.BlockCount * 8);
+            CpmFileSystem fs = new CpmFileSystem(image, p, map);
+            byte[] big = Pattern(40 * 1024);
+            byte[] small = Encoding.ASCII.GetBytes("HELLO FROM RETROIO\r\n");
+            fs.Write(0, "BIG.DAT", big);
+            fs.Write(3, "SMALL.TXT", small);
+
+            string folder = Path.Combine(Path.GetTempPath(), "retroio-cpmtools-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            try
+            {
+                byte[] flat = new byte[map.RecordCount * 256];
+                for (int r = 0; r < map.RecordCount; r++)
+                {
+                    Array.Copy(fs.Image, map.ImageOffset(r), flat, r * 256, 256);
+                }
+
+                File.WriteAllBytes(Path.Combine(folder, "flat.img"), flat);
+                File.WriteAllText(Path.Combine(folder, "diskdefs"),
+                    "diskdef c128flat\n  seclen 256\n  tracks " + map.RecordCount + "\n  sectrk 1\n  blocksize 2048\n"
+                    + "  maxdir 128\n  skew 0\n  boottrk 0\n  os 3\nend\n");
+
+                string output = RunCpmtools(folder,
+                    "cpmcp -f c128flat flat.img 0:BIG.DAT big.out && cpmcp -f c128flat flat.img 3:SMALL.TXT small.out && cpmls -f c128flat flat.img");
+                Assert.That(output, Does.Contain("big.dat").IgnoreCase.And.Contain("turbo.com").IgnoreCase, output);
+
+                byte[] bigBack = File.ReadAllBytes(Path.Combine(folder, "big.out"));
+                Assert.That(bigBack.Length, Is.EqualTo(big.Length), "cpmtools sees BIG.DAT as 320 records");
+                Assert.That(bigBack, Is.EqualTo(big));
+                byte[] smallBack = File.ReadAllBytes(Path.Combine(folder, "small.out"));
+                Assert.That(smallBack.AsSpan(0, small.Length).SequenceEqual(small), Is.True, "user 3 SMALL.TXT");
+            }
+            finally
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+
+        // Runs a command line in WSL in the given Windows folder; the test is ignored when WSL or
+        // cpmtools is not installed.
+        private static string RunCpmtools(string folder, string commands)
+        {
+            string wslFolder = "/mnt/" + char.ToLowerInvariant(folder[0]) + folder.Substring(2).Replace('\\', '/');
+            System.Diagnostics.ProcessStartInfo start = new System.Diagnostics.ProcessStartInfo("wsl")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            start.ArgumentList.Add("-e");
+            start.ArgumentList.Add("sh");
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add("command -v cpmcp >/dev/null || exit 99; cd '" + wslFolder + "' && " + commands);
+            System.Diagnostics.Process? process;
+            try
+            {
+                process = System.Diagnostics.Process.Start(start);
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                Assert.Ignore("WSL is not installed; this check needs cpmtools in WSL.");
+                return string.Empty;
+            }
+
+            using System.Diagnostics.Process running = process!;
+            string output = running.StandardOutput.ReadToEnd() + running.StandardError.ReadToEnd();
+            running.WaitForExit();
+            if (running.ExitCode == 99)
+            {
+                Assert.Ignore("cpmtools is not installed in WSL (apt install cpmtools).");
+            }
+
+            Assert.That(running.ExitCode, Is.EqualTo(0), "cpmtools failed: " + output);
+            return output;
+        }
+
+        private static byte[] LoadImage(string name)
+        {
+            string path = Image(name);
+            RequireImage(path);
+            return File.ReadAllBytes(path);
+        }
+
+        private static CpmDriver MountBytes(byte[] image, bool writable)
+        {
+            MemoryStream stream = new MemoryStream(image, writable);
+            CpmDriver driver = new CpmDriver();
+            driver.Mount(stream, readOnly: !writable);
+            return driver;
+        }
+
+        private static byte[] Pattern(int length)
+        {
+            byte[] data = new byte[length];
+            for (int i = 0; i < length; i++)
+            {
+                data[i] = (byte)(i * 7 + i / 251);
+            }
+
+            return data;
+        }
+
+        private static int[] Copy(System.Collections.Generic.IReadOnlyList<int> list)
+        {
+            int[] copy = new int[list.Count];
+            for (int i = 0; i < copy.Length; i++)
+            {
+                copy[i] = list[i];
+            }
+
+            return copy;
+        }
+
         private static CpmDriver Mount(string name)
         {
             string path = Image(name);

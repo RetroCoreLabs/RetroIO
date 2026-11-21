@@ -73,6 +73,11 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         }
 
         /// <summary>
+        /// Gets the disk image, with every change made through this instance.
+        /// </summary>
+        public byte[] Image => _image;
+
+        /// <summary>
         /// Gets the CP/M 3 disk label, or an empty string when the disk has none.
         /// </summary>
         public string Label { get; private set; } = string.Empty;
@@ -249,9 +254,360 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
             return data;
         }
 
+        /// <summary>
+        /// Writes a file, replacing any file of the same user number and name.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The data is stored in 128-byte records; a last partial record is filled with Ctrl-Z (1Ah),
+        /// the CP/M end-of-file mark, because CP/M keeps no length finer than a record.
+        /// </para>
+        /// <para>
+        /// Blocks are taken lowest number first from those no directory entry uses. The file gets one
+        /// directory entry per (EXM + 1) logical extents of 16 KB, each in the first empty (E5h) entry.
+        /// An entry's extent number (EX, with S2 for the high bits) is that of the last logical extent
+        /// it holds and RC is the records used in that extent, which is how <see cref="Read"/> and
+        /// CP/M itself work out the length.
+        /// </para>
+        /// <para>
+        /// CP/M 3 time stamp entries are left as they are, so a stamped disk keeps the old stamps for
+        /// a replaced file (stamping is not written yet).
+        /// </para>
+        /// </remarks>
+        /// <param name="user">
+        /// User number, 0 to 15.
+        /// </param>
+        /// <param name="name">
+        /// File name as NAME.TYP; it is stored in upper case.
+        /// </param>
+        /// <param name="data">
+        /// The file's bytes.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="name"/> is not a CP/M file name.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the file there is read-only, the disk is full or the directory is full. The
+        /// disk is not changed.
+        /// </exception>
+        public void Write(int user, string name, byte[] data)
+        {
+            CheckUser(user);
+            byte[] fileName = EncodeName(name);
+            CpmFile? existing = Find(user, DecodeName(fileName));
+            if (existing != null && existing.ReadOnly)
+            {
+                throw new IOException("File R/O: " + existing.Name + " is read-only.");
+            }
+
+            byte[] directory = DirectoryBytes(_image, _parameters, _map);
+            if (existing != null)
+            {
+                MarkEntriesEmpty(directory, user, fileName);
+            }
+
+            bool[] used = UsedBlocks(directory);
+            int records = (data.Length + RecordBytes - 1) / RecordBytes;
+            int recordsPerBlock = _parameters.BlockSize / RecordBytes;
+            int blocksNeeded = (records + recordsPerBlock - 1) / recordsPerBlock;
+            int[] blocks = new int[blocksNeeded];
+            int found = 0;
+            for (int b = 0; b < _parameters.BlockCount && found < blocksNeeded; b++)
+            {
+                if (!used[b])
+                {
+                    blocks[found++] = b;
+                }
+            }
+
+            if (found < blocksNeeded)
+            {
+                throw new IOException("Disk full: " + name + " needs " + blocksNeeded + " blocks, " + found + " are free.");
+            }
+
+            int slots = _parameters.WideBlockNumbers ? 8 : 16;
+            int recordsPerEntry = slots * recordsPerBlock;
+            int entriesNeeded = Math.Max(1, (records + recordsPerEntry - 1) / recordsPerEntry);
+            int[] entryIndex = new int[entriesNeeded];
+            int freeEntries = 0;
+            for (int e = 0; e < _parameters.DirectoryEntries && freeEntries < entriesNeeded; e++)
+            {
+                if (directory[e * EntrySize] == EmptyEntry)
+                {
+                    entryIndex[freeEntries++] = e;
+                }
+            }
+
+            if (freeEntries < entriesNeeded)
+            {
+                throw new IOException("Directory full: " + name + " needs " + entriesNeeded + " entries, " + freeEntries + " are free.");
+            }
+
+            for (int k = 0; k < entriesNeeded; k++)
+            {
+                int at = entryIndex[k] * EntrySize;
+                Array.Clear(directory, at, EntrySize);
+                directory[at] = (byte)user;
+                Array.Copy(fileName, 0, directory, at + 1, 11);
+                int recordsHere = Math.Min(recordsPerEntry, records - k * recordsPerEntry);
+                int lastExtentInEntry = recordsHere > 0 ? (recordsHere - 1) / 128 : 0;
+                int extent = k * (_parameters.ExtentMask + 1) + lastExtentInEntry;
+                directory[at + 12] = (byte)(extent & 0x1F);
+                directory[at + 14] = (byte)(extent >> 5);
+                directory[at + 15] = (byte)(recordsHere - lastExtentInEntry * 128);
+                int blocksHere = (recordsHere + recordsPerBlock - 1) / recordsPerBlock;
+                for (int s = 0; s < blocksHere; s++)
+                {
+                    int block = blocks[k * slots + s];
+                    if (slots == 8)
+                    {
+                        directory[at + 16 + s * 2] = (byte)block;
+                        directory[at + 17 + s * 2] = (byte)(block >> 8);
+                    }
+                    else
+                    {
+                        directory[at + 16 + s] = (byte)block;
+                    }
+                }
+            }
+
+            // Data first, then the directory: until the directory is stored the old file stands.
+            byte[] padded = new byte[records * RecordBytes];
+            Array.Fill(padded, (byte)0x1A);
+            Array.Copy(data, padded, data.Length);
+            int mapRecordsPerBlock = _parameters.BlockSize / _map.RecordSize;
+            for (int b = 0; b < blocksNeeded; b++)
+            {
+                int blockBytes = Math.Min(_parameters.BlockSize, padded.Length - b * _parameters.BlockSize);
+                int mapRecords = (blockBytes + _map.RecordSize - 1) / _map.RecordSize;
+                for (int r = 0; r < mapRecords; r++)
+                {
+                    long offset = _map.ImageOffset(blocks[b] * mapRecordsPerBlock + r);
+                    int from = b * _parameters.BlockSize + r * _map.RecordSize;
+                    int count = Math.Min(_map.RecordSize, padded.Length - from);
+                    Array.Copy(padded, from, _image, offset, count);
+                }
+            }
+
+            StoreDirectory(directory);
+        }
+
+        /// <summary>
+        /// Deletes a file: every one of its directory entries becomes empty (E5h).
+        /// </summary>
+        /// <param name="user">
+        /// User number, 0 to 15.
+        /// </param>
+        /// <param name="name">
+        /// File name as NAME.TYP.
+        /// </param>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the file is read-only.
+        /// </exception>
+        public void Delete(int user, string name)
+        {
+            CpmFile file = Find(user, name) ?? throw new FileNotFoundException("File not found: " + name);
+            if (file.ReadOnly)
+            {
+                throw new IOException("File R/O: " + file.Name + " is read-only.");
+            }
+
+            byte[] directory = DirectoryBytes(_image, _parameters, _map);
+            MarkEntriesEmpty(directory, user, EncodeName(file.Name));
+            StoreDirectory(directory);
+        }
+
+        /// <summary>
+        /// Renames a file, keeping its user number and attributes.
+        /// </summary>
+        /// <param name="user">
+        /// User number, 0 to 15.
+        /// </param>
+        /// <param name="oldName">
+        /// Current name as NAME.TYP.
+        /// </param>
+        /// <param name="newName">
+        /// New name as NAME.TYP.
+        /// </param>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no file called <paramref name="oldName"/>.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the file is read-only or <paramref name="newName"/> already exists.
+        /// </exception>
+        public void Rename(int user, string oldName, string newName)
+        {
+            CpmFile file = Find(user, oldName) ?? throw new FileNotFoundException("File not found: " + oldName);
+            byte[] target = EncodeName(newName);
+            if (Find(user, DecodeName(target)) != null)
+            {
+                throw new IOException("File exists: " + DecodeName(target));
+            }
+
+            if (file.ReadOnly)
+            {
+                throw new IOException("File R/O: " + file.Name + " is read-only.");
+            }
+
+            byte[] source = EncodeName(file.Name);
+            byte[] directory = DirectoryBytes(_image, _parameters, _map);
+            for (int e = 0; e < _parameters.DirectoryEntries; e++)
+            {
+                int at = e * EntrySize;
+                if (IsEntryOf(directory, at, user, source))
+                {
+                    for (int i = 0; i < 11; i++)
+                    {
+                        // Keep the attribute bits (bit 7) the entry already has.
+                        directory[at + 1 + i] = (byte)((directory[at + 1 + i] & 0x80) | target[i]);
+                    }
+                }
+            }
+
+            StoreDirectory(directory);
+        }
+
+        // Writes the directory back through the record map and reads it again.
+        private void StoreDirectory(byte[] directory)
+        {
+            int records = (directory.Length + _map.RecordSize - 1) / _map.RecordSize;
+            for (int r = 0; r < records; r++)
+            {
+                long offset = _map.ImageOffset(r);
+                int count = Math.Min(_map.RecordSize, directory.Length - r * _map.RecordSize);
+                Array.Copy(directory, r * _map.RecordSize, _image, offset, count);
+            }
+
+            ReadDirectory();
+        }
+
+        // Blocks in use: the directory's own blocks and every block a file entry lists.
+        private bool[] UsedBlocks(byte[] directory)
+        {
+            bool[] used = new bool[_parameters.BlockCount];
+            for (int b = 0; b < _parameters.DirectoryBlocks && b < used.Length; b++)
+            {
+                used[b] = true;
+            }
+
+            bool wide = _parameters.WideBlockNumbers;
+            int slots = wide ? 8 : 16;
+            for (int e = 0; e < _parameters.DirectoryEntries; e++)
+            {
+                int at = e * EntrySize;
+                if (directory[at] > 15)
+                {
+                    continue;
+                }
+
+                for (int s = 0; s < slots; s++)
+                {
+                    int block = wide ? directory[at + 16 + s * 2] | (directory[at + 17 + s * 2] << 8) : directory[at + 16 + s];
+                    if (block > 0 && block < used.Length)
+                    {
+                        used[block] = true;
+                    }
+                }
+            }
+
+            return used;
+        }
+
+        // Every entry of the file becomes empty.
+        private void MarkEntriesEmpty(byte[] directory, int user, byte[] fileName)
+        {
+            for (int e = 0; e < _parameters.DirectoryEntries; e++)
+            {
+                int at = e * EntrySize;
+                if (IsEntryOf(directory, at, user, fileName))
+                {
+                    directory[at] = EmptyEntry;
+                }
+            }
+        }
+
+        // An entry of the file: same user, same name and type with the attribute bits ignored.
+        private static bool IsEntryOf(byte[] directory, int at, int user, byte[] fileName)
+        {
+            if (directory[at] != user)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < 11; i++)
+            {
+                if ((directory[at + 1 + i] & 0x7F) != fileName[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static void CheckUser(int user)
+        {
+            if (user < 0 || user > 15)
+            {
+                throw new ArgumentOutOfRangeException(nameof(user), user, "CP/M user numbers are 0 to 15");
+            }
+        }
+
+        // NAME.TYP to the 11 directory bytes: upper case, padded with spaces. A name is up to 8
+        // characters and a type up to 3, none of them a space or one of: less-than, greater-than,
+        // dot, comma, semicolon, colon, equals, question mark, star, square brackets (CP/M 2.2
+        // Interface Guide, section 2).
+        private static byte[] EncodeName(string name)
+        {
+            string upper = name.Trim().ToUpperInvariant();
+            int dot = upper.LastIndexOf('.');
+            string baseName = dot >= 0 ? upper.Substring(0, dot) : upper;
+            string type = dot >= 0 ? upper.Substring(dot + 1) : string.Empty;
+            if (baseName.Length == 0 || baseName.Length > 8 || type.Length > 3)
+            {
+                throw new ArgumentException("A CP/M file name is 1 to 8 characters, a dot and up to 3 more: " + name, nameof(name));
+            }
+
+            byte[] encoded = new byte[11];
+            Array.Fill(encoded, (byte)' ');
+            for (int i = 0; i < baseName.Length; i++)
+            {
+                encoded[i] = NameByte(baseName[i], name);
+            }
+
+            for (int i = 0; i < type.Length; i++)
+            {
+                encoded[8 + i] = NameByte(type[i], name);
+            }
+
+            return encoded;
+        }
+
+        private static byte NameByte(char c, string name)
+        {
+            if (c <= ' ' || c > '~' || "<>.,;:=?*[]".IndexOf(c) >= 0)
+            {
+                throw new ArgumentException("'" + c + "' is not allowed in a CP/M file name: " + name, nameof(name));
+            }
+
+            return (byte)c;
+        }
+
+        private static string DecodeName(byte[] encoded)
+        {
+            string baseName = Encoding.ASCII.GetString(encoded, 0, 8).TrimEnd(' ');
+            string type = Encoding.ASCII.GetString(encoded, 8, 3).TrimEnd(' ');
+            return type.Length == 0 ? baseName : baseName + "." + type;
+        }
+
         // Reads every directory entry and groups the file entries by user number and name.
         private void ReadDirectory()
         {
+            _files.Clear();
+            Label = string.Empty;
             byte[] directory = DirectoryBytes(_image, _parameters, _map);
             Dictionary<string, CpmFileBuilder> byKey = new Dictionary<string, CpmFileBuilder>(StringComparer.Ordinal);
             List<CpmFileBuilder> order = new List<CpmFileBuilder>();

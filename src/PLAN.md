@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2): writing to the Commodore CP/M disks.
+Next: CP/M (item 2): CP/M-86 on PC floppies (machine 2 in the list).
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -28,9 +28,8 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      after.
    - **Built (2026-11-21)**: `CpmDriver` + `CpmDriverProvider` read C128 CP/M disks on D64, D71 and D81 and C64 CP/M 2.2 disks
      (`FileSystems/Cpm`: `CpmDiskParameters` from the CPM3.LIB `dpb` macro, `C128CpmRecordMap` from
-     the Z80 ROM routine, `CpmFileSystem`), tested in `C128CpmTests`. Still open for the C128:
-     CP/M 3 time
-     stamps, and writing.
+     the Z80 ROM routine, `CpmFileSystem`), tested in `C128CpmTests`. Writing (write, delete, rename) works on all
+     four, checked by cpmtools on a flat copy. Still open for the C128: CP/M 3 time stamps.
    - **Machines, in this order.**
      1. **Commodore 128 CP/M** on 1541, 1571 and 1581 images. The disk has a normal CBM header
         named "CP/M" and CP/M data elsewhere; we already have one real image (a C128 CP/M D71).

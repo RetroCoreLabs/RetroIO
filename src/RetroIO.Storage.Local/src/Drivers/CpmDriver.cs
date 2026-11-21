@@ -43,12 +43,15 @@ namespace RetroIO.Storage.Local.Drivers
     /// The layout is <c>dpb 256,17,34,1024,64,3</c>, placed by <see cref="C64CpmRecordMap"/>.
     /// </para>
     /// <para>
-    /// Read-only for now; writing is planned.
+    /// Files can be written, deleted and renamed; each change is saved back to the image stream
+    /// straight away. CP/M 3 time stamps are not written yet.
     /// </para>
     /// </remarks>
     public sealed class CpmDriver : IFileSystemDriver
     {
         private CpmFileSystem? _fileSystem;
+        private Stream? _stream;
+        private bool _readOnly = true;
 
         private const string UserFolderPrefix = "USER";
 
@@ -68,9 +71,11 @@ namespace RetroIO.Storage.Local.Drivers
         public string VolumeLabel => _fileSystem?.Label ?? string.Empty;
 
         /// <summary>
-        /// Gets what this driver can do: read and list.
+        /// Gets what this driver can do: read and list, and write, delete and rename on a writable mount.
         /// </summary>
-        public DriverCapabilities Capabilities => DriverCapabilities.Read | DriverCapabilities.ListDirectory;
+        public DriverCapabilities Capabilities => _readOnly
+            ? DriverCapabilities.Read | DriverCapabilities.ListDirectory
+            : DriverCapabilities.Read | DriverCapabilities.ListDirectory | DriverCapabilities.Write | DriverCapabilities.Delete | DriverCapabilities.Rename;
 
         /// <summary>
         /// Gets a value indicating whether files can be read; always <c>true</c>.
@@ -78,9 +83,10 @@ namespace RetroIO.Storage.Local.Drivers
         public bool CanRead => true;
 
         /// <summary>
-        /// Gets a value indicating whether files can be written; <c>false</c> until writing is built.
+        /// Gets a value indicating whether files can be written: the disk was mounted writable on a
+        /// writable stream.
         /// </summary>
-        public bool CanWrite => false;
+        public bool CanWrite => _fileSystem != null && !_readOnly;
 
         /// <summary>
         /// Gets a value indicating whether raw blocks can be read; <c>false</c>.
@@ -170,7 +176,8 @@ namespace RetroIO.Storage.Local.Drivers
         /// The disk image.
         /// </param>
         /// <param name="readOnly">
-        /// Ignored: the driver only reads.
+        /// <c>true</c> to refuse every change; otherwise changes are saved back to
+        /// <paramref name="imageStream"/>, which must then be writable.
         /// </param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="imageStream"/> is null.
@@ -188,6 +195,8 @@ namespace RetroIO.Storage.Local.Drivers
             byte[] image = new byte[imageStream.Length];
             imageStream.Position = 0;
             imageStream.ReadExactly(image, 0, image.Length);
+            _stream = imageStream;
+            _readOnly = readOnly || !imageStream.CanWrite;
 
             if (IsD81Size(image.Length))
             {
@@ -316,31 +325,76 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Not supported yet: the driver only reads.
+        /// Writes a file and saves the image back to the stream.
         /// </summary>
         /// <param name="path">
-        /// Unused.
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
         /// </param>
         /// <param name="data">
-        /// Unused.
+        /// The file's bytes; a last partial 128-byte record is filled with Ctrl-Z.
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when the disk was mounted read-only.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the file there is read-only, or the disk or its directory is full.
         /// </exception>
         public void WriteFile(string path, byte[] data)
-            => throw new UnauthorizedAccessException("The CP/M driver has no write support yet, so the volume is read-only");
+        {
+            CpmFileSystem fs = EnsureWritable();
+            ParsePath(path, out int user, out string name);
+            fs.Write(user, name, data);
+            Save(fs);
+        }
 
         /// <summary>
-        /// Not supported yet: the driver only reads.
+        /// Deletes a file and saves the image back to the stream.
         /// </summary>
         /// <param name="path">
-        /// Unused.
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
         /// </param>
         /// <exception cref="UnauthorizedAccessException">
-        /// Always thrown.
+        /// Thrown when the disk was mounted read-only.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no file at <paramref name="path"/>.
         /// </exception>
         public void DeleteFile(string path)
-            => throw new UnauthorizedAccessException("The CP/M driver has no write support yet, so the volume is read-only");
+        {
+            CpmFileSystem fs = EnsureWritable();
+            ParsePath(path, out int user, out string name);
+            fs.Delete(user, name);
+            Save(fs);
+        }
+
+        /// <summary>
+        /// Renames a file within its user area and saves the image back to the stream.
+        /// </summary>
+        /// <param name="oldPath">
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
+        /// </param>
+        /// <param name="newPath">
+        /// The new path, in the same user area.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Thrown when the disk was mounted read-only.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when <paramref name="newPath"/> is in another user area or already exists.
+        /// </exception>
+        public void RenameFile(string oldPath, string newPath)
+        {
+            CpmFileSystem fs = EnsureWritable();
+            ParsePath(oldPath, out int user, out string oldName);
+            ParsePath(newPath, out int newUser, out string newName);
+            if (newUser != user)
+            {
+                throw new IOException("A CP/M rename stays in one user area: " + oldPath + " to " + newPath);
+            }
+
+            fs.Rename(user, oldName, newName);
+            Save(fs);
+        }
 
         /// <summary>
         /// Not supported: the driver gives files, not raw blocks.
@@ -394,6 +448,39 @@ namespace RetroIO.Storage.Local.Drivers
         private CpmFileSystem EnsureMounted()
             => _fileSystem ?? throw new InvalidOperationException("The CP/M disk is not mounted.");
 
+        private CpmFileSystem EnsureWritable()
+        {
+            CpmFileSystem fs = EnsureMounted();
+            if (_readOnly)
+            {
+                throw new UnauthorizedAccessException("The CP/M disk is mounted read-only.");
+            }
+
+            return fs;
+        }
+
+        // The whole image goes back to the stream after each change (at most 822400 bytes).
+        private void Save(CpmFileSystem fs)
+        {
+            _stream!.Position = 0;
+            _stream.Write(fs.Image, 0, fs.Image.Length);
+            _stream.Flush();
+        }
+
+        // "/NAME.TYP" is user 0; "/USERn/NAME.TYP" is user n.
+        private static void ParsePath(string path, out int user, out string name)
+        {
+            string trimmed = path.Trim('/');
+            int slash = trimmed.IndexOf('/');
+            user = 0;
+            name = trimmed;
+            if (slash >= 0)
+            {
+                user = UserOfFolder(trimmed.Substring(0, slash));
+                name = trimmed.Substring(slash + 1);
+            }
+        }
+
         // 0 for the root, n for "/USERn"; anything else is not a folder.
         private static int UserOfFolder(string path)
         {
@@ -415,16 +502,7 @@ namespace RetroIO.Storage.Local.Drivers
         // "/NAME.TYP" is user 0; "/USERn/NAME.TYP" is user n.
         private static CpmFile? Find(CpmFileSystem fs, string path)
         {
-            string trimmed = path.Trim('/');
-            int slash = trimmed.IndexOf('/');
-            int user = 0;
-            string name = trimmed;
-            if (slash >= 0)
-            {
-                user = UserOfFolder(trimmed.Substring(0, slash));
-                name = trimmed.Substring(slash + 1);
-            }
-
+            ParsePath(path, out int user, out string name);
             return fs.Find(user, name);
         }
 
