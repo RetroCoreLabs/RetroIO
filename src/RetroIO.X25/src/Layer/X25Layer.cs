@@ -261,6 +261,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 OtherFacilities = requested.OtherFacilities,
                 NetworkUtilities = requested.NetworkUtilities,
                 ClearFacilities = System.Array.Empty<byte>(),
+                ClearUtilities = System.Array.Empty<byte>(),
                 TimerExpiryMs = Now() + _config.CallRequestTimeoutMs
             };
             _vcs[lci] = vc;
@@ -749,6 +750,34 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </returns>
         public bool ClearCall(ushort lci, byte cause, byte diagnostic, byte[]? facilities)
         {
+            return ClearCall(lci, cause, diagnostic, facilities, null);
+        }
+
+        /// <summary>
+        /// Clears a circuit as <see cref="ClearCall(ushort, byte, byte, byte[])"/> does; between networks, a refusal names
+        /// the transit networks of <paramref name="transitList"/> instead of those of the Call Request it answers.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        /// <param name="facilities">
+        /// The facility field, byte for byte; null or empty sends the basic format.
+        /// </param>
+        /// <param name="transitList">
+        /// A utility field whose transit network identifications go in the refusal (a switch passes the one the next
+        /// network refused with, X.75 5.3.1), or null for the Call Request's own.
+        /// </param>
+        /// <returns>
+        /// True when the Clear Request was sent.
+        /// </returns>
+        public bool ClearCall(ushort lci, byte cause, byte diagnostic, byte[]? facilities, byte[]? transitList)
+        {
             if (!_vcs.TryGetValue(lci, out X25Vc? vc))
             {
                 return false;
@@ -780,7 +809,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // clear carries the transit list of the Call Request it answers, as the destination's Call Connected does
             // (SwitchCore.AnswerTransitList). Added 2026-11-22; before, every clear between networks had an empty field.
             bool directResponse = vc.State == X25VcState.CallIncoming;
-            byte[] incomingUtilities = vc.NetworkUtilities;
+            byte[] incomingUtilities = transitList ?? vc.NetworkUtilities;
 
             vc.State = X25VcState.ClearRequest;
             vc.Cause = cause;
@@ -873,6 +902,21 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public byte[] GetClearFacilities(ushort lci)
         {
             return _vcs.TryGetValue(lci, out X25Vc? vc) ? vc.ClearFacilities : System.Array.Empty<byte>();
+        }
+
+        /// <summary>
+        /// Gets the X.75 utility field of the clear that ended the last call on a channel (empty off an STE, or when it had
+        /// none), for a switch to read the transit list of a refusal (X.75 5.3.1).
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <returns>
+        /// The field byte for byte, or empty.
+        /// </returns>
+        public byte[] GetClearUtilities(ushort lci)
+        {
+            return _vcs.TryGetValue(lci, out X25Vc? vc) ? vc.ClearUtilities : System.Array.Empty<byte>();
         }
 
         /// <summary>
@@ -1945,6 +1989,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 : requested.PassThrough;
             vc.NetworkUtilities = info.NetworkUtilities;
             vc.ClearFacilities = System.Array.Empty<byte>();
+            vc.ClearUtilities = System.Array.Empty<byte>();
 
             // T11 (Table D.1) runs from the moment the call is offered until it is answered. It is
             // armed BEFORE the offer: an owner that answers inside the event (AcceptCall or ClearCall)
@@ -2389,6 +2434,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             // Kept for whoever is told of the clear (a switch passes it to the other leg, PLAN B1).
             vc.ClearFacilities = info.Facilities ?? System.Array.Empty<byte>();
+
+            // And the utility field between networks: a refusal carries the transit list of the networks past this one
+            // (X.75 5.3.1), which a switch passes back to the caller's side. Kept since 2026-11-22.
+            vc.ClearUtilities = info.NetworkUtilities ?? System.Array.Empty<byte>();
             ReportCleared(vc, info.ClearingCause, info.DiagnosticCode);
         }
 

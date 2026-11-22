@@ -130,6 +130,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public byte[] ClearFacilities { get; set; } = System.Array.Empty<byte>();
 
         /// <summary>
+        /// The X.75 utility field of the clear that ended the call (X.75 5.3.1: a refusal's transit list); empty when none.
+        /// </summary>
+        public byte[] ClearUtilities { get; set; } = System.Array.Empty<byte>();
+
+        /// <summary>
         /// True from our Interrupt until the peer's Interrupt Confirmation. X.25 4.4.2: "The DTE should
         /// not transmit a second DTE interrupt packet until the first one is confirmed."
         /// </summary>

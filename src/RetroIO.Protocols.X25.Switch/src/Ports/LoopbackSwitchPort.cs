@@ -375,6 +375,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         {
             ClearedCalls.Add((lci, cause, diagnostic));
             ClearedFacilities.Add(Array.Empty<byte>());
+            ClearedTransitLists.Add(null);
         }
 
         /// <summary>
@@ -397,12 +398,58 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         {
             ClearedCalls.Add((lci, cause, diagnostic));
             ClearedFacilities.Add(facilities);
+            ClearedTransitLists.Add(null);
         }
 
         /// <summary>
         /// The facility field of each clear in <see cref="ClearedCalls"/>, in the same order (empty for a clear that had none).
         /// </summary>
         public List<byte[]> ClearedFacilities { get; } = new List<byte[]>();
+
+        /// <summary>
+        /// The transit list the switch gave each clear in <see cref="ClearedCalls"/>, in the same order (null when none).
+        /// </summary>
+        public List<byte[]?> ClearedTransitLists { get; } = new List<byte[]?>();
+
+        /// <inheritdoc/>
+        public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities, byte[]? transitList)
+        {
+            ClearCall(lci, cause, diagnostic, facilities);
+            ClearedTransitLists[ClearedTransitLists.Count - 1] = transitList;
+        }
+
+        // Set by InjectClear for the switch to read while it handles the clear.
+        private readonly Dictionary<ushort, byte[]> _injectedClearUtilities = new Dictionary<ushort, byte[]>();
+
+        /// <inheritdoc/>
+        public byte[] GetClearUtilities(ushort lci)
+        {
+            return _injectedClearUtilities.TryGetValue(lci, out byte[]? u) ? u : Array.Empty<byte>();
+        }
+
+        /// <summary>
+        /// Injects a clear that carries a facility field and an X.75 utility field, as a refusal from another network.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to clear.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        /// <param name="facilities">
+        /// The facility field.
+        /// </param>
+        /// <param name="utilities">
+        /// The utility field, readable through <see cref="GetClearUtilities"/> while the switch handles the clear.
+        /// </param>
+        public void InjectClear(ushort lci, byte cause, byte diagnostic, byte[] facilities, byte[] utilities)
+        {
+            _injectedClearUtilities[lci] = utilities;
+            InjectClear(lci, cause, diagnostic, facilities);
+        }
 
         // Set by InjectClear for the switch to read while it handles the clear.
         private readonly Dictionary<ushort, byte[]> _injectedClearFacilities = new Dictionary<ushort, byte[]>();

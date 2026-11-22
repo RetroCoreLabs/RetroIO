@@ -355,6 +355,39 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         byte[] GetClearFacilities(ushort lci);
 
         /// <summary>
+        /// Gets the X.75 utility field of the clear that ended the last call on a channel (a refusal's transit list, X.75
+        /// 5.3.1); empty on a port that is not between networks, or when it had none. Added 2026-11-22.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <returns>
+        /// The field byte for byte, or empty.
+        /// </returns>
+        byte[] GetClearUtilities(ushort lci);
+
+        /// <summary>
+        /// Clears a circuit with a facility field, and between networks names the transit networks of
+        /// <paramref name="transitList"/> in a refusal (X.75 5.3.1). Added 2026-11-22.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel to clear.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause code.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        /// <param name="facilities">
+        /// The facility field, byte for byte; empty sends the basic format.
+        /// </param>
+        /// <param name="transitList">
+        /// The utility field of the next network's refusal, or null for the Call Request's own list.
+        /// </param>
+        void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities, byte[]? transitList);
+
+        /// <summary>
         /// Asked for the facility field of the DCE Clear Confirmation when the DTE on this port clears a call: the
         /// charging answer (X.25 5.2.5, 6.22). Null, or a result that is null or empty, sends the basic confirmation.
         /// </summary>

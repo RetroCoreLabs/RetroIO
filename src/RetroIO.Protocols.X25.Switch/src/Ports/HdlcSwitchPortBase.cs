@@ -611,6 +611,24 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         }
 
         /// <inheritdoc/>
+        public byte[] GetClearUtilities(ushort lci)
+        {
+            lock (_sync)
+            {
+                return _layer.GetClearUtilities(lci);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities, byte[]? transitList)
+        {
+            lock (_sync)
+            {
+                _layer.ClearCall(lci, cause, diagnostic, facilities, transitList);
+            }
+        }
+
+        /// <inheritdoc/>
         public byte[] GetClearFacilities(ushort lci)
         {
             lock (_sync)

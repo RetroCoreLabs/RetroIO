@@ -595,6 +595,66 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(ReadUntil(tadStream, X25PacketType.CallRequest).CalledAddress, Is.EqualTo(called));
         }
 
+        /// <summary>
+        /// X.75 5.3.1: a refusal names the transit networks up to the network that refused. The called subscriber in
+        /// 2999 refuses; 2999 answers 2900 with the list it received, 2901 then 2900; 2900 passes that back to 2901; and
+        /// 2901 must pass THAT list back to the originating network 2422, not the empty one it received itself. Added
+        /// 2026-11-22: until then every network answered with the list it had been sent.
+        /// </summary>
+        [Test]
+        public void ARefusalFromFurtherOn_GoesBackWithTheListOfTheNetworkThatSentIt()
+        {
+            const string called = "2999589004";
+            HdlcTcpSwitchPort dIn = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+            XotSwitchPort tadLine = new XotSwitchPort(Subscriber(1));
+            Build("2999", "2999", dIn, tadLine);
+            Assert.That(dIn.Start() && tadLine.Start(), Is.True);
+
+            HdlcTcpSwitchPort cIn = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+            HdlcTcpSwitchPort cOut = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, dIn.BoundPort), NullLogger.Instance);
+            Build("2900", "2999", cIn, cOut);
+            Assert.That(cIn.Start() && cOut.Start(), Is.True);
+
+            HdlcTcpSwitchPort bIn = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+            HdlcTcpSwitchPort bOut = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, cIn.BoundPort), NullLogger.Instance);
+            Build("2901", "2999", bIn, bOut);
+            Assert.That(bIn.Start() && bOut.Start(), Is.True);
+            List<byte[]> bInReceived = new List<byte[]>();
+            List<byte[]> bInSent = new List<byte[]>();
+            Capture(bIn, bInReceived, bInSent);
+
+            XotSwitchPort padLine = new XotSwitchPort(Subscriber(0));
+            HdlcTcpSwitchPort aOut = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, bIn.BoundPort), NullLogger.Instance);
+            Build("2422", "2999", padLine, aOut);
+            Assert.That(padLine.Start() && aOut.Start(), Is.True);
+            Assert.That(SpinWait.SpinUntil(() => dIn.PeerConnected && cIn.PeerConnected && cOut.PeerConnected
+                && bIn.PeerConnected && bOut.PeerConnected && aOut.PeerConnected, 15000), Is.True, "the links did not come up");
+
+            TcpClient tad = new TcpClient { NoDelay = true };
+            _disposables.Add(tad);
+            tad.Connect("127.0.0.1", tadLine.BoundPort);
+            TcpClient pad = new TcpClient { NoDelay = true };
+            _disposables.Add(pad);
+            pad.Connect("127.0.0.1", padLine.BoundPort);
+            Assert.That(SpinWait.SpinUntil(() => padLine.PeerConnected && tadLine.PeerConnected, 5000), Is.True);
+            NetworkStream padStream = pad.GetStream();
+            NetworkStream tadStream = tad.GetStream();
+            padStream.ReadTimeout = 10000;
+            tadStream.ReadTimeout = 10000;
+
+            SendXot(padStream, X25PacketBuilder.CreateCallRequest(1, called, "24220001",
+                new byte[] { 0x42, 0x07, 0x07, 0x43, 0x02, 0x02 }, new byte[] { 0x01, 0x00, 0x00, 0x00 }));
+            X25PacketInfo incoming = ReadUntil(tadStream, X25PacketType.CallRequest);
+
+            // The called subscriber refuses: DTE originated, diagnostic 0.
+            SendXot(tadStream, X25PacketBuilder.CreateClearRequest(incoming.LCN, 0x00, 0x00));
+            ReadUntilClear(padStream);
+
+            X25PacketInfo refusal = Captured(bInSent, X25PacketType.ClearRequest);
+            Assert.That(Utilities(refusal).TransitNetworks, Is.EqualTo(new[] { "2901", "2900" }),
+                "the list 2900 refused with, which names both transit networks");
+        }
+
         private static bool HasType(List<byte[]> packets, X25PacketType type)
         {
             lock (packets)

@@ -1780,8 +1780,14 @@ namespace RetroIO.Protocols.X25.Switch
             }
             else
             {
+                // X.75 5.3.1: a refusal from the next network names the transit networks up to the one that refused,
+                // which includes this one. A call not yet connected that the next network refused goes back to the caller's
+                // side with that list, not with the one this network received. Added 2026-11-22; until then the caller's
+                // side was given the list it had sent. Only a refusal that came in from another network carries one; from
+                // an internal trunk or a subscriber the packet layer answers with the Call Request's own list.
+                byte[]? transitList = !stitch.Active && stitch.OutPort.Config.BetweenNetworks ? port.GetClearUtilities(lci) : null;
                 stitch.InPort.ClearCall(stitch.InLci, cause, diagnostic,
-                    ClearFacilitiesFor(stitch, toCaller: true, clearFacilities));
+                    ClearFacilitiesFor(stitch, toCaller: true, clearFacilities), transitList);
             }
 
             WriteCdr(stitch, cause, diagnostic);

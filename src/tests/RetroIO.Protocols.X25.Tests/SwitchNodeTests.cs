@@ -56,6 +56,8 @@ namespace RetroIO.Protocols.X25.Tests
             public void ClearCall(ushort lci, byte cause, byte diagnostic) { }
             public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities) { }
             public byte[] GetClearFacilities(ushort lci) => Array.Empty<byte>();
+            public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities, byte[]? transitList) { }
+            public byte[] GetClearUtilities(ushort lci) => Array.Empty<byte>();
             public Func<ushort, byte[]?>? ClearConfirmationFacilities { get; set; }
             public void ResetCircuit(ushort lci, byte cause, byte diagnostic) { }
             public void SendInterrupt(ushort lci, byte[] userData) { }
