@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Slip: SLIP, the Serial Line Internet Protocol (RFC 1055), for a dial-up line.
+
+    It knows bytes only: whole IP packets in and out on one side, line bytes in and out on the
+    other. It owns no port, no thread and no timer; the owner calls it from its own thread (an
+    emulated machine's thread in RetroCore, a server's in RetroServer).
+
+    Specification: RFC 1055, "A Nonstandard for Transmission of IP Datagrams over Serial Lines:
+    SLIP" (J. Romkey, June 1988). CSLIP (RFC 1144) is planned for this package; PPP gets its own.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Slip</PackageId>
+    <AssemblyName>RetroIO.Protocols.Slip</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Slip</RootNamespace>
+    <Description>SLIP (RFC 1055) framing for dial-up lines: IP packets to line bytes and back, with no port or thread of its own.</Description>
+    <PackageTags>retroio;slip;rfc1055;dialup;serial</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -19,6 +19,8 @@
     href: ../../RetroIO.Protocols.DriveWire/README.md
   - name: RetroIO.Protocols.Econet
     href: ../../RetroIO.Protocols.Econet/README.md
+  - name: RetroIO.Protocols.Slip
+    href: ../../RetroIO.Protocols.Slip/README.md
   - name: RetroIO.Protocols.Telnet
     href: ../../RetroIO.Protocols.Telnet/README.md
   - name: RetroIO.Protocols.Tn3270
