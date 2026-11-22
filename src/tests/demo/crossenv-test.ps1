@@ -75,5 +75,11 @@ $env:CROSSENV_WSL_MON_HOST = $WslHost
 $env:CROSSENV_WSL_MON_PORT = "$MonitorPort"
 # CROSSENV_WSL_REPO lets the reverse test drive the reference traffic generator via wsl.exe.
 $env:CROSSENV_WSL_REPO = $WslRepo
+# The tests that start their own x25emu switch (the restart, PVC and C-client ones) read X25EMU_DIR instead. Until
+# 2026-11-23 this script did not set it, so six of its ten tests were skipped on every run unless the shell happened to
+# have it from src/eng/test-env.local.bat. An X25EMU_DIR already set is kept.
+if (-not $env:X25EMU_DIR) {
+    $env:X25EMU_DIR = $WslRepo
+}
 dotnet test $Project --nologo -nodeReuse:false --filter 'TestCategory=CrossEnvLive'
 exit $LASTEXITCODE
