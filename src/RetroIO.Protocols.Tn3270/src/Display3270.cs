@@ -32,6 +32,24 @@ namespace RetroIO.Protocols.Tn3270
         /// only ignores the key. RetroTerm follows IBM (decided 22 November 2026).
         /// </summary>
         OperatorError,
+
+        /// <summary>
+        /// Insert mode found no null left in the field to take the character ("Too Much Data",
+        /// GA27-2890-4 p. 3-42; GA23-0061-2 p. C-5). Reset clears it.
+        /// </summary>
+        TooMuchData,
+
+        /// <summary>
+        /// The cursor tried to leave, or the operator tried to send, a mandatory-fill field that has
+        /// data in it but is not full (GA23-0059-4 p. 4-21). Reset clears it.
+        /// </summary>
+        MandatoryFill,
+
+        /// <summary>
+        /// The operator tried to send while a mandatory-entry field is still empty; the cursor was
+        /// moved to it (GA23-0059-4 p. 4-22). Reset clears it.
+        /// </summary>
+        MandatoryEntry,
     }
 
     /// <summary>
@@ -66,13 +84,13 @@ namespace RetroIO.Protocols.Tn3270
         private static readonly byte[] QueryCodesWithoutFileTransfer =
         {
             QueryCode.Summary, QueryCode.UsableArea, QueryCode.CharacterSets, QueryCode.Color,
-            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.ImplicitPartition,
+            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.FieldValidation, QueryCode.ImplicitPartition,
         };
 
         private static readonly byte[] QueryCodesWithFileTransfer =
         {
             QueryCode.Summary, QueryCode.UsableArea, QueryCode.CharacterSets, QueryCode.Color,
-            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.Ddm, QueryCode.ImplicitPartition,
+            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.FieldValidation, QueryCode.Ddm, QueryCode.ImplicitPartition,
         };
 
         private readonly int _defaultRows;
@@ -121,6 +139,13 @@ namespace RetroIO.Protocols.Tn3270
         private readonly byte[] _inboundSa = new byte[5];
 
         private int _fileTransferLimit;
+
+        // The field attribute address of the primed mandatory-fill field, or -1 (p. 4-21). Only one
+        // can be primed: the cursor is in it, and leaving it validates and unprimes it.
+        private int _primedField = -1;
+
+        // Set when the record being applied raised ProtocolError.
+        private bool _failed;
         private CodePage _codePage = CodePage.Cp037;
 
         /// <summary>
@@ -215,6 +240,15 @@ namespace RetroIO.Protocols.Tn3270
         /// Gets why the keyboard is locked, or <see cref="KeyboardLock.None"/>.
         /// </summary>
         public KeyboardLock Lock { get; private set; }
+
+        /// <summary>
+        /// Gets a value indicating whether the keyboard is in insert mode.
+        /// </summary>
+        /// <remarks>
+        /// Switched by the Insert key through <see cref="ToggleInsert"/>; ended by Reset and by every
+        /// key that talks to the host (GA23-0061-2 p. C-5, C-6).
+        /// </remarks>
+        public bool InsertMode { get; private set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether the screen shows colour, as a 3279 does.
@@ -528,11 +562,16 @@ namespace RetroIO.Protocols.Tn3270
         /// <param name="record">
         /// The record: command byte first.
         /// </param>
-        public void ProcessOutbound(ReadOnlySpan<byte> record)
+        /// <returns>
+        /// False when <see cref="ProtocolError"/> was raised for this record. A TN3270E session
+        /// that was asked for a response answers negatively then (RFC 2355 section 10.4.1).
+        /// </returns>
+        public bool ProcessOutbound(ReadOnlySpan<byte> record)
         {
+            _failed = false;
             if (record.Length == 0)
             {
-                return;
+                return true;
             }
 
             byte command = record[0];
@@ -574,18 +613,20 @@ namespace RetroIO.Protocols.Tn3270
                     Error("Unknown command X'" + command.ToString("X2", System.Globalization.CultureInfo.InvariantCulture) + "' (GA23-0059-4 p. 3-2).");
                     break;
             }
+
+            return !_failed;
         }
 
         /// <summary>
-        /// The operator types a character at the cursor (GA27-2890-4 p. 3-25).
+        /// The operator types a character at the cursor (GA27-2890-4 p. 3-25; GA23-0061-2 p. C-3).
         /// </summary>
         /// <param name="c">
         /// The typed character.
         /// </param>
         /// <returns>
-        /// False when the key was refused: keyboard locked, character not in the code page, or the
-        /// cursor is in a protected field or on a field attribute (which locks the keyboard with an
-        /// operator error).
+        /// False when the key was refused: keyboard locked, character not in the code page, the
+        /// cursor in a protected field or on a field attribute, or no room in insert mode (the last
+        /// two lock the keyboard).
         /// </returns>
         public bool Type(char c)
         {
@@ -601,36 +642,274 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            int fa = GetFieldAttributeFor(CursorAddress);
-            if (fa >= 0)
+            return TypeByte(ebcdic, tabAfter: false);
+        }
+
+        /// <summary>
+        /// The DUP key: stores the DUP code X'1C', sets the MDT and tabs to the next input field
+        /// (GA23-0061-2 p. C-6, C-7).
+        /// </summary>
+        /// <returns>
+        /// False when refused: keyboard locked, or the cursor in a protected field or on a field
+        /// attribute (which locks the keyboard).
+        /// </returns>
+        public bool Dup()
+        {
+            return Lock == KeyboardLock.None && TypeByte(FormatControl.Dup, tabAfter: true);
+        }
+
+        /// <summary>
+        /// The FIELD MARK key: stores the FM code X'1E' and sets the MDT; the cursor moves on as
+        /// after any character (GA23-0061-2 p. C-7).
+        /// </summary>
+        /// <returns>
+        /// False when refused, as for <see cref="Dup"/>.
+        /// </returns>
+        public bool FieldMark()
+        {
+            return Lock == KeyboardLock.None && TypeByte(FormatControl.FieldMark, tabAfter: false);
+        }
+
+        /// <summary>
+        /// The Insert key: switches insert mode on, or off again. Refused while the keyboard is
+        /// locked.
+        /// </summary>
+        public void ToggleInsert()
+        {
+            if (Lock == KeyboardLock.None)
             {
-                if (_isFieldAttribute[CursorAddress] || FieldAttribute.IsProtected(_buffer[fa]))
+                InsertMode = !InsertMode;
+            }
+        }
+
+        /// <summary>
+        /// The Delete key: removes the character at the cursor; the rest of the field on the same
+        /// row moves one place left and a null fills the end. The cursor stays (GA23-0061-2 p. C-6).
+        /// </summary>
+        /// <returns>
+        /// False when refused: keyboard locked, or the cursor in a protected field or on a field
+        /// attribute (which locks the keyboard).
+        /// </returns>
+        public bool Delete()
+        {
+            if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
+            {
+                return false;
+            }
+
+            // The end is the last position before the next field attribute, never past the row.
+            int rowEnd = ((CursorAddress / Columns) * Columns) + Columns - 1;
+            int end = CursorAddress;
+            while (end < rowEnd && !_isFieldAttribute[end + 1])
+            {
+                end++;
+            }
+
+            for (int a = CursorAddress; a < end; a++)
+            {
+                MoveCell(a + 1, a);
+            }
+
+            StoreCharacter(end, FormatControl.Null, graphicEscape: false, useSa: false);
+            SetMdt(fa);
+            Prime(fa);
+            return true;
+        }
+
+        /// <summary>
+        /// The ERASE EOF key: nulls from the cursor to the end of the field, or on an unformatted
+        /// screen to the end of the screen. The cursor stays and the MDT is set (GA23-0061-2 p. C-4).
+        /// </summary>
+        /// <returns>
+        /// False when refused: keyboard locked, or the cursor in a protected field or on a field
+        /// attribute (which locks the keyboard).
+        /// </returns>
+        public bool EraseEndOfField()
+        {
+            if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
+            {
+                return false;
+            }
+
+            if (fa < 0)
+            {
+                // Unformatted: to the last position on the bottom line (GA27-2890-4 p. 3-35).
+                for (int a = CursorAddress; a < Size; a++)
                 {
-                    // "Go Elsewhere" (GA27-2890-4 p. 2-21).
-                    Lock = KeyboardLock.OperatorError;
-                    return false;
+                    StoreCharacter(a, FormatControl.Null, graphicEscape: false, useSa: false);
                 }
 
-                // Numeric fields: with a plain typewriter keyboard the 3274 accepts any character
-                // (GA23-0061-2 Figure 6-2, KEYBOARD.md 4.4), so no check is made here.
-                _buffer[fa] = (byte)(_buffer[fa] | FieldAttribute.Mdt);
+                return true;
             }
 
-            StoreCharacter(CursorAddress, ebcdic, graphicEscape: false, useSa: false);
-            int next = Next(CursorAddress);
-
-            // Never leave the cursor on a field attribute: skip an autoskip field to the next input
-            // field, otherwise step past the attribute. The IBM rule in KEYBOARD.md 4.2 covers only
-            // the autoskip case; the step past a plain attribute follows x3270 kybd.c
-            // ("Implement auto-skip"), read, not copied.
-            int guard = Size;
-            while (_isFieldAttribute[next] && guard-- > 0)
+            // It may wrap from the end of the screen to the end of the field.
+            int p = CursorAddress;
+            while (!_isFieldAttribute[p])
             {
-                next = FieldAttribute.IsAutoSkip(_buffer[next]) ? NextInputPosition(next) : Next(next);
+                StoreCharacter(p, FormatControl.Null, graphicEscape: false, useSa: false);
+                p = Next(p);
             }
 
-            CursorAddress = next;
+            SetMdt(fa);
+            Prime(fa);
             return true;
+        }
+
+        /// <summary>
+        /// The ERASE INPUT key: nulls in every unprotected field, their MDTs reset, the cursor to
+        /// the first input position (GA23-0061-2 p. C-5).
+        /// </summary>
+        /// <remarks>
+        /// With only protected fields nothing is erased and the cursor goes to 0; with no fields at
+        /// all the whole screen is erased and the cursor goes to 0.
+        /// </remarks>
+        /// <returns>
+        /// False when refused because the keyboard is locked.
+        /// </returns>
+        public bool EraseInput()
+        {
+            if (Lock != KeyboardLock.None)
+            {
+                return false;
+            }
+
+            // An erase-input keystroke unprimes a mandatory-fill field (p. 4-21).
+            _primedField = -1;
+            int size = Size;
+            int first = GetFieldAttributeFor(size - 1);
+            if (first < 0)
+            {
+                for (int a = 0; a < size; a++)
+                {
+                    StoreCharacter(a, FormatControl.Null, graphicEscape: false, useSa: false);
+                }
+
+                CursorAddress = 0;
+                return true;
+            }
+
+            bool isProtected = FieldAttribute.IsProtected(_buffer[first]);
+            bool any = false;
+            for (int a = 0; a < size; a++)
+            {
+                if (_isFieldAttribute[a])
+                {
+                    isProtected = FieldAttribute.IsProtected(_buffer[a]);
+                    if (!isProtected)
+                    {
+                        any = true;
+                        _buffer[a] = (byte)(_buffer[a] & ~FieldAttribute.Mdt);
+                    }
+                }
+                else if (!isProtected)
+                {
+                    StoreCharacter(a, FormatControl.Null, graphicEscape: false, useSa: false);
+                }
+            }
+
+            CursorAddress = any ? NextInputPosition(size - 1) : 0;
+            return true;
+        }
+
+        /// <summary>
+        /// Back Tab: the first position of the current input field, or of the previous one when the
+        /// cursor is already there, on an attribute or in a protected field; no input field: 0
+        /// (GA23-0061-2 p. C-4).
+        /// </summary>
+        public void BackTab()
+        {
+            if (Lock != KeyboardLock.None)
+            {
+                return;
+            }
+
+            int size = Size;
+            int fa = GetFieldAttributeFor(CursorAddress);
+            if (fa >= 0 && !_isFieldAttribute[CursorAddress] && !FieldAttribute.IsProtected(_buffer[fa]) && Next(fa) != CursorAddress)
+            {
+                OperatorMove(Next(fa));
+                return;
+            }
+
+            // Search backwards from the position before the current field start.
+            int a = CursorAddress;
+            for (int n = 0; n < size; n++)
+            {
+                a = a == 0 ? size - 1 : a - 1;
+                if (_isFieldAttribute[a] && !FieldAttribute.IsProtected(_buffer[a]) && Next(a) != CursorAddress && !_isFieldAttribute[Next(a)])
+                {
+                    OperatorMove(Next(a));
+                    return;
+                }
+            }
+
+            OperatorMove(0);
+        }
+
+        /// <summary>
+        /// New Line: the first input position on the next line or after; no input field: 0; no
+        /// fields at all: the first position of the next line (GA23-0061-2 p. C-4).
+        /// </summary>
+        public void NewLine()
+        {
+            if (Lock != KeyboardLock.None)
+            {
+                return;
+            }
+
+            int size = Size;
+            int lineStart = ((CursorAddress / Columns) + 1) * Columns;
+            if (lineStart >= size)
+            {
+                lineStart = 0;
+            }
+
+            if (!IsFormatted)
+            {
+                OperatorMove(lineStart);
+                return;
+            }
+
+            int a = lineStart;
+            for (int n = 0; n < size; n++)
+            {
+                int fa = GetFieldAttributeFor(a);
+                if (!_isFieldAttribute[a] && fa >= 0 && !FieldAttribute.IsProtected(_buffer[fa]))
+                {
+                    OperatorMove(a);
+                    return;
+                }
+
+                a = Next(a);
+            }
+
+            OperatorMove(0);
+        }
+
+        /// <summary>
+        /// The arrow keys and Backspace: one position, wrapping to the row above or below at the
+        /// edges and from top to bottom in the same column (GA23-0061-2 p. C-3). The MDT is not
+        /// touched.
+        /// </summary>
+        /// <param name="columns">
+        /// Positions to the right, negative to the left (ALT gives two).
+        /// </param>
+        /// <param name="rows">
+        /// Rows down, negative up.
+        /// </param>
+        public void MoveCursorBy(int columns, int rows)
+        {
+            if (Lock != KeyboardLock.None)
+            {
+                return;
+            }
+
+            int size = Size;
+            int a = CursorAddress + columns;
+            a = ((a % size) + size) % size;
+            int row = (a / Columns) + rows;
+            row = ((row % Rows) + Rows) % Rows;
+            OperatorMove((row * Columns) + (a % Columns));
         }
 
         /// <summary>
@@ -644,7 +923,7 @@ namespace RetroIO.Protocols.Tn3270
                 return;
             }
 
-            CursorAddress = NextInputPosition(CursorAddress);
+            OperatorMove(NextInputPosition(CursorAddress));
         }
 
         /// <summary>
@@ -658,7 +937,7 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             int last = Size - 1;
-            CursorAddress = NextInputPosition(last);
+            OperatorMove(NextInputPosition(last));
         }
 
         /// <summary>
@@ -679,18 +958,23 @@ namespace RetroIO.Protocols.Tn3270
                 throw new ArgumentOutOfRangeException(nameof(address));
             }
 
-            CursorAddress = address;
+            OperatorMove(address);
         }
 
         /// <summary>
-        /// Reset key: clears an operator error. It does not clear waiting for the host
-        /// (GA23-0059-4 p. 3-20; GA27-2890-4 p. 3-40).
+        /// Reset key: clears an operator error and ends insert mode. It does not clear waiting for
+        /// the host (GA23-0059-4 p. 3-20; GA27-2890-4 p. 3-40; GA23-0061-2 p. C-6).
         /// </summary>
         public void Reset()
         {
-            if (Lock == KeyboardLock.OperatorError)
+            if (Lock == KeyboardLock.OperatorError || Lock == KeyboardLock.TooMuchData || Lock == KeyboardLock.MandatoryFill || Lock == KeyboardLock.MandatoryEntry)
             {
                 Lock = KeyboardLock.None;
+            }
+
+            if (Lock == KeyboardLock.None)
+            {
+                InsertMode = false;
             }
         }
 
@@ -714,14 +998,33 @@ namespace RetroIO.Protocols.Tn3270
             if (aid == Aid.Clear)
             {
                 // Clear: every field attribute becomes a null - no fields left (p. 4-13), the buffer
-                // is cleared and the cursor goes home. Then the short read: the AID alone.
-                Array.Clear(_buffer);
-                Array.Clear(_isFieldAttribute);
-                Array.Clear(_graphicEscape);
-                ClearAllAttributes();
+                // and all extended attributes are cleared, the screen goes back to the default size
+                // and the cursor to 0 (GA23-0061-2 p. C-8). Then the short read: the AID alone.
+                Resize(_defaultRows, _defaultColumns);
                 CursorAddress = 0;
             }
 
+            if (aid != Aid.Clear && !Aid.IsShortRead(aid))
+            {
+                // An enter action with the cursor in a primed mandatory-fill field validates it
+                // first (p. 4-22 note 4); then no data goes while an unprotected mandatory-entry
+                // field has its MDT off, and the cursor goes there (p. 4-22).
+                if (!ValidateFill())
+                {
+                    return false;
+                }
+
+                int empty = FirstEmptyMandatoryEntryField();
+                if (empty >= 0)
+                {
+                    CursorAddress = Next(empty);
+                    Lock = KeyboardLock.MandatoryEntry;
+                    return false;
+                }
+            }
+
+            // Every key that talks to the host ends insert mode (GA23-0061-2 p. C-6).
+            InsertMode = false;
             _lastAid = aid;
             Lock = KeyboardLock.WaitingForHost;
             SendReadModified(aid, all: false);
@@ -747,8 +1050,193 @@ namespace RetroIO.Protocols.Tn3270
             Send();
         }
 
+        private void OperatorMove(int address)
+        {
+            // Moving the cursor out of a primed mandatory-fill field validates it first; on failure
+            // the cursor stays in the field (p. 4-21).
+            if (_primedField >= 0 && GetFieldAttributeFor(address) != _primedField && !ValidateFill())
+            {
+                return;
+            }
+
+            CursorAddress = address;
+        }
+
+        private void Prime(int fieldAttribute)
+        {
+            // An unprotected mandatory-fill field is primed by a data key, Delete or Erase EOF in
+            // it (p. 4-21). Protected fields cannot get here.
+            if (fieldAttribute >= 0 && (_fieldValidation[fieldAttribute] & FieldValidation.MandatoryFill) != 0)
+            {
+                _primedField = fieldAttribute;
+            }
+        }
+
+        private bool ValidateFill()
+        {
+            // A DUP anywhere in the field passes; otherwise any null fails (p. 4-21).
+            if (_primedField < 0)
+            {
+                return true;
+            }
+
+            bool hasNull = false;
+            int a = Next(_primedField);
+            int guard = Size;
+            while (!_isFieldAttribute[a] && guard-- > 0)
+            {
+                if (_buffer[a] == FormatControl.Dup)
+                {
+                    _primedField = -1;
+                    return true;
+                }
+
+                hasNull |= _buffer[a] == FormatControl.Null;
+                a = Next(a);
+            }
+
+            if (hasNull)
+            {
+                Lock = KeyboardLock.MandatoryFill;
+                return false;
+            }
+
+            _primedField = -1;
+            return true;
+        }
+
+        private int FirstEmptyMandatoryEntryField()
+        {
+            // The first unprotected mandatory-entry field with its MDT off, in buffer order (p. 4-22).
+            int size = Size;
+            for (int a = 0; a < size; a++)
+            {
+                if (_isFieldAttribute[a]
+                    && (_fieldValidation[a] & FieldValidation.MandatoryEntry) != 0
+                    && !FieldAttribute.IsProtected(_buffer[a])
+                    && (_buffer[a] & FieldAttribute.Mdt) == 0)
+                {
+                    return a;
+                }
+            }
+
+            return -1;
+        }
+
+        private bool TypeByte(byte ebcdic, bool tabAfter)
+        {
+            if (!CheckInputPosition(out int fa))
+            {
+                return false;
+            }
+
+            if (InsertMode && _buffer[CursorAddress] != FormatControl.Null)
+            {
+                // Insert (GA23-0061-2 p. C-5): the first null at or after the cursor in the field
+                // takes the shift; characters after that null stay. No null: Too Much Data. The
+                // operator guide's "one less than the blanks" (GA27-2890-4 p. 3-42) is a rule of
+                // thumb for the operator; the control unit's rule is the null count, used here.
+                int size = Size;
+                int hole = -1;
+                int p = CursorAddress;
+                for (int n = 0; n < size && !_isFieldAttribute[p]; n++)
+                {
+                    if (_buffer[p] == FormatControl.Null)
+                    {
+                        hole = p;
+                        break;
+                    }
+
+                    p = Next(p);
+                }
+
+                if (hole < 0)
+                {
+                    Lock = KeyboardLock.TooMuchData;
+                    return false;
+                }
+
+                // Shift right, the last row's character moving to the next row; character
+                // attributes move with the characters (p. C-5).
+                while (hole != CursorAddress)
+                {
+                    int from = hole == 0 ? size - 1 : hole - 1;
+                    MoveCell(from, hole);
+                    hole = from;
+                }
+            }
+
+            Prime(fa);
+
+            // Numeric fields: with a plain typewriter keyboard the 3274 accepts any character
+            // (GA23-0061-2 Figure 6-2, KEYBOARD.md 4.4), so no check is made here.
+            SetMdt(fa);
+
+            // The character attributes of a typed position are X'00' (p. C-3).
+            StoreCharacter(CursorAddress, ebcdic, graphicEscape: false, useSa: false);
+            if (tabAfter)
+            {
+                // DUP: "a Tab key operation" (p. C-6). On an unformatted screen Tab gives 0.
+                OperatorMove(NextInputPosition(CursorAddress));
+                return true;
+            }
+
+            int next = Next(CursorAddress);
+
+            // Never leave the cursor on a field attribute: skip an autoskip field to the next input
+            // field, otherwise step past the attribute. The IBM rule in KEYBOARD.md 4.2 covers only
+            // the autoskip case; the step past a plain attribute follows x3270 kybd.c
+            // ("Implement auto-skip"), read, not copied.
+            int guard = Size;
+            while (_isFieldAttribute[next] && guard-- > 0)
+            {
+                next = FieldAttribute.IsAutoSkip(_buffer[next]) ? NextInputPosition(next) : Next(next);
+            }
+
+            OperatorMove(next);
+            return true;
+        }
+
+        private bool CheckInputPosition(out int fieldAttribute)
+        {
+            // Keys that change data need an alphanumeric position in an unprotected field; on a
+            // field attribute or in a protected field they lock the keyboard ("Go Elsewhere",
+            // GA27-2890-4 p. 2-21; GA23-0061-2 p. C-3 to C-7). An unformatted screen is all input.
+            fieldAttribute = GetFieldAttributeFor(CursorAddress);
+            if (fieldAttribute >= 0 && (_isFieldAttribute[CursorAddress] || FieldAttribute.IsProtected(_buffer[fieldAttribute])))
+            {
+                Lock = KeyboardLock.OperatorError;
+                return false;
+            }
+
+            return true;
+        }
+
+        private void SetMdt(int fieldAttribute)
+        {
+            if (fieldAttribute >= 0)
+            {
+                _buffer[fieldAttribute] = (byte)(_buffer[fieldAttribute] | FieldAttribute.Mdt);
+            }
+        }
+
+        private void MoveCell(int from, int to)
+        {
+            // A character and its character attributes, never a field attribute.
+            _buffer[to] = _buffer[from];
+            _graphicEscape[to] = _graphicEscape[from];
+            _charHighlight[to] = _charHighlight[from];
+            _charColor[to] = _charColor[from];
+            _charCharset[to] = _charCharset[from];
+            _charBackground[to] = _charBackground[from];
+            _charTransparency[to] = _charTransparency[from];
+        }
+
         private void Write(ReadOnlySpan<byte> data, bool erase, bool alternate, bool fromStructuredField = false)
         {
+            // "A write operation to that partition" unprimes a mandatory-fill field (p. 4-21).
+            _primedField = -1;
+
             // "A write command with no WCC and no data is a no-op" (p. 3-2); an EW with no WCC is a
             // no-op too, nothing is erased (p. 3-6).
             if (data.Length == 0)
@@ -1433,6 +1921,11 @@ namespace RetroIO.Protocols.Tn3270
                     AppendBytes(stackalloc byte[] { 0x05, 0x00, 0xF0, 0xF0, 0xF0, 0xF1, 0xF1, 0xF2, 0xF2, 0xF4, 0xF4 });
                     break;
 
+                case QueryCode.FieldValidation:
+                    // p. 6-52: mandatory fill and mandatory entry; trigger is not built.
+                    AppendByte((byte)(FieldValidation.MandatoryFill | FieldValidation.MandatoryEntry));
+                    break;
+
                 case QueryCode.ReplyModes:
                     // p. 6-74: Field, Extended Field, Character.
                     AppendBytes(stackalloc byte[] { 0x00, 0x01, 0x02 });
@@ -1602,6 +2095,18 @@ namespace RetroIO.Protocols.Tn3270
                         _buffer[address] = (byte)(value & FieldAttribute.Meaningful);
                         break;
                     case 0xC1:
+                        if ((value & FieldValidation.Reserved) != 0)
+                        {
+                            Error("Field validation X'" + Hex(value) + "' sets the reserved bits 0-4 (p. 4-21).");
+                            return false;
+                        }
+
+                        if ((value & FieldValidation.Trigger) != 0)
+                        {
+                            Error("Field validation with the trigger bit: trigger fields are not built, and the Field Validation query reply says so (p. 4-23, 6-52).");
+                            return false;
+                        }
+
                         _fieldValidation[address] = value;
                         break;
                     case 0xC2:
@@ -1662,6 +2167,8 @@ namespace RetroIO.Protocols.Tn3270
 
         private void EraseAllUnprotected()
         {
+            _primedField = -1;
+
             // GA23-0059-4 p. 3-7.
             bool any = false;
             bool isProtected = true;
@@ -2025,6 +2532,7 @@ namespace RetroIO.Protocols.Tn3270
 
         private void Error(string message)
         {
+            _failed = true;
             ProtocolError?.Invoke(message);
         }
     }

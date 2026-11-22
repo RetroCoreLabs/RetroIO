@@ -71,10 +71,10 @@ namespace RetroIO.Protocols.Tn3270.Tests
                 codes[i] = f[i][3];
             }
 
-            Assert.Equal(new byte[] { 0x80, 0x81, 0x85, 0x86, 0x87, 0x88, 0xA6 }, codes);
+            Assert.Equal(new byte[] { 0x80, 0x81, 0x85, 0x86, 0x87, 0x88, 0x8A, 0xA6 }, codes);
 
             // Summary lists the same codes (p. 6-81).
-            Assert.Equal(new byte[] { 0x00, 0x0B, 0x81, 0x80, 0x80, 0x81, 0x85, 0x86, 0x87, 0x88, 0xA6 }, f[0]);
+            Assert.Equal(new byte[] { 0x00, 0x0C, 0x81, 0x80, 0x80, 0x81, 0x85, 0x86, 0x87, 0x88, 0x8A, 0xA6 }, f[0]);
 
             // Usable Area: 12/14-bit, 80 x 32 (the larger screen), cells 9 x 16, buffer 2560.
             Assert.Equal(
@@ -87,7 +87,10 @@ namespace RetroIO.Protocols.Tn3270.Tests
                 f[2]);
 
             // Implicit Partition: default 80 x 24, alternate 80 x 32.
-            Assert.Equal(new byte[] { 0x00, 0x11, 0x81, 0xA6, 0x00, 0x00, 0x0B, 0x01, 0x00, 0x00, 0x50, 0x00, 0x18, 0x00, 0x50, 0x00, 0x20 }, f[6]);
+            Assert.Equal(new byte[] { 0x00, 0x11, 0x81, 0xA6, 0x00, 0x00, 0x0B, 0x01, 0x00, 0x00, 0x50, 0x00, 0x18, 0x00, 0x50, 0x00, 0x20 }, f[7]);
+
+            // Field Validation: mandatory fill and mandatory entry, no trigger.
+            Assert.Equal(new byte[] { 0x00, 0x05, 0x81, 0x8A, 0x06 }, f[6]);
         }
 
         [Fact]
@@ -125,7 +128,7 @@ namespace RetroIO.Protocols.Tn3270.Tests
             d.ProcessOutbound(Query);
             List<byte[]> f = Fields(sent[0]);
             Assert.Equal(new byte[] { 0x00, 0x0C, 0x81, 0x95, 0x00, 0x00, 0x40, 0x00, 0x40, 0x00, 0x01, 0x01 }, Find(f, QueryCode.Ddm));
-            Assert.Equal(8, f.Count);
+            Assert.Equal(9, f.Count);
         }
 
         [Fact]
@@ -160,7 +163,7 @@ namespace RetroIO.Protocols.Tn3270.Tests
 
             d.ProcessOutbound(new byte[] { Command3270.WriteStructuredField, 0x00, 0x07, 0x01, 0xFF, 0x03, 0x80, 0x86 });
 
-            Assert.Equal(7, Fields(sent[0]).Count);
+            Assert.Equal(8, Fields(sent[0]).Count);
         }
 
         [Fact]
