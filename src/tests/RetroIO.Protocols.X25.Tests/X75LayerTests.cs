@@ -187,6 +187,57 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(parameter, Is.EqualTo(new byte[] { 0xAB }));
         }
 
+        /// <summary>
+        /// X.75 5.3.3 in the answer: the confirmed throughput class is utility 02 in the Call Connected, not a facility.
+        /// Added 2026-11-22.
+        /// </summary>
+        [Test]
+        public void TheAnswer_CarriesTheThroughputClassAsAUtility()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ste.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, "2624", "2422",
+                networkUtilities: new byte[] { 0x81, 0x00, 0x00, 0x01, 0x02, 0xAB }));
+            Assert.That(ste.AcceptCall(5, new X25CallParameters(2, 2, 128, 128, new byte[] { 0x02, 0x9A }, Array.Empty<byte>())), Is.True);
+
+            X25PacketInfo info = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(X75Utilities.TryDecode(info.NetworkUtilities, out X75Utilities u), Is.EqualTo(X75UtilityError.None));
+            Assert.That(u.HasThroughputClass, Is.True);
+            Assert.That(u.ThroughputFromCalling, Is.EqualTo((byte)0x0A));
+            Assert.That(u.ThroughputFromCalled, Is.EqualTo((byte)0x09));
+            Assert.That(info.Facilities, Is.Empty, "no throughput class in the user facility field");
+        }
+
+        /// <summary>
+        /// X.75 5.3.3: a confirmed class higher than the one asked, in either direction, clears the call with Network
+        /// congestion (Table 13: 00000101); the same or lower is accepted. Asked: 0x55 (class 5 each way).
+        /// </summary>
+        [TestCase((byte)0x55, false)]
+        [TestCase((byte)0x34, false)]
+        [TestCase((byte)0x56, true)]
+        [TestCase((byte)0x65, true)]
+        public void AConfirmedThroughputClassHigherThanAsked_ClearsTheCall(byte confirmed, bool clears)
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            X25CallParameters p = new X25CallParameters(2, 2, 128, 128, new byte[] { 0x02, 0x55 }, new byte[] { 0x81, 0x00, 0x00, 0x01 });
+            Assert.That(ste.PlaceCall("2624", "2422", null, p), Is.EqualTo((ushort)1));
+            int before = _sink.Sent.Count;
+
+            ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(1, null,
+                networkUtilities: new byte[] { 0x02, confirmed, 0x43, 0x02, 0x02, 0x42, 0x07, 0x07 }));
+
+            bool sawClear = false;
+            for (int i = before; i < _sink.Sent.Count; i++)
+            {
+                if (_sink.Sent[i].Length > 3 && _sink.Sent[i][2] == 0x13)
+                {
+                    sawClear = true;
+                    Assert.That(_sink.Sent[i][3], Is.EqualTo((byte)0x05), "Network congestion");
+                }
+            }
+
+            Assert.That(sawClear, Is.EqualTo(clears));
+        }
+
         [Test]
         public void ReverseCharging_LeavesAsAUtility_NotAFacility()
         {

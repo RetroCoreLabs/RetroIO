@@ -384,6 +384,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     otherFacilities = Cut(otherFacilities, rc, rcLength);
                 }
 
+                // X.75 5.3.3: the throughput class the called side confirms goes in the utility field, never in the user
+                // facility field (added 2026-11-22; before, it stayed a facility).
+                MoveElementToUtilities(ThroughputClassCode, 0xFF, ref otherFacilities, ref networkUtilities);
+
                 facilities = otherFacilities.Length > 0 ? new X25Facilities { PassThrough = otherFacilities }.Encode() : null;
                 utilities = vc.PeerSentFacilities
                     ? WithUtilityFlowControl(networkUtilities, vc.WindowSizeOut, vc.WindowSizeIn, vc.PacketSizeOut, vc.PacketSizeIn)
@@ -1954,6 +1958,30 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 FailCall(vc, X25Diagnostic.FacilityParameterNotAllowed);
                 return;
+            }
+
+            // X.75 5.3.3, between networks: the confirmed throughput class arrives as utility 02 and reaches the switch as
+            // facility 02. "If an STE detects that an explicitly confirmed throughput class value finally applying to the
+            // call is higher than the one requested, it should clear the call with an indication of Network congestion"
+            // (Table 13: 00000101; not FailCall, whose cause is Invalid facility request). 5.3.3 names no diagnostic; the one used for a window or packet
+            // size outside what was asked is used. Only a class asked for explicitly can be compared: the default agreed
+            // between Administrations is not known here. Added 2026-11-22.
+            if (_config.IsSte)
+            {
+                agreed.PassThrough = ElementFromUtilities(ThroughputClassCode, 0xFF, info.NetworkUtilities, agreed.PassThrough);
+                int askedAt = FindElement(vc.OtherFacilities, ThroughputClassCode, out int askedLength);
+                int confirmedAt = FindElement(agreed.PassThrough, ThroughputClassCode, out int confirmedLength);
+                if (askedAt >= 0 && askedLength == 2 && confirmedAt >= 0 && confirmedLength == 2)
+                {
+                    byte asked = vc.OtherFacilities[askedAt + 1];
+                    byte confirmed = agreed.PassThrough[confirmedAt + 1];
+                    if ((confirmed & 0x0F) > (asked & 0x0F) || (confirmed >> 4) > (asked >> 4))
+                    {
+                        BeginClear(vc, SteClearingNetworkCongestion, X25Diagnostic.FacilityParameterNotAllowed, Now());
+                        ReportCleared(vc, SteClearingNetworkCongestion, X25Diagnostic.FacilityParameterNotAllowed);
+                        return;
+                    }
+                }
             }
 
             // A Call Connected with no facility says "the defaults apply" (7.2.2.1: a value not
