@@ -178,6 +178,19 @@ public static class RetroServerComposition
             }
         }
 
+        if (opts.EnableDialUp)
+        {
+            DialUpServerConfiguration dialUpConfig =
+                ProtocolConfigurationLoader.LoadDialUpConfiguration(retroFsPath, configuration);
+
+            if (dialUpConfig.Enabled)
+            {
+                services.AddSingleton(dialUpConfig);
+                services.AddSingleton<RetroIO.Server.DialUp.DialUpHostedService>();
+                services.AddHostedService(sp => sp.GetRequiredService<RetroIO.Server.DialUp.DialUpHostedService>());
+            }
+        }
+
         if (opts.EnableXmsgNode)
         {
             XmsgNodeServerConfiguration nodeConfig =

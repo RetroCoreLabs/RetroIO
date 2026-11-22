@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\RetroIO.Protocols.Econet\src\RetroIO.Protocols.Econet.csproj" />
     <ProjectReference Include="..\..\RetroIO.Identity\src\RetroIO.Identity.csproj" />
     <ProjectReference Include="..\..\RetroIO.Server.Hosting\src\RetroIO.Server.Hosting.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Server\src\RetroIO.Server.csproj" />
     <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
     <ProjectReference Include="..\..\RetroIO.Storage.Azure\src\RetroIO.Storage.Azure.csproj" />
   </ItemGroup>

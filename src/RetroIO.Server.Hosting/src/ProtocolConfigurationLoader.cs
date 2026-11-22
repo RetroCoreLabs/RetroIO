@@ -298,6 +298,92 @@ public static class ProtocolConfigurationLoader
     }
 
     /// <summary>
+    /// Loads the dial-up ISP settings from dialup-config.json, applies overrides from the application configuration, and writes the file only when it did not exist.
+    /// </summary>
+    /// <remarks>
+    /// Works like <see cref="LoadXmsgHubConfiguration"/>. The keys DialUp:Enabled, DialUp:Port, DialUp:BindAddress, DialUp:MaxCalls,
+    /// DialUp:Network, DialUp:PrefixLength and DialUp:Greeting override the loaded values.
+    /// </remarks>
+    /// <param name="retroFsPath">
+    /// The folder that holds the JSON file.
+    /// </param>
+    /// <param name="configuration">
+    /// The application configuration with the optional overrides.
+    /// </param>
+    /// <returns>
+    /// The dial-up settings.
+    /// </returns>
+    public static DialUpServerConfiguration LoadDialUpConfiguration(string retroFsPath, IConfiguration configuration)
+    {
+        string configPath = Path.Combine(retroFsPath, DialUpConfigurationFileName);
+        bool existed = File.Exists(configPath);
+        DialUpServerConfiguration config;
+
+        if (existed)
+        {
+            try
+            {
+                string json = File.ReadAllText(configPath);
+                config = JsonSerializer.Deserialize<DialUpServerConfiguration>(json) ?? DialUpServerConfiguration.GetDefault();
+            }
+            catch (Exception ex) when (ex is IOException || ex is JsonException || ex is UnauthorizedAccessException)
+            {
+                Console.WriteLine($"Failed to load dial-up configuration: {ex.Message}");
+                Console.WriteLine("Using default configuration...");
+                config = DialUpServerConfiguration.GetDefault();
+            }
+        }
+        else
+        {
+            config = DialUpServerConfiguration.GetDefault();
+        }
+
+        ApplyDialUpOverrides(configuration, config);
+        if (!existed)
+        {
+            SaveConfiguration(configPath, config, "dial-up");
+        }
+
+        return config;
+    }
+
+    /// <summary>
+    /// The file name of the dial-up settings inside the RetroFS data folder.
+    /// </summary>
+    public const string DialUpConfigurationFileName = "dialup-config.json";
+
+    private static void ApplyDialUpOverrides(IConfiguration configuration, DialUpServerConfiguration config)
+    {
+        string? enabled = configuration["DialUp:Enabled"];
+        if (!string.IsNullOrEmpty(enabled) && bool.TryParse(enabled, out bool isEnabled))
+            config.Enabled = isEnabled;
+
+        string? port = configuration["DialUp:Port"];
+        if (!string.IsNullOrEmpty(port) && int.TryParse(port, out int portNumber))
+            config.Port = portNumber;
+
+        string? bindAddress = configuration["DialUp:BindAddress"];
+        if (!string.IsNullOrEmpty(bindAddress))
+            config.BindAddress = bindAddress;
+
+        string? maxCalls = configuration["DialUp:MaxCalls"];
+        if (!string.IsNullOrEmpty(maxCalls) && int.TryParse(maxCalls, out int calls))
+            config.MaxCalls = calls;
+
+        string? network = configuration["DialUp:Network"];
+        if (!string.IsNullOrEmpty(network))
+            config.Network = network;
+
+        string? prefix = configuration["DialUp:PrefixLength"];
+        if (!string.IsNullOrEmpty(prefix) && int.TryParse(prefix, out int prefixLength))
+            config.PrefixLength = prefixLength;
+
+        string? greeting = configuration["DialUp:Greeting"];
+        if (!string.IsNullOrEmpty(greeting))
+            config.Greeting = greeting;
+    }
+
+    /// <summary>
     /// The file name of the hub settings inside the RetroFS data folder.
     /// </summary>
     public const string XmsgHubConfigurationFileName = "xmsghub-config.json";

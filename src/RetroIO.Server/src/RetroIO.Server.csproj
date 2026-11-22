@@ -33,6 +33,7 @@
     <ProjectReference Include="..\..\RetroIO.Protocols.DriveWire\src\RetroIO.Protocols.DriveWire.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hub\src\RetroIO.Protocols.Xmsg.Hub.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Plugins\src\RetroIO.Protocols.Xmsg.Plugins.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Network.DialUp\src\RetroIO.Network.DialUp.csproj" />
     <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
   </ItemGroup>
 

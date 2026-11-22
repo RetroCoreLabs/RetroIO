@@ -45,6 +45,15 @@ public sealed class RetroServerOptions
     public bool EnableXmsgHub { get; set; } = true;
 
     /// <summary>
+    /// Host the emulated dial-up ISP. Default true.
+    /// </summary>
+    /// <remarks>
+    /// The ISP also has its own switch, Enabled in dialup-config.json (or DialUp:Enabled), which is OFF by default; both
+    /// must be on. This one exists so a host can leave the ISP out entirely.
+    /// </remarks>
+    public bool EnableDialUp { get; set; } = true;
+
+    /// <summary>
     /// Host RetroServer's own XMSG node, which client and server programs connect to. Default true.
     /// </summary>
     /// <remarks>
