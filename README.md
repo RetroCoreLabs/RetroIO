@@ -105,7 +105,7 @@ The fix list is kept in the maintainer's notes and will be worked through after 
 | P7 | A real machine or emulator | Only the lab tests | See the app repos' manual test documents |
 
 **CP/M test images** (for the CP/M driver, `src/PLAN.md` item 2) go in a `cpm` folder of the image
-corpus, one folder per machine (`c128`, `kaypro`, `amstrad`, `cpm86`, `osborne`, `tiki100`). Where
+corpus, one folder per machine (`c128`, `kaypro`, `amstrad`, `pcw`, `cpm86`, `osborne`, `tiki100`). Where
 they come from:
 
 | Machine | Source | What is there |
@@ -113,6 +113,7 @@ they come from:
 | Commodore 128 | [Funet CP/M archive](https://ftp.funet.fi/pub/cpm/) (file list: [ALLFILES](https://ftp.funet.fi/pub/cpm/ALLFILES)) | C128 CP/M programs as gzipped `.d64`, `.d71` and `.d81` images (Turbo Pascal, WordStar, MBASIC, HI-TECH C, Infocom games) |
 | Kaypro II / 4 | [izkaypro on GitHub](https://github.com/ivanizag/izkaypro/tree/main/disks) | raw Kaypro images: CP/M 2.2 system disks, blank disks, applications and games (204800 bytes single-sided, 409600 double-sided, some with extra bytes at the end) |
 | Amstrad CPC | [archive.org](https://archive.org) (the Infocom "cpm version" items, such as `Enchanter_1984_Infocom_cpm_version`) | CPC `.dsk` images (both the standard and the extended container) of CP/M games; take game and data disks only, the licence of CP/M system disks there is unclear |
+| Amstrad PCW | [PCW 8256 games archive](https://8bitchip.info/oub/Amstrad%20PCW/) (linked from the cpcwiki forum) | PCW games as CPC-container `.dsk` images, 180 KB single-sided; some are copy-protected and do not follow the standard layout |
 | IBM PC CP/M-86 | [archive.org item `cpm-86`](https://archive.org/details/cpm-86) | CP/M-86 1.00 for the IBM PC, 160 KB, as a raw `.IMG` and an ImageDisk `.IMD` of the same disk |
 | Osborne 1 | [archive.org item `wizard-of-osz-osborne-imd-disks`](https://archive.org/details/wizard-of-osz-osborne-imd-disks) | Osborne user group disks, double density, as ImageDisk `.IMD` files |
 | TIKI-100 | [Tiki-100-emulator on GitHub](https://github.com/ovesennet/Tiki-100-emulator) (`src/plater`) | TIKO 4.01 boot disk, games disks, empty 90/200/400/800 KB disks and two 8 MB hard disks; an 800 KB disk with files (FD0054) comes from a private TIKI-100 disk library |

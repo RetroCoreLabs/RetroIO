@@ -120,7 +120,7 @@ namespace RetroIO.Storage.Local.Drivers
         public override IFileSystemDriver CreateDriver() => new CpmDriver();
 
         // A CPC DSK file, one side, whose first track has the Amstrad sector IDs 41h-49h (system
-        // format) or C1h-C9h (data format). The full check of every track is done at mount.
+        // format), C1h-C9h (data format) or 01h-09h (PCW). The full check of every track is done at mount.
         private static bool IsAmstradDsk(ReadOnlySpan<byte> header)
         {
             if (header.Length < 512 || header[0x31] != 1 || !StartsWithText(header, "EXTENDED CPC DSK") && !StartsWithText(header, "MV - CPC"))
@@ -144,7 +144,7 @@ namespace RetroIO.Storage.Local.Drivers
                 }
             }
 
-            return lowest == 0x41 || lowest == 0xC1;
+            return lowest == 0x41 || lowest == 0xC1 || lowest == 0x01;
         }
 
         private static bool StartsWithText(ReadOnlySpan<byte> data, string text)

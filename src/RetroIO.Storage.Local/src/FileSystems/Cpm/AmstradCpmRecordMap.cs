@@ -23,8 +23,10 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
     /// The track header gives the sector count at 15h and, from 18h, eight bytes per sector:
     /// C, H, R (the sector ID), N, two status bytes and, in an extended image, the data length.
     /// <para><b>The Amstrad formats</b></para>
-    /// Each track has nine 512-byte sectors. Their IDs tell the format: 41h-49h is the system
-    /// format (two reserved tracks for the CP/M system), C1h-C9h the data format (none). A track's
+    /// Each track has nine 512-byte sectors. Their IDs tell the format: 41h-49h is the CPC system
+    /// format (two reserved tracks for the CP/M system), C1h-C9h the CPC data format (none), and
+    /// 01h-09h the Amstrad PCW single-sided format (one reserved track; measured on real PCW disks:
+    /// the directory starts track 1). A track's
     /// sectors are read in ID order, whatever order they sit in on the track (a real disk has
     /// them interleaved 45h, 41h, 46h, ...). Both measured on real disks.
     /// </remarks>
@@ -54,8 +56,8 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
         /// The whole DSK file.
         /// </param>
         /// <param name="firstSectorId">
-        /// The lowest sector ID on the first track: 41h for the system format, C1h for the data
-        /// format.
+        /// The lowest sector ID on the first track: 41h for the CPC system format, C1h for the CPC
+        /// data format, 01h for the PCW format.
         /// </param>
         /// <param name="trackCount">
         /// Number of tracks on side 0.
@@ -108,7 +110,7 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
 
                 if (t == 0)
                 {
-                    if (lowest != 0x41 && lowest != 0xC1)
+                    if (lowest != 0x41 && lowest != 0xC1 && lowest != 0x01)
                     {
                         return null;
                     }
@@ -142,11 +144,25 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
                 at += blockSize;
             }
 
-            int reserved = firstSectorId == 0x41 ? 2 : 0;
+            int reserved = ReservedTracks(firstSectorId);
             long[] visible = new long[(tracks - reserved) * SectorsPerTrack];
             Array.Copy(all, reserved * SectorsPerTrack, visible, 0, visible.Length);
             trackCount = tracks;
             return new AmstradCpmRecordMap(visible);
+        }
+
+        /// <summary>
+        /// Gives the number of reserved tracks of an Amstrad format.
+        /// </summary>
+        /// <param name="firstSectorId">
+        /// The lowest sector ID: 41h (CPC system), C1h (CPC data) or 01h (PCW).
+        /// </param>
+        /// <returns>
+        /// Two, none or one.
+        /// </returns>
+        public static int ReservedTracks(byte firstSectorId)
+        {
+            return firstSectorId == 0x41 ? 2 : firstSectorId == 0x01 ? 1 : 0;
         }
 
         /// <inheritdoc/>

@@ -141,6 +141,62 @@ namespace RetroIO.Storage.Local.Tests
             Assert.That(stream.Length, Is.EqualTo(original.Length), "the DSK file keeps its size");
         }
 
+        // Amstrad PCW games disks (sector IDs 1-9, one reserved track); Poste Haste stores its
+        // sectors interleaved 1, 6, 2, 7, ...
+        [TestCase("PacMania.dsk", "PACMANIA.EMS")]
+        [TestCase("Poste_Haste.dsk", "BASIC.COM")]
+        public void PcwDisk_IsDetectedAndMounted(string name, string expectedFile)
+        {
+            string path = RequireImage(Pcw(name));
+            DriverFactory factory = new DriverFactory();
+            factory.Register(new CpmDriverProvider());
+            factory.Register(new DragonDskDriverProvider());
+            IFileSystemDriver driver = factory.Detect(path)!;
+            Assert.That(driver.FileSystemType, Is.EqualTo("CPM"));
+            using FileStream stream = File.OpenRead(path);
+            driver.Mount(stream, readOnly: true);
+            Assert.That(driver.GetMetadata("/" + expectedFile), Is.Not.Null, expectedFile);
+        }
+
+        [Test]
+        public void PcwFormat_HasOneReservedTrackAnd175Blocks()
+        {
+            byte[] image = File.ReadAllBytes(RequireImage(Pcw("PacMania.dsk")));
+            AmstradCpmRecordMap map = AmstradCpmRecordMap.TryRead(image, out byte first, out _)!;
+            Assert.That(first, Is.EqualTo(0x01));
+            CpmDiskParameters p = CpmDriver.AmstradParameters(map.RecordCount, first);
+            Assert.That(p.ReservedTracks, Is.EqualTo(1));
+            Assert.That(p.BlockCount, Is.EqualTo(175), "39 tracks of 4.5 KB in 1 KB blocks");
+        }
+
+        [Test]
+        public void PcwDisk_Write_ReadsBackOnAFreshMount()
+        {
+            byte[] original = File.ReadAllBytes(RequireImage(Pcw("Poste_Haste.dsk")));
+            using MemoryStream stream = new MemoryStream();
+            stream.Write(original, 0, original.Length);
+            CpmDriver writer = new CpmDriver();
+            writer.Mount(stream, readOnly: false);
+            byte[] data = new byte[3000];
+            data.AsSpan().Fill(0x41);
+            writer.WriteFile("/USER3/NOTE.TXT", data);
+            CpmDriver reader = new CpmDriver();
+            using MemoryStream saved = new MemoryStream(stream.ToArray(), writable: false);
+            reader.Mount(saved, readOnly: true);
+            Assert.That(reader.ReadFile("/USER3/NOTE.TXT").AsSpan(0, data.Length).SequenceEqual(data), Is.True);
+            Assert.That(reader.ReadFile("/BASIC.COM"), Is.EqualTo(MountedRead(original, "/BASIC.COM")));
+        }
+
+        private static string Pcw(string name) => TestData.FromVariable(TestData.TestImagesVariable, Path.Combine("cpm", "pcw", name));
+
+        private static byte[] MountedRead(byte[] image, string path)
+        {
+            CpmDriver driver = new CpmDriver();
+            using MemoryStream stream = new MemoryStream(image, writable: false);
+            driver.Mount(stream, readOnly: true);
+            return driver.ReadFile(path);
+        }
+
         [Test]
         public void ImageThatIsNotDsk_IsNotAmstrad()
         {

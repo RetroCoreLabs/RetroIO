@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2): CP/M 3 time stamps, Amstrad PCW, PC CP/M-86 320 KB and larger (all need test disks).
+Next: CP/M (item 2): CP/M 3 time stamps and PC CP/M-86 320 KB and larger (both need test disks).
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
@@ -32,14 +32,14 @@ RetroCore master (local, not pushed; the user pushes RetroCore) has the Dragon 6
      four, checked by cpmtools on a flat copy. Still open for the C128: CP/M 3 time stamps.
      Kaypro II and 4 raw images done (2026-11-21): layouts from ROM 81-232, `KayproCpmTests`, checked by cpmtools.
      Amstrad CPC system and data format in DSK files done (2026-11-21), `AmstradCpmTests`; the layout is not yet checked against the Amstrad manual, and no data-format disk was tested.
-     CP/M-86 on 160 KB IBM PC floppies done (2026-11-21), `Cpm86Tests`, layout measured on the IBM CP/M-86 1.00 disk. Not yet: 320 KB double-sided, 360 KB, 1.2 MB (no images). Osborne images downloaded (`cpm/osborne`, ImageDisk .IMD); ImageDisk (.IMD) reader and Osborne 1 double density done (2026-11-21), `ImdCpmTests`. TIKI-100 90, 200 and 400 KB done (2026-11-21), `Tiki100CpmTests`: 90 and 400 KB from the TIKO 4.01 kernel tables, 200 KB measured; 800 KB measured on library disk FD0054 (2 KB blocks, 128 entries, one reserved cylinder; a 1581 D81 of the same size wins when its directory holds files). TIKI-100 8 MB hard disk done (2026-11-21): DPB from the TIKO kernel on the hard disk (1745h), checked on HD0 and HD1.
+     CP/M-86 on 160 KB IBM PC floppies done (2026-11-21), `Cpm86Tests`, layout measured on the IBM CP/M-86 1.00 disk. Not yet: 320 KB double-sided, 360 KB, 1.2 MB (no images). Osborne images downloaded (`cpm/osborne`, ImageDisk .IMD); ImageDisk (.IMD) reader and Osborne 1 double density done (2026-11-21), `ImdCpmTests`. TIKI-100 90, 200 and 400 KB done (2026-11-21), `Tiki100CpmTests`: 90 and 400 KB from the TIKO 4.01 kernel tables, 200 KB measured; 800 KB measured on library disk FD0054 (2 KB blocks, 128 entries, one reserved cylinder; a 1581 D81 of the same size wins when its directory holds files). Amstrad PCW single-sided (sector IDs 1-9, one reserved track) done (2026-11-22), measured on two games disks. TIKI-100 8 MB hard disk done (2026-11-21): DPB from the TIKO kernel on the hard disk (1745h), checked on HD0 and HD1.
    - **Machines, in this order.**
      1. **Commodore 128 CP/M** on 1541, 1571 and 1581 images. The disk has a normal CBM header
         named "CP/M" and CP/M data elsewhere; we already have one real image (a C128 CP/M D71).
         Layout from Commodore's C128 CP/M documentation.
      2. **CP/M-86 on PC floppies**: the 160/320 KB IBM layouts, the 360 KB and 1.2 MB later ones.
         Uses the existing PC floppy images.
-     3. **Z80/8080 machines**: Osborne 1, Amstrad PCW,
+     3. **Z80/8080 machines**: Osborne 1,
         Epson QX-10, and the 8-inch IBM 3740 standard layout CP/M was born on. Each layout from the
         maker's technical manual.
    - **Image containers.** Raw images first. Then the containers these machines' images come in:

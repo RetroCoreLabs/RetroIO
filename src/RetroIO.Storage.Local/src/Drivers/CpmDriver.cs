@@ -162,23 +162,24 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gives the CP/M disk parameters of an Amstrad CPC system or data format disk.
         /// </summary>
         /// <remarks>
-        /// Both formats have 1 KB blocks and 64 directory entries (two blocks), and every 512-byte
-        /// sector is used: the data area is the 40 tracks (data format) or the 38 after the two
-        /// system tracks (system format), so DSM is 179 or 170. The directory was found at the start
+        /// All three formats have 1 KB blocks and 64 directory entries (two blocks): the data area is
+        /// the 40 tracks (CPC data format), the 38 after the two system tracks (CPC system format,
+        /// DSM 170) or the 39 after one reserved track (PCW, DSM 174, the last half block unused).
+        /// PCW: measured on real disks, sixteen blocks to a full 16 KB entry. The directory was found at the start
         /// of the first data track on real system-format disks.
         /// </remarks>
         /// <param name="recordCount">
         /// Number of 128-byte records in the data area.
         /// </param>
         /// <param name="firstSectorId">
-        /// 41h (system format) or C1h (data format).
+        /// 41h (CPC system format), C1h (CPC data format) or 01h (PCW).
         /// </param>
         /// <returns>
         /// The parameters.
         /// </returns>
         public static CpmDiskParameters AmstradParameters(int recordCount, byte firstSectorId)
         {
-            return new CpmDiskParameters(1024, recordCount / 8, 64, 0, firstSectorId == 0x41 ? 2 : 0);
+            return new CpmDiskParameters(1024, recordCount / 8, 64, 0, AmstradCpmRecordMap.ReservedTracks(firstSectorId));
         }
 
         /// <summary>
