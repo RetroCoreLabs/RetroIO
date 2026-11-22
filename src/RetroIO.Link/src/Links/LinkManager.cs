@@ -33,8 +33,29 @@ namespace RetroIO.Link
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _links = new Dictionary<string, ILink>(StringComparer.OrdinalIgnoreCase);
             _linksByMachineId = new Dictionary<string, ILink>(StringComparer.OrdinalIgnoreCase);
+            _roles = new Dictionary<string, X25LinkRole>(StringComparer.OrdinalIgnoreCase);
 
             _logger.LogInformation("LinkManager: Created");
+        }
+
+        // The X.25 role each link was created with (LinkConfigBase.X25Role), by link name.
+        private readonly Dictionary<string, X25LinkRole> _roles;
+
+        /// <summary>
+        /// The X.25 role a link was created with; DTE for a link this manager does not know.
+        /// </summary>
+        /// <param name="linkName">
+        /// The link name.
+        /// </param>
+        /// <returns>
+        /// The role from the link's settings (<see cref="LinkConfigBase.X25Role"/>).
+        /// </returns>
+        public X25LinkRole GetX25Role(string linkName)
+        {
+            lock (_lock)
+            {
+                return _roles.TryGetValue(linkName, out X25LinkRole role) ? role : X25LinkRole.Dte;
+            }
         }
 
         #region Link Management
@@ -52,7 +73,7 @@ namespace RetroIO.Link
                 }
 
                 var link = new SerialLink(_logger, config);
-                AddLink(link, config.RemoteMachineId);
+                AddLink(link, config.RemoteMachineId, config.X25Role);
 
                 _logger.LogInformation("LinkManager: Created serial link '{Name}'", config.Name);
                 return link;
@@ -72,7 +93,7 @@ namespace RetroIO.Link
                 }
 
                 var link = new TcpLapbLink(_logger, config);
-                AddLink(link, config.RemoteMachineId);
+                AddLink(link, config.RemoteMachineId, config.X25Role);
 
                 _logger.LogInformation("LinkManager: Created TCP-LAPB link '{Name}'", config.Name);
                 return link;
@@ -92,7 +113,7 @@ namespace RetroIO.Link
                 }
 
                 var link = new XotLink(_logger, config);
-                AddLink(link, config.RemoteMachineId);
+                AddLink(link, config.RemoteMachineId, config.X25Role);
 
                 _logger.LogInformation("LinkManager: Created XOT link '{Name}'", config.Name);
                 return link;
@@ -121,7 +142,7 @@ namespace RetroIO.Link
                 }
 
                 var link = new CodecLink(_logger, config, transport);
-                AddLink(link, config.RemoteMachineId);
+                AddLink(link, config.RemoteMachineId, config.X25Role);
 
                 _logger.LogInformation("LinkManager: Created codec link '{Name}' ({Framing})", config.Name, config.Framing);
                 return link;
@@ -132,7 +153,8 @@ namespace RetroIO.Link
         /// Create and add a test link for frame injection and simulation
         /// </summary>
         public TestLink CreateTestLink(string name, byte windowSize = 7, byte maxRetries = 10,
-            int t1TimeoutMs = 3000, int t2TimeoutMs = 1500, int t3TimeoutMs = 0, bool isPrimary = true)
+            int t1TimeoutMs = 3000, int t2TimeoutMs = 1500, int t3TimeoutMs = 0, bool isPrimary = true,
+            X25LinkRole x25Role = X25LinkRole.Dte)
         {
             lock (_lock)
             {
@@ -142,7 +164,7 @@ namespace RetroIO.Link
                 }
 
                 var link = new TestLink(_logger, name, windowSize, maxRetries, t1TimeoutMs, t2TimeoutMs, t3TimeoutMs, isPrimary);
-                AddLink(link, string.Empty);
+                AddLink(link, string.Empty, x25Role);
 
                 _logger.LogInformation("LinkManager: Created test link '{Name}'", name);
                 return link;
@@ -170,9 +192,10 @@ namespace RetroIO.Link
         /// <summary>
         /// Add a link to the manager
         /// </summary>
-        private void AddLink(ILink link, string remoteMachineId)
+        private void AddLink(ILink link, string remoteMachineId, X25LinkRole role)
         {
             _links[link.Name] = link;
+            _roles[link.Name] = role;
 
             if (!string.IsNullOrWhiteSpace(remoteMachineId))
             {
@@ -210,6 +233,8 @@ namespace RetroIO.Link
                 {
                     lapbLink.LapbStateChanged -= OnLinkLapbStateChanged;
                 }
+
+                _roles.Remove(linkName);
 
                 // Remove from machine ID index
                 var machineId = link.RemoteMachineId;

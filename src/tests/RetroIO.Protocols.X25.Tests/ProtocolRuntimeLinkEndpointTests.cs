@@ -59,7 +59,7 @@ namespace RetroIO.Protocols.X25.Tests
         /// router like a call on any other line (2026-11-18), so the local machine's address gets an
         /// inbound route to the local TAD unless a test wants none.
         /// </summary>
-        private void Build(bool withRoute)
+        private void Build(bool withRoute, RetroIO.Link.X25LinkRole role = RetroIO.Link.X25LinkRole.Dte)
         {
             if (_runtime != null)
             {
@@ -93,7 +93,12 @@ namespace RetroIO.Protocols.X25.Tests
             }
 
             _runtime = new ProtocolRuntime(NullLogger.Instance, config);
-            _link = _runtime.DefaultTestLink;
+            // A DCE link is a test link of its own; the default test link is the DTE every link was before 2026-11-21.
+            _link = role == RetroIO.Link.X25LinkRole.Dte ? _runtime.DefaultTestLink : _runtime.Links.CreateTestLink("dce-link", x25Role: role);
+            if (role != RetroIO.Link.X25LinkRole.Dte)
+            {
+                _link.Start();
+            }
 
             // Every I frame the runtime puts on the link, with its information field kept: that is
             // the X.25 packet the engine produced.
@@ -245,6 +250,22 @@ namespace RetroIO.Protocols.X25.Tests
             // 0x00 in the cause and the router's diagnostic goes on unchanged (lines 8022-8024).
             Assert.That(clear![3], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Cause.DteOriginated), "a DTE clears with DTE originated");
             Assert.That(clear[4], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Diagnostic.InvalidCalledAddress), "the router's diagnostic, # 67");
+        }
+
+        /// <summary>
+        /// A link set to DCE (LinkConfigBase.X25Role, added 2026-11-21) is the network end, so the router's own cause
+        /// goes out: Not obtainable 0x0D, diagnostic 67 - not the DTE's "DTE originated" (Table 5-7 note a).
+        /// </summary>
+        [Test]
+        public void OnALinkSetToDce_AnUnroutableCall_IsClearedWithTheRealCause()
+        {
+            Build(withRoute: true, role: RetroIO.Link.X25LinkRole.Dce);
+            DeliverToLink(X25PacketBuilder.CreateCallRequest(lcn: 6, calledAddress: "999", callingAddress: CallingAddress), ns: 0);
+
+            byte[]? clear = ClearOn(6);
+            Assert.That(clear, Is.Not.Null, "an unroutable call must be cleared on the link it came in on");
+            Assert.That(clear![3], Is.EqualTo((byte)0x0D), "a DCE sends the network's cause, Not obtainable");
+            Assert.That(clear[4], Is.EqualTo(RetroIO.Protocols.X25.PacketLayer.X25Diagnostic.InvalidCalledAddress));
         }
 
         [Test]

@@ -205,7 +205,8 @@ namespace RetroIO.Protocols.X25.Runtime
         /// </param>
         private X25Endpoint EndpointForLink(ILink link)
         {
-            return FindEndpoint(link) ?? EndpointFor(link, link.Name, payload => _linkManager.SendViaLink(link.Name, payload), isDte: true);
+            return FindEndpoint(link) ?? EndpointFor(link, link.Name, payload => _linkManager.SendViaLink(link.Name, payload),
+                isDte: _linkManager.GetX25Role(link.Name) == X25LinkRole.Dte);
         }
 
         private XotInterfaceConfig? FindXotEntry(string name)

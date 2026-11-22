@@ -49,6 +49,34 @@ namespace RetroIO.Link
         /// Optional description
         /// </summary>
         public string Description { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Which end of the X.25 packet layer this side of the link is.
+        /// </summary>
+        /// <remarks>
+        /// Added 2026-11-21 (RetroIO BUGS.md, "DTE cause on a link manager link"; decided by Ronny: a setting per link,
+        /// DTE when it is left out, which is what every link was before). The role decides the end the engine takes free
+        /// channels from (X.25 Annex A), which side wins a call collision (4.1.3), and which clearing causes may be sent
+        /// (Table 5-7 note a: a DTE sends 0 or a cause with bit 8 set). X.25 does not tie it to who opens the TCP
+        /// connection, so a link that listens for a SINTRAN machine (a DTE) is set to <see cref="X25LinkRole.Dce"/> here.
+        /// </remarks>
+        public X25LinkRole X25Role { get; set; } = X25LinkRole.Dte;
+    }
+
+    /// <summary>
+    /// The X.25 role of this side of a link.
+    /// </summary>
+    public enum X25LinkRole
+    {
+        /// <summary>
+        /// The terminal end: the far side is a switch or another network's DCE. The default.
+        /// </summary>
+        Dte,
+
+        /// <summary>
+        /// The network end: the far side is a DTE, for example a SINTRAN machine that dials in.
+        /// </summary>
+        Dce,
     }
 
     /// <summary>
