@@ -10,6 +10,10 @@ jobs:
   publish:
     needs: verify
     runs-on: windows-latest
+    # GITHUB_TOKEN may write packages of this repository to GitHub Packages; nothing else.
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -29,7 +33,20 @@ jobs:
           Write-Host "nupkg=$n snupkg=$s"
           if ($n -eq 0 -or $n -ne $s) { throw "expected one .snupkg per .nupkg and at least one package" }
         working-directory: src
-      - run: dotnet nuget push "packages\*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      # GitHub Packages: the feed https://nuget.pkg.github.com/retrocorelabs/index.json. It takes
+      # .nupkg only (no symbol packages); the symbols go to nuget.org below.
+      - run: dotnet nuget push "packages\*.nupkg" --source https://nuget.pkg.github.com/retrocorelabs/index.json --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
         working-directory: src
-      - run: dotnet nuget push "packages\*.snupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      # nuget.org only once its key is set up as the NUGET_API_KEY secret.
+      - name: nuget.org key present
+        id: nugetorg
+        shell: pwsh
+        env:
+          KEY: ${{ secrets.NUGET_API_KEY }}
+        run: echo "present=$(-not [string]::IsNullOrEmpty($env:KEY))" >> $env:GITHUB_OUTPUT
+      - if: steps.nugetorg.outputs.present == 'True'
+        run: dotnet nuget push "packages\*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+        working-directory: src
+      - if: steps.nugetorg.outputs.present == 'True'
+        run: dotnet nuget push "packages\*.snupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
         working-directory: src
