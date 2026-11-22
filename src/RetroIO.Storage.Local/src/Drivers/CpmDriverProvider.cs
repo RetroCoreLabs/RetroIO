@@ -29,6 +29,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </remarks>
     public sealed class CpmDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Commodore 128", "Commodore 64", "Kaypro II", "Kaypro 4", "Osborne 1", "Amstrad CPC", "Amstrad PCW", "IBM PC (CP/M-86)", "IBM PC-XT (CP/M-86)", "TIKI-100" };
+
         private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81", ".img", ".dsk", ".imd" };
 
         /// <summary>
@@ -44,7 +47,13 @@ namespace RetroIO.Storage.Local.Drivers
         /// <summary>
         /// Gets a short description of the format.
         /// </summary>
-        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 and Osborne 1 raw or ImageDisk images; Amstrad CPC DSK; CP/M-86 on 160 KB IBM PC floppies)";
+        public override string Description => "CP/M disk (Commodore 128 and 64 CP/M on D64, D71 and D81 images; Kaypro II and 4 and Osborne 1 raw or ImageDisk images; Amstrad CPC DSK; Amstrad PCW DSK; CP/M-86 on 160 KB IBM PC and 320 KB IBM PC-XT floppies; TIKI-100 floppies and 8 MB hard disk)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
+
+        /// <inheritdoc/>
+        public override bool SupportsWrite => true;
 
         /// <summary>
         /// Gets the number of first bytes detection needs: 80 KB, which holds every directory detection

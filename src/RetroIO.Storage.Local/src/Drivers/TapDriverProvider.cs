@@ -16,6 +16,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class TapDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Commodore 8-bit computers" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".tap" };
@@ -36,6 +39,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the Commodore TAP tape image format.
         /// </summary>
         public override string Description => "Commodore TAP tape image";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
         /// <summary>
         /// Gets 20, the number of header bytes the detection needs.
         /// </summary>

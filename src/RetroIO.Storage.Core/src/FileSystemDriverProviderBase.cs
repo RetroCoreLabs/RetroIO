@@ -60,6 +60,12 @@ namespace RetroIO.Storage.Core
         /// </remarks>
         public virtual IReadOnlyList<string> FileExtensions => Array.Empty<string>();
 
+        /// <inheritdoc/>
+        public virtual bool SupportsWrite => false;
+
+        /// <inheritdoc/>
+        public virtual IReadOnlyList<string> Machines => Array.Empty<string>();
+
         /// <summary>
         /// Analyzes detection hints to determine confidence that the file matches this filesystem format.
         /// Default implementation returns 0.0 (no detection).

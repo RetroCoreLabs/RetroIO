@@ -47,6 +47,25 @@ namespace RetroIO.Storage.Core
         IReadOnlyList<string> FileExtensions => Array.Empty<string>();
 
         /// <summary>
+        /// Gets whether this provider's driver can write files to a mounted image.
+        /// </summary>
+        /// <remarks>
+        /// A provider that says <c>true</c> must also implement <see cref="IBlankImageProvider"/>
+        /// with at least one layout, so a blank disk of its format can be created; one test over
+        /// every provider checks it. The default is <c>false</c>.
+        /// </remarks>
+        bool SupportsWrite => false;
+
+        /// <summary>
+        /// Gets the machines or systems whose disks this format covers, for example
+        /// <c>Kaypro II</c> or <c>IBM PC</c>.
+        /// </summary>
+        /// <remarks>
+        /// Shown to users, for example in a list of supported formats. Empty by default.
+        /// </remarks>
+        IReadOnlyList<string> Machines => Array.Empty<string>();
+
+        /// <summary>
         /// Analyzes detection hints to determine confidence that the file matches this filesystem format.
         /// Factory reads the file ONCE and provides the same hints to all drivers for efficiency.
         /// HeaderBytes will contain at least RequiredHeaderBytes bytes (or entire file if smaller).

@@ -45,6 +45,57 @@ namespace RetroIO.Storage.Core
         /// Gets the allowed values of a <see cref="BlankImageOptionKind.Choice"/> option.
         /// </summary>
         public IReadOnlyList<string> Choices { get; init; } = Array.Empty<string>();
+
+        /// <summary>
+        /// Gives this option's value from the values the user set, or its default.
+        /// </summary>
+        /// <param name="options">
+        /// Option values by id, or <c>null</c> for all defaults.
+        /// </param>
+        /// <returns>
+        /// The value, checked against the kind, length and choices of the option.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the value set in <paramref name="options"/> is not allowed.
+        /// </exception>
+        public string ValueIn(IReadOnlyDictionary<string, string>? options)
+        {
+            if (options == null || !options.TryGetValue(Id, out string? value) || value == null)
+            {
+                return Default;
+            }
+
+            if (MaxLength > 0 && value.Length > MaxLength)
+            {
+                throw new ArgumentException(Label + ": at most " + MaxLength + " characters", nameof(options));
+            }
+
+            if (Kind == BlankImageOptionKind.Number && !long.TryParse(value, out _))
+            {
+                throw new ArgumentException(Label + ": not a whole number: " + value, nameof(options));
+            }
+
+            if (Kind == BlankImageOptionKind.Flag && value != "true" && value != "false")
+            {
+                throw new ArgumentException(Label + ": must be true or false", nameof(options));
+            }
+
+            if (Kind == BlankImageOptionKind.Choice)
+            {
+                bool found = false;
+                for (int i = 0; i < Choices.Count; i++)
+                {
+                    found |= Choices[i] == value;
+                }
+
+                if (!found)
+                {
+                    throw new ArgumentException(Label + ": not one of the choices: " + value, nameof(options));
+                }
+            }
+
+            return value;
+        }
     }
 
     /// <summary>

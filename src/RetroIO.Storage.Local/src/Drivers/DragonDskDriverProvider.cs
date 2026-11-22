@@ -18,6 +18,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonDskDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Dragon 32", "Dragon 64", "TRS-80 Color Computer" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".dsk", ".jvc" };
@@ -39,6 +42,12 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the Dragon DSK and JVC image formats.
         /// </summary>
         public override string Description => "Dragon 32/64 DSK/JVC disk images (35/40/80 tracks, DragonDOS)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
+
+        /// <inheritdoc/>
+        public override bool SupportsWrite => true;
 
         /// <summary>
         /// Scores the file from its extension (.dsk or .jvc), a plausible JVC header, its size, and an OS-9 identification sector in a headerless

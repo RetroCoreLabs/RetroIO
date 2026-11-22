@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using RetroIO.Storage.Core;
 
 namespace RetroIO.Storage.Local.Drivers
@@ -15,8 +16,24 @@ namespace RetroIO.Storage.Local.Drivers
     /// Unified provider for Commodore disk drivers (D64, D71, D81).
     /// Replaces separate D64DriverProvider, D71DriverProvider, and D81DriverProvider.
     /// </summary>
-    public sealed class CommodoreDiskDriverProvider : FileSystemDriverProviderBase
+    public sealed class CommodoreDiskDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Commodore 64 (1541)", "Commodore 128 (1571, 1581)" };
+
+        // Disk name (16 characters) and ID (2) of the BAM header, as the drive's NEW command takes
+        // them ("N:name,id").
+        private static readonly BlankImageOption DiskName = new BlankImageOption { Id = "diskName", Label = "Disk name", Kind = BlankImageOptionKind.Text, Default = "BLANK", MaxLength = 16 };
+        private static readonly BlankImageOption DiskId = new BlankImageOption { Id = "diskId", Label = "Disk ID", Kind = BlankImageOptionKind.Text, Default = "00", MaxLength = 2 };
+        private static readonly BlankImageOption[] NameAndId = { DiskName, DiskId };
+
+        private static readonly BlankImageLayout[] Layouts =
+        {
+            new BlankImageLayout { Id = "cbm-d64", Machine = "Commodore 1541", Name = "D64 - 35 tracks, 170 KB", Extension = ".d64", SizeBytes = 174848, Options = NameAndId },
+            new BlankImageLayout { Id = "cbm-d71", Machine = "Commodore 1571", Name = "D71 - 70 tracks, double-sided, 340 KB", Extension = ".d71", SizeBytes = 349696, Options = NameAndId },
+            new BlankImageLayout { Id = "cbm-d81", Machine = "Commodore 1581", Name = "D81 - 80 tracks, 800 KB", Extension = ".d81", SizeBytes = 819200, Options = NameAndId },
+        };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81" };
@@ -38,6 +55,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the Commodore disk image formats.
         /// </summary>
         public override string Description => "Commodore disk images (D64/D71/D81)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
 
         /// <summary>
         /// Analyzes detection hints to determine confidence that file matches Commodore disk format.
@@ -74,6 +94,39 @@ namespace RetroIO.Storage.Local.Drivers
         public override IFileSystemDriver CreateDriver()
         {
             return new CommodoreDiskDriver();
+        }
+
+        /// <inheritdoc/>
+        public override bool SupportsWrite => true;
+
+        /// <inheritdoc/>
+        public IReadOnlyList<BlankImageLayout> BlankLayouts => Layouts;
+
+        /// <inheritdoc/>
+        public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
+        {
+            CbmDiskType type = TypeOf(layoutId);
+            return CbmImageFactory.CreateBlank(type, DiskName.ValueIn(options), DiskId.ValueIn(options));
+        }
+
+        /// <inheritdoc/>
+        public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
+        {
+            TypeOf(layoutId);
+            CommodoreDiskDriver driver = new CommodoreDiskDriver();
+            driver.Mount(stream, readOnly);
+            return driver;
+        }
+
+        private static CbmDiskType TypeOf(string layoutId)
+        {
+            return layoutId switch
+            {
+                "cbm-d64" => CbmDiskType.D64,
+                "cbm-d71" => CbmDiskType.D71,
+                "cbm-d81" => CbmDiskType.D81,
+                _ => throw new ArgumentException("not a Commodore blank-image layout: " + layoutId, nameof(layoutId)),
+            };
         }
 
         /// <summary>

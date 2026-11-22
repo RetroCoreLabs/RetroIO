@@ -16,6 +16,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonDmkDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Dragon 32", "Dragon 64", "TRS-80 Color Computer" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".dmk" };
@@ -37,6 +40,12 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the description of the provider.
         /// </summary>
         public override string Description => "Dragon and Color Computer DMK disk images (DragonDOS, DECB, OS-9)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
+
+        /// <inheritdoc/>
+        public override bool SupportsWrite => true;
 
         /// <summary>
         /// Rates how likely a file is a DMK image.

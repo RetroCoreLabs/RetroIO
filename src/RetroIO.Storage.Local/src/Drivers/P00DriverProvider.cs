@@ -17,6 +17,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class P00DriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Commodore 64" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".p00" };
@@ -37,6 +40,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the PC64 P00 program container format.
         /// </summary>
         public override string Description => "Commodore PC64 program container (.P00)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
         /// <summary>
         /// Gets 26, the number of header bytes the detection needs.
         /// </summary>

@@ -18,6 +18,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class PrgDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Commodore 8-bit computers" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".prg" };
@@ -38,6 +41,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the Commodore PRG program file format.
         /// </summary>
         public override string Description => "Commodore PRG program file";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
         /// <summary>
         /// Gets 16, the number of header bytes requested for detection.
         /// </summary>

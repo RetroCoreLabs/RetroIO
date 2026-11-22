@@ -17,6 +17,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class DragonVdkDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Dragon 32", "Dragon 64" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".vdk" };
@@ -38,6 +41,12 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the Dragon VDK image format.
         /// </summary>
         public override string Description => "Dragon 32/64 VDK disk images (40/80 tracks, DragonDOS)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
+
+        /// <inheritdoc/>
+        public override bool SupportsWrite => true;
 
         /// <summary>
         /// Scores the file from its extension (.vdk), the VDK header fields and its size.

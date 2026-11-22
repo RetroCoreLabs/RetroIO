@@ -34,6 +34,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class FfsDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new string[0];
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".ffs", ".ufs", ".img", ".dsk" };
@@ -55,6 +58,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the Berkeley Fast File System format.
         /// </summary>
         public override string Description => "Berkeley Fast File System (FFS/UFS)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
 
         /// <summary>
         /// FFS requires reading the superblock at offset 8192 + full superblock size (2048 bytes).

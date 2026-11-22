@@ -17,6 +17,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class PcFloppyDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "IBM PC" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         // .hdd is a raw PC hard-disk image, the same bytes as .img. .vhd is a fixed VHD: the raw disk
@@ -41,6 +44,12 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the PC floppy image formats.
         /// </summary>
         public override string Description => "PC floppy disk images (360KB-2.88MB, FAT12/FAT16)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
+
+        /// <inheritdoc/>
+        public override bool SupportsWrite => true;
 
         /// <summary>
         /// Scores the file from its extension, its size and its boot sector fields.

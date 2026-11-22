@@ -19,6 +19,9 @@ namespace RetroIO.Storage.Ndfs.Drivers
     /// </summary>
     public sealed class NdfsDriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new[] { "Norsk Data ND-100", "Norsk Data ND-500" };
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] SupportedExtensions = { ".nd", ".ndfs", ".nord", ".ndf" };
@@ -46,6 +49,12 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// Always <c>"Nord Disk File System"</c>.
         /// </value>
         public override string Description => "Nord Disk File System";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
+
+        /// <inheritdoc/>
+        public override bool SupportsWrite => true;
 
         /// <summary>
         /// NDFS requires at least one page (2048 bytes) to validate the master block.

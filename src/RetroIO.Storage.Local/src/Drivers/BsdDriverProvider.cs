@@ -32,6 +32,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </summary>
     public sealed class V7DriverProvider : FileSystemDriverProviderBase
     {
+        // The machines this format's disks come from, shown to users.
+        private static readonly string[] MachineList = new string[0];
+
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
         private static readonly string[] KnownExtensions = { ".bsd", ".img", ".dsk" };
@@ -53,6 +56,9 @@ namespace RetroIO.Storage.Local.Drivers
         /// Gets the human-readable description of the UNIX V7 format.
         /// </summary>
         public override string Description => "UNIX V7 filesystem (1979)";
+
+        /// <inheritdoc/>
+        public override System.Collections.Generic.IReadOnlyList<string> Machines => MachineList;
 
         /// <summary>
         /// Analyzes detection hints to determine if this is a BSD filesystem.
