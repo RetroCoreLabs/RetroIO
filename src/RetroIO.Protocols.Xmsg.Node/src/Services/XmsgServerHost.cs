@@ -336,6 +336,30 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         }
 
         /// <summary>
+        /// Tells every server that wants it (<see cref="IXmsgRejectAware"/>) that a remote node
+        /// refused one of our frames with an error frame.
+        /// </summary>
+        /// <param name="remoteNode">
+        /// The node that refused it.
+        /// </param>
+        /// <param name="rejectedFlags1">
+        /// The refused frame's Flags 1.
+        /// </param>
+        /// <param name="error">
+        /// The error from the error frame's Flags 2.
+        /// </param>
+        public void NotifyRejected(ushort remoteNode, ushort rejectedFlags1, XmsgError error)
+        {
+            for (int i = 0; i < _servers.Count; i++)
+            {
+                if (_servers[i] is IXmsgRejectAware aware)
+                {
+                    aware.NotifyRejected(remoteNode, rejectedFlags1, error);
+                }
+            }
+        }
+
+        /// <summary>
         /// Records that a remote node ACKed one of our frames, advancing the persisted next-sequence for
         /// that link to <c>ackedFlags1 + 1</c> (never past what was actually received).
         /// </summary>

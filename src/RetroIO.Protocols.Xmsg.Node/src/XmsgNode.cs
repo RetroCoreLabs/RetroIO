@@ -771,6 +771,14 @@ namespace RetroIO.Protocols.Xmsg.Node
                         + " rejected our frame at Flags1 0x" + incoming.Header.Flags1.ToString("X4", System.Globalization.CultureInfo.InvariantCulture)
                         + " with " + DescribeNetworkError(incoming.Header.Flags2));
 
+                    // Tell the servers which of their frames was refused, so a secure message comes
+                    // back to the task that sent it (RetroIO BUGS.md, kernel bridge, part 1). Flags 2
+                    // is the negative XMSG error number (XEIMA = 0xFFED = -19).
+                    ServerHost?.NotifyRejected(
+                        incoming.Header.SourceNode,
+                        incoming.Header.Flags1,
+                        (XmsgError)unchecked((short)incoming.Header.Flags2));
+
                     // A XENSE (Flags2 0xFFDE) reject of our accept means our sequence
                     // was AHEAD of 100's expected-from-us (drift). Step the accept DOWN and re-send;
                     // one step per XENSE converges on 100's exact value with no restart. Only while

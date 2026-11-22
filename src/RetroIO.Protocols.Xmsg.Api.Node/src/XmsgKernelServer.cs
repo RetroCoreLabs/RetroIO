@@ -36,8 +36,15 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
     /// letters and TAD sessions decoded elsewhere in this repo are unaffected - they are built by
     /// their own code paths.
     /// </remarks>
-    public sealed class XmsgKernelServer : IXmsgServer, IXmsgDatagramSink, IXmsgNameOwner
+    public sealed class XmsgKernelServer : IXmsgServer, IXmsgDatagramSink, IXmsgNameOwner, IXmsgRejectAware
     {
+        /// <summary>
+        /// Secure messages sent and not yet ACKed, by <c>(node shifted left 16) | Flags 1</c> of each
+        /// frame that carries them. A refusal of any of those frames returns the message; an ACK of
+        /// a frame forgets that frame. Guarded by itself.
+        /// </summary>
+        private readonly Dictionary<uint, SentSecure> _unacked = new Dictionary<uint, SentSecure>();
+
         private readonly XmsgKernel _kernel;
         private readonly List<XmsgFrame> _outbound;
         private readonly HashSet<ushort> _ownedPorts;
@@ -519,21 +526,79 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         }
 
         /// <summary>
-        /// Called when a remote node acknowledged one of our frames. This server does nothing with
-        /// it.
+        /// Called when a remote node acknowledged one of our frames: a secure message carried by
+        /// that frame is no longer kept for a possible return (<see cref="NotifyRejected"/>).
         /// </summary>
         /// <param name="remoteNode">
-        /// The node that acknowledged. It is not read.
+        /// The node that acknowledged.
         /// </param>
         /// <param name="ackedFlags1">
-        /// The Flags 1 the acknowledgement echoes. It is not read.
+        /// The Flags 1 the acknowledgement echoes.
         /// </param>
         /// <remarks>
-        /// The request-response layer paces itself on its own messages, not on the transport's
-        /// acknowledgements, so there is nothing to release here.
+        /// Output is not paced on it: the request-response layer paces itself on its own messages,
+        /// not on the transport's acknowledgements, so no held-back frame is released here.
         /// </remarks>
         public void NotifyAck(ushort remoteNode, ushort ackedFlags1)
         {
+            lock (_unacked)
+            {
+                _unacked.Remove(SentKey(remoteNode, ackedFlags1));
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// A refused frame of a SECURE message hands the message back to the port that sent it, as a
+        /// returned message (XMTRE) whose sender names the port it could not reach - what a SINTRAN
+        /// kernel does (see <see cref="XmsgKernel.DeliverReturned"/>). A message split over several
+        /// frames comes back once. A non-secure message was not kept and is not returned, as on
+        /// SINTRAN.
+        /// </remarks>
+        public void NotifyRejected(ushort remoteNode, ushort rejectedFlags1, XmsgError error)
+        {
+            SentSecure? sent;
+            lock (_unacked)
+            {
+                if (!_unacked.Remove(SentKey(remoteNode, rejectedFlags1), out sent))
+                {
+                    return;
+                }
+
+                for (int i = 0; i < sent.Keys.Length; i++)
+                {
+                    _unacked.Remove(sent.Keys[i]);
+                }
+            }
+
+            _kernel.DeliverReturned(sent.Sender, sent.Destination, sent.Data, error);
+        }
+
+        private static uint SentKey(ushort node, ushort flags1)
+        {
+            return ((uint)node << 16) | flags1;
+        }
+
+        /// <summary>
+        /// A secure message on the wire, kept until its frames are ACKed.
+        /// </summary>
+        private sealed class SentSecure
+        {
+            internal SentSecure(XmsgMagicNumber destination, XmsgMagicNumber sender, byte[] data, uint[] keys)
+            {
+                Destination = destination;
+                Sender = sender;
+                Data = data;
+                Keys = keys;
+            }
+
+            internal XmsgMagicNumber Destination { get; }
+
+            internal XmsgMagicNumber Sender { get; }
+
+            internal byte[] Data { get; }
+
+            internal uint[] Keys { get; }
         }
 
         /// <summary>
@@ -614,6 +679,25 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
             for (int i = 0; i < frames.Count; i++)
             {
                 _outbound.Add(frames[i]);
+            }
+
+            // Keep a SECURE message until the far side ACKs it, so a refusal can return it.
+            if ((flags & XmsgSendFlags.Secure) != 0)
+            {
+                uint[] keys = new uint[frames.Count];
+                for (int i = 0; i < frames.Count; i++)
+                {
+                    keys[i] = SentKey(frames[i].Header.DestinationNode, frames[i].Header.Flags1);
+                }
+
+                SentSecure kept = new SentSecure(destination, sender, userData.ToArray(), keys);
+                lock (_unacked)
+                {
+                    for (int i = 0; i < keys.Length; i++)
+                    {
+                        _unacked[keys[i]] = kept;
+                    }
+                }
             }
 
             return XmsgStatus.Completed;

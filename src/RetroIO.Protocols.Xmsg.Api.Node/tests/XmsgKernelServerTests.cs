@@ -365,6 +365,88 @@ namespace RetroIO.Protocols.Xmsg.Api.Node.Tests
             return bytes;
         }
 
+        /// <summary>
+        /// A SECURE message the far node refuses with an error frame comes back to the port that
+        /// sent it as a returned message (XMTRE), with the refusal's error and the unreachable port
+        /// as its sender - what SINTRAN does (RetroIO BUGS.md, kernel bridge, part 1).
+        /// </summary>
+        [Fact]
+        public void RefusedSecureMessage_ComesBackToTheSender()
+        {
+            XmsgKernelServer bridge = XmsgKernelServer.Create(102, 0x1111, "*DEMO", 4);
+            XmsgKernel kernel = bridge.Kernel;
+            XmsgPortNumber port;
+            kernel.OpenPort(out port);
+            XmsgMagicNumber mine;
+            kernel.ConvertPortToMagic(port, out mine);
+            FakeTransport transport = new FakeTransport();
+            XmsgMagicNumber remote = XmsgMagicNumber.Create(100, 5, 43);
+            bridge.RegisterPort(mine.PortWord);
+            bridge.Handle(BuildFrame(remote, mine, Array.Empty<byte>()), transport);
+            kernel.Receive(port, XmsgWaitOptions.None);
+
+            XmsgFrame sent = SendOne(bridge, kernel, port, remote, transport, XmsgSendFlags.Secure);
+            Assert.True(kernel.Receive(port, XmsgWaitOptions.None).Status.IsNotTerminated);
+
+            bridge.NotifyRejected(sent.Header.DestinationNode, sent.Header.Flags1, XmsgError.XEIMA);
+
+            XmsgReceiveResult back = kernel.Receive(port, XmsgWaitOptions.None);
+            Assert.Equal(XmsgMessageType.XMTRE, back.MessageType);
+            Assert.Equal(XmsgError.XEIMA, back.ReturnReason);
+
+            // Once only: a second refusal of the same frame returns nothing more.
+            bridge.NotifyRejected(sent.Header.DestinationNode, sent.Header.Flags1, XmsgError.XEIMA);
+            Assert.True(kernel.Receive(port, XmsgWaitOptions.None).Status.IsNotTerminated);
+        }
+
+        /// <summary>
+        /// An ACKed secure message, and any non-secure message, is not returned by a later refusal
+        /// at the same Flags 1.
+        /// </summary>
+        [Fact]
+        public void AckedOrNonSecureMessage_IsNotReturned()
+        {
+            XmsgKernelServer bridge = XmsgKernelServer.Create(102, 0x1111, "*DEMO", 4);
+            XmsgKernel kernel = bridge.Kernel;
+            XmsgPortNumber port;
+            kernel.OpenPort(out port);
+            XmsgMagicNumber mine;
+            kernel.ConvertPortToMagic(port, out mine);
+            FakeTransport transport = new FakeTransport();
+            XmsgMagicNumber remote = XmsgMagicNumber.Create(100, 5, 43);
+            bridge.RegisterPort(mine.PortWord);
+            bridge.Handle(BuildFrame(remote, mine, Array.Empty<byte>()), transport);
+            kernel.Receive(port, XmsgWaitOptions.None);
+
+            XmsgFrame secure = SendOne(bridge, kernel, port, remote, transport, XmsgSendFlags.Secure);
+            bridge.NotifyAck(secure.Header.DestinationNode, secure.Header.Flags1);
+            bridge.NotifyRejected(secure.Header.DestinationNode, secure.Header.Flags1, XmsgError.XEIMA);
+            Assert.True(kernel.Receive(port, XmsgWaitOptions.None).Status.IsNotTerminated);
+
+            XmsgFrame plain = SendOne(bridge, kernel, port, remote, transport, XmsgSendFlags.None);
+            bridge.NotifyRejected(plain.Header.DestinationNode, plain.Header.Flags1, XmsgError.XEIMA);
+            Assert.True(kernel.Receive(port, XmsgWaitOptions.None).Status.IsNotTerminated);
+        }
+
+        private static XmsgFrame SendOne(
+            XmsgKernelServer bridge,
+            XmsgKernel kernel,
+            XmsgPortNumber port,
+            XmsgMagicNumber remote,
+            FakeTransport transport,
+            XmsgSendFlags flags)
+        {
+            XmsgMessageIdentifier message;
+            kernel.ReserveBuffer(4, XmsgBufferOptions.None, out message);
+            int written;
+            kernel.Write(message, Encoding.ASCII.GetBytes("PING"), 0, false, out written);
+            Assert.False(kernel.Send(remote, port, flags).IsError);
+
+            IReadOnlyList<XmsgFrame> pending = bridge.DrainPending(transport);
+            Assert.Single(pending);
+            return pending[0];
+        }
+
         private static XmsgFrame BuildFrame(XmsgMagicNumber from, XmsgMagicNumber to, byte[] payload)
         {
             XmsgFrame frame = new XmsgFrameBuilder()
