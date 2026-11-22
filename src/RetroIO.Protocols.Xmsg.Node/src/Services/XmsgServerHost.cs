@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 
+using RetroIO.Protocols.Xmsg.ListNames;
 using RetroIO.Protocols.Xmsg.Packet;
 
 namespace RetroIO.Protocols.Xmsg.Node.Services
@@ -300,6 +301,29 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// One <see cref="XmsgServerInfo"/> per registered server.
         /// </returns>
         public IReadOnlyList<XmsgServerInfo> DescribeServers()
+        {
+            return DescribeServersCore();
+        }
+
+        /// <summary>
+        /// Adds the LIST-NAMES rows of every server that answers names of its own
+        /// (<see cref="IXmsgNameOwner"/>), for example the names a plug-in program claimed.
+        /// </summary>
+        /// <param name="rows">
+        /// The rows being built.
+        /// </param>
+        public void AddOwnedNameRows(List<NameTableEntry> rows)
+        {
+            for (int i = 0; i < _servers.Count; i++)
+            {
+                if (_servers[i] is IXmsgNameOwner owner)
+                {
+                    owner.AddNameRows(rows);
+                }
+            }
+        }
+
+        private IReadOnlyList<XmsgServerInfo> DescribeServersCore()
         {
             List<XmsgServerInfo> list = new List<XmsgServerInfo>(_servers.Count);
             for (int i = 0; i < _servers.Count; i++)

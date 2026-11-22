@@ -10,6 +10,7 @@ using System.Collections.Generic;
 
 using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Api;
+using RetroIO.Protocols.Xmsg.ListNames;
 using RetroIO.Protocols.Xmsg.Node.Services;
 
 namespace RetroIO.Protocols.Xmsg.Api.Node
@@ -171,6 +172,41 @@ namespace RetroIO.Protocols.Xmsg.Api.Node
         {
             XroutDirectory? directory = Directory;
             return directory != null && directory.Contains(name);
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// One row per name in <see cref="Directory"/>, at the magic number it was claimed with. A
+        /// connection port (a name with seats) reports its free seats as reply parameter 3; a plain
+        /// name reports none, the same split D100's table shows.
+        /// </remarks>
+        public void AddNameRows(List<NameTableEntry> rows)
+        {
+            if (rows == null)
+            {
+                throw new ArgumentNullException(nameof(rows));
+            }
+
+            XroutDirectory? directory = Directory;
+            if (directory == null)
+            {
+                return;
+            }
+
+            XroutNameEntry[] names = directory.CopyNames();
+            for (int i = 0; i < names.Length; i++)
+            {
+                XroutNameEntry entry = names[i];
+                if (entry.FreeConnections < 0)
+                {
+                    rows.Add(new NameTableEntry(entry.Magic.Value, entry.Name));
+                }
+                else
+                {
+                    int free = entry.FreeConnections > ushort.MaxValue ? ushort.MaxValue : entry.FreeConnections;
+                    rows.Add(new NameTableEntry(entry.Magic.Value, entry.Name, (ushort)free));
+                }
+            }
         }
 
         /// <summary>

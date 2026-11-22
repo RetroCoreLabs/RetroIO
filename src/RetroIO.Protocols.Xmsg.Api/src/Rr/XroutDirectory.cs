@@ -150,7 +150,7 @@ namespace RetroIO.Protocols.Xmsg.Api
             while (e.MoveNext())
             {
                 KeyValuePair<string, Entry> pair = e.Current;
-                entries[at] = new XroutNameEntry(pair.Key, pair.Value.FreeConnections);
+                entries[at] = new XroutNameEntry(pair.Key, pair.Value.FreeConnections, pair.Value.Magic);
                 at++;
             }
 

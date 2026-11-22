@@ -24,6 +24,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
     ///   <item><description>This node's own system name at port word <c>0x0001</c>.</description></item>
     ///   <item><description>Every other system in the routing table, at port word <c>0x0001</c>.</description></item>
     ///   <item><description>Every registered server, at its real wire port word (<see cref="IXmsgServer.WirePort"/>), under this node's system number.</description></item>
+    ///   <item><description>Every name a bridge server answers for (<see cref="IXmsgNameOwner.AddNameRows"/>), at the magic number it was claimed with.</description></item>
     /// </list>
     /// <para><b>Names</b></para>
     /// <para>
@@ -166,6 +167,18 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
                 rows.Add(new NameTableEntry(Magic(_ownSystem, servers[i].WirePort), servers[i].Name));
             }
 
+            // Names claimed by tasks behind a bridge server (a plug-in's chat room, for one). Each
+            // has its own magic number; a row whose magic is already listed is not added twice.
+            List<NameTableEntry> owned = new List<NameTableEntry>();
+            _serverHost.AddOwnedNameRows(owned);
+            for (int i = 0; i < owned.Count; i++)
+            {
+                if (!HasMagic(rows, owned[i].Magic))
+                {
+                    rows.Add(owned[i]);
+                }
+            }
+
             return rows;
         }
 
@@ -182,7 +195,14 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// </summary>
         private static bool HasSystem(List<NameTableEntry> rows, ushort system)
         {
-            uint magic = Magic(system, SystemNamePortWord);
+            return HasMagic(rows, Magic(system, SystemNamePortWord));
+        }
+
+        /// <summary>
+        /// Returns true when the rows already hold a row with this magic number.
+        /// </summary>
+        private static bool HasMagic(List<NameTableEntry> rows, uint magic)
+        {
             for (int i = 0; i < rows.Count; i++)
             {
                 if (rows[i].Magic == magic)

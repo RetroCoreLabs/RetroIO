@@ -5,6 +5,10 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System.Collections.Generic;
+
+using RetroIO.Protocols.Xmsg.ListNames;
+
 namespace RetroIO.Protocols.Xmsg.Node.Services
 {
     /// <summary>
@@ -29,5 +33,14 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         /// True when this server takes letters for the name.
         /// </returns>
         bool AnswersName(string name);
+
+        /// <summary>
+        /// Adds one LIST-NAMES row for every name this server answers, so a machine that walks our
+        /// name table sees them (RetroIO BUGS.md, kernel bridge, part 3, 2026-11-10).
+        /// </summary>
+        /// <param name="rows">
+        /// The rows being built; add to it, never remove.
+        /// </param>
+        void AddNameRows(List<NameTableEntry> rows);
     }
 }

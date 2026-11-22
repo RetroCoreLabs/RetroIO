@@ -26,10 +26,35 @@ namespace RetroIO.Protocols.Xmsg.Api
         /// port at all.
         /// </param>
         public XroutNameEntry(string name, int freeConnections)
+            : this(name, freeConnections, XmsgMagicNumber.None)
+        {
+        }
+
+        /// <summary>
+        /// Creates an entry that also carries the magic number the name was claimed with.
+        /// </summary>
+        /// <param name="name">
+        /// The registered name.
+        /// </param>
+        /// <param name="freeConnections">
+        /// How many free connections remain, or a negative value when the name has no connection
+        /// port at all.
+        /// </param>
+        /// <param name="magic">
+        /// The magic number the name resolves to.
+        /// </param>
+        public XroutNameEntry(string name, int freeConnections, XmsgMagicNumber magic)
         {
             Name = name;
             FreeConnections = freeConnections;
+            Magic = magic;
         }
+
+        /// <summary>
+        /// Gets the magic number the name resolves to; <see cref="XmsgMagicNumber.None"/> when the
+        /// listing that made this entry did not carry it.
+        /// </summary>
+        public XmsgMagicNumber Magic { get; }
 
         /// <summary>
         /// Gets the registered name.
