@@ -13,7 +13,7 @@
   <!-- ImplicitUsings and GenerateDocumentationFile are deliberately NOT set here: each project keeps its own. -->
   <PropertyGroup>
     <Authors>Ronny Hansen</Authors>
-    <Company>RetroCoreLabs</Company>
+    <Company>RetroCore Labs</Company>
     <Copyright>Copyright (c) 1985-$([System.DateTime]::Now.Year) Ronny Hansen</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>nuget-icon.png</PackageIcon>
