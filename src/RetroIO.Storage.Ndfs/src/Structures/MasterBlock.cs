@@ -9,6 +9,8 @@ using System.Text;
 using RetroIO.Storage.Ndfs.BlockDevices;
 using RetroIO.Storage.Ndfs.Boot;
 
+using RetroIO.Storage.Ndfs.Creation;
+
 namespace RetroIO.Storage.Ndfs.Structures
 {
     /// <summary>
@@ -399,7 +401,16 @@ namespace RetroIO.Storage.Ndfs.Structures
                 uint distance = objId > usrId ? objId - usrId : usrId - objId;
                 bool userAdjacentToObject = (distance == 2);
 
-                structural = typesOk && userAdjacentToObject;
+                // Or exactly where SINTRAN's page allocation (RSBPG) puts them on a new directory.
+                // When the bit file is not at the start of a 16-page bitmap word, the four pages of
+                // the first user and file fall on both sides of it and the blocks are 3 or more
+                // apart: for example 3995 and 3998 with the bit file at 3996 (DISC-16MB), or 9242
+                // and 9246 with it at 9243 (DISC-38MB, a size real SINTRAN M has used). The 53
+                // images above all had the bit file at a word boundary, which is why their
+                // distance is always 2.
+                bool newDirectoryPlacement = NdfsImageCreator.IsNewDirectoryPlacement(BitFilePointer.BlockID, devicePages, usrId, objId);
+
+                structural = typesOk && (userAdjacentToObject || newDirectoryPlacement);
             }
 
             if (!structural)

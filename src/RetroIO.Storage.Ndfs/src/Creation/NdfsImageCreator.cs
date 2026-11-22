@@ -74,6 +74,26 @@ namespace RetroIO.Storage.Ndfs.Creation
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
 
+            return BuildImage(options, SpecOf(options));
+        }
+
+        /// <summary>
+        /// Gives the length in bytes of the image <see cref="CreateImageBytes"/> makes, without making it.
+        /// </summary>
+        /// <param name="options">
+        /// Image creation options.
+        /// </param>
+        /// <returns>
+        /// The image length.
+        /// </returns>
+        internal static long ImageBytes(NdfsImageCreationOptions options)
+        {
+            return SpecOf(options).FileBlocks * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
+        }
+
+        // The disk template the options name, with the boot loader they ask for.
+        private static NdfsTemplateSpec SpecOf(NdfsImageCreationOptions options)
+        {
             NdfsTemplateSpec spec;
             if (options.Template == NdfsImageTemplate.Custom)
             {
@@ -90,7 +110,7 @@ namespace RetroIO.Storage.Ndfs.Creation
                 spec.BootLoaderType = options.BootLoaderType.Value;
             }
 
-            return BuildImage(options, spec);
+            return spec;
         }
 
         /// <summary>
@@ -299,6 +319,48 @@ namespace RetroIO.Storage.Ndfs.Creation
             spec.ObjectFileBlock = (uint)objectIndex;
             spec.UnreservedPages = layout.Available - layout.Quota;
             return layout;
+        }
+
+        /// <summary>
+        /// Tells whether two index blocks are where SINTRAN puts the user and object files of a new
+        /// directory whose bit file is at a given page.
+        /// </summary>
+        /// <remarks>
+        /// Runs the same RSBPG allocation as <see cref="ComputeLayout"/>, on a bit file in which only
+        /// page 0 and the bit file itself are used. The device length stands in for the directory size:
+        /// the two differ only in the last pages of a disk, far from where these four pages go.
+        /// </remarks>
+        /// <param name="bitFilePage">
+        /// The bit file address from the master block.
+        /// </param>
+        /// <param name="devicePages">
+        /// The length of the device in pages.
+        /// </param>
+        /// <param name="userIndex">
+        /// The user file index block from the master block.
+        /// </param>
+        /// <param name="objectIndex">
+        /// The object file index block from the master block.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the two blocks are the second and fourth pages the rule gives.
+        /// </returns>
+        internal static bool IsNewDirectoryPlacement(uint bitFilePage, uint devicePages, uint userIndex, uint objectIndex)
+        {
+            uint bitmapPages = (devicePages + 16383) / 16384;
+            if (bitFilePage < 8 || bitFilePage + bitmapPages > devicePages)
+                return false;
+
+            byte[] bitmap = new byte[bitmapPages * NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE];
+            MarkBlockAllocated(bitmap, 0);
+            for (uint i = 0; i < bitmapPages; i++)
+                MarkBlockAllocated(bitmap, (int)(bitFilePage + i));
+
+            AllocNearHint(bitmap, devicePages, bitFilePage - 1);
+            int user = AllocNearHint(bitmap, devicePages, bitFilePage - 1);
+            AllocNearHint(bitmap, devicePages, bitFilePage - 1);
+            int obj = AllocNearHint(bitmap, devicePages, bitFilePage - 1);
+            return user == (int)userIndex && obj == (int)objectIndex;
         }
 
         /// <summary>

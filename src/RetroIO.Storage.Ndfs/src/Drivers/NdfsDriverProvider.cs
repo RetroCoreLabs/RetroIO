@@ -46,8 +46,8 @@ namespace RetroIO.Storage.Ndfs.Drivers
         private static readonly BlankImageOption[] NdfsOptions = { DirectoryName, BootLoader, ExtendedInfo, SystemNumber, FlagWord };
         private static readonly BlankImageOption[] CustomOptions = { CustomPages, Controller, DirectoryName, BootLoader, ExtendedInfo, SystemNumber, FlagWord };
 
-        // One layout per disk template of the image creator; size is its page count times 2048.
-        private static readonly BlankImageLayout[] Layouts =
+        // The fixed layouts: one per disk template of the image creator, then the any-size disk.
+        private static readonly BlankImageLayout[] TemplateLayouts =
         {
             new BlankImageLayout { Id = "ndfs-floppy-360k", Machine = "Norsk Data ND-100", Name = "Floppy (360 KB type) - 154 pages", Extension = ".img", SizeBytes = 154L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Floppy360KB) },
             new BlankImageLayout { Id = "ndfs-floppy-1200k", Machine = "Norsk Data ND-100", Name = "Floppy (1.2 MB type) - 616 pages", Extension = ".img", SizeBytes = 616L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Floppy12MB) },
@@ -56,6 +56,9 @@ namespace RetroIO.Storage.Ndfs.Drivers
             new BlankImageLayout { Id = "ndfs-scsi-126m", Machine = "Norsk Data ND-100", Name = "SCSI disk, 126 MB - 64656 pages", Extension = ".img", SizeBytes = 64656L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Scsi126MB) },
             new BlankImageLayout { Id = "ndfs-custom", Machine = "Norsk Data ND-100", Name = "Any size - the size is set by the page count and controller options", Extension = ".img", SizeBytes = 616L * 2048, Options = CustomOptions, Details = "The size shown is for the default 616 pages on a floppy controller; a hard-disk controller adds its spare area." },
         };
+
+        // Built once, in BuildLayouts.
+        private static readonly BlankImageLayout[] Layouts = BuildLayouts();
 
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
@@ -185,42 +188,147 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// <inheritdoc/>
         public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
         {
-            bool custom = layoutId == "ndfs-custom";
-            NdfsImageCreationOptions create = new NdfsImageCreationOptions
+            NdfsImageCreationOptions create = BaseOptionsOf(layoutId, options);
+            create.IncludeExtendedInfo = ExtendedInfo.ValueIn(options) == "true";
+            create.SystemNumber = ushort.Parse(SystemNumber.ValueIn(options));
+            create.FlagWord = ushort.Parse(FlagWord.ValueIn(options));
+            create.DirectoryName = DirectoryName.ValueIn(options);
+            NdfsBootLoaderType? boot = BootLoader.ValueIn(options) switch
             {
-                Template = custom ? NdfsImageTemplate.Custom : TemplateOf(layoutId),
-                CustomNdfsPages = custom ? uint.Parse(CustomPages.ValueIn(options)) : 0,
-                ControllerType = Controller.ValueIn(options) switch
-                {
-                    "SMD" => NdfsControllerType.Smd,
-                    "Winchester" => NdfsControllerType.Winchester,
-                    "SCSI" => NdfsControllerType.Scsi,
-                    _ => NdfsControllerType.Floppy,
-                },
-                IncludeExtendedInfo = ExtendedInfo.ValueIn(options) == "true",
-                SystemNumber = ushort.Parse(SystemNumber.ValueIn(options)),
-                FlagWord = ushort.Parse(FlagWord.ValueIn(options)),
-                DirectoryName = DirectoryName.ValueIn(options),
-                BootLoaderType = BootLoader.ValueIn(options) switch
-                {
-                    "None" => NdfsBootLoaderType.None,
-                    "Floppy" => NdfsBootLoaderType.Floppy,
-                    "SMD" => NdfsBootLoaderType.Smd,
-                    "Winchester" => NdfsBootLoaderType.Winchester,
-                    "SCSI" => NdfsBootLoaderType.Scsi,
-                    _ => null,
-                },
+                "None" => NdfsBootLoaderType.None,
+                "Floppy" => NdfsBootLoaderType.Floppy,
+                "SMD" => NdfsBootLoaderType.Smd,
+                "Winchester" => NdfsBootLoaderType.Winchester,
+                "SCSI" => NdfsBootLoaderType.Scsi,
+                _ => null,
             };
+            if (boot.HasValue)
+            {
+                create.BootLoaderType = boot;
+            }
+
             return NdfsImageCreator.CreateImageBytes(create);
         }
 
         /// <inheritdoc/>
         public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
         {
-            TemplateOf(layoutId);
+            BaseOptionsOf(layoutId, null);
             NdfsDriver driver = new NdfsDriver();
             driver.Mount(stream, readOnly);
             return driver;
+        }
+
+        // The fixed layouts, then one per SINTRAN disk type whose size is known (the SINTRAN
+        // device-name table gives the directory size; a type with size 0 is left out, not guessed),
+        // then ND's larger SCSI drives.
+        private static BlankImageLayout[] BuildLayouts()
+        {
+            List<BlankImageLayout> list = new List<BlankImageLayout>();
+            for (int i = 0; i < TemplateLayouts.Length; i++)
+            {
+                list.Add(TemplateLayouts[i]);
+            }
+
+            IReadOnlyList<NdfsDiskType> types = NdfsDiskTypes.All;
+            for (int i = 0; i < types.Count; i++)
+            {
+                NdfsDiskType type = types[i];
+                if (type.Pages == 0)
+                {
+                    continue;
+                }
+
+                long bytes = NdfsImageCreator.ImageBytes(NdfsImageCreationOptions.ForDiskType(type.Name));
+                list.Add(new BlankImageLayout
+                {
+                    Id = SintranIdOf(type),
+                    Machine = "Norsk Data ND-100",
+                    Name = "SINTRAN " + type.Name + " - " + type.Drive + ", " + type.Pages + " directory pages",
+                    Extension = ".img",
+                    SizeBytes = bytes,
+                    Options = NdfsOptions,
+                    Details = type.Family + " controller. Directory " + type.Pages + " pages, image "
+                        + bytes / NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE + " pages"
+                        + (type.LayoutPages > type.Pages ? " (the full SINTRAN disk layout)" : string.Empty) + ".\n"
+                        + (type.Tested
+                            ? "Real SINTRAN M has used a disk of this type made by this library."
+                            : "Size from the SINTRAN name table; not yet tried on real SINTRAN."),
+                });
+            }
+
+            // ND's SCSI drives whose drive data space and directory size the DOMINO SCSI Operator
+            // Guide (ND-814009-1, its disk table) gives. SINTRAN asks a SCSI disk for its size, so
+            // these are the sizes ND sold, not the only ones SINTRAN takes; the any-size disk with
+            // the SCSI controller covers the rest.
+            list.Add(ScsiLayout("ndfs-scsi-310m", "SCSI disk, 310 MB (CDC EMD 97201 368, ND 110326)", 151242, 151368));
+            list.Add(ScsiLayout("ndfs-scsi-630m", "SCSI disk, 630 MB (CDC EMD 97201 736, ND 110325)", 307492, 307618));
+            return list.ToArray();
+        }
+
+        // A SCSI disk of ND's: the directory of the given size on a device of the drive's length.
+        private static BlankImageLayout ScsiLayout(string id, string name, uint directoryPages, uint drivePages)
+        {
+            return new BlankImageLayout
+            {
+                Id = id,
+                Machine = "Norsk Data ND-100",
+                Name = name + " - " + directoryPages + " directory pages",
+                Extension = ".img",
+                SizeBytes = drivePages * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE,
+                Options = NdfsOptions,
+                Details = "SCSI controller. Directory " + directoryPages + " pages on " + drivePages
+                    + " pages of drive data space (DOMINO SCSI Operator Guide, ND-814009-1).\nNot yet tried on real SINTRAN.",
+            };
+        }
+
+        private static string SintranIdOf(NdfsDiskType type)
+        {
+            return "ndfs-sintran-" + type.Name.ToLowerInvariant();
+        }
+
+        // How to make a formatted layout, before the user's options are applied.
+        private static NdfsImageCreationOptions BaseOptionsOf(string layoutId, IReadOnlyDictionary<string, string>? options)
+        {
+            IReadOnlyList<NdfsDiskType> types = NdfsDiskTypes.All;
+            for (int i = 0; i < types.Count; i++)
+            {
+                if (types[i].Pages != 0 && SintranIdOf(types[i]) == layoutId)
+                {
+                    return NdfsImageCreationOptions.ForDiskType(types[i].Name);
+                }
+            }
+
+            if (layoutId == "ndfs-scsi-310m" || layoutId == "ndfs-scsi-630m")
+            {
+                bool big = layoutId == "ndfs-scsi-630m";
+                return new NdfsImageCreationOptions
+                {
+                    Template = NdfsImageTemplate.Custom,
+                    CustomNdfsPages = big ? 307492u : 151242u,
+                    DevicePages = big ? 307618u : 151368u,
+                    ControllerType = NdfsControllerType.Scsi,
+                    BootLoaderType = NdfsBootLoaderType.Scsi,
+                };
+            }
+
+            if (layoutId == "ndfs-custom")
+            {
+                return new NdfsImageCreationOptions
+                {
+                    Template = NdfsImageTemplate.Custom,
+                    CustomNdfsPages = uint.Parse(CustomPages.ValueIn(options)),
+                    ControllerType = Controller.ValueIn(options) switch
+                    {
+                        "SMD" => NdfsControllerType.Smd,
+                        "Winchester" => NdfsControllerType.Winchester,
+                        "SCSI" => NdfsControllerType.Scsi,
+                        _ => NdfsControllerType.Floppy,
+                    },
+                };
+            }
+
+            return new NdfsImageCreationOptions { Template = TemplateOf(layoutId) };
         }
 
         // The numbers of a disk template, for the user.
