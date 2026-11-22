@@ -297,6 +297,35 @@ namespace RetroIO.Protocols.Xmsg
             return BuildShort(SintranPacketSubtype.ReachabilityReply, destinationNode, sourceNode, 0xFFFF, 0x0001, counterByte);
         }
 
+        /// <summary>
+        /// Builds an error frame (subtype <c>0x07</c>): the bare 14-byte header, with the negative
+        /// XMSG error code in Flags 2 and the Flags 1 of the frame it answers.
+        /// </summary>
+        /// <param name="destinationNode">
+        /// The node the answered frame came from.
+        /// </param>
+        /// <param name="sourceNode">
+        /// This node.
+        /// </param>
+        /// <param name="answeredFlags1">
+        /// The Flags 1 of the frame being refused - not one of our own numbers.
+        /// </param>
+        /// <param name="error">
+        /// The error, for example <see cref="XmsgError.XEIMA"/> (Flags 2 <c>0xFFED</c>).
+        /// </param>
+        /// <returns>
+        /// The error frame.
+        /// </returns>
+        /// <remarks>
+        /// What real ND machines send for data to a port nobody owns: 10 of 10 such rejects in four
+        /// captures (NDInsight TRIO-SEQUENCE-2026-08-11 trio.pcapng #9333 -> #9349 among them), as
+        /// recorded by libxmsg commit 0755090 (2026-11-10), which does the same.
+        /// </remarks>
+        public static XmsgFrame Error(ushort destinationNode, ushort sourceNode, ushort answeredFlags1, XmsgError error)
+        {
+            return BuildShort(SintranPacketSubtype.NetworkError, destinationNode, sourceNode, answeredFlags1, unchecked((ushort)(short)error), 0x00);
+        }
+
         private static XmsgFrame BuildShort(SintranPacketSubtype subtype, ushort destinationNode, ushort sourceNode, ushort flags1, ushort flags2, byte counterByte)
         {
             XmsgFrame frame = new XmsgFrame();

@@ -390,6 +390,22 @@ namespace RetroIO.Protocols.Xmsg.Node
                 && incoming.SubHeader != null
                 && incoming.XmcsmWithBodyWord != ListRoutingServer.XmcsmXsgsyRequest)
             {
+                // DATA FOR A PORT NOBODY OWNS: a bare error frame, Flags 2 XEIMA, at the frame's own
+                // Flags 1, and NO ACK - what real ND machines send (10 of 10 rejects in four captures,
+                // NDInsight TRIO-SEQUENCE-2026-08-11 trio.pcapng #9333 -> #9349; libxmsg 0755090).
+                // Acknowledging and dropping it, as this node did, left the sender waiting for ever:
+                // D100's TADA hung on a 7WHO to the port of a session lost in a restart (libxmsg,
+                // live, 2026-11-10). Port 0 is XROUT's and always open. A split message reaches here
+                // only rejoined, so a continuation is never refused on its own.
+                ushort destinationPort = incoming.SubHeader.DestinationPort;
+                if (destinationPort != 0 && !ServerHost.OwnsPort(destinationPort))
+                {
+                    return new XmsgFrame[]
+                    {
+                        XmsgFrameBuilder.Error(incoming.Header.SourceNode, NodeNumber, incoming.Header.Flags1, XmsgError.XEIMA),
+                    };
+                }
+
                 List<XmsgFrame> served = new List<XmsgFrame>();
                 // Gate the secure-ACK on AcknowledgeTadFrames (the session-data ACK flag), NOT
                 // AcknowledgeData. AcknowledgeData governs the LEGACY generic-data path below and is

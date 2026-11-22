@@ -1560,6 +1560,20 @@ namespace RetroIO.Protocols.Xmsg.Node.Services
         }
 
         /// <summary>
+        /// Gets a value indicating whether a registered server owns a session port.
+        /// </summary>
+        /// <param name="port">
+        /// The destination port of an incoming datagram.
+        /// </param>
+        /// <returns>
+        /// True when some server owns it. Port 0 is XROUT's and is not asked here.
+        /// </returns>
+        public bool OwnsPort(ushort port)
+        {
+            return FindByPort(port) != null;
+        }
+
+        /// <summary>
         /// Finds the registered server that owns a given session/reply port, or null.
         /// </summary>
         /// <param name="port">
