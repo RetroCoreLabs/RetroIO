@@ -136,6 +136,36 @@ public class ProtocolSettingsControllerTests
     }
 
     /// <summary>
+    /// The file server's storage setting is saved as given, and an unusable one is refused: neither a
+    /// mount nor a place, both at once, or a kind of storage that is not served.
+    /// </summary>
+    [Test]
+    public void XmsgNode_FileServer_IsSaved_AndBadStorageIsRefused()
+    {
+        XmsgNodeController controller = new XmsgNodeController(_data);
+        XmsgNodeSettingsDto settings = Data(controller.GetSettings());
+        settings.FileServerEnabled = true;
+        Assert.That(controller.PutSettings(settings).Result, Is.InstanceOf<BadRequestObjectResult>(), "neither form");
+
+        settings.FileServerProvider = "TNFS";
+        settings.FileServerUri = "tnfs://host:16384/cosmos";
+        settings.FileServerMountRef = "cosmos-volume";
+        Assert.That(controller.PutSettings(settings).Result, Is.InstanceOf<BadRequestObjectResult>(), "both forms");
+
+        settings.FileServerMountRef = null;
+        settings.FileServerProvider = "ftp";
+        Assert.That(controller.PutSettings(settings).Result, Is.InstanceOf<BadRequestObjectResult>(), "not served");
+
+        settings.FileServerProvider = "TNFS";
+        controller.PutSettings(settings);
+        XmsgNodeServerConfiguration loaded = ProtocolConfigurationLoader.LoadXmsgNodeConfiguration(_data, Empty());
+        Assert.That(loaded.FileServerEnabled, Is.True);
+        Assert.That(loaded.FileServerProvider, Is.EqualTo("tnfs"));
+        Assert.That(loaded.FileServerUri, Is.EqualTo("tnfs://host:16384/cosmos"));
+        Assert.That(loaded.FileServerMountRef, Is.Null);
+    }
+
+    /// <summary>
     /// Security settings saved through the API are what AddRetroSecurity reads; an empty limit stays "no limit".
     /// </summary>
     [Test]

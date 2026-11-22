@@ -97,6 +97,34 @@ public class XmsgNodeController : ControllerBase
             return BadRequest(ApiResponse<XmsgNodeSettingsDto>.Fail("The Ethernet segment is needed, for example tcp:127.0.0.1:5010."));
         }
 
+        if (request.FileServerEnabled)
+        {
+            // Either a mounts.json entry, or an inline kind and place - never both, never neither. The same
+            // rule start-up applies (StorageMountResolver); checked here so a bad setting is refused when
+            // it is saved, not found at the next start.
+            bool hasMount = !string.IsNullOrWhiteSpace(request.FileServerMountRef);
+            bool hasInline = !string.IsNullOrWhiteSpace(request.FileServerProvider) || !string.IsNullOrWhiteSpace(request.FileServerUri);
+            if (hasMount == hasInline)
+            {
+                return BadRequest(ApiResponse<XmsgNodeSettingsDto>.Fail(
+                    "The file server needs either a mount from mounts.json, or a kind of storage and where it is - one of the two, not both."));
+            }
+
+            if (hasInline)
+            {
+                string provider = (request.FileServerProvider ?? string.Empty).Trim().ToLowerInvariant();
+                if (provider != "native" && provider != "tnfs")
+                {
+                    return BadRequest(ApiResponse<XmsgNodeSettingsDto>.Fail("The file server's storage must be native (a folder) or tnfs."));
+                }
+
+                if (string.IsNullOrWhiteSpace(request.FileServerUri))
+                {
+                    return BadRequest(ApiResponse<XmsgNodeSettingsDto>.Fail("The file server needs to know where its files are (a folder, or tnfs://host:port/path)."));
+                }
+            }
+        }
+
         string? level = null;
         for (int i = 0; i < LogLevels.Length; i++)
         {
@@ -125,6 +153,10 @@ public class XmsgNodeController : ControllerBase
                 : (request.NewProgramToken.Length == 0 ? null : request.NewProgramToken),
             ProgramLogMinimum = level,
             Motd = string.IsNullOrWhiteSpace(request.Motd) ? null : request.Motd,
+            FileServerEnabled = request.FileServerEnabled,
+            FileServerProvider = string.IsNullOrWhiteSpace(request.FileServerProvider) ? null : request.FileServerProvider.Trim().ToLowerInvariant(),
+            FileServerUri = string.IsNullOrWhiteSpace(request.FileServerUri) ? null : request.FileServerUri.Trim(),
+            FileServerMountRef = string.IsNullOrWhiteSpace(request.FileServerMountRef) ? null : request.FileServerMountRef.Trim(),
         };
 
         ProtocolConfigurationLoader.SaveSettingsFile(_retroFsPath, ProtocolConfigurationLoader.XmsgNodeConfigurationFileName, config);
@@ -150,6 +182,10 @@ public class XmsgNodeController : ControllerBase
             ProgramTokenSet = !string.IsNullOrEmpty(config.ProgramToken),
             ProgramLogMinimum = config.ProgramLogMinimum,
             Motd = config.Motd,
+            FileServerEnabled = config.FileServerEnabled,
+            FileServerProvider = config.FileServerProvider,
+            FileServerUri = config.FileServerUri,
+            FileServerMountRef = config.FileServerMountRef,
         };
     }
 }

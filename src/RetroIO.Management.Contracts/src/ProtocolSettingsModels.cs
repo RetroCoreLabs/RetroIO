@@ -126,6 +126,26 @@ public class XmsgNodeSettingsDto
     /// Gets or sets the middle line of the login banner of RetroServer's own terminal server; null for the built-in one.
     /// </summary>
     public string? Motd { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the node serves files as the COSMOS file server (<c>*FA-SERVER</c>).
+    /// </summary>
+    public bool FileServerEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the kind of storage: <c>native</c> (a folder) or <c>tnfs</c>; null with a mount reference.
+    /// </summary>
+    public string? FileServerProvider { get; set; }
+
+    /// <summary>
+    /// Gets or sets where the files are (a folder, or <c>tnfs://host:port/path</c>); null with a mount reference.
+    /// </summary>
+    public string? FileServerUri { get; set; }
+
+    /// <summary>
+    /// Gets or sets the volume id of a <c>mounts.json</c> entry to serve instead, or null.
+    /// </summary>
+    public string? FileServerMountRef { get; set; }
 }
 
 /// <summary>

@@ -5,6 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -184,8 +185,37 @@ public static class RetroServerComposition
 
             if (nodeConfig.Enabled)
             {
+                // The file server's files: built here, where the storage settings are resolved (a folder,
+                // TNFS, or a mounts.json volume - the same rules as the Econet discs). A setting that
+                // cannot be used is reported and the node starts WITHOUT the file server, never with a
+                // different folder than the one asked for.
+                RetroIO.Protocols.Xmsg.Ndfs.IFaFileStore? fileStore = null;
+                if (nodeConfig.FileServerEnabled)
+                {
+                    try
+                    {
+                        IReadOnlyList<RetroIO.Storage.Core.UnifiedMountEntry>? registry =
+                            string.IsNullOrEmpty(nodeConfig.FileServerMountRef)
+                                ? null
+                                : RetroIO.Storage.Core.UnifiedMountConfigStore.Load(null).Mounts;
+                        fileStore = XmsgFileServerStore.Build(
+                            nodeConfig, Path.Combine(retroFsPath, "xmsg", "fa-cache"), registry, out RetroIO.Storage.Core.VFS.VfsCore? fileVfs);
+                        if (fileVfs != null)
+                        {
+                            // DI owns the storage layer so it is disposed at shutdown.
+                            services.AddSingleton(fileVfs);
+                        }
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException || ex is NotSupportedException
+                        || ex is IOException || ex is UnauthorizedAccessException || ex is System.Net.Sockets.SocketException)
+                    {
+                        Console.WriteLine($"XMSG node: the file server is OFF - {ex.Message}");
+                    }
+                }
+
                 services.AddXmsgNode(o =>
                 {
+                    o.FileStore = fileStore;
                     // A number outside 1..65535 is left at zero, which the node refuses with a log line.
                     o.SystemNumber = nodeConfig.SystemNumber > 0 && nodeConfig.SystemNumber <= ushort.MaxValue
                         ? (ushort)nodeConfig.SystemNumber : (ushort)0;

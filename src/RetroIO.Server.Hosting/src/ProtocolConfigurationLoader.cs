@@ -425,6 +425,22 @@ public static class ProtocolConfigurationLoader
         string? motd = configuration["XmsgNode:Motd"];
         if (!string.IsNullOrEmpty(motd))
             config.Motd = motd;
+
+        string? fileServer = configuration["XmsgNode:FileServerEnabled"];
+        if (!string.IsNullOrEmpty(fileServer) && bool.TryParse(fileServer, out bool fileServerOn))
+            config.FileServerEnabled = fileServerOn;
+
+        string? fileProvider = configuration["XmsgNode:FileServerProvider"];
+        if (!string.IsNullOrEmpty(fileProvider))
+            config.FileServerProvider = fileProvider;
+
+        string? fileUri = configuration["XmsgNode:FileServerUri"];
+        if (!string.IsNullOrEmpty(fileUri))
+            config.FileServerUri = fileUri;
+
+        string? fileMount = configuration["XmsgNode:FileServerMountRef"];
+        if (!string.IsNullOrEmpty(fileMount))
+            config.FileServerMountRef = fileMount;
     }
 
     private static void ApplyXmsgHubOverrides(IConfiguration configuration, XmsgHubServerConfiguration config)

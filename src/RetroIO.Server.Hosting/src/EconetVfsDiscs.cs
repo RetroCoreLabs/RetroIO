@@ -154,75 +154,9 @@ public static class EconetVfsDiscs
         EconetDiscConfiguration disc,
         IReadOnlyList<UnifiedMountEntry>? registryMounts)
     {
-        if (!string.IsNullOrEmpty(disc.MountRef))
-        {
-            // MountRef and inline Provider/Uri are mutually exclusive — mixing them is ambiguous config.
-            if (!string.IsNullOrEmpty(disc.Provider) || !string.IsNullOrEmpty(disc.Uri))
-                throw new InvalidOperationException(
-                    $"Econet disc '{disc.AcornName}' sets both MountRef ('{disc.MountRef}') and inline Provider/Uri — use one or the other.");
-
-            if (registryMounts == null)
-                throw new InvalidOperationException(
-                    $"Econet disc '{disc.AcornName}' uses MountRef '{disc.MountRef}' but no mount registry (mounts.json) was provided.");
-
-            UnifiedMountEntry? entry = FindMountByVolumeId(registryMounts, disc.MountRef!);
-            if (entry == null)
-                throw new InvalidOperationException(
-                    $"Econet disc '{disc.AcornName}' references mount '{disc.MountRef}', which is not in the mount registry (mounts.json). {DescribeKnownMounts(registryMounts)}");
-
-            if (string.IsNullOrEmpty(entry.ProviderType) || string.IsNullOrEmpty(entry.SourceUri))
-                throw new InvalidOperationException(
-                    $"Econet disc '{disc.AcornName}' references mount '{disc.MountRef}', but that registry entry has no ProviderType/SourceUri.");
-
-            // Credentials on a referenced mount are not propagated through the disc-mount path yet
-            // (VfsCore.Mount takes no credential args). Fail loud rather than silently authenticate as
-            // anonymous — embed creds in the URI or use an inline disc until credential plumbing lands.
-            if (!string.IsNullOrEmpty(entry.Username) || !string.IsNullOrEmpty(entry.Password))
-                throw new NotSupportedException(
-                    $"Econet disc '{disc.AcornName}' references mount '{disc.MountRef}', which carries credentials — credential propagation for referenced mounts is a follow-up. Embed them in the URI or use inline Provider/Uri.");
-
-            // A read-only registry mount can only be exposed read-only; the disc's own flag can add (never
-            // remove) restriction.
-            bool readOnly = entry.IsReadOnly || disc.ReadOnly;
-            return (entry.ProviderType.ToLowerInvariant(), entry.SourceUri, readOnly);
-        }
-
-        if (string.IsNullOrEmpty(disc.Provider) || string.IsNullOrEmpty(disc.Uri))
-            throw new InvalidOperationException(
-                $"Econet disc '{disc.AcornName}' needs both Provider and Uri (inline mount), or a MountRef.");
-
-        return (disc.Provider!.ToLowerInvariant(), disc.Uri!, disc.ReadOnly);
+        // The rules (and the messages) now live in StorageMountResolver, shared with the XMSG file server.
+        return StorageMountResolver.Resolve(
+            $"Econet disc '{disc.AcornName}'", disc.Provider, disc.Uri, disc.MountRef, disc.ReadOnly, registryMounts);
     }
 
-    /// <summary>
-    /// Finds a registry entry by volume id (case-insensitive, matching the registry's own keying). No LINQ.
-    /// </summary>
-    private static UnifiedMountEntry? FindMountByVolumeId(IReadOnlyList<UnifiedMountEntry> mounts, string volumeId)
-    {
-        for (int i = 0; i < mounts.Count; i++)
-        {
-            if (string.Equals(mounts[i].VolumeId, volumeId, StringComparison.OrdinalIgnoreCase))
-                return mounts[i];
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Builds a "known mounts: a, b, c" hint for the not-found error (or notes the registry is empty). No LINQ.
-    /// </summary>
-    private static string DescribeKnownMounts(IReadOnlyList<UnifiedMountEntry> mounts)
-    {
-        if (mounts.Count == 0)
-            return "The mount registry is empty.";
-
-        System.Text.StringBuilder sb = new System.Text.StringBuilder("Known mounts: ");
-        for (int i = 0; i < mounts.Count; i++)
-        {
-            if (i > 0)
-                sb.Append(", ");
-            sb.Append(mounts[i].VolumeId);
-        }
-        sb.Append('.');
-        return sb.ToString();
-    }
 }

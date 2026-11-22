@@ -71,5 +71,11 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
         /// Gets or sets the middle line of the TAD login banner, or null for the built-in one.
         /// </summary>
         public string? Motd { get; set; }
+
+        /// <summary>
+        /// Gets or sets the files the node serves as <c>*FA-SERVER</c>, built from the settings by the host,
+        /// or null for no file server.
+        /// </summary>
+        public RetroIO.Protocols.Xmsg.Ndfs.IFaFileStore? FileStore { get; set; }
     }
 }

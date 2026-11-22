@@ -144,8 +144,25 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             topology.Nodes.Add(new TopologyNode { Id = peer, Reach = "neighbour", Link = 1 });
             List<RoutingTableEntry> routes = topology.BuildRoutingEntries(self);
 
+            // The file server, when the host built a store for it. A store that cannot be read is
+            // reported and the node runs without the file server rather than not at all.
+            RetroIO.Protocols.Xmsg.Servers.Fa.FaServer? fileServer = null;
+            if (_options.FileStore != null)
+            {
+                try
+                {
+                    fileServer = XmsgNodeBuilder.CreateFileServer(_options.FileStore, 0, _options.StateDirectory!, Log);
+                }
+                catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException)
+                {
+                    _logger.LogError("XMSG node: the file server's files at {Location} could not be read ({Reason}); the file server is OFF.",
+                        _options.FileStore.Location, ex.Message);
+                }
+            }
+
             XmsgHostedNode node = XmsgNodeBuilder.Build(link, self, routes, new XmsgNodeOptions
             {
+                FileServer = fileServer,
                 StateDirectory = _options.StateDirectory,
                 Motd = _options.Motd,
                 Log = Log,

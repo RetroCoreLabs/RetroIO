@@ -284,10 +284,18 @@ public sealed class ProtocolConfigurationLoaderTests
                     ["XmsgNode:ProgramPort"] = "5099",
                     ["XmsgNode:Ethernet"] = "tcp:10.0.0.1:5010",
                     ["XmsgNode:ProgramLogMinimum"] = "Debug",
+                    ["XmsgNode:FileServerEnabled"] = "true",
+                    ["XmsgNode:FileServerProvider"] = "tnfs",
+                    ["XmsgNode:FileServerUri"] = "tnfs://host:16384/cosmos",
+                    ["XmsgNode:FileServerMountRef"] = "cosmos-volume",
                 })
                 .Build();
 
             XmsgNodeServerConfiguration result = ProtocolConfigurationLoader.LoadXmsgNodeConfiguration(tempPath, config);
+            Assert.That(result.FileServerEnabled, Is.True);
+            Assert.That(result.FileServerProvider, Is.EqualTo("tnfs"));
+            Assert.That(result.FileServerUri, Is.EqualTo("tnfs://host:16384/cosmos"));
+            Assert.That(result.FileServerMountRef, Is.EqualTo("cosmos-volume"));
 
             Assert.That(result.Enabled, Is.True);
             Assert.That(result.SystemNumber, Is.EqualTo(19998));

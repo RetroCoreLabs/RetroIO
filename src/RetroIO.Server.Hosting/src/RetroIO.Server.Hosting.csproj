@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\RetroIO.Security.Firewall\src\RetroIO.Security.Firewall.csproj" />
     <ProjectReference Include="..\..\RetroIO.Security.Implementation\src\RetroIO.Security.Implementation.csproj" />
     <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ndfs\src\RetroIO.Protocols.Xmsg.Ndfs.csproj" />
     <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
   </ItemGroup>
 

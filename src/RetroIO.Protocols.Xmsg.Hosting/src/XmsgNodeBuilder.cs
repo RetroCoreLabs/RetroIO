@@ -135,6 +135,50 @@ namespace RetroIO.Protocols.Xmsg.Hosting
         }
 
         /// <summary>
+        /// Creates the COSMOS file server (<c>*FA-SERVER</c>) over a ready store - a local folder, a TNFS
+        /// server or a <c>mounts.json</c> volume - and reserves its connection numbers.
+        /// </summary>
+        /// <param name="store">
+        /// The files to serve.
+        /// </param>
+        /// <param name="userIndex">
+        /// The user index the server reports in its directory entries.
+        /// </param>
+        /// <param name="stateDirectory">
+        /// The folder that holds <c>fa-connection.state</c>.
+        /// </param>
+        /// <param name="log">
+        /// Where the server's own lines are written. Null discards them.
+        /// </param>
+        /// <returns>
+        /// The server.
+        /// </returns>
+        public static FaServer CreateFileServer(IFaFileStore store, byte userIndex, string stateDirectory, XmsgLogHandler? log)
+        {
+            if (store == null)
+            {
+                throw new ArgumentNullException(nameof(store));
+            }
+
+            if (string.IsNullOrEmpty(stateDirectory))
+            {
+                throw new ArgumentNullException(nameof(stateDirectory));
+            }
+
+            FaServer server = new FaServer(store, userIndex);
+            server.NextConnectionNumber = FaConnectionNumbers.Reserve(
+                XmsgStateFiles.PathOf(stateDirectory, XmsgStateFiles.FaConnection), log);
+            if (log != null)
+            {
+                server.Log += line => log(line);
+            }
+            log?.Invoke($"[fa] file server ON as {FaServer.ServerName} (logical port {FaServer.ServerLogicalPort}, wire port 0x{FaServer.FaServerWirePort:X4})");
+            log?.Invoke($"[fa] serving: {store.Location}");
+            log?.Invoke($"[fa] files visible now: {store.ListFiles().Count}");
+            return server;
+        }
+
+        /// <summary>
         /// Creates the COSMOS file server (<c>*FA-SERVER</c>) over the configured Windows folder.
         /// </summary>
         /// <param name="config">
@@ -193,18 +237,7 @@ namespace RetroIO.Protocols.Xmsg.Hosting
 
             try
             {
-                FolderFileStore store = new FolderFileStore(root);
-                FaServer server = new FaServer(store, config.UserIndex);
-                server.NextConnectionNumber = FaConnectionNumbers.Reserve(
-                    XmsgStateFiles.PathOf(stateDirectory, XmsgStateFiles.FaConnection), log);
-                if (log != null)
-                {
-                    server.Log += line => log(line);
-                }
-                log?.Invoke($"[fa] file server ON as {FaServer.ServerName} (logical port {FaServer.ServerLogicalPort}, wire port 0x{FaServer.FaServerWirePort:X4})");
-                log?.Invoke($"[fa] serving folder: {store.RootFolder}");
-                log?.Invoke($"[fa] files visible now: {store.ListFiles().Count}");
-                return server;
+                return CreateFileServer(new FolderFileStore(root), config.UserIndex, stateDirectory, log);
             }
             catch (Exception ex)
             {
