@@ -39,10 +39,8 @@ namespace RetroIO.Network.Nat
     /// <para><b>Not built</b></para>
     /// Each of these is dropped and counted under its <see cref="NatDropReason"/>, never answered
     /// with something made up:
-    ///  - ICMP (<see cref="NatDropReason.UnsupportedProtocol"/>).
+    ///  - ICMP other than echo request (<see cref="NatDropReason.UnsupportedProtocol"/>).
     ///  - IP fragments from a caller (<see cref="NatDropReason.Fragment"/>).
-    ///  - an ICMP error back to the caller when the host reports a port unreachable; the report is
-    ///    counted in <see cref="HostPortUnreachable"/>.
     /// </remarks>
     public sealed partial class IpNat : IDisposable
     {
@@ -69,7 +67,7 @@ namespace RetroIO.Network.Nat
         private readonly List<Socket> _readList = new List<Socket>();
         private readonly List<Socket> _writeList = new List<Socket>();
         private readonly List<Socket> _errorList = new List<Socket>();
-        private readonly long[] _drops = new long[(int)NatDropReason.HostConnectFailed + 1];
+        private readonly long[] _drops = new long[(int)NatDropReason.TooManyPings + 1];
         private readonly byte[] _receive = new byte[65536];
         private readonly IpRouter.PacketOutput _upstream;
         private byte[] _packet = new byte[2048];
@@ -120,7 +118,8 @@ namespace RetroIO.Network.Nat
         /// </summary>
         /// <remarks>
         /// Windows reports the ICMP "port unreachable" for an earlier send as a reset on the next
-        /// receive. The caller is not told yet; see the class remarks.
+        /// receive; each one is passed on to the caller as an ICMP port unreachable. Other systems
+        /// do not report it to an unconnected socket, so there the caller hears nothing.
         /// </remarks>
         public long HostPortUnreachable { get; private set; }
 
@@ -149,7 +148,7 @@ namespace RetroIO.Network.Nat
         /// The longest wait for a socket, in microseconds; 0 only looks.
         /// </param>
         /// <returns>
-        /// True when there was any socket to wait on.
+        /// True when there was any socket or ping reply to wait on.
         /// </returns>
         /// <exception cref="ObjectDisposedException">
         /// Thrown after <see cref="Dispose"/>.
@@ -176,6 +175,7 @@ namespace RetroIO.Network.Nat
             }
 
             AddTcpSockets();
+            TakePingReplies();
             bool waited = _readList.Count + _writeList.Count + _errorList.Count > 0;
             if (waited)
             {
@@ -193,8 +193,14 @@ namespace RetroIO.Network.Nat
                 ServiceTcpSockets();
             }
 
+            if (!waited)
+            {
+                WaitForPing(waitMicroseconds);
+            }
+
+            TakePingReplies();
             RunTcpTimers();
-            return waited;
+            return waited || _pings.Count > 0;
         }
 
         /// <summary>
@@ -216,6 +222,7 @@ namespace RetroIO.Network.Nat
 
             _udp.Clear();
             CloseAllTcp();
+            DropAllPings();
         }
 
         // The Internet checksum (RFC 1071): the ones' complement of the ones' complement sum of the
@@ -274,7 +281,7 @@ namespace RetroIO.Network.Nat
 
             uint source = Ipv4.Source(packet);
             uint destination = Ipv4.Destination(packet);
-            if (packet[9] != ProtocolUdp && packet[9] != ProtocolTcp)
+            if (packet[9] != ProtocolUdp && packet[9] != ProtocolTcp && packet[9] != ProtocolIcmp)
             {
                 Drop(NatDropReason.UnsupportedProtocol);
                 return;
@@ -283,6 +290,12 @@ namespace RetroIO.Network.Nat
             if (!IsUnicast(destination))
             {
                 Drop(NatDropReason.NotUnicast);
+                return;
+            }
+
+            if (packet[9] == ProtocolIcmp)
+            {
+                FromCallerIcmp(packet.Slice(headerBytes), source, destination, packet[8]);
                 return;
             }
 
@@ -343,6 +356,7 @@ namespace RetroIO.Network.Nat
             }
 
             mapping.LastUsed = _now;
+            mapping.Remember(packet.Slice(0, headerBytes + UdpHeaderBytes), destination);
             IPEndPoint target = new IPEndPoint(new IPAddress(BinaryPrimitives.ReverseEndianness(destination)), destinationPort);
             try
             {
@@ -372,6 +386,7 @@ namespace RetroIO.Network.Nat
                     if (e.SocketErrorCode == SocketError.ConnectionReset)
                     {
                         HostPortUnreachable++;
+                        SendPortUnreachable(m);
                         continue;
                     }
 
@@ -464,6 +479,21 @@ namespace RetroIO.Network.Nat
             public Socket Host { get; }
 
             public long LastUsed { get; set; }
+
+            // The IP header and first 8 bytes of the caller's last datagram, which an ICMP error
+            // quotes (RFC 792), and where that datagram went.
+            public byte[] LastQuote { get; } = new byte[60 + UdpHeaderBytes];
+
+            public int LastQuoteLength { get; private set; }
+
+            public uint LastDestination { get; private set; }
+
+            public void Remember(ReadOnlySpan<byte> quote, uint destination)
+            {
+                quote.CopyTo(LastQuote);
+                LastQuoteLength = quote.Length;
+                LastDestination = destination;
+            }
         }
     }
 
@@ -473,7 +503,7 @@ namespace RetroIO.Network.Nat
     public enum NatDropReason
     {
         /// <summary>
-        /// Not UDP or TCP; ICMP is not built yet.
+        /// Not UDP, TCP or an ICMP echo request.
         /// </summary>
         UnsupportedProtocol,
 
@@ -523,5 +553,15 @@ namespace RetroIO.Network.Nat
         /// caller gets no answer and gives up by itself.
         /// </summary>
         HostConnectFailed,
+
+        /// <summary>
+        /// An ICMP message whose checksum is wrong or that is too short.
+        /// </summary>
+        BadIcmp,
+
+        /// <summary>
+        /// An echo request while <see cref="IpNat.MaxPings"/> are already waiting for a reply.
+        /// </summary>
+        TooManyPings,
     }
 }

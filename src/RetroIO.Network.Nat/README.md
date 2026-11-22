@@ -1,6 +1,6 @@
 # RetroIO.Network.Nat
 
-Address sharing (NAT) for `RetroIO.Network.Router`, for TCP and UDP. Every packet a caller sends to an address
+Address sharing (NAT) for `RetroIO.Network.Router`, for TCP, UDP and ping. Every packet a caller sends to an address
 outside the router's subnet goes to the NAT. The NAT sends the data on with an ordinary socket of the
 host, and turns what comes back into packets for that caller. No raw sockets, so no administrator
 rights are needed.
@@ -12,8 +12,8 @@ and passes the time.
 
 | Type | What it does |
 |---|---|
-| `IpNat` | Attaches to a router's upstream side. `Service(now, wait)` reads and writes the host sockets, runs the TCP timers and closes idle mappings; `UdpMappings`, `TcpConnections`, `HostConnectsRefused`, `TcpRetransmits`, `DropCount` per reason, `HostPortUnreachable`; event `OnDrop`. `Dispose` leaves the router and closes every socket. |
-| `NatDropReason` | Why a packet was dropped: unsupported protocol, fragment, not unicast, bad UDP, too many mappings, too big for IP, host send failed, bad TCP, too many connections, host connect failed. |
+| `IpNat` | Attaches to a router's upstream side. `Service(now, wait)` reads and writes the host sockets, runs the TCP timers and closes idle mappings; `UdpMappings`, `TcpConnections`, `HostConnectsRefused`, `TcpRetransmits`, `PingsWaiting`, `PingsUnanswered`, `DropCount` per reason, `HostPortUnreachable`; event `OnDrop`. `Dispose` leaves the router and closes every socket. |
+| `NatDropReason` | Why a packet was dropped: unsupported protocol, fragment, not unicast, bad UDP, too many mappings, too big for IP, host send failed, bad TCP, too many connections, host connect failed, bad ICMP, too many pings. |
 
 ## UDP
 
@@ -48,11 +48,24 @@ The bytes go on over an ordinary host connection to the address and port the cal
   3.4.2). Resets go both ways. A segment for no connection gets a reset.
 - At most 256 connections at once; a SYN beyond that gets a reset.
 
+## ICMP
+
+- A caller's echo request goes on with the host's own ping, which needs no administrator rights. The
+  answer is rebuilt with the caller's identifier, sequence number and the data that came back
+  (RFC 5508 section 3.1). At most 64 wait at once; the host waits 4 seconds for each.
+- What the host's ping reports becomes the matching message (RFC 792): echo reply; time exceeded
+  when the TTL ran out; destination unreachable (network, host, protocol or port); nothing on a
+  timeout. Any other result is counted in `PingsUnanswered`.
+- A UDP "port unreachable" the host reports becomes destination unreachable, code 3, quoting the
+  caller's last datagram on that mapping. Only Windows reports it to an unconnected socket; on other
+  systems the caller hears nothing.
+- Other ICMP from a caller is dropped as an unsupported protocol.
+
 ## Not built yet
 
 Each is dropped and counted, never answered with something made up:
 
 - TCP urgent data (the URG flag and pointer are not carried).
-- ICMP: ping to outside addresses, and the "port unreachable" message back to the caller when the
-  host reports one (counted in `HostPortUnreachable`).
+- ICMP messages from a caller other than echo request.
+- An ICMP message to the caller when a TCP host connect fails for a reason other than a refusal.
 - IP fragments from a caller.
