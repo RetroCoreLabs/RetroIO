@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\src\RetroIO.Protocols.Xmsg.Ndfs.csproj" />
+    <!-- The real storage stack (VfsCore + VfsFileSystemBackend) the file store runs on for TNFS. -->
+    <ProjectReference Include="..\..\RetroIO.Storage.Providers\src\RetroIO.Storage.Providers.csproj" />
     <ProjectReference Include="..\..\tests\RetroIO.Protocols.Xmsg.TestSupport\RetroIO.Protocols.Xmsg.TestSupport.csproj" />
   </ItemGroup>
 

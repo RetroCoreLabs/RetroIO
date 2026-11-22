@@ -12,6 +12,8 @@ using System.Text;
 
 using RetroIO.Protocols.Xmsg.Ndfs;
 using RetroIO.Server.Core.FileSystem;
+using RetroIO.Storage.Core.VFS;
+using RetroIO.Storage.Providers;
 
 using Xunit;
 
@@ -258,6 +260,51 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
             {
                 Directory.Delete(folder, recursive: true);
             }
+        }
+    }
+
+    /// <summary>
+    /// The same tests through the real storage stack a TNFS endpoint uses: a <see cref="VfsCore"/>
+    /// mount and <see cref="VfsFileSystemBackend"/>, which copies each file to a local temporary file
+    /// on open and writes it back on close. The mount here is a local folder (the native provider), so
+    /// no TNFS server is needed; the copy-and-write-back path is the same.
+    /// </summary>
+    public sealed class FolderFileStoreOverVfsTests : FolderFileStoreTests
+    {
+        /// <summary>
+        /// The logical path the mount is reached by.
+        /// </summary>
+        private const string MountPath = "/cosmos";
+
+        /// <summary>
+        /// Creates a store over a fresh temporary folder, mounted through the storage layer.
+        /// </summary>
+        public FolderFileStoreOverVfsTests()
+            : base(OverVfs)
+        {
+        }
+
+        /// <summary>
+        /// Mounts <paramref name="folder"/> and builds the store over it.
+        /// </summary>
+        /// <param name="folder">
+        /// The real folder.
+        /// </param>
+        /// <returns>
+        /// The store.
+        /// </returns>
+        private static FolderFileStore OverVfs(string folder)
+        {
+            Directory.CreateDirectory(folder);
+            VfsCore vfs = new VfsCore(enablePersistence: false);
+            vfs.RegisterProvider(new NativeVolumeProvider());
+            vfs.Mount("native", folder, "fa-test", readOnly: false);
+
+            // The temporary copies live in a subfolder of the test folder, so the test's own clean-up
+            // removes them. The store lists files only, never folders, so it is not seen.
+            VfsFileSystemBackend backend = new VfsFileSystemBackend(
+                vfs, "native", "fa-test", MountPath, Path.Combine(folder, "cache"));
+            return new FolderFileStore(backend, MountPath, "native:" + folder);
         }
     }
 }
