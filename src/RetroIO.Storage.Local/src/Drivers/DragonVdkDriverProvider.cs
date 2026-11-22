@@ -7,7 +7,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using RetroIO.Storage.Core;
+using RetroIO.Storage.Local.FileSystems;
 
 namespace RetroIO.Storage.Local.Drivers
 {
@@ -15,10 +17,19 @@ namespace RetroIO.Storage.Local.Drivers
     /// Provider for Dragon 32/64 VDK disk images with DragonDOS filesystem.
     /// Handles format detection and driver instantiation for VDK format.
     /// </summary>
-    public sealed class DragonVdkDriverProvider : FileSystemDriverProviderBase
+    public sealed class DragonVdkDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Dragon 32", "Dragon 64" };
+
+        // Blank DragonDOS disks as DSKINIT formats them (see DragonDosFormat).
+        private static readonly BlankImageLayout[] Layouts =
+        {
+            new BlankImageLayout { Id = "dragon-vdk-40ss", Machine = "Dragon 32/64", Name = "DragonDOS 40 tracks, 1 side, 18 x 256 - 180 KB", Extension = ".vdk", SizeBytes = 184332 },
+            new BlankImageLayout { Id = "dragon-vdk-40ds", Machine = "Dragon 32/64", Name = "DragonDOS 40 tracks, 2 sides, 18 x 256 - 360 KB", Extension = ".vdk", SizeBytes = 368652 },
+            new BlankImageLayout { Id = "dragon-vdk-80ss", Machine = "Dragon 32/64", Name = "DragonDOS 80 tracks, 1 side, 18 x 256 - 360 KB", Extension = ".vdk", SizeBytes = 368652 },
+            new BlankImageLayout { Id = "dragon-vdk-80ds", Machine = "Dragon 32/64", Name = "DragonDOS 80 tracks, 2 sides, 18 x 256 - 720 KB", Extension = ".vdk", SizeBytes = 737292 },
+        };
 
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
@@ -114,6 +125,53 @@ namespace RetroIO.Storage.Local.Drivers
         public override IFileSystemDriver CreateDriver()
         {
             return new DragonVdkDriver();
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<BlankImageLayout> BlankLayouts => Layouts;
+
+        /// <inheritdoc/>
+        public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
+        {
+            GeometryOf(layoutId, out int tracks, out int sides);
+            return Wrap(DragonDosFormat.CreateBlank(tracks, sides), tracks, sides);
+        }
+
+        /// <inheritdoc/>
+        public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
+        {
+            GeometryOf(layoutId, out _, out _);
+            DragonVdkDriver driver = new DragonVdkDriver();
+            driver.Mount(stream, readOnly);
+            return driver;
+        }
+
+        private static void GeometryOf(string layoutId, out int tracks, out int sides)
+        {
+            switch (layoutId)
+            {
+                case "dragon-vdk-40ss": tracks = 40; sides = 1; return;
+                case "dragon-vdk-40ds": tracks = 40; sides = 2; return;
+                case "dragon-vdk-80ss": tracks = 80; sides = 1; return;
+                case "dragon-vdk-80ds": tracks = 80; sides = 2; return;
+                default: throw new ArgumentException("not a DragonDOS blank-image layout: " + layoutId, nameof(layoutId));
+            }
+        }
+
+        // A VDK file: the 12-byte header of the PC-Dragon images in the test folder ("dk", header
+        // length 12, versions 10h 10h, then tracks and sides), then the sectors.
+        private static byte[] Wrap(byte[] sectors, int tracks, int sides)
+        {
+            byte[] file = new byte[12 + sectors.Length];
+            file[0] = 0x64;
+            file[1] = 0x6B;
+            file[2] = 12;
+            file[4] = 0x10;
+            file[5] = 0x10;
+            file[8] = (byte)tracks;
+            file[9] = (byte)sides;
+            sectors.CopyTo(file, 12);
+            return file;
         }
 
         /// <summary>

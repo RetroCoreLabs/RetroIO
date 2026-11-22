@@ -538,6 +538,54 @@ namespace RetroIO.Storage.Local.Drivers
         public IFileSystemMetadataDescriptor? GetMetadataDescriptor() => null;
 
         /// <summary>
+        /// Mounts a raw image with a given layout, without detecting one.
+        /// </summary>
+        /// <remarks>
+        /// Used where several machines' disks are the same bytes, such as a freshly formatted disk
+        /// that is all E5h: the image is opened as the machine the user picked.
+        /// </remarks>
+        /// <param name="imageStream">
+        /// The image, laid out flat.
+        /// </param>
+        /// <param name="readOnly">
+        /// Whether the mount is read-only.
+        /// </param>
+        /// <param name="parameters">
+        /// The disk parameters.
+        /// </param>
+        /// <param name="map">
+        /// Where each record lies in the image.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="imageStream"/>, <paramref name="parameters"/> or <paramref name="map"/> is null.
+        /// </exception>
+        public void MountAs(Stream imageStream, bool readOnly, CpmDiskParameters parameters, ICpmRecordMap map)
+        {
+            if (imageStream == null)
+            {
+                throw new ArgumentNullException(nameof(imageStream));
+            }
+
+            if (parameters == null)
+            {
+                throw new ArgumentNullException(nameof(parameters));
+            }
+
+            if (map == null)
+            {
+                throw new ArgumentNullException(nameof(map));
+            }
+
+            byte[] image = new byte[imageStream.Length];
+            imageStream.Position = 0;
+            imageStream.ReadExactly(image, 0, image.Length);
+            _stream = imageStream;
+            _readOnly = readOnly || !imageStream.CanWrite;
+            _imd = null;
+            _fileSystem = new CpmFileSystem(image, parameters, map);
+        }
+
+        /// <summary>
         /// Reads the whole image and its CP/M directory.
         /// </summary>
         /// <param name="imageStream">
@@ -891,6 +939,22 @@ namespace RetroIO.Storage.Local.Drivers
         internal static bool IsC1581CpmWithFiles(long length, byte[] image)
         {
             return IsD81Size(length) && CpmFileSystem.LooksLikeDirectory(image, C1581Parameters(), out int files) && files > 0;
+        }
+
+        // A freshly formatted CP/M disk: every byte of the directory is E5h, as the format program
+        // leaves it. Zeros or any other data there are not taken as an empty CP/M directory.
+        internal static bool IsFreshlyFormatted(byte[] image, CpmDiskParameters parameters, ICpmRecordMap map)
+        {
+            byte[] directory = CpmFileSystem.DirectoryBytes(image, parameters, map);
+            for (int i = 0; i < directory.Length; i++)
+            {
+                if (directory[i] != 0xE5)
+                {
+                    return false;
+                }
+            }
+
+            return directory.Length > 0;
         }
 
         internal static bool HasFiles(byte[] image, CpmDiskParameters parameters, ICpmRecordMap map)

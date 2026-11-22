@@ -110,6 +110,29 @@ flowchart TB
 it, thirty providers each open and read the image, which on a large file is thirty times the I/O for the
 same answer.
 
+## Blank disks: a rule for every format that writes
+
+A provider that says `SupportsWrite` must also implement `IBlankImageProvider`: it lists the blank
+disks it can create (`BlankLayouts`, each with an id, the machine, a name, the file extension, the
+size and the options the user can set), creates one (`CreateBlank`) and mounts an image as a named
+layout (`Mount`). A program builds its "new image" window from that list, and a "supported formats"
+list from `SupportsWrite`, `Machines` and `BlankLayouts`.
+
+One test over every provider (`tests/RetroIO.Tests/BlankImageRuleTests.cs`) holds every format to it.
+For each blank layout:
+
+- the image is exactly `SizeBytes` long;
+- detection over all providers picks this format;
+- it holds no files (folders the format always has, such as the NDFS SYSTEM user, must be empty);
+- it mounts writable, takes a file and reads it back;
+- when `SameBytesAs` is empty, plain detection mounts it as this same layout.
+
+A blank disk holds what the real machine's own format program writes, taken from its source,
+manual or ROM, or measured on real disks. A format whose freshly formatted contents are not known is
+left out, never guessed. Where blank disks of different machines are the same bytes (a freshly
+formatted CP/M disk is E5h throughout), each layout names the others in `SameBytesAs`, and the
+program opens it with `Mount` and the layout the user picked.
+
 ## Contents
 
 | Area | Types |

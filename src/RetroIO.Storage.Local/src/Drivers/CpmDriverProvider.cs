@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.FileSystems.Cpm;
 
@@ -27,10 +28,28 @@ namespace RetroIO.Storage.Local.Drivers
     /// least one is a file; an empty CP/M directory gives no sign of CP/M, so it is left to the
     /// Commodore provider.
     /// </remarks>
-    public sealed class CpmDriverProvider : FileSystemDriverProviderBase
+    public sealed class CpmDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Commodore 128", "Commodore 64", "Kaypro II", "Kaypro 4", "Osborne 1", "Amstrad CPC", "Amstrad PCW", "IBM PC (CP/M-86)", "IBM PC-XT (CP/M-86)", "TIKI-100" };
+
+        // Blank CP/M disks: raw images filled with E5h throughout, as measured on real disks of
+        // each machine (the free space is E5h on every Kaypro, Osborne and TIKI-100 disk tested, and
+        // the reserved tracks are E5h on the data disks that never had the system written to them:
+        // Kaypro MBasic and TIKI-100 hello). Not offered yet, because what a freshly formatted disk
+        // holds was not measured: C128 and C64 CP/M (the boot sector of the C128 format program),
+        // CP/M-86 (its free space is not E5h), Amstrad CPC and PCW (their reserved tracks).
+        private static readonly BlankImageLayout[] Layouts =
+        {
+            new BlankImageLayout { Id = "kaypro2", Machine = "Kaypro II", Name = "200 KB floppy - 40 tracks, 1 side", Extension = ".img", SizeBytes = 204800, SameBytesAs = new[] { "osborne1", "tiki100-200k" } },
+            new BlankImageLayout { Id = "kaypro4", Machine = "Kaypro 4", Name = "400 KB floppy - 40 tracks, 2 sides", Extension = ".img", SizeBytes = 409600, SameBytesAs = new[] { "tiki100-400k" } },
+            new BlankImageLayout { Id = "osborne1", Machine = "Osborne 1", Name = "200 KB double-density floppy - 40 tracks, 1 side", Extension = ".img", SizeBytes = 204800, SameBytesAs = new[] { "kaypro2", "tiki100-200k" } },
+            new BlankImageLayout { Id = "tiki100-90k", Machine = "TIKI-100", Name = "90 KB floppy - 40 tracks, 1 side, single density", Extension = ".dsk", SizeBytes = 92160 },
+            new BlankImageLayout { Id = "tiki100-200k", Machine = "TIKI-100", Name = "200 KB floppy - 40 tracks, 1 side, 10 x 512", Extension = ".dsk", SizeBytes = 204800, SameBytesAs = new[] { "kaypro2", "osborne1" } },
+            new BlankImageLayout { Id = "tiki100-400k", Machine = "TIKI-100", Name = "400 KB floppy - 40 tracks, 2 sides, 10 x 512", Extension = ".dsk", SizeBytes = 409600, SameBytesAs = new[] { "kaypro4" } },
+            new BlankImageLayout { Id = "tiki100-800k", Machine = "TIKI-100", Name = "800 KB floppy - 80 tracks, 2 sides, 10 x 512", Extension = ".dsk", SizeBytes = 819200 },
+            new BlankImageLayout { Id = "tiki100-hd", Machine = "TIKI-100", Name = "8 MB hard disk", Extension = ".dsk", SizeBytes = 8388608 },
+        };
 
         private static readonly string[] KnownExtensions = { ".d64", ".d71", ".d81", ".img", ".dsk", ".imd" };
 
@@ -92,8 +111,20 @@ namespace RetroIO.Storage.Local.Drivers
                 // CP/M-86, Kaypro, Osborne and TIKI-100 raw images: every candidate directory lies in
                 // the header bytes.
                 byte[] start = hints.HeaderBytes;
-                return CpmDriver.TrySelectFlatLayout(hints.FileSize, start, out CpmDiskParameters? flat, out ICpmRecordMap? flatMap)
-                    && CpmDriver.HasFiles(start, flat!, flatMap!) ? 0.95f : 0.0f;
+                if (!CpmDriver.TrySelectFlatLayout(hints.FileSize, start, out CpmDiskParameters? flat, out ICpmRecordMap? flatMap))
+                {
+                    return 0.0f;
+                }
+
+                if (CpmDriver.HasFiles(start, flat!, flatMap!))
+                {
+                    return 0.95f;
+                }
+
+                // An empty disk counts only when its directory is all E5h, which is what a CP/M
+                // format program writes: positive evidence, but weaker than files, and stronger
+                // than a format that is only guessed from the file size.
+                return CpmDriver.IsFreshlyFormatted(start, flat!, flatMap!) ? 0.7f : 0.0f;
             }
 
             if (CpmDriver.IsD81Size(hints.FileSize))
@@ -127,6 +158,61 @@ namespace RetroIO.Storage.Local.Drivers
         /// A new <see cref="CpmDriver"/>.
         /// </returns>
         public override IFileSystemDriver CreateDriver() => new CpmDriver();
+
+        /// <inheritdoc/>
+        public IReadOnlyList<BlankImageLayout> BlankLayouts => Layouts;
+
+        /// <inheritdoc/>
+        public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
+        {
+            LayoutOf(layoutId, out _, out _);
+            byte[] image = new byte[SizeOf(layoutId)];
+            image.AsSpan().Fill(0xE5);
+            return image;
+        }
+
+        /// <inheritdoc/>
+        public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
+        {
+            LayoutOf(layoutId, out CpmDiskParameters parameters, out ICpmRecordMap map);
+            CpmDriver driver = new CpmDriver();
+            driver.MountAs(stream, readOnly, parameters, map);
+            return driver;
+        }
+
+        private static long SizeOf(string layoutId)
+        {
+            for (int i = 0; i < Layouts.Length; i++)
+            {
+                if (Layouts[i].Id == layoutId)
+                {
+                    return Layouts[i].SizeBytes;
+                }
+            }
+
+            throw new ArgumentException("not a CP/M blank-image layout: " + layoutId, nameof(layoutId));
+        }
+
+        // The layout of each blank disk, from the same tables detection uses.
+        private static void LayoutOf(string layoutId, out CpmDiskParameters parameters, out ICpmRecordMap map)
+        {
+            long size = SizeOf(layoutId);
+            CpmDiskParameters? p;
+            ICpmRecordMap? m;
+            bool found = layoutId switch
+            {
+                "kaypro2" or "kaypro4" => CpmDriver.TryKaypro(size, out p, out m),
+                "osborne1" => CpmDriver.TryOsborne(size, out p, out m),
+                _ => CpmDriver.TryTiki100(size, out p, out m),
+            };
+            if (!found || p == null || m == null)
+            {
+                throw new InvalidOperationException("no CP/M layout for " + layoutId);
+            }
+
+            parameters = p;
+            map = m;
+        }
 
         // A CPC DSK file, one side, whose first track has the Amstrad sector IDs 41h-49h (system
         // format), C1h-C9h (data format) or 01h-09h (PCW). The full check of every track is done at mount.

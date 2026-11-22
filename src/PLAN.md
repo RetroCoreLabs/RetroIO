@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2): CP/M 3 time stamps (needs a test disk); blank-disk creation for every writable format.
+Next: CP/M (item 2): CP/M 3 time stamps (needs a test disk); blank disks for C128/C64 CP/M, CP/M-86 and Amstrad CPC/PCW (need a real freshly formatted disk of each).
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 

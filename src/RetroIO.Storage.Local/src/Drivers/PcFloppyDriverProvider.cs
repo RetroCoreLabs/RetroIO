@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using RetroIO.Storage.Core;
 
 namespace RetroIO.Storage.Local.Drivers
@@ -15,10 +16,24 @@ namespace RetroIO.Storage.Local.Drivers
     /// Provider for PC floppy disk drivers (FAT12/FAT16).
     /// Handles format detection and driver instantiation.
     /// </summary>
-    public sealed class PcFloppyDriverProvider : FileSystemDriverProviderBase
+    public sealed class PcFloppyDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "IBM PC" };
+
+        // The volume label of the boot sector and root directory: 11 characters, as FORMAT /V takes it.
+        private static readonly BlankImageOption VolumeLabel = new BlankImageOption { Id = "volumeLabel", Label = "Volume label", Kind = BlankImageOptionKind.Text, Default = string.Empty, MaxLength = 11 };
+        private static readonly BlankImageOption[] LabelOnly = { VolumeLabel };
+
+        // FAT12 floppies with the cluster size and root directory size MS-DOS used (PcImageFactory).
+        private static readonly BlankImageLayout[] Layouts =
+        {
+            new BlankImageLayout { Id = "pc-360k", Machine = "IBM PC", Name = "360 KB 5.25\" floppy - 40 tracks, 2 sides, 9 x 512", Extension = ".img", SizeBytes = 368640, Options = LabelOnly },
+            new BlankImageLayout { Id = "pc-720k", Machine = "IBM PC", Name = "720 KB 3.5\" floppy - 80 tracks, 2 sides, 9 x 512", Extension = ".img", SizeBytes = 737280, Options = LabelOnly },
+            new BlankImageLayout { Id = "pc-1200k", Machine = "IBM PC", Name = "1.2 MB 5.25\" floppy - 80 tracks, 2 sides, 15 x 512", Extension = ".img", SizeBytes = 1228800, Options = LabelOnly },
+            new BlankImageLayout { Id = "pc-1440k", Machine = "IBM PC", Name = "1.44 MB 3.5\" floppy - 80 tracks, 2 sides, 18 x 512", Extension = ".img", SizeBytes = 1474560, Options = LabelOnly },
+            new BlankImageLayout { Id = "pc-2880k", Machine = "IBM PC", Name = "2.88 MB 3.5\" floppy - 80 tracks, 2 sides, 36 x 512", Extension = ".img", SizeBytes = 2949120, Options = LabelOnly },
+        };
 
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
@@ -82,8 +97,13 @@ namespace RetroIO.Storage.Local.Drivers
 
             if (!hasValidBootSignature)
             {
-                // No boot signature at all — whatever this is, it isn't a FAT volume.
-                return confidence;
+                // No boot signature. An early DOS floppy may lack it, but every FAT volume starts its
+                // first FAT, in sector 1 of a floppy, with the media byte (F0h-FFh) and FFh FFh. Without
+                // that the file is not FAT, whatever its size (a blank Dragon disk of 360 or 720 KB is
+                // E5h there), and the size alone is not a claim.
+                bool hasFatStart = hints.HeaderBytes != null && hints.HeaderBytes.Length >= 515 &&
+                    hints.HeaderBytes[512] >= 0xF0 && hints.HeaderBytes[513] == 0xFF && hints.HeaderBytes[514] == 0xFF;
+                return hasFatStart ? confidence : 0.0f;
             }
 
             confidence += 0.3f;
@@ -155,6 +175,37 @@ namespace RetroIO.Storage.Local.Drivers
         public override IFileSystemDriver CreateDriver()
         {
             return new PcFloppyDriver();
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<BlankImageLayout> BlankLayouts => Layouts;
+
+        /// <inheritdoc/>
+        public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
+        {
+            return PcImageFactory.CreateBlankFloppy(SizeOf(layoutId), VolumeLabel.ValueIn(options));
+        }
+
+        /// <inheritdoc/>
+        public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
+        {
+            SizeOf(layoutId);
+            PcFloppyDriver driver = new PcFloppyDriver();
+            driver.Mount(stream, readOnly);
+            return driver;
+        }
+
+        private static PcFloppySize SizeOf(string layoutId)
+        {
+            return layoutId switch
+            {
+                "pc-360k" => PcFloppySize.Size360K,
+                "pc-720k" => PcFloppySize.Size720K,
+                "pc-1200k" => PcFloppySize.Size1_2M,
+                "pc-1440k" => PcFloppySize.Size1_44M,
+                "pc-2880k" => PcFloppySize.Size2_88M,
+                _ => throw new ArgumentException("not a PC floppy blank-image layout: " + layoutId, nameof(layoutId)),
+            };
         }
 
         /// <summary>

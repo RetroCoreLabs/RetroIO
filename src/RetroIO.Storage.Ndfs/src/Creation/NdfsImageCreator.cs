@@ -51,10 +51,29 @@ namespace RetroIO.Storage.Ndfs.Creation
         {
             if (string.IsNullOrEmpty(outputPath))
                 throw new ArgumentNullException(nameof(outputPath));
+            byte[] image = CreateImageBytes(options);
+            File.WriteAllBytes(outputPath, image);
+            if (new FileInfo(outputPath).Length != image.Length)
+                throw new IOException($"File size mismatch: expected {image.Length}, got {new FileInfo(outputPath).Length}");
+        }
+
+        /// <summary>
+        /// Creates an NDFS image in memory.
+        /// </summary>
+        /// <param name="options">
+        /// Image creation options.
+        /// </param>
+        /// <returns>
+        /// The whole image, exactly as <see cref="CreateImage"/> writes it to a file.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="options"/> is null.
+        /// </exception>
+        public static byte[] CreateImageBytes(NdfsImageCreationOptions options)
+        {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
 
-            // Get template specification
             NdfsTemplateSpec spec;
             if (options.Template == NdfsImageTemplate.Custom)
             {
@@ -62,24 +81,16 @@ namespace RetroIO.Storage.Ndfs.Creation
             }
             else
             {
-                var templateSpec = NdfsTemplates.GetTemplate(options.Template);
-                if (templateSpec == null)
-                    throw new ArgumentException($"Invalid template: {options.Template}");
-                spec = templateSpec;
+                spec = NdfsTemplates.GetTemplate(options.Template) ?? throw new ArgumentException($"Invalid template: {options.Template}");
             }
 
-            // Work on a copy: the pre-defined templates are shared static objects and the layout is
-            // computed into the spec below.
             spec = spec.Clone();
-
-            // Override boot loader if explicitly specified (null means use template default)
             if (options.BootLoaderType.HasValue)
             {
                 spec.BootLoaderType = options.BootLoaderType.Value;
             }
 
-            // Create the image
-            CreateImageFromSpec(outputPath, options, spec);
+            return BuildImage(options, spec);
         }
 
         /// <summary>
@@ -361,16 +372,16 @@ namespace RetroIO.Storage.Ndfs.Creation
         /// <summary>
         /// Creates the actual disk image file from specification.
         /// </summary>
-        /// <param name="outputPath">
-        /// Path of the image file to write.
-        /// </param>
         /// <param name="options">
         /// Image creation options.
         /// </param>
         /// <param name="spec">
         /// Specification to build from; the layout is stored in it.
         /// </param>
-        private static void CreateImageFromSpec(string outputPath, NdfsImageCreationOptions options, NdfsTemplateSpec spec)
+        /// <returns>
+        /// The whole image.
+        /// </returns>
+        private static byte[] BuildImage(NdfsImageCreationOptions options, NdfsTemplateSpec spec)
         {
             // Calculate file size
             long fileSize = spec.FileBlocks * NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE;
@@ -385,13 +396,7 @@ namespace RetroIO.Storage.Ndfs.Creation
             // shape the hardened detector rejects, so it will not auto-mount. That is intended.
             if (options.CreateBlankImage)
             {
-                File.WriteAllBytes(outputPath, diskImage);
-
-                var blankInfo = new FileInfo(outputPath);
-                if (blankInfo.Length != fileSize)
-                    throw new Exception($"File size mismatch: expected {fileSize}, got {blankInfo.Length}");
-
-                return;
+                return diskImage;
             }
 
             // Where everything goes. Done before any byte is written so a disk that is too small fails
@@ -451,15 +456,7 @@ namespace RetroIO.Storage.Ndfs.Creation
                 Array.Copy(last, 0, diskImage, fileSize - NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE, NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
             }
 
-            // Step 7: Write to file
-            File.WriteAllBytes(outputPath, diskImage);
-
-            // Verify file size
-            var fileInfo = new FileInfo(outputPath);
-            if (fileInfo.Length != fileSize)
-            {
-                throw new Exception($"File size mismatch: expected {fileSize}, got {fileInfo.Length}");
-            }
+            return diskImage;
         }
 
         /// <summary>

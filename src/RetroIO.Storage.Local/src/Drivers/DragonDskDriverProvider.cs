@@ -7,7 +7,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using RetroIO.Storage.Core;
+using RetroIO.Storage.Local.FileSystems;
 
 namespace RetroIO.Storage.Local.Drivers
 {
@@ -16,10 +18,19 @@ namespace RetroIO.Storage.Local.Drivers
     /// Handles format detection and driver instantiation for headerless or
     /// variable-header DSK/JVC format.
     /// </summary>
-    public sealed class DragonDskDriverProvider : FileSystemDriverProviderBase
+    public sealed class DragonDskDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Dragon 32", "Dragon 64", "TRS-80 Color Computer" };
+
+        // Blank DragonDOS disks as DSKINIT formats them (see DragonDosFormat).
+        private static readonly BlankImageLayout[] Layouts =
+        {
+            new BlankImageLayout { Id = "dragon-dsk-40ss", Machine = "Dragon 32/64", Name = "DragonDOS 40 tracks, 1 side, 18 x 256 - 180 KB", Extension = ".dsk", SizeBytes = 184320 },
+            new BlankImageLayout { Id = "dragon-dsk-40ds", Machine = "Dragon 32/64", Name = "DragonDOS 40 tracks, 2 sides, 18 x 256 - 360 KB", Extension = ".dsk", SizeBytes = 368642 },
+            new BlankImageLayout { Id = "dragon-dsk-80ss", Machine = "Dragon 32/64", Name = "DragonDOS 80 tracks, 1 side, 18 x 256 - 360 KB", Extension = ".dsk", SizeBytes = 368640 },
+            new BlankImageLayout { Id = "dragon-dsk-80ds", Machine = "Dragon 32/64", Name = "DragonDOS 80 tracks, 2 sides, 18 x 256 - 720 KB", Extension = ".dsk", SizeBytes = 737280 },
+        };
 
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
@@ -120,6 +131,55 @@ namespace RetroIO.Storage.Local.Drivers
         public override IFileSystemDriver CreateDriver()
         {
             return new DragonDskDriver();
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<BlankImageLayout> BlankLayouts => Layouts;
+
+        /// <inheritdoc/>
+        public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
+        {
+            GeometryOf(layoutId, out int tracks, out int sides);
+            return Wrap(DragonDosFormat.CreateBlank(tracks, sides), tracks, sides);
+        }
+
+        /// <inheritdoc/>
+        public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
+        {
+            GeometryOf(layoutId, out _, out _);
+            DragonDskDriver driver = new DragonDskDriver();
+            driver.Mount(stream, readOnly);
+            return driver;
+        }
+
+        private static void GeometryOf(string layoutId, out int tracks, out int sides)
+        {
+            switch (layoutId)
+            {
+                case "dragon-dsk-40ss": tracks = 40; sides = 1; return;
+                case "dragon-dsk-40ds": tracks = 40; sides = 2; return;
+                case "dragon-dsk-80ss": tracks = 80; sides = 1; return;
+                case "dragon-dsk-80ds": tracks = 80; sides = 2; return;
+                default: throw new ArgumentException("not a DragonDOS blank-image layout: " + layoutId, nameof(layoutId));
+            }
+        }
+
+        // A raw DSK file. A double-sided 40-track disk is the same size as a single-sided 80-track
+        // one, which a headerless file is read as, so it gets the two-byte JVC header that says 18
+        // sectors per track and two sides (the header as XRoar documents it; the DSK reader takes the
+        // header length from the size).
+        private static byte[] Wrap(byte[] sectors, int tracks, int sides)
+        {
+            if (tracks != 40 || sides != 2)
+            {
+                return sectors;
+            }
+
+            byte[] file = new byte[2 + sectors.Length];
+            file[0] = 18;
+            file[1] = 2;
+            sectors.CopyTo(file, 2);
+            return file;
         }
 
         /// <summary>

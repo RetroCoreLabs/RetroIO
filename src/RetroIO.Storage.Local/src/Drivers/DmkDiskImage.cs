@@ -486,6 +486,112 @@ namespace RetroIO.Storage.Local.Drivers
             return found;
         }
 
+        /// <summary>
+        /// Creates a DMK file of a disk as the DragonDOS 1.2 <c>DSKINIT</c> command formats it: every track written with its write-track table,
+        /// every sector holding 256 bytes of E5H.
+        /// </summary>
+        /// <remarks>
+        /// The track is the controller's output for the DSKINIT tables (ddos12.asm: TrackHeaderTable, SectorIDLayout, SectorIDLayout2,
+        /// TrackFiller and SectorIDTable). Each table entry writes a byte a number of times and then its terminator byte once, F5H goes out as
+        /// the sync byte A1H, F6H as C2H and F7H as the two CRC bytes:
+        ///  - Track start: 54 x 4EH, 9 x 00H, 3 x C2H, FCH, 32 x 4EH.
+        ///  - Each sector: 8 x 00H, 3 x A1H, FEH, cylinder, side, sector, 01H, CRC, 22 x 4EH, 12 x 00H, 3 x A1H, FBH, 256 x E5H, CRC, 24 x 4EH.
+        ///  - The sectors in the order 1, 10, 2, 11, ... 9, 18, then 4EH up to the end of the track.
+        /// The real DMK images in the test folder show exactly these bytes, and their track length of 1900H (6400 bytes with the 128-byte
+        /// header) and option byte (10H single sided, 00H double sided), which this file uses too. Each sector header is listed once in the
+        /// track header.
+        /// </remarks>
+        /// <param name="cylinders">
+        /// 40 or 80.
+        /// </param>
+        /// <param name="sides">
+        /// 1 or 2.
+        /// </param>
+        /// <returns>
+        /// The whole DMK file.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when <paramref name="cylinders"/> or <paramref name="sides"/> is not one DSKINIT takes.
+        /// </exception>
+        public static byte[] CreateDragonDosFormatted(int cylinders, int sides)
+        {
+            if (cylinders != 40 && cylinders != 80)
+            {
+                throw new ArgumentOutOfRangeException(nameof(cylinders), cylinders, "DSKINIT formats 40 or 80 tracks");
+            }
+
+            if (sides != 1 && sides != 2)
+            {
+                throw new ArgumentOutOfRangeException(nameof(sides), sides, "DSKINIT formats 1 or 2 sides");
+            }
+
+            const int trackLength = 0x1900;
+            byte[] file = new byte[16 + cylinders * sides * trackLength];
+            file[1] = (byte)cylinders;
+            file[2] = trackLength & 0xFF;
+            file[3] = trackLength >> 8;
+            file[4] = sides == 1 ? (byte)0x10 : (byte)0x00;
+            for (int cylinder = 0; cylinder < cylinders; cylinder++)
+            {
+                for (int side = 0; side < sides; side++)
+                {
+                    WriteFormattedTrack(file.AsSpan(16 + (cylinder * sides + side) * trackLength, trackLength), cylinder, side);
+                }
+            }
+
+            return file;
+        }
+
+        // One track block as DSKINIT writes it (see CreateDragonDosFormatted).
+        private static void WriteFormattedTrack(Span<byte> block, int cylinder, int side)
+        {
+            byte[] track = new byte[block.Length - 128];
+            int at = 0;
+            Run(track, ref at, 54, 0x4E);
+            Run(track, ref at, 9, 0x00);
+            Run(track, ref at, 3, 0xC2);
+            Run(track, ref at, 1, 0xFC);
+            Run(track, ref at, 32, 0x4E);
+            for (int i = 0; i < 18; i++)
+            {
+                // SectorIDTable: 1, 10, 2, 11, ... 9, 18.
+                int sector = (i & 1) == 0 ? i / 2 + 1 : i / 2 + 10;
+                Run(track, ref at, 8, 0x00);
+                Run(track, ref at, 3, 0xA1);
+                int idam = at;
+                track[at++] = 0xFE;
+                track[at++] = (byte)cylinder;
+                track[at++] = (byte)side;
+                track[at++] = (byte)sector;
+                track[at++] = 0x01;
+                int headerCrc = Crc(track, idam, 5);
+                track[at++] = (byte)(headerCrc >> 8);
+                track[at++] = (byte)headerCrc;
+                Run(track, ref at, 22, 0x4E);
+                Run(track, ref at, 12, 0x00);
+                Run(track, ref at, 3, 0xA1);
+                int mark = at;
+                track[at++] = 0xFB;
+                Run(track, ref at, 256, 0xE5);
+                int dataCrc = Crc(track, mark, 257);
+                track[at++] = (byte)(dataCrc >> 8);
+                track[at++] = (byte)dataCrc;
+                Run(track, ref at, 24, 0x4E);
+                int pointer = (128 + idam) | 0x8000;
+                block[i * 2] = (byte)pointer;
+                block[i * 2 + 1] = (byte)(pointer >> 8);
+            }
+
+            Run(track, ref at, track.Length - at, 0x4E);
+            track.CopyTo(block.Slice(128));
+        }
+
+        private static void Run(byte[] track, ref int at, int count, byte value)
+        {
+            track.AsSpan(at, count).Fill(value);
+            at += count;
+        }
+
         // The disk controller CRC: polynomial 1021H, start value FFFFH, high bit first, run over the three sync bytes A1H first and then the bytes.
         private static int Crc(byte[] data, int offset, int length)
         {

@@ -7,9 +7,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Ndfs.BlockDevices;
+using RetroIO.Storage.Ndfs.Creation;
 using RetroIO.Storage.Ndfs.Structures;
 
 namespace RetroIO.Storage.Ndfs.Drivers
@@ -17,10 +19,27 @@ namespace RetroIO.Storage.Ndfs.Drivers
     /// <summary>
     /// NDFS driver provider for registration with FileSystemDriverFactory.
     /// </summary>
-    public sealed class NdfsDriverProvider : FileSystemDriverProviderBase
+    public sealed class NdfsDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Norsk Data ND-100", "Norsk Data ND-500" };
+
+        // The directory name in the master block: 1 to 16 printable characters.
+        private static readonly BlankImageOption DirectoryName = new BlankImageOption { Id = "directoryName", Label = "Directory name", Kind = BlankImageOptionKind.Text, Default = "EMPTY-DISK", MaxLength = 16 };
+
+        // The boot loader written to the first page; the disk type's own one unless another is picked.
+        private static readonly BlankImageOption BootLoader = new BlankImageOption { Id = "bootLoader", Label = "Boot loader", Kind = BlankImageOptionKind.Choice, Default = "Disk type default", Choices = new[] { "Disk type default", "None", "Floppy", "SMD", "Winchester", "SCSI" } };
+        private static readonly BlankImageOption[] NdfsOptions = { DirectoryName, BootLoader };
+
+        // One layout per disk template of the image creator; size is its page count times 2048.
+        private static readonly BlankImageLayout[] Layouts =
+        {
+            new BlankImageLayout { Id = "ndfs-floppy-360k", Machine = "Norsk Data ND-100", Name = "Floppy (360 KB type) - 154 pages", Extension = ".img", SizeBytes = 154L * 2048, Options = NdfsOptions },
+            new BlankImageLayout { Id = "ndfs-floppy-1200k", Machine = "Norsk Data ND-100", Name = "Floppy (1.2 MB type) - 616 pages", Extension = ".img", SizeBytes = 616L * 2048, Options = NdfsOptions },
+            new BlankImageLayout { Id = "ndfs-smd-75m", Machine = "Norsk Data ND-100", Name = "SMD disk, 75 MB - 38400 pages", Extension = ".img", SizeBytes = 38400L * 2048, Options = NdfsOptions },
+            new BlankImageLayout { Id = "ndfs-winchester-74m", Machine = "Norsk Data ND-100", Name = "Winchester disk, 74 MB (Micropolis 1325) - 36864 pages", Extension = ".img", SizeBytes = 36864L * 2048, Options = NdfsOptions },
+            new BlankImageLayout { Id = "ndfs-scsi-126m", Machine = "Norsk Data ND-100", Name = "SCSI disk, 126 MB - 64656 pages", Extension = ".img", SizeBytes = 64656L * 2048, Options = NdfsOptions },
+        };
 
         // The one extension list for this format: detection below uses it, and programs read it
         // through FileExtensions (for example to link these files to themselves).
@@ -142,6 +161,51 @@ namespace RetroIO.Storage.Ndfs.Drivers
         public override IFileSystemDriver CreateDriver()
         {
             return new NdfsDriver();
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<BlankImageLayout> BlankLayouts => Layouts;
+
+        /// <inheritdoc/>
+        public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
+        {
+            NdfsImageCreationOptions create = new NdfsImageCreationOptions
+            {
+                Template = TemplateOf(layoutId),
+                DirectoryName = DirectoryName.ValueIn(options),
+                BootLoaderType = BootLoader.ValueIn(options) switch
+                {
+                    "None" => NdfsBootLoaderType.None,
+                    "Floppy" => NdfsBootLoaderType.Floppy,
+                    "SMD" => NdfsBootLoaderType.Smd,
+                    "Winchester" => NdfsBootLoaderType.Winchester,
+                    "SCSI" => NdfsBootLoaderType.Scsi,
+                    _ => null,
+                },
+            };
+            return NdfsImageCreator.CreateImageBytes(create);
+        }
+
+        /// <inheritdoc/>
+        public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
+        {
+            TemplateOf(layoutId);
+            NdfsDriver driver = new NdfsDriver();
+            driver.Mount(stream, readOnly);
+            return driver;
+        }
+
+        private static NdfsImageTemplate TemplateOf(string layoutId)
+        {
+            return layoutId switch
+            {
+                "ndfs-floppy-360k" => NdfsImageTemplate.Floppy360KB,
+                "ndfs-floppy-1200k" => NdfsImageTemplate.Floppy12MB,
+                "ndfs-smd-75m" => NdfsImageTemplate.Smd75MB,
+                "ndfs-winchester-74m" => NdfsImageTemplate.Winchester74MB,
+                "ndfs-scsi-126m" => NdfsImageTemplate.Scsi126MB,
+                _ => throw new ArgumentException("not an NDFS blank-image layout: " + layoutId, nameof(layoutId)),
+            };
         }
     }
 }

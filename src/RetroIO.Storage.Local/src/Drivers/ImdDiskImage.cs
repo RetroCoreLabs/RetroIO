@@ -155,7 +155,7 @@ namespace RetroIO.Storage.Local.Drivers
                 if (track.SizeCode > 6)
                 {
                     error = "ImageDisk track " + track.Cylinder + ": sector size code " + track.SizeCode + " is not one of 0-6.";
-                return null;
+                    return null;
                 }
 
                 int n = track.SectorCount;
@@ -198,7 +198,7 @@ namespace RetroIO.Storage.Local.Drivers
                     if (type > 8)
                     {
                         error = "ImageDisk track " + track.Cylinder + ": sector record type " + type + " is not one of 0-8.";
-                return null;
+                        return null;
                     }
 
                     byte[] sector = new byte[size];
