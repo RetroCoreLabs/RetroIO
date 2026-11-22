@@ -129,6 +129,14 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             using EthernetLink link = new EthernetLink("eth:" + peer, self, peer, backend);
             link.Log = Log;
 
+            // A datagram held back behind the send window is NOT sent, and nothing else says so: the
+            // send call reports it as taken. Without this line a reply that never left looked, in the
+            // log, exactly like a reply the peer ignored (live test from D102, 2026-11-22).
+            link.DatagramParked += delegate (EthernetLink parkedOn, int byteCount, int queueDepth)
+            {
+                Log($"[link] {parkedOn.Name}: datagram of {byteCount} bytes held back, {queueDepth} waiting ({parkedOn.ParkedDetail})");
+            };
+
             // The bridge: every connected program's ports and names live in its kernel and name table.
             XmsgKernelServer bridge = XmsgKernelServer.Create(self, (ushort)Environment.TickCount, BridgeName, 4);
             PluginServerHost programs = new PluginServerHost(bridge, new XroutDirectory())
@@ -187,6 +195,28 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             {
                 Interlocked.Exchange(ref connectionOpened, 1);
             };
+
+            // WAIT FOR THE HUB CONNECTION BEFORE THE REOPEN. The TCP backend connects on its own
+            // thread and drops every frame sent before that, so a reopen sent at once was lost, the
+            // link waited for ever for a confirm with its send window at 0, and every answer to the
+            // peer was held back (live test from D102, 2026-11-22: "NO ANSWER FROM REMOTE SYSTEM").
+            while (!link.IsBackendConnected && !stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TickMs, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+
+            if (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             link.Reopen();
 
             WebApplication web;

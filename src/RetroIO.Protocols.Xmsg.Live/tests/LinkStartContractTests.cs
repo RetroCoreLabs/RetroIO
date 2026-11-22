@@ -86,6 +86,34 @@ namespace RetroIO.Protocols.Xmsg.Live.Tests
             Assert.Equal(LinkStatus.Error, link.Status);
         }
 
+        /// <summary>
+        /// A TCP backend is active from Start but has no connection until its own thread makes one;
+        /// the link must say so, because a reopen sent in that gap is lost (live test, 2026-11-22).
+        /// </summary>
+        [Fact]
+        public void EthernetLink_OverTcpWithNobodyListening_IsStartedButNotConnected()
+        {
+            // Port 1 on loopback: nothing listens there, so the dial loop never connects.
+            TcpEthernetBackend backend = TcpEthernetBackend.FromSpec("tcp:127.0.0.1:1")!;
+            using EthernetLink link = new EthernetLink("eth", LocalSystem, PeerSystem, backend);
+
+            Assert.True(link.Start());
+            Assert.False(link.IsBackendConnected);
+        }
+
+        /// <summary>
+        /// A backend that carries frames as soon as it is started reports connected when active.
+        /// </summary>
+        [Fact]
+        public void EthernetLink_OverInProcessSegment_IsConnectedOnceStarted()
+        {
+            InProcessEthernetSegment segment = new InProcessEthernetSegment();
+            using EthernetLink link = new EthernetLink("eth", LocalSystem, PeerSystem, segment.CreatePort("a"));
+
+            Assert.True(link.Start());
+            Assert.True(link.IsBackendConnected);
+        }
+
         [Fact]
         public void LapbLayerAdapter_Start_ReturnsTrueOnce_ThenFalseWhileNotStopped()
         {

@@ -52,6 +52,28 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         bool IsActive { get; }
 
         /// <summary>
+        /// Gets a value indicating whether a frame handed to <see cref="SendPacket"/> now actually
+        /// reaches the segment.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Not the same as <see cref="IsActive"/>. A TCP backend is active from <see cref="Start"/>,
+        /// but it connects on its own thread, and until that connection is made every frame sent is
+        /// dropped without a trace. A link that sends its connection request in that gap waits for a
+        /// confirm that can never come (live test from D102, 2026-11-22: our reopen was lost this way
+        /// and the node never sent a data frame again).
+        /// </para>
+        /// <para>
+        /// The default is <see cref="IsActive"/>, which is right for a backend that carries frames the
+        /// moment it is started (UDP multicast, the in-process loopback).
+        /// </para>
+        /// </remarks>
+        bool IsConnected
+        {
+            get { return IsActive; }
+        }
+
+        /// <summary>
         /// Gets a short human-readable description of the transport, for logs.
         /// </summary>
         string Description { get; }

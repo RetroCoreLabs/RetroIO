@@ -391,6 +391,16 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         }
 
         /// <summary>
+        /// Gets a value indicating whether the backend has a working connection, so a frame sent now
+        /// reaches the segment. A caller that is about to <see cref="Reopen"/> waits for this: a
+        /// connection request sent before it is lost, and nothing sends it again.
+        /// </summary>
+        public bool IsBackendConnected
+        {
+            get { return _backend.IsConnected; }
+        }
+
+        /// <summary>
         /// Stops the link. Idempotent.
         /// </summary>
         /// <remarks>
@@ -559,8 +569,10 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
                 // TAD connect came to hang while every log line said the reply had gone out.
                 if (outcome == NdSendOutcome.Queued)
                 {
-                    DatagramParked?.Invoke(this, payload.Length, _linkLayer.QueuedDatagrams);
+                    // The detail is set BEFORE the event, so a handler that logs it reads this frame's
+                    // state and not the previous one's.
                     ParkedDetail = $"window {_linkLayer.Window}, outstanding {_linkLayer.OutstandingFrames}, peer placed us: {_linkLayer.HasLearnedPeerPosition}";
+                    DatagramParked?.Invoke(this, payload.Length, _linkLayer.QueuedDatagrams);
                 }
 
                 return outcome != NdSendOutcome.Refused;
