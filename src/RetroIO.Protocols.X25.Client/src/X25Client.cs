@@ -838,6 +838,7 @@ namespace RetroIO.Protocols.X25.Client
                 }
 
                 leg.Dead = true;
+                ConnectionDropsForTest++;
                 _logger.LogDebug("X25Client: a connection dropped ({Reason}) with {Count} circuit(s) on it", reason, leg.Vcs.Count);
                 ushort[] numbers = new ushort[leg.Vcs.Count];
                 leg.Vcs.Keys.CopyTo(numbers, 0);
@@ -1020,6 +1021,11 @@ namespace RetroIO.Protocols.X25.Client
         internal Action? SpareConnectedForTest { get; set; }
 
         /// <summary>
+        /// How many connections have been seen to drop (<see cref="OnLegClosed"/>), for a test that must wait for a drop.
+        /// </summary>
+        internal int ConnectionDropsForTest { get; private set; }
+
+        /// <summary>
         /// Dials a new spare connection for the next arriving call. Runs on a pool thread. A failed dial is dialled again
         /// after the next wait of <see cref="XotSpareRedial"/>, for as long as the client is open.
         /// </summary>
@@ -1087,6 +1093,16 @@ namespace RetroIO.Protocols.X25.Client
             if (!keep && !spare.Used)
             {
                 CloseLeg(spare);
+
+                // The new spare dropped between Open and this point (the switch died just after it accepted the dial).
+                // OnLegClosed did not dial again, because the connection was not yet recorded as the spare, so it is done
+                // here. Until 2026-11-22 nothing dialled again in that case and the client answered no call after the
+                // switch came back (XotSwitchRestartTests.X25Client_TheSwitchRestarts... failed now and then). A spare that
+                // is not kept because another spare is already there is no loss; ScheduleSpareRedial returns for that.
+                if (spare.Dead)
+                {
+                    ScheduleSpareRedial("the new spare connection dropped as it opened");
+                }
             }
 
             if (takenByACall)

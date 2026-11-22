@@ -251,6 +251,49 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(Volatile.Read(ref answered), Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// The switch dies just after it accepted the dial of a new spare, before the client recorded it as the spare.
+        /// The client must still dial again (added 2026-11-22: before, that spare was closed and nothing was dialled, the
+        /// cause of the test above failing now and then).
+        /// </summary>
+        [Test]
+        public void X25Client_TheSwitchDiesAsANewSpareOpens_ItStillDialsAgain()
+        {
+            Network net = BuildSwitch(0, 0, subscriberDnicPrefix: "26245890040099");
+            X25Client server = new X25Client { ServiceName = "echo-like" };
+            _disposables.Add(server);
+            server.SetOnIncoming((c, vc) => c.Accept(vc));
+            server.Open(new X25ClientConfig
+            {
+                Host = "127.0.0.1",
+                Port = net.SubscriberPort.BoundPort,
+                LocalAddress = "26245890040099",
+                Framing = X25ClientFraming.Xot,
+                SpareRedialFirstMs = 100,
+                SpareRedialMostMs = 400,
+            }, NullLogger.Instance);
+            Assert.That(SpinWait.SpinUntil(() => net.SubscriberPort.ConnectionCount >= 1, 5000), Is.True);
+
+            ushort subscriberPort = net.SubscriberPort.BoundPort;
+            ushort callerPort = net.CallerPort.BoundPort;
+            bool dropsSeen = false;
+
+            // The call takes the spare; the next spare is dialled, and the switch dies right after it connected. The hook
+            // returns only once the client has seen both connections drop, so the order is forced.
+            server.SpareConnectedForTest = () =>
+            {
+                server.SpareConnectedForTest = null;
+                net.Kill();
+                dropsSeen = SpinWait.SpinUntil(() => server.ConnectionDropsForTest >= 2, 10000);
+            };
+            Dial(net, "26245890040099", "26240031");
+            Assert.That(SpinWait.SpinUntil(() => server.SpareConnectedForTest == null && server.ConnectionDropsForTest >= 2, 10000), Is.True, "the switch was not killed as the spare opened");
+            Assert.That(SpinWait.SpinUntil(() => Volatile.Read(ref dropsSeen), 10000), Is.True, "the client never saw the new spare drop");
+
+            Network again = BuildSwitch(subscriberPort, callerPort, subscriberDnicPrefix: "26245890040099");
+            Assert.That(SpinWait.SpinUntil(() => again.SubscriberPort.ConnectionCount >= 1, 10000), Is.True, "the client never dialled its spare again");
+        }
+
         // ------------------------------------------------------------------ helpers
 
         private sealed class Network
