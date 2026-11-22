@@ -30,7 +30,9 @@ namespace RetroIO.Network.DialUp
     /// <para>The login: the name is echoed and the password is not; a line ends at CR or LF, and
     /// backspace or delete takes back one character. A wrong login gets <c>Login incorrect</c> and
     /// a new prompt, and after <see cref="DialUpSettings.MaxLoginTries"/> of them the session hangs
-    /// up. SLIP has no login of its own; PPP's (PAP and CHAP) comes with the PPP support.</para>
+    /// up. A slow check (<see cref="DialUpSettings.LoginStart"/>) answers later; the session
+    /// waits, drops what the caller types meanwhile, and acts on the answer in <see cref="Poll"/>.
+    /// SLIP has no login of its own; PPP's (PAP and CHAP) comes with the PPP support.</para>
     /// </remarks>
     public sealed class SlipDialUpSession
     {
@@ -50,6 +52,7 @@ namespace RetroIO.Network.DialUp
         private int _failedLogins;
         private Stage _stage;
         private long _packetsDropped;
+        private DialUpLoginAnswer? _pendingAnswer;
 
         // ── Events ──
 
@@ -73,6 +76,11 @@ namespace RetroIO.Network.DialUp
         public SlipDialUpSession(DialUpSettings settings, IDialUpPacketSide side)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            if (settings.LoginCheck != null && settings.LoginStart != null)
+            {
+                throw new ArgumentException("Set LoginCheck or LoginStart, not both.", nameof(settings));
+            }
+
             _side = side ?? throw new ArgumentNullException(nameof(side));
             _slip = new SlipLink(settings.MaxPacket);
             _slip.OnPacket += OnSlipPacket;
@@ -163,6 +171,12 @@ namespace RetroIO.Network.DialUp
                 return true;
             }
 
+            if (_stage == Stage.Checking)
+            {
+                // Typed while the password is checked: dropped, as a real login does.
+                return true;
+            }
+
             TakeLoginByte(value);
             return true;
         }
@@ -203,6 +217,7 @@ namespace RetroIO.Network.DialUp
         /// </summary>
         public void Poll()
         {
+            TakeAnswer();
             if (_stage == Stage.Slip)
             {
                 _side.Poll();
@@ -264,8 +279,38 @@ namespace RetroIO.Network.DialUp
 
             string password = _line.ToString();
             _line.Clear();
+            DialUpLoginStart? start = _settings.LoginStart;
+            if (start != null)
+            {
+                // The check may answer at once, or later from another thread; Poll looks again.
+                _stage = Stage.Checking;
+                DialUpLoginAnswer answer = new DialUpLoginAnswer();
+                _pendingAnswer = answer;
+                start(_name, password, answer);
+                TakeAnswer();
+                return;
+            }
+
             DialUpLoginCheck? check = _settings.LoginCheck;
-            if (check == null || check(_name, password))
+            LoginDecided(check == null || check(_name, password));
+        }
+
+        // Acts on a slow check's answer once it has come.
+        private void TakeAnswer()
+        {
+            DialUpLoginAnswer? answer = _pendingAnswer;
+            if (_stage != Stage.Checking || answer == null || !answer.Answered)
+            {
+                return;
+            }
+
+            _pendingAnswer = null;
+            LoginDecided(answer.IsAccepted);
+        }
+
+        private void LoginDecided(bool accepted)
+        {
+            if (accepted)
             {
                 StartSlip();
                 return;
@@ -386,6 +431,7 @@ namespace RetroIO.Network.DialUp
             NotAnswered,
             Name,
             Password,
+            Checking,
             Slip,
             Ended,
         }

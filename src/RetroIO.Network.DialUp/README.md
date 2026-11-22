@@ -6,7 +6,9 @@ then carries the caller's IP packets over SLIP (RFC 1055). Moved from RetroCore 
 made pluggable in two places:
 
 - **The login check** (`DialUpSettings.LoginCheck`): `null` takes any name, as an emulator's
-  built-in ISP does; a server checks its own users. Three wrong logins hang up.
+  built-in ISP does; a server checks its own users. Three wrong logins hang up. A slow check
+  (a password hash) goes in `DialUpSettings.LoginStart` instead: it answers through a
+  `DialUpLoginAnswer` later, from any thread, and the session acts on it in its next `Poll`.
 - **The packet side** (`IDialUpPacketSide`), started only after a good login:
   - `NatDialUpSide`: a NAT of its own (`RetroIO.Network.Nat`), for one modem in an emulator.
   - `RouterDialUpSide`: a link on a shared `IpRouter` (`RetroIO.Network.Router`), so many callers

@@ -115,6 +115,91 @@ namespace RetroIO.Network.DialUp.Tests
         }
 
         [Test]
+        public void ASlowCheckLetsTheSessionWaitAndSlipStartsAtTheNextPollAfterYes()
+        {
+            DialUpLoginAnswer? pending = null;
+            Answer(new DialUpSettings { LoginStart = (name, password, answer) => pending = answer }, new NatDialUpSide());
+            Text();
+            TypeText("ronny\rright\r");
+            Text();
+
+            TypeText("typed while waiting");
+            _session.Poll();
+            Assert.That(Text(), Is.Empty, "nothing echoed while the check runs");
+            Assert.That(_session.InSlipMode, Is.False);
+
+            pending!.Accept();
+            Assert.That(_session.InSlipMode, Is.False, "the answer is acted on in Poll, on the session's thread");
+            _session.Poll();
+
+            Assert.That(_session.InSlipMode, Is.True);
+            Assert.That(Text(), Does.Contain("SLIP mode."));
+        }
+
+        [Test]
+        public void ASlowNoCountsAsAWrongLogin()
+        {
+            DialUpLoginAnswer? pending = null;
+            Answer(new DialUpSettings { LoginStart = (name, password, answer) => pending = answer }, new NatDialUpSide());
+            Text();
+            TypeText("ronny\rwrong\r");
+
+            pending!.Refuse();
+            pending.Accept();
+            _session.Poll();
+
+            Assert.That(Text(), Does.EndWith("Login incorrect\r\nlogin: "), "only the first answer counts");
+        }
+
+        [Test]
+        public void ACheckThatAnswersAtOnceNeedsNoPoll()
+        {
+            Answer(new DialUpSettings { LoginStart = (name, password, answer) => answer.Accept() }, new NatDialUpSide());
+            TypeText("ronny\rright\r");
+
+            Assert.That(_session.InSlipMode, Is.True);
+        }
+
+        [Test]
+        public void AnAnswerFromAnotherThreadIsTaken()
+        {
+            Answer(new DialUpSettings { LoginStart = (name, password, answer) => System.Threading.ThreadPool.QueueUserWorkItem(_ => answer.Accept()) }, new NatDialUpSide());
+            TypeText("ronny\rright\r");
+
+            Stopwatch clock = Stopwatch.StartNew();
+            while (!_session.InSlipMode && clock.ElapsedMilliseconds < 5000)
+            {
+                _session.Poll();
+            }
+
+            Assert.That(_session.InSlipMode, Is.True);
+        }
+
+        [Test]
+        public void AHangUpWhileTheCheckRunsMakesTheAnswerGoNowhere()
+        {
+            IpRouter router = SharedRouter();
+            DialUpLoginAnswer? pending = null;
+            Answer(new DialUpSettings { LoginStart = (name, password, answer) => pending = answer }, new RouterDialUpSide(router, 0));
+            TypeText("ronny\rright\r");
+
+            _session.CallerHungUp();
+            pending!.Accept();
+            _session.Poll();
+
+            Assert.That(_session.Ended, Is.True);
+            Assert.That(router.LinkCount, Is.EqualTo(0), "no address taken for a caller who left");
+        }
+
+        [Test]
+        public void BothChecksAtOnceAreRefused()
+        {
+            DialUpSettings settings = new DialUpSettings { LoginCheck = (n, p) => true, LoginStart = (n, p, a) => a.Accept() };
+
+            Assert.Throws<ArgumentException>(() => new SlipDialUpSession(settings, new NatDialUpSide()));
+        }
+
+        [Test]
         public void WithoutALoginSlipStartsAtOnce()
         {
             Answer(new DialUpSettings { LoginPrompt = false }, new NatDialUpSide());
