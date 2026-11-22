@@ -98,6 +98,65 @@ namespace RetroIO.Storage.Local.Tests
             }
         }
 
+        [Test]
+        public void Disk320K_IsDetectedAndEveryCmdFileHasACodeGroupHeader()
+        {
+            string path = RequireImage(Image("CPM86_110_320K.IMG"));
+            DriverFactory factory = new DriverFactory();
+            factory.Register(new CpmDriverProvider());
+            factory.Register(new PcFloppyDriverProvider());
+            IFileSystemDriver driver = factory.Detect(path)!;
+            Assert.That(driver.FileSystemType, Is.EqualTo("CPM"));
+            using FileStream stream = File.OpenRead(path);
+            driver.Mount(stream, readOnly: true);
+            DirectoryEntry[] files = driver.ListDirectory("/");
+            int commands = 0;
+            for (int i = 0; i < files.Length; i++)
+            {
+                if (!files[i].Name.EndsWith(".CMD", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // A CP/M-86 .CMD file starts with group descriptors: type 1 (code), then its length in
+                // 16-byte paragraphs, which must fit after the 128-byte header.
+                byte[] cmd = driver.ReadFile("/" + files[i].Name);
+                int paragraphs = cmd[1] | (cmd[2] << 8);
+                Assert.That(cmd[0], Is.EqualTo(1), files[i].Name);
+                Assert.That(128 + paragraphs * 16, Is.LessThanOrEqualTo(cmd.Length), files[i].Name);
+                commands++;
+            }
+
+            Assert.That(commands, Is.EqualTo(18));
+        }
+
+        [Test]
+        public void Disk320K_ImageDiskCopy_IsTheSameDisk()
+        {
+            byte[] raw = File.ReadAllBytes(RequireImage(Image("CPM86_110_320K.IMG")));
+            byte[] imd = File.ReadAllBytes(RequireImage(Image("CPM86_110_320K.IMD")));
+            Assert.That(ImdDiskImage.Decode(imd).Flat, Is.EqualTo(raw));
+        }
+
+        [Test]
+        public void SerpentineMap_SideOneRunsBackFromTheLastCylinder()
+        {
+            SerpentineCpmRecordMap map = new SerpentineCpmRecordMap(40, 4096, 1, 158 * 16);
+            Assert.That(map.ImageOffset(0), Is.EqualTo(2 * 4096), "CP/M track 1 is cylinder 1 side 0");
+            Assert.That(map.ImageOffset(39 * 32), Is.EqualTo(79 * 4096), "CP/M track 40 is cylinder 39 side 1");
+            Assert.That(map.ImageOffset(78 * 32), Is.EqualTo(1 * 4096), "CP/M track 79 is cylinder 0 side 1");
+        }
+
+        [Test]
+        public void DosFloppyOf320K_IsNotCpm86()
+        {
+            byte[] dos = new byte[327680];
+            dos[0x200] = 0xFF;
+            dos[0x201] = 0xFF;
+            dos[0x202] = 0xFF;
+            Assert.That(CpmDriver.TryIbmPcCpm86(dos.Length, dos, out _, out _), Is.False);
+        }
+
         private static string RequireImage(string path)
         {
             if (!File.Exists(path))

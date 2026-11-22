@@ -183,7 +183,7 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Gives the CP/M-86 layout of a 160 KB IBM PC floppy image, if the image is one.
+        /// Gives the CP/M-86 layout of a 160 KB or 320 KB IBM PC floppy image, if the image is one.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -193,8 +193,14 @@ namespace RetroIO.Storage.Local.Drivers
         /// back clean with this layout.
         /// </para>
         /// <para>
-        /// A DOS disk of the same size has its FAT at 200h, starting FEh FFh FFh (the 160 KB media
-        /// byte); an image that starts that way is not taken as CP/M-86.
+        /// The 320 KB IBM PC-XT disk (CP/M-86 1.10, two sides): measured the same way: one reserved
+        /// track, 2 KB blocks, EXM 1, 64 entries in block 0, DSM 157, with the tracks running down side
+        /// 0 and back up side 1 (<see cref="SerpentineCpmRecordMap"/>).
+        /// </para>
+        /// <para>
+        /// A DOS disk of the same size has its FAT at 200h, starting with the media byte (F0h-FFh, FEh
+        /// for 160 KB, FFh for 320 KB) and FFh FFh; an image that starts that way is not taken as
+        /// CP/M-86.
         /// </para>
         /// </remarks>
         /// <param name="length">
@@ -210,20 +216,27 @@ namespace RetroIO.Storage.Local.Drivers
         /// The record map, or <c>null</c>.
         /// </param>
         /// <returns>
-        /// <c>true</c> when the image has the size of a 160 KB PC floppy and no DOS FAT.
+        /// <c>true</c> when the image has the size of a 160 KB or 320 KB PC floppy and no DOS FAT.
         /// </returns>
         public static bool TryIbmPcCpm86(long length, ReadOnlySpan<byte> image, out CpmDiskParameters? parameters, out ICpmRecordMap? map)
         {
             const int Track = 8 * 512;
             parameters = null;
             map = null;
-            if (length != 163840 || image.Length < 0x203 || (image[0x200] == 0xFE && image[0x201] == 0xFF && image[0x202] == 0xFF))
+            if ((length != 163840 && length != 327680) || image.Length < 0x203 || (image[0x201] == 0xFF && image[0x202] == 0xFF && image[0x200] >= 0xF0))
             {
                 return false;
             }
 
-            parameters = new CpmDiskParameters(1024, 156, 64, 0, 1);
-            map = new LinearCpmRecordMap(Track, 156 * 8);
+            if (length == 163840)
+            {
+                parameters = new CpmDiskParameters(1024, 156, 64, 0, 1);
+                map = new LinearCpmRecordMap(Track, 156 * 8);
+                return true;
+            }
+
+            parameters = new CpmDiskParameters(2048, 158, 64, 1, 1);
+            map = new SerpentineCpmRecordMap(40, Track, 1, 158 * 16);
             return true;
         }
 
@@ -865,7 +878,7 @@ namespace RetroIO.Storage.Local.Drivers
         // A size one of the raw layouts in TrySelectFlatLayout uses.
         internal static bool HasFlatLayouts(long length)
         {
-            return length == 163840 || length == 92160 || length == 819200 || length == 8388608 || TryKaypro(length, out _, out _);
+            return length == 163840 || length == 327680 || length == 92160 || length == 819200 || length == 8388608 || TryKaypro(length, out _, out _);
         }
 
         private static bool HasFilesFor(byte[] image)

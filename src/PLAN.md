@@ -1,6 +1,6 @@
 # Plan: outstanding work only
 
-Next: CP/M (item 2): CP/M 3 time stamps and PC CP/M-86 320 KB and larger (both need test disks).
+Next: CP/M (item 2): CP/M 3 time stamps (needs a test disk); blank-disk creation for every writable format.
 
 Proof level for all items: lean. One full suite run after a merge, a mutation check for the key new rule only.
 
