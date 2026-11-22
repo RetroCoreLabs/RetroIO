@@ -1766,7 +1766,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 byte[] userFacilities = vc.OtherFacilities;
                 byte[] networkUtilities = vc.NetworkUtilities;
-                MoveReverseChargingToUtilities(ref userFacilities, ref networkUtilities);
+                MoveElementToUtilities(ReverseChargingFastSelectCode, ReverseChargingFastSelectBits, ref userFacilities, ref networkUtilities);
+                MoveElementToUtilities(ThroughputClassCode, 0xFF, ref userFacilities, ref networkUtilities);
                 facilities = new X25Facilities { PassThrough = userFacilities }.Encode();
                 utilities = WithUtilityFlowControl(networkUtilities, vc.WindowSizeIn, vc.WindowSizeOut, vc.PacketSizeIn, vc.PacketSizeOut);
             }
@@ -1894,7 +1895,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.WindowSizeOut = requested.WindowFromCalled;
             vc.WindowSizeIn = requested.WindowFromCalling;
             vc.OtherFacilities = _config.IsSte
-                ? ReverseChargingFromUtilities(info.NetworkUtilities, requested.PassThrough)
+                ? ElementFromUtilities(ThroughputClassCode, 0xFF, info.NetworkUtilities,
+                    ElementFromUtilities(ReverseChargingFastSelectCode, ReverseChargingFastSelectBits, info.NetworkUtilities, requested.PassThrough))
                 : requested.PassThrough;
             vc.NetworkUtilities = info.NetworkUtilities;
             vc.ClearFacilities = System.Array.Empty<byte>();
@@ -2017,6 +2019,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         private const byte ReverseChargingFastSelectBits = 0xC1;
 
         /// <summary>
+        /// X.25 facility code 02 and X.75 utility code 02: throughput class (X.25 7.3.2, X.75 5.4.3.3).
+        /// </summary>
+        private const byte ThroughputClassCode = 0x02;
+
+        /// <summary>
         /// Finds the first element with a given code in a facility or utility field, before the first marker (00). Both
         /// fields use the same element classes (X.25 7.1, X.75 5.2): bits 8 and 7 of the code give one, two or three
         /// parameter octets, or a length octet first.
@@ -2083,42 +2090,64 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// 5.3.6 the same for fast select, which is a utility between networks. An element 01 already in the utility field
         /// (carried from the previous network) is replaced, so it is never sent twice (Annex F a) row 15: code repeated).
         /// </summary>
-        private static void MoveReverseChargingToUtilities(ref byte[] otherFacilities, ref byte[] utilities)
+        /// <remarks>
+        /// Since 2026-11-22 the same move is made for the throughput class (code 02, X.75 5.3.3: "No indication of throughput
+        /// classes should be present in the user facility field of the call request"). X.25 7.3.2 and X.75 5.4.3.3 code it
+        /// alike: bits 4-1 the class from the calling side, bits 8-5 from the called side. Until then it went to the next
+        /// network in the user facility field (RetroIO BUGS.md, "X.75 utilities not mapped").
+        /// </remarks>
+        /// <param name="code">
+        /// The facility code, which is also the utility code.
+        /// </param>
+        /// <param name="bits">
+        /// The parameter bits X.75 assigns; the rest are cleared.
+        /// </param>
+        /// <param name="otherFacilities">
+        /// The user facilities, without the element afterwards.
+        /// </param>
+        /// <param name="utilities">
+        /// The utility field, with the element afterwards.
+        /// </param>
+        private static void MoveElementToUtilities(byte code, byte bits, ref byte[] otherFacilities, ref byte[] utilities)
         {
-            int inUtilities = FindElement(utilities, ReverseChargingFastSelectCode, out int utilityLength);
+            int inUtilities = FindElement(utilities, code, out int utilityLength);
             if (inUtilities >= 0)
             {
                 utilities = Cut(utilities, inUtilities, utilityLength);
             }
 
-            int at = FindElement(otherFacilities, ReverseChargingFastSelectCode, out int length);
+            int at = FindElement(otherFacilities, code, out int length);
             if (at < 0 || length != 2)
             {
                 return;
             }
 
-            byte parameter = (byte)(otherFacilities[at + 1] & ReverseChargingFastSelectBits);
+            byte parameter = (byte)(otherFacilities[at + 1] & bits);
             otherFacilities = Cut(otherFacilities, at, length);
             if (parameter != 0)
             {
-                utilities = Prepend(ReverseChargingFastSelectCode, parameter, utilities);
+                utilities = Prepend(code, parameter, utilities);
             }
         }
 
         /// <summary>
         /// For a Call Request arriving at an STE: gives the X.75 reverse charging / fast select utility to the switch as the
         /// X.25 facility 01 it means (same bits, X.25 7.3.6), in front of the other facilities. The utility field keeps it as
-        /// well; the next STE replaces it (MoveReverseChargingToUtilities).
+        /// well; the next STE replaces it (MoveElementToUtilities).
         /// </summary>
-        private static byte[] ReverseChargingFromUtilities(byte[] utilities, byte[] otherFacilities)
+        /// <remarks>
+        /// Since 2026-11-22 also used for the throughput class utility (code 02, X.75 5.3.3), given to the switch as X.25
+        /// facility 02.
+        /// </remarks>
+        private static byte[] ElementFromUtilities(byte code, byte bits, byte[] utilities, byte[] otherFacilities)
         {
-            int at = FindElement(utilities, ReverseChargingFastSelectCode, out int length);
-            if (at < 0 || length != 2 || FindElement(otherFacilities, ReverseChargingFastSelectCode, out _) >= 0)
+            int at = FindElement(utilities, code, out int length);
+            if (at < 0 || length != 2 || FindElement(otherFacilities, code, out _) >= 0)
             {
                 return otherFacilities;
             }
 
-            return Prepend(ReverseChargingFastSelectCode, (byte)(utilities[at + 1] & ReverseChargingFastSelectBits), otherFacilities);
+            return Prepend(code, (byte)(utilities[at + 1] & bits), otherFacilities);
         }
 
         private static byte[] WithUtilityFlowControl(byte[] utilities, byte windowFromCalled, byte windowFromCalling, int packetFromCalled, int packetFromCalling)

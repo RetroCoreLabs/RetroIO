@@ -155,6 +155,38 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_sink.Last, Is.EqualTo(new byte[] { 0x10, 0x05, 0x0F, 0x00, 0x06, 0x43, 0x07, 0x07, 0x42, 0x08, 0x08, 0x00 }));
         }
 
+        /// <summary>
+        /// X.75 5.3.3: "No indication of throughput classes should be present in the user facility field of the call
+        /// request". The X.25 facility 02 goes out as utility 02 with the same octet (X.25 7.3.2, X.75 5.4.3.3: bits 4-1
+        /// from the calling side, 8-5 from the called side). Added 2026-11-22; before, it stayed a facility.
+        /// </summary>
+        [Test]
+        public void ThroughputClass_LeavesAsAUtility_NotAFacility()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            X25CallParameters p = new X25CallParameters(2, 2, 128, 128, new byte[] { 0x02, 0xAB }, Array.Empty<byte>());
+            Assert.That(ste.PlaceCall("2624", "2422", null, p), Is.EqualTo((ushort)1));
+
+            X25PacketInfo info = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(X75Utilities.TryDecode(info.NetworkUtilities, out X75Utilities u), Is.EqualTo(X75UtilityError.None));
+            Assert.That(u.HasThroughputClass, Is.True);
+            Assert.That(u.ThroughputFromCalling, Is.EqualTo((byte)0x0B));
+            Assert.That(u.ThroughputFromCalled, Is.EqualTo((byte)0x0A));
+            Assert.That(info.Facilities, Is.Empty, "no throughput class in the user facility field");
+        }
+
+        [Test]
+        public void AThroughputClassUtility_ReachesTheSwitchAsTheX25Facility()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ste.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, "2624", "2422",
+                networkUtilities: new byte[] { 0x81, 0x00, 0x00, 0x01, 0x02, 0xAB }));
+
+            Assert.That(ste.TryGetCallParameters(5, out X25CallParameters p), Is.True);
+            Assert.That(p.TryGetFacility(0x02, out byte[] parameter), Is.True);
+            Assert.That(parameter, Is.EqualTo(new byte[] { 0xAB }));
+        }
+
         [Test]
         public void ReverseCharging_LeavesAsAUtility_NotAFacility()
         {
