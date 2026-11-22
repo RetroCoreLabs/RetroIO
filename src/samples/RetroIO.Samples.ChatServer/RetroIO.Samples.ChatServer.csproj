@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Chat\src\RetroIO.Protocols.Xmsg.Chat.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Programs\src\RetroIO.Protocols.Xmsg.Programs.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Plugins.Client\src\RetroIO.Protocols.Xmsg.Plugins.Client.csproj" />
   </ItemGroup>
 

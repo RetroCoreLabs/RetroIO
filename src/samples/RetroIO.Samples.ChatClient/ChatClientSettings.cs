@@ -5,9 +5,7 @@
 // RetroIO - Accessing yesterday's data with today's standards
 //
 
-using System;
-using System.IO;
-using System.Text.Json;
+using RetroIO.Protocols.Xmsg.Programs.Settings;
 
 namespace RetroIO.Samples.ChatClient
 {
@@ -66,24 +64,7 @@ namespace RetroIO.Samples.ChatClient
         /// </returns>
         public static ChatClientSettings? Load(string path, out string? problem)
         {
-            problem = null;
-            JsonSerializerOptions json = new JsonSerializerOptions { WriteIndented = true };
-            try
-            {
-                if (!File.Exists(path))
-                {
-                    ChatClientSettings fresh = new ChatClientSettings();
-                    File.WriteAllText(path, JsonSerializer.Serialize(fresh, json));
-                    return fresh;
-                }
-
-                return JsonSerializer.Deserialize<ChatClientSettings>(File.ReadAllText(path)) ?? new ChatClientSettings();
-            }
-            catch (Exception ex) when (ex is IOException || ex is JsonException || ex is UnauthorizedAccessException)
-            {
-                problem = ex.Message;
-                return null;
-            }
+            return ProgramSettingsFile.Load<ChatClientSettings>(path, out problem);
         }
     }
 }
