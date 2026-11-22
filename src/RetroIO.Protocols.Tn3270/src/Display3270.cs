@@ -46,13 +46,35 @@ namespace RetroIO.Protocols.Tn3270
     /// <see cref="GetFieldAttributeFor"/>.
     /// </para>
     /// <para>
-    /// Not built yet, and loud about it through <see cref="ProtocolError"/>: Write Structured Field
-    /// (so no Query Reply), partitions, 16-bit addresses, insert mode, field validation (mandatory
-    /// fill / entry, trigger), selector pen, Erase EOF / Erase Input / DUP / Field Mark keys.
+    /// Write Structured Field is handled for Read Partition (Query, Query List, and the three reads
+    /// of partition 0), Erase/Reset, Set Reply Mode, Outbound 3270DS and the file transfer field
+    /// X'D0', which goes to <see cref="FileTransferField"/>.
+    /// </para>
+    /// <para>
+    /// Not built yet, and loud about it through <see cref="ProtocolError"/>: partitions other than
+    /// the implicit partition 0, 16-bit addresses, every other structured field, and the BSC Copy
+    /// command inside Outbound 3270DS.
     /// </para>
     /// </remarks>
     public sealed class Display3270
     {
+        // The character attribute types an SA order may carry (p. 4-16): highlighting, foreground
+        // colour, character set, background colour, transparency.
+        private static readonly byte[] CharacterAttributeTypes = { 0x41, 0x42, 0x43, 0x45, 0x46 };
+
+        // The query replies this terminal sends, in ascending code order (p. 6-81: Null is never listed).
+        private static readonly byte[] QueryCodesWithoutFileTransfer =
+        {
+            QueryCode.Summary, QueryCode.UsableArea, QueryCode.CharacterSets, QueryCode.Color,
+            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.ImplicitPartition,
+        };
+
+        private static readonly byte[] QueryCodesWithFileTransfer =
+        {
+            QueryCode.Summary, QueryCode.UsableArea, QueryCode.CharacterSets, QueryCode.Color,
+            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.Ddm, QueryCode.ImplicitPartition,
+        };
+
         private readonly int _defaultRows;
         private readonly int _defaultColumns;
         private readonly int _alternateRows;
@@ -88,6 +110,18 @@ namespace RetroIO.Protocols.Tn3270
         private byte _saTransparency;
 
         private byte _lastAid = Aid.None;
+
+        // Set Reply Mode (p. 5-61): the form of later inbound data, and for Character mode the
+        // character attribute types that are sent with SA orders.
+        private ReplyMode _replyMode = ReplyMode.Field;
+        private byte[] _replyTypes = Array.Empty<byte>();
+
+        // The character attribute values last sent inbound with SA, in the order of
+        // CharacterAttributeTypes. Every inbound record starts with all at default (p. 3-12, 3-13).
+        private readonly byte[] _inboundSa = new byte[5];
+
+        private int _fileTransferLimit;
+        private CodePage _codePage = CodePage.Cp037;
 
         /// <summary>
         /// Creates a display. The default size is used after Erase/Write, the alternate size after
@@ -126,21 +160,36 @@ namespace RetroIO.Protocols.Tn3270
         }
 
         /// <summary>
-        /// A record the terminal sends to the host (an AID reply or a read reply). The span is only
-        /// valid during the call.
+        /// A record the terminal sends to the host: an AID reply, a read reply or query replies.
         /// </summary>
+        /// <remarks>
+        /// The span is only valid during the call.
+        /// </remarks>
         public event InboundRecordHandler? InboundRecord;
 
         /// <summary>
-        /// The host sent something this model rejects or has not built. The record is not applied
-        /// past that point. The text says what and why.
+        /// The host sent something this model rejects or has not built.
         /// </summary>
-        public event Action<string>? ProtocolError;
+        /// <remarks>
+        /// The record is not applied past that point. The text says what and why, with the page of
+        /// the manual that decides it.
+        /// </remarks>
+        public event ProtocolErrorHandler? ProtocolError;
 
         /// <summary>
         /// The WCC asked to sound the alarm (GA23-0059-4 p. 3-3).
         /// </summary>
-        public event Action? Alarm;
+        public event AlarmHandler? Alarm;
+
+        /// <summary>
+        /// A file transfer structured field (ID X'D0') arrived in a Write Structured Field.
+        /// </summary>
+        /// <remarks>
+        /// Raised only while <see cref="FileTransferLimit"/> is above 0; otherwise such a field is a
+        /// <see cref="ProtocolError"/>. The span is the whole structured field, length bytes first, and
+        /// is only valid during the call. <see cref="IndFileTransfer"/> handles it.
+        /// </remarks>
+        public event StructuredFieldHandler? FileTransferField;
 
         /// <summary>
         /// Gets the number of rows on the screen now.
@@ -166,6 +215,95 @@ namespace RetroIO.Protocols.Tn3270
         /// Gets why the keyboard is locked, or <see cref="KeyboardLock.None"/>.
         /// </summary>
         public KeyboardLock Lock { get; private set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the screen shows colour, as a 3279 does.
+        /// </summary>
+        /// <remarks>
+        /// Only changes the Color query reply (GA23-0059-4 p. 6-29, 6-30): with colour every value
+        /// X'F1'-X'F7' is shown as itself; without, every value is shown as the default colour.
+        /// The colour attributes are stored either way. Default true.
+        /// </remarks>
+        public bool Color { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the width of one character cell, in screen pixels, as the Usable Area and
+        /// Character Sets query replies report it (AW and SDW, p. 6-87, 6-22).
+        /// </summary>
+        /// <remarks>
+        /// The renderer knows its font and should set this. The default of 9 is an ASSUMPTION (the
+        /// usual 3278 cell width), not a measured value.
+        /// </remarks>
+        public int CellWidth { get; set; } = 9;
+
+        /// <summary>
+        /// Gets or sets the height of one character cell, in screen pixels (AH and SDH, p. 6-87, 6-22).
+        /// </summary>
+        /// <remarks>
+        /// The renderer should set this. The default of 16 is an ASSUMPTION, not a measured value.
+        /// </remarks>
+        public int CellHeight { get; set; } = 16;
+
+        /// <summary>
+        /// Gets or sets the largest file transfer structured field transmission, in bytes, both
+        /// ways; 0 switches file transfer off.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Above 0, the Query Reply includes DDM (X'95') with this value as LIMIN and LIMOUT
+        /// (GA23-0059-4 p. 6-37), which is what makes IND$FILE choose DFT mode, and X'D0' fields go
+        /// to <see cref="FileTransferField"/>. A WSF whose X'D0' fields add up to more than this is
+        /// rejected (p. 6-37).
+        /// </para>
+        /// <para>
+        /// 0 is never sent as a limit, because to the host it means "no limit" (p. 6-37).
+        /// </para>
+        /// </remarks>
+        public int FileTransferLimit
+        {
+            get => _fileTransferLimit;
+            set
+            {
+                if (value < 0 || value > 0x7FFF)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "The file transfer limit is 0 (off) or 1 to 32767 bytes.");
+                }
+
+                _fileTransferLimit = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets the inbound reply mode the host last set with Set Reply Mode.
+        /// </summary>
+        public ReplyMode ReplyMode => _replyMode;
+
+        /// <summary>
+        /// Gets or sets the base code page that turns typed characters into bytes, and that the
+        /// Character Sets query reply names. Default 037.
+        /// </summary>
+        /// <remarks>
+        /// Set it before connecting: the host learns the page from the query reply, and bytes
+        /// already in the buffer stay as they are. Only base pages are allowed, never
+        /// <see cref="CodePage.Cp310"/>, which is the Graphic Escape set beside every base page.
+        /// </remarks>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the value is <see cref="CodePage.Cp310"/>.
+        /// </exception>
+        public CodePage CodePage
+        {
+            get => _codePage;
+            set
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                if (value == CodePage.Cp310)
+                {
+                    throw new ArgumentException("Code page 310 is the Graphic Escape set, not a base page.", nameof(value));
+                }
+
+                _codePage = value;
+            }
+        }
 
         /// <summary>
         /// Gets a value indicating whether the screen has at least one field (a "formatted" screen).
@@ -293,6 +431,98 @@ namespace RetroIO.Protocols.Tn3270
         public byte GetCharacterHighlight(int address) => _charHighlight[address];
 
         /// <summary>
+        /// The character set of the field at a field attribute address (X'00' = default).
+        /// </summary>
+        /// <remarks>
+        /// X'F1' is the Graphic Escape set, code page 310: the Character Sets query reply gives it
+        /// local ID X'F1' (p. 6-25).
+        /// </remarks>
+        /// <param name="fieldAttributeAddress">
+        /// The field attribute's address.
+        /// </param>
+        /// <returns>
+        /// The character set's local ID (p. 4-19).
+        /// </returns>
+        public byte GetFieldCharacterSet(int fieldAttributeAddress) => _fieldCharset[fieldAttributeAddress];
+
+        /// <summary>
+        /// The character set character attribute of one position (X'00' = take the field's).
+        /// </summary>
+        /// <param name="address">
+        /// The buffer address.
+        /// </param>
+        /// <returns>
+        /// The character set's local ID.
+        /// </returns>
+        public byte GetCharacterCharacterSet(int address) => _charCharset[address];
+
+        /// <summary>
+        /// The background colour of the field at a field attribute address (X'00' = default).
+        /// </summary>
+        /// <param name="fieldAttributeAddress">
+        /// The field attribute's address.
+        /// </param>
+        /// <returns>
+        /// The colour value (p. 4-18).
+        /// </returns>
+        public byte GetFieldBackground(int fieldAttributeAddress) => _fieldBackground[fieldAttributeAddress];
+
+        /// <summary>
+        /// The background colour character attribute of one position (X'00' = take the field's).
+        /// </summary>
+        /// <param name="address">
+        /// The buffer address.
+        /// </param>
+        /// <returns>
+        /// The colour value.
+        /// </returns>
+        public byte GetCharacterBackground(int address) => _charBackground[address];
+
+        /// <summary>
+        /// The transparency of the field at a field attribute address (X'00' = default).
+        /// </summary>
+        /// <param name="fieldAttributeAddress">
+        /// The field attribute's address.
+        /// </param>
+        /// <returns>
+        /// The transparency value (p. 4-20).
+        /// </returns>
+        public byte GetFieldTransparency(int fieldAttributeAddress) => _fieldTransparency[fieldAttributeAddress];
+
+        /// <summary>
+        /// The transparency character attribute of one position (X'00' = take the field's).
+        /// </summary>
+        /// <param name="address">
+        /// The buffer address.
+        /// </param>
+        /// <returns>
+        /// The transparency value.
+        /// </returns>
+        public byte GetCharacterTransparency(int address) => _charTransparency[address];
+
+        /// <summary>
+        /// The field validation attribute of the field at a field attribute address (p. 4-21).
+        /// </summary>
+        /// <param name="fieldAttributeAddress">
+        /// The field attribute's address.
+        /// </param>
+        /// <returns>
+        /// The validation bits: see <see cref="FieldValidation"/>.
+        /// </returns>
+        public byte GetFieldValidation(int fieldAttributeAddress) => _fieldValidation[fieldAttributeAddress];
+
+        /// <summary>
+        /// The field outlining attribute of the field at a field attribute address (p. 4-20).
+        /// </summary>
+        /// <param name="fieldAttributeAddress">
+        /// The field attribute's address.
+        /// </param>
+        /// <returns>
+        /// The outlining bits: see <see cref="FieldOutlining"/>.
+        /// </returns>
+        public byte GetFieldOutlining(int fieldAttributeAddress) => _fieldOutlining[fieldAttributeAddress];
+
+        /// <summary>
         /// Applies one complete outbound record (telnet framing already removed).
         /// </summary>
         /// <param name="record">
@@ -337,7 +567,7 @@ namespace RetroIO.Protocols.Tn3270
                     break;
 
                 case Command3270.WriteStructuredField:
-                    Error("Write Structured Field (X'F3') is not built yet, so Query Reply and the other structured fields are not answered.");
+                    WriteStructuredField(record.Slice(1));
                     break;
 
                 default:
@@ -366,7 +596,7 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            if (!CodePage037.TryFromUnicode(c, out byte ebcdic))
+            if (!_codePage.TryFromUnicode(c, out byte ebcdic))
             {
                 return false;
             }
@@ -498,7 +728,26 @@ namespace RetroIO.Protocols.Tn3270
             return true;
         }
 
-        private void Write(ReadOnlySpan<byte> data, bool erase, bool alternate)
+        /// <summary>
+        /// Sends one structured field to the host as its own inbound record: AID X'88', then the
+        /// field (GA23-0059-4 p. 3-10).
+        /// </summary>
+        /// <remarks>
+        /// For the replies of <see cref="IndFileTransfer"/>; any other inbound structured field a
+        /// caller builds goes the same way.
+        /// </remarks>
+        /// <param name="field">
+        /// The whole structured field, its two length bytes first.
+        /// </param>
+        public void SendStructuredFieldReply(ReadOnlySpan<byte> field)
+        {
+            _inbound.Clear();
+            AppendByte(Aid.StructuredField);
+            AppendBytes(field);
+            Send();
+        }
+
+        private void Write(ReadOnlySpan<byte> data, bool erase, bool alternate, bool fromStructuredField = false)
         {
             // "A write command with no WCC and no data is a no-op" (p. 3-2); an EW with no WCC is a
             // no-op too, nothing is erased (p. 3-6).
@@ -507,10 +756,22 @@ namespace RetroIO.Protocols.Tn3270
                 return;
             }
 
+            byte wcc = data[0];
+            if (fromStructuredField && !erase)
+            {
+                // A Write inside Outbound 3270DS ignores WCC bits 0-3 (p. 5-47).
+                wcc = (byte)(wcc & 0x0F);
+            }
+
             if (erase)
             {
                 // Erase/Write steps (p. 3-6): screen size, nulls, attributes to X'00', cursor to 0.
-                if (alternate)
+                // Inside Outbound 3270DS the size does not change (p. 5-47).
+                if (fromStructuredField)
+                {
+                    Resize(Rows, Columns);
+                }
+                else if (alternate)
                 {
                     Resize(_alternateRows, _alternateColumns);
                 }
@@ -520,9 +781,14 @@ namespace RetroIO.Protocols.Tn3270
                 }
 
                 CursorAddress = 0;
-            }
 
-            byte wcc = data[0];
+                if ((wcc & Wcc.Reset) != 0)
+                {
+                    // EW or EWA with the WCC reset bit puts the reply mode back to Field (p. 5-62).
+                    _replyMode = ReplyMode.Field;
+                    _replyTypes = Array.Empty<byte>();
+                }
+            }
             if ((wcc & Wcc.ResetMdt) != 0)
             {
                 // Reset MDT happens before any data or order (p. 3-3).
@@ -753,8 +1019,479 @@ namespace RetroIO.Protocols.Tn3270
             {
                 Alarm?.Invoke();
             }
-
         }
+
+        private void WriteStructuredField(ReadOnlySpan<byte> data)
+        {
+            // First pass: check every field's length, that Read Partition is the last one, and the
+            // file transfer total, before anything is applied. Each field is a 2-byte length that
+            // counts itself, then the ID; length 0 means the field runs to the end (p. 5-1).
+            int fileTransferBytes = 0;
+            int pos = 0;
+            while (pos < data.Length)
+            {
+                if (!NextStructuredField(data, pos, out int length))
+                {
+                    return;
+                }
+
+                byte id = data[pos + 2];
+                if (id == StructuredFieldId.ReadPartition && pos + length < data.Length)
+                {
+                    Error("Read Partition must be the last structured field in the transmission (p. 5-48).");
+                    return;
+                }
+
+                if (id == StructuredFieldId.DataTransfer)
+                {
+                    fileTransferBytes += length;
+                }
+
+                pos += length;
+            }
+
+            if (fileTransferBytes > 0)
+            {
+                if (_fileTransferLimit == 0)
+                {
+                    Error("A file transfer structured field (X'D0') arrived, but file transfer is off, so the DDM query reply was never sent.");
+                    return;
+                }
+
+                if (fileTransferBytes > _fileTransferLimit)
+                {
+                    Error("The file transfer fields add up to " + fileTransferBytes + " bytes, more than the " + _fileTransferLimit + " this terminal reported as LIMOUT (p. 6-37).");
+                    return;
+                }
+            }
+
+            pos = 0;
+            while (pos < data.Length)
+            {
+                NextStructuredField(data, pos, out int length);
+                ReadOnlySpan<byte> field = data.Slice(pos, length);
+                pos += length;
+
+                bool ok;
+                switch (field[2])
+                {
+                    case StructuredFieldId.ReadPartition:
+                        ok = ReadPartition(field);
+                        break;
+                    case StructuredFieldId.EraseReset:
+                        ok = EraseReset(field);
+                        break;
+                    case StructuredFieldId.SetReplyMode:
+                        ok = SetReplyMode(field);
+                        break;
+                    case StructuredFieldId.Outbound3270DS:
+                        ok = Outbound3270DS(field);
+                        break;
+                    case StructuredFieldId.DataTransfer:
+                        FileTransferField?.Invoke(field);
+                        ok = true;
+                        break;
+                    default:
+                        Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Set Reply Mode, Outbound 3270DS and X'D0' file transfer are).");
+                        ok = false;
+                        break;
+                }
+
+                if (!ok)
+                {
+                    // A rejected field stops the rest of the transmission (p. 5-1).
+                    return;
+                }
+            }
+        }
+
+        private bool NextStructuredField(ReadOnlySpan<byte> data, int pos, out int length)
+        {
+            length = 0;
+            if (pos + 3 > data.Length)
+            {
+                Error("Structured field cut short: fewer than 3 bytes left for its length and ID (p. 5-1).");
+                return false;
+            }
+
+            length = (data[pos] << 8) | data[pos + 1];
+            if (length == 0)
+            {
+                length = data.Length - pos;
+            }
+
+            if (length < 3 || pos + length > data.Length)
+            {
+                Error("Structured field length " + length + " does not fit the " + (data.Length - pos) + " bytes left (p. 5-1).");
+                return false;
+            }
+
+            byte id = data[pos + 2];
+            if (id == 0x0F || id == 0x10)
+            {
+                // Two-byte IDs begin with X'0F' or X'10' (p. 5-2); none of them is built.
+                Error("Structured field with the two-byte ID X'" + Hex(id) + (length > 3 ? Hex(data[pos + 3]) : string.Empty) + "' is not built.");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool ReadPartition(ReadOnlySpan<byte> field)
+        {
+            // L, X'01', PID, TYPE, then for Query List the flags byte and the codes (p. 5-47).
+            if (field.Length < 5)
+            {
+                Error("Read Partition shorter than 5 bytes (p. 5-47).");
+                return false;
+            }
+
+            byte pid = field[3];
+            byte type = field[4];
+            switch (type)
+            {
+                case 0x02:
+                    if (pid != 0xFF)
+                    {
+                        Error("Read Partition Query with partition X'" + Hex(pid) + "', which must be X'FF' (p. 5-48).");
+                        return false;
+                    }
+
+                    SendQueryReplies(Array.Empty<byte>(), all: true);
+                    return true;
+
+                case 0x03:
+                {
+                    if (pid != 0xFF)
+                    {
+                        Error("Read Partition Query List with partition X'" + Hex(pid) + "', which must be X'FF' (p. 5-48).");
+                        return false;
+                    }
+
+                    if (field.Length < 6)
+                    {
+                        Error("Read Partition Query List without its request type byte (p. 5-47).");
+                        return false;
+                    }
+
+                    // Bits 0-1 of byte 5, IBM bit 0 being the high bit (p. 5-47, 5-48).
+                    int requestType = field[5] >> 6;
+                    ReadOnlySpan<byte> codes = field.Slice(6);
+                    switch (requestType)
+                    {
+                        case 0:
+                            SendQueryReplies(codes, all: false);
+                            return true;
+                        case 1:
+                            // "Equivalent": everything a Query sends, plus the listed codes, no
+                            // duplicates. A Query sends every reply this terminal has, so the list
+                            // adds nothing.
+                            SendQueryReplies(codes, all: true);
+                            return true;
+                        case 2:
+                            // "All" overrides the list.
+                            SendQueryReplies(Array.Empty<byte>(), all: true);
+                            return true;
+                        default:
+                            Error("Read Partition Query List with the reserved request type B'11' (p. 5-47).");
+                            return false;
+                    }
+                }
+
+                case Command3270.ReadBuffer:
+                case Command3270.ReadModified:
+                case Command3270.ReadModifiedAll:
+                    if (pid != 0x00)
+                    {
+                        Error("Read Partition of partition X'" + Hex(pid) + "': only the implicit partition 0 exists, partitions are not built (p. 5-48).");
+                        return false;
+                    }
+
+                    // Partition 0 answers in plain 3270 format, not in Inbound 3270DS (p. 6-7). The
+                    // manual contradicts itself on the AID: p. 5-49 step 8 says X'61', but p. 3-9
+                    // note 2 says X'61' can never be the first byte of an inbound stream, and in
+                    // plain 3270 format the AID is the first byte. The current AID is sent, which
+                    // obeys p. 3-9.
+                    if (type == Command3270.ReadBuffer)
+                    {
+                        SendReadBuffer(_lastAid);
+                    }
+                    else
+                    {
+                        SendReadModified(_lastAid, all: type == Command3270.ReadModifiedAll);
+                    }
+
+                    return true;
+
+                default:
+                    Error("Read Partition type X'" + Hex(type) + "' is reserved and rejected (p. 5-48).");
+                    return false;
+            }
+        }
+
+        private bool EraseReset(ReadOnlySpan<byte> field)
+        {
+            // L, X'03', flags; bit 0 (X'80') IPZ: the implicit partition gets the alternate size,
+            // otherwise the default size (p. 5-15). All partitions are destroyed and implicit
+            // partition 0 is made; with no partitions built that is the screen itself.
+            if (field.Length < 4)
+            {
+                Error("Erase/Reset without its flags byte (p. 5-15).");
+                return false;
+            }
+
+            if ((field[3] & 0x80) != 0)
+            {
+                Resize(_alternateRows, _alternateColumns);
+            }
+            else
+            {
+                Resize(_defaultRows, _defaultColumns);
+            }
+
+            CursorAddress = 0;
+            _replyMode = ReplyMode.Field;
+            _replyTypes = Array.Empty<byte>();
+            return true;
+        }
+
+        private bool SetReplyMode(ReadOnlySpan<byte> field)
+        {
+            // L, X'09', PID, MODE, then the attribute type list for Character mode (p. 5-61).
+            if (field.Length < 5)
+            {
+                Error("Set Reply Mode shorter than 5 bytes (p. 5-61).");
+                return false;
+            }
+
+            if (field[3] != 0x00)
+            {
+                Error("Set Reply Mode for partition X'" + Hex(field[3]) + "': only the implicit partition 0 exists, partitions are not built.");
+                return false;
+            }
+
+            byte mode = field[4];
+            if (mode > (byte)ReplyMode.Character)
+            {
+                Error("Set Reply Mode X'" + Hex(mode) + "' is reserved and rejected (p. 5-62).");
+                return false;
+            }
+
+            ReadOnlySpan<byte> types = mode == (byte)ReplyMode.Character ? field.Slice(5) : ReadOnlySpan<byte>.Empty;
+            for (int i = 0; i < types.Length; i++)
+            {
+                if (Array.IndexOf(CharacterAttributeTypes, types[i]) < 0)
+                {
+                    Error("Set Reply Mode lists attribute type X'" + Hex(types[i]) + "', which is not a character attribute type (p. 5-62).");
+                    return false;
+                }
+            }
+
+            _replyMode = (ReplyMode)mode;
+            _replyTypes = types.ToArray();
+            return true;
+        }
+
+        private bool Outbound3270DS(ReadOnlySpan<byte> field)
+        {
+            // L, X'40', PID, CMND, then the WCC (none for EAU) and the orders and data (p. 5-40).
+            if (field.Length < 5)
+            {
+                Error("Outbound 3270DS shorter than 5 bytes (p. 5-40).");
+                return false;
+            }
+
+            if (field[3] != 0x00)
+            {
+                Error("Outbound 3270DS for partition X'" + Hex(field[3]) + "': only partition 0 exists, partitions are not built (p. 5-40).");
+                return false;
+            }
+
+            ReadOnlySpan<byte> rest = field.Slice(5);
+            switch (field[4])
+            {
+                case Command3270.Write:
+                    Write(rest, erase: false, alternate: false, fromStructuredField: true);
+                    return true;
+                case Command3270.EraseWrite:
+                    Write(rest, erase: true, alternate: false, fromStructuredField: true);
+                    return true;
+                case Command3270.EraseWriteAlternate:
+                    Write(rest, erase: true, alternate: true, fromStructuredField: true);
+                    return true;
+                case Command3270.EraseAllUnprotected:
+                    EraseAllUnprotected();
+                    return true;
+                case 0xF7:
+                    Error("Outbound 3270DS with BSC Copy (X'F7') is not built: it needs remote BSC, which TN3270 is not (p. 5-41).");
+                    return false;
+                default:
+                    Error("Outbound 3270DS command X'" + Hex(field[4]) + "' is reserved and rejected (p. 5-40).");
+                    return false;
+            }
+        }
+
+        private void SendQueryReplies(ReadOnlySpan<byte> listed, bool all)
+        {
+            // AID X'88' once, then the replies in ascending code order, each code once however often
+            // it is listed (p. 3-10, 5-48). Summary is among them for Query, Equivalent and All, and
+            // for a list only when the list names it (p. 6-81).
+            _inbound.Clear();
+            AppendByte(Aid.StructuredField);
+
+            bool any = false;
+            ReadOnlySpan<byte> supported = SupportedQueryCodes();
+            for (int i = 0; i < supported.Length; i++)
+            {
+                byte code = supported[i];
+                if (all || listed.IndexOf(code) >= 0)
+                {
+                    AppendQueryReply(code);
+                    any = true;
+                }
+            }
+
+            if (!any)
+            {
+                // None of the listed codes is supported, or the list is empty: Null (p. 5-48, 6-67).
+                AppendBytes(stackalloc byte[] { 0x00, 0x04, StructuredFieldId.QueryReply, QueryCode.Null });
+            }
+
+            Send();
+        }
+
+        private ReadOnlySpan<byte> SupportedQueryCodes()
+        {
+            // Ascending order, the order they are sent in. DDM only while file transfer is on.
+            return _fileTransferLimit > 0 ? QueryCodesWithFileTransfer : QueryCodesWithoutFileTransfer;
+        }
+
+        private void AppendQueryReply(byte code)
+        {
+            int start = _inbound.WrittenCount;
+            AppendBytes(stackalloc byte[] { 0x00, 0x00, StructuredFieldId.QueryReply, code });
+            switch (code)
+            {
+                case QueryCode.Summary:
+                    // The codes of every reply this terminal has (p. 6-81).
+                    AppendBytes(SupportedQueryCodes());
+                    break;
+
+                case QueryCode.UsableArea:
+                {
+                    // p. 6-85 to 6-90. Flags: 12/14-bit addressing (X'01'), no special features.
+                    // W and H are the largest screen; units inches (X'00') with Xr and Yr X'FFFFFFFF',
+                    // "cannot be determined", which is allowed without Load PS (p. 6-89).
+                    int columns = Math.Max(_defaultColumns, _alternateColumns);
+                    int rows = Math.Max(_defaultRows, _alternateRows);
+                    AppendBytes(stackalloc byte[] { 0x01, 0x00 });
+                    AppendUInt16(columns);
+                    AppendUInt16(rows);
+                    AppendBytes(stackalloc byte[] { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+                    AppendByte((byte)CellWidth);
+                    AppendByte((byte)CellHeight);
+                    AppendUInt16(columns * rows);
+                    break;
+                }
+
+                case QueryCode.CharacterSets:
+                    // p. 6-21 to 6-28. Flags X'82': ALT (Graphic Escape is supported) and GF (the
+                    // CGCSGID fields are present). SDW, SDH, FORM 0, descriptor length 7.
+                    AppendBytes(stackalloc byte[] { 0x82, 0x00 });
+                    AppendByte((byte)CellWidth);
+                    AppendByte((byte)CellHeight);
+                    AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x00, 0x00, 0x07 });
+
+                    // Base set: SET 0, flags 0, local ID 0, then character set and code page.
+                    AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x00 });
+                    AppendUInt16(_codePage.CharacterSet);
+                    AppendUInt16(_codePage.Number);
+
+                    // Graphic Escape set: SET 1, flags 0, local ID X'F1', code page 310.
+                    AppendBytes(stackalloc byte[] { 0x01, 0x00, 0xF1 });
+                    AppendUInt16(CodePage.Cp310.CharacterSet);
+                    AppendUInt16(CodePage.Cp310.Number);
+                    break;
+
+                case QueryCode.Color:
+                {
+                    // p. 6-29, 6-30. Flags 0, 8 pairs: the default X'00' is green (X'F4'), then
+                    // X'F1'-X'F7' shown as themselves on a colour screen, as the default on a
+                    // monochrome one.
+                    AppendBytes(stackalloc byte[] { 0x00, 0x08, 0x00, 0xF4 });
+                    for (byte c = 0xF1; c <= 0xF7; c++)
+                    {
+                        AppendByte(c);
+                        AppendByte(Color ? c : (byte)0x00);
+                    }
+
+                    break;
+                }
+
+                case QueryCode.Highlighting:
+                    // p. 6-56. 5 pairs: default X'00' is normal, normal, blink, reverse, underscore.
+                    AppendBytes(stackalloc byte[] { 0x05, 0x00, 0xF0, 0xF0, 0xF0, 0xF1, 0xF1, 0xF2, 0xF2, 0xF4, 0xF4 });
+                    break;
+
+                case QueryCode.ReplyModes:
+                    // p. 6-74: Field, Extended Field, Character.
+                    AppendBytes(stackalloc byte[] { 0x00, 0x01, 0x02 });
+                    break;
+
+                case QueryCode.Ddm:
+                    // p. 6-37. Flags 0, LIMIN, LIMOUT, one subset, subset ID 1.
+                    AppendBytes(stackalloc byte[] { 0x00, 0x00 });
+                    AppendUInt16(_fileTransferLimit);
+                    AppendUInt16(_fileTransferLimit);
+                    AppendBytes(stackalloc byte[] { 0x01, 0x01 });
+                    break;
+
+                case QueryCode.ImplicitPartition:
+                    // p. 6-59 to 6-61. Flags 0, then the size self-defining parameter X'01', length
+                    // 11: flags 0, default width and height, alternate width and height.
+                    AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x0B, 0x01, 0x00 });
+                    AppendUInt16(_defaultColumns);
+                    AppendUInt16(_defaultRows);
+                    AppendUInt16(_alternateColumns);
+                    AppendUInt16(_alternateRows);
+                    break;
+            }
+
+            // Fill in the length, which counts itself.
+            int length = _inbound.WrittenCount - start;
+            Span<byte> written = MemoryMarshalWritten(start);
+            written[0] = (byte)(length >> 8);
+            written[1] = (byte)length;
+        }
+
+        private Span<byte> MemoryMarshalWritten(int start)
+        {
+            // ArrayBufferWriter only hands out the written bytes read-only; the length bytes are ours.
+            return System.Runtime.InteropServices.MemoryMarshal.AsMemory(_inbound.WrittenMemory).Span.Slice(start);
+        }
+
+        private void AppendByte(byte value)
+        {
+            Span<byte> s = _inbound.GetSpan(1);
+            s[0] = value;
+            _inbound.Advance(1);
+        }
+
+        private void AppendBytes(ReadOnlySpan<byte> values)
+        {
+            values.CopyTo(_inbound.GetSpan(values.Length));
+            _inbound.Advance(values.Length);
+        }
+
+        private void AppendUInt16(int value)
+        {
+            Span<byte> s = _inbound.GetSpan(2);
+            s[0] = (byte)(value >> 8);
+            s[1] = (byte)value;
+            _inbound.Advance(2);
+        }
+
+        private static string Hex(byte value) => value.ToString("X2", System.Globalization.CultureInfo.InvariantCulture);
 
         private int ProgramTab(int address, bool nullFill, out bool nullingWrapped)
         {
@@ -960,10 +1697,11 @@ namespace RetroIO.Protocols.Tn3270
 
         private void SendReadModified(byte aid, bool all)
         {
+            // Read Modified is the same in Field and Extended field mode: SBA and the data, no
+            // attributes. Character mode adds SA orders for the listed types (p. 5-61, 5-62).
             _inbound.Clear();
-            Span<byte> one = _inbound.GetSpan(1);
-            one[0] = aid;
-            _inbound.Advance(1);
+            Array.Clear(_inboundSa);
+            AppendByte(aid);
 
             if (!all && Aid.IsShortRead(aid))
             {
@@ -996,9 +1734,7 @@ namespace RetroIO.Protocols.Tn3270
                     continue;
                 }
 
-                Span<byte> sba = _inbound.GetSpan(1);
-                sba[0] = Order3270.SetBufferAddress;
-                _inbound.Advance(1);
+                AppendByte(Order3270.SetBufferAddress);
                 int a = Next(fa);
                 AppendAddress(a);
                 while (!_isFieldAttribute[a])
@@ -1013,58 +1749,133 @@ namespace RetroIO.Protocols.Tn3270
 
         private void SendReadBuffer(byte aid)
         {
-            // Field reply mode: AID, cursor, then every position from 0 with SF before each field
-            // attribute; nulls are NOT left out (p. 3-11, 4-10).
+            // AID, cursor, then every position from 0; nulls are NOT left out (p. 3-11, 4-10). How a
+            // field attribute goes depends on the reply mode (p. 5-61, 5-62):
+            //  - Field: SF and the attribute.
+            //  - Extended field and Character: SFE with the attribute and every extended field
+            //    attribute that is not at its default.
+            //  - Character also sends SA before a character whose listed character attributes
+            //    differ from the ones last sent in this record, which start at default.
             _inbound.Clear();
-            Span<byte> one = _inbound.GetSpan(1);
-            one[0] = aid;
-            _inbound.Advance(1);
+            Array.Clear(_inboundSa);
+            AppendByte(aid);
             AppendAddress(CursorAddress);
             int size = Size;
             for (int a = 0; a < size; a++)
             {
-                Span<byte> s = _inbound.GetSpan(3);
-                int n = 0;
                 if (_isFieldAttribute[a])
                 {
-                    s[n++] = Order3270.StartField;
-
-                    // Bits 0-1 made printable per Figure D-1 (p. 4-13).
-                    s[n++] = BufferAddress.EncodeSixBits(_buffer[a]);
+                    AppendFieldAttribute(a);
+                    continue;
                 }
-                else
+
+                AppendCharacterAttributes(a);
+                if (_graphicEscape[a])
                 {
-                    if (_graphicEscape[a])
-                    {
-                        s[n++] = Order3270.GraphicEscape;
-                    }
-
-                    s[n++] = _buffer[a];
+                    AppendByte(Order3270.GraphicEscape);
                 }
 
-                _inbound.Advance(n);
+                AppendByte(_buffer[a]);
             }
 
             Send();
         }
 
+        private void AppendFieldAttribute(int address)
+        {
+            // Bits 0-1 made printable per Figure D-1 (p. 4-13).
+            byte attribute = BufferAddress.EncodeSixBits(_buffer[address]);
+            if (_replyMode == ReplyMode.Field)
+            {
+                AppendByte(Order3270.StartField);
+                AppendByte(attribute);
+                return;
+            }
+
+            Span<byte> pairs = stackalloc byte[16];
+            int n = 0;
+            pairs[n++] = 0xC0;
+            pairs[n++] = attribute;
+            AddPair(pairs, ref n, 0x41, _fieldHighlight[address]);
+            AddPair(pairs, ref n, 0x42, _fieldColor[address]);
+            AddPair(pairs, ref n, 0x43, _fieldCharset[address]);
+            AddPair(pairs, ref n, 0x45, _fieldBackground[address]);
+            AddPair(pairs, ref n, 0x46, _fieldTransparency[address]);
+            AddPair(pairs, ref n, 0xC1, _fieldValidation[address]);
+            AddPair(pairs, ref n, 0xC2, _fieldOutlining[address]);
+            AppendByte(Order3270.StartFieldExtended);
+            AppendByte((byte)(n / 2));
+            AppendBytes(pairs.Slice(0, n));
+        }
+
+        private static void AddPair(Span<byte> pairs, ref int n, byte type, byte value)
+        {
+            // Default values are not sent (p. 5-61).
+            if (value != 0)
+            {
+                pairs[n++] = type;
+                pairs[n++] = value;
+            }
+        }
+
+        private void AppendCharacterAttributes(int address)
+        {
+            // Character mode only, and only the types Set Reply Mode listed (p. 5-62).
+            if (_replyMode != ReplyMode.Character)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _replyTypes.Length; i++)
+            {
+                byte type = _replyTypes[i];
+                int slot = Array.IndexOf(CharacterAttributeTypes, type);
+                byte value = CharacterAttribute(slot, address);
+                if (value != _inboundSa[slot])
+                {
+                    _inboundSa[slot] = value;
+                    AppendByte(Order3270.SetAttribute);
+                    AppendByte(type);
+                    AppendByte(value);
+                }
+            }
+        }
+
+        private byte CharacterAttribute(int slot, int address)
+        {
+            // Slots in the order of CharacterAttributeTypes.
+            switch (slot)
+            {
+                case 0:
+                    return _charHighlight[address];
+                case 1:
+                    return _charColor[address];
+                case 2:
+                    return _charCharset[address];
+                case 3:
+                    return _charBackground[address];
+                default:
+                    return _charTransparency[address];
+            }
+        }
+
         private void AppendData(int address)
         {
+            // Nulls are left out; in Character mode SA orders go before a non-null character only
+            // (p. 3-13, 5-62).
             byte b = _buffer[address];
             if (b == FormatControl.Null)
             {
                 return;
             }
 
-            Span<byte> s = _inbound.GetSpan(2);
-            int n = 0;
+            AppendCharacterAttributes(address);
             if (_graphicEscape[address])
             {
-                s[n++] = Order3270.GraphicEscape;
+                AppendByte(Order3270.GraphicEscape);
             }
 
-            s[n++] = b;
-            _inbound.Advance(n);
+            AppendByte(b);
         }
 
         private void AppendAddress(int address)
@@ -1225,4 +2036,25 @@ namespace RetroIO.Protocols.Tn3270
     /// The record, valid only during the call.
     /// </param>
     public delegate void InboundRecordHandler(ReadOnlySpan<byte> record);
+
+    /// <summary>
+    /// Receives the text of a protocol error.
+    /// </summary>
+    /// <param name="message">
+    /// What was rejected or not built, and the page of the manual that decides it.
+    /// </param>
+    public delegate void ProtocolErrorHandler(string message);
+
+    /// <summary>
+    /// Called when the host asks the terminal to sound its alarm.
+    /// </summary>
+    public delegate void AlarmHandler();
+
+    /// <summary>
+    /// Receives one structured field from a Write Structured Field.
+    /// </summary>
+    /// <param name="field">
+    /// The whole structured field, its two length bytes first, valid only during the call.
+    /// </param>
+    public delegate void StructuredFieldHandler(ReadOnlySpan<byte> field);
 }

@@ -6,8 +6,14 @@ The IBM 3270 display station as a library, with no window and no network of its 
 |---|---|
 | `Display3270` | The screen: buffer, fields, extended attributes, cursor, keyboard lock. Takes host records (`ProcessOutbound`) and operator keys (`Type`, `Tab`, `Home`, `Reset`, `Attention`), and raises `InboundRecord` with the exact bytes the terminal sends back. |
 | `BufferAddress` | 12-bit and 14-bit buffer addresses, and the 6-bit code table (GA23-0059-4 Appendix D). |
-| `CodePage037` | EBCDIC code page 037 for display and typing. |
-| `Command3270`, `Wcc`, `Order3270`, `FormatControl`, `FieldAttribute`, `Aid` | The byte values, each cited to its page. |
+| `CodePage` | EBCDIC code pages 037, 273, 277, 278, 280, 284, 285, 297, 500, 871, 1047 and 1140-1149, plus the Graphic Escape set 310. Made from IBM's ICU tables and checked against .NET's own tables. |
+| `IndFileTransfer` | IND$FILE file transfer in DFT mode (the X'D0' structured fields), download and upload. |
+| `Command3270`, `Wcc`, `Order3270`, `FormatControl`, `FieldAttribute`, `Aid`, `StructuredFieldId`, `QueryCode`, `FieldValidation`, `FieldOutlining` | The byte values, each cited to its page. |
+
+Write Structured Field handles Read Partition (Query, Query List, and the reads of partition 0),
+Erase/Reset, Set Reply Mode (field, extended field and character mode) and Outbound 3270DS. The
+query reply reports Usable Area, Character Sets, Color, Highlight, Reply Modes, Implicit
+Partition, and DDM while file transfer is on.
 
 A renderer reads the screen, a test drives it, and a future System/360 or 370 emulator can
 attach it directly as a console.
@@ -23,9 +29,10 @@ copied from them.
 
 Each of these raises `ProtocolError` when the host uses it. None is skipped silently.
 
-- Write Structured Field, so Query Reply and DFT-mode IND$FILE do not work yet
 - the TN3270 client session over RetroIO.Protocols.Telnet
 - TN3270E
 - partitions and 16-bit addresses
 - insert mode, Erase EOF, Erase Input, Dup and Field Mark keys
-- field validation, the selector pen, and code pages other than 037
+- field validation, the selector pen
+- IND$FILE in CUT mode (screen frames), for a host that does not take DFT
+- every structured field not named above, and BSC Copy

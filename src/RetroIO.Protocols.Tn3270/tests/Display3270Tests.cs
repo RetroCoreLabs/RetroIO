@@ -206,16 +206,6 @@ namespace RetroIO.Protocols.Tn3270.Tests
         }
 
         [Fact]
-        public void WriteStructuredFieldIsReportedAsNotBuilt()
-        {
-            var (d, _, errors) = Create();
-
-            d.ProcessOutbound(new byte[] { Command3270.WriteStructuredField, 0x00, 0x05, 0x01, 0xFF, 0x02 });
-
-            Assert.Single(errors);
-        }
-
-        [Fact]
         public void ReadBufferSendsEveryPositionWithStartFieldBeforeEachAttribute()
         {
             var (d, sent, _) = Create();
