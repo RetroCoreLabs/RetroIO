@@ -12,8 +12,8 @@ and passes the time.
 
 | Type | What it does |
 |---|---|
-| `IpNat` | Attaches to a router's upstream side. `Service(now, wait)` reads and writes the host sockets, runs the TCP timers and closes idle mappings; `UdpMappings`, `TcpConnections`, `HostConnectsRefused`, `TcpRetransmits`, `PingsWaiting`, `PingsUnanswered`, `DropCount` per reason, `HostPortUnreachable`; event `OnDrop`. `Dispose` leaves the router and closes every socket. |
-| `NatDropReason` | Why a packet was dropped: unsupported protocol, fragment, not unicast, bad UDP, too many mappings, too big for IP, host send failed, bad TCP, too many connections, host connect failed, bad ICMP, too many pings. |
+| `IpNat` | Attaches to a router's upstream side. `Service(now, wait)` reads and writes the host sockets, runs the TCP timers and closes idle mappings; `UdpMappings`, `TcpConnections`, `HostConnectsRefused`, `TcpRetransmits`, `PingsWaiting`, `PingsUnanswered`, `Reassemblies`, `DropCount` per reason, `HostPortUnreachable`; event `OnDrop`. `Dispose` leaves the router and closes every socket. |
+| `NatDropReason` | Why a packet was dropped: unsupported protocol, fragment, not unicast, bad UDP, too many mappings, too big for IP, host send failed, bad TCP, too many connections, host connect failed, bad ICMP, too many pings, too many reassemblies, reassembly timeout. |
 
 ## UDP
 
@@ -61,6 +61,15 @@ The bytes go on over an ordinary host connection to the address and port the cal
   systems the caller hears nothing.
 - Other ICMP from a caller is dropped as an unsupported protocol.
 
+## Fragments
+
+A host socket takes whole datagrams only, so a caller's fragmented packet is put back together first
+(RFC 791 section 3.2). Fragments may come in any order, repeat or overlap. At most 64 packets are
+put together at once. One not complete after 60 seconds (RFC 1122 section 3.3.2) is dropped, and
+when its first fragment had arrived the caller gets ICMP time exceeded, code 1. A fragment that
+would end past 65535 bytes, or a fragment other than the last whose data is not a multiple of 8
+bytes, is dropped.
+
 ## Not built yet
 
 Each is dropped and counted, never answered with something made up:
@@ -68,4 +77,3 @@ Each is dropped and counted, never answered with something made up:
 - TCP urgent data (the URG flag and pointer are not carried).
 - ICMP messages from a caller other than echo request.
 - An ICMP message to the caller when a TCP host connect fails for a reason other than a refusal.
-- IP fragments from a caller.

@@ -40,7 +40,6 @@ namespace RetroIO.Network.Nat
     /// Each of these is dropped and counted under its <see cref="NatDropReason"/>, never answered
     /// with something made up:
     ///  - ICMP other than echo request (<see cref="NatDropReason.UnsupportedProtocol"/>).
-    ///  - IP fragments from a caller (<see cref="NatDropReason.Fragment"/>).
     /// </remarks>
     public sealed partial class IpNat : IDisposable
     {
@@ -200,6 +199,7 @@ namespace RetroIO.Network.Nat
 
             TakePingReplies();
             RunTcpTimers();
+            ExpireReassemblies();
             return waited || _pings.Count > 0;
         }
 
@@ -275,10 +275,16 @@ namespace RetroIO.Network.Nat
             if ((fragment & 0x3FFF) != 0)
             {
                 // More Fragments set, or a fragment offset: this packet is part of a larger one.
-                Drop(NatDropReason.Fragment);
+                Reassemble(packet, headerBytes, fragment);
                 return;
             }
 
+            FromRouterWhole(packet, headerBytes);
+        }
+
+        // A whole packet: never fragmented, or put back together.
+        private void FromRouterWhole(ReadOnlySpan<byte> packet, int headerBytes)
+        {
             uint source = Ipv4.Source(packet);
             uint destination = Ipv4.Destination(packet);
             if (packet[9] != ProtocolUdp && packet[9] != ProtocolTcp && packet[9] != ProtocolIcmp)
@@ -508,9 +514,22 @@ namespace RetroIO.Network.Nat
         UnsupportedProtocol,
 
         /// <summary>
-        /// Part of a fragmented packet; the NAT does not put fragments back together.
+        /// A fragment that cannot be part of a good packet: it would end past 65535 bytes, or it is
+        /// not the last fragment and its data is not a multiple of 8 bytes (RFC 791).
         /// </summary>
         Fragment,
+
+        /// <summary>
+        /// A fragment of a new packet while <see cref="IpNat.MaxReassemblies"/> packets are already
+        /// being put back together.
+        /// </summary>
+        TooManyReassemblies,
+
+        /// <summary>
+        /// A packet whose fragments did not all arrive within
+        /// <see cref="IpNat.ReassemblyTimeoutMilliseconds"/>; counted once per packet.
+        /// </summary>
+        ReassemblyTimeout,
 
         /// <summary>
         /// For a multicast, reserved or "this network" address, which a host socket cannot send to.

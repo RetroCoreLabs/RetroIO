@@ -195,13 +195,12 @@ namespace RetroIO.Network.Nat.Tests
         }
 
         [Fact]
-        public void GreFragmentsAndMulticastAreDroppedAndCounted()
+        public void GreAndMulticastAreDroppedAndCounted()
         {
             _link.Receive(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[] { 1 }, protocol: 47));
-            _link.Receive(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[] { 1 }, fragment: 0x2000));
             _link.Receive(Udp(_link.Address, 4000, Ipv4.Parse("224.0.0.9"), 520, new byte[] { 1 }));
 
-            Assert.Equal(new[] { NatDropReason.UnsupportedProtocol, NatDropReason.Fragment, NatDropReason.NotUnicast }, _natDrops);
+            Assert.Equal(new[] { NatDropReason.UnsupportedProtocol, NatDropReason.NotUnicast }, _natDrops);
             Assert.Equal(0, _nat.UdpMappings);
         }
 
@@ -232,6 +231,74 @@ namespace RetroIO.Network.Nat.Tests
             _link.Receive(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[] { 1 }));
 
             Assert.Equal(new[] { DropReason.NoRoute }, drops);
+        }
+
+        // Cuts a whole packet into fragments of the given data sizes (each but the last a multiple
+        // of 8), with correct headers.
+        private static byte[][] Split(byte[] whole, int first)
+        {
+            byte[] a = new byte[20 + first];
+            byte[] b = new byte[whole.Length - first];
+            whole.AsSpan(0, 20 + first).CopyTo(a);
+            whole.AsSpan(0, 20).CopyTo(b);
+            whole.AsSpan(20 + first).CopyTo(b.AsSpan(20));
+            BinaryPrimitives.WriteUInt16BigEndian(a.AsSpan(4), 0x4242);
+            BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(4), 0x4242);
+            BinaryPrimitives.WriteUInt16BigEndian(a.AsSpan(2), (ushort)a.Length);
+            BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(2), (ushort)b.Length);
+            BinaryPrimitives.WriteUInt16BigEndian(a.AsSpan(6), 0x2000);
+            BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(6), (ushort)(first / 8));
+            a[10] = a[11] = b[10] = b[11] = 0;
+            BinaryPrimitives.WriteUInt16BigEndian(a.AsSpan(10), (ushort)~Ipv4.Sum(a.AsSpan(0, 20)));
+            BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(10), (ushort)~Ipv4.Sum(b.AsSpan(0, 20)));
+            return new[] { a, b };
+        }
+
+        [Fact]
+        public void FragmentsInAnyOrderArePutBackTogether()
+        {
+            byte[] data = new byte[100];
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = (byte)i;
+            }
+
+            byte[][] parts = Split(Udp(_link.Address, 4000, Loopback, _echoPort, data), 48);
+            _link.Receive(parts[1]);
+            Assert.Equal(1, _nat.Reassemblies);
+            _link.Receive(parts[0]);
+
+            Assert.Equal(0, _nat.Reassemblies);
+            Assert.Equal(data, EchoReceive().Data);
+            Assert.Empty(_natDrops);
+        }
+
+        [Fact]
+        public void AnUnfinishedPacketTimesOutWithTimeExceeded()
+        {
+            byte[][] parts = Split(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[40]), 16);
+            _link.Receive(parts[0]);
+
+            _nat.Service(IpNat.ReassemblyTimeoutMilliseconds - 1, 0);
+            Assert.Empty(_toCaller);
+            _nat.Service(IpNat.ReassemblyTimeoutMilliseconds, 0);
+
+            Assert.Equal(new[] { NatDropReason.ReassemblyTimeout }, _natDrops);
+            byte[] p = Assert.Single(_toCaller);
+            Assert.Equal(1, p[9]);
+            Assert.Equal(11, p[20]);
+            Assert.Equal(1, p[21]);
+            Assert.Equal(0x4242, BinaryPrimitives.ReadUInt16BigEndian(p.AsSpan(32)));
+            Assert.Equal(4000, BinaryPrimitives.ReadUInt16BigEndian(p.AsSpan(48)));
+        }
+
+        [Fact]
+        public void AMiddleFragmentNotAMultipleOfEightIsDropped()
+        {
+            byte[][] parts = Split(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[40]), 12);
+            _link.Receive(parts[0]);
+
+            Assert.Equal(new[] { NatDropReason.Fragment }, _natDrops);
         }
     }
 }
