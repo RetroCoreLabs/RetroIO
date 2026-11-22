@@ -135,11 +135,11 @@ namespace RetroIO.Protocols.Xmsg.Hosting
         }
 
         /// <summary>
-        /// Creates the COSMOS file server (<c>*FA-SERVER</c>) over a ready store - a local folder, a TNFS
-        /// server or a <c>mounts.json</c> volume - and reserves its connection numbers.
+        /// Creates the COSMOS file server (<c>*FA-SERVER</c>) over ready user folders - on a local folder,
+        /// a TNFS server or a <c>mounts.json</c> volume - and reserves its connection numbers.
         /// </summary>
-        /// <param name="store">
-        /// The files to serve.
+        /// <param name="folders">
+        /// The served root, one folder per SINTRAN user.
         /// </param>
         /// <param name="userIndex">
         /// The user index the server reports in its directory entries.
@@ -153,11 +153,11 @@ namespace RetroIO.Protocols.Xmsg.Hosting
         /// <returns>
         /// The server.
         /// </returns>
-        public static FaServer CreateFileServer(IFaFileStore store, byte userIndex, string stateDirectory, XmsgLogHandler? log)
+        public static FaServer CreateFileServer(FaUserFolders folders, byte userIndex, string stateDirectory, XmsgLogHandler? log)
         {
-            if (store == null)
+            if (folders == null)
             {
-                throw new ArgumentNullException(nameof(store));
+                throw new ArgumentNullException(nameof(folders));
             }
 
             if (string.IsNullOrEmpty(stateDirectory))
@@ -165,7 +165,7 @@ namespace RetroIO.Protocols.Xmsg.Hosting
                 throw new ArgumentNullException(nameof(stateDirectory));
             }
 
-            FaServer server = new FaServer(store, userIndex);
+            FaServer server = new FaServer(folders, userIndex);
             server.NextConnectionNumber = FaConnectionNumbers.Reserve(
                 XmsgStateFiles.PathOf(stateDirectory, XmsgStateFiles.FaConnection), log);
             if (log != null)
@@ -173,8 +173,9 @@ namespace RetroIO.Protocols.Xmsg.Hosting
                 server.Log += line => log(line);
             }
             log?.Invoke($"[fa] file server ON as {FaServer.ServerName} (logical port {FaServer.ServerLogicalPort}, wire port 0x{FaServer.FaServerWirePort:X4})");
-            log?.Invoke($"[fa] serving: {store.Location}");
-            log?.Invoke($"[fa] files visible now: {store.ListFiles().Count}");
+            log?.Invoke($"[fa] serving: {folders.Location} (one folder per user)");
+            IReadOnlyList<string> users = folders.ListUsers();
+            log?.Invoke($"[fa] users now: {users.Count}" + (users.Count == 0 ? " - make a folder per user to serve files" : " (" + string.Join(", ", users) + ")"));
             return server;
         }
 
@@ -237,7 +238,7 @@ namespace RetroIO.Protocols.Xmsg.Hosting
 
             try
             {
-                return CreateFileServer(new FolderFileStore(root), config.UserIndex, stateDirectory, log);
+                return CreateFileServer(new FaUserFolders(root), config.UserIndex, stateDirectory, log);
             }
             catch (Exception ex)
             {

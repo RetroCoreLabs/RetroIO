@@ -42,7 +42,7 @@ namespace RetroIO.Protocols.Xmsg.Hosting
 
         /// <summary>
         /// Gets or sets the COSMOS file server to register, or null for none. Build one with
-        /// <see cref="XmsgNodeBuilder.CreateFileServer(Ndfs.IFaFileStore, byte, string, XmsgLogHandler)"/>.
+        /// <see cref="XmsgNodeBuilder.CreateFileServer(Ndfs.FaUserFolders, byte, string, XmsgLogHandler)"/>.
         /// </summary>
         public FaServer? FileServer { get; set; }
 

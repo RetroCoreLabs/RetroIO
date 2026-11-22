@@ -69,6 +69,16 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         NoSuchFile = 46,
 
         /// <summary>
+        /// The user has no directory here - SINTRAN error 39, <c>0x0027</c>, 047 octal, "No such user
+        /// name in main directory".
+        /// </summary>
+        /// <remarks>
+        /// VERIFIED against a live D100 on 2026-08-18: a push to <c>(NOUSR)A:T</c> was refused on the
+        /// OpenFile with <c>F2 0001 A2 0027</c> (see <c>FaSintranError</c>).
+        /// </remarks>
+        NoSuchUser = 39,
+
+        /// <summary>
         /// The directory walk has run off the end - SINTRAN error 197, <c>0x00C5</c>.
         /// </summary>
         /// <remarks>

@@ -103,7 +103,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         public FaServerWiringTests(ITestOutputHelper output)
         {
             _output = output;
-            _folder = Path.Combine(Path.GetTempPath(), "fa-server-wiring-" + Guid.NewGuid().ToString("N"));
+            _folder = Path.Combine(Path.GetTempPath(), "fa-server-wiring-" + Guid.NewGuid().ToString("N"), "SYSTEM");  // the SYSTEM user's folder: the server serves one folder per user
             Directory.CreateDirectory(_folder);
         }
 
@@ -114,7 +114,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             try
             {
-                Directory.Delete(_folder, true);
+                Directory.Delete(Path.GetDirectoryName(_folder)!, true);
             }
             catch (IOException)
             {
@@ -212,13 +212,14 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost(out FaServer server);
             host.Route(BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             // Cursor 0xFFFF asks for the FIRST entry.
             byte[] request = BuildListingRequest(sequence: 1, cursor: FaListFilesCodec.FirstEntryCursor);
             XmsgFrame requestFrame = BuildSessionFrame(request, flags1: 0x0002);
             IReadOnlyList<XmsgFrame> replies = host.Route(requestFrame);
 
-            byte[] body = BodyOf(AssertAckThenReply(replies, 0x0001));
+            byte[] body = BodyOf(AssertAckThenReply(replies, 0x0003));  // the reserve took 0x0001 and 0x0002
 
             // The reply echoes the operation and the sequence, then carries the 64-byte record.
             FaOperation operation;
@@ -269,28 +270,29 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost(out FaServer server);
             host.Route(BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             // 0xFFFF starts the walk...
             XmsgFrame startFrame = BuildSessionFrame(
                 BuildListingRequest(1, FaListFilesCodec.FirstEntryCursor), 0x0002);
-            string firstName = NameOfEntry(BodyOf(AssertAckThenReply(host.Route(startFrame), 0x0001)));
+            string firstName = NameOfEntry(BodyOf(AssertAckThenReply(host.Route(startFrame), 0x0003)));
 
             // ...then the client asks for the DIRECTORY by sub-function, not by position. UPDATED
             // 2026-08-05: this test used to expect the second FILE here, because every request was
             // read as "give me the next file". That is what made D100 abandon the listing.
             XmsgFrame packFrame = BuildSessionFrame(
                 BuildFunctionRequest(2, FaSpecialFunction.DirectoryEntry), 0x0004);
-            byte[] packBody = BodyOf(AssertAckThenReply(host.Route(packFrame), 0x0003));
+            byte[] packBody = BodyOf(AssertAckThenReply(host.Route(packFrame), 0x0005));
             string packName = NameOfDirectoryEntry(packBody);
 
             // ...then the USER, the other half of the (PACK-ONE:SYSTEM) header...
             XmsgFrame userFrame = BuildSessionFrame(
                 BuildFunctionRequest(3, FaSpecialFunction.UserEntry), 0x0006);
-            byte[] userBody = BodyOf(AssertAckThenReply(host.Route(userFrame), 0x0005));
+            byte[] userBody = BodyOf(AssertAckThenReply(host.Route(userFrame), 0x0007));
 
             // ...and the walk resumes with the second file, its position untouched by either.
             XmsgFrame nextFrame = BuildSessionFrame(BuildListingRequest(4, cursor: 0), 0x0008);
-            string secondName = NameOfEntry(BodyOf(AssertAckThenReply(host.Route(nextFrame), 0x0007)));
+            string secondName = NameOfEntry(BodyOf(AssertAckThenReply(host.Route(nextFrame), 0x0009)));
 
             _output.WriteLine("walk: " + firstName + ", pack " + packName + ", then " + secondName);
 
@@ -756,7 +758,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </returns>
         private XmsgServerHost BuildHost(out FaServer server)
         {
-            server = new FaServer(new FolderFileStore(_folder));
+            server = new FaServer(new FaUserFolders(Path.GetDirectoryName(_folder)!));
             server.Log += line => _output.WriteLine(line);
 
             XmsgServerHost host = new XmsgServerHost(ServerNode);

@@ -141,6 +141,36 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         }
 
         /// <summary>
+        /// The datagram number the test reserve is sent under: outside the range any test numbers its
+        /// own requests in, so adding the reserve changes none of them. The server tells repeats
+        /// apart by this number and checks nothing else about it.
+        /// </summary>
+        public const ushort ReserveFlags1 = 0x7F01;
+
+        /// <summary>
+        /// Builds the reserve that opens a real conversation, naming the user whose folder the
+        /// conversation works in.
+        /// </summary>
+        /// <param name="user">
+        /// The SINTRAN user, for example <c>SYSTEM</c>.
+        /// </param>
+        /// <returns>
+        /// The datagram, sent under <see cref="ReserveFlags1"/>.
+        /// </returns>
+        /// <remarks>
+        /// Every captured conversation starts with this request, and since 2026-11-22 the server
+        /// takes the user from it (one folder per user). The fields come from
+        /// <see cref="FaWriteRequests.ReserveFileEntry(string, string)"/>, which follows the
+        /// captured layout; <c>BAK04</c> is the asker in the captured write.
+        /// </remarks>
+        public static XmsgFrame BuildReserve(string user)
+        {
+            return BuildSessionFrame(
+                BuildRequestEnvelope(FaOperation.ReserveFileEntry, 0, FaWriteRequests.ReserveFileEntry("BAK04", user)),
+                ReserveFlags1);
+        }
+
+        /// <summary>
         /// Builds a session datagram carrying a file-access message body to the server's port.
         /// </summary>
         /// <param name="body">

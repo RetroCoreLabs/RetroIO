@@ -343,6 +343,21 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         public string OpenName { get; set; } = string.Empty;
 
         /// <summary>
+        /// Gets or sets the store the open file belongs to; null when no file is open.
+        /// </summary>
+        public IFaFileStore? OpenStore { get; set; }
+
+        /// <summary>
+        /// Gets or sets the user named in this conversation's reserve, in capitals; empty before it.
+        /// </summary>
+        public string User { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets that user's files; null when the user has no folder or no reserve was seen.
+        /// </summary>
+        public IFaFileStore? Store { get; set; }
+
+        /// <summary>
         /// Gets or sets the file bytes a <c>ReadFile</c> has promised but not yet sent, or
         /// <c>null</c> when nothing is outstanding.
         /// </summary>

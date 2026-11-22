@@ -72,7 +72,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         public FaReadFileWiringTests(ITestOutputHelper output)
         {
             _output = output;
-            _folder = Path.Combine(Path.GetTempPath(), "fa-read-wiring-" + Guid.NewGuid().ToString("N"));
+            _folder = Path.Combine(Path.GetTempPath(), "fa-read-wiring-" + Guid.NewGuid().ToString("N"), "SYSTEM");  // the SYSTEM user's folder: the server serves one folder per user
             Directory.CreateDirectory(_folder);
         }
 
@@ -83,7 +83,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             try
             {
-                Directory.Delete(_folder, true);
+                Directory.Delete(Path.GetDirectoryName(_folder)!, true);
             }
             catch (IOException)
             {
@@ -103,6 +103,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
             OpenTheFile(host, sequence: 1, flags1: 0x0002);
 
             IReadOnlyList<XmsgFrame> frames = host.Route(FaTestClient.BuildSessionFrame(
@@ -155,6 +156,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
             OpenTheFile(host, sequence: 1, flags1: 0x0002);
 
             IReadOnlyList<XmsgFrame> frames = host.Route(FaTestClient.BuildSessionFrame(
@@ -198,6 +200,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
             OpenTheFile(host, sequence: 1, flags1: 0x0002);
 
             IReadOnlyList<XmsgFrame> frames = host.Route(FaTestClient.BuildSessionFrame(
@@ -248,6 +251,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
             OpenTheFile(host, sequence: 1, flags1: 0x0002);
 
             IReadOnlyList<XmsgFrame> frames = host.Route(FaTestClient.BuildSessionFrame(
@@ -294,6 +298,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             IReadOnlyList<XmsgFrame> frames = host.Route(FaTestClient.BuildSessionFrame(
                 BuildOpenRequest(sequence: 1), 0x0002));
@@ -352,6 +357,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             IReadOnlyList<XmsgFrame> frames = host.Route(FaTestClient.BuildSessionFrame(
                 BuildReadRequest(sequence: 2, position: 0), 0x0002));
@@ -444,7 +450,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </returns>
         private XmsgServerHost BuildHost()
         {
-            FaServer server = new FaServer(new FolderFileStore(_folder));
+            FaServer server = new FaServer(new FaUserFolders(Path.GetDirectoryName(_folder)!));
             server.Log += line => _output.WriteLine(line);
 
             XmsgServerHost host = new XmsgServerHost(FaTestClient.ServerNode);

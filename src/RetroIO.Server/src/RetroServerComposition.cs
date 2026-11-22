@@ -189,7 +189,7 @@ public static class RetroServerComposition
                 // TNFS, or a mounts.json volume - the same rules as the Econet discs). A setting that
                 // cannot be used is reported and the node starts WITHOUT the file server, never with a
                 // different folder than the one asked for.
-                RetroIO.Protocols.Xmsg.Ndfs.IFaFileStore? fileStore = null;
+                RetroIO.Protocols.Xmsg.Ndfs.FaUserFolders? fileStore = null;
                 if (nodeConfig.FileServerEnabled)
                 {
                     try

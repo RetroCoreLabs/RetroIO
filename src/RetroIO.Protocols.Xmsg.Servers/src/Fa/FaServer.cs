@@ -236,7 +236,9 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             (byte)QformTagByte.Selector, 0x00, 0xFF,
         };
 
-        private readonly IFaFileStore _store;
+        // The served root: one folder per SINTRAN user. Each conversation reaches its user's files
+        // through it - see FaServerSession.Store.
+        private readonly FaUserFolders _folders;
         private readonly Dictionary<uint, FaServerSession> _sessions;
         private readonly List<FaServerSession> _sessionList;
 
@@ -424,21 +426,21 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         }
 
         /// <summary>
-        /// Initialises the server over a file store.
+        /// Initialises the server over the user folders.
         /// </summary>
-        /// <param name="store">
-        /// The files to serve (a local folder is <see cref="FolderFileStore"/>).
+        /// <param name="folders">
+        /// The served root, one folder per SINTRAN user (Ronny, 2026-11-22: per-user always).
         /// </param>
         /// <param name="userIndex">
         /// The user index stamped into synthesised directory entries. There is no real user directory
         /// behind a Windows folder, so this is whatever user we are pretending to serve as.
         /// </param>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="store"/> is null.
+        /// Thrown when <paramref name="folders"/> is null.
         /// </exception>
-        public FaServer(IFaFileStore store, byte userIndex = 0)
+        public FaServer(FaUserFolders folders, byte userIndex = 0)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
+            _folders = folders ?? throw new ArgumentNullException(nameof(folders));
             _userIndex = userIndex;
             _sessions = new Dictionary<uint, FaServerSession>();
             _sessionList = new List<FaServerSession>();
@@ -459,7 +461,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// </summary>
         public string RootFolder
         {
-            get { return _store.Location; }
+            get { return _folders.Location; }
         }
 
         /// <summary>
@@ -693,7 +695,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
 
             Log?.Invoke(
                 $"[fa] connect letter from node {request.Header!.SourceNode} (system {clientSystem} port 0x{clientPort:X4}); "
-                + $"serving {_store.Location}; answering from session port 0x{session.SessionWirePort:X4} "
+                + $"serving {_folders.Location}; answering from session port 0x{session.SessionWirePort:X4} "
                 + $"with an FA ConnectionConfirm {Convert.ToHexString(confirm)}");
 
             // From the SESSION port, not the registered directory port - see FaServerWirePort.
@@ -999,10 +1001,10 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             switch (operation)
             {
                 case FaOperation.ReserveFileEntry:
+                    return ReserveFileEntry(session, sequence, body);
+
                 case FaOperation.ReleaseFileEntry:
-                    // The two operations that open and close every captured conversation. They name
-                    // a user and directory we do not model - one Windows folder is the whole world
-                    // here - so they are accepted and nothing is looked up.
+                    // Closes every captured conversation; nothing to look up.
                     Log?.Invoke($"[fa] request {operation} seq {sequence} from system {session.ClientSystem}: accepted");
                     return OkFields;
 
@@ -1075,7 +1077,13 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             }
 
             // Find the entry the same way a listing would, so the two can never disagree.
-            IReadOnlyList<FaFileInfo> all = _store.ListFiles();
+            if (session.OpenStore == null)
+            {
+                Log?.Invoke($"[fa] FileInformation seq {sequence} from system {session.ClientSystem} with no file open; answering a refusal");
+                return ErrorFields(FaServerStatus.NoSuchFile);
+            }
+
+            IReadOnlyList<FaFileInfo> all = session.OpenStore.ListFiles();
             string wantedName;
             string wantedType;
             if (!SplitSpecification(session.OpenName, out wantedName, out wantedType))
@@ -1103,6 +1111,87 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
 
             Log?.Invoke($"[fa] FileInformation seq {sequence}: '{session.OpenName}' is open but no longer in the folder; answering a refusal");
             return ErrorFields(FaServerStatus.NoSuchFile);
+        }
+
+        /// <summary>
+        /// Takes the reserve that opens a conversation: it names the user whose directory the client
+        /// works in.
+        /// </summary>
+        /// <param name="session">
+        /// The conversation.
+        /// </param>
+        /// <param name="sequence">
+        /// The request's sequence number.
+        /// </param>
+        /// <param name="body">
+        /// The whole request body, starting at the message type.
+        /// </param>
+        /// <returns>
+        /// The reply's fields.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// The user is in the credentials block (<see cref="FaWriteRequests.TryReadReserveUser"/>);
+        /// MEASURED 2026-11-22: <c>LIST-FILES d19999(ronny).</c> from D102 put <c>RONNY</c> there.
+        /// </para>
+        /// <para>
+        /// The reserve itself is ACCEPTED even for a user with no folder. What a real server answers
+        /// to a reserve for an unknown user has not been captured; what HAS been measured is D100
+        /// refusing the next request that needed the user, the open, with error 39 (see
+        /// <see cref="FaServerStatus.NoSuchUser"/>). So the refusal is given there, by
+        /// <see cref="StoreFor"/>. The password word is read and logged but not checked yet.
+        /// </para>
+        /// </remarks>
+        private byte[] ReserveFileEntry(FaServerSession session, ushort sequence, ReadOnlySpan<byte> body)
+        {
+            string user;
+            ushort passwordWord;
+            if (!FaWriteRequests.TryReadReserveUser(body.Slice(FaExchangeCodec.QformOffset), out user, out passwordWord))
+            {
+                Log?.Invoke($"[fa] ReserveFileEntry seq {sequence} from system {session.ClientSystem} names no user; accepted, but every file request will be refused");
+                session.User = string.Empty;
+                session.Store = null;
+                return OkFields;
+            }
+
+            session.User = user.ToUpperInvariant();
+            session.Store = _folders.ForUser(user);
+            Log?.Invoke(
+                $"[fa] ReserveFileEntry seq {sequence} from system {session.ClientSystem}: user {session.User}"
+                + (session.Store == null ? " - NO FOLDER for this user; its file requests get error 39" : " - " + session.Store.Location)
+                + (passwordWord == 0 ? ", no password" : ", password word given (not checked yet)"));
+            return OkFields;
+        }
+
+        /// <summary>
+        /// Finds the files a request reaches: the user named in the file specification when it names
+        /// one, otherwise the conversation's user from the reserve.
+        /// </summary>
+        /// <param name="session">
+        /// The conversation.
+        /// </param>
+        /// <param name="specification">
+        /// The file specification, for example <c>(NOUSR)A:T</c> or <c>A:T</c>; empty for a listing.
+        /// </param>
+        /// <returns>
+        /// The user's files, or null when that user has no folder.
+        /// </returns>
+        /// <remarks>
+        /// A specification can name another user: the measured D100 refusal (error 39) was for a push
+        /// to <c>(NOUSR)A:T</c>, so the user in the name is what a real server looks up.
+        /// </remarks>
+        private IFaFileStore? StoreFor(FaServerSession session, string specification)
+        {
+            FaFileName? parsed;
+            if (specification.Length > 0
+                && FaFileName.TryParse(specification, out parsed)
+                && parsed != null
+                && !string.IsNullOrEmpty(parsed.User))
+            {
+                return _folders.ForUser(parsed.User);
+            }
+
+            return session.Store;
         }
 
         /// <summary>
@@ -1147,8 +1236,15 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 return ErrorFields(FaServerStatus.BadRequest);
             }
 
+            IFaFileStore? store = StoreFor(session, named);
+            if (store == null)
+            {
+                Log?.Invoke($"[fa] CreateFile '{named}' for system {session.ClientSystem}: no such user; answering error 39");
+                return ErrorFields(FaServerStatus.NoSuchUser);
+            }
+
             ushort fileNumber;
-            FaStoreStatus status = _store.Create(named, out fileNumber);
+            FaStoreStatus status = store.Create(named, out fileNumber);
             if (status != FaStoreStatus.Ok)
             {
                 Log?.Invoke($"[fa] CreateFile '{named}' for system {session.ClientSystem}: {status}");
@@ -1200,7 +1296,14 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 return ErrorFields(FaServerStatus.BadRequest);
             }
 
-            FaStoreStatus status = _store.Delete(named);
+            IFaFileStore? store = StoreFor(session, named);
+            if (store == null)
+            {
+                Log?.Invoke($"[fa] DeleteFile '{named}' for system {session.ClientSystem}: no such user; answering error 39");
+                return ErrorFields(FaServerStatus.NoSuchUser);
+            }
+
+            FaStoreStatus status = store.Delete(named);
             if (status != FaStoreStatus.Ok)
             {
                 Log?.Invoke($"[fa] DeleteFile '{named}' for system {session.ClientSystem}: {status}");
@@ -1293,14 +1396,22 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 return ErrorFields(FaServerStatus.BadRequest);
             }
 
-            if (session.OpenHandle != 0)
+            if (session.OpenHandle != 0 && session.OpenStore != null)
             {
-                _store.Close(session.OpenHandle);
+                session.OpenStore.Close(session.OpenHandle);
                 session.OpenHandle = 0;
+                session.OpenStore = null;
+            }
+
+            IFaFileStore? store = StoreFor(session, fileName);
+            if (store == null)
+            {
+                Log?.Invoke($"[fa] OpenFile '{fileName}' for system {session.ClientSystem}: no such user; answering error 39");
+                return ErrorFields(FaServerStatus.NoSuchUser);
             }
 
             ushort handle;
-            FaStoreStatus status = _store.Open(fileName, forWrite, out handle);
+            FaStoreStatus status = store.Open(fileName, forWrite, out handle);
             if (status != FaStoreStatus.Ok)
             {
                 Log?.Invoke($"[fa] OpenFile '{fileName}' for system {session.ClientSystem}: {status}");
@@ -1308,10 +1419,11 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             }
 
             session.OpenHandle = handle;
+            session.OpenStore = store;
             session.OpenForWrite = forWrite;
             session.OpenName = fileName;
 
-            long length = LengthOf(fileName);
+            long length = LengthOf(store, fileName);
 
             Log?.Invoke(
                 $"[fa] OpenFile '{fileName}' for system {session.ClientSystem}: "
@@ -1340,11 +1452,12 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// </remarks>
         private byte[] CloseFile(FaServerSession session, ushort sequence)
         {
-            if (session.OpenHandle != 0)
+            if (session.OpenHandle != 0 && session.OpenStore != null)
             {
-                _store.Close(session.OpenHandle);
+                session.OpenStore.Close(session.OpenHandle);
                 Log?.Invoke($"[fa] CloseFile for system {session.ClientSystem}: file number {session.OpenHandle}");
                 session.OpenHandle = 0;
+                session.OpenStore = null;
                 session.OpenForWrite = false;
             }
             else
@@ -1397,7 +1510,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 return ErrorFields(FaServerStatus.BadRequest);
             }
 
-            if (session.OpenHandle == 0)
+            if (session.OpenHandle == 0 || session.OpenStore == null)
             {
                 Log?.Invoke($"[fa] ReadFile seq {sequence} from system {session.ClientSystem} with no file open; answering a refusal");
                 return ErrorFields(FaServerStatus.NoSuchFile);
@@ -1417,7 +1530,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             long offset = (long)position * session.BlockSize;
 
             int bytesRead;
-            FaStoreStatus status = _store.Read(session.OpenHandle, offset, delivery, out bytesRead);
+            FaStoreStatus status = session.OpenStore.Read(session.OpenHandle, offset, delivery, out bytesRead);
             if (status != FaStoreStatus.Ok)
             {
                 Log?.Invoke($"[fa] ReadFile at {offset} for system {session.ClientSystem}: {status}");
@@ -1583,7 +1696,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 return ErrorFields(FaServerStatus.BadRequest);
             }
 
-            if (session.OpenHandle == 0)
+            if (session.OpenHandle == 0 || session.OpenStore == null)
             {
                 Log?.Invoke($"[fa] WriteFile seq {sequence} from system {session.ClientSystem} with no file open; answering a refusal");
                 return ErrorFields(FaServerStatus.NoSuchFile);
@@ -1635,7 +1748,14 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             ReadOnlySpan<byte> content = body.Slice(
                 FaExchangeCodec.QformOffset, FaFileDataCodec.BlockLength);
 
-            FaStoreStatus status = _store.Write(session.OpenHandle, session.WriteOffset, content);
+            if (session.OpenStore == null)
+            {
+                Log?.Invoke($"[fa] writing at {session.WriteOffset} for system {session.ClientSystem}: no file open");
+                session.WriteOffset = FaServerSession.NoWriteInProgress;
+                return false;
+            }
+
+            FaStoreStatus status = session.OpenStore.Write(session.OpenHandle, session.WriteOffset, content);
             if (status != FaStoreStatus.Ok)
             {
                 Log?.Invoke($"[fa] writing {FaFileDataCodec.BlockLength} byte(s) at {session.WriteOffset} for system {session.ClientSystem}: {status}");
@@ -1689,7 +1809,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 return ErrorFields(FaServerStatus.BadRequest);
             }
 
-            if (session.OpenHandle == 0)
+            if (session.OpenHandle == 0 || session.OpenStore == null)
             {
                 Log?.Invoke($"[fa] SetEndOfFile seq {sequence} from system {session.ClientSystem} with no file open; answering a refusal");
                 return ErrorFields(FaServerStatus.NoSuchFile);
@@ -1711,7 +1831,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             // because both sides of our own code would have agreed on the wrong number.
             long trueLength = (long)byteLength + 1;
 
-            FaStoreStatus status = _store.SetLength(session.OpenHandle, trueLength);
+            FaStoreStatus status = session.OpenStore.SetLength(session.OpenHandle, trueLength);
             if (status != FaStoreStatus.Ok)
             {
                 Log?.Invoke($"[fa] SetEndOfFile to {trueLength} for system {session.ClientSystem}: {status}");
@@ -1817,6 +1937,9 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// <summary>
         /// Reports the length of a served file, or zero when it cannot be measured.
         /// </summary>
+        /// <param name="store">
+        /// The files the open file belongs to.
+        /// </param>
         /// <param name="specification">
         /// The file specification as the client typed it.
         /// </param>
@@ -1836,7 +1959,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// <see cref="ReadFile"/>.
         /// </para>
         /// </remarks>
-        private long LengthOf(string specification)
+        private long LengthOf(IFaFileStore store, string specification)
         {
             string wantedName;
             string wantedType;
@@ -1845,7 +1968,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 return 0;
             }
 
-            IReadOnlyList<FaFileInfo> files = _store.ListFiles();
+            IReadOnlyList<FaFileInfo> files = store.ListFiles();
             for (int i = 0; i < files.Count; i++)
             {
                 if (Matches(files[i].Name, wantedName, wantedType))
@@ -1953,16 +2076,17 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
 
             if (function == FaSpecialFunction.UserEntry)
             {
-                Log?.Invoke($"[fa] system {session.ClientSystem} asked for the USER entry: {UserName}");
-                return StripOperationAndSequence(FaListFilesCodec.BuildUserReply(sequence, UserName));
+                string user = session.User.Length > 0 ? session.User : UserName;
+                Log?.Invoke($"[fa] system {session.ClientSystem} asked for the USER entry: {user}");
+                return StripOperationAndSequence(FaListFilesCodec.BuildUserReply(sequence, user));
             }
 
             IReadOnlyList<FaFileInfo> entries;
             if (cursor == FaListFilesCodec.FirstEntryCursor)
             {
-                entries = SnapshotFor(body);
+                entries = SnapshotFor(session, body);
                 session.BeginWalk(entries);
-                Log?.Invoke($"[fa] directory walk started by system {session.ClientSystem}: {entries.Count} file(s) in {_store.Location}");
+                Log?.Invoke($"[fa] directory walk started by system {session.ClientSystem}: {entries.Count} file(s) in {_folders.Location}");
             }
             else
             {
@@ -1971,7 +2095,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 {
                     // A walk that never started: take a snapshot now rather than refuse, so a client
                     // that resumes mid-walk after our restart still gets files.
-                    entries = SnapshotFor(body);
+                    entries = SnapshotFor(session, body);
                     session.BeginWalk(entries);
                     Log?.Invoke($"[fa] system {session.ClientSystem} asked for entry {cursor} with no walk in progress; taking a fresh snapshot of {entries.Count} file(s)");
                 }
@@ -2010,6 +2134,9 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// Takes the snapshot a directory walk will step through: the whole folder, or just the one
         /// file the request named.
         /// </summary>
+        /// <param name="session">
+        /// The conversation; its user is the one listed.
+        /// </param>
         /// <param name="body">
         /// The whole request body, starting at the message type.
         /// </param>
@@ -2041,9 +2168,18 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// could send, so it would be returned for all of them.
         /// </para>
         /// </remarks>
-        private IReadOnlyList<FaFileInfo> SnapshotFor(ReadOnlySpan<byte> body)
+        private IReadOnlyList<FaFileInfo> SnapshotFor(FaServerSession session, ReadOnlySpan<byte> body)
         {
-            IReadOnlyList<FaFileInfo> all = _store.ListFiles();
+            // The walk lists the conversation's user, named in the reserve. A user with no folder
+            // has no files: what a real server answers to a walk for an unknown user is NOT captured,
+            // so the walk simply ends at once rather than inventing a refusal here.
+            if (session.Store == null)
+            {
+                Log?.Invoke($"[fa] directory walk for system {session.ClientSystem}: user '{session.User}' has no folder; listing nothing");
+                return Array.Empty<FaFileInfo>();
+            }
+
+            IReadOnlyList<FaFileInfo> all = session.Store.ListFiles();
 
             string named;
             if (!FaListFilesCodec.TryReadRequestedFileName(

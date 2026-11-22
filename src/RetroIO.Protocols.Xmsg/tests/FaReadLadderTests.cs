@@ -364,24 +364,29 @@ namespace RetroIO.Protocols.Xmsg.Tests
         }
 
         /// <summary>
-        /// A filespec too long for the open request is refused before it reaches the wire.
+        /// A specification of up to thirteen characters goes in the compact string; a longer one goes
+        /// in the long form, as a real reader sends it.
         /// </summary>
         /// <remarks>
-        /// Thirteen characters is the read's ceiling: fifteen bytes of compact string less the
-        /// apostrophe and the suffix. The WRITE ceiling is eleven, because its quotes cost two more
-        /// - which is the trap for anything that pushes a file and later pulls it back.
+        /// REPLACED 2026-11-22. This test used to assert that fourteen characters THROW, calling a
+        /// longer name unknown. It is not unknown: <c>capture-read.txt</c> (NDInsight
+        /// <c>SINTRAN/XMSG/DOC/captures/FA-READ-WRITE-2026-08-04</c>) holds a real read open of
+        /// <c>PATCH-FILE:OUT</c>, fourteen characters, as <c>B0 10 "PATCH-FILE:OUT'T"</c> - the long
+        /// form. The builder has written that form since 2026-08-24, but its length guard still threw
+        /// first, so a read of a long name could never be sent.
         /// </remarks>
         [Fact]
-        public void AFileSpecTooLongForTheOpenRequestIsRefused()
+        public void ALongFileSpecGoesInTheLongStringForm()
         {
-            // Thirteen characters - the most a read can carry.
+            // Thirteen characters: the compact form, BF = byte string of 15.
             byte[] atTheLimit = FaReadRequests.OpenFile("ABCDEFGH:TXT1");
-            Assert.NotNull(atTheLimit);
+            Assert.Equal(0xBF, atTheLimit[3]);
 
-            // Fourteen. What a real client does here is UNKNOWN, so we refuse rather than invent
-            // an encoding no capture has ever shown.
-            Assert.Throws<ArgumentException>(
-                delegate { FaReadRequests.OpenFile("ABCDEFGHI:TXT1"); });
+            // Fourteen: B0 and a length byte of 16, as in the capture.
+            byte[] longer = FaReadRequests.OpenFile("PATCH-FILE:OUT");
+            Assert.Equal(0xB0, longer[3]);
+            Assert.Equal(0x10, longer[4]);
+            Assert.Equal("PATCH-FILE:OUT'", System.Text.Encoding.ASCII.GetString(longer, 5, 15));
         }
 
         /// <summary>

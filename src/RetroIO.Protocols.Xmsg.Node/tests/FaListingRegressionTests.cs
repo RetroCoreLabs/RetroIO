@@ -155,33 +155,46 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         // NdDateTime.FitNdRange (back 30 years, Ronny's rule) instead of its own 64-year fold, so a
         // served file and a file written to a pack get the same year. The header checksum covers
         // words 0 to 5 only, so it does not move.
+        // RE-RECORDED 2026-11-22, deliberately. The conversation now starts with the RESERVE, as a
+        // real one does: MEASURED that day, D102's LIST-FILES sends connect letter, reserve, then the
+        // walk. The server takes the user from the reserve (one folder per user), so without it there
+        // is nothing to list. Two frames are added after the confirmation (our acknowledgement and the
+        // reserve's 18-byte reply), and everything after moves by exactly one exchange: our Flags 1
+        // and the short-acknowledgement count go up by one step, the reply message counter starts one
+        // later (0x81 for the first file instead of 0x80), the echoed request numbers are one higher
+        // (the reserve is request 1), and the header checksums follow. Checked by comparison: the record
+        // bytes themselves - names, lengths, dates, PACK-ONE, SYSTEM - are unchanged.
         private static readonly string[] ExpectedFrames =
         {
             // The connection confirmation: 07D2, the echoed letter word 0004, our connection
             // counter 0042, then the client's system byte 64.
             "2113000E00644E1F00000008905321008284006402F74E1F0211000807D2000400426400",
 
-            // First file: the acknowledgement, then the 64-byte object entry for ALPHA:SYMB.
+            // The reserve: the acknowledgement, then its 18-byte reply.
             "2113000E00644E1F00010008905221009600006402F74E1F0211000807A200040100922A",
-            "2113000E00644E1F000200628FF721009600006402F74E1F0211006207F000048000908192000C920001F200028C4BA20000A20000A20001B0409000414C504841270000000000000000000053594D420000000004F7000800000000000000000000BA0AB5A100000000BA0AB5A10000000100000002400078DAF200FF00",
+            "2113000E00644E1F00020012904721009600006402F74E1F0211001207F0000480009081920002920001F200FF00",
+
+            // First file: the acknowledgement, then the 64-byte object entry for ALPHA:SYMB.
+            "2113000E00644E1F00030008905021009600006402F74E1F0211000807A200040200922A",
+            "2113000E00644E1F000400628FF521009600006402F74E1F0211006207F000048100908192000C920002F200028C4BA20000A20000A20001B0409000414C504841270000000000000000000053594D420000000004F7000800000000000000000000BA0AB5A100000000BA0AB5A10000000100000002400078DAF200FF00",
 
             // The directory entry: a 42-byte record naming PACK-ONE, under the same B0 tag as a
             // file record and told apart only by its length.
-            "2113000E00644E1F00030008905021009600006402F74E1F0211000807A200040200922A",
-            "2113000E00644E1F00040046901121009600006402F74E1F0211004607F000048100908192000C920002F200028C2FB02AD00002400000054000005041434B2D4F4E452700000000000000400048FC400048FE000048240000347EA20001F200FF00",
+            "2113000E00644E1F00050008904E21009600006402F74E1F0211000807A200040300922A",
+            "2113000E00644E1F00060046900F21009600006402F74E1F0211004607F000048200908192000C920003F200028C2FB02AD00002400000054000005041434B2D4F4E452700000000000000400048FC400048FE000048240000347EA20001F200FF00",
 
             // The user entry: a 16-byte name and no record at all.
-            "2113000E00644E1F00050008904E21009600006402F74E1F0211000807A200040300922A",
-            "2113000E00644E1F00060028902D21009600006402F74E1F0211002807F000048200908192000C920003F200028C12B01053595354454D27000000000000000000F200FF",
+            "2113000E00644E1F00070008904C21009600006402F74E1F0211000807A200040400922A",
+            "2113000E00644E1F00080028902B21009600006402F74E1F0211002807F000048300908192000C920004F200028C12B01053595354454D27000000000000000000F200FF",
 
             // Second file: BETA:DATA, at walk ordinal 1.
-            "2113000E00644E1F00070008904C21009600006402F74E1F0211000807A200040400922A",
-            "2113000E00644E1F000800628FF121009600006402F74E1F0211006207F000048300908192000C920004F200028C4BA20000A20001A20001B040900042455441270000000000000000000000444154410001000104F7000800000000000100000000BA0AB5A100000000BA0AB5A10000000100000006400078DAF200FF00",
+            "2113000E00644E1F00090008904A21009600006402F74E1F0211000807A200040500922A",
+            "2113000E00644E1F000A00628FEF21009600006402F74E1F0211006207F000048400908192000C920005F200028C4BA20000A20001A20001B040900042455441270000000000000000000000444154410001000104F7000800000000000100000000BA0AB5A100000000BA0AB5A10000000100000006400078DAF200FF00",
 
             // Past the end of the walk: selector 1 with SINTRAN error 0x00C5 = 197, "no more
             // files". A refusal is the presence of selector 1, not a flag inside it.
-            "2113000E00644E1F00090008904A21009600006402F74E1F0211000807A200040500922A",
-            "2113000E00644E1F000A0018903921009600006402F74E1F0211001807F000048400908192000C920005F20001A200C5F200FF00",
+            "2113000E00644E1F000B0008904821009600006402F74E1F0211000807A200040600922A",
+            "2113000E00644E1F000C0018903721009600006402F74E1F0211001807F000048500908192000C920006F20001A200C5F200FF00",
         };
 
         /// <summary>
@@ -193,7 +206,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         public FaListingRegressionTests(ITestOutputHelper output)
         {
             _output = output;
-            _folder = Path.Combine(Path.GetTempPath(), "fa-listing-golden-" + Guid.NewGuid().ToString("N"));
+            _folder = Path.Combine(Path.GetTempPath(), "fa-listing-golden-" + Guid.NewGuid().ToString("N"), "SYSTEM");  // the SYSTEM user's folder: the server serves one folder per user
             Directory.CreateDirectory(_folder);
 
             WriteServedFile(FirstFileName, FirstFileText);
@@ -207,7 +220,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             try
             {
-                Directory.Delete(_folder, true);
+                Directory.Delete(Path.GetDirectoryName(_folder)!, true);
             }
             catch (IOException)
             {
@@ -340,14 +353,15 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// The emitted frames.
         /// </returns>
         /// <remarks>
-        /// The step order is the one D100 uses: the connect letter, the first file, the directory
-        /// entry, the user entry, the next file, and one request past the end of the walk. The
+        /// The step order is the one a real client uses: the connect letter, the reserve, the first
+        /// file, the directory entry, the user entry, the next file, and one request past the end of
+        /// the walk. The
         /// client's Flags 1 rises by two per exchange because each of ours is answered by an
         /// acknowledgement of its own.
         /// </remarks>
         private IReadOnlyList<XmsgFrame> RunListingConversation()
         {
-            FaServer server = new FaServer(new FolderFileStore(_folder));
+            FaServer server = new FaServer(new FaUserFolders(Path.GetDirectoryName(_folder)!));
             server.Log += line => _output.WriteLine(line);
 
             XmsgServerHost host = new XmsgServerHost(FaTestClient.ServerNode);
@@ -357,22 +371,28 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             Collect(emitted, host.Route(FaTestClient.BuildConnectLetter()));
 
+            // The reserve, which names the user whose folder is listed. MEASURED 2026-11-22: D102's
+            // LIST-FILES sends it straight after the connect letter, before the walk.
+            Collect(emitted, host.Route(FaTestClient.BuildSessionFrame(
+                FaTestClient.BuildRequestEnvelope(FaOperation.ReserveFileEntry, 1, FaWriteRequests.ReserveFileEntry("BAK04", "SYSTEM")),
+                0x0002)));
+
             // 0xFFFF starts the walk and asks for the first file.
             Collect(emitted, host.Route(FaTestClient.BuildSessionFrame(
-                FaTestClient.BuildListingRequest(1, FaListFilesCodec.FirstEntryCursor), 0x0002)));
+                FaTestClient.BuildListingRequest(2, FaListFilesCodec.FirstEntryCursor), 0x0004)));
 
             // The two header entries a SINTRAN listing prints as "(PACK-ONE:SYSTEM)". Neither moves
             // the walk on - which is the defect that stopped D100 listing anything at all.
             Collect(emitted, host.Route(FaTestClient.BuildSessionFrame(
-                FaTestClient.BuildFunctionRequest(2, FaSpecialFunction.DirectoryEntry), 0x0004)));
+                FaTestClient.BuildFunctionRequest(3, FaSpecialFunction.DirectoryEntry), 0x0006)));
             Collect(emitted, host.Route(FaTestClient.BuildSessionFrame(
-                FaTestClient.BuildFunctionRequest(3, FaSpecialFunction.UserEntry), 0x0006)));
+                FaTestClient.BuildFunctionRequest(4, FaSpecialFunction.UserEntry), 0x0008)));
 
             // The second file, then one request past the end.
             Collect(emitted, host.Route(FaTestClient.BuildSessionFrame(
-                FaTestClient.BuildListingRequest(4, 0), 0x0008)));
-            Collect(emitted, host.Route(FaTestClient.BuildSessionFrame(
                 FaTestClient.BuildListingRequest(5, 0), 0x000A)));
+            Collect(emitted, host.Route(FaTestClient.BuildSessionFrame(
+                FaTestClient.BuildListingRequest(6, 0), 0x000C)));
 
             return emitted;
         }

@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 
 using RetroIO.Protocols.Xmsg.Qform;
 
@@ -110,6 +111,85 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// reserves, so nothing distinguishes it from a constant.
         /// </remarks>
         public const ushort ReserveField1 = 2000;
+
+        /// <summary>
+        /// Reads the user whose directory a <see cref="FaOperation.ReserveFileEntry"/> opens, and the
+        /// folded password word that comes with it - the server side of
+        /// <see cref="ReserveFileEntry(string, string, string, ushort)"/>.
+        /// </summary>
+        /// <param name="fields">
+        /// The request's QFORM fields, from the operation pair onwards.
+        /// </param>
+        /// <param name="remoteUser">
+        /// Receives the user name, or an empty string when the request has none.
+        /// </param>
+        /// <param name="passwordWord">
+        /// Receives the folded password word, or zero.
+        /// </param>
+        /// <returns>
+        /// True when the credentials block was found and its user slot holds a name.
+        /// </returns>
+        /// <remarks>
+        /// <para><b>Where the name is</b></para>
+        /// <para>
+        /// The reader flattens the credentials block (field 4, <c>8C 38</c>), so its two 16-byte
+        /// strings are the first two 16-byte strings of the request: the user slot, then the password
+        /// slot. The asker in field 3 is a 13-byte string and is not one of them. Layout decoded on the
+        /// builder above, from the SECRET capture.
+        /// </para>
+        /// <para><b>The name ends at the FIRST apostrophe</b></para>
+        /// <para>
+        /// MEASURED 2026-11-22, a hub capture of <c>LIST-FILES d19999(ronny).</c> from D102: the slot
+        /// held <c>RONNY''</c> and NULs. An older capture of a SYSTEM listing held <c>SYS'EM'</c>. In
+        /// both, what follows the first apostrophe is left over from an earlier name in the same buffer
+        /// on the client, so only the part before it is the name. A NUL ends it too.
+        /// </para>
+        /// </remarks>
+        public static bool TryReadReserveUser(ReadOnlySpan<byte> fields, out string remoteUser, out ushort passwordWord)
+        {
+            remoteUser = string.Empty;
+            passwordWord = 0;
+
+            IReadOnlyList<QformField> parsed;
+            if (!QformReader.TryRead(fields, out parsed))
+            {
+                return false;
+            }
+
+            int slot = 0;
+            for (int i = 0; i < parsed.Count; i++)
+            {
+                if (parsed[i].Class != QformClass.ByteString || parsed[i].ValueLength != 16)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> value = fields.Slice(parsed[i].ValueOffset, parsed[i].ValueLength);
+                if (slot == 0)
+                {
+                    int end = 0;
+                    while (end < value.Length && value[end] != 0x27 && value[end] != 0x00)
+                    {
+                        end++;
+                    }
+
+                    char[] name = new char[end];
+                    for (int k = 0; k < end; k++)
+                    {
+                        name[k] = (char)(value[k] & 0x7F);
+                    }
+
+                    remoteUser = new string(name);
+                    slot = 1;
+                    continue;
+                }
+
+                passwordWord = (ushort)((value[0] << 8) | value[1]);
+                break;
+            }
+
+            return remoteUser.Length > 0;
+        }
 
         /// <summary>
         /// Builds the fields for <see cref="FaOperation.ReserveFileEntry"/>.

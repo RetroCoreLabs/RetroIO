@@ -32,8 +32,9 @@ public class XmsgFileServerStoreTests
     public void SetUp()
     {
         _folder = Path.Combine(Path.GetTempPath(), "xmsg-fa-store-test-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(_folder, "files"));
-        File.WriteAllText(Path.Combine(_folder, "files", "HELLO.SYMB"), "hello");
+        // One folder per SINTRAN user under the served root.
+        Directory.CreateDirectory(Path.Combine(_folder, "files", "SYSTEM"));
+        File.WriteAllText(Path.Combine(_folder, "files", "SYSTEM", "HELLO.SYMB"), "hello");
     }
 
     [TearDown]
@@ -46,7 +47,7 @@ public class XmsgFileServerStoreTests
     [Test]
     public void Off_GivesNoStore()
     {
-        IFaFileStore? store = XmsgFileServerStore.Build(new XmsgNodeServerConfiguration(), _folder, null, out VfsCore? vfs);
+        FaUserFolders? store = XmsgFileServerStore.Build(new XmsgNodeServerConfiguration(), _folder, null, out VfsCore? vfs);
         Assert.That(store, Is.Null);
         Assert.That(vfs, Is.Null);
     }
@@ -61,11 +62,11 @@ public class XmsgFileServerStoreTests
             FileServerUri = Path.Combine(_folder, "files"),
         };
 
-        IFaFileStore? store = XmsgFileServerStore.Build(config, Path.Combine(_folder, "cache"), null, out VfsCore? vfs);
+        FaUserFolders? store = XmsgFileServerStore.Build(config, Path.Combine(_folder, "cache"), null, out VfsCore? vfs);
 
         Assert.That(vfs, Is.Null, "a plain folder needs no storage layer");
         Assert.That(store, Is.Not.Null);
-        Assert.That(store!.ListFiles().Count, Is.EqualTo(1));
+        Assert.That(store!.ForUser("SYSTEM")!.ListFiles().Count, Is.EqualTo(1));
     }
 
     [Test]
@@ -87,12 +88,12 @@ public class XmsgFileServerStoreTests
             FileServerMountRef = "cosmos-volume",
         };
 
-        IFaFileStore? store = XmsgFileServerStore.Build(config, Path.Combine(_folder, "cache"), registry, out VfsCore? vfs);
+        FaUserFolders? store = XmsgFileServerStore.Build(config, Path.Combine(_folder, "cache"), registry, out VfsCore? vfs);
         try
         {
             Assert.That(vfs, Is.Not.Null, "a read-only mount is served through the storage layer");
             Assert.That(store, Is.Not.Null);
-            Assert.That(store!.ListFiles().Count, Is.EqualTo(1));
+            Assert.That(store!.ForUser("SYSTEM")!.ListFiles().Count, Is.EqualTo(1));
             Assert.That(store.Location, Does.StartWith("native:"));
         }
         finally

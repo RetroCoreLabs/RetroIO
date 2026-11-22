@@ -228,6 +228,10 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// How many times a connection request of a reopen may be refused and tried again.
         /// </summary>
         private int _reopenRetriesLeft;
+
+        // True while our connection request went out before the peer had ever been heard from. On a
+        // hub that request may have reached nobody - see where it is sent again, in HandleFrame.
+        private bool _requestSentUnheard;
         private readonly NdMacAddress _localMac;
         private readonly Action<byte[], int> _sendFrame;
 
@@ -463,6 +467,12 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// never sent.
         /// </remarks>
         public long DatagramsRefusedQueueFull { get; private set; }
+
+        /// <summary>
+        /// Gets how many times a connection request was sent again because the first went out before
+        /// the peer had been heard from (see <see cref="Reopen"/>).
+        /// </summary>
+        public long ConnectionRequestsResent { get; private set; }
 
         /// <summary>
         /// Takes an acknowledgement, learning where the peer thinks our numbering is if this is the
@@ -926,6 +936,7 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             _nextExpectedFromPeer = InitialSequence;
 
             _reopen = ReopenStep.WaitingForConnectionConfirm;
+            _requestSentUnheard = !HasLearnedPeer;
             SendConnectionRequest(PeerMac);
         }
 
@@ -1041,6 +1052,22 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
                 {
                     OnPeerLearned?.Invoke();
                 }
+            }
+
+            // OUR CONNECTION REQUEST MAY HAVE REACHED NOBODY. MEASURED 2026-11-22: RetroServer runs the
+            // hub itself, so after a restart our node sends its request before the machines have joined
+            // again; the request is lost, the link waits for a confirm with a send window of 0, and the
+            // peer's "NO ANSWER FROM REMOTE SYSTEM" follows. When the request went out before the peer
+            // was ever heard from, the first frame from the peer proves it is there now, so the request
+            // goes once more. No timer and no guessed interval: how a real machine repeats an unanswered
+            // request is NOT measured (BUGS.md), and this does not stand in for that. A real D102 has
+            // been seen answering a connection request with a confirm (0x0F, then 0x1F, DOC/captures/
+            // 2026-11-21-xmsg-restart-d102-over-ethernet-hub.pcap).
+            if (_reopen == ReopenStep.WaitingForConnectionConfirm && _requestSentUnheard && !header.IsConnectionConfirm)
+            {
+                _requestSentUnheard = false;
+                ConnectionRequestsResent++;
+                SendConnectionRequest(PeerMac);
             }
 
             if (header.IsAcknowledge)

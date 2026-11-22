@@ -54,7 +54,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         public FaNamedFileListingTests(ITestOutputHelper output)
         {
             _output = output;
-            _folder = Path.Combine(Path.GetTempPath(), "fa-named-" + Guid.NewGuid().ToString("N"));
+            _folder = Path.Combine(Path.GetTempPath(), "fa-named-" + Guid.NewGuid().ToString("N"), "SYSTEM");  // the SYSTEM user's folder: the server serves one folder per user
             Directory.CreateDirectory(_folder);
 
             File.WriteAllText(Path.Combine(_folder, "ALPHA.SYMB"), "one");
@@ -69,7 +69,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             try
             {
-                Directory.Delete(_folder, true);
+                Directory.Delete(Path.GetDirectoryName(_folder)!, true);
             }
             catch (IOException)
             {
@@ -90,6 +90,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             byte[] block = FaTestClient.BuildSpecBlock(FaServer.UserName, "BETA:DATA");
 
@@ -114,6 +115,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             byte[] block = FaTestClient.BuildSpecBlock(FaServer.UserName, string.Empty);
 
@@ -131,6 +133,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             byte[] block = FaTestClient.BuildSpecBlock(FaServer.UserName, "NOSUCH:FILE");
 
@@ -155,6 +158,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
 
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             byte[] block = FaTestClient.BuildSpecBlock(FaServer.UserName, "BETA:DATA");
 
@@ -176,6 +180,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         {
             XmsgServerHost host = BuildHost();
             host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("SYSTEM"));
 
             // The right name and the WRONG type finds nothing...
             byte[] wrongType = FaTestClient.BuildSpecBlock(FaServer.UserName, "BETA:SYMB");
@@ -228,7 +233,7 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
         /// </returns>
         private XmsgServerHost BuildHost()
         {
-            FaServer server = new FaServer(new FolderFileStore(_folder));
+            FaServer server = new FaServer(new FaUserFolders(Path.GetDirectoryName(_folder)!));
             server.Log += line => _output.WriteLine(line);
 
             XmsgServerHost host = new XmsgServerHost(FaTestClient.ServerNode);

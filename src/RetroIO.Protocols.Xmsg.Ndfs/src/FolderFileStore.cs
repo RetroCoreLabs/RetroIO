@@ -635,6 +635,12 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
             }
 
             string hostName = name.Type == null ? name.Name : name.Name + "." + name.Type;
+
+            // A client must not reach a metadata file by naming it, for example as NAME:XAT.
+            if (XatSidecar.IsXatName(hostName) || XatSidecar.IsDamagedXatName(hostName))
+            {
+                return false;
+            }
             string candidate = _backend == null
                 ? Path.GetFullPath(Path.Combine(_root, hostName))
                 : _backend.GetFullPath(_backend.CombinePath(_root, hostName));
@@ -818,6 +824,14 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         private static FaFileName? FromHostPath(string path)
         {
             string fileName = Path.GetFileName(path);
+
+            // A .xat file holds the metadata of the file beside it, and a .xat.bad one is a damaged
+            // copy kept for a person to look at. Neither is a SINTRAN file, so neither is ever listed
+            // (Ronny, 2026-11-22: metadata files that do "not show in the listing").
+            if (XatSidecar.IsXatName(fileName) || XatSidecar.IsDamagedXatName(fileName))
+            {
+                return null;
+            }
             int dot = fileName.LastIndexOf('.');
 
             if (dot < 0)

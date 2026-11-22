@@ -22,7 +22,7 @@ namespace RetroIO.Server.Hosting;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A plain local folder is served straight from disk (<see cref="FolderFileStore(string)"/>), so it keeps
+/// A plain local folder is served straight from disk (<see cref="FaUserFolders(string)"/>), so it keeps
 /// the file sharing rules of an open <c>FileStream</c>; the storage layer has no share mode. Everything
 /// else - TNFS, a read-only folder, a referenced mount - goes through one <see cref="VfsCore"/> mount, the
 /// way the Econet discs do (<see cref="EconetVfsDiscs"/>).
@@ -69,7 +69,7 @@ public static class XmsgFileServerStore
     /// <exception cref="NotSupportedException">
     /// Thrown for a kind of storage other than <c>native</c> and <c>tnfs</c>.
     /// </exception>
-    public static IFaFileStore? Build(
+    public static FaUserFolders? Build(
         XmsgNodeServerConfiguration config,
         string tempCacheDir,
         IReadOnlyList<UnifiedMountEntry>? registryMounts,
@@ -97,7 +97,7 @@ public static class XmsgFileServerStore
 
         if (provider == "native" && !readOnly)
         {
-            return new FolderFileStore(uri);
+            return new FaUserFolders(uri);
         }
 
         VfsCore core = new VfsCore(enablePersistence: false);
@@ -108,7 +108,7 @@ public static class XmsgFileServerStore
             core.Mount(provider, uri, VolumeId, readOnly);
             VfsFileSystemBackend backend = new VfsFileSystemBackend(
                 core, provider, VolumeId, MountPath, tempCacheDir, readOnly: readOnly);
-            FolderFileStore store = new FolderFileStore(backend, MountPath, provider + ":" + uri);
+            FaUserFolders store = new FaUserFolders(backend, MountPath, provider + ":" + uri);
             vfs = core;
             return store;
         }

@@ -369,6 +369,13 @@
         "evidence": "every successful exchange"
       },
       {
+        "name": "NoSuchUser",
+        "value": 39,
+        "meaning": "no such user name in main directory (047 octal)",
+        "status": "MEASURED",
+        "evidence": "live D100 2026-08-18: a push to (NOUSR)A:T was refused on the OpenFile with F2 0001 A2 0027"
+      },
+      {
         "name": "NoSuchFile",
         "value": 46,
         "meaning": "no file of that name on that machine",

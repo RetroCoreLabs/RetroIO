@@ -62,7 +62,7 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// Thrown when <paramref name="fileSpec"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// Thrown when the specification and its suffix do not fit a compact byte string.
+        /// Thrown when the specification and its suffix are empty or longer than 127 bytes.
         /// </exception>
         /// <remarks>
         /// <para><b>The captured field, byte for byte</b></para>
@@ -83,13 +83,13 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// See <see cref="FaReadLadder.ReadAccessSuffix"/>. Writes put a letter there and use more
         /// than one, so it is not simply an access mode, and nothing here pretends otherwise.
         /// </para>
-        /// <para><b>The eleven-character budget</b></para>
+        /// <para><b>Short and long names</b></para>
         /// <para>
-        /// The compact string form holds at most fifteen bytes, and the suffix costs two of them,
-        /// so a specification has THIRTEEN to live in - and the write side is tighter still at
-        /// eleven, because its quotes cost two more. What a real client does with a longer name is
-        /// UNKNOWN, so this throws rather than silently switching to the long string form and
-        /// sending something no capture has ever shown.
+        /// The compact string form holds at most fifteen bytes, and the suffix costs two of them, so
+        /// a specification of up to THIRTEEN characters goes compact. A longer one goes in the long
+        /// form, <c>B0</c> and a length byte, which the read capture shows for the fourteen-character
+        /// <c>PATCH-FILE:OUT</c>. (This paragraph used to call a longer name UNKNOWN; it was written
+        /// before that capture and left behind when the long form was added on 2026-08-24.)
         /// </para>
         /// </remarks>
         public static byte[] OpenFile(string fileSpec)
@@ -102,7 +102,11 @@ namespace RetroIO.Protocols.Xmsg.Fa
             string field = fileSpec + "'" + FaReadLadder.ReadAccessSuffix;
             byte[] text = System.Text.Encoding.ASCII.GetBytes(field);
 
-            if (text.Length < 1 || text.Length > 0x0F)
+            // The long string form below takes up to 127 bytes. This guard used to stop at 15, the
+            // compact form's limit, left behind when the long form was added on 2026-08-24, so a read
+            // of any name longer than 13 characters threw (found 2026-11-22 opening
+            // "(RONNY)LETTER:SYMB").
+            if (text.Length < 1 || text.Length > 0x7F)
             {
                 throw new ArgumentException(
                     "'" + fileSpec + "' plus its suffix is " + text.Length
