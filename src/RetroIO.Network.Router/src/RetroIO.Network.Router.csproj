@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Network.Router: a small IPv4 router for emulated dial-up providers.
+
+    Each dial-up call (SLIP now, PPP later) is one point-to-point link with its own address on one
+    subnet. The router passes IP packets between the links, the owner's own services (RetroServer's
+    TNFS and so on) and, later, NAT to the internet. Used by RetroServer and RetroCore.
+
+    It owns no socket, no thread and no timer: the owner calls it from its own thread.
+
+    Specifications: RFC 791 (IPv4: header, checksum, TTL), RFC 1812 (requirements for IPv4 routers:
+    TTL decrement, header checks, broadcast forwarding), RFC 1624 (the header checksum after a
+    change), RFC 1918 (private addresses, 10.0.0.0/8).
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Network.Router</PackageId>
+    <AssemblyName>RetroIO.Network.Router</AssemblyName>
+    <RootNamespace>RetroIO.Network.Router</RootNamespace>
+    <Description>A small IPv4 router for emulated dial-up: point-to-point links on one subnet, the owner's own services, and a place for NAT. No socket or thread of its own.</Description>
+    <PackageTags>retroio;router;ipv4;dialup;slip;ppp</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

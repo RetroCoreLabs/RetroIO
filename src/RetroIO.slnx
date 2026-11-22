@@ -256,6 +256,13 @@
     <Project Path="tests/RetroIO.Protocols.Xmsg.TestSupport/RetroIO.Protocols.Xmsg.TestSupport.csproj" />
     <Project Path="tests/RetroIO.Tests/RetroIO.Tests.csproj" />
   </Folder>
+  <Folder Name="/RetroIO.Network.Router/" />
+  <Folder Name="/RetroIO.Network.Router/src/">
+    <Project Path="RetroIO.Network.Router/src/RetroIO.Network.Router.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Network.Router/tests/">
+    <Project Path="RetroIO.Network.Router/tests/RetroIO.Network.Router.Tests.csproj" />
+  </Folder>
   <Folder Name="/RetroIO.Protocols.Slip/" />
   <Folder Name="/RetroIO.Protocols.Slip/src/">
     <Project Path="RetroIO.Protocols.Slip/src/RetroIO.Protocols.Slip.csproj" />
