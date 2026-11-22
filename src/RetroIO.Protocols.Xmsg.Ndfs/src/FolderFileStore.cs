@@ -9,6 +9,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using RetroIO.Server.Core.FileSystem;
+
 namespace RetroIO.Protocols.Xmsg.Ndfs
 {
     /// <summary>
@@ -129,6 +131,13 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
     public sealed class FolderFileStore : IFaFileStore
     {
         private readonly string _root;
+
+        // Null for a local folder, which keeps the exact FileStream sharing it always had (a file being
+        // written can still be read). Set for any other storage (TNFS, a mounts.json volume), reached
+        // through the same backend Econet discs use. IFileSystemBackend.OpenFile takes no share mode, so
+        // routing the local case through it as well would change that behaviour.
+        private readonly IFileSystemBackend? _backend;
+        private readonly string _location;
         private readonly Dictionary<string, ushort> _fileNumbers =
             new Dictionary<string, ushort>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<ushort, OpenFile> _open = new Dictionary<ushort, OpenFile>();
@@ -154,7 +163,50 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
             }
 
             _root = Path.GetFullPath(rootFolder);
+            _location = _root;
             Directory.CreateDirectory(_root);
+        }
+
+        /// <summary>
+        /// Opens a store over a folder on any storage backend - a TNFS endpoint, a <c>mounts.json</c>
+        /// volume - creating the folder when it does not exist.
+        /// </summary>
+        /// <param name="backend">
+        /// The storage, as Econet discs reach it.
+        /// </param>
+        /// <param name="rootFolder">
+        /// The folder on that storage whose files are served, in the backend's own path form.
+        /// </param>
+        /// <param name="location">
+        /// How the storage is shown in log lines and status pages, for example the mount's URI.
+        /// </param>
+        /// <remarks>
+        /// <para>
+        /// Verified by reading the code, 2026-11-22: a non-local backend (<c>VfsFileSystemBackend</c>)
+        /// copies the file into a local temporary file on open, so reads and writes by byte offset work
+        /// on TNFS as on a local folder. A file larger than the backend's copy limit cannot be opened.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="backend"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="rootFolder"/> is null or blank.
+        /// </exception>
+        public FolderFileStore(IFileSystemBackend backend, string rootFolder, string location)
+        {
+            if (string.IsNullOrWhiteSpace(rootFolder))
+            {
+                throw new ArgumentException("A root folder is required.", nameof(rootFolder));
+            }
+
+            _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+            _root = backend.GetFullPath(rootFolder);
+            _location = string.IsNullOrEmpty(location) ? _root : location;
+            if (!backend.DirectoryExists(_root))
+            {
+                backend.CreateDirectory(_root);
+            }
         }
 
         /// <summary>
@@ -166,11 +218,11 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         }
 
         /// <summary>
-        /// Gets the folder being served; the same as <see cref="RootFolder"/>.
+        /// Gets where the files are, for log lines: the folder, or the text given for another backend.
         /// </summary>
         public string Location
         {
-            get { return _root; }
+            get { return _location; }
         }
 
         /// <summary>
@@ -185,7 +237,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
 
             lock (_gate)
             {
-                string[] paths = Directory.GetFiles(_root);
+                string[] paths = ListHostFiles();
                 Array.Sort(paths, StringComparer.OrdinalIgnoreCase);
 
                 for (int i = 0; i < paths.Length; i++)
@@ -196,9 +248,9 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
                         continue;
                     }
 
-                    FileInfo info = new FileInfo(paths[i]);
+                    GetHostInfo(paths[i], out long length, out DateTime modifiedUtc);
                     results.Add(new FaFileInfo(
-                        FileNumberFor(name), name, info.Length, info.LastWriteTimeUtc));
+                        FileNumberFor(name), name, length, modifiedUtc));
                 }
             }
 
@@ -227,16 +279,14 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
 
             lock (_gate)
             {
-                if (File.Exists(path))
+                if (HostFileExists(path!))
                 {
                     return FaStoreStatus.AlreadyExists;
                 }
 
                 try
                 {
-                    using (File.Create(path!))
-                    {
-                    }
+                    CreateEmptyHostFile(path!);
                 }
                 catch (IOException)
                 {
@@ -275,14 +325,14 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
 
             lock (_gate)
             {
-                if (!File.Exists(path))
+                if (!HostFileExists(path!))
                 {
                     return FaStoreStatus.NoSuchFile;
                 }
 
                 try
                 {
-                    File.Delete(path!);
+                    DeleteHostFile(path!);
                 }
                 catch (IOException)
                 {
@@ -322,7 +372,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
 
             lock (_gate)
             {
-                if (!forWrite && !File.Exists(path))
+                if (!forWrite && !HostFileExists(path!))
                 {
                     return FaStoreStatus.NoSuchFile;
                 }
@@ -330,9 +380,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
                 FileStream stream;
                 try
                 {
-                    stream = forWrite
-                        ? new FileStream(path!, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read)
-                        : new FileStream(path!, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    stream = OpenHostFile(path!, forWrite);
                 }
                 catch (IOException)
                 {
@@ -587,12 +635,15 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
             }
 
             string hostName = name.Type == null ? name.Name : name.Name + "." + name.Type;
-            string candidate = Path.GetFullPath(Path.Combine(_root, hostName));
+            string candidate = _backend == null
+                ? Path.GetFullPath(Path.Combine(_root, hostName))
+                : _backend.GetFullPath(_backend.CombinePath(_root, hostName));
 
             // Belt and braces: whatever the name looked like, the result must sit inside the root.
-            string rootWithSeparator = _root.EndsWith(Path.DirectorySeparatorChar)
+            char separator = _backend == null ? Path.DirectorySeparatorChar : SeparatorOf(_root);
+            string rootWithSeparator = _root.EndsWith(separator)
                 ? _root
-                : _root + Path.DirectorySeparatorChar;
+                : _root + separator;
 
             if (!candidate.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
             {
@@ -601,6 +652,158 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
 
             path = candidate;
             return true;
+        }
+
+        /// <summary>
+        /// The separator a backend path uses: '/' when the path has one, else the local one.
+        /// </summary>
+        /// <param name="path">
+        /// A path in the backend's form.
+        /// </param>
+        /// <returns>
+        /// The separator.
+        /// </returns>
+        private static char SeparatorOf(string path)
+        {
+            return path.IndexOf('/') >= 0 ? '/' : Path.DirectorySeparatorChar;
+        }
+
+        /// <summary>
+        /// The files (not folders) directly in the served folder, as host paths.
+        /// </summary>
+        /// <returns>
+        /// The paths.
+        /// </returns>
+        private string[] ListHostFiles()
+        {
+            if (_backend == null)
+            {
+                return Directory.GetFiles(_root);
+            }
+
+            List<string> files = new List<string>();
+            using (IEnumerator<string> entries = _backend.EnumerateFileSystemEntries(_root).GetEnumerator())
+            {
+                while (entries.MoveNext())
+                {
+                    if (!_backend.IsDirectory(entries.Current))
+                    {
+                        files.Add(entries.Current);
+                    }
+                }
+            }
+
+            return files.ToArray();
+        }
+
+        /// <summary>
+        /// Reads a file's length and last write time.
+        /// </summary>
+        /// <param name="path">
+        /// The host path.
+        /// </param>
+        /// <param name="length">
+        /// Receives the length in bytes.
+        /// </param>
+        /// <param name="modifiedUtc">
+        /// Receives the last write time; <see cref="DateTime.MinValue"/> when the backend has none.
+        /// </param>
+        private void GetHostInfo(string path, out long length, out DateTime modifiedUtc)
+        {
+            if (_backend == null)
+            {
+                FileInfo info = new FileInfo(path);
+                length = info.Length;
+                modifiedUtc = info.LastWriteTimeUtc;
+                return;
+            }
+
+            BackendFileInfo? backendInfo = _backend.GetFileInfo(path);
+            length = backendInfo == null ? 0 : backendInfo.Length;
+            modifiedUtc = backendInfo == null || backendInfo.LastWriteTimeUtc == null
+                ? DateTime.MinValue
+                : backendInfo.LastWriteTimeUtc.Value;
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether a file exists.
+        /// </summary>
+        /// <param name="path">
+        /// The host path.
+        /// </param>
+        /// <returns>
+        /// True when it exists.
+        /// </returns>
+        private bool HostFileExists(string path)
+        {
+            return _backend == null ? File.Exists(path) : _backend.FileExists(path);
+        }
+
+        /// <summary>
+        /// Creates an empty file.
+        /// </summary>
+        /// <param name="path">
+        /// The host path.
+        /// </param>
+        private void CreateEmptyHostFile(string path)
+        {
+            if (_backend == null)
+            {
+                using (File.Create(path))
+                {
+                }
+
+                return;
+            }
+
+            using (_backend.OpenFile(path, FileMode.CreateNew, FileAccess.Write))
+            {
+            }
+        }
+
+        /// <summary>
+        /// Deletes a file.
+        /// </summary>
+        /// <param name="path">
+        /// The host path.
+        /// </param>
+        private void DeleteHostFile(string path)
+        {
+            if (_backend == null)
+            {
+                File.Delete(path);
+            }
+            else
+            {
+                _backend.DeleteFile(path);
+            }
+        }
+
+        /// <summary>
+        /// Opens a file for reading or writing.
+        /// </summary>
+        /// <param name="path">
+        /// The host path.
+        /// </param>
+        /// <param name="forWrite">
+        /// True to open for writing (created when missing).
+        /// </param>
+        /// <returns>
+        /// The stream.
+        /// </returns>
+        private FileStream OpenHostFile(string path, bool forWrite)
+        {
+            if (_backend == null)
+            {
+                // A local file being written can still be read, and the other way round.
+                return forWrite
+                    ? new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read)
+                    : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            }
+
+            return forWrite
+                ? _backend.OpenFile(path, FileMode.OpenOrCreate, FileAccess.ReadWrite)
+                : _backend.OpenFile(path, FileMode.Open, FileAccess.Read);
         }
 
         /// <summary>

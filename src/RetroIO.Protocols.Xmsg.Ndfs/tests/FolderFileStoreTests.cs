@@ -11,6 +11,7 @@ using System.IO;
 using System.Text;
 
 using RetroIO.Protocols.Xmsg.Ndfs;
+using RetroIO.Server.Core.FileSystem;
 
 using Xunit;
 
@@ -20,7 +21,12 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
     /// Gate for the file store behind the FA file server: SINTRAN name parsing, the stable
     /// file-number promise, and the refusal to serve anything outside the folder it was given.
     /// </summary>
-    public sealed class FolderFileStoreTests : IDisposable
+    /// <remarks>
+    /// Every test here runs twice: on a local folder (this class) and through the storage backend
+    /// Econet discs use (<see cref="FolderFileStoreOverBackendTests"/>), so both ways of reaching the
+    /// files keep the same promises.
+    /// </remarks>
+    public class FolderFileStoreTests : IDisposable
     {
         private readonly string _folder;
         private readonly FolderFileStore _store;
@@ -29,9 +35,20 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
         /// Creates a store over a fresh temporary folder.
         /// </summary>
         public FolderFileStoreTests()
+            : this(folder => new FolderFileStore(folder))
+        {
+        }
+
+        /// <summary>
+        /// Creates a store over a fresh temporary folder, made by <paramref name="makeStore"/>.
+        /// </summary>
+        /// <param name="makeStore">
+        /// Makes the store over the folder.
+        /// </param>
+        protected FolderFileStoreTests(Func<string, FolderFileStore> makeStore)
         {
             _folder = Path.Combine(Path.GetTempPath(), "xmsg-store-" + Guid.NewGuid().ToString("N"));
-            _store = new FolderFileStore(_folder);
+            _store = makeStore(_folder);
         }
 
         /// <summary>
@@ -39,6 +56,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
         /// </summary>
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
             try
             {
                 if (Directory.Exists(_folder))
@@ -206,6 +224,40 @@ namespace RetroIO.Protocols.Xmsg.Ndfs.Tests
 
             Assert.Equal("README.markdown", entry.Name.Name);
             Assert.Null(entry.Name.Type);
+        }
+    }
+
+    /// <summary>
+    /// The same tests, with the files reached through <see cref="IFileSystemBackend"/> - the path a
+    /// TNFS endpoint or a <c>mounts.json</c> volume takes (plan Phase 6).
+    /// </summary>
+    public sealed class FolderFileStoreOverBackendTests : FolderFileStoreTests
+    {
+        /// <summary>
+        /// Creates a store over a fresh temporary folder, through the local backend.
+        /// </summary>
+        public FolderFileStoreOverBackendTests()
+            : base(folder => new FolderFileStore(new LocalFileSystemBackend(), folder, "local backend"))
+        {
+        }
+
+        /// <summary>
+        /// Location is the text given for the backend, not the folder.
+        /// </summary>
+        [Fact]
+        public void Location_IsTheTextGivenForTheBackend()
+        {
+            string folder = Path.Combine(Path.GetTempPath(), "xmsg-store-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                FolderFileStore store = new FolderFileStore(new LocalFileSystemBackend(), folder, "tnfs://host:16384/cosmos");
+                Assert.Equal("tnfs://host:16384/cosmos", store.Location);
+                Assert.True(Directory.Exists(folder));
+            }
+            finally
+            {
+                Directory.Delete(folder, recursive: true);
+            }
         }
     }
 }
