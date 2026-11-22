@@ -1780,14 +1780,31 @@ namespace RetroIO.Protocols.X25.Switch
             }
             else
             {
-                // X.75 5.3.1: a refusal from the next network names the transit networks up to the one that refused,
-                // which includes this one. A call not yet connected that the next network refused goes back to the caller's
-                // side with that list, not with the one this network received. Added 2026-11-22; until then the caller's
-                // side was given the list it had sent. Only a refusal that came in from another network carries one; from
-                // an internal trunk or a subscriber the packet layer answers with the Call Request's own list.
-                byte[]? transitList = !stitch.Active && stitch.OutPort.Config.BetweenNetworks ? port.GetClearUtilities(lci) : null;
-                stitch.InPort.ClearCall(stitch.InLci, cause, diagnostic,
-                    ClearFacilitiesFor(stitch, toCaller: true, clearFacilities), transitList);
+                // X.75 5.3.1: a refusal names the transit networks up to the one that refused. A call not yet connected
+                // goes back to the caller's side with the list the same rule as a Call Connected gives (AnswerTransitList):
+                // the one the next network refused with, the carried copy from another of our switches, or at the
+                // destination the list the call came with. It is placed as WithAnswerTransitList places an answer's: in the
+                // utility field toward another network, in the carried private element toward another of our switches, and
+                // nowhere toward a subscriber. Added 2026-11-22; until then the caller's side was given the list it had sent,
+                // and none crossed an internal trunk.
+                byte[]? transitList = null;
+                if (!stitch.Active)
+                {
+                    X25CallParameters refused = new X25CallParameters(
+                        X25Facilities.DefaultWindowSize, X25Facilities.DefaultWindowSize,
+                        X25Facilities.DefaultPacketSize, X25Facilities.DefaultPacketSize,
+                        clearFacilities, port.GetClearUtilities(lci));
+                    transitList = AnswerTransitList(stitch, refused);
+                }
+
+                // The carried element is this network's own signalling (X.25 7.1): it never goes on as it came.
+                X25CallParameters toCaller = WithCarriedUtilities(new X25CallParameters(
+                    X25Facilities.DefaultWindowSize, X25Facilities.DefaultWindowSize,
+                    X25Facilities.DefaultPacketSize, X25Facilities.DefaultPacketSize,
+                    ClearFacilitiesFor(stitch, toCaller: true, clearFacilities), null),
+                    IsInternalTrunk(stitch.InPort) ? transitList : null);
+                stitch.InPort.ClearCall(stitch.InLci, cause, diagnostic, toCaller.OtherFacilities,
+                    stitch.InPort.Config.BetweenNetworks ? transitList : null);
             }
 
             WriteCdr(stitch, cause, diagnostic);

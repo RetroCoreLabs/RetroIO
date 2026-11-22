@@ -366,9 +366,15 @@ namespace RetroIO.Protocols.X25.Tests
         /// England as two switches joined by an internal trunk: Norway - England 1 =internal= England 2 - Germany. The
         /// transit list must cross England's internal trunk (in the private facility FE after the marker, x25emu's
         /// coding), so Germany still sees [2342], England is still named exactly once, and the answer still names 2342.
+        /// With <paramref name="theTadRefuses"/> the called TAD refuses instead, and the refusal must name 2342 to Norway
+        /// too (X.75 5.3.1); added 2026-11-22, when a refusal crossing an internal trunk lost the list.
         /// </summary>
-        [Test]
-        public void TheTransitList_CrossesAnInternalTrunkInsideEngland()
+        /// <param name="theTadRefuses">
+        /// True for a refusal, false for an answer.
+        /// </param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void TheTransitList_CrossesAnInternalTrunkInsideEngland(bool theTadRefuses)
         {
             // Germany: X.75 from England 2 on port 0, the TAD on port 1.
             HdlcTcpSwitchPort deFromUk = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
@@ -447,6 +453,15 @@ namespace RetroIO.Protocols.X25.Tests
             X75Utilities enteringGermany = Utilities(Captured(deLinkIn, X25PacketType.CallRequest));
             Assert.That(enteringGermany.TransitNetworks, Is.EqualTo(new[] { "2342" }));
             Assert.That(enteringGermany.CallIdentifier, Is.EqualTo(onTrunk.CallIdentifier));
+
+            if (theTadRefuses)
+            {
+                // The refusal crosses the internal trunk back and still names England to Norway.
+                SendXot(tadStream, X25PacketBuilder.CreateClearRequest(offered.LCN, 0x00, 0x00));
+                ReadUntilClear(padStream);
+                Assert.That(Utilities(Captured(noLinkIn, X25PacketType.ClearRequest)).TransitNetworks, Is.EqualTo(new[] { "2342" }));
+                return;
+            }
 
             // The answer crosses the internal trunk back and still names England to Norway.
             SendXot(tadStream, X25PacketBuilder.CreateCallAccepted(offered.LCN));
