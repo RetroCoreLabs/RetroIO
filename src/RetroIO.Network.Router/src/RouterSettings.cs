@@ -41,5 +41,18 @@ namespace RetroIO.Network.Router
         /// Gets the last address given to links, or 0 for the last host address of the subnet.
         /// </summary>
         public uint PoolLast { get; init; }
+
+        /// <summary>
+        /// Gets addresses inside the subnet that belong to the upstream side, such as the NAT's
+        /// gateway and name server. Empty by default.
+        /// </summary>
+        /// <remarks>
+        /// RetroIO.Network.Nat reaches the host's own 127.0.0.1 through its gateway address and the
+        /// host's name server through its name server address, and both are inside the NAT's
+        /// subnet. The router sends packets for these addresses upstream, takes packets from
+        /// upstream that come from them, and never gives them to a link. Each must be a host
+        /// address of the subnet other than the router's own.
+        /// </remarks>
+        public uint[] UpstreamAddresses { get; init; } = System.Array.Empty<uint>();
     }
 }

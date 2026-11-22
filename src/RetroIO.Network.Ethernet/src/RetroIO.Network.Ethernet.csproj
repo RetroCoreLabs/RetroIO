@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Network.Ethernet: what an emulated network card plugs into on the host side.
+
+    The backend interface (IEthernetBackend) and the registry that makes a backend from a text
+    setting, the bounded receive queue (EthernetFrameRing), the checksum repair for frames from
+    host adapters that offload checksums (IpChecksumRepair), a backend that drops everything
+    (NullEthernetBackend), and the links that join emulated machines to each other: a TCP link
+    between two, a TCP hub for many, UDP multicast on one host, and a TAP interface on Linux.
+
+    No native dependency. The real-adapter backend is RetroIO.Network.Pcap, the NAT to the
+    internet is RetroIO.Network.Nat.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Network.Ethernet</PackageId>
+    <AssemblyName>RetroIO.Network.Ethernet</AssemblyName>
+    <RootNamespace>RetroIO.Network.Ethernet</RootNamespace>
+    <Description>The host side of an emulated network card: the backend interface and registry, a bounded receive queue, checksum repair, a null backend, and links between emulated machines (TCP link, TCP hub, UDP multicast, Linux TAP). No native dependency.</Description>
+    <PackageTags>retroio;network;ethernet;nic;emulation;tap</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RetroIO.Network.Ethernet.Tests" />
+  </ItemGroup>
+</Project>

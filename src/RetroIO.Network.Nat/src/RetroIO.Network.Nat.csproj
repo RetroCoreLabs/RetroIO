@@ -1,22 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    RetroIO.Network.Nat: address sharing (NAT) between a RetroIO.Network.Router subnet and the
-    internet, through ordinary host sockets.
+    RetroIO.Network.Nat: the built-in NAT. An emulated machine on it gets an address by DHCP,
+    a gateway and a name server, and its UDP, TCP and ping reach the internet through ordinary
+    host sockets, so no administrator rights are needed. Port forwards let host programs reach
+    the machine. It is an IEthernetBackend (whole Ethernet frames, for an emulated network card),
+    and it also takes bare IP packets, for dial-up over SLIP and RetroIO.Network.Router.
 
-    The router hands it every packet for an address outside the subnet. The NAT sends the data on
-    with a socket of the host, and builds the reply packets that go back to the caller. No raw
-    sockets, so it needs no administrator rights.
-
-    Specifications: RFC 768 (UDP), RFC 792 (ICMP), RFC 5508 (NAT for ICMP), RFC 9293 (TCP), RFC 6298 (TCP retransmission timer), RFC 791 (IPv4), RFC 1071 (the Internet checksum), RFC 3022
-    (traditional NAT), RFC 4787 (NAT behaviour for UDP).
+    Specifications: RFC 768 (UDP), RFC 791 (IPv4), RFC 792 (ICMP), RFC 826 (ARP), RFC 951
+    (BOOTP), RFC 1035 (DNS), RFC 2131 (DHCP), RFC 4787 (NAT behaviour for UDP), RFC 9293 (TCP).
   -->
   <PropertyGroup>
     <PackageId>RetroIO.Network.Nat</PackageId>
     <AssemblyName>RetroIO.Network.Nat</AssemblyName>
     <RootNamespace>RetroIO.Network.Nat</RootNamespace>
-    <Description>Address sharing (NAT) for RetroIO.Network.Router: the callers' TCP and UDP go to the internet through ordinary host sockets, and the replies come back to them.</Description>
-    <PackageTags>retroio;nat;router;ipv4;tcp;udp;dialup</PackageTags>
+    <Description>The built-in NAT for emulated machines: DHCP, a gateway and a name server, UDP, TCP and ping to the internet through ordinary host sockets, and port forwards in. Takes Ethernet frames or bare IP packets.</Description>
+    <PackageTags>retroio;nat;network;ethernet;dhcp;slip;emulation</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
@@ -26,6 +25,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\RetroIO.Network.Router\src\RetroIO.Network.Router.csproj" />
+    <InternalsVisibleTo Include="RetroIO.Network.Nat.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Network.Ethernet\src\RetroIO.Network.Ethernet.csproj" />
   </ItemGroup>
 </Project>

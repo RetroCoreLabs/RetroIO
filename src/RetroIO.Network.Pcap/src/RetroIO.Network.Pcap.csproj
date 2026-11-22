@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Network.Pcap: puts an emulated network card on a real host network adapter, through
+    SharpPcap (Npcap on Windows, libpcap elsewhere). Its own package, so the rest of the network
+    code never pulls a native dependency. Desktop only.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Network.Pcap</PackageId>
+    <AssemblyName>RetroIO.Network.Pcap</AssemblyName>
+    <RootNamespace>RetroIO.Network.Pcap</RootNamespace>
+    <Description>Puts an emulated network card on a real host network adapter through SharpPcap (Npcap or libpcap): adapter choice, a filter for the machine's own address, and setup advice when the driver is missing.</Description>
+    <PackageTags>retroio;network;ethernet;pcap;npcap;libpcap;emulation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RetroIO.Network.Pcap.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Network.Ethernet\src\RetroIO.Network.Ethernet.csproj" />
+    <PackageReference Include="SharpPcap" />
+  </ItemGroup>
+</Project>

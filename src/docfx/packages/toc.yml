@@ -15,8 +15,12 @@
     href: ../../RetroIO.Management.Client/README.md
   - name: RetroIO.Management.Contracts
     href: ../../RetroIO.Management.Contracts/README.md
+  - name: RetroIO.Network.Ethernet
+    href: ../../RetroIO.Network.Ethernet/README.md
   - name: RetroIO.Network.Nat
     href: ../../RetroIO.Network.Nat/README.md
+  - name: RetroIO.Network.Pcap
+    href: ../../RetroIO.Network.Pcap/README.md
   - name: RetroIO.Network.Router
     href: ../../RetroIO.Network.Router/README.md
   - name: RetroIO.Protocols.DriveWire

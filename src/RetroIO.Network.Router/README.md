@@ -14,7 +14,7 @@ is raised from inside the call that caused it.
 |---|---|
 | `IpRouter` | The router. `AddLink` and `RemoveLink`; `SendFromLocal` for packets from the owner's services; `SendFromUpstream` for packets coming back from the internet; events `OnLocal`, `OnUpstream` and `OnDrop`; `DropCount` per reason. |
 | `RouterLink` | One link. `Receive` takes a packet from the far end; packets for it go to the delegate given to `AddLink`. Counters: packets and bytes, in and out. |
-| `RouterSettings` | Subnet (default 10.42.0.0/24), router address (default 10.42.0.1), address pool. The prefix length can be 8 to 30. |
+| `RouterSettings` | Subnet (default 10.42.0.0/24), router address (default 10.42.0.1), address pool, and upstream addresses inside the subnet (the NAT's gateway and name server). The prefix length can be 8 to 30. |
 | `Ipv4` | Address text, header checks, checksum, TTL decrement. |
 | `DropReason` | Why a packet was dropped: bad header, spoofed source, TTL expired, no route, too big. |
 
@@ -27,6 +27,7 @@ By its destination address:
   the other links. RFC 1812 section 5.3.5.2 lets a router forward a directed broadcast, says it must be
   possible to turn that off, and makes off the default. This router never forwards one, so a caller
   cannot reach every other caller with one packet.
+- **An upstream address** (`RouterSettings.UpstreamAddresses`): to `OnUpstream`, as if it were outside.
 - **A link's address**: to that link.
 - **Another address in the subnet**: dropped, no route.
 - **Outside the subnet**: to `OnUpstream` (the NAT in `RetroIO.Network.Nat`); dropped, no route, when nothing is attached.
@@ -39,8 +40,8 @@ By its destination address:
   `SendFromLocal`. Anything else is dropped as spoofed.
 - A forwarded packet has its TTL lowered by one and its checksum corrected by RFC 1624; a packet whose
   TTL would reach 0 is dropped (RFC 1812 section 5.3.1).
-- A packet from upstream (`SendFromUpstream`) must have a source outside the subnet, or it is dropped
-  as spoofed. It is delivered only to an address inside the subnet: one outside, or the subnet
+- A packet from upstream (`SendFromUpstream`) must have a source outside the subnet or an upstream
+  address, or it is dropped as spoofed. It is delivered only to an address inside the subnet: one outside, or the subnet
   broadcast, is dropped as no route, so nothing goes back the way it came. A packet for the router itself is delivered,
   not forwarded, and keeps its TTL.
 - A packet larger than the link it is for carries (the link's MTU) is dropped. The router does not

@@ -22,7 +22,9 @@ namespace RetroIO.Network.Router
     ///    be possible to turn that off, and off is the default; this router never forwards one.
     ///  - the address of a link: to that link.
     ///  - any other address in the subnet: dropped as <see cref="DropReason.NoRoute"/>.
-    ///  - an address outside the subnet: to <see cref="OnUpstream"/> (NAT, later), or dropped as
+    ///  - one of <see cref="RouterSettings.UpstreamAddresses"/> (the NAT's gateway and name server):
+    ///    to <see cref="OnUpstream"/>, as for an address outside the subnet.
+    ///  - an address outside the subnet: to <see cref="OnUpstream"/> (RetroIO.Network.Nat), or dropped as
     ///    <see cref="DropReason.NoRoute"/> when nothing is attached.
     /// <para>
     /// A packet from a link must carry the link's own address as its source, or it is dropped as
@@ -44,6 +46,7 @@ namespace RetroIO.Network.Router
         private readonly uint _broadcast;
         private readonly uint _poolFirst;
         private readonly uint _poolLast;
+        private readonly uint[] _upstreamAddresses;
         private byte[] _scratch = new byte[2048];
 
         /// <summary>
@@ -115,6 +118,16 @@ namespace RetroIO.Network.Router
                 throw new ArgumentException("the router address " + Ipv4.Format(settings.RouterAddress) + " is not a host address in the subnet", nameof(settings));
             }
 
+            uint[] upstream = settings.UpstreamAddresses ?? Array.Empty<uint>();
+            for (int i = 0; i < upstream.Length; i++)
+            {
+                if (!IsHostAddress(upstream[i]) || upstream[i] == settings.RouterAddress)
+                {
+                    throw new ArgumentException("the upstream address " + Ipv4.Format(upstream[i]) + " is not a host address in the subnet other than the router's", nameof(settings));
+                }
+            }
+
+            _upstreamAddresses = upstream;
             _poolFirst = settings.PoolFirst != 0 ? settings.PoolFirst : settings.Network + 1;
             _poolLast = settings.PoolLast != 0 ? settings.PoolLast : _broadcast - 1;
             if (!IsHostAddress(_poolFirst) || !IsHostAddress(_poolLast) || _poolFirst > _poolLast)
@@ -191,7 +204,7 @@ namespace RetroIO.Network.Router
             {
                 address = FreePoolAddress();
             }
-            else if (!IsHostAddress(address) || address == Settings.RouterAddress)
+            else if (!IsHostAddress(address) || address == Settings.RouterAddress || IsUpstreamAddress(address))
             {
                 throw new ArgumentException(Ipv4.Format(address) + " is not a free host address in " + Ipv4.Format(Settings.Network) + "/" + Settings.PrefixLength, nameof(address));
             }
@@ -273,14 +286,15 @@ namespace RetroIO.Network.Router
             }
 
             packet = packet.Slice(0, total);
-            if ((Ipv4.Source(packet) & _mask) == Settings.Network)
+            uint source = Ipv4.Source(packet);
+            if ((source & _mask) == Settings.Network && !IsUpstreamAddress(source))
             {
                 Drop(DropReason.Spoofed);
                 return;
             }
 
             uint destination = Ipv4.Destination(packet);
-            if ((destination & _mask) != Settings.Network || destination == _broadcast)
+            if ((destination & _mask) != Settings.Network || destination == _broadcast || IsUpstreamAddress(destination))
             {
                 Drop(DropReason.NoRoute);
                 return;
@@ -327,7 +341,7 @@ namespace RetroIO.Network.Router
                 return;
             }
 
-            bool inSubnet = (destination & _mask) == Settings.Network;
+            bool inSubnet = (destination & _mask) == Settings.Network && !IsUpstreamAddress(destination);
             RouterLink? to = null;
             if (inSubnet && !_links.TryGetValue(destination, out to))
             {
@@ -381,13 +395,26 @@ namespace RetroIO.Network.Router
         {
             for (uint a = _poolFirst; a <= _poolLast; a++)
             {
-                if (a != Settings.RouterAddress && !_links.ContainsKey(a))
+                if (a != Settings.RouterAddress && !IsUpstreamAddress(a) && !_links.ContainsKey(a))
                 {
                     return a;
                 }
             }
 
             throw new InvalidOperationException("no free address left in the pool " + Ipv4.Format(_poolFirst) + " to " + Ipv4.Format(_poolLast));
+        }
+
+        private bool IsUpstreamAddress(uint address)
+        {
+            for (int i = 0; i < _upstreamAddresses.Length; i++)
+            {
+                if (_upstreamAddresses[i] == address)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private bool IsHostAddress(uint address)

@@ -256,12 +256,26 @@
     <Project Path="tests/RetroIO.Protocols.Xmsg.TestSupport/RetroIO.Protocols.Xmsg.TestSupport.csproj" />
     <Project Path="tests/RetroIO.Tests/RetroIO.Tests.csproj" />
   </Folder>
+  <Folder Name="/RetroIO.Network.Ethernet/" />
+  <Folder Name="/RetroIO.Network.Ethernet/src/">
+    <Project Path="RetroIO.Network.Ethernet/src/RetroIO.Network.Ethernet.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Network.Ethernet/tests/">
+    <Project Path="RetroIO.Network.Ethernet/tests/RetroIO.Network.Ethernet.Tests.csproj" />
+  </Folder>
   <Folder Name="/RetroIO.Network.Nat/" />
   <Folder Name="/RetroIO.Network.Nat/src/">
     <Project Path="RetroIO.Network.Nat/src/RetroIO.Network.Nat.csproj" />
   </Folder>
   <Folder Name="/RetroIO.Network.Nat/tests/">
     <Project Path="RetroIO.Network.Nat/tests/RetroIO.Network.Nat.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Network.Pcap/" />
+  <Folder Name="/RetroIO.Network.Pcap/src/">
+    <Project Path="RetroIO.Network.Pcap/src/RetroIO.Network.Pcap.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Network.Pcap/tests/">
+    <Project Path="RetroIO.Network.Pcap/tests/RetroIO.Network.Pcap.Tests.csproj" />
   </Folder>
   <Folder Name="/RetroIO.Network.Router/" />
   <Folder Name="/RetroIO.Network.Router/src/">

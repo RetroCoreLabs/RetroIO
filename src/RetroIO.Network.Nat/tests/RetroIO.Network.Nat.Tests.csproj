@@ -4,15 +4,20 @@
     <AssemblyName>RetroIO.Network.Nat.Tests</AssemblyName>
     <RootNamespace>RetroIO.Network.Nat.Tests</RootNamespace>
     <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Description>Tests for RetroIO.Network.Nat: DHCP, ARP, ping, UDP, TCP, name lookups, the IP packet entry and port forwards, against real host sockets.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Network.Router\src\RetroIO.Network.Router.csproj" />
     <ProjectReference Include="..\src\RetroIO.Network.Nat.csproj" />
   </ItemGroup>
 
