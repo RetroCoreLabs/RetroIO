@@ -178,7 +178,35 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// properly. The sender has not learned the peer's identity yet at that point.
         /// </para>
         /// </remarks>
-        DisconnectConfirm = 0x70
+        DisconnectConfirm = 0x70,
+
+        /// <summary>
+        /// <c>0x7F</c> - DC, the confirmation of a disconnect request. MEASURED 2026-11-21.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Hub capture of D102 restarting its XMSG while D100 kept running
+        /// (<c>DOC/captures/2026-11-21-xmsg-restart-d102-over-ethernet-hub.pcap</c>):
+        /// </para>
+        /// <code>
+        /// D102 -> D100   0B02 60 00 03 016B 036B 0001   disconnect request, old connection
+        /// D100 -> D102   0B02 7F 00 03 036B 016B 0000   this kind: same sequence byte, the two
+        ///                                               link ids swapped, trailing field zero
+        /// </code>
+        /// <para>
+        /// High nibble 7 is the disconnect-confirm NPDU type, the same as <see cref="DisconnectConfirm"/>.
+        /// What the low nibble tells apart (<c>0</c> or <c>F</c>) is not known.
+        /// </para>
+        /// </remarks>
+        DisconnectConfirm7F = 0x7F,
+
+        /// <summary>
+        /// <c>0x1F</c> - CC, the confirmation of a connection request. MEASURED: our own CC was
+        /// accepted by D100 on 2026-08-27, and D100's CC to D102 was captured on 2026-11-21:
+        /// <c>0B02 1F 00 04 0387 016C 0064</c> - the requester's new link id first, the
+        /// confirmer's new one second, the confirmer's system number last.
+        /// </summary>
+        ConnectionConfirm = 0x1F
     }
 
     /// <summary>
@@ -423,6 +451,20 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// </para>
         /// </remarks>
         public bool IsDisconnectRequest => (Kind & 0xF0) == 0x60;
+
+        /// <summary>
+        /// Gets a value indicating whether this frame confirms a disconnect request: exactly the two
+        /// kinds seen on the wire, <c>0x70</c> and <c>0x7F</c>. Other high-nibble-7 values have never
+        /// been seen, so they stay unknown kinds and are reported as such.
+        /// </summary>
+        public bool IsDisconnectConfirm =>
+            Kind == (byte)NdLinkFrameKind.DisconnectConfirm || Kind == (byte)NdLinkFrameKind.DisconnectConfirm7F;
+
+        /// <summary>
+        /// Gets a value indicating whether this frame confirms a connection request
+        /// (<see cref="NdLinkFrameKind.ConnectionConfirm"/>).
+        /// </summary>
+        public bool IsConnectionConfirm => Kind == (byte)NdLinkFrameKind.ConnectionConfirm;
 
         /// <summary>
         /// Builds a data header.

@@ -213,7 +213,21 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// </remarks>
         public const int UnpositionedWindow = 1;
 
-        private readonly ushort _localLinkId;
+        /// <summary>
+        /// This node's link id. Not read-only: opening a NEW connection takes a new one, as D102
+        /// did on 2026-11-21 (<c>0x036B</c> before, <c>0x0387</c> after) - see <see cref="Reopen"/>.
+        /// </summary>
+        private ushort _localLinkId;
+
+        /// <summary>
+        /// Where a <see cref="Reopen"/> has got to.
+        /// </summary>
+        private ReopenStep _reopen = ReopenStep.None;
+
+        /// <summary>
+        /// How many times a connection request of a reopen may be refused and tried again.
+        /// </summary>
+        private int _reopenRetriesLeft;
         private readonly NdMacAddress _localMac;
         private readonly Action<byte[], int> _sendFrame;
 
@@ -741,7 +755,198 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// </remarks>
         private int CurrentWindow
         {
-            get { return _havePeerPosition ? SendWindow : UnpositionedWindow; }
+            get
+            {
+                // While a connection is being closed and opened again, nothing may go out: there is
+                // no connection for a data frame to belong to. Everything handed to us waits in the
+                // queue and leaves when the new connection is confirmed.
+                if (_reopen != ReopenStep.None)
+                {
+                    return 0;
+                }
+
+                return _havePeerPosition ? SendWindow : UnpositionedWindow;
+            }
+        }
+
+        /// <summary>
+        /// The steps of <see cref="Reopen"/>.
+        /// </summary>
+        private enum ReopenStep
+        {
+            /// <summary>No reopen running.</summary>
+            None,
+
+            /// <summary>Our disconnect request is out; waiting for the peer's confirm.</summary>
+            WaitingForDisconnectConfirm,
+
+            /// <summary>Our connection request is out; waiting for the peer's confirm.</summary>
+            WaitingForConnectionConfirm,
+        }
+
+        /// <summary>
+        /// The sequence byte of the disconnect request <see cref="Reopen"/> sends.
+        /// </summary>
+        /// <remarks>
+        /// COPIED FROM THE ONE CAPTURE, meaning NOT known. D102's request on 2026-11-21 carried
+        /// <c>0x03</c> although its next data sequence was <c>0x07</c>, so it is not the data
+        /// sequence. D100's own request of 2026-08-11 carried <c>0x26</c>. The peer echoes it in
+        /// its confirm. If a peer ever refuses the request, this byte is the first suspect.
+        /// </remarks>
+        public const byte ReopenDisconnectSequence = 0x03;
+
+        /// <summary>
+        /// The trailing field of the disconnect request <see cref="Reopen"/> sends: <c>0x0001</c>,
+        /// as in D102's request on 2026-11-21. Its meaning is not known; the confirm carries zero.
+        /// </summary>
+        public const ushort ReopenDisconnectTrailing = 0x0001;
+
+        /// <summary>
+        /// Occurs when a connection opened by <see cref="Reopen"/> has been confirmed by the peer.
+        /// </summary>
+        /// <remarks>
+        /// The layer above must now send its XMSG INIT (reachability request) as the FIRST message
+        /// on the new connection, because that is what D102 did - see <see cref="Reopen"/>.
+        /// Anything queued while the reopen ran leaves after the handler returns.
+        /// </remarks>
+        public event Action? OnConnectionOpened;
+
+        /// <summary>
+        /// Gets this node's current link id.
+        /// </summary>
+        public ushort LocalLinkId
+        {
+            get { return _localLinkId; }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether a <see cref="Reopen"/> is still running.
+        /// </summary>
+        public bool IsReopening
+        {
+            get { return _reopen != ReopenStep.None; }
+        }
+
+        /// <summary>
+        /// Gets the number of disconnect confirms received.
+        /// </summary>
+        public int DisconnectConfirmsReceived { get; private set; }
+
+        /// <summary>
+        /// Gets the number of disconnect confirms this node has sent.
+        /// </summary>
+        public int DisconnectConfirmsSent { get; private set; }
+
+        /// <summary>
+        /// Gets the number of connection confirms received.
+        /// </summary>
+        public int ConnectionConfirmsReceived { get; private set; }
+
+        /// <summary>
+        /// Closes the connection to the peer and opens a new one, the way a SINTRAN machine does
+        /// when its XMSG is restarted.
+        /// </summary>
+        /// <param name="peer">
+        /// The peer's station address; needed when no frame has arrived from it yet.
+        /// </param>
+        /// <remarks>
+        /// <para><b>What a real machine does - MEASURED 2026-11-21</b></para>
+        /// <para>
+        /// D102 ran its XMSG restart mode file while D100 kept running. Before it, LIST-SYSTEMS on
+        /// both said 515 sent / 515 received; after it, 2 and 2 on both. On the wire, in order:
+        /// </para>
+        /// <code>
+        /// D102 -> D100   60  disconnect request on the old connection (ids 016B / 036B)
+        /// D100 -> D102   7F  disconnect confirm
+        /// D102 -> D100   0F  connection request, D102's NEW link id 0387, sequence 0
+        /// D100 -> D102   1F  connection confirm, D100's new link id 016C
+        /// D102 -> D100   20  first data frame: the XMSG INIT, 2113 0019 0064 0066 FFFF 0001 DE08
+        /// </code>
+        /// <para>
+        /// This method does the first and third steps and waits for the answers; the INIT is the
+        /// layer above's job, on <see cref="OnConnectionOpened"/>. When no connection is known
+        /// (this process has just started and the peer has not spoken), there is nothing to close,
+        /// so it starts at the connection request.
+        /// </para>
+        /// <para><b>Why the old attempt failed</b></para>
+        /// <para>
+        /// On 2026-08-11 this node sent a connection request on a connection D100 still held open,
+        /// and D100 answered with a disconnect request (<c>6F</c>) and went silent. A peer that
+        /// refuses our request that way is now answered with a confirm and asked once more - that
+        /// is the step the 2026-08-11 note listed as never tried.
+        /// </para>
+        /// <para>
+        /// NOT YET PROVEN: whether the new connection alone makes the peer start its counting
+        /// again, or the INIT on it. That is what the live test of this method is for.
+        /// </para>
+        /// </remarks>
+        public void Reopen(NdMacAddress peer)
+        {
+            if (!HasLearnedPeer)
+            {
+                PeerMac = peer;
+            }
+
+            _reopenRetriesLeft = 1;
+            if (PeerLinkId != UnknownPeerLinkId)
+            {
+                _reopen = ReopenStep.WaitingForDisconnectConfirm;
+                SendControl(
+                    (byte)NdLinkFrameKind.DisconnectRequest60,
+                    ReopenDisconnectSequence,
+                    PeerLinkId,
+                    ReopenDisconnectTrailing);
+                return;
+            }
+
+            OpenNewConnection();
+        }
+
+        /// <summary>
+        /// Takes a new link id, forgets everything about the old connection, and asks the peer for
+        /// a new one.
+        /// </summary>
+        private void OpenNewConnection()
+        {
+            // How a real machine picks its new id is NOT known - D102 went from 0x036B to 0x0387.
+            // Any id the peer has not seen from us will do, so the next one up is used, never 0,
+            // which means "no link yet".
+            _localLinkId = (ushort)(_localLinkId + 1);
+            if (_localLinkId == UnknownPeerLinkId)
+            {
+                _localLinkId = 1;
+            }
+
+            PeerLinkId = UnknownPeerLinkId;
+            _nextSequence = InitialSequence;
+            _peerNextExpected = InitialSequence;
+            _havePeerPosition = false;
+            _unpositioned = null;
+            _haveSeenPeerData = false;
+            _nextExpectedFromPeer = InitialSequence;
+
+            _reopen = ReopenStep.WaitingForConnectionConfirm;
+            SendConnectionRequest(PeerMac);
+        }
+
+        /// <summary>
+        /// Sends a control frame with no payload to the peer.
+        /// </summary>
+        /// <param name="kind">The frame kind.</param>
+        /// <param name="sequence">The sequence byte.</param>
+        /// <param name="peerLinkId">The peer's link id; goes in the first id field.</param>
+        /// <param name="trailing">The trailing field.</param>
+        private void SendControl(byte kind, byte sequence, ushort peerLinkId, ushort trailing)
+        {
+            EnsureBuffer(Ieee8023Frame.MinimumFrameLength);
+
+            // Destination's reference first, ours second - the order of every captured frame.
+            NdLinkHeader header = new NdLinkHeader(kind, sequence, peerLinkId, _localLinkId, trailing);
+            Span<byte> llcPayload = stackalloc byte[NdLinkHeader.Length];
+            header.Write(llcPayload);
+
+            int written = BuildFrame(PeerMac, llcPayload, ReadOnlySpan<byte>.Empty);
+            _sendFrame(_frameBuffer, written);
         }
 
 
@@ -846,6 +1051,27 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
                 return true;
             }
 
+            if (header.IsDisconnectConfirm)
+            {
+                DisconnectConfirmsReceived++;
+                if (_reopen == ReopenStep.WaitingForDisconnectConfirm)
+                {
+                    OpenNewConnection();
+                }
+
+                return true;
+            }
+
+            if (header.IsConnectionConfirm && _reopen == ReopenStep.WaitingForConnectionConfirm)
+            {
+                // The peer's new link id was learned from this frame above (second id field).
+                ConnectionConfirmsReceived++;
+                _reopen = ReopenStep.None;
+                OnConnectionOpened?.Invoke();
+                DrainWaiting();
+                return true;
+            }
+
             if (header.IsConnectionRequest)
             {
                 ConnectionRequestsReceived++;
@@ -883,6 +1109,37 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
             if (header.IsDisconnectRequest)
             {
                 DisconnectRequestsReceived++;
+
+                // A REAL MACHINE CONFIRMS A 0x60 - MEASURED 2026-11-21: D100 answered D102's 0x60
+                // with 0x7F, the same sequence byte, the link ids swapped and a zero trailing field.
+                // Only 0x60 is answered: whether a 0x6F is confirmed too has not been seen.
+                if (header.Kind == (byte)NdLinkFrameKind.DisconnectRequest60)
+                {
+                    SendControl((byte)NdLinkFrameKind.DisconnectConfirm7F, header.Sequence, header.ReceiverLinkId, 0);
+                    DisconnectConfirmsSent++;
+                }
+
+                // Our reopen's connection request was refused. Confirm (done above for 0x60; a
+                // 0x6F is confirmed here, because the reopen cannot go on without closing it) and
+                // ask once more - see Reopen.
+                if (_reopen == ReopenStep.WaitingForConnectionConfirm)
+                {
+                    if (header.Kind != (byte)NdLinkFrameKind.DisconnectRequest60)
+                    {
+                        SendControl((byte)NdLinkFrameKind.DisconnectConfirm7F, header.Sequence, header.ReceiverLinkId, 0);
+                        DisconnectConfirmsSent++;
+                    }
+
+                    if (_reopenRetriesLeft > 0)
+                    {
+                        _reopenRetriesLeft--;
+                        OpenNewConnection();
+                        return true;
+                    }
+
+                    // Given up: say so through the disconnect event below, and stop holding the queue.
+                    _reopen = ReopenStep.None;
+                }
 
                 // THE SEND STATE BELONGS TO THE CONNECTION, so it dies with it. Without this, the
                 // frames we had outstanding on the torn-down link stay counted for ever: a peer that
@@ -1102,6 +1359,14 @@ namespace RetroIO.Protocols.Xmsg.Ethernet
         /// STILL UNKNOWN: whether answering that disconnect request (with a disconnect confirm,
         /// NPDU index 7, whose wire byte has never been captured) and THEN sending a fresh request
         /// would open a clean link. That is the next thing to try if this line is picked up again.
+        /// </para>
+        /// <para><b>ACCEPTED on 2026-11-21</b></para>
+        /// <para>
+        /// Sent by <see cref="Reopen"/> from a freshly started process (no connection known, so
+        /// nothing to close first), D100 answered with a connection confirm (<c>1F</c>) in 10 ms,
+        /// took our XMSG INIT and counted from 0 with us. What made the 2026-08-11 attempt different
+        /// is not known; that one went out on a connection D100 still held open from our side.
+        /// The disconnect confirm byte is now known too: <c>7F</c>.
         /// </para>
         /// </remarks>
         public bool SendConnectionRequest(NdMacAddress destination)

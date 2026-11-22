@@ -219,6 +219,7 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
             // and silently lost - so a peer that reused an existing connection (its first frame to
             // us being data, not a connection request) never got an answer at all.
             _linkLayer.OnPeerLearned += HandlePeerLearned;
+            _linkLayer.OnConnectionOpened += delegate { ConnectionOpened?.Invoke(this); };
 
             _status = LinkStatus.Stopped;
         }
@@ -356,6 +357,37 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
         public bool RequestConnection()
         {
             return _linkLayer.SendConnectionRequest(_peerMac);
+        }
+
+        /// <summary>
+        /// Closes the connection to the peer and opens a new one, the way a SINTRAN machine does
+        /// when its XMSG restarts. <see cref="ConnectionOpened"/> fires when the peer has confirmed
+        /// the new connection; the INIT must then be the first message sent on it.
+        /// </summary>
+        /// <remarks>
+        /// See <c>NdLinkLayer.Reopen</c> for the capture this copies and what is not yet proven.
+        /// </remarks>
+        public void Reopen()
+        {
+            lock (_gate)
+            {
+                _linkLayer.Reopen(_peerMac);
+            }
+        }
+
+        /// <summary>
+        /// Occurs when a connection opened by <see cref="Reopen"/> has been confirmed by the peer.
+        /// Raised on the thread that received the confirm.
+        /// </summary>
+        public event Action<EthernetLink>? ConnectionOpened;
+
+        /// <summary>
+        /// Gets this node's current link id on the ND connection. It changes when
+        /// <see cref="Reopen"/> opens a new connection.
+        /// </summary>
+        public ushort LocalLinkId
+        {
+            get { return _linkLayer.LocalLinkId; }
         }
 
         /// <summary>
