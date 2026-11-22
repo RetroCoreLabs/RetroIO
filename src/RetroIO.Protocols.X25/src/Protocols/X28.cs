@@ -2050,39 +2050,34 @@ namespace RetroIO.Protocols.X25.Protocols
         }
 
         /// <summary>
-        /// Process PAD command and return response
+        /// Runs one PAD command line as if it had been typed at the PAD's prompt and ended with CR.
         /// </summary>
         /// <param name="command">
-        /// Command string to process
+        /// The command line, without the CR.
         /// </param>
         /// <returns>
-        /// Response string
+        /// <see cref="CommandResult.InvalidCommand"/> for an empty line; otherwise <see cref="CommandResult.Success"/>,
+        /// and the PAD's answer (a service signal, or ERR) arrives through the usual events.
         /// </returns>
+        /// <remarks>
+        /// Changed 2026-11-22 (RetroIO BUGS.md, "PAD texts that are not X.28", the part still open): this method was a
+        /// second copy of the command handling that knew STAT, CLR and RESET only. CLR and RESET put nothing on the wire
+        /// (X.28 4.9.2.2 and 4.9.2.3 say a clear and a reset are sent), and every other line was echoed back as if it
+        /// were the answer. It now runs <see cref="ProcessCommandLine"/>, the same path as the typed prompt, so the two
+        /// can no longer differ.
+        /// </remarks>
         public CommandResult ProcessCommand(string command)
         {
-            if (string.IsNullOrEmpty(command))
+            if (string.IsNullOrWhiteSpace(command))
             {
                 ErrorMessage?.Invoke(this, new ErrorMessageEventArgs("Empty command"));
                 return CommandResult.InvalidCommand;
             }
 
-            var cmd = command.Trim().ToUpperInvariant();
-            
-            // Common X.28 commands
-            switch (cmd)
-            {
-                case "STAT":
-                    CommandResponse?.Invoke(this, new CommandResponseEventArgs(StatusSignal() + "\r\n", ResponseType.Success));
-                    return CommandResult.Success;
-                case "CLR":
-                    return CommandResult.Success; // Clear - handled by disconnect
-                case "RESET":
-                    CommandResponse?.Invoke(this, new CommandResponseEventArgs("\r\n", ResponseType.Success));
-                    return CommandResult.Success;
-                default:
-                    CommandResponse?.Invoke(this, new CommandResponseEventArgs(command + "\r\n", ResponseType.Success)); // Pass through unknown commands
-                    return CommandResult.Success;
-            }
+            _commandBuffer.Clear();
+            _commandBuffer.Append(command);
+            ProcessCommandLine();
+            return CommandResult.Success;
         }
 
         /// <summary>

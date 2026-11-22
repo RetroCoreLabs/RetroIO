@@ -116,6 +116,18 @@ namespace RetroIO.Protocols.X25.Tests
         // ------------------------------------------------------------------ the set arrives
 
         /// <summary>
+        /// A command given through <see cref="PadClient.SendCommand"/> does what the same command typed at the prompt
+        /// does (added 2026-11-22; before, CLR put nothing on the wire, X.28 4.9.2.2).
+        /// </summary>
+        [Test]
+        public void ClrGivenThroughTheApi_ClearsTheCall()
+        {
+            using Rig rig = new Rig();
+            Assert.That(rig.Pad.SendCommand("CLR"), Is.True);
+            Assert.That(rig.Transport.Cleared, Does.Contain(Lcn), "CLR must send a Clear Request");
+        }
+
+        /// <summary>
         /// X.29 Table 1, "Set / List of selected parameters with the given values / Set the selected parameters to the
         /// desired values / a) if no error is encountered: None", and 3.1.4 "The PAD will not return a parameter
         /// indication PAD message in response to a valid set PAD message received."
