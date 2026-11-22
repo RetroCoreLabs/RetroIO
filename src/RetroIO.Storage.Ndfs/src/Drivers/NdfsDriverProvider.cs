@@ -24,21 +24,37 @@ namespace RetroIO.Storage.Ndfs.Drivers
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Norsk Data ND-100", "Norsk Data ND-500" };
 
-        // The directory name in the master block: 1 to 16 printable characters.
-        private static readonly BlankImageOption DirectoryName = new BlankImageOption { Id = "directoryName", Label = "Directory name", Kind = BlankImageOptionKind.Text, Default = "EMPTY-DISK", MaxLength = 16 };
+        // The directory name in the master block. The image creator keeps at most 15 characters and
+        // ends the name with an apostrophe (27h), so a name holds 1 to 15 printable characters and no
+        // apostrophe.
+        private static readonly BlankImageOption DirectoryName = new BlankImageOption { Id = "directoryName", Label = "Directory name", Kind = BlankImageOptionKind.Text, Default = "EMPTY-DISK", MinLength = 1, MaxLength = 15, PrintableAsciiOnly = true, ForbiddenCharacters = "'" };
+
+        // The extended information page, with the system number and flag word in it; the image
+        // creator writes it on hard disks only.
+        private static readonly BlankImageOption ExtendedInfo = new BlankImageOption { Id = "includeExtendedInfo", Label = "Extended information (hard disks only)", Kind = BlankImageOptionKind.Flag, Default = "true" };
+        private static readonly BlankImageOption SystemNumber = new BlankImageOption { Id = "systemNumber", Label = "System number (in the extended information)", Kind = BlankImageOptionKind.Number, Default = "0", Minimum = 0, Maximum = 65535 };
+        private static readonly BlankImageOption FlagWord = new BlankImageOption { Id = "flagWord", Label = "Flag word (in the extended information)", Kind = BlankImageOptionKind.Number, Default = "0", Minimum = 0, Maximum = 65535 };
+
+        // A disk of any size: the page count (default the 1.2 MB floppy's 616 pages; at least the
+        // smallest template's 154, at most what fits in one image in memory) and the controller,
+        // which decides the spare area after the NDFS pages.
+        private static readonly BlankImageOption CustomPages = new BlankImageOption { Id = "customPages", Label = "NDFS pages (2 KB each)", Kind = BlankImageOptionKind.Number, Default = "616", Minimum = 154, Maximum = int.MaxValue / 2048 };
+        private static readonly BlankImageOption Controller = new BlankImageOption { Id = "controller", Label = "Controller", Kind = BlankImageOptionKind.Choice, Default = "Floppy", Choices = new[] { "Floppy", "SMD", "Winchester", "SCSI" } };
 
         // The boot loader written to the first page; the disk type's own one unless another is picked.
         private static readonly BlankImageOption BootLoader = new BlankImageOption { Id = "bootLoader", Label = "Boot loader", Kind = BlankImageOptionKind.Choice, Default = "Disk type default", Choices = new[] { "Disk type default", "None", "Floppy", "SMD", "Winchester", "SCSI" } };
-        private static readonly BlankImageOption[] NdfsOptions = { DirectoryName, BootLoader };
+        private static readonly BlankImageOption[] NdfsOptions = { DirectoryName, BootLoader, ExtendedInfo, SystemNumber, FlagWord };
+        private static readonly BlankImageOption[] CustomOptions = { CustomPages, Controller, DirectoryName, BootLoader, ExtendedInfo, SystemNumber, FlagWord };
 
         // One layout per disk template of the image creator; size is its page count times 2048.
         private static readonly BlankImageLayout[] Layouts =
         {
-            new BlankImageLayout { Id = "ndfs-floppy-360k", Machine = "Norsk Data ND-100", Name = "Floppy (360 KB type) - 154 pages", Extension = ".img", SizeBytes = 154L * 2048, Options = NdfsOptions },
-            new BlankImageLayout { Id = "ndfs-floppy-1200k", Machine = "Norsk Data ND-100", Name = "Floppy (1.2 MB type) - 616 pages", Extension = ".img", SizeBytes = 616L * 2048, Options = NdfsOptions },
-            new BlankImageLayout { Id = "ndfs-smd-75m", Machine = "Norsk Data ND-100", Name = "SMD disk, 75 MB - 38400 pages", Extension = ".img", SizeBytes = 38400L * 2048, Options = NdfsOptions },
-            new BlankImageLayout { Id = "ndfs-winchester-74m", Machine = "Norsk Data ND-100", Name = "Winchester disk, 74 MB (Micropolis 1325) - 36864 pages", Extension = ".img", SizeBytes = 36864L * 2048, Options = NdfsOptions },
-            new BlankImageLayout { Id = "ndfs-scsi-126m", Machine = "Norsk Data ND-100", Name = "SCSI disk, 126 MB - 64656 pages", Extension = ".img", SizeBytes = 64656L * 2048, Options = NdfsOptions },
+            new BlankImageLayout { Id = "ndfs-floppy-360k", Machine = "Norsk Data ND-100", Name = "Floppy (360 KB type) - 154 pages", Extension = ".img", SizeBytes = 154L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Floppy360KB) },
+            new BlankImageLayout { Id = "ndfs-floppy-1200k", Machine = "Norsk Data ND-100", Name = "Floppy (1.2 MB type) - 616 pages", Extension = ".img", SizeBytes = 616L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Floppy12MB) },
+            new BlankImageLayout { Id = "ndfs-smd-75m", Machine = "Norsk Data ND-100", Name = "SMD disk, 75 MB - 38400 pages", Extension = ".img", SizeBytes = 38400L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Smd75MB) },
+            new BlankImageLayout { Id = "ndfs-winchester-74m", Machine = "Norsk Data ND-100", Name = "Winchester disk, 74 MB (Micropolis 1325) - 36864 pages", Extension = ".img", SizeBytes = 36864L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Winchester74MB) },
+            new BlankImageLayout { Id = "ndfs-scsi-126m", Machine = "Norsk Data ND-100", Name = "SCSI disk, 126 MB - 64656 pages", Extension = ".img", SizeBytes = 64656L * 2048, Options = NdfsOptions, Details = DetailsOf(NdfsTemplates.Scsi126MB) },
+            new BlankImageLayout { Id = "ndfs-custom", Machine = "Norsk Data ND-100", Name = "Any size - the size is set by the page count and controller options", Extension = ".img", SizeBytes = 616L * 2048, Options = CustomOptions, Details = "The size shown is for the default 616 pages on a floppy controller; a hard-disk controller adds its spare area." },
         };
 
         // The one extension list for this format: detection below uses it, and programs read it
@@ -169,9 +185,21 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// <inheritdoc/>
         public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
         {
+            bool custom = layoutId == "ndfs-custom";
             NdfsImageCreationOptions create = new NdfsImageCreationOptions
             {
-                Template = TemplateOf(layoutId),
+                Template = custom ? NdfsImageTemplate.Custom : TemplateOf(layoutId),
+                CustomNdfsPages = custom ? uint.Parse(CustomPages.ValueIn(options)) : 0,
+                ControllerType = Controller.ValueIn(options) switch
+                {
+                    "SMD" => NdfsControllerType.Smd,
+                    "Winchester" => NdfsControllerType.Winchester,
+                    "SCSI" => NdfsControllerType.Scsi,
+                    _ => NdfsControllerType.Floppy,
+                },
+                IncludeExtendedInfo = ExtendedInfo.ValueIn(options) == "true",
+                SystemNumber = ushort.Parse(SystemNumber.ValueIn(options)),
+                FlagWord = ushort.Parse(FlagWord.ValueIn(options)),
                 DirectoryName = DirectoryName.ValueIn(options),
                 BootLoaderType = BootLoader.ValueIn(options) switch
                 {
@@ -195,6 +223,14 @@ namespace RetroIO.Storage.Ndfs.Drivers
             return driver;
         }
 
+        // The numbers of a disk template, for the user.
+        private static string DetailsOf(NdfsTemplateSpec spec)
+        {
+            return spec.NdfsPages + " NDFS pages of 2 KB, device " + spec.FileBlocks + " pages (" + spec.FileBlocks * 2L + " KB)"
+                + (spec.SpareBlocks > 0 ? ", of which " + spec.SpareBlocks + " spare after the NDFS area" : string.Empty)
+                + ".\nController: " + spec.ControllerType + ", boot loader: " + spec.BootLoaderType + ".";
+        }
+
         private static NdfsImageTemplate TemplateOf(string layoutId)
         {
             return layoutId switch
@@ -204,6 +240,7 @@ namespace RetroIO.Storage.Ndfs.Drivers
                 "ndfs-smd-75m" => NdfsImageTemplate.Smd75MB,
                 "ndfs-winchester-74m" => NdfsImageTemplate.Winchester74MB,
                 "ndfs-scsi-126m" => NdfsImageTemplate.Scsi126MB,
+                "ndfs-custom" => NdfsImageTemplate.Custom,
                 _ => throw new ArgumentException("not an NDFS blank-image layout: " + layoutId, nameof(layoutId)),
             };
         }

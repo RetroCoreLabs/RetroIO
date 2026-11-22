@@ -54,5 +54,11 @@ namespace RetroIO.Storage.Core
         /// machine by naming the layout (<see cref="IBlankImageProvider.Mount"/>).
         /// </remarks>
         public IReadOnlyList<string> SameBytesAs { get; init; } = Array.Empty<string>();
+
+        /// <summary>
+        /// Gets more about the disk for the user, such as its geometry, as free text (may be several
+        /// lines, may be empty).
+        /// </summary>
+        public string Details { get; init; } = string.Empty;
     }
 }

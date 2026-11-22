@@ -104,6 +104,61 @@ namespace RetroIO.Tests
             }
         }
 
+        [Test]
+        public void OptionCheck_GivesTheRuleThatWasBroken()
+        {
+            BlankImageOption id = FindOption("cbm-d64", "diskId");
+            Assert.That(id.Check("A"), Is.EqualTo("Disk ID: must be exactly 2 characters"));
+            Assert.That(id.Check("42"), Is.Null);
+
+            BlankImageOption name = FindOption("ndfs-floppy-360k", "directoryName");
+            Assert.That(name.Check("PACK'ONE"), Is.EqualTo("Directory name: must not contain '"));
+            Assert.That(name.Check("SIXTEEN-CHARS-XX"), Is.EqualTo("Directory name: at most 15 characters"));
+            Assert.That(name.Check("PACK-ONE"), Is.Null);
+
+            BlankImageOption system = FindOption("ndfs-smd-75m", "systemNumber");
+            Assert.That(system.Check("65536"), Is.EqualTo("System number (in the extended information): must be from 0 to 65535"));
+
+            BlankImageOption label = FindOption("pc-1440k", "volumeLabel");
+            Assert.That(label.Check("TWELVE-CHARS"), Is.EqualTo("Volume label: at most 11 characters"));
+        }
+
+        [Test]
+        public void CreateBlank_RefusesAValueCheckRefuses()
+        {
+            CommodoreDiskDriverProvider cbm = new CommodoreDiskDriverProvider();
+            Dictionary<string, string> options = new Dictionary<string, string> { { "diskId", "A" } };
+            Assert.Throws<ArgumentException>(() => cbm.CreateBlank("cbm-d64", options));
+        }
+
+        private static BlankImageOption FindOption(string layoutId, string optionId)
+        {
+            IFileSystemDriverProvider[] providers = AllProviders();
+            for (int p = 0; p < providers.Length; p++)
+            {
+                if (providers[p] is IBlankImageProvider blank)
+                {
+                    for (int i = 0; i < blank.BlankLayouts.Count; i++)
+                    {
+                        if (blank.BlankLayouts[i].Id != layoutId)
+                        {
+                            continue;
+                        }
+
+                        for (int k = 0; k < blank.BlankLayouts[i].Options.Count; k++)
+                        {
+                            if (blank.BlankLayouts[i].Options[k].Id == optionId)
+                            {
+                                return blank.BlankLayouts[i].Options[k];
+                            }
+                        }
+                    }
+                }
+            }
+
+            throw new AssertionException("no option " + optionId + " on " + layoutId);
+        }
+
         [TestCaseSource(nameof(Layouts))]
         public void BlankImage_IsDetectedMountsAndTakesAFile(string fileSystemType, string layoutId)
         {
@@ -158,6 +213,13 @@ namespace RetroIO.Tests
                     // Plain detection must pick this exact layout: a file written through it reads
                     // back through the named mount.
                     MemoryStream detectedStream = NewStream(image);
+
+                    // A partitioned disk is opened the way a program opens one: its first partition.
+                    if (detected is IPartitionProvider partitioned && HasPartitionTable(path))
+                    {
+                        Assert.That(partitioned.SelectPartition("0"), Is.True, "partition 0 selected");
+                    }
+
                     detected.Mount(detectedStream, false);
                     byte[] viaDetect = WriteOneFile(detected, data, detectedStream);
 
@@ -170,6 +232,12 @@ namespace RetroIO.Tests
             {
                 Directory.Delete(folder, recursive: true);
             }
+        }
+
+        private static bool HasPartitionTable(string path)
+        {
+            List<RetroIO.Storage.Local.Partitions.PartitionInfo>? partitions = RetroIO.Storage.Local.Partitions.PartitionDetectionService.DetectPartitions(path);
+            return partitions != null && partitions.Count > 0;
         }
 
         private static MemoryStream NewStream(byte[] image)

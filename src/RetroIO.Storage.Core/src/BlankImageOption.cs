@@ -47,51 +47,124 @@ namespace RetroIO.Storage.Core
         public IReadOnlyList<string> Choices { get; init; } = Array.Empty<string>();
 
         /// <summary>
+        /// Gets the shortest text allowed, or 0 for none.
+        /// </summary>
+        public int MinLength { get; init; }
+
+        /// <summary>
+        /// Gets whether text may only hold printable ASCII characters (20h to 7Eh).
+        /// </summary>
+        public bool PrintableAsciiOnly { get; init; }
+
+        /// <summary>
+        /// Gets characters text must not hold, for example the end mark of a name on disk.
+        /// </summary>
+        public string ForbiddenCharacters { get; init; } = string.Empty;
+
+        /// <summary>
+        /// Gets the smallest value of a <see cref="BlankImageOptionKind.Number"/> option.
+        /// </summary>
+        public long Minimum { get; init; } = long.MinValue;
+
+        /// <summary>
+        /// Gets the largest value of a <see cref="BlankImageOptionKind.Number"/> option.
+        /// </summary>
+        public long Maximum { get; init; } = long.MaxValue;
+
+        /// <summary>
+        /// Checks a value the user typed or picked.
+        /// </summary>
+        /// <param name="value">
+        /// The value.
+        /// </param>
+        /// <returns>
+        /// <c>null</c> when the value is allowed, otherwise the message to show.
+        /// </returns>
+        public string? Check(string value)
+        {
+            if (value == null)
+            {
+                return Label + ": no value";
+            }
+
+            switch (Kind)
+            {
+                case BlankImageOptionKind.Number:
+                    if (!long.TryParse(value, out long number))
+                    {
+                        return Label + ": must be a whole number";
+                    }
+
+                    if (number < Minimum || number > Maximum)
+                    {
+                        return Label + ": must be from " + Minimum + " to " + Maximum;
+                    }
+
+                    return null;
+                case BlankImageOptionKind.Flag:
+                    return value == "true" || value == "false" ? null : Label + ": must be true or false";
+                case BlankImageOptionKind.Choice:
+                    for (int i = 0; i < Choices.Count; i++)
+                    {
+                        if (Choices[i] == value)
+                        {
+                            return null;
+                        }
+                    }
+
+                    return Label + ": not one of the choices";
+            }
+
+            if (MinLength > 0 && MinLength == MaxLength && value.Length != MinLength)
+            {
+                return Label + ": must be exactly " + MinLength + " characters";
+            }
+
+            if (value.Length < MinLength)
+            {
+                return Label + ": at least " + MinLength + " characters";
+            }
+
+            if (MaxLength > 0 && value.Length > MaxLength)
+            {
+                return Label + ": at most " + MaxLength + " characters";
+            }
+
+            for (int i = 0; i < value.Length; i++)
+            {
+                if (PrintableAsciiOnly && (value[i] < ' ' || value[i] > '~'))
+                {
+                    return Label + ": printable ASCII only";
+                }
+
+                if (ForbiddenCharacters.IndexOf(value[i]) >= 0)
+                {
+                    return Label + ": must not contain " + value[i];
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Gives this option's value from the values the user set, or its default.
         /// </summary>
         /// <param name="options">
         /// Option values by id, or <c>null</c> for all defaults.
         /// </param>
         /// <returns>
-        /// The value, checked against the kind, length and choices of the option.
+        /// The value, checked with <see cref="Check"/>.
         /// </returns>
         /// <exception cref="ArgumentException">
         /// Thrown when the value set in <paramref name="options"/> is not allowed.
         /// </exception>
         public string ValueIn(IReadOnlyDictionary<string, string>? options)
         {
-            if (options == null || !options.TryGetValue(Id, out string? value) || value == null)
+            string value = options != null && options.TryGetValue(Id, out string? set) && set != null ? set : Default;
+            string? problem = Check(value);
+            if (problem != null)
             {
-                return Default;
-            }
-
-            if (MaxLength > 0 && value.Length > MaxLength)
-            {
-                throw new ArgumentException(Label + ": at most " + MaxLength + " characters", nameof(options));
-            }
-
-            if (Kind == BlankImageOptionKind.Number && !long.TryParse(value, out _))
-            {
-                throw new ArgumentException(Label + ": not a whole number: " + value, nameof(options));
-            }
-
-            if (Kind == BlankImageOptionKind.Flag && value != "true" && value != "false")
-            {
-                throw new ArgumentException(Label + ": must be true or false", nameof(options));
-            }
-
-            if (Kind == BlankImageOptionKind.Choice)
-            {
-                bool found = false;
-                for (int i = 0; i < Choices.Count; i++)
-                {
-                    found |= Choices[i] == value;
-                }
-
-                if (!found)
-                {
-                    throw new ArgumentException(Label + ": not one of the choices: " + value, nameof(options));
-                }
+                throw new ArgumentException(problem, nameof(options));
             }
 
             return value;

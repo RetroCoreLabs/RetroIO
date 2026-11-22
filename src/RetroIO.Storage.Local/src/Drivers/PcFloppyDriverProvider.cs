@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using RetroIO.Storage.Core;
+using RetroIO.Storage.Local.BlockDevices;
 
 namespace RetroIO.Storage.Local.Drivers
 {
@@ -22,7 +23,7 @@ namespace RetroIO.Storage.Local.Drivers
         private static readonly string[] MachineList = new[] { "IBM PC" };
 
         // The volume label of the boot sector and root directory: 11 characters, as FORMAT /V takes it.
-        private static readonly BlankImageOption VolumeLabel = new BlankImageOption { Id = "volumeLabel", Label = "Volume label", Kind = BlankImageOptionKind.Text, Default = string.Empty, MaxLength = 11 };
+        private static readonly BlankImageOption VolumeLabel = new BlankImageOption { Id = "volumeLabel", Label = "Volume label", Kind = BlankImageOptionKind.Text, Default = string.Empty, MaxLength = 11, PrintableAsciiOnly = true };
         private static readonly BlankImageOption[] LabelOnly = { VolumeLabel };
 
         // FAT12 floppies with the cluster size and root directory size MS-DOS used (PcImageFactory).
@@ -33,6 +34,14 @@ namespace RetroIO.Storage.Local.Drivers
             new BlankImageLayout { Id = "pc-1200k", Machine = "IBM PC", Name = "1.2 MB 5.25\" floppy - 80 tracks, 2 sides, 15 x 512", Extension = ".img", SizeBytes = 1228800, Options = LabelOnly },
             new BlankImageLayout { Id = "pc-1440k", Machine = "IBM PC", Name = "1.44 MB 3.5\" floppy - 80 tracks, 2 sides, 18 x 512", Extension = ".img", SizeBytes = 1474560, Options = LabelOnly },
             new BlankImageLayout { Id = "pc-2880k", Machine = "IBM PC", Name = "2.88 MB 3.5\" floppy - 80 tracks, 2 sides, 36 x 512", Extension = ".img", SizeBytes = 2949120, Options = LabelOnly },
+            new BlankImageLayout { Id = "pc-hd-xt-5m", Machine = "IBM PC/XT", Name = "5 MB hard disk - 306 cylinders, 2 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcXt_5MB.TotalBlocks * 512L, Options = LabelOnly, Details = "IBM XT BIOS drive type 0.\nOne FAT12 partition over the whole disk, from the first sector after cylinder 0 head 0." },
+            new BlankImageLayout { Id = "pc-hd-xt-10m", Machine = "IBM PC/XT", Name = "10 MB hard disk - 306 cylinders, 4 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcXt_10MB.TotalBlocks * 512L, Options = LabelOnly, Details = "the usual XT drive, also IBM AT type 1.\nOne FAT12 partition over the whole disk, from the first sector after cylinder 0 head 0." },
+            new BlankImageLayout { Id = "pc-hd-xt-15m", Machine = "IBM PC/XT", Name = "15 MB hard disk - 306 cylinders, 6 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcXt_15MB.TotalBlocks * 512L, Options = LabelOnly, Details = "IBM XT BIOS drive type 2.\nOne FAT12 partition over the whole disk, from the first sector after cylinder 0 head 0." },
+            new BlankImageLayout { Id = "pc-hd-xt-26m", Machine = "IBM PC/XT", Name = "26 MB hard disk - 375 cylinders, 8 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcXt_26MB.TotalBlocks * 512L, Options = LabelOnly, Details = "IBM XT BIOS drive type 1.\nOne FAT16 partition over the whole disk, from the first sector after cylinder 0 head 0." },
+            new BlankImageLayout { Id = "pc-hd-at-20m", Machine = "IBM PC/AT", Name = "20 MB hard disk - 615 cylinders, 4 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcAt_20MB.TotalBlocks * 512L, Options = LabelOnly, Details = "IBM AT BIOS drive type 2.\nOne FAT16 partition over the whole disk, from the first sector after cylinder 0 head 0." },
+            new BlankImageLayout { Id = "pc-hd-at-30m", Machine = "IBM PC/AT", Name = "30 MB hard disk - 615 cylinders, 6 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcAt_30MB.TotalBlocks * 512L, Options = LabelOnly, Details = "IBM AT BIOS drive type 3.\nOne FAT16 partition over the whole disk, from the first sector after cylinder 0 head 0." },
+            new BlankImageLayout { Id = "pc-hd-at-47m", Machine = "IBM PC/AT", Name = "47 MB hard disk - 940 cylinders, 6 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcAt_47MB.TotalBlocks * 512L, Options = LabelOnly, Details = "IBM AT BIOS drive type 5.\nOne FAT16 partition over the whole disk, from the first sector after cylinder 0 head 0." },
+            new BlankImageLayout { Id = "pc-hd-at-62m", Machine = "IBM PC/AT", Name = "62 MB hard disk - 940 cylinders, 8 heads, 17 x 512", Extension = ".img", SizeBytes = BlockDeviceDescriptor.PcAt_62MB.TotalBlocks * 512L, Options = LabelOnly, Details = "IBM AT BIOS drive type 4.\nOne FAT16 partition over the whole disk, from the first sector after cylinder 0 head 0." },
         };
 
         // The one extension list for this format: detection below uses it, and programs read it
@@ -183,16 +192,46 @@ namespace RetroIO.Storage.Local.Drivers
         /// <inheritdoc/>
         public byte[] CreateBlank(string layoutId, IReadOnlyDictionary<string, string> options)
         {
+            if (TryHardDisk(layoutId, out PcHddPreset preset))
+            {
+                return PcImageFactory.CreateBlankHardDisk(preset, VolumeLabel.ValueIn(options));
+            }
+
             return PcImageFactory.CreateBlankFloppy(SizeOf(layoutId), VolumeLabel.ValueIn(options));
         }
 
         /// <inheritdoc/>
         public IFileSystemDriver Mount(Stream stream, bool readOnly, string layoutId)
         {
-            SizeOf(layoutId);
             PcFloppyDriver driver = new PcFloppyDriver();
+            if (TryHardDisk(layoutId, out _))
+            {
+                // The file system of a hard disk created here is in partition 0.
+                driver.SelectPartition("0");
+            }
+            else
+            {
+                SizeOf(layoutId);
+            }
+
             driver.Mount(stream, readOnly);
             return driver;
+        }
+
+        private static bool TryHardDisk(string layoutId, out PcHddPreset preset)
+        {
+            switch (layoutId)
+            {
+                case "pc-hd-xt-5m": preset = PcHddPreset.Xt5MB; return true;
+                case "pc-hd-xt-10m": preset = PcHddPreset.Xt10MB; return true;
+                case "pc-hd-xt-15m": preset = PcHddPreset.Xt15MB; return true;
+                case "pc-hd-xt-26m": preset = PcHddPreset.Xt26MB; return true;
+                case "pc-hd-at-20m": preset = PcHddPreset.At20MB; return true;
+                case "pc-hd-at-30m": preset = PcHddPreset.At30MB; return true;
+                case "pc-hd-at-47m": preset = PcHddPreset.At47MB; return true;
+                case "pc-hd-at-62m": preset = PcHddPreset.At62MB; return true;
+                default: preset = PcHddPreset.Xt5MB; return false;
+            }
         }
 
         private static PcFloppySize SizeOf(string layoutId)

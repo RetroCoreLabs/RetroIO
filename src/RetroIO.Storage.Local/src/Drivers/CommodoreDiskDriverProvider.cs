@@ -21,10 +21,10 @@ namespace RetroIO.Storage.Local.Drivers
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Commodore 64 (1541)", "Commodore 128 (1571, 1581)" };
 
-        // Disk name (16 characters) and ID (2) of the BAM header, as the drive's NEW command takes
-        // them ("N:name,id").
-        private static readonly BlankImageOption DiskName = new BlankImageOption { Id = "diskName", Label = "Disk name", Kind = BlankImageOptionKind.Text, Default = "BLANK", MaxLength = 16 };
-        private static readonly BlankImageOption DiskId = new BlankImageOption { Id = "diskId", Label = "Disk ID", Kind = BlankImageOptionKind.Text, Default = "00", MaxLength = 2 };
+        // Disk name (up to 16 characters) and ID of the BAM header, as the drive's NEW command takes
+        // them ("N:name,id"). The drive does a full format only when the ID is given, two characters.
+        private static readonly BlankImageOption DiskName = new BlankImageOption { Id = "diskName", Label = "Disk name", Kind = BlankImageOptionKind.Text, Default = "BLANK", MaxLength = 16, PrintableAsciiOnly = true };
+        private static readonly BlankImageOption DiskId = new BlankImageOption { Id = "diskId", Label = "Disk ID", Kind = BlankImageOptionKind.Text, Default = "00", MinLength = 2, MaxLength = 2, PrintableAsciiOnly = true };
         private static readonly BlankImageOption[] NameAndId = { DiskName, DiskId };
 
         private static readonly BlankImageLayout[] Layouts =
