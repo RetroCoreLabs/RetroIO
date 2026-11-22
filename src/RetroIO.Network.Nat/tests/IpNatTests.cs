@@ -195,9 +195,9 @@ namespace RetroIO.Network.Nat.Tests
         }
 
         [Fact]
-        public void TcpFragmentsAndMulticastAreDroppedAndCounted()
+        public void IcmpFragmentsAndMulticastAreDroppedAndCounted()
         {
-            _link.Receive(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[] { 1 }, protocol: 6));
+            _link.Receive(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[] { 1 }, protocol: 1));
             _link.Receive(Udp(_link.Address, 4000, Loopback, _echoPort, new byte[] { 1 }, fragment: 0x2000));
             _link.Receive(Udp(_link.Address, 4000, Ipv4.Parse("224.0.0.9"), 520, new byte[] { 1 }));
 

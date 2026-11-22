@@ -16,14 +16,15 @@ using RetroIO.Network.Router;
 namespace RetroIO.Network.Nat
 {
     /// <summary>
-    /// Address sharing (NAT) for an <see cref="IpRouter"/>: the callers' UDP goes to the internet
-    /// through ordinary host sockets, and the replies come back to them.
+    /// Address sharing (NAT) for an <see cref="IpRouter"/>: the callers' TCP and UDP go to the
+    /// internet through ordinary host sockets, and the replies come back to them.
     /// </summary>
     /// <remarks>
     /// <para><b>How it works</b></para>
-    /// The NAT takes every packet the router sends upstream. For each caller address and UDP port it
-    /// opens one host socket (a mapping), sends the datagram on with it, and later turns what comes
-    /// back to that socket into a packet for the caller, given to <see cref="IpRouter.SendFromUpstream"/>.
+    /// The NAT takes every packet the router sends upstream. For TCP it ends the caller's connection
+    /// itself and opens a matching one from the host. For each caller address and UDP port it opens
+    /// one host socket (a mapping), sends the datagram on with it, and later turns what comes back to
+    /// that socket into a packet for the caller, given to <see cref="IpRouter.SendFromUpstream"/>.
     /// This is traditional NAT with port translation (RFC 3022 section 2.2), where the host's own
     /// network stack picks the outside port.
     /// <para><b>UDP behaviour (RFC 4787)</b></para>
@@ -38,12 +39,12 @@ namespace RetroIO.Network.Nat
     /// <para><b>Not built</b></para>
     /// Each of these is dropped and counted under its <see cref="NatDropReason"/>, never answered
     /// with something made up:
-    ///  - TCP and ICMP (<see cref="NatDropReason.UnsupportedProtocol"/>).
+    ///  - ICMP (<see cref="NatDropReason.UnsupportedProtocol"/>).
     ///  - IP fragments from a caller (<see cref="NatDropReason.Fragment"/>).
     ///  - an ICMP error back to the caller when the host reports a port unreachable; the report is
     ///    counted in <see cref="HostPortUnreachable"/>.
     /// </remarks>
-    public sealed class IpNat : IDisposable
+    public sealed partial class IpNat : IDisposable
     {
         /// <summary>
         /// How long a mapping lives after its last datagram, in milliseconds (RFC 4787 REQ-5: at least
@@ -60,12 +61,15 @@ namespace RetroIO.Network.Nat
         private const int IpHeaderBytes = 20;
         private const int UdpHeaderBytes = 8;
         private const byte ProtocolUdp = 17;
+        private const byte ProtocolTcp = 6;
         private const byte DefaultTtl = 64;
 
         private readonly IpRouter _router;
         private readonly List<UdpMapping> _udp = new List<UdpMapping>();
         private readonly List<Socket> _readList = new List<Socket>();
-        private readonly long[] _drops = new long[(int)NatDropReason.HostSendFailed + 1];
+        private readonly List<Socket> _writeList = new List<Socket>();
+        private readonly List<Socket> _errorList = new List<Socket>();
+        private readonly long[] _drops = new long[(int)NatDropReason.HostConnectFailed + 1];
         private readonly byte[] _receive = new byte[65536];
         private readonly IpRouter.PacketOutput _upstream;
         private byte[] _packet = new byte[2048];
@@ -163,28 +167,34 @@ namespace RetroIO.Network.Nat
                 }
             }
 
-            if (_udp.Count == 0)
-            {
-                return false;
-            }
-
             _readList.Clear();
+            _writeList.Clear();
+            _errorList.Clear();
             for (int i = 0; i < _udp.Count; i++)
             {
                 _readList.Add(_udp[i].Host);
             }
 
-            Socket.Select(_readList, null, null, waitMicroseconds);
-            for (int i = 0; i < _readList.Count; i++)
+            AddTcpSockets();
+            bool waited = _readList.Count + _writeList.Count + _errorList.Count > 0;
+            if (waited)
             {
-                UdpMapping? m = FindMapping(_readList[i]);
-                if (m != null)
+                Socket.Select(_readList.Count > 0 ? _readList : null, _writeList.Count > 0 ? _writeList : null, _errorList.Count > 0 ? _errorList : null, waitMicroseconds);
+                ServiceTcpConnects();
+                for (int i = 0; i < _readList.Count; i++)
                 {
-                    ReadUdp(m);
+                    UdpMapping? m = FindMapping(_readList[i]);
+                    if (m != null)
+                    {
+                        ReadUdp(m);
+                    }
                 }
+
+                ServiceTcpSockets();
             }
 
-            return true;
+            RunTcpTimers();
+            return waited;
         }
 
         /// <summary>
@@ -205,6 +215,7 @@ namespace RetroIO.Network.Nat
             }
 
             _udp.Clear();
+            CloseAllTcp();
         }
 
         // The Internet checksum (RFC 1071): the ones' complement of the ones' complement sum of the
@@ -231,10 +242,11 @@ namespace RetroIO.Network.Nat
             return (ushort)~sum;
         }
 
-        // The UDP pseudo-header (RFC 768): source, destination, zero and protocol, UDP length.
-        private static uint PseudoHeaderSum(uint source, uint destination, int udpLength)
+        // The UDP and TCP pseudo-header (RFC 768, RFC 9293 section 3.1): source, destination, zero
+        // and protocol, then the length of the UDP or TCP part.
+        private static uint PseudoHeaderSum(uint source, uint destination, int length, byte protocol = ProtocolUdp)
         {
-            return (source >> 16) + (source & 0xFFFF) + (destination >> 16) + (destination & 0xFFFF) + ProtocolUdp + (uint)udpLength;
+            return (source >> 16) + (source & 0xFFFF) + (destination >> 16) + (destination & 0xFFFF) + protocol + (uint)length;
         }
 
         private static bool IsUnicast(uint address)
@@ -260,17 +272,23 @@ namespace RetroIO.Network.Nat
                 return;
             }
 
-            if (packet[9] != ProtocolUdp)
+            uint source = Ipv4.Source(packet);
+            uint destination = Ipv4.Destination(packet);
+            if (packet[9] != ProtocolUdp && packet[9] != ProtocolTcp)
             {
                 Drop(NatDropReason.UnsupportedProtocol);
                 return;
             }
 
-            uint source = Ipv4.Source(packet);
-            uint destination = Ipv4.Destination(packet);
             if (!IsUnicast(destination))
             {
                 Drop(NatDropReason.NotUnicast);
+                return;
+            }
+
+            if (packet[9] == ProtocolTcp)
+            {
+                FromCallerTcp(packet.Slice(headerBytes), source, destination);
                 return;
             }
 
@@ -455,7 +473,7 @@ namespace RetroIO.Network.Nat
     public enum NatDropReason
     {
         /// <summary>
-        /// Not UDP; TCP and ICMP are not built yet.
+        /// Not UDP or TCP; ICMP is not built yet.
         /// </summary>
         UnsupportedProtocol,
 
@@ -488,5 +506,22 @@ namespace RetroIO.Network.Nat
         /// The host socket refused to send the datagram.
         /// </summary>
         HostSendFailed,
+
+        /// <summary>
+        /// The TCP header is too short, its data offset does not fit, or its checksum is wrong.
+        /// </summary>
+        BadTcp,
+
+        /// <summary>
+        /// A TCP connection was asked for and <see cref="IpNat.MaxTcpConnections"/> are already
+        /// open; the caller gets a reset.
+        /// </summary>
+        TooManyConnections,
+
+        /// <summary>
+        /// The host could not connect for a reason other than a refusal (a timeout, no route); the
+        /// caller gets no answer and gives up by itself.
+        /// </summary>
+        HostConnectFailed,
     }
 }
