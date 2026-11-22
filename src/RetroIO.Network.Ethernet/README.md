@@ -9,6 +9,7 @@ and the backends with no native dependency. Moved from RetroCore on 2026-11-22.
 
 | Type | What it does |
 |---|---|
+| `IEthernetController` | The other side: what an emulated card offers, event `FrameTransmitted` and `DeliverFrame`, so the host can join any card to any backend. |
 | `IEthernetBackend` | What a card plugs into: `Send`, `Poll`, `Start`, `Stop`, event `OnFrameReceived`. |
 | `IEthernetBackendStatus`, `IEthernetPortForwarding` | Optional extras a backend may offer: a status line, and port forwards (the NAT has them). |
 | `EthernetBackends` | Makes a backend from a text setting such as `nat`, `pcap:Ethernet 2` or `tcp:host:port`. Each backend package registers its own maker. `none` or an empty setting gives no backend. |
