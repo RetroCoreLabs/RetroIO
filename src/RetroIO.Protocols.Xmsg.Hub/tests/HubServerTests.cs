@@ -283,14 +283,23 @@ namespace RetroIO.Protocols.Xmsg.Hub.Tests
                             break;
                         }
 
-                        healthyGot++;
+                        Interlocked.Increment(ref healthyGot);
                     }
                 });
                 drain.IsBackground = true;
                 drain.Start();
 
+                // The sender stays at most 64 frames ahead of the healthy member. Unpaced, it sent all
+                // 2000 faster than a slow machine (the GitHub runner) could read them, so the healthy
+                // member's own queue filled too and the hub rightly dropped ITS frames as well: it got
+                // exactly MemberQueueDepth (256) and then nothing. Paced, only the member that reads
+                // nothing at all falls behind, which is what this test is about.
                 for (int i = 0; i < count; i++)
                 {
+                    int sent = i;
+                    Assert.True(
+                        SpinWait.SpinUntil(() => Volatile.Read(ref healthyGot) > sent - 64, 10000),
+                        $"the healthy member stopped receiving at {Volatile.Read(ref healthyGot)} of {count}");
                     sender.Send(BigFrame((byte)(i & 0xFF), frameSize));
                 }
 
