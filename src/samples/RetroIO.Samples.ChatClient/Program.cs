@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 
 using Grpc.Net.Client;
 
+using RetroIO.Protocols.Xmsg.Programs.Running;
 using RetroIO.Protocols.Xmsg;
 using RetroIO.Protocols.Xmsg.Chat;
 using RetroIO.Protocols.Xmsg.Plugins.Client;
@@ -75,7 +76,7 @@ namespace RetroIO.Samples.ChatClient
             if (settings == null)
             {
                 Console.Error.WriteLine("retro-chat: cannot read " + configPath + ": " + problem);
-                return 2;
+                return ProgramExitCode.BadSettings;
             }
 
             string node = settings.Node;
@@ -91,7 +92,7 @@ namespace RetroIO.Samples.ChatClient
                 if (Is(a, "--help") || Is(a, "-h"))
                 {
                     PrintUsage();
-                    return 0;
+                    return ProgramExitCode.Done;
                 }
                 else if (Is(a, "--config") && hasValue)
                 {
@@ -121,7 +122,7 @@ namespace RetroIO.Samples.ChatClient
                 {
                     Console.Error.WriteLine("retro-chat: not understood: " + a);
                     PrintUsage();
-                    return 2;
+                    return ProgramExitCode.BadSettings;
                 }
             }
 
@@ -129,15 +130,11 @@ namespace RetroIO.Samples.ChatClient
             {
                 Console.Error.WriteLine("retro-chat: no nickname. Set Nick in " + configPath + ", or pass --nick.");
                 PrintUsage();
-                return 2;
+                return ProgramExitCode.BadSettings;
             }
 
-            using CancellationTokenSource stop = new CancellationTokenSource();
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                e.Cancel = true;
-                stop.Cancel();
-            };
+            // Ctrl+C only asks the loop to stop, so it leaves cleanly (ProgramStop).
+            using ProgramStop stop = new ProgramStop();
 
             using GrpcChannel channel = GrpcChannel.ForAddress(node);
             PluginConnection connection;
@@ -148,7 +145,7 @@ namespace RetroIO.Samples.ChatClient
             catch (Exception ex) when (ex is InvalidOperationException || ex is Grpc.Core.RpcException || ex is OperationCanceledException)
             {
                 Console.Error.WriteLine("retro-chat: could not connect to RetroServer at " + node + ": " + ex.Message);
-                return 3;
+                return ProgramExitCode.CannotConnect;
             }
 
             await using (connection)
@@ -159,7 +156,7 @@ namespace RetroIO.Samples.ChatClient
                 if (joined != XroutError.XRSOK)
                 {
                     Console.Error.WriteLine("retro-chat: RetroServer could not deliver the join to " + service + ": " + joined);
-                    return 4;
+                    return ProgramExitCode.Refused;
                 }
 
                 // Typed lines come from a reader thread; only this loop touches the client.
@@ -171,7 +168,7 @@ namespace RetroIO.Samples.ChatClient
 
                 DateTime joinSent = DateTime.UtcNow;
                 bool refused = false;
-                while (!stop.IsCancellationRequested && !connection.IsClosed && !refused)
+                while (!stop.IsStopping && !connection.IsClosed && !refused)
                 {
                     bool busy = false;
                     IReadOnlyList<ChatMessage> got = chat.Poll();
@@ -186,7 +183,7 @@ namespace RetroIO.Samples.ChatClient
                     {
                         Console.Error.WriteLine("retro-chat: no answer from " + service + " within "
                             + JoinPatience.TotalSeconds + " seconds.");
-                        return 6;
+                        return ProgramExitCode.NoAnswer;
                     }
 
                     // Lines wait until the server has let us in: said before the welcome they would be
@@ -197,7 +194,7 @@ namespace RetroIO.Samples.ChatClient
                         busy = true;
                         if (!Obey(chat, line))
                         {
-                            stop.Cancel();
+                            stop.Stop();
                         }
                     }
 
@@ -220,17 +217,17 @@ namespace RetroIO.Samples.ChatClient
 
                 if (refused)
                 {
-                    return 4;
+                    return ProgramExitCode.Refused;
                 }
 
                 if (connection.IsClosed)
                 {
                     Console.Error.WriteLine("retro-chat: RetroServer closed the connection.");
-                    return 5;
+                    return ProgramExitCode.ConnectionClosed;
                 }
 
                 chat.Leave();
-                return 0;
+                return ProgramExitCode.Done;
             }
         }
 
@@ -308,9 +305,9 @@ namespace RetroIO.Samples.ChatClient
         /// <param name="stop">
         /// Ends the reading when the program stops.
         /// </param>
-        private static void ReadLines(ConcurrentQueue<string> typed, InputState input, CancellationTokenSource stop)
+        private static void ReadLines(ConcurrentQueue<string> typed, InputState input, ProgramStop stop)
         {
-            while (!stop.IsCancellationRequested)
+            while (!stop.IsStopping)
             {
                 string? line = Console.ReadLine();
                 if (line == null)
