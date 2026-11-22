@@ -773,6 +773,15 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // The state change stands even when the packet is refused: the application has decided
             // the call is over, and the clear-request timer is what carries that decision to the
             // peer if this attempt did not (retransmission arrives with the T23 work, plan B5).
+            // X.75 5.3.1: "A transit network identification is always present for each transit network in ... the clear
+            // request packet issued as a direct response to the call request packet", and is "not present in a clear request
+            // packet issued either after receipt of the corresponding call connected packet or after transmission of the
+            // corresponding call request or call connected packets". A call still incoming here is being refused: its
+            // clear carries the transit list of the Call Request it answers, as the destination's Call Connected does
+            // (SwitchCore.AnswerTransitList). Added 2026-11-22; before, every clear between networks had an empty field.
+            bool directResponse = vc.State == X25VcState.CallIncoming;
+            byte[] incomingUtilities = vc.NetworkUtilities;
+
             vc.State = X25VcState.ClearRequest;
             vc.Cause = cause;
             vc.Diagnostic = diagnostic;
@@ -780,9 +789,41 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.CallRequestHeld = false;
             vc.TimerExpiryMs = Now() + _config.ClearRequestTimeoutMs;
             // X.75 4.2.3.3.3: in the extended format the network utility length is "always present when the user
-            // facility length is present", so between networks an empty utility field goes with any facilities.
-            byte[]? utilities = _config.IsSte ? System.Array.Empty<byte>() : null;
+            // facility length is present", so between networks a utility field (empty when there is nothing for it) goes
+            // with any facilities.
+            byte[]? utilities = null;
+            if (_config.IsSte)
+            {
+                utilities = directResponse ? TransitListOf(incomingUtilities) : System.Array.Empty<byte>();
+            }
             return Send(X25PacketBuilder.CreateClearRequest(lci, cause, diagnostic, facilities, networkUtilities: utilities));
+        }
+
+        /// <summary>
+        /// A utility field holding only the transit network identifications of <paramref name="utilities"/>, in order
+        /// (X.75 5.3.1); empty when it has none or does not decode.
+        /// </summary>
+        /// <param name="utilities">
+        /// The utility field of the Call Request.
+        /// </param>
+        /// <returns>
+        /// The field for the answer.
+        /// </returns>
+        private static byte[] TransitListOf(byte[] utilities)
+        {
+            if (X75Utilities.TryDecode(utilities, out X75Utilities read) != X75UtilityError.None || read.TransitNetworks.Count == 0)
+            {
+                return System.Array.Empty<byte>();
+            }
+
+            X75Utilities answer = new X75Utilities();
+            List<string> transit = read.TransitNetworks;
+            for (int i = 0; i < transit.Count; i++)
+            {
+                answer.TransitNetworks.Add(transit[i]);
+            }
+
+            return answer.Encode();
         }
 
         /// <summary>

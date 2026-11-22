@@ -793,7 +793,7 @@ namespace RetroIO.Protocols.X25.Switch
 
             if (!toNetwork)
             {
-                // Destination network: the field stops here. Its transit list is echoed in the Call Connected (AnswerUtilities).
+                // Destination network: the field stops here. Its transit list is echoed in the Call Connected (AnswerTransitList).
                 return true;
             }
 

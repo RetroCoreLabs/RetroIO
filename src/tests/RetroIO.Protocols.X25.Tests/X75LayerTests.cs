@@ -238,6 +238,39 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(sawClear, Is.EqualTo(clears));
         }
 
+        /// <summary>
+        /// X.75 5.3.1: a Clear Request that is the direct answer to a Call Request names every transit network of that
+        /// Call Request, in order; one sent after the call connected names none. Added 2026-11-22.
+        /// </summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ARefusal_CarriesTheTransitList_AClearAfterConnectingDoesNot(bool connectFirst)
+        {
+            X25Layer ste = Ste(fromHighest: false);
+
+            // Transit networks 2624 then 2080 (41 26 24, 41 20 80, 5.4.3.1), then the call identifier 81 00 00 01.
+            ste.ProcessPacket(X25PacketBuilder.CreateCallRequest(5, "2624", "2422",
+                networkUtilities: new byte[] { 0x41, 0x26, 0x24, 0x41, 0x20, 0x80, 0x81, 0x00, 0x00, 0x01 }));
+            if (connectFirst)
+            {
+                Assert.That(ste.AcceptCall(5), Is.True);
+            }
+
+            Assert.That(ste.ClearCall(5, 0x0D, 67, null), Is.True);
+
+            X25PacketInfo info = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(X75Utilities.TryDecode(info.NetworkUtilities, out X75Utilities u), Is.EqualTo(X75UtilityError.None));
+            if (connectFirst)
+            {
+                Assert.That(info.NetworkUtilities, Is.Empty, "not after the call connected");
+            }
+            else
+            {
+                Assert.That(u.TransitNetworks, Is.EqualTo(new[] { "2624", "2080" }));
+                Assert.That(u.HasCallIdentifier, Is.False, "only the transit list");
+            }
+        }
+
         [Test]
         public void ReverseCharging_LeavesAsAUtility_NotAFacility()
         {
