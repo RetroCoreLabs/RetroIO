@@ -218,15 +218,13 @@ namespace RetroIO.Protocols.X25.Tests
 
             client.Open(new X25ClientConfig { Host = "127.0.0.1", Port = (ushort)peer.Port, LocalAddress = "10000", Framing = X25ClientFraming.Xot }, NullLogger.Instance);
             pad.Initialize();
-            TypeLine(pad, "CALL 200");
+            // Enter as the x25pad console sends it: CR only. A CR LF would add a packet: the CR starts the
+            // call, and when the call is accepted before the PAD reads the LF, the LF goes out as data. That
+            // happened on the GitHub runner (run 45063375463: the peer's trace showed a data packet holding
+            // only 0A, echoed back, so the counts read 2 2).
+            TypeCr(pad, "CALL 200");
             Assert.That(connected.Wait(3000), Is.True);
-            // Enter as the x25pad console sends it: CR only (a CR LF would be two packets - CR forwards, then LF alone).
-            for (int i = 0; i < 5; i++)
-            {
-                pad.OnKey("HELLO"[i]);
-            }
-
-            pad.OnKey('\r');
+            TypeCr(pad, "HELLO");
             Assert.That(SpinWait.SpinUntil(() => text().Contains("HELLO"), 3000), Is.True, text());
 
             Assert.That(peer.ClearLastCall(0, 0), Is.True);
@@ -245,6 +243,17 @@ namespace RetroIO.Protocols.X25.Tests
         /// <param name="text">
         /// The characters to type before Enter.
         /// </param>
+        private static void TypeCr(PadClient pad, string line)
+        {
+            // A CR alone, as the x25pad console sends Enter.
+            for (int i = 0; i < line.Length; i++)
+            {
+                pad.OnKey(line[i]);
+            }
+
+            pad.OnKey('\r');
+        }
+
         private static void TypeLine(PadClient pad, string text)
         {
             for (int i = 0; i < text.Length; i++)
