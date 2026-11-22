@@ -1307,6 +1307,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // channel; an undefined type on an assigned channel is ERROR # 33.
             if (type == X25PacketType.RestartRequest || type == X25PacketType.RestartConfirmation)
             {
+                // Except in p7, our own Clear Request unconfirmed: X.25 Table C-3 (DCE clear indication) and X.75
+                // Table C.3 (STE-Y clear request) both give DISCARD there. Until 2026-11-23 it cleared the channel
+                // again. A DTE has no Annex C table and keeps the old behaviour.
+                if (!_config.IsDte && _vcs.TryGetValue(lci, out X25Vc? clearing) && clearing.State == X25VcState.ClearRequest)
+                {
+                    return Discard();
+                }
+
                 ChannelError(lci, X25Diagnostic.RestartWithNonzeroChannel, pkt);
                 return false;
             }
@@ -1356,7 +1364,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 case X25PacketType.CallRequest:
                     // NORMAL in p1; collision in p2 (handled); p6/p7 DISCARD; else ERROR.
                     if (state == X25VcState.Ready || state == X25VcState.CallRequest) return true;
-                    if (state == X25VcState.ClearRequest) return Discard();
+
+                    // p7, our Clear Request unconfirmed: DISCARD for an X.25 DCE (Table C-3), but ERROR (p7) # 26 between
+                    // networks (X.75 Table C.3, PDF page 102). Until 2026-11-23 an STE discarded it too.
+                    if (state == X25VcState.ClearRequest && !_config.IsSte) return Discard();
                     return Error(lci, state, pkt);
 
                 case X25PacketType.CallAccepted:
@@ -1370,6 +1381,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
                 case X25PacketType.ClearConfirmation:
                     if (state == X25VcState.ClearRequest) return true;
+
+                    // p1: ERROR # 20 for an X.25 DCE (Table C-3), but DISCARD between networks (X.75 Table C.3). Until
+                    // 2026-11-23 an STE cleared the idle channel.
+                    if (state == X25VcState.Ready && _config.IsSte) return Discard();
                     return Error(lci, state, pkt);
 
                 case X25PacketType.ResetConfirmation:
@@ -1455,16 +1470,24 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// Annex E 20-29: "packet type invalid for state" p1..p7 and d1..d3, from this engine's
         /// circuit states.
         /// </summary>
-        private static byte StateDiagnostic(X25VcState state)
+        /// <remarks>
+        /// The p-states are states of the INTERFACE, named from the DTE's side: p2 "DTE waiting" is a call the DTE sent,
+        /// p3 "DCE waiting" one the DCE sent; p6 "DTE clear request", p7 "DCE clear indication". So a DCE or an STE
+        /// (X.75 Table C.3: p2 "STE-X call request", p7 "STE-Y clear request") finds its OWN outgoing call in p3 (# 22)
+        /// and its own clear in p7 (# 26), the mirror of a DTE. Until 2026-11-23 every side used the DTE's mapping, so a
+        /// network side named the wrong state in diagnostics 21, 22 and 25.
+        /// </remarks>
+        private byte StateDiagnostic(X25VcState state)
         {
+            bool dteSide = _config.IsDte;
             switch (state)
             {
                 case X25VcState.Ready: return 20;
-                case X25VcState.CallRequest: return 21;
-                case X25VcState.CallIncoming: return 22;
+                case X25VcState.CallRequest: return dteSide ? (byte)21 : (byte)22;
+                case X25VcState.CallIncoming: return dteSide ? (byte)22 : (byte)21;
                 case X25VcState.DataTransfer: return 23;
                 case X25VcState.PvcReady: return 27;
-                case X25VcState.ClearRequest: return 25;
+                case X25VcState.ClearRequest: return dteSide ? (byte)25 : (byte)26;
                 case X25VcState.ResetRequest: return 28;
                 default: return X25Diagnostic.PacketTypeInvalid;
             }

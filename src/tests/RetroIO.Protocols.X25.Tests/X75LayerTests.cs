@@ -116,6 +116,140 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        /// <summary>
+        /// X.75 Table C.3, read from the 10/96 PDF page 102, row by row: each ERROR clears the channel with "network
+        /// congestion" (00000101) and the diagnostic the table gives, each DISCARD sends nothing. Added 2026-11-23; it
+        /// failed first on 9 rows: diagnostics 21 and 22 swapped on the network side, a Call Request in p7 discarded
+        /// instead of ERROR # 26, a restart packet in p7 cleared instead of discarded, a Clear Confirmation in p1 cleared
+        /// instead of discarded.
+        /// </summary>
+        /// <param name="state">
+        /// p1 ready, p2 a call from the other STE not yet answered, p3 our call not yet answered, p4 data transfer, p7
+        /// our Clear Request not yet confirmed.
+        /// </param>
+        /// <param name="packet">
+        /// The packet received: connected, clearconf, data, rr, call, restart.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The ERROR diagnostic, or -1 for DISCARD.
+        /// </param>
+        [TestCase("p1", "connected", 20)]
+        [TestCase("p1", "data", 20)]
+        [TestCase("p1", "rr", 20)]
+        [TestCase("p1", "restart", 41)]
+        [TestCase("p1", "clearconf", -1)]
+        [TestCase("p2", "call", 21)]
+        [TestCase("p2", "connected", 21)]
+        [TestCase("p2", "clearconf", 21)]
+        [TestCase("p2", "data", 21)]
+        [TestCase("p2", "restart", 41)]
+        [TestCase("p3", "clearconf", 22)]
+        [TestCase("p3", "data", 22)]
+        [TestCase("p3", "restart", 41)]
+        [TestCase("p4", "call", 23)]
+        [TestCase("p4", "connected", 23)]
+        [TestCase("p4", "clearconf", 23)]
+        [TestCase("p7", "call", 26)]
+        [TestCase("p7", "connected", -1)]
+        [TestCase("p7", "data", -1)]
+        [TestCase("p7", "restart", -1)]
+        public void TableC3_EachRow_AtAnSte(string state, string packet, int diagnostic)
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ushort lci;
+            switch (state)
+            {
+                case "p1":
+                    lci = 3;
+                    break;
+                case "p2":
+                    lci = 3;
+                    ste.ProcessPacket(X25PacketBuilder.CreateCallRequest(lci, "2624", "2422", networkUtilities: Array.Empty<byte>()));
+                    break;
+                default:
+                    lci = ste.PlaceCall("2624");
+                    Assert.That(lci, Is.EqualTo((ushort)1));
+                    if (state != "p3")
+                    {
+                        ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()));
+                        Assert.That(ste.TryGetCallParameters(lci, out _), Is.True);
+                    }
+
+                    if (state == "p7")
+                    {
+                        Assert.That(ste.ClearCall(lci, 0x05, 0), Is.True);
+                    }
+
+                    break;
+            }
+
+            byte[] bytes = packet switch
+            {
+                "connected" => X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()),
+                "clearconf" => X25PacketBuilder.CreateClearConfirmation(lci),
+                "data" => new byte[] { 0x10, (byte)lci, 0x00, 0x41 },
+                "rr" => new byte[] { 0x10, (byte)lci, 0x01 },
+                "call" => X25PacketBuilder.CreateCallRequest(lci, "2624", "2422", networkUtilities: Array.Empty<byte>()),
+                "restart" => new byte[] { 0x10, (byte)lci, 0xFB, 0x00, 0x00 },
+                _ => throw new ArgumentException(packet),
+            };
+
+            int before = _sink.Sent.Count;
+            ste.ProcessPacket(bytes);
+
+            if (diagnostic < 0)
+            {
+                Assert.That(_sink.Sent.Count, Is.EqualTo(before), "DISCARD: nothing sent");
+                return;
+            }
+
+            Assert.That(_sink.Sent.Count, Is.EqualTo(before + 1));
+            X25PacketInfo sent = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(sent.LCN, Is.EqualTo(lci));
+            Assert.That(sent.ClearingCause, Is.EqualTo((byte)0x05), "network congestion");
+            Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)diagnostic));
+        }
+
+        /// <summary>
+        /// X.25 Table C-3 (10/96 PDF page 127): data in p3 "DCE waiting" (the DCE's own call unanswered) is ERROR # 22,
+        /// data in p2 "DTE waiting" (a call the DCE received, unanswered) is ERROR # 21; a DTE names the same channel
+        /// states the other way round. Added 2026-11-23, when the network side had them swapped.
+        /// </summary>
+        /// <param name="dte">
+        /// True for a DTE, false for a DCE.
+        /// </param>
+        /// <param name="ownCall">
+        /// True when this side placed the call.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The diagnostic expected in the clear.
+        /// </param>
+        [TestCase(false, true, 22)]
+        [TestCase(false, false, 21)]
+        [TestCase(true, true, 21)]
+        [TestCase(true, false, 22)]
+        public void DataBeforeTheAnswer_NamesTheStateFromTheDteSide(bool dte, bool ownCall, int diagnostic)
+        {
+            _sink = new RecordingSink();
+            X25Layer layer = new X25Layer(_sink, new X25Config { LocalAddress = "2422", IsDte = dte, LciBase = 1, LciCount = 4 });
+            ushort lci;
+            if (ownCall)
+            {
+                lci = layer.PlaceCall("2624");
+            }
+            else
+            {
+                lci = 2;
+                layer.ProcessPacket(X25PacketBuilder.CreateCallRequest(lci, "2422", "2624"));
+            }
+
+            layer.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x00, 0x41 });
+            X25PacketInfo sent = X25PacketParser.ParsePacket(_sink.Last);
+            Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)diagnostic));
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {
