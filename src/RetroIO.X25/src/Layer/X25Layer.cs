@@ -1478,7 +1478,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         private void SendDiagnostic(byte diagnostic, ReadOnlySpan<byte> offender)
         {
             UnexpectedPackets++;
-            if (_config.IsDte)
+
+            // X.75 has no Diagnostic packet: its packet types have none, Annex E codes a diagnostic only in a clear,
+            // reset or restart, and Table C.1 gives DISCARD for the very cases X.25 answers with DIAG (an unassigned
+            // channel, a packet under 2 octets, a bad GFI). So between networks a DIAG entry is a DISCARD. Added
+            // 2026-11-23; until then an STE sent X.25 Diagnostic packets across an X.75 link.
+            if (_config.IsDte || _config.IsSte)
             {
                 return;
             }

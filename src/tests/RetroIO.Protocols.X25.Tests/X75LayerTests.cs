@@ -87,6 +87,35 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(layer.RestartOutstanding, Is.True, "r3: waiting for the other side's confirmation");
         }
 
+        /// <summary>
+        /// X.75 Table C.1: a packet on an unassigned channel, one under 2 octets, or one with a bad GFI is DISCARD. X.75
+        /// has no Diagnostic packet, so an STE sends nothing where an X.25 DCE sends one (# 36, # 38, # 40). Added
+        /// 2026-11-23; before, an STE sent X.25 Diagnostic packets.
+        /// </summary>
+        /// <param name="ste">
+        /// True for a switch between networks, false for an X.25 DCE.
+        /// </param>
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ABadPacket_IsDroppedBetweenNetworks_AndDiagnosedOnX25(bool ste)
+        {
+            _sink = new RecordingSink();
+            X25Layer layer = new X25Layer(_sink, new X25Config { LocalAddress = "2422", IsDte = false, IsSte = ste, LciBase = 1, LciCount = 4 });
+            int before = _sink.Sent.Count;
+
+            // RR on channel 100, outside 1..4; then a 1-octet packet; then a GFI of 00.
+            layer.ProcessPacket(new byte[] { 0x10, 0x64, 0x01 });
+            layer.ProcessPacket(new byte[] { 0x10 });
+            layer.ProcessPacket(new byte[] { 0x00, 0x01, 0x01 });
+
+            int expected = ste ? 0 : 3;
+            Assert.That(_sink.Sent.Count - before, Is.EqualTo(expected));
+            for (int i = before; i < _sink.Sent.Count; i++)
+            {
+                Assert.That(_sink.Sent[i][2], Is.EqualTo((byte)0xF1), "a Diagnostic packet");
+            }
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {
