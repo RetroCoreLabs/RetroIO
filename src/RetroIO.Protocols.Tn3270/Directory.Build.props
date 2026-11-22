@@ -1,0 +1,4 @@
+<Project>
+  <!-- Family props for the TN3270 / 3270 projects. Imports the repo props first. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+</Project>

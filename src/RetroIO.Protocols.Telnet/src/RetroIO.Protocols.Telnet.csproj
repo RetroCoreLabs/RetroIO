@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Telnet: the ONE telnet implementation for RetroCore Labs code.
+
+    It knows bytes only: splitting a received stream into data, commands, option negotiation,
+    subnegotiation and end-of-record marks, escaping data for sending, and the RFC 1143 "Q method"
+    option negotiation that can never loop. It owns no socket and no thread, so it works over TCP,
+    over TLS (a later addition - any Stream), over a test harness, or over an emulated channel.
+
+    Specifications, all kept in the RetroTerm repository under docs/spec/IBM3270/RFC/:
+    RFC 854 (telnet), RFC 855 (option subnegotiation), RFC 856 (BINARY), RFC 885 (END-OF-RECORD),
+    RFC 1091 (TERMINAL-TYPE), RFC 1143 (the Q method).
+
+    Today telnet is written four times across RetroTerm and RetroIO (RetroTerm's TelnetConnection
+    and TelnetServer, RetroIO's X.25 TelnetPadServer and switch TelnetCliServer). They move onto
+    this library one at a time; this project is where that ends.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Telnet</PackageId>
+    <AssemblyName>RetroIO.Protocols.Telnet</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Telnet</RootNamespace>
+    <Description>Telnet byte layer: stream parser, data escaping and RFC 1143 option negotiation, with no socket of its own.</Description>
+    <PackageTags>retroio;telnet;rfc854;rfc1143</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

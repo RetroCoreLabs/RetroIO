@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Protocols.Tn3270: the IBM 3270 display station as a library.
+
+    Three parts, usable on their own:
+      - the 3270 data stream: command, order, attribute and AID byte values, buffer addresses;
+      - Display3270: the screen model - buffer, fields, cursor, keyboard lock, local editing, and the
+        reply the terminal sends when Enter, a PF or a PA key is pressed. No network, no window:
+        a renderer reads it, a test drives it, and a future System/360/370 emulator can drive it
+        directly as its console through a channel adapter;
+      - Tn3270Client: plain TN3270 over RetroIO.Protocols.Telnet (TN3270E is not built yet).
+
+    Specification (in the RetroTerm repository, docs/spec/IBM3270/): IBM GA23-0059-4 "3270 Data
+    Stream Programmer's Reference", GA27-2837-9 "3270 Character Set Reference", GA27-2890-4 "3278
+    Display Station Operator's Guide", RFC 1576 and RFC 2355. Every rule in the code cites its page.
+    x3270 and IBM's Python tnz are oracles to compare against, never sources of code.
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Protocols.Tn3270</PackageId>
+    <AssemblyName>RetroIO.Protocols.Tn3270</AssemblyName>
+    <RootNamespace>RetroIO.Protocols.Tn3270</RootNamespace>
+    <Description>IBM 3270 display station: data stream, headless screen model with local field editing, and a TN3270 client session.</Description>
+    <PackageTags>retroio;3270;tn3270;ebcdic;mainframe</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Telnet\src\RetroIO.Protocols.Telnet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

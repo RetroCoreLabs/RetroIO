@@ -1,0 +1,4 @@
+<Project>
+  <!-- Family props for the Telnet protocol projects. Imports the repo props first. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+</Project>

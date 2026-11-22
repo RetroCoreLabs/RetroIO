@@ -256,6 +256,20 @@
     <Project Path="tests/RetroIO.Protocols.Xmsg.TestSupport/RetroIO.Protocols.Xmsg.TestSupport.csproj" />
     <Project Path="tests/RetroIO.Tests/RetroIO.Tests.csproj" />
   </Folder>
+  <Folder Name="/RetroIO.Protocols.Telnet/" />
+  <Folder Name="/RetroIO.Protocols.Telnet/src/">
+    <Project Path="RetroIO.Protocols.Telnet/src/RetroIO.Protocols.Telnet.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Telnet/tests/">
+    <Project Path="RetroIO.Protocols.Telnet/tests/RetroIO.Protocols.Telnet.Tests.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Tn3270/" />
+  <Folder Name="/RetroIO.Protocols.Tn3270/src/">
+    <Project Path="RetroIO.Protocols.Tn3270/src/RetroIO.Protocols.Tn3270.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Protocols.Tn3270/tests/">
+    <Project Path="RetroIO.Protocols.Tn3270/tests/RetroIO.Protocols.Tn3270.Tests.csproj" />
+  </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/RetroIO.Samples.ChatClient/RetroIO.Samples.ChatClient.csproj" />
     <Project Path="samples/RetroIO.Samples.ChatServer/RetroIO.Samples.ChatServer.csproj" />
