@@ -1658,7 +1658,8 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </summary>
         private int RestartTimerMs()
         {
-            return _config.IsDte ? _config.RestartTimeoutMs : _config.RestartIndicationTimeoutMs;
+            // X.75 Table D.1: T30 is 180 s, the value of RestartTimeoutMs; an STE ran the DCE's 60 s T10 until 2026-11-23.
+            return _config.IsDte || _config.IsSte ? _config.RestartTimeoutMs : _config.RestartIndicationTimeoutMs;
         }
 
         /// <summary>
@@ -1673,9 +1674,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         {
             if (_restartRetries == 0)
             {
+                // X.75 Table D.1, T30 first expiry: "a restart request packet (network congestion, # 52) again, and
+                // restarts time-out T30" - the same rule as T10 with the X.75 cause (00000011, Table 25) and 180 s.
                 _restartRetries = 1;
-                _restartExpiryMs = nowMs + _config.RestartIndicationTimeoutMs;
-                _restartCause = X25Cause.RestartingLocalProcedureError;
+                _restartExpiryMs = nowMs + RestartTimerMs();
+                _restartCause = _config.IsSte ? SteRestartingNetworkCongestion : X25Cause.RestartingLocalProcedureError;
                 _restartDiagnostic = X25Diagnostic.TimeExpiredRestart;
                 Send(X25PacketBuilder.CreateRestartRequest(_restartCause, _restartDiagnostic));
                 return;
@@ -1688,8 +1691,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // contain the general format identifier for the interface" and "bits 4 to 1 of the first octet and bits 8
             // to 1 of the second octet are all 0 for expiration of time-out T10". The GFI is 0001, modulo 8, the only
             // modulo this engine runs (X25Config.Validate).
-            DiagnosticsSent++;
-            Send(X25PacketBuilder.CreateDiagnostic(X25Diagnostic.TimeExpiredRestart, new byte[] { 0x10, 0x00 }));
+            // X.75 Table D.2, T30 second expiry: "STE X/Y enters the r1 state" and nothing more - X.75 has no
+            // Diagnostic packet. Until 2026-11-23 an STE sent one here.
+            if (!_config.IsSte)
+            {
+                DiagnosticsSent++;
+                Send(X25PacketBuilder.CreateDiagnostic(X25Diagnostic.TimeExpiredRestart, new byte[] { 0x10, 0x00 }));
+            }
+
             FailHeldCalls(X25Diagnostic.TimeExpiredRestart);
             RaiseRestartTimedOut();
         }
@@ -1729,6 +1738,35 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </summary>
         private void OnT22Expired(X25Vc vc, long nowMs)
         {
+            // X.75 Tables D.1 and D.2, T32: the first expiry signals a reset request (network congestion, # 51) again,
+            // the second clears a virtual call (network congestion, # 51) or returns a permanent circuit to d1. One
+            // retransmission and a fixed packet, not the X.25 retries of the original one. Added 2026-11-23.
+            if (_config.IsSte)
+            {
+                if (vc.Retries == 0)
+                {
+                    vc.Retries = 1;
+                    vc.Cause = SteResettingNetworkCongestion;
+                    vc.Diagnostic = X25Diagnostic.TimeExpiredReset;
+                    vc.TimerExpiryMs = nowMs + _config.ResetRequestTimeoutMs;
+                    Send(X25PacketBuilder.CreateResetRequest(vc.Lci, vc.Cause, vc.Diagnostic));
+                    return;
+                }
+
+                ResetTimeouts++;
+                if (vc.Kind == X25VcKind.Svc)
+                {
+                    BeginClear(vc, SteClearingNetworkCongestion, X25Diagnostic.TimeExpiredReset, nowMs);
+                    ReportCleared(vc, vc.Cause, vc.Diagnostic);
+                    return;
+                }
+
+                vc.State = X25VcState.PvcReady;
+                vc.Retries = 0;
+                RaiseReset(vc.Lci, SteResettingNetworkCongestion, X25Diagnostic.TimeExpiredReset);
+                return;
+            }
+
             if (vc.Retries < _config.MaxRetransmissions)
             {
                 vc.Retries++;
@@ -1763,7 +1801,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
         /// </summary>
         private void OnT23Expired(X25Vc vc, long nowMs)
         {
-            if (vc.Retries < _config.MaxRetransmissions)
+            // X.75 Tables D.1 and D.2, T33: the first expiry signals a clear request (network congestion, # 50) again,
+            // the second returns the channel to p1. One retransmission and a fixed packet. Added 2026-11-23.
+            if (_config.IsSte && vc.Retries == 0)
+            {
+                vc.Retries = 1;
+                vc.TimerExpiryMs = nowMs + _config.ClearRequestTimeoutMs;
+                Send(X25PacketBuilder.CreateClearRequest(vc.Lci, SteClearingNetworkCongestion, X25Diagnostic.TimeExpiredClear));
+                return;
+            }
+
+            if (!_config.IsSte && vc.Retries < _config.MaxRetransmissions)
             {
                 vc.Retries++;
                 vc.TimerExpiryMs = nowMs + _config.ClearRequestTimeoutMs;

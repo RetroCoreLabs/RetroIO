@@ -286,6 +286,90 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_sink.Sent.Count, Is.EqualTo(before));
         }
 
+        /// <summary>
+        /// X.75 Annex D (10/96 PDF pages 105-106) at an STE: T30 180 s, first expiry a Restart Request (network congestion
+        /// 03, # 52), second expiry r1 and nothing sent; T32 first expiry a Reset Request (07, # 51), second a Clear
+        /// Request (05, # 51); T33 first expiry a Clear Request (05, # 50), second the channel back to p1 and nothing
+        /// sent. Added 2026-11-23; before, an STE ran the X.25 DCE and DTE rules.
+        /// </summary>
+        /// <param name="timer">
+        /// T30, T32 or T33.
+        /// </param>
+        [TestCase("T30")]
+        [TestCase("T32")]
+        [TestCase("T33")]
+        public void AnnexD_Timeouts_AtAnSte(string timer)
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            long t0 = Environment.TickCount64;
+            ushort lci = 0;
+            if (timer == "T30")
+            {
+                ste.Restart(0x03, 0);
+            }
+            else
+            {
+                lci = ste.PlaceCall("2624");
+                ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()));
+                if (timer == "T32")
+                {
+                    Assert.That(ste.ResetCall(lci, 0x07, 0), Is.True);
+                }
+                else
+                {
+                    Assert.That(ste.ClearCall(lci, 0x05, 0), Is.True);
+                }
+            }
+
+            // Not yet: 179 s. T30 is 180 s here, not the DCE's 60 s.
+            int before = _sink.Sent.Count;
+            ste.Tick(t0 + 179000);
+            Assert.That(_sink.Sent.Count, Is.EqualTo(before), "nothing before 180 s");
+
+            ste.Tick(t0 + 181000);
+            Assert.That(_sink.Sent.Count, Is.EqualTo(before + 1));
+            X25PacketInfo first = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            switch (timer)
+            {
+                case "T30":
+                    Assert.That(first.PacketType, Is.EqualTo(X25PacketType.RestartRequest));
+                    Assert.That(first.RestartCause, Is.EqualTo((byte)0x03));
+                    Assert.That(first.DiagnosticCode, Is.EqualTo((byte)52));
+                    break;
+                case "T32":
+                    Assert.That(first.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+                    Assert.That(first.ResetCause, Is.EqualTo((byte)0x07));
+                    Assert.That(first.DiagnosticCode, Is.EqualTo((byte)51));
+                    break;
+                default:
+                    Assert.That(first.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+                    Assert.That(first.ClearingCause, Is.EqualTo((byte)0x05));
+                    Assert.That(first.DiagnosticCode, Is.EqualTo((byte)50));
+                    break;
+            }
+
+            ste.Tick(t0 + 400000);
+            if (timer == "T32")
+            {
+                Assert.That(_sink.Sent.Count, Is.EqualTo(before + 2));
+                X25PacketInfo second = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+                Assert.That(second.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+                Assert.That(second.ClearingCause, Is.EqualTo((byte)0x05));
+                Assert.That(second.DiagnosticCode, Is.EqualTo((byte)51));
+                return;
+            }
+
+            Assert.That(_sink.Sent.Count, Is.EqualTo(before + 1), "the second expiry sends nothing");
+            if (timer == "T30")
+            {
+                Assert.That(ste.RestartOutstanding, Is.False, "r1");
+            }
+            else
+            {
+                Assert.That(ste.PlaceCall("2624"), Is.EqualTo(lci), "p1: the channel is free again");
+            }
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {
