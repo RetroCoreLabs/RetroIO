@@ -1032,8 +1032,11 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
                 case FaOperation.SiiiSpecial:
                     return DirectoryEnquiry(session, sequence, body);
 
+                case FaOperation.ChangeFileEntryId:
+                    return ChangeUser(session, sequence, body);
+
                 default:
-                    // What is left is 0x01, 0x04 and 0x0D - the only FA operations whose request
+                    // What is left is 0x01 and 0x0D - the only FA operations whose request
                     // and reply layouts have never been captured. (This comment used to list write,
                     // create and delete too; all three are dispatched above.) Refusing is the
                     // honest answer, and it is an ANSWER - the caller does not hang.
@@ -1158,6 +1161,56 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             session.Store = _folders.ForUser(user);
             Log?.Invoke(
                 $"[fa] ReserveFileEntry seq {sequence} from system {session.ClientSystem}: user {session.User}"
+                + (session.Store == null ? " - NO FOLDER for this user; its file requests get error 39" : " - " + session.Store.Location)
+                + (passwordWord == 0 ? ", no password" : ", password word given (not checked yet)"));
+            return OkFields;
+        }
+
+        /// <summary>
+        /// Takes <see cref="FaOperation.ChangeFileEntryId"/>: the client keeps the conversation and moves
+        /// it to another user.
+        /// </summary>
+        /// <param name="session">
+        /// The conversation.
+        /// </param>
+        /// <param name="sequence">
+        /// The request's sequence number.
+        /// </param>
+        /// <param name="body">
+        /// The whole request body, starting at the message type.
+        /// </param>
+        /// <returns>
+        /// The reply's fields.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// MEASURED 2026-11-22 (<c>DOC/captures/2026-11-22-fa-two-listings-change-user-d102.pcap</c>):
+        /// D102 ran <c>LIST-FILES d19999(ronny).</c> and then <c>LIST-FILES d19999(system).</c>. The
+        /// second listing sent no new connect letter and no reserve; it sent this operation on the same
+        /// conversation, with field 1 holding the same 56-byte block as the reserve's field 4 (the user
+        /// name <c>SYSTEM'</c> in a 16-byte string, the password word, two more 16-byte strings). Our
+        /// refusal made D102 try once more and then print ILLEGAL FUNCTION CODE.
+        /// </para>
+        /// <para>
+        /// So the user is changed exactly as the reserve sets it. The OK reply is the plain one with no
+        /// fields: a refusal is the presence of selector 1 (measured on every FA reply), but a real
+        /// server's answer to THIS request has not been captured.
+        /// </para>
+        /// </remarks>
+        private byte[] ChangeUser(FaServerSession session, ushort sequence, ReadOnlySpan<byte> body)
+        {
+            string user;
+            ushort passwordWord;
+            if (!FaWriteRequests.TryReadReserveUser(body.Slice(FaExchangeCodec.QformOffset), out user, out passwordWord))
+            {
+                Log?.Invoke($"[fa] ChangeFileEntryId seq {sequence} from system {session.ClientSystem} names no user; refused");
+                return ErrorFields(FaServerStatus.NotSupported);
+            }
+
+            session.User = user.ToUpperInvariant();
+            session.Store = _folders.ForUser(user);
+            Log?.Invoke(
+                $"[fa] ChangeFileEntryId seq {sequence} from system {session.ClientSystem}: conversation moves to user {session.User}"
                 + (session.Store == null ? " - NO FOLDER for this user; its file requests get error 39" : " - " + session.Store.Location)
                 + (passwordWord == 0 ? ", no password" : ", password word given (not checked yet)"));
             return OkFields;

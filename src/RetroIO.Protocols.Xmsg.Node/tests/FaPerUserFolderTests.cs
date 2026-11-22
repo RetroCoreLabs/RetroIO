@@ -186,6 +186,34 @@ namespace RetroIO.Protocols.Xmsg.Node.Tests
             Assert.Contains("F20001A20027", Hex(missing));
         }
 
+        /// <summary>
+        /// The FA body D102 sent for its second listing on one conversation, frame 90 of
+        /// <c>DOC/captures/2026-11-22-fa-two-listings-change-user-d102.pcap</c>: operation 4 naming
+        /// <c>SYSTEM</c>.
+        /// </summary>
+        private const string CapturedChangeToSystem =
+            "07F000828500D77E"
+            + "920004920006F200018C38B01053595354454D27000000000000000000E180"
+            + "B01000000000000000000000000000000000B01000000000000000000000000000000000F200FF";
+
+        [Fact]
+        public void TheCapturedChangeOfUser_MovesTheConversation_SoTheSecondListingShowsTheNewUser()
+        {
+            XmsgServerHost host = BuildHost();
+            host.Route(FaTestClient.BuildConnectLetter());
+            host.Route(FaTestClient.BuildReserve("RONNY"));
+
+            IReadOnlyList<XmsgFrame> change = host.Route(FaTestClient.BuildSessionFrame(
+                Convert.FromHexString(CapturedChangeToSystem), 0x0002));
+            Assert.DoesNotContain("F20001A2", Hex(change));
+
+            IReadOnlyList<XmsgFrame> walk = host.Route(FaTestClient.BuildSessionFrame(
+                FaTestClient.BuildListingRequest(7, FaListFilesCodec.FirstEntryCursor), 0x0004));
+            string all = Hex(walk);
+            Assert.Contains(Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes("SYSFILE")), all);
+            Assert.DoesNotContain(Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes("LETTER")), all);
+        }
+
         private XmsgServerHost BuildHost()
         {
             FaServer server = new FaServer(new FaUserFolders(_root));

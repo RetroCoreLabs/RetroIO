@@ -123,8 +123,13 @@ namespace RetroIO.Protocols.Xmsg.Fa
         /// reservation rather than creating anything.
         /// </para>
         /// <para>
-        /// That is behaviour, NOT a wire layout. How the request encodes the entry key and the new
-        /// value is still unknown, no traffic carries it, and it stays refused.
+        /// That is behaviour, NOT a wire layout.
+        /// </para>
+        /// <para>
+        /// MEASURED 2026-11-22 (<c>DOC/captures/2026-11-22-fa-two-listings-change-user-d102.pcap</c>):
+        /// a second <c>LIST-FILES</c> from D102 on the same conversation sends this instead of a new
+        /// reserve. Field 1 is the reserve's 56-byte user block, naming the new user. That fits the
+        /// note above: it edits the existing reservation.
         /// </para>
         /// </remarks>
         ChangeFileEntryId = 0x0004,

@@ -276,9 +276,9 @@
       {
         "name": "ChangeFileEntryId",
         "value": "0x0004",
-        "meaning": "renumber a slot",
-        "status": "INFERRED",
-        "evidence": "named in the ND sources; never driven"
+        "meaning": "move the conversation to another user: field 1 holds the same 56-byte user block as the reserve's field 4",
+        "status": "MEASURED",
+        "evidence": "live D102 2026-11-22, DOC/captures/2026-11-22-fa-two-listings-change-user-d102.pcap: a second LIST-FILES on the same conversation sent this with user SYSTEM instead of a new reserve; the OK reply shape is not captured"
       },
       {
         "name": "OpenFile",
