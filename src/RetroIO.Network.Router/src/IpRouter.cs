@@ -248,7 +248,45 @@ namespace RetroIO.Network.Router
             }
 
             // The router is the sender here, not a router on the way, so the TTL is left as it is.
-            Route(packet, null, false);
+            Route(packet, PacketSource.Local);
+        }
+
+        /// <summary>
+        /// Takes a packet from the upstream side, such as a reply the NAT received from the internet.
+        /// </summary>
+        /// <remarks>
+        /// The source must be outside the subnet, or the packet is dropped as
+        /// <see cref="DropReason.Spoofed"/>. The packet is forwarded, so its TTL is lowered by one. A
+        /// packet for an address outside the subnet is dropped as <see cref="DropReason.NoRoute"/>:
+        /// the router never sends a packet back the way it came. A broadcast from upstream is dropped
+        /// the same way (RFC 1812 section 5.3.5.2: directed broadcasts are not forwarded).
+        /// </remarks>
+        /// <param name="packet">
+        /// The packet.
+        /// </param>
+        public void SendFromUpstream(ReadOnlySpan<byte> packet)
+        {
+            if (!Ipv4.TryCheckHeader(packet, out int total))
+            {
+                Drop(DropReason.BadHeader);
+                return;
+            }
+
+            packet = packet.Slice(0, total);
+            if ((Ipv4.Source(packet) & _mask) == Settings.Network)
+            {
+                Drop(DropReason.Spoofed);
+                return;
+            }
+
+            uint destination = Ipv4.Destination(packet);
+            if ((destination & _mask) != Settings.Network || destination == _broadcast)
+            {
+                Drop(DropReason.NoRoute);
+                return;
+            }
+
+            Route(packet, PacketSource.Upstream);
         }
 
         // A packet from one of the links.
@@ -268,16 +306,17 @@ namespace RetroIO.Network.Router
             }
 
             link.CountIn(packet.Length);
-            Route(packet, link, true);
+            Route(packet, PacketSource.Link);
         }
 
-        private void Route(ReadOnlySpan<byte> packet, RouterLink? from, bool forwarding)
+        private void Route(ReadOnlySpan<byte> packet, PacketSource source)
         {
+            bool forwarding = source != PacketSource.Local;
             uint destination = Ipv4.Destination(packet);
             if (destination == Settings.RouterAddress || destination == _broadcast || destination == Ipv4.LimitedBroadcast)
             {
                 // Delivered to the router itself, not forwarded: the TTL stays.
-                if (from == null)
+                if (source == PacketSource.Local)
                 {
                     // The local services talking to themselves: there is no route back out.
                     Drop(DropReason.NoRoute);
@@ -296,7 +335,7 @@ namespace RetroIO.Network.Router
                 return;
             }
 
-            if (!inSubnet && OnUpstream == null)
+            if (!inSubnet && (OnUpstream == null || source == PacketSource.Upstream))
             {
                 Drop(DropReason.NoRoute);
                 return;
@@ -363,6 +402,14 @@ namespace RetroIO.Network.Router
         }
     }
 
+    // Where a packet came into the router from.
+    internal enum PacketSource
+    {
+        Local,
+        Link,
+        Upstream,
+    }
+
     /// <summary>
     /// Why the router dropped a packet.
     /// </summary>
@@ -376,7 +423,7 @@ namespace RetroIO.Network.Router
 
         /// <summary>
         /// The source address is not the sender's own: a link's address for a link, the router
-        /// address for the local services.
+        /// address for the local services, an address outside the subnet for the upstream side.
         /// </summary>
         Spoofed,
 

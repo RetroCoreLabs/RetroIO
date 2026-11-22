@@ -12,7 +12,7 @@ is raised from inside the call that caused it.
 
 | Type | What it does |
 |---|---|
-| `IpRouter` | The router. `AddLink` and `RemoveLink`; `SendFromLocal` for packets from the owner's services; events `OnLocal`, `OnUpstream` and `OnDrop`; `DropCount` per reason. |
+| `IpRouter` | The router. `AddLink` and `RemoveLink`; `SendFromLocal` for packets from the owner's services; `SendFromUpstream` for packets coming back from the internet; events `OnLocal`, `OnUpstream` and `OnDrop`; `DropCount` per reason. |
 | `RouterLink` | One link. `Receive` takes a packet from the far end; packets for it go to the delegate given to `AddLink`. Counters: packets and bytes, in and out. |
 | `RouterSettings` | Subnet (default 10.42.0.0/24), router address (default 10.42.0.1), address pool. The prefix length can be 8 to 30. |
 | `Ipv4` | Address text, header checks, checksum, TTL decrement. |
@@ -29,7 +29,7 @@ By its destination address:
   cannot reach every other caller with one packet.
 - **A link's address**: to that link.
 - **Another address in the subnet**: dropped, no route.
-- **Outside the subnet**: to `OnUpstream` (NAT, later); dropped, no route, when nothing is attached.
+- **Outside the subnet**: to `OnUpstream` (the NAT in `RetroIO.Network.Nat`); dropped, no route, when nothing is attached.
 
 ## Rules a packet has to pass
 
@@ -38,7 +38,10 @@ By its destination address:
 - The source is the sender's own address: the link's address, or the router address for
   `SendFromLocal`. Anything else is dropped as spoofed.
 - A forwarded packet has its TTL lowered by one and its checksum corrected by RFC 1624; a packet whose
-  TTL would reach 0 is dropped (RFC 1812 section 5.3.1). A packet for the router itself is delivered,
+  TTL would reach 0 is dropped (RFC 1812 section 5.3.1).
+- A packet from upstream (`SendFromUpstream`) must have a source outside the subnet, or it is dropped
+  as spoofed. It is delivered only to an address inside the subnet: one outside, or the subnet
+  broadcast, is dropped as no route, so nothing goes back the way it came. A packet for the router itself is delivered,
   not forwarded, and keeps its TTL.
 - A packet larger than the link it is for carries (the link's MTU) is dropped. The router does not
   fragment.
@@ -46,5 +49,5 @@ By its destination address:
 ## Not done yet
 
 - ICMP replies (time exceeded, destination unreachable, echo for the router address).
-- NAT to the internet (step 2), then a bridge to the real LAN (step 3).
+- A bridge to the real LAN (step 3).
 - An Ethernet link kind with ARP and DHCP, and a tick in emulated time, which RetroCore's NAT needs.

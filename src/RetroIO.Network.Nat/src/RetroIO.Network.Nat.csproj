@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Network.Nat: address sharing (NAT) between a RetroIO.Network.Router subnet and the
+    internet, through ordinary host sockets.
+
+    The router hands it every packet for an address outside the subnet. The NAT sends the data on
+    with a socket of the host, and builds the reply packets that go back to the caller. No raw
+    sockets, so it needs no administrator rights.
+
+    Specifications: RFC 768 (UDP), RFC 791 (IPv4), RFC 1071 (the Internet checksum), RFC 3022
+    (traditional NAT), RFC 4787 (NAT behaviour for UDP).
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Network.Nat</PackageId>
+    <AssemblyName>RetroIO.Network.Nat</AssemblyName>
+    <RootNamespace>RetroIO.Network.Nat</RootNamespace>
+    <Description>Address sharing (NAT) for RetroIO.Network.Router: the callers' UDP goes to the internet through ordinary host sockets, and the replies come back to them.</Description>
+    <PackageTags>retroio;nat;router;ipv4;udp;dialup</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Network.Router\src\RetroIO.Network.Router.csproj" />
+  </ItemGroup>
+</Project>
