@@ -250,6 +250,42 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)diagnostic));
         }
 
+        /// <summary>
+        /// X.75 Table C.4 (10/96 PDF page 103): on a call in data transfer, a restart packet on its channel is ERROR (d3)
+        /// # 41 and an unknown packet type ERROR (d3) # 33 - a Reset Request with network congestion (00000111, Table
+        /// 15), the call stays - and both are DISCARD while our own reset is outstanding (d3). Added 2026-11-23; before,
+        /// an STE cleared the call.
+        /// </summary>
+        /// <param name="packet">
+        /// restart or unknown.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The reset diagnostic expected.
+        /// </param>
+        [TestCase("restart", 41)]
+        [TestCase("unknown", 33)]
+        public void InDataTransfer_ARestartOrUnknownPacket_ResetsTheCall_AtAnSte(string packet, int diagnostic)
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ushort lci = ste.PlaceCall("2624");
+            ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()));
+            byte[] bytes = packet == "restart"
+                ? new byte[] { 0x10, (byte)lci, 0xFB, 0x00, 0x00 }
+                : new byte[] { 0x10, (byte)lci, 0x0D };
+
+            ste.ProcessPacket(bytes);
+            X25PacketInfo sent = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            Assert.That(sent.ResetCause, Is.EqualTo((byte)0x07), "network congestion");
+            Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)diagnostic));
+            Assert.That(ste.TryGetCallParameters(lci, out _), Is.True, "the call is still there");
+
+            // d3: the same packet again is DISCARD.
+            int before = _sink.Sent.Count;
+            ste.ProcessPacket(bytes);
+            Assert.That(_sink.Sent.Count, Is.EqualTo(before));
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {

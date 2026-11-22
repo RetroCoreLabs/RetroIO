@@ -1315,6 +1315,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     return Discard();
                 }
 
+                if (SteResetInDataTransfer(lci, X25Diagnostic.RestartWithNonzeroChannel))
+                {
+                    return false;
+                }
+
                 ChannelError(lci, X25Diagnostic.RestartWithNonzeroChannel, pkt);
                 return false;
             }
@@ -1328,6 +1333,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             if (type == X25PacketType.Unknown)
             {
+                if (SteResetInDataTransfer(lci, X25Diagnostic.UnidentifiablePacket))
+                {
+                    return false;
+                }
+
                 ChannelError(lci, X25Diagnostic.UnidentifiablePacket, pkt);
                 return false;
             }
@@ -1409,6 +1419,36 @@ namespace RetroIO.Protocols.X25.PacketLayer
                     if (state == X25VcState.ClearRequest) return Discard();
                     return Error(lci, state, pkt);
             }
+        }
+
+        /// <summary>
+        /// X.75 Table C.4 (10/96 PDF page 103) for a restart packet on a nonzero channel or an unknown packet type on a
+        /// virtual call in data transfer: ERROR (d3) - a RESET with network congestion - in d1, and DISCARD in d3 (our
+        /// reset outstanding). Added 2026-11-23; until then an STE cleared the call, as X.25 does through Table C-3.
+        /// </summary>
+        /// <returns>
+        /// True when Table C.4 decided it (reset or discard); false when the caller goes on to Table C.3.
+        /// </returns>
+        private bool SteResetInDataTransfer(ushort lci, byte diagnostic)
+        {
+            if (!_config.IsSte || !_vcs.TryGetValue(lci, out X25Vc? vc) || vc.Kind != X25VcKind.Svc)
+            {
+                return false;
+            }
+
+            if (vc.State == X25VcState.ResetRequest)
+            {
+                Discard();
+                return true;
+            }
+
+            if (vc.State == X25VcState.DataTransfer)
+            {
+                ResetForProcedureError(vc, diagnostic);
+                return true;
+            }
+
+            return false;
         }
 
         private bool Discard()
