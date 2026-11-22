@@ -21,7 +21,7 @@ namespace RetroIO.Protocols.Xmsg.Live
     /// NOT-LIVE-TESTED: this class talks to a real socket and cannot be exercised against a
     /// live bridge in the unit-test suite. The bridge is a transparent byte pipe
     /// (XMSG-PROTOCOL.md section 1), so this transport only moves bytes - all framing and
-    /// protocol logic lives in <see cref="LiveNode"/>, which IS tested over
+    /// protocol logic lives in <see cref="Seam.LapbLayerAdapter"/>, which IS tested over
     /// <see cref="InMemoryDuplex"/>.
     /// </remarks>
     public sealed class TcpBridgeTransport : IByteDuplex, IDisposable

@@ -24,11 +24,10 @@ namespace RetroIO.Protocols.Xmsg.Live.Seam
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is the seam-shaped sibling of the proven <see cref="LiveNode"/>: it reuses the identical,
+    /// This replaced the old <c>LiveNode</c> (removed 2026-11-22): it reuses the identical,
     /// live-tested framing (incremental <c>0x7E</c> splitting, <see cref="HdlcDeframer"/>,
     /// <see cref="Fcs16"/> validation, <see cref="HdlcEncoder"/>) but is DECOUPLED from any
-    /// application node - the codec/layer above it does the responding via the up-event. The old
-    /// <see cref="LiveNode"/> path stays intact until the new path proves live parity (Phase 5).
+    /// application node - the codec/layer above it does the responding via the up-event.
     /// </para>
     /// <para>
     /// The HDLC/LAPB transport is common to X.25 and XMSG; this adapter carries the payload opaquely

@@ -19,7 +19,7 @@ namespace RetroIO.Protocols.Xmsg.Live
     /// <remarks>
     /// Reads never block: once the pre-loaded inbound bytes are exhausted,
     /// <see cref="ReadAsync"/> returns 0 (end of stream), which lets a
-    /// <see cref="LiveNode"/> receive loop terminate deterministically in a unit test.
+    /// <see cref="Seam.LapbLayerAdapter"/> receive loop terminate deterministically in a unit test.
     /// </remarks>
     public sealed class InMemoryDuplex : IByteDuplex
     {
