@@ -22,7 +22,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
     /// This is the JOIN between three pieces that already existed and had never been connected:
     /// <c>FaExchangeCodec</c> / <c>FaListFilesCodec</c> (the wire format),
     /// <see cref="FaServerConversation"/> (the reply envelope, replayed byte for byte against the
-    /// captured conversations), and <see cref="FolderFileStore"/> (a Windows folder as a file store).
+    /// captured conversations), and <see cref="IFaFileStore"/> (the files served; <see cref="FolderFileStore"/> is a local folder).
     /// It adds no new wire knowledge of its own.
     /// </para>
     /// <para><b>The rule that governs every path in here: ALWAYS ANSWER A REQUEST.</b></para>
@@ -236,7 +236,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             (byte)QformTagByte.Selector, 0x00, 0xFF,
         };
 
-        private readonly FolderFileStore _store;
+        private readonly IFaFileStore _store;
         private readonly Dictionary<uint, FaServerSession> _sessions;
         private readonly List<FaServerSession> _sessionList;
 
@@ -424,10 +424,10 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         }
 
         /// <summary>
-        /// Initialises the server over a folder.
+        /// Initialises the server over a file store.
         /// </summary>
         /// <param name="store">
-        /// The Windows folder presented as a file store.
+        /// The files to serve (a local folder is <see cref="FolderFileStore"/>).
         /// </param>
         /// <param name="userIndex">
         /// The user index stamped into synthesised directory entries. There is no real user directory
@@ -436,7 +436,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="store"/> is null.
         /// </exception>
-        public FaServer(FolderFileStore store, byte userIndex = 0)
+        public FaServer(IFaFileStore store, byte userIndex = 0)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _userIndex = userIndex;
@@ -459,7 +459,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
         /// </summary>
         public string RootFolder
         {
-            get { return _store.RootFolder; }
+            get { return _store.Location; }
         }
 
         /// <summary>
@@ -693,7 +693,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
 
             Log?.Invoke(
                 $"[fa] connect letter from node {request.Header!.SourceNode} (system {clientSystem} port 0x{clientPort:X4}); "
-                + $"serving {_store.RootFolder}; answering from session port 0x{session.SessionWirePort:X4} "
+                + $"serving {_store.Location}; answering from session port 0x{session.SessionWirePort:X4} "
                 + $"with an FA ConnectionConfirm {Convert.ToHexString(confirm)}");
 
             // From the SESSION port, not the registered directory port - see FaServerWirePort.
@@ -1962,7 +1962,7 @@ namespace RetroIO.Protocols.Xmsg.Servers.Fa
             {
                 entries = SnapshotFor(body);
                 session.BeginWalk(entries);
-                Log?.Invoke($"[fa] directory walk started by system {session.ClientSystem}: {entries.Count} file(s) in {_store.RootFolder}");
+                Log?.Invoke($"[fa] directory walk started by system {session.ClientSystem}: {entries.Count} file(s) in {_store.Location}");
             }
             else
             {

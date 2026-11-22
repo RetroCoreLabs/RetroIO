@@ -126,7 +126,7 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
     /// per user as 16 object blocks of 256) - anything that narrows one to 8 bits is a bug.
     /// </para>
     /// </remarks>
-    public sealed class FolderFileStore
+    public sealed class FolderFileStore : IFaFileStore
     {
         private readonly string _root;
         private readonly Dictionary<string, ushort> _fileNumbers =
@@ -161,6 +161,14 @@ namespace RetroIO.Protocols.Xmsg.Ndfs
         /// Gets the folder being served.
         /// </summary>
         public string RootFolder
+        {
+            get { return _root; }
+        }
+
+        /// <summary>
+        /// Gets the folder being served; the same as <see cref="RootFolder"/>.
+        /// </summary>
+        public string Location
         {
             get { return _root; }
         }
