@@ -28,9 +28,12 @@ namespace RetroIO.Protocols.Tn3270
 
         /// <summary>
         /// The operator did something not allowed, such as typing into a protected field
-        /// ("Go Elsewhere", GA27-2890-4 p. 2-21). Reset clears it. IBM locks here; x3270 by default
-        /// only ignores the key. RetroTerm follows IBM (decided 22 November 2026).
+        /// ("Go Elsewhere", GA27-2890-4 p. 2-21). Reset clears it.
         /// </summary>
+        /// <remarks>
+        /// IBM locks here; x3270 by default only ignores the key. RetroTerm follows IBM (decided
+        /// 22 November 2026).
+        /// </remarks>
         OperatorError,
 
         /// <summary>
@@ -149,9 +152,12 @@ namespace RetroIO.Protocols.Tn3270
         private CodePage _codePage = CodePage.Cp037;
 
         /// <summary>
-        /// Creates a display. The default size is used after Erase/Write, the alternate size after
-        /// Erase/Write Alternate (GA23-0059-4 p. 3-5). A model 2 has 24 x 80 for both.
+        /// Creates a display with a default and an alternate screen size.
         /// </summary>
+        /// <remarks>
+        /// The default size is used after Erase/Write, the alternate size after Erase/Write
+        /// Alternate (GA23-0059-4 p. 3-5). A model 2 has 24 x 80 for both.
+        /// </remarks>
         /// <param name="rows">
         /// Default rows.
         /// </param>
