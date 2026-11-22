@@ -230,7 +230,7 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(SpinWait.SpinUntil(() => text().Contains("HELLO"), 3000), Is.True, text());
 
             Assert.That(peer.ClearLastCall(0, 0), Is.True);
-            Assert.That(SpinWait.SpinUntil(() => System.Text.RegularExpressions.Regex.IsMatch(text(), @"CLR DTE \(00\) 00:00:00:\d\d 1 1\r\n"), 3000), Is.True, text());
+            Assert.That(SpinWait.SpinUntil(() => System.Text.RegularExpressions.Regex.IsMatch(text(), @"CLR DTE \(00\) 00:00:00:\d\d 1 1\r\n"), 3000), Is.True, () => text() + "\npackets at the peer:\n" + peer.Trace);
 
             pad.Dispose();
         }

@@ -210,6 +210,10 @@ namespace RetroIO.Protocols.X25.Tests
         {
             Network net = BuildSwitch(0, 0, subscriberDnicPrefix: "26245890040099");
             X25Client server = new X25Client { ServiceName = "echo-like" };
+
+            // Keeps every line the client logs: it fails now and then on the GitHub runner only, and
+            // the order of its events (spare dialled, closed, redial scheduled) is what finds the cause.
+            TrunkListLogger log = new TrunkListLogger();
             _disposables.Add(server);
             int answered = 0;
             byte clearCause = 0xFF;
@@ -232,7 +236,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Framing = X25ClientFraming.Xot,
                 SpareRedialFirstMs = 100,
                 SpareRedialMostMs = 400,
-            }, NullLogger.Instance);
+            }, log);
             Assert.That(SpinWait.SpinUntil(() => net.SubscriberPort.ConnectionCount >= 1, 5000), Is.True);
 
             Dial(net, "26245890040099", "26240031");
@@ -246,7 +250,7 @@ namespace RetroIO.Protocols.X25.Tests
 
             // The switch comes back on the same TCP ports.
             Network again = BuildSwitch(subscriberPort, callerPort, subscriberDnicPrefix: "26245890040099");
-            Assert.That(SpinWait.SpinUntil(() => again.SubscriberPort.ConnectionCount >= 1, 10000), Is.True, "the client never dialled its spare again");
+            Assert.That(SpinWait.SpinUntil(() => again.SubscriberPort.ConnectionCount >= 1, 10000), Is.True, () => "the client never dialled its spare again. The client's log:\n" + log.All());
             Dial(again, "26245890040099", "26240032");
             Assert.That(Volatile.Read(ref answered), Is.EqualTo(2));
         }

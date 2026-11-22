@@ -44,7 +44,11 @@ namespace RetroIO.Protocols.X25.Tests
 
             // Bytes up: transport -> codec -> whole packets -> layer (all on the peer's read thread).
             _transport.DataReceived += (name, bytes) => _codec.ProcessBytes(bytes);
-            _codec.FrameReceived += (id, frame) => _x25.ProcessPacket(frame);
+            _codec.FrameReceived += (id, frame) =>
+            {
+                Note("in ", frame);
+                _x25.ProcessPacket(frame);
+            };
 
             // Accept every incoming call, then echo every data packet straight back.
             _x25.IncomingCall += (layer, lci, called, calling, cud) =>
@@ -84,6 +88,7 @@ namespace RetroIO.Protocols.X25.Tests
         {
             try
             {
+                Note("out", packet);
                 _codec.SendFrame(packet);
                 return X25SendResult.Sent;
             }
@@ -95,6 +100,32 @@ namespace RetroIO.Protocols.X25.Tests
 
         private ushort _lastLci;
         private int _resetsSeen;
+        private readonly System.Text.StringBuilder _trace = new System.Text.StringBuilder();
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+
+        /// <summary>
+        /// Every packet the peer took in and sent out, in order, one line each: milliseconds since
+        /// the peer started, "in" or "out", and the packet in hex. For a test's failure message.
+        /// </summary>
+        public string Trace
+        {
+            get
+            {
+                lock (_trace)
+                {
+                    return _trace.ToString();
+                }
+            }
+        }
+
+        private void Note(string direction, ReadOnlySpan<byte> packet)
+        {
+            string hex = Convert.ToHexString(packet);
+            lock (_trace)
+            {
+                _trace.Append(_clock.ElapsedMilliseconds).Append(' ').Append(direction).Append(' ').Append(hex).Append('\n');
+            }
+        }
 
         /// <summary>How many resets of a call the peer has been told of (the client's, after the peer confirmed them).</summary>
         public int ResetsSeen => System.Threading.Volatile.Read(ref _resetsSeen);
