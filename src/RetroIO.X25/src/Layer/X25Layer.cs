@@ -1237,6 +1237,14 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             if (!vc.InterruptOutstanding)
             {
+                // Between networks it is DISCARD: X.75 Table C.5 (10/96 PDF page 104), interrupt confirmation in i1
+                // and i2. Until 2026-11-23 an STE reset the call with # 43, the X.25 rule.
+                if (_config.IsSte)
+                {
+                    Discard();
+                    return;
+                }
+
                 ResetForProcedureError(vc, X25Diagnostic.UnauthorizedInterruptConfirmation);
                 return;
             }

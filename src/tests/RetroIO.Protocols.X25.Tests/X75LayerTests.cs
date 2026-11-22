@@ -370,6 +370,53 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        /// <summary>
+        /// X.75 Table C.5 (10/96 PDF page 104), in d1 i1 on a fresh call: an interrupt confirmation is DISCARD; a first
+        /// data packet with P(S) not 0 is ERROR (d3) # 1; data or RR with an invalid P(R) is ERROR (d3) # 2. ERROR is a
+        /// Reset Request with network congestion (00000111). Added 2026-11-23 as the check of Table C.5.
+        /// </summary>
+        /// <param name="packet">
+        /// intconf, data-ps1, data-pr3, rr-pr3.
+        /// </param>
+        /// <param name="diagnostic">
+        /// The reset diagnostic, or -1 for DISCARD.
+        /// </param>
+        [TestCase("intconf", -1)]
+        [TestCase("data-ps1", 1)]
+        [TestCase("data-pr3", 2)]
+        [TestCase("rr-pr3", 2)]
+        public void TableC5_Rows_AtAnSte(string packet, int diagnostic)
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ushort lci = ste.PlaceCall("2624");
+            ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()));
+            byte l = (byte)lci;
+
+            // Modulo 8 data: octet 3 is P(R) in bits 8-6, M in bit 5, P(S) in bits 4-2, bit 1 = 0. RR: P(R) in bits 8-6,
+            // then 00001. Nothing has been sent on this call, so a P(R) of 3 acknowledges packets that do not exist.
+            byte[] bytes = packet switch
+            {
+                "intconf" => new byte[] { 0x10, l, 0x27 },
+                "data-ps1" => new byte[] { 0x10, l, 0x02, 0x41 },
+                "data-pr3" => new byte[] { 0x10, l, 0x60, 0x41 },
+                "rr-pr3" => new byte[] { 0x10, l, 0x61 },
+                _ => throw new ArgumentException(packet),
+            };
+
+            int before = _sink.Sent.Count;
+            ste.ProcessPacket(bytes);
+            if (diagnostic < 0)
+            {
+                Assert.That(_sink.Sent.Count, Is.EqualTo(before), "DISCARD");
+                return;
+            }
+
+            X25PacketInfo sent = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            Assert.That(sent.ResetCause, Is.EqualTo((byte)0x07), "network congestion");
+            Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)diagnostic));
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {
