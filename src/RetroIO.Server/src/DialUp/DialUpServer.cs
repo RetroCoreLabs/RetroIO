@@ -40,9 +40,10 @@ namespace RetroIO.Server.DialUp;
 /// call with a reason.
 /// </para>
 /// <para>
-/// KNOWN LIMIT: the login check is synchronous (the session's <see cref="DialUpLoginCheck"/>), and
-/// checking a password hash takes real time, so while one caller's password is checked the other
-/// calls wait. Recorded in BUGS.md.
+/// The password check takes real time (an Argon2id hash), so it runs on a worker
+/// (<see cref="DialUpSettings.LoginStart"/>): the session waits in its checking stage and the pump
+/// thread goes on moving every other call. Until 2026-11-22 it ran on the pump thread and held up
+/// every call while one password was checked.
 /// </para>
 /// </remarks>
 public sealed class DialUpServer : IDisposable
@@ -328,7 +329,7 @@ public sealed class DialUpServer : IDisposable
             DialUpSettings settings = new DialUpSettings
             {
                 Greeting = _config.Greeting,
-                LoginCheck = call.CheckLogin,
+                LoginStart = call.StartLogin,
             };
             call.Session = new SlipDialUpSession(settings, side);
             call.Session.OnEnded += call.Ended;
@@ -489,33 +490,49 @@ public sealed class DialUpServer : IDisposable
     }
 
     /// <summary>
-    /// Checks a caller's login against RetroServer's users, with the dial-up right.
+    /// Checks a caller's login against RetroServer's users, with the dial-up right, on a worker, and
+    /// answers the session when done.
     /// </summary>
-    private bool CheckUser(Call call, string name, string password)
+    /// <remarks>
+    /// Runs off the pump thread. It writes only the call's fixed address (before answering, so the
+    /// pump thread sees it when it acts on the answer) and the refused-login counter (Interlocked).
+    /// </remarks>
+    private async Task CheckUserAsync(Call call, string name, string password, DialUpLoginAnswer answer)
     {
-        // Synchronous by the session's design; see the KNOWN LIMIT in the class remarks.
-        ProtocolAuthResult result = RetroUserProtocolAuth
-            .AuthenticateAsync(_idp, name, password, RetroFsProtocol.DialUp)
-            .AsTask().GetAwaiter().GetResult();
-        if (result != ProtocolAuthResult.Success)
+        try
         {
+            ProtocolAuthResult result = await RetroUserProtocolAuth
+                .AuthenticateAsync(_idp, name, password, RetroFsProtocol.DialUp).ConfigureAwait(false);
+            if (result != ProtocolAuthResult.Success)
+            {
+                Interlocked.Increment(ref _loginsRefused);
+                _log($"[dialup] login '{name}' from {call.RemoteText} refused: {result}");
+                answer.Refuse();
+                return;
+            }
+
+            RetroUser? user = await _idp.GetUserByUsernameAsync(name).ConfigureAwait(false);
+            uint fixedAddress = 0;
+            string fixedText = string.Empty;
+            if (user != null && !string.IsNullOrEmpty(user.DialUpAddress))
+            {
+                fixedAddress = Ipv4.Parse(user.DialUpAddress);
+                fixedText = user.DialUpAddress;
+            }
+
+            call.FixedAddress = fixedAddress;
+            _log($"[dialup] login '{name}' from {call.RemoteText} accepted, "
+                + (fixedText.Length == 0 ? "address from the pool" : "fixed address " + fixedText));
+            answer.Accept();
+        }
+        catch (Exception ex) when (ex is IOException || ex is FormatException || ex is InvalidOperationException)
+        {
+            // The user store could not be read, or the stored fixed address is not an address: the
+            // caller is refused and the reason is logged; nothing is let in on a failed check.
             Interlocked.Increment(ref _loginsRefused);
-            _log($"[dialup] login '{name}' from {call.RemoteText} refused: {result}");
-            return false;
+            _log($"[dialup] login '{name}' from {call.RemoteText} refused: the check failed ({ex.GetType().Name}: {ex.Message})");
+            answer.Refuse();
         }
-
-        RetroUser? user = _idp.GetUserByUsernameAsync(name).AsTask().GetAwaiter().GetResult();
-        call.FixedAddress = 0;
-        string fixedText = string.Empty;
-        if (user != null && !string.IsNullOrEmpty(user.DialUpAddress))
-        {
-            call.FixedAddress = Ipv4.Parse(user.DialUpAddress);
-            fixedText = user.DialUpAddress;
-        }
-
-        _log($"[dialup] login '{name}' from {call.RemoteText} accepted, "
-            + (fixedText.Length == 0 ? "address from the pool" : "fixed address " + fixedText));
-        return true;
     }
 
     /// <summary>
@@ -540,9 +557,21 @@ public sealed class DialUpServer : IDisposable
 
         public string? EndReason { get; set; }
 
-        public uint FixedAddress { get; set; }
+        private uint _fixedAddress;
 
-        public bool CheckLogin(string name, string password) => _server.CheckUser(this, name, password);
+        /// <summary>
+        /// Gets or sets the fixed address the login found; written by the login worker, read by the pump thread.
+        /// </summary>
+        public uint FixedAddress
+        {
+            get => Volatile.Read(ref _fixedAddress);
+            set => Volatile.Write(ref _fixedAddress, value);
+        }
+
+        public void StartLogin(string name, string password, DialUpLoginAnswer answer)
+        {
+            _ = Task.Run(() => _server.CheckUserAsync(this, name, password, answer));
+        }
 
         public uint LookUpAddress(string userName) => FixedAddress;
 
