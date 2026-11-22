@@ -405,7 +405,12 @@ namespace RetroIO.Protocols.X25.Tests
 
             Assert.That(users[0].WaitForCount("+++guest+++\r\n", 30, 10000), Is.True, "user 1 did not see all 30 join");
 
-            Caller late = Dial(net, "26241099");
+            // The chat answers the 31st call, writes its refusal and clears straight away. On a slow
+            // machine the clear can reach the caller before CallWait looks at the circuit, so this
+            // call is not required to still be connected; what it was sent and the clear are checked.
+            Caller late = new Caller(net.CallerPort.BoundPort, "26241099");
+            _disposables.Add(late);
+            late.Call();
             Assert.That(late.WaitForClear(10000), Is.True, "caller 31 was not cleared: " + late.Text);
             Assert.That(late.Text, Is.EqualTo(
                 "Welcome to the original, evergreen\r\n" +

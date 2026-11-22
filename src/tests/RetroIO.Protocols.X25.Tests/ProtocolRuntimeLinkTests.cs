@@ -298,7 +298,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "TcpLapb0",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 54407,
+                Port = 0, // the system picks a free port: a fixed one can be taken, or reserved by Windows
                 RemoteMachineId = "100"
             });
 
@@ -330,7 +330,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "TcpLapb0",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 54408,
+                Port = 0, // the system picks a free port: a fixed one can be taken, or reserved by Windows
                 RemoteMachineId = "100"
             });
 
@@ -376,7 +376,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "TcpLapb0",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55509,
+                Port = 0, // the system picks a free port: a fixed one can be taken, or reserved by Windows
                 RemoteMachineId = "100"
             });
 
@@ -385,7 +385,7 @@ namespace RetroIO.Protocols.X25.Tests
                 Name = "TcpLapb1",
                 Enabled = true,
                 Mode = TcpMode.Server,
-                Port = 55510,
+                Port = 0, // the system picks a free port: a fixed one can be taken, or reserved by Windows
                 RemoteMachineId = "101"
             });
 

@@ -46,29 +46,34 @@ namespace RetroIO.Protocols.X25.Tests
             _runtime = new ProtocolRuntime(_logger, config);
         }
 
+        // How long a test waits for something the loopback service sends. The service answers in
+        // milliseconds; the deadline is only there so a broken service fails the test instead of
+        // hanging it. Each wait returns as soon as the thing it waits for has happened, so a slow
+        // machine (the GitHub runner) gets the time it needs and a fast one loses none.
+        private const int Deadline = 10000;
+
+        private const string Welcome = "X.25 TAD Loopback Echo Service";
+
         [Fact]
         public void TestBasicPadConnectToTad()
         {
             // Arrange
             var padClient = _runtime.CreatePadClient("TestPAD");
-            var connected = false;
+            using var connected = new ManualResetEventSlim();
 
             padClient.ConnectionStateChanged += (sender, args) =>
             {
                 if (args.State == PadConnectionState.Connected)
-                    connected = true;
+                    connected.Set();
             };
 
             // Act
             var success = padClient.Connect("200", "100");
 
-            // Wait for connection to establish
-            System.Threading.Thread.Sleep(500);
-
             // Assert
             Assert.True(success, "Should successfully initiate connection");
-            Assert.True(connected, "Should establish connection");
-            
+            Assert.True(connected.Wait(Deadline), "Should establish connection");
+
             // Cleanup
             padClient.Disconnect();
             padClient.Dispose();
@@ -79,21 +84,14 @@ namespace RetroIO.Protocols.X25.Tests
         {
             // Arrange
             var padClient = _runtime.CreatePadClient("TestPAD");
-            var welcomeReceived = false;
-
-            padClient.DataReceived += (sender, args) =>
-            {
-                if (args.Data.Contains("X.25 TAD Loopback Echo Service"))
-                    welcomeReceived = true;
-            };
+            using var welcomeReceived = WhenReceived(padClient, Welcome);
 
             // Act
             padClient.Connect("200", "100");
-            System.Threading.Thread.Sleep(600); // Wait for timers to complete
 
             // Assert
-            Assert.True(welcomeReceived, "Should receive welcome message");
-            
+            Assert.True(welcomeReceived.Wait(Deadline), "Should receive welcome message");
+
             // Cleanup
             padClient.Disconnect();
             padClient.Dispose();
@@ -104,24 +102,17 @@ namespace RetroIO.Protocols.X25.Tests
         {
             // Arrange
             var padClient = _runtime.CreatePadClient("TestPAD");
-            var echoReceived = false;
-
-            padClient.DataReceived += (sender, args) =>
-            {
-                if (args.Data.Contains("Echo: Hello"))
-                    echoReceived = true;
-            };
+            using var welcome = WhenReceived(padClient, Welcome);
+            using var echoReceived = WhenReceived(padClient, "Echo: Hello");
 
             // Act
             padClient.Connect("200", "100");
-            System.Threading.Thread.Sleep(600); // Wait for welcome
-            
+            Assert.True(welcome.Wait(Deadline), "Should receive welcome message");
             padClient.SendText("Hello\r\n");
-            System.Threading.Thread.Sleep(300); // Wait for echo
 
             // Assert
-            Assert.True(echoReceived, "Should receive echo response");
-            
+            Assert.True(echoReceived.Wait(Deadline), "Should receive echo response");
+
             // Cleanup
             padClient.Disconnect();
             padClient.Dispose();
@@ -132,24 +123,17 @@ namespace RetroIO.Protocols.X25.Tests
         {
             // Arrange
             var padClient = _runtime.CreatePadClient("TestPAD");
-            var helpReceived = false;
-
-            padClient.DataReceived += (sender, args) =>
-            {
-                if (args.Data.Contains("Available commands:"))
-                    helpReceived = true;
-            };
+            using var welcome = WhenReceived(padClient, Welcome);
+            using var helpReceived = WhenReceived(padClient, "Available commands:");
 
             // Act
             padClient.Connect("200", "100");
-            System.Threading.Thread.Sleep(600); // Wait for welcome
-            
+            Assert.True(welcome.Wait(Deadline), "Should receive welcome message");
             padClient.SendText("HELP\r\n");
-            System.Threading.Thread.Sleep(300); // Wait for response
 
             // Assert
-            Assert.True(helpReceived, "Should receive help response");
-            
+            Assert.True(helpReceived.Wait(Deadline), "Should receive help response");
+
             // Cleanup
             padClient.Disconnect();
             padClient.Dispose();
@@ -160,32 +144,25 @@ namespace RetroIO.Protocols.X25.Tests
         {
             // Arrange
             var padClient = _runtime.CreatePadClient("TestPAD");
-            var goodbyeReceived = false;
-            var disconnected = false;
-
-            padClient.DataReceived += (sender, args) =>
-            {
-                if (args.Data.Contains("Goodbye!"))
-                    goodbyeReceived = true;
-            };
+            using var welcome = WhenReceived(padClient, Welcome);
+            using var goodbyeReceived = WhenReceived(padClient, "Goodbye!");
+            using var disconnected = new ManualResetEventSlim();
 
             padClient.ConnectionStateChanged += (sender, args) =>
             {
                 if (args.State == PadConnectionState.Disconnected)
-                    disconnected = true;
+                    disconnected.Set();
             };
 
             // Act
             padClient.Connect("200", "100");
-            System.Threading.Thread.Sleep(600); // Wait for welcome
-            
+            Assert.True(welcome.Wait(Deadline), "Should receive welcome message");
             padClient.SendText("QUIT\r\n");
-            System.Threading.Thread.Sleep(1000); // Wait for goodbye + clear
 
             // Assert
-            Assert.True(goodbyeReceived, "Should receive goodbye message");
-            Assert.True(disconnected, "Should disconnect after QUIT");
-            
+            Assert.True(goodbyeReceived.Wait(Deadline), "Should receive goodbye message");
+            Assert.True(disconnected.Wait(Deadline), "Should disconnect after QUIT");
+
             // Cleanup
             padClient.Dispose();
         }
@@ -196,39 +173,41 @@ namespace RetroIO.Protocols.X25.Tests
             // Arrange
             var client1 = _runtime.CreatePadClient("PAD1");
             var client2 = _runtime.CreatePadClient("PAD2");
-            var client1Echo = false;
-            var client2Echo = false;
-
-            client1.DataReceived += (sender, args) =>
-            {
-                if (args.Data.Contains("Echo: Message1"))
-                    client1Echo = true;
-            };
-
-            client2.DataReceived += (sender, args) =>
-            {
-                if (args.Data.Contains("Echo: Message2"))
-                    client2Echo = true;
-            };
+            using var welcome1 = WhenReceived(client1, Welcome);
+            using var welcome2 = WhenReceived(client2, Welcome);
+            using var client1Echo = WhenReceived(client1, "Echo: Message1");
+            using var client2Echo = WhenReceived(client2, "Echo: Message2");
 
             // Act
             client1.Connect("200", "101");
             client2.Connect("200", "102");
-            System.Threading.Thread.Sleep(800); // Wait for both to connect
+            Assert.True(welcome1.Wait(Deadline), "Client 1 should receive the welcome message");
+            Assert.True(welcome2.Wait(Deadline), "Client 2 should receive the welcome message");
 
             client1.SendText("Message1\r\n");
             client2.SendText("Message2\r\n");
-            System.Threading.Thread.Sleep(400); // Wait for echoes
 
             // Assert
-            Assert.True(client1Echo, "Client 1 should receive its echo");
-            Assert.True(client2Echo, "Client 2 should receive its echo");
-            
+            Assert.True(client1Echo.Wait(Deadline), "Client 1 should receive its echo");
+            Assert.True(client2Echo.Wait(Deadline), "Client 2 should receive its echo");
+
             // Cleanup
             client1.Disconnect();
             client2.Disconnect();
             client1.Dispose();
             client2.Dispose();
+        }
+
+        // Set once the client has received data containing the text.
+        private static ManualResetEventSlim WhenReceived(PadClient client, string text)
+        {
+            var seen = new ManualResetEventSlim();
+            client.DataReceived += (sender, args) =>
+            {
+                if (args.Data.Contains(text))
+                    seen.Set();
+            };
+            return seen;
         }
 
         [Fact]
