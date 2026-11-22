@@ -190,6 +190,49 @@ namespace RetroIO.Network.Router
         /// </exception>
         public RouterLink AddLink(RouterLink.PacketOutput output, uint address = 0, int mtu = 1500)
         {
+            if (!TryAddLink(output, address, mtu, out RouterLink? link, out string error))
+            {
+                if (address == 0)
+                {
+                    throw new InvalidOperationException(error);
+                }
+
+                throw new ArgumentException(error, nameof(address));
+            }
+
+            return link!;
+        }
+
+        /// <summary>
+        /// Adds a link the way <see cref="AddLink"/> does, but reports a refused address instead of
+        /// throwing: for a host that hangs up a caller it cannot place.
+        /// </summary>
+        /// <param name="output">
+        /// Where packets for the link go.
+        /// </param>
+        /// <param name="address">
+        /// The link's fixed address, or 0 for the next free one from the pool.
+        /// </param>
+        /// <param name="mtu">
+        /// The largest packet the link carries.
+        /// </param>
+        /// <param name="link">
+        /// The link, or <c>null</c>.
+        /// </param>
+        /// <param name="error">
+        /// Why no link was added, naming the address, or empty.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the link was added.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="output"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when <paramref name="mtu"/> is smaller than an IPv4 header.
+        /// </exception>
+        public bool TryAddLink(RouterLink.PacketOutput output, uint address, int mtu, out RouterLink? link, out string error)
+        {
             if (output == null)
             {
                 throw new ArgumentNullException(nameof(output));
@@ -200,22 +243,31 @@ namespace RetroIO.Network.Router
                 throw new ArgumentOutOfRangeException(nameof(mtu), mtu, "a link carries at least an IPv4 header");
             }
 
+            link = null;
+            error = string.Empty;
             if (address == 0)
             {
                 address = FreePoolAddress();
+                if (address == 0)
+                {
+                    error = "no free address left in the pool " + Ipv4.Format(_poolFirst) + " to " + Ipv4.Format(_poolLast);
+                    return false;
+                }
             }
             else if (!IsHostAddress(address) || address == Settings.RouterAddress || IsUpstreamAddress(address))
             {
-                throw new ArgumentException(Ipv4.Format(address) + " is not a free host address in " + Ipv4.Format(Settings.Network) + "/" + Settings.PrefixLength, nameof(address));
+                error = Ipv4.Format(address) + " is not a free host address in " + Ipv4.Format(Settings.Network) + "/" + Settings.PrefixLength;
+                return false;
             }
             else if (_links.ContainsKey(address))
             {
-                throw new ArgumentException(Ipv4.Format(address) + " is already given to another link", nameof(address));
+                error = Ipv4.Format(address) + " is already given to another link";
+                return false;
             }
 
-            RouterLink link = new RouterLink(this, address, mtu, output);
+            link = new RouterLink(this, address, mtu, output);
             _links.Add(address, link);
-            return link;
+            return true;
         }
 
         /// <summary>
@@ -401,7 +453,8 @@ namespace RetroIO.Network.Router
                 }
             }
 
-            throw new InvalidOperationException("no free address left in the pool " + Ipv4.Format(_poolFirst) + " to " + Ipv4.Format(_poolLast));
+            // 0 is never a host address, so it can stand for "none free".
+            return 0;
         }
 
         private bool IsUpstreamAddress(uint address)

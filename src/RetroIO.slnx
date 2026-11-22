@@ -256,6 +256,13 @@
     <Project Path="tests/RetroIO.Protocols.Xmsg.TestSupport/RetroIO.Protocols.Xmsg.TestSupport.csproj" />
     <Project Path="tests/RetroIO.Tests/RetroIO.Tests.csproj" />
   </Folder>
+  <Folder Name="/RetroIO.Network.DialUp/" />
+  <Folder Name="/RetroIO.Network.DialUp/src/">
+    <Project Path="RetroIO.Network.DialUp/src/RetroIO.Network.DialUp.csproj" />
+  </Folder>
+  <Folder Name="/RetroIO.Network.DialUp/tests/">
+    <Project Path="RetroIO.Network.DialUp/tests/RetroIO.Network.DialUp.Tests.csproj" />
+  </Folder>
   <Folder Name="/RetroIO.Network.Ethernet/" />
   <Folder Name="/RetroIO.Network.Ethernet/src/">
     <Project Path="RetroIO.Network.Ethernet/src/RetroIO.Network.Ethernet.csproj" />

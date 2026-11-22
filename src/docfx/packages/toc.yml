@@ -15,6 +15,8 @@
     href: ../../RetroIO.Management.Client/README.md
   - name: RetroIO.Management.Contracts
     href: ../../RetroIO.Management.Contracts/README.md
+  - name: RetroIO.Network.DialUp
+    href: ../../RetroIO.Network.DialUp/README.md
   - name: RetroIO.Network.Ethernet
     href: ../../RetroIO.Network.Ethernet/README.md
   - name: RetroIO.Network.Nat

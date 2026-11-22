@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RetroIO.Network.DialUp: the answering side of a dial-up internet call. A caller's bytes come
+    in from a modem line; the session gives an optional text login, then carries the caller's IP
+    packets over SLIP (RetroIO.Protocols.Slip) to a packet side: a NAT of its own
+    (RetroIO.Network.Nat), or a link on a shared router (RetroIO.Network.Router) so many callers
+    share one subnet and one NAT. The login check is the host's: any name for an emulator's
+    built-in ISP, real accounts for a server. PPP with PAP and CHAP comes into this package later.
+
+    Specifications: RFC 1055 (SLIP).
+  -->
+  <PropertyGroup>
+    <PackageId>RetroIO.Network.DialUp</PackageId>
+    <AssemblyName>RetroIO.Network.DialUp</AssemblyName>
+    <RootNamespace>RetroIO.Network.DialUp</RootNamespace>
+    <Description>The answering side of a dial-up internet call: an optional text login with a check the host supplies, then SLIP between the caller's bytes and IP packets, to a NAT of its own or a link on a shared router.</Description>
+    <PackageTags>retroio;dialup;isp;slip;modem;network;emulation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RetroIO.Network.DialUp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Protocols.Slip\src\RetroIO.Protocols.Slip.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Network.Nat\src\RetroIO.Network.Nat.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Network.Router\src\RetroIO.Network.Router.csproj" />
+  </ItemGroup>
+</Project>

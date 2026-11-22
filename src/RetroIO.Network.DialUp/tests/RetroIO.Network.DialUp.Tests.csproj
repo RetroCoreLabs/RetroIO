@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>RetroIO.Network.DialUp.Tests</AssemblyName>
+    <RootNamespace>RetroIO.Network.DialUp.Tests</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Description>Tests for RetroIO.Network.DialUp: the text login and its check, SLIP to a NAT of its own and to a shared router, against real host sockets.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Network.Router\src\RetroIO.Network.Router.csproj" />
+    <ProjectReference Include="..\src\RetroIO.Network.DialUp.csproj" />
+  </ItemGroup>
+
+</Project>
