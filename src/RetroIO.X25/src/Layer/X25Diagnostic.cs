@@ -39,6 +39,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte PacketTypeInvalid = 16;
 
         /// <summary>
+        /// 17 - Packet type invalid for state r1 (packet layer ready): a restart confirmation with no restart to confirm
+        /// (X.25 Annex E; X.25 Table C-2, X.75 Table C.2).
+        /// </summary>
+        public const byte UnexpectedRestartConfirmation = 17;
+
+        /// <summary>
         /// 20 - Packet type invalid for state p1 (ready). 21 p2, 22 p3, 23 p4, 24 p5, 25 p6, 26 p7; 27 d1, 28 d2, 29 d3.
         /// </summary>
         public const byte PacketTypeInvalidForP1 = 20;

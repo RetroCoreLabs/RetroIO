@@ -1805,6 +1805,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         private const byte SteClearingNetworkCongestion = 0x05;
 
         /// <summary>
+        /// X.75 Table 25: restarting cause "Network congestion", 00000011.
+        /// </summary>
+        private const byte SteRestartingNetworkCongestion = 0x03;
+
+        /// <summary>
         /// X.75 Table 15: resetting cause "Network congestion", 00000111.
         /// </summary>
         private const byte SteResettingNetworkCongestion = 0x07;
@@ -2524,6 +2529,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
             if (!_restartOutstanding)
             {
                 UnexpectedPackets++;
+
+                // A restart confirmation in r1 (nothing to confirm) is ERROR (r3) # 17 for the network side:
+                // X.25 Table C-2 for a DCE ("restart indication", local procedure error) and X.75 Table C.2 for an
+                // STE ("restarting with network congestion cause", 00000011 in X.75 Table 25). Added 2026-11-22; until
+                // then it was counted and dropped on every side. X.25 gives a DTE no table, so a DTE still drops it.
+                if (!_config.IsDte)
+                {
+                    Restart(_config.IsSte ? SteRestartingNetworkCongestion : X25Cause.RestartingLocalProcedureError,
+                        X25Diagnostic.UnexpectedRestartConfirmation);
+                }
+
                 return;
             }
 

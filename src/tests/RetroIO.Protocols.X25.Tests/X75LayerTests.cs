@@ -50,6 +50,43 @@ namespace RetroIO.Protocols.X25.Tests
             });
         }
 
+        /// <summary>
+        /// A restart confirmation with nothing to confirm (state r1) is ERROR (r3) # 17 on the network side: X.75 Table
+        /// C.2 restarts with network congestion (00000011, Table 25), X.25 Table C-2 with local procedure error. A DTE
+        /// has no table and drops it. Added 2026-11-22; before, every side dropped it.
+        /// </summary>
+        /// <param name="ste">
+        /// True for a switch between networks.
+        /// </param>
+        /// <param name="dte">
+        /// True for a DTE.
+        /// </param>
+        /// <param name="cause">
+        /// The restarting cause expected, or -1 for no restart at all.
+        /// </param>
+        [TestCase(true, false, 0x03)]
+        [TestCase(false, false, 0x01)]
+        [TestCase(false, true, -1)]
+        public void AnUnaskedRestartConfirmation_IsRestartedWithDiagnostic17OnTheNetworkSide(bool ste, bool dte, int cause)
+        {
+            _sink = new RecordingSink();
+            X25Layer layer = new X25Layer(_sink, new X25Config { LocalAddress = "2422", IsDte = dte, IsSte = ste, LciBase = 1, LciCount = 4 });
+            int before = _sink.Sent.Count;
+            layer.ProcessPacket(X25PacketBuilder.CreateRestartConfirmation());
+
+            if (cause < 0)
+            {
+                Assert.That(_sink.Sent.Count, Is.EqualTo(before));
+                return;
+            }
+
+            X25PacketInfo sent = X25PacketParser.ParsePacket(_sink.Last, x75: ste);
+            Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.RestartRequest));
+            Assert.That(sent.RestartCause, Is.EqualTo((byte)cause));
+            Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)17));
+            Assert.That(layer.RestartOutstanding, Is.True, "r3: waiting for the other side's confirmation");
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {
