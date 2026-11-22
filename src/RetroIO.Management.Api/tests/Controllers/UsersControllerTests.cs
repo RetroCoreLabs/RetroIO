@@ -125,6 +125,61 @@ public class UsersControllerTests
         Assert.That(made.AllowEconet, Is.True);
     }
 
+    /// <summary>
+    /// Dial-up is off for a new user unless the admin ticks it, and a fixed address is kept
+    /// (Ronny, 2026-11-22: only ticked users dial in; pool, or a fixed address when set).
+    /// </summary>
+    [Test]
+    public async Task CreateUser_DialUpIsOffUnlessTicked_AndKeepsTheFixedAddress()
+    {
+        List<RetroUser> made = new List<RetroUser>();
+        _mockIdp.Setup(x => x.CreateUserAsync(It.IsAny<RetroUser>(), It.IsAny<CancellationToken>()))
+            .Callback<RetroUser, CancellationToken>((u, _) => made.Add(u))
+            .Returns(new ValueTask<Guid>(Guid.NewGuid()));
+        _mockIdp.Setup(x => x.SetPasswordAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(new ValueTask<bool>(true));
+        _mockIdp.Setup(x => x.SaveAsync(It.IsAny<CancellationToken>())).Returns(new ValueTask());
+
+        await _controller.CreateUser(new CreateUserRequest { Username = "plain", Password = "password123" });
+        await _controller.CreateUser(new CreateUserRequest
+        {
+            Username = "caller",
+            Password = "password123",
+            AllowDialUp = true,
+            DialUpAddress = "10.42.0.20",
+        });
+
+        Assert.That(made.Count, Is.EqualTo(2));
+        Assert.That(made[0].EffectiveAllowDialUp, Is.False);
+        Assert.That(made[0].DialUpAddress, Is.Null);
+        Assert.That(made[1].EffectiveAllowDialUp, Is.True);
+        Assert.That(made[1].DialUpAddress, Is.EqualTo("10.42.0.20"));
+        Assert.That(RetroUserProtocolAuth.CanUseProtocol(made[0], RetroFsProtocol.DialUp), Is.False);
+        Assert.That(RetroUserProtocolAuth.CanUseProtocol(made[1], RetroFsProtocol.DialUp), Is.True);
+    }
+
+    /// <summary>
+    /// A fixed dial-up address that is not a full dotted IPv4 address is refused, and the user is
+    /// not created.
+    /// </summary>
+    [TestCase("10.42.0")]
+    [TestCase("10.42.0.256")]
+    [TestCase("10.42.0.20.1")]
+    [TestCase("10.42..20")]
+    [TestCase("10.42.0.x")]
+    [TestCase("10.42.0.0020")]
+    public async Task CreateUser_ABadDialUpAddress_IsRefused(string address)
+    {
+        var result = await _controller.CreateUser(new CreateUserRequest
+        {
+            Username = "caller",
+            Password = "password123",
+            DialUpAddress = address,
+        });
+
+        Assert.That(result.Result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockIdp.Verify(x => x.CreateUserAsync(It.IsAny<RetroUser>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Test]
     public async Task DeleteUser_ValidId_ReturnsOk()
     {

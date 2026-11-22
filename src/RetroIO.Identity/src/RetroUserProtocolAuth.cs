@@ -40,6 +40,7 @@ public static class RetroUserProtocolAuth
         {
             RetroFsProtocol.Tnfs => user.EffectiveAllowTnfs,
             RetroFsProtocol.Econet => user.EffectiveAllowEconet,
+            RetroFsProtocol.DialUp => user.EffectiveAllowDialUp,
             _ => false,
         };
     }
@@ -159,6 +160,9 @@ public static class RetroUserProtocolAuth
                 break;
             case RetroFsProtocol.Econet:
                 user.LastLoginEconetAt = now;
+                break;
+            case RetroFsProtocol.DialUp:
+                user.LastLoginDialUpAt = now;
                 break;
         }
     }

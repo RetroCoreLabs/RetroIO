@@ -72,6 +72,19 @@ namespace RetroIO.Identity
         public bool? AllowEconet { get; set; }
 
         /// <summary>
+        /// When null, dial-up access (RetroServer's emulated ISP) is denied until an admin turns it on
+        /// (Ronny, 2026-11-22: only ticked users may dial in).
+        /// </summary>
+        public bool? AllowDialUp { get; set; }
+
+        /// <summary>
+        /// The fixed IPv4 address a dial-up call by this user gets, in dotted form (for example
+        /// <c>10.42.0.20</c>); null for a free address from the pool. A call whose fixed address is
+        /// already in use is refused.
+        /// </summary>
+        public string? DialUpAddress { get; set; }
+
+        /// <summary>
         /// Created timestamp
         /// </summary>
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -92,6 +105,11 @@ namespace RetroIO.Identity
         public DateTime? LastLoginEconetAt { get; set; }
 
         /// <summary>
+        /// Last successful dial-up login
+        /// </summary>
+        public DateTime? LastLoginDialUpAt { get; set; }
+
+        /// <summary>
         /// Last failed login attempt (wrong password or protocol denied)
         /// </summary>
         public DateTime? LastFailedLoginAt { get; set; }
@@ -110,5 +128,10 @@ namespace RetroIO.Identity
         /// Gets whether Econet access is allowed, which is false when AllowEconet is not set.
         /// </summary>
         public bool EffectiveAllowEconet => AllowEconet ?? false;
+
+        /// <summary>
+        /// Gets whether dial-up access is allowed, which is false when AllowDialUp is not set.
+        /// </summary>
+        public bool EffectiveAllowDialUp => AllowDialUp ?? false;
     }
 }

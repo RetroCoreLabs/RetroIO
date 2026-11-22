@@ -60,6 +60,14 @@ public class UserDto
     /// </summary>
     public bool AllowEconet { get; set; }
     /// <summary>
+    /// Gets or sets whether the user may dial in to the emulated ISP.
+    /// </summary>
+    public bool AllowDialUp { get; set; }
+    /// <summary>
+    /// Gets or sets the fixed address a dial-up call gets, or null for one from the pool.
+    /// </summary>
+    public string? DialUpAddress { get; set; }
+    /// <summary>
     /// Gets or sets the names of the groups the user belongs to.
     /// </summary>
     public List<string> Groups { get; set; } = new();
@@ -83,6 +91,10 @@ public class UserDto
     /// Gets or sets the time of the last Econet login, or null when there is none.
     /// </summary>
     public DateTime? LastLoginEconetAt { get; set; }
+    /// <summary>
+    /// Gets or sets the time of the last dial-up login, or null when there is none.
+    /// </summary>
+    public DateTime? LastLoginDialUpAt { get; set; }
     /// <summary>
     /// Gets or sets the time of the last failed login, or null when there is none.
     /// </summary>
@@ -126,6 +138,14 @@ public class CreateUserRequest
     /// Gets or sets whether the user may use Econet. Null means the server's default (no).
     /// </summary>
     public bool? AllowEconet { get; set; }
+    /// <summary>
+    /// Gets or sets whether the user may dial in. Null means the server's default (no).
+    /// </summary>
+    public bool? AllowDialUp { get; set; }
+    /// <summary>
+    /// Gets or sets the fixed dial-up address in dotted form, or null for one from the pool.
+    /// </summary>
+    public string? DialUpAddress { get; set; }
 }
 
 /// <summary>
@@ -153,6 +173,15 @@ public class UpdateUserRequest
     /// Gets or sets whether the user may use Econet, or null to keep the current value.
     /// </summary>
     public bool? AllowEconet { get; set; }
+    /// <summary>
+    /// Gets or sets whether the user may dial in, or null to keep the current value.
+    /// </summary>
+    public bool? AllowDialUp { get; set; }
+    /// <summary>
+    /// Gets or sets the fixed dial-up address in dotted form; null keeps the current value, an
+    /// empty string clears it (the pool is used again).
+    /// </summary>
+    public string? DialUpAddress { get; set; }
     /// <summary>
     /// Gets or sets the ids of every group the user should be in, or null to keep the membership as it is. The user is
     /// taken out of any group not listed. An unknown id refuses the whole request.

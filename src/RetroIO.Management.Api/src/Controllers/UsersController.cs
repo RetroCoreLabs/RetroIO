@@ -84,6 +84,11 @@ public class UsersController : ControllerBase
                 return BadRequest(ApiResponse<UserDto>.Fail(groupProblem, "UNKNOWN_GROUP"));
             }
 
+            if (!string.IsNullOrEmpty(request.DialUpAddress) && !IsDottedIpv4(request.DialUpAddress))
+            {
+                return BadRequest(ApiResponse<UserDto>.Fail("DialUpAddress must be an IPv4 address such as 10.42.0.20, or empty to use the pool.", "INVALID_FORMAT"));
+            }
+
             var userId = Guid.NewGuid();
             var newUser = new RetroUser
             {
@@ -98,6 +103,8 @@ public class UsersController : ControllerBase
                 // caller still sends nothing, the old defaults stand.
                 AllowTnfs = request.AllowTnfs ?? true,
                 AllowEconet = request.AllowEconet ?? false,
+                AllowDialUp = request.AllowDialUp ?? false,
+                DialUpAddress = string.IsNullOrEmpty(request.DialUpAddress) ? null : request.DialUpAddress,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -178,6 +185,14 @@ public class UsersController : ControllerBase
                 user.AllowTnfs = request.AllowTnfs.Value;
             if (request.AllowEconet.HasValue)
                 user.AllowEconet = request.AllowEconet.Value;
+            if (request.AllowDialUp.HasValue)
+                user.AllowDialUp = request.AllowDialUp.Value;
+            if (request.DialUpAddress != null)
+            {
+                if (request.DialUpAddress.Length > 0 && !IsDottedIpv4(request.DialUpAddress))
+                    return BadRequest(ApiResponse<UserDto>.Fail("DialUpAddress must be an IPv4 address such as 10.42.0.20, or empty to use the pool.", "INVALID_FORMAT"));
+                user.DialUpAddress = request.DialUpAddress.Length == 0 ? null : request.DialUpAddress;
+            }
 
             RetroGroup[] allGroups = await _idp.ListGroupsAsync();
             List<Guid> wanted = new List<Guid>();
@@ -343,13 +358,56 @@ public class UsersController : ControllerBase
             IsAdmin = user.IsAdmin,
             AllowTnfs = user.EffectiveAllowTnfs,
             AllowEconet = user.EffectiveAllowEconet,
+            AllowDialUp = user.EffectiveAllowDialUp,
+            DialUpAddress = user.DialUpAddress,
             Groups = names,
             GroupIds = ids,
             CreatedAt = user.CreatedAt,
             LastLoginAt = user.LastLoginAt,
             LastLoginTnfsAt = user.LastLoginTnfsAt,
             LastLoginEconetAt = user.LastLoginEconetAt,
+            LastLoginDialUpAt = user.LastLoginDialUpAt,
             LastFailedLoginAt = user.LastFailedLoginAt
         };
+    }
+
+    /// <summary>
+    /// Tells whether a text is an IPv4 address in dotted form: four parts of 0 to 255, digits only.
+    /// </summary>
+    /// <param name="text">
+    /// The text.
+    /// </param>
+    /// <returns>
+    /// True for a form such as <c>10.42.0.20</c>.
+    /// </returns>
+    /// <remarks>
+    /// Written out rather than <c>IPAddress.TryParse</c>, which also takes shortened forms such as
+    /// <c>10.20</c> and would store something the dial-up service then reads differently.
+    /// </remarks>
+    private static bool IsDottedIpv4(string text)
+    {
+        int parts = 0;
+        int value = 0;
+        int digits = 0;
+        for (int i = 0; i <= text.Length; i++)
+        {
+            if (i == text.Length || text[i] == '.')
+            {
+                if (digits == 0 || value > 255)
+                    return false;
+                parts++;
+                value = 0;
+                digits = 0;
+                continue;
+            }
+
+            char c = text[i];
+            if (c < '0' || c > '9' || digits == 3)
+                return false;
+            value = (value * 10) + (c - '0');
+            digits++;
+        }
+
+        return parts == 4;
     }
 }

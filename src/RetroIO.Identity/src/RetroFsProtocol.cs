@@ -20,6 +20,10 @@ public enum RetroFsProtocol : byte
     /// The Econet protocol.
     /// </summary>
     Econet = 2,
+    /// <summary>
+    /// A dial-up call to RetroServer's emulated ISP.
+    /// </summary>
+    DialUp = 3,
 }
 
 /// <summary>
