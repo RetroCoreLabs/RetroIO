@@ -159,6 +159,19 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
                 return;
             }
 
+            // A restart opens a NEW network connection and sends the XMSG INIT first, as a restarting
+            // SINTRAN does (hub capture 2026-11-21, DOC/captures/2026-11-21-xmsg-restart-d102-over-
+            // ethernet-hub.pcap). Measured live against D100 the same day: after it D100 counted from
+            // 0 with us, so no saved message number is needed on Ethernet. Our own counter is set
+            // to 0 too, because the peer's now is. The confirm arrives on the receive thread, so it
+            // only raises a flag; the INIT is sent from the pump loop below.
+            int connectionOpened = 0;
+            link.ConnectionOpened += delegate (EthernetLink opened)
+            {
+                Interlocked.Exchange(ref connectionOpened, 1);
+            };
+            link.Reopen();
+
             WebApplication web;
             try
             {
@@ -179,6 +192,12 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             {
                 while (!stoppingToken.IsCancellationRequested)
                 {
+                    if (Interlocked.Exchange(ref connectionOpened, 0) == 1)
+                    {
+                        _logger.LogInformation("XMSG node {Self}: new connection to {Peer} confirmed; sending the XMSG INIT first.", self, peer);
+                        node.Host.AnnounceRestartAndResetOurs(peer);
+                    }
+
                     programs.Pump();
                     node.Host.Pump();
 

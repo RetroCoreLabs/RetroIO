@@ -418,6 +418,13 @@ namespace RetroIO.Protocols.Xmsg.Node.Seam
         /// instead of by inference. Do NOT promote this to automatic until a run says which.
         /// </para>
         /// <para>
+        /// <b>Answered on Ethernet, 2026-11-21:</b> sent as the first message on a NEW network
+        /// connection (<c>NdLinkLayer.Reopen</c>, as a restarting SINTRAN does), D100 answered it
+        /// normally and counted from 0 with us. RetroServer's node (<c>XmsgNodeService</c>) now
+        /// does this at every start. Sent on the OLD connection it was refused (2026-08-17), and
+        /// over HDLC, where there is no such connection, it is still not measured.
+        /// </para>
+        /// <para>
         /// The request carries Flags 1 <c>0xFFFF</c>, outside the ordinary sequence, so it can
         /// always be sent whatever state the counters are in.
         /// </para>
