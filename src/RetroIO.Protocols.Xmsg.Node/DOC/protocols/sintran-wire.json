@@ -453,6 +453,20 @@
           "evidence": "three independent occurrences across DOC/captures/XMSG-DEGRADE-2026-08-24 (segment.pcap and after-fix.pcap), 2026-08-24 - every one immediately after a DisconnectRequest60, link ids swapped, trailing field 0 where the request carried 0x0001, no payload",
           "would_disprove_it": "A 0x70 that does NOT follow a disconnect request. Every sample so far follows one immediately, so one counter-example retires this reading.",
           "note": "The FIRST of each pair is addressed to MAC 08:00:26:00:00:00 - system number ZERO - and only the retry is addressed properly, because the sender has not learned the peer's identity yet."
+        },
+        {
+          "value": "0x1F",
+          "name": "ConnectionConfirm",
+          "meaning": "The answer to a connection request; it carries the answering side's new link id.",
+          "status": "MEASURED",
+          "evidence": "DOC/captures/2026-11-21-xmsg-restart-d102-over-ethernet-hub.pcap: D100 answered D102's 0F with 1F 00 04 0387 016C 0064 after D102's XMSG restart; and on 2026-11-21 D100 answered our node's 0F with 1F in 10 ms"
+        },
+        {
+          "value": "0x7F",
+          "name": "DisconnectConfirm7F",
+          "meaning": "The confirmation of a DisconnectRequest60 on an open connection: same sequence byte, ids swapped, trailing 0.",
+          "status": "MEASURED",
+          "evidence": "DOC/captures/2026-11-21-xmsg-restart-d102-over-ethernet-hub.pcap: D102 sent 60 00 03 016B 036B 0001 on STOP-XMSG and D100 answered 7F 00 03 036B 016B 0000"
         }
       ],
       "unknown_aspects": [
@@ -477,7 +491,7 @@
             "status": "MEASURED",
             "evidence": "2026-08-17: we answered D100's CR with it and D100 moved on to DT, which is the test the code's own comment names. Low nibble still inferred from 'every control frame ends in F'",
             "csharp": "NdLinkLayer.ConnectionConfirmKindUnverified",
-            "why_not_in_the_enum": "It is a CONSTANT on NdLinkLayer, not a member of NdLinkFrameKind - we send this byte but have never received one, so it is not a kind we decode. The completeness check caught it being listed as an enum member, which it is not."
+            "why_not_in_the_enum": "The constant on NdLinkLayer predates the enum member: until 2026-11-21 we sent this byte but had never received one. Since the restart capture we decode it too, so NdLinkFrameKind.ConnectionConfirm is listed above under values; the constant is kept for the send side."
           }
         ]
       },
