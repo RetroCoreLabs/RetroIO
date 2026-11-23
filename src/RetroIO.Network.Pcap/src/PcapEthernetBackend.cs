@@ -43,7 +43,7 @@ namespace RetroIO.Network.Pcap
     /// done for every backend in the machine's EthernetManager.
     /// </para>
     /// </remarks>
-    public sealed class PcapEthernetBackend : IEthernetBackend, IEthernetBackendStatus
+    public sealed class PcapEthernetBackend : IEthernetBackend, IEthernetBackendStatus, IEthernetGuestAddresses
     {
         // ── Constants ──
 
@@ -439,6 +439,36 @@ namespace RetroIO.Network.Pcap
             }
 
             device.SendPacket(bytes);
+        }
+
+        /// <summary>
+        /// Adds a card address the machine already knows, so frames for that card pass before the
+        /// card has sent anything. The kernel filter follows on the next <see cref="Poll"/>.
+        /// </summary>
+        /// <param name="mac">
+        /// The 6-byte address.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the address was new.
+        /// </returns>
+        public bool AddGuestAddress(ReadOnlySpan<byte> mac)
+        {
+            return _filter.Add(mac);
+        }
+
+        /// <summary>
+        /// Removes a card address that is no longer used. The kernel filter follows on the next
+        /// <see cref="Poll"/>.
+        /// </summary>
+        /// <param name="mac">
+        /// The 6-byte address.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the address was held.
+        /// </returns>
+        public bool RemoveGuestAddress(ReadOnlySpan<byte> mac)
+        {
+            return _filter.Remove(mac);
         }
 
         /// <inheritdoc/>

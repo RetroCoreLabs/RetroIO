@@ -12,7 +12,7 @@ wants it calls `PcapEthernetBackend.RegisterFactory()` once at start; after that
 
 | Type | What it does |
 |---|---|
-| `PcapEthernetBackend` | The backend: opens the adapter, sends frames, and passes on received frames meant for the emulated machine. |
+| `PcapEthernetBackend` | The backend: opens the adapter, sends frames, and passes on received frames meant for the emulated machine. It learns the card addresses from what the machine sends; give them up front with `IEthernetGuestAddresses.AddGuestAddress` (and `RemoveGuestAddress` when a card changes address), or a host that already knows the card's address gets no answer until the machine has sent a frame. |
 | `PcapAdapterChoice`, `PcapAdapter` | Lists the adapters and picks one by name or description; with none named it takes the ND-Loopback adapter and says why. |
 | `PcapSetupAdvice` | The text shown when the driver is missing, for each host system. |
 

@@ -11,7 +11,7 @@ and the backends with no native dependency. Moved from RetroCore on 2026-11-22.
 |---|---|
 | `IEthernetController` | The other side: what an emulated card offers, event `FrameTransmitted` and `DeliverFrame`, so the host can join any card to any backend. |
 | `IEthernetBackend` | What a card plugs into: `Send`, `Poll`, `Start`, `Stop`, event `OnFrameReceived`. |
-| `IEthernetBackendStatus`, `IEthernetPortForwarding` | Optional extras a backend may offer: a status line, and port forwards (the NAT has them). |
+| `IEthernetBackendStatus`, `IEthernetPortForwarding`, `IEthernetGuestAddresses` | Optional extras a backend may offer: a status line, port forwards (the NAT has them), and the card addresses given up front (the pcap backend needs them). |
 | `EthernetBackends` | Makes a backend from a text setting such as `nat`, `pcap:Ethernet 2` or `tcp:host:port`. Each backend package registers its own maker. `none` or an empty setting gives no backend. |
 | `EthernetFrameRing` | A bounded queue of frames between two threads; a frame that finds it full is dropped and counted, as on real Ethernet when a receive ring is full. |
 | `IpChecksumRepair` | Recomputes IPv4, TCP and UDP checksums in frames from host adapters that leave them to the network card's hardware (checksum offload). |

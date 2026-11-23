@@ -140,24 +140,93 @@ namespace RetroIO.Network.Pcap
                 return false;
             }
 
-            long source = ReadMac(frame.Slice(6, 6));
-            if (source == 0 || (frame[6] & 0x01) != 0)
+            return Add(frame.Slice(6, 6));
+        }
+
+        /// <summary>
+        /// Adds a guest address the caller already knows, such as the card's configured address.
+        /// </summary>
+        /// <remarks>
+        /// A free entry is used first; when all are taken the oldest is replaced. A group address
+        /// or all zeros is not a station address and is not added.
+        /// </remarks>
+        /// <param name="mac">
+        /// The 6-byte address.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the address was new.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="mac"/> is not 6 bytes.
+        /// </exception>
+        public bool Add(ReadOnlySpan<byte> mac)
+        {
+            long value = CheckedMac(mac);
+            if (value == 0 || (mac[0] & 0x01) != 0)
+            {
+                return false;
+            }
+
+            int free = -1;
+            for (int i = 0; i < MaxGuestMacs; i++)
+            {
+                long held = Volatile.Read(ref _macs[i]);
+                if (held == value)
+                {
+                    return false;
+                }
+
+                if (held == 0 && free < 0)
+                {
+                    free = i;
+                }
+            }
+
+            if (free >= 0)
+            {
+                Volatile.Write(ref _macs[free], value);
+            }
+            else
+            {
+                Volatile.Write(ref _macs[_next], value);
+                _next = (_next + 1) % MaxGuestMacs;
+            }
+
+            Interlocked.Increment(ref _version);
+            return true;
+        }
+
+        /// <summary>
+        /// Removes a guest address, for example the old address of a card that was given a new one.
+        /// </summary>
+        /// <param name="mac">
+        /// The 6-byte address.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the address was held.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="mac"/> is not 6 bytes.
+        /// </exception>
+        public bool Remove(ReadOnlySpan<byte> mac)
+        {
+            long value = CheckedMac(mac);
+            if (value == 0)
             {
                 return false;
             }
 
             for (int i = 0; i < MaxGuestMacs; i++)
             {
-                if (Volatile.Read(ref _macs[i]) == source)
+                if (Volatile.Read(ref _macs[i]) == value)
                 {
-                    return false;
+                    Volatile.Write(ref _macs[i], 0);
+                    Interlocked.Increment(ref _version);
+                    return true;
                 }
             }
 
-            Volatile.Write(ref _macs[_next], source);
-            _next = (_next + 1) % MaxGuestMacs;
-            Interlocked.Increment(ref _version);
-            return true;
+            return false;
         }
 
         /// <summary>
@@ -273,6 +342,16 @@ namespace RetroIO.Network.Pcap
         /// <summary>
         /// Reads six address bytes as one 48-bit number, first byte highest.
         /// </summary>
+        private static long CheckedMac(ReadOnlySpan<byte> mac)
+        {
+            if (mac.Length != 6)
+            {
+                throw new ArgumentException("A MAC address is 6 bytes", nameof(mac));
+            }
+
+            return ReadMac(mac);
+        }
+
         private static long ReadMac(ReadOnlySpan<byte> mac)
         {
             return ((long)mac[0] << 40) | ((long)mac[1] << 32) | ((long)mac[2] << 24)
