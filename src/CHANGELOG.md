@@ -57,6 +57,7 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   link are queued and handled inside `Pump()`, so a link that delivers on its own thread (the
   Ethernet backends) no longer runs server code at the same time as the pump thread. Off by
   default; the HDLC path is unchanged.
+- X.25 switch, end-to-end interrupt confirmation (X.25 4.3.7, X.75 3.3.5): `X25Config.ConfirmInterruptsFromFarEnd`, `X25Layer.ConfirmInterrupt`, `ISwitchPort.InterruptConfirmed` / `ConfirmInterrupt`. The switch passes the far end's confirmation back across the call instead of confirming at once; a second interrupt before it is a procedure error (reset, diagnostic 44).
 
 ### Changed
 - `SwitchConfigLoader` now throws `InvalidDataException` for a `transport` value it does not know (it was read as XOT). A missing `transport` key still means XOT. `x25switch` and the Desktop built-in switch build their ports through `SwitchPortFactory` and stop with a message naming the port and the transport when one cannot be run, instead of running every port as XOT.
@@ -67,6 +68,12 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
   mount that worked before stops working until you give it `?hostKey=SHA256:...` (the fingerprint
   from `ssh-keygen -lf`), or `?hostKeyCheck=accept-new` to remember the key on the first
   connection. `?hostKeyCheck=off` restores the old behaviour. See `RetroIO.Storage.Providers`.
+- X.25 / X.75 (2026-11-23, matched with x25emu):
+  - At an STE, a short data packet with M=1 and D=0 resets the circuit with diagnostic 103 (X.75 3.3.4).
+  - An STE no longer times out an unanswered incoming call; X.75 Annex D has no T11.
+  - A reset or clear for a local procedure error goes to the other leg of the call as remote procedure error, reset 0x03 and clear 0x11 (X.25 Table C-4).
+  - The owner of the circuit is told about a procedure-error reset when the reset is sent, not when it is confirmed.
+  - A transit network that refuses a call adds its own DNIC to the transit list in the refusal (X.75 5.3.1).
 
 ### Fixed
 - `IndFileTransfer` (`RetroIO.Protocols.Tn3270`) never ended a transfer on a real host: it waited for a Close of the message file, which neither IBM's figures nor TK5 send. It now ends on the Data ack for the host's TRANSxx message, and cuts the message at its `$` end mark (TK5 sends `TRANS03   File transfer complete$` and blanks, in ASCII). Measured on TK5, 23 November 2026; a test replays the recorded upload.

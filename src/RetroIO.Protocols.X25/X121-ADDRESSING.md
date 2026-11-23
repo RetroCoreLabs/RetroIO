@@ -211,7 +211,8 @@ In the runtime (`X25Router.DecideIncomingCall`), in this order:
 3. **Wait mode** (`AnswerIncomingCallsAutomatically = false`): the call is offered to the program and waits
    for its Accept or Reject. One that is not answered is cleared by the line's X.25 engine when T11 runs out,
    180 s (X.25 4.1.4, Table D.1), with diagnostic 49; the cause is Local procedure error 0x13 at a DCE and
-   DTE originated 0x00 at a DTE.
+   DTE originated 0x00 at a DTE. On an X.75 link (an STE) there is no such timer: X.75 Annex D has only
+   T30-T33, and the calling side's T31 clears an unanswered call (decided 2026-11-23).
 4. **Automatic answering** (the default): the local service that takes the number answers it; if none
    does, Not obtainable 67.
 
@@ -350,7 +351,10 @@ causes are on `X25CallDecision`.
 | Network congestion | `0x05` | 0 | The switch already carries `max_calls` calls (section 7; list after Table C.3, row 36) | switch |
 | Invalid facility request | `0x03` | 84 | An NUI that no account has (6.21, row 15) | switch |
 | Local procedure error | `0x13` | 84 | No NUI on a port that needs one (row 16) | switch |
-| Local procedure error / DTE originated | `0x13` / `0x00` | 49 | Wait mode: nobody answered within T11, 180 s (4.1.4, Table D.1); `0x13` at a DCE, `0x00` at a DTE | the line's X.25 engine |
+| Network congestion | `0x05` | 120 | The call's transit list already names this network (a loop), or the route would cross more than four international links (X.75 Table E.1 items 40, 41; X.110 3.2) | switch, where a call enters from another network |
+| Network congestion | `0x05` | 128 | The call has crossed more than `[switch] max_hops` of our switches (x25emu's own diagnostic; ITU sets no limit inside a network) | switch, on an internal trunk |
+| Local procedure error / DTE originated | `0x13` / `0x00` | 49 | Wait mode: nobody answered within T11, 180 s (4.1.4, Table D.1); `0x13` at a DCE, `0x00` at a DTE; never at an STE (X.75 Annex D) | the line's X.25 engine |
+| Remote procedure error | `0x11` | as received | The other leg of a call was cleared for a local procedure error; the far side is told "remote" (X.25 Table C-4) | switch |
 | DTE originated | `0x00` | - | A local service refuses the call (4.1.7) | runtime |
 
 **The DTE side sends cause 0.** On a link manager link the runtime is the DTE, and the X.25 engine turns
@@ -390,17 +394,20 @@ and a Lines list with each line's channel count, "4095 (default)" when the file 
 
 ## 8. Status in RetroIO
 
-Done (2026-11-18, not yet committed): one route table and one lookup for the switch and the runtime, with
+Done (2026-11-18): one route table and one lookup for the switch and the runtime, with
 own-DNIC completion, the order of section 4.1, the default gateway, ordered backup ports, the arrival-port
 rule, switched-off routes, hunt groups that skip a member that is down, and the causes of section 6. Old
 configurations load as section 4.6 says. The RetroX25 desktop program has one Routing screen that lists the
 routes in this order and has a box to test a number.
 
+Also done: the transit list on X.75 links and internal trunks, the loop check and the four-link limit
+(2026-11-18), `[switch] max_hops` inside the network (2026-11-21), and a transit network that refuses a call
+adds its own DNIC to the list in the refusal (X.75 5.3.1, decided 2026-11-23). Section 6 has the causes.
+
 Still open, each one in `src/BUGS.md` by name:
 
-- **No hop limit and no loop check** (`RetroIO.Protocols.X25.Routing`): X.110 3.2, 3.6 and 5.6, and X.75
-  5.3.1 (the transit network field) and Table E.1 items 40 and 41. `[switch] max_hops` (default 15) is read,
-  shown and written back, but nothing uses it.
+- **The loop check runs only where a call enters from another network** (`RetroIO.Protocols.X25.Switch`), as
+  in x25emu; inside the network `max_hops` is what stops a circle.
 - **Escape codes** (`RetroIO.Protocols.X25.Routing`): X.121 7.9, Table 2 and note 2 of 7.2.
 - **No forwarding between lines** (`RetroIO.Protocols.X25.Runtime`): an incoming call is never sent on to
   another runtime line.
