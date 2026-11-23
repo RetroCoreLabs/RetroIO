@@ -207,6 +207,31 @@ public sealed class RetroTelemetryTests
         Assert.That(Read(econet.Telemetry, "retroio.econet.io", "out"), Is.EqualTo(30));
     }
 
+    [Test]
+    public void TheXmsgNode_HasItsMetricsInTheSharedShape_AndItsLogNextToThem()
+    {
+        // No system number: the node refuses to start, and says so in its kept log.
+        RetroIO.Protocols.Xmsg.Plugins.Server.XmsgNodeService node =
+            new RetroIO.Protocols.Xmsg.Plugins.Server.XmsgNodeService(
+                new RetroIO.Protocols.Xmsg.Plugins.Server.XmsgNodeServiceOptions(), null);
+
+        Assert.That(node.Telemetry.Name, Is.EqualTo("RetroIO.XmsgNode"));
+        Assert.That(Read(node.Telemetry, "retroio.xmsgnode.link.up", null), Is.EqualTo(0));
+        Assert.That(Read(node.Telemetry, "retroio.xmsgnode.programs", null), Is.EqualTo(0));
+        Assert.That(Read(node.Telemetry, "retroio.xmsgnode.connections.opened", null), Is.EqualTo(0));
+        Assert.That(Read(node.Telemetry, "retroio.xmsgnode.datagrams.parked", null), Is.EqualTo(0));
+
+        node.StartAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+        node.ExecuteTask!.GetAwaiter().GetResult();
+
+        List<TelemetryLogRecord> records = new List<TelemetryLogRecord>();
+        node.Telemetry.CollectLog(0, records);
+        Assert.That(records, Has.Count.EqualTo(1));
+        Assert.That(records[0].Level, Is.EqualTo(LogLevel.Error));
+        Assert.That(records[0].Message, Does.Contain("system number"));
+        node.Dispose();
+    }
+
     private static long Read(RetroTelemetry telemetry, string name, string? direction)
     {
         List<MetricReading> readings = new List<MetricReading>();

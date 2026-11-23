@@ -273,6 +273,10 @@ public static class RetroServerComposition
                     o.StateDirectory = System.IO.Path.Combine(retroFsPath, "xmsg");
                 });
 
+                // Its metrics and log, for the management API (api/v1/telemetry).
+                services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(
+                    sp => sp.GetRequiredService<RetroIO.Protocols.Xmsg.Plugins.Server.XmsgNodeService>().Telemetry);
+
                 if (opts.PrintBanners)
                 {
                     ServerHostingBanners.PrintXmsgNodeConfiguration(nodeConfig);

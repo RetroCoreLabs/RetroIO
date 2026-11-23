@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Plugins.Contracts\src\RetroIO.Protocols.Xmsg.Plugins.Contracts.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Api.Node\src\RetroIO.Protocols.Xmsg.Api.Node.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Hosting\src\RetroIO.Protocols.Xmsg.Hosting.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Telemetry\src\RetroIO.Telemetry.csproj" />
   </ItemGroup>
 
   <ItemGroup>

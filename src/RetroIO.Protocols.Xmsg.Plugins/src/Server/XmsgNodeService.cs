@@ -26,6 +26,7 @@ using RetroIO.Protocols.Xmsg.Hosting;
 using RetroIO.Protocols.Xmsg.ListRouting;
 using RetroIO.Protocols.Xmsg.Live.Seam;
 using RetroIO.Protocols.Xmsg.Node.Services;
+using RetroIO.Telemetry;
 
 namespace RetroIO.Protocols.Xmsg.Plugins.Server
 {
@@ -74,6 +75,21 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
         private readonly ILoggerFactory _loggerFactory;
 
         /// <summary>
+        /// Datagrams held back behind the send window since start.
+        /// </summary>
+        private long _datagramsParked;
+
+        /// <summary>
+        /// New network connections to the peer confirmed since start; each one sends the XMSG INIT.
+        /// </summary>
+        private long _connectionsOpened;
+
+        /// <summary>
+        /// The name of the node's metrics and log: the .NET meter name and the source in the API.
+        /// </summary>
+        public const string TelemetryName = "RetroIO.XmsgNode";
+
+        /// <summary>
         /// Initialises the service.
         /// </summary>
         /// <param name="options">
@@ -90,7 +106,22 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
             _logger = _loggerFactory.CreateLogger<XmsgNodeService>();
+
+            Telemetry = new RetroTelemetry(TelemetryName, _logger);
+            Telemetry.AddGauge("retroio.xmsgnode.link.up", "1", "1 once the link has heard from the peer, else 0.",
+                () => PeerHeard ? 1 : 0);
+            Telemetry.AddUpDownCounter("retroio.xmsgnode.programs", "{program}", "Client and server programs connected now.",
+                () => ConnectedPrograms);
+            Telemetry.AddCounter("retroio.xmsgnode.connections.opened", "{connection}",
+                "New network connections to the peer confirmed since start.", () => Interlocked.Read(ref _connectionsOpened));
+            Telemetry.AddCounter("retroio.xmsgnode.datagrams.parked", "{datagram}",
+                "Datagrams held back behind the send window since start.", () => Interlocked.Read(ref _datagramsParked));
         }
+
+        /// <summary>
+        /// Gets the node's metrics and log, in the shape every RetroServer part uses.
+        /// </summary>
+        public RetroTelemetry Telemetry { get; }
 
         /// <summary>
         /// Gets a value indicating whether the link has heard from the peer.
@@ -107,20 +138,21 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
         {
             if (_options.SystemNumber == 0 || _options.PeerSystemNumber == 0)
             {
-                _logger.LogError("XMSG node: the system number and the peer's system number are both required; the node is not started.");
+                Telemetry.Log(LogLevel.Error, "XMSG node: the system number and the peer's system number are both required; the node is not started.");
                 return;
             }
 
             if (string.IsNullOrEmpty(_options.StateDirectory))
             {
-                _logger.LogError("XMSG node: no state folder configured; the node is not started.");
+                Telemetry.Log(LogLevel.Error, "XMSG node: no state folder configured; the node is not started.");
                 return;
             }
 
             IEthernetBackend? backend = EthernetBackendFactory.FromSpec(_options.Ethernet);
             if (backend == null)
             {
-                _logger.LogError("XMSG node: the Ethernet setting '{Spec}' is not understood; the node is not started.", _options.Ethernet);
+                Telemetry.Log(LogLevel.Error, "XMSG node: the Ethernet setting is not understood; the node is not started.",
+                    new KeyValuePair<string, string>("ethernet", _options.Ethernet ?? string.Empty));
                 return;
             }
 
@@ -134,6 +166,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             // log, exactly like a reply the peer ignored (live test from D102, 2026-11-22).
             link.DatagramParked += delegate (EthernetLink parkedOn, int byteCount, int queueDepth)
             {
+                Interlocked.Increment(ref _datagramsParked);
                 Log($"[link] {parkedOn.Name}: datagram of {byteCount} bytes held back, {queueDepth} waiting ({parkedOn.ParkedDetail})");
             };
 
@@ -163,8 +196,8 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
                 }
                 catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException)
                 {
-                    _logger.LogError("XMSG node: the file server's files at {Location} could not be read ({Reason}); the file server is OFF.",
-                        _options.FileStore.Location, ex.Message);
+                    Telemetry.Log(LogLevel.Error, ex, "XMSG node: the file server's files could not be read; the file server is OFF.",
+                        new KeyValuePair<string, string>("location", _options.FileStore.Location ?? string.Empty));
                 }
             }
 
@@ -180,7 +213,9 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
 
             if (!link.Start())
             {
-                _logger.LogError("XMSG node {Self}: the Ethernet link to {Spec} did not start; the node is not running.", self, _options.Ethernet);
+                Telemetry.Log(LogLevel.Error, "XMSG node: the Ethernet link did not start; the node is not running.",
+                    new KeyValuePair<string, string>("system", self.ToString()),
+                    new KeyValuePair<string, string>("ethernet", _options.Ethernet ?? string.Empty));
                 return;
             }
 
@@ -226,14 +261,16 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             }
             catch (Exception ex) when (ex is System.IO.IOException || ex is InvalidOperationException || ex is FormatException)
             {
-                _logger.LogError(ex, "XMSG node {Self}: the port for programs ({Address}:{Port}) could not be opened.",
-                    self, _options.PluginBindAddress, _options.PluginPort);
+                Telemetry.Log(LogLevel.Error, ex, "XMSG node: the port for programs could not be opened.",
+                    new KeyValuePair<string, string>("system", self.ToString()),
+                    new KeyValuePair<string, string>("address", _options.PluginBindAddress + ":" + _options.PluginPort));
                 return;
             }
 
-            _logger.LogInformation(
-                "XMSG node {Self} is up on {Spec}, peer {Peer}. Programs connect to http://{Address}:{Port}.",
-                self, _options.Ethernet, peer, _options.PluginBindAddress, _options.PluginPort);
+            Telemetry.Log(LogLevel.Information,
+                $"XMSG node {self} is up on {_options.Ethernet}, peer {peer}. Programs connect to http://{_options.PluginBindAddress}:{_options.PluginPort}.",
+                new KeyValuePair<string, string>("system", self.ToString()),
+                new KeyValuePair<string, string>("peer", peer.ToString()));
 
             try
             {
@@ -241,7 +278,9 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
                 {
                     if (Interlocked.Exchange(ref connectionOpened, 0) == 1)
                     {
-                        _logger.LogInformation("XMSG node {Self}: new connection to {Peer} confirmed; sending the XMSG INIT first.", self, peer);
+                        Interlocked.Increment(ref _connectionsOpened);
+                        Telemetry.Log(LogLevel.Information, $"XMSG node {self}: new connection to {peer} confirmed; sending the XMSG INIT first.",
+                            new KeyValuePair<string, string>("peer", peer.ToString()));
                         node.Host.AnnounceRestartAndResetOurs(peer);
                     }
 
@@ -251,7 +290,8 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
                     if (!PeerHeard && link.HasLearnedPeer)
                     {
                         PeerHeard = true;
-                        _logger.LogInformation("XMSG node {Self}: heard from {Peer}; the link is up.", self, peer);
+                        Telemetry.Log(LogLevel.Information, $"XMSG node {self}: heard from {peer}; the link is up.",
+                            new KeyValuePair<string, string>("peer", peer.ToString()));
                     }
 
                     ConnectedPrograms = programs.CopySessions().Length;
@@ -278,7 +318,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
 
                 await web.StopAsync(CancellationToken.None);
                 await web.DisposeAsync();
-                _logger.LogInformation("XMSG node {Self} stopped.", self);
+                Telemetry.Log(LogLevel.Information, $"XMSG node {self} stopped.");
             }
         }
 
@@ -315,6 +355,14 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
             return web;
         }
 
+        /// <inheritdoc/>
+        public override void Dispose()
+        {
+            // The meter goes with the service, so a stopped node leaves no instruments behind.
+            Telemetry.Dispose();
+            base.Dispose();
+        }
+
         /// <summary>
         /// Sends one of the node's own lines to the log.
         /// </summary>
@@ -323,7 +371,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
         /// </param>
         private void Log(string message)
         {
-            _logger.LogInformation("{Line}", message);
+            Telemetry.Log(LogLevel.Information, message);
         }
     }
 }
