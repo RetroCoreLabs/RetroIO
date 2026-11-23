@@ -26,7 +26,7 @@ internal sealed class EconetAunTestClient : IDisposable
 {
     private readonly Socket _socket;
     private readonly IPEndPoint _server;
-    private readonly IPAddress _clientAddress = IPAddress.Loopback;
+    private readonly IPAddress _clientAddress;
     private readonly byte _clientNet;
     private readonly byte _clientStation;
 
@@ -42,8 +42,12 @@ internal sealed class EconetAunTestClient : IDisposable
         int serverPort = EconetTestPorts.UnitTestServerUdp,
         int clientPort = EconetTestPorts.UnitTestClientUdp,
         byte clientNet = 1,
-        byte clientStation = 1)
+        byte clientStation = 1,
+        IPAddress? clientAddress = null)
     {
+        // AUN takes the station number from the last byte of the sender's address, so a test
+        // with several stations gives each client its own loopback address (127.0.0.N).
+        _clientAddress = clientAddress ?? IPAddress.Loopback;
         _clientNet = clientNet;
         _clientStation = clientStation;
         _server = new IPEndPoint(IPAddress.Loopback, serverPort);

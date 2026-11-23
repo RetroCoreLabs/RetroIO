@@ -42,8 +42,12 @@ internal sealed class EconetUdpTestServer : IAsyncDisposable
     public IRetroIDP IdentityProvider { get; }
     public int UdpPort { get; }
 
-    private EconetUdpTestServer(IHost host, EconetActivityLog activityLog, IRetroIDP identityProvider, int udpPort)
+    /// <summary>The server's logged-in sessions, for tests that check none is left.</summary>
+    public FileServerSessionManager Sessions { get; }
+
+    private EconetUdpTestServer(IHost host, EconetActivityLog activityLog, IRetroIDP identityProvider, int udpPort, FileServerSessionManager sessions)
     {
+        Sessions = sessions;
         _host = host;
         ActivityLog = activityLog;
         Monitor = new EconetTestMonitor(activityLog);
@@ -112,7 +116,7 @@ internal sealed class EconetUdpTestServer : IAsyncDisposable
         // The host's start can return before the transport has bound its port; a client that
         // sends first gets "port unreachable" back. Started means listening.
         await transport.Listening.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
-        return new EconetUdpTestServer(host, activityLog, identityProvider, udpPort);
+        return new EconetUdpTestServer(host, activityLog, identityProvider, udpPort, sessions);
     }
 
     public async ValueTask DisposeAsync()
