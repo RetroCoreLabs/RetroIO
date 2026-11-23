@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
@@ -662,6 +663,48 @@ public sealed class ManagementApiClient : IDisposable
     /// </returns>
     public Task<ApiResponse<XmsgHubMembersResponse>?> GetXmsgHubMembersAsync() =>
         GetAsync<XmsgHubMembersResponse>("get XMSG hub members", "/api/v1/xmsghub/members");
+
+    /// <summary>
+    /// Gets the parts of RetroServer that report metrics and a log (api/v1/telemetry/sources).
+    /// </summary>
+    /// <returns>
+    /// The parts, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<List<TelemetrySourceDto>>?> GetTelemetrySourcesAsync() =>
+        GetAsync<List<TelemetrySourceDto>>("get telemetry sources", "/api/v1/telemetry/sources");
+
+    /// <summary>
+    /// Gets the metrics of one part, or of all parts.
+    /// </summary>
+    /// <param name="source">
+    /// The part's name, for example <c>RetroIO.DialUp</c>; null for all parts.
+    /// </param>
+    /// <returns>
+    /// The metric readings, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<MetricsResponse>?> GetTelemetryMetricsAsync(string? source = null) =>
+        GetAsync<MetricsResponse>("get metrics",
+            source == null ? "/api/v1/telemetry/metrics" : "/api/v1/telemetry/metrics?source=" + Uri.EscapeDataString(source));
+
+    /// <summary>
+    /// Gets the log records of one part, or of all parts, after a sequence number.
+    /// </summary>
+    /// <param name="source">
+    /// The part's name; null for all parts.
+    /// </param>
+    /// <param name="after">
+    /// The last sequence number already held; 0 for all the records still kept.
+    /// </param>
+    /// <param name="limit">
+    /// The most records to return.
+    /// </param>
+    /// <returns>
+    /// The records, oldest first, or null on failure.
+    /// </returns>
+    public Task<ApiResponse<TelemetryLogResponse>?> GetTelemetryLogAsync(string? source = null, long after = 0, int limit = 1000) =>
+        GetAsync<TelemetryLogResponse>("get telemetry log",
+            "/api/v1/telemetry/log?after=" + after + "&limit=" + limit
+            + (source == null ? string.Empty : "&source=" + Uri.EscapeDataString(source)));
 
     /// <summary>
     /// Gets the hub's log lines after a given line number.
