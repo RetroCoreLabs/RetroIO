@@ -2,10 +2,14 @@
   <!-- Root Directory.Build.props for the RetroIO repo. MSBuild finds this walking up from each project. -->
   <Import Project="$(MSBuildThisFileDirectory)eng\build\Directory.Build.props" />
   <PropertyGroup>
+    <!-- Each check is written for both separators: Windows paths use '\', Linux paths '/'. With only
+         the '\' form no project on Linux got the package settings (icon, documentation file, package
+         validation) and packing failed with NU5046. A Replace('/', '\') does not help: MSBuild on
+         Linux turns the '\' in it into '/'. -->
     <_RioDir>$(MSBuildProjectDirectory)</_RioDir>
-    <_RioIsSrc Condition="$(_RioDir.EndsWith('\src'))">true</_RioIsSrc>
-    <_RioIsTests Condition="$(_RioDir.EndsWith('\tests')) or $(MSBuildProjectName.EndsWith('.Tests')) or $(_RioDir.Contains('\tests\'))">true</_RioIsTests>
-    <_RioIsTools Condition="$(_RioDir.Contains('\tools\'))">true</_RioIsTools>
+    <_RioIsSrc Condition="$(_RioDir.EndsWith('\src')) or $(_RioDir.EndsWith('/src'))">true</_RioIsSrc>
+    <_RioIsTests Condition="$(_RioDir.EndsWith('\tests')) or $(_RioDir.EndsWith('/tests')) or $(MSBuildProjectName.EndsWith('.Tests')) or $(_RioDir.Contains('\tests\')) or $(_RioDir.Contains('/tests/'))">true</_RioIsTests>
+    <_RioIsTools Condition="$(_RioDir.Contains('\tools\')) or $(_RioDir.Contains('/tools/'))">true</_RioIsTools>
   </PropertyGroup>
   <Import Project="$(MSBuildThisFileDirectory)eng\build\src.Directory.Build.props" Condition="'$(_RioIsSrc)' == 'true' and '$(_RioIsTests)' != 'true' and '$(_RioIsTools)' != 'true'" />
   <Import Project="$(MSBuildThisFileDirectory)eng\build\tests.Directory.Build.props" Condition="'$(_RioIsTests)' == 'true'" />
