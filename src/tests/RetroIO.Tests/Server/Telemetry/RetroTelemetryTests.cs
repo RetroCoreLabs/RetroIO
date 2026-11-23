@@ -154,4 +154,37 @@ public sealed class RetroTelemetryTests
         Assert.That(dropped, Is.EqualTo(3), "slow member, loop and hop limit are three labelled series of one metric");
         hub.Dispose();
     }
+
+    [Test]
+    public void DriveWire_HasItsMetricsInTheSharedShape_ReadFromItsStatistics_AllZeroBeforeAnyClient()
+    {
+        RetroIO.Protocols.DriveWire.Server.DriveWireServerStatistics statistics = new RetroIO.Protocols.DriveWire.Server.DriveWireServerStatistics();
+        RetroIO.Protocols.DriveWire.Server.DriveWireServerService service = new RetroIO.Protocols.DriveWire.Server.DriveWireServerService(
+            new RetroIO.Protocols.DriveWire.Server.DriveWireServerOptions(),
+            new RetroIO.Protocols.DriveWire.Drives.DriveWireDriveTable(),
+            statistics);
+
+        List<MetricReading> readings = new List<MetricReading>();
+        service.Telemetry.CollectMetrics(readings);
+
+        Assert.That(service.Telemetry.Name, Is.EqualTo("RetroIO.DriveWire"));
+        long active = -1;
+        int errorSeries = 0;
+        for (int i = 0; i < readings.Count; i++)
+        {
+            if (readings[i].Name == "retroio.drivewire.connections.active")
+            {
+                active = readings[i].Value;
+            }
+
+            if (readings[i].Name == "retroio.drivewire.errors")
+            {
+                errorSeries++;
+            }
+        }
+
+        Assert.That(active, Is.EqualTo(0), "no client has connected");
+        Assert.That(errorSeries, Is.EqualTo(5), "read, write, checksum, timeout and unknown operation");
+        service.Dispose();
+    }
 }

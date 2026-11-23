@@ -12,6 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RetroIO.Protocols.DriveWire.Drives;
+using RetroIO.Telemetry;
 
 namespace RetroIO.Protocols.DriveWire.Server;
 
@@ -72,7 +73,38 @@ public sealed class DriveWireServerService : BackgroundService
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = _loggerFactory.CreateLogger<DriveWireServerService>();
         _timeProvider = timeProvider;
+
+        // The shared RetroServer metrics and log (RetroIO.Telemetry); each metric reads a counter of
+        // DriveWireServerStatistics.
+        Telemetry = new RetroTelemetry(TelemetryName, _logger);
+        DriveWireServerStatistics st = _statistics;
+        Telemetry.AddCounter("retroio.drivewire.connections", "{connection}", "Client connections since start.", () => st.Connections);
+        Telemetry.AddUpDownCounter("retroio.drivewire.connections.active", "{connection}", "Clients connected now.", () => st.ActiveConnections);
+        Telemetry.AddCounter("retroio.drivewire.transactions", "{transaction}", "Transactions handled.", () => st.Transactions);
+        Telemetry.AddCounter("retroio.drivewire.sectors", "{sector}", "Sectors moved.", () => st.SectorsRead, Tag("operation", "read"));
+        Telemetry.AddCounter("retroio.drivewire.sectors", "{sector}", "Sectors moved.", () => st.SectorsWritten, Tag("operation", "write"));
+        Telemetry.AddCounter("retroio.drivewire.retries", "{transaction}", "Transactions the client sent again.", () => st.Rereads, Tag("operation", "read"));
+        Telemetry.AddCounter("retroio.drivewire.retries", "{transaction}", "Transactions the client sent again.", () => st.Rewrites, Tag("operation", "write"));
+        Telemetry.AddCounter("retroio.drivewire.errors", "{error}", "Failed transactions.", () => st.ReadErrors, Tag("reason", "read"));
+        Telemetry.AddCounter("retroio.drivewire.errors", "{error}", "Failed transactions.", () => st.WriteErrors, Tag("reason", "write"));
+        Telemetry.AddCounter("retroio.drivewire.errors", "{error}", "Failed transactions.", () => st.ChecksumErrors, Tag("reason", "checksum"));
+        Telemetry.AddCounter("retroio.drivewire.errors", "{error}", "Failed transactions.", () => st.Timeouts, Tag("reason", "timeout"));
+        Telemetry.AddCounter("retroio.drivewire.errors", "{error}", "Failed transactions.", () => st.UnknownOpCodes, Tag("reason", "unknown_operation"));
+        Telemetry.AddCounter("retroio.drivewire.resets", "{reset}", "Client resets.", () => st.Resets);
+        Telemetry.AddCounter("retroio.drivewire.io", "By", "Bytes on the client connections.", () => st.BytesReceived, Tag("direction", "in"));
+        Telemetry.AddCounter("retroio.drivewire.io", "By", "Bytes on the client connections.", () => st.BytesSent, Tag("direction", "out"));
     }
+
+    /// <summary>
+    /// The name of the DriveWire server in metrics and logs, and its meter name for OpenTelemetry.
+    /// </summary>
+    public const string TelemetryName = "RetroIO.DriveWire";
+
+    /// <summary>
+    /// Gets the metrics and the log of the server, in the shape every RetroServer part uses. The log
+    /// lines of each client session still go only to the session logger (see the plan).
+    /// </summary>
+    public RetroTelemetry Telemetry { get; }
 
     /// <summary>
     /// Raised when a client finishes a print job. The arguments are the session and the job's bytes.
@@ -155,13 +187,10 @@ public sealed class DriveWireServerService : BackgroundService
     {
         DriveWireImageDrive drive = DriveWireImageDrive.Open(path, readOnly);
         _drives.Mount(driveNumber, drive);
-        _logger.LogInformation(
-            "DriveWire drive {Drive}: {Path} ({Sectors} sectors, {FileSystem}{ReadOnly})",
-            driveNumber,
-            drive.Name,
-            drive.TotalSectors,
-            drive.FileSystemType,
-            readOnly ? ", read-only" : string.Empty);
+        Telemetry.Log(
+            LogLevel.Information,
+            $"drive {driveNumber}: {drive.Name} ({drive.TotalSectors} sectors, {drive.FileSystemType}{(readOnly ? ", read-only" : string.Empty)})",
+            Tag("drive", driveNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }
 
     /// <summary>
@@ -203,7 +232,7 @@ public sealed class DriveWireServerService : BackgroundService
         {
             listener.Start();
             LocalEndPoint = (IPEndPoint)listener.LocalEndpoint;
-            _logger.LogInformation("DriveWire server listening on {EndPoint}", LocalEndPoint);
+            Telemetry.Log(LogLevel.Information, $"listening on {LocalEndPoint}");
             _listeningNow.TrySetResult(LocalEndPoint);
 
             while (!stoppingToken.IsCancellationRequested)
@@ -221,7 +250,7 @@ public sealed class DriveWireServerService : BackgroundService
         catch (SocketException ex)
         {
             _listeningNow.TrySetException(ex);
-            _logger.LogError(ex, "DriveWire server could not listen on {Address}:{Port}", address, _options.Port);
+            Telemetry.Log(LogLevel.Error, ex, $"could not listen on {address}:{_options.Port}");
             throw;
         }
         finally
@@ -230,7 +259,7 @@ public sealed class DriveWireServerService : BackgroundService
             LocalEndPoint = null;
             await Task.WhenAll(sessionTasks).ConfigureAwait(false);
             _drives.EjectAll();
-            _logger.LogInformation("DriveWire server stopped");
+            Telemetry.Log(LogLevel.Information, "stopped");
         }
     }
 
@@ -242,7 +271,7 @@ public sealed class DriveWireServerService : BackgroundService
             DriveWireDriveOptions entry = drives[i];
             if (entry.Drive < 0 || entry.Drive > 255)
             {
-                _logger.LogError("DriveWire drive number {Drive} for {Path} is not 0 to 255; not mounted", entry.Drive, entry.Path);
+                Telemetry.Log(LogLevel.Error, $"drive number {entry.Drive} for {entry.Path} is not 0 to 255; not mounted");
                 continue;
             }
 
@@ -254,7 +283,7 @@ public sealed class DriveWireServerService : BackgroundService
             {
                 // One bad image must not keep the other drives from being served. The drive stays empty, so the client gets
                 // E$NotRdy for it, and the reason is in the log.
-                _logger.LogError(ex, "DriveWire drive {Drive}: {Path} could not be mounted", entry.Drive, entry.Path);
+                Telemetry.Log(LogLevel.Error, ex, $"drive {entry.Drive}: {entry.Path} could not be mounted");
             }
         }
     }
@@ -273,7 +302,7 @@ public sealed class DriveWireServerService : BackgroundService
         session.PrintJobReceived += OnPrintJob;
         _sessions[session.Id] = session;
         _statistics.RecordConnectionOpened();
-        _logger.LogInformation("DriveWire client {Remote} connected (session {Id})", remote, session.Id);
+        Telemetry.Log(LogLevel.Information, $"client {remote} connected (session {session.Id})", Tag("client", remote));
         try
         {
             client.NoDelay = true;
@@ -287,8 +316,13 @@ public sealed class DriveWireServerService : BackgroundService
             _sessions.TryRemove(session.Id, out _);
             session.PrintJobReceived -= OnPrintJob;
             _statistics.RecordConnectionClosed();
-            _logger.LogInformation("DriveWire client {Remote} disconnected (session {Id})", remote, session.Id);
+            Telemetry.Log(LogLevel.Information, $"client {remote} disconnected (session {session.Id})", Tag("client", remote));
         }
+    }
+
+    private static KeyValuePair<string, string> Tag(string key, string value)
+    {
+        return new KeyValuePair<string, string>(key, value);
     }
 
     private void OnPrintJob(DriveWireSession session, byte[] job)

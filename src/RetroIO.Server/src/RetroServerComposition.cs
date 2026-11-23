@@ -146,6 +146,9 @@ public static class RetroServerComposition
                     }
                 });
 
+                // Its metrics and log, for the management API (api/v1/telemetry).
+                services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(sp => sp.GetRequiredService<DriveWireServerService>().Telemetry);
+
                 if (opts.PrintBanners)
                 {
                     ServerHostingBanners.PrintDriveWireConfiguration(driveWireConfig);
