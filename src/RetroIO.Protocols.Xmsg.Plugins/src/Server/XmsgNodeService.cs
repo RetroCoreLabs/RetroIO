@@ -298,7 +298,9 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Server
 
                     try
                     {
-                        await Task.Delay(TickMs, stoppingToken);
+                        // At most one tick, but at once when a program has asked something: each of
+                        // a program's calls waits for this pump (see WaitForWorkAsync).
+                        await programs.WaitForWorkAsync(TickMs, stoppingToken);
                     }
                     catch (OperationCanceledException)
                     {

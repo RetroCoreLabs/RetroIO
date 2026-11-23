@@ -96,7 +96,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Tests
 
         /// <summary>
         /// Load (plan Phase 14): 16 chat client programs, each on its own connection, join one room on
-        /// the running node and each says 2 lines at the same time. Every client must hear every
+        /// the running node and each says 20 lines at the same time. Every client must hear every
         /// line of every other client; once all have left, the room is empty.
         /// </summary>
         /// <returns>
@@ -107,9 +107,9 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Tests
         public async Task Load_SixteenChatClients_AllTalkAtOnce_EveryoneHearsEveryone_AndTheRoomEmpties()
         {
             const int Clients = 16;
-            // 2 lines each, not more: the node moves about 28 chat messages a second (BUGS.md,
-            // 2026-11-23), so 20 lines each took about 170 s.
-            const int Lines = 2;
+            // Until 2026-11-23 this took about 170 s: the node answered a program's call only on its
+            // next 20 ms tick. Now about 1.5 s.
+            const int Lines = 20;
             HubServer hub = new HubServer(IPAddress.Loopback, 0);
             hub.Start();
             string state = Path.Combine(Path.GetTempPath(), "xmsg-node-test-" + Guid.NewGuid().ToString("N"));

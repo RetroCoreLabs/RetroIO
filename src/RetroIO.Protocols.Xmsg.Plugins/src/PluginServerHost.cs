@@ -8,6 +8,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Google.Protobuf;
 
@@ -50,6 +52,9 @@ namespace RetroIO.Protocols.Xmsg.Plugins
         private readonly XmsgKernelServer _bridge;
         private readonly XroutDirectory _directory;
         private readonly ConcurrentQueue<Work> _work;
+
+        // Released once per queued item, so the pump can wake as soon as a program asks.
+        private readonly SemaphoreSlim _wake;
         private readonly List<PluginSession> _sessions;
         private readonly byte[] _scratch;
         private int _nextSession;
@@ -59,6 +64,23 @@ namespace RetroIO.Protocols.Xmsg.Plugins
         /// ND are far smaller; this only bounds the scratch buffer.
         /// </summary>
         public const int MaximumMessageSize = 65536;
+
+        /// <summary>
+        /// Waits until a program has queued work, or the time has passed.
+        /// </summary>
+        /// <param name="milliseconds">The longest wait: the node's tick.</param>
+        /// <param name="cancellationToken">Stops the wait.</param>
+        /// <returns>The wait.</returns>
+        /// <remarks>
+        /// Every call a program makes blocks until the node answers it, and the node answers on its
+        /// pump. With a fixed sleep between pumps, each call cost a whole tick (20 ms, about 31 ms on
+        /// Windows): a chat line to 15 members took 15 ticks and the node moved about 28 messages a
+        /// second (load test, 2026-11-23). Waking the pump when work is queued answers at once.
+        /// </remarks>
+        public Task WaitForWorkAsync(int milliseconds, CancellationToken cancellationToken)
+        {
+            return _wake.WaitAsync(milliseconds, cancellationToken);
+        }
 
         /// <summary>
         /// Initialises the host on a bridge and its name table.
@@ -79,6 +101,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _bridge.Directory = directory;
             _work = new ConcurrentQueue<Work>();
+            _wake = new SemaphoreSlim(0, int.MaxValue);
             _sessions = new List<PluginSession>();
             _scratch = new byte[MaximumMessageSize];
         }
@@ -125,6 +148,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins
             int id = System.Threading.Interlocked.Increment(ref _nextSession);
             PluginSession session = new PluginSession(id);
             _work.Enqueue(new Work(session, null, WorkKind.Attach));
+            _wake.Release();
             return session;
         }
 
@@ -153,6 +177,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins
             }
 
             _work.Enqueue(new Work(session, request, WorkKind.Request));
+            _wake.Release();
         }
 
         /// <summary>
@@ -173,6 +198,7 @@ namespace RetroIO.Protocols.Xmsg.Plugins
             }
 
             _work.Enqueue(new Work(session, null, WorkKind.Detach));
+            _wake.Release();
         }
 
         /// <summary>
@@ -220,6 +246,11 @@ namespace RetroIO.Protocols.Xmsg.Plugins
         /// </returns>
         public int Pump()
         {
+            // Every wake-up queued so far is answered by this pass.
+            while (_wake.Wait(0))
+            {
+            }
+
             int handled = 0;
 
             Work work;
