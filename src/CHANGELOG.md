@@ -5,6 +5,19 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
 ## [Unreleased]
 
 ### Added
+- `RetroIO.Storage.Ndfs`: **a new 1.2 MB floppy boots, and FLOMON starts its program.**
+  Measured on nd100x with the TPE floppy 210523I01-XX-01D: FLOMON is in page 0, in bytes 2000-2015
+  of page 0, and in the bit file page after the map. The copy RetroIO carried came from the X.25
+  install floppies, which do not boot; the 616 page floppy now gets all three parts from the TPE
+  floppy. FLOMON loads and starts the one file of type BPUN on the floppy, whatever its name; with
+  none or two it stops at `FLOPPY-MON-H02`. Proven on nd100x and on the RetroCore ND-100.
+- `RetroIO.Storage.Ndfs`: **writing the bit file wiped the rest of its page.** It built each page
+  from zeros; it now changes only the map bytes, so a file write no longer breaks a FLOMON floppy.
+- `RetroIO.Storage.Ndfs`: **zero pages are stored.** A plain write made every all-zero page a hole,
+  and FLOMON cannot load a file with holes. Now every page is stored, unless the write carries an
+  `ndfs.holes` list (from a `.xat` file), which makes those pages holes again.
+- `RetroIO.Storage.Ndfs`: a path with a doubled slash (`/SYSTEM//TPE:BPUN`) stored the name
+  `/TPE:BPUN`.
 - The Clear key puts the inbound reply mode back to field mode, as GA23-0059-4 Table C-1 (p. C-1) says.
 - `StatusLine3270.Build` with a `tn3270e` flag: column 1 shows "B" instead of "A" while the connection runs TN3270E (wc3270 draw_oia).
 - `KeyboardLock.MinusFunction` and `Display3270.RefuseFunction`: a key whose function is not available now locks the keyboard with Minus Function, shown as "X -f", until Reset (x3270 KL_OIA_MINUS; GA27-2890-4 p. 3-32). Used for Attn on a TN3270E connection with no SNA session bound.

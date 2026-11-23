@@ -250,9 +250,10 @@ namespace RetroIO.Storage.Ndfs.PropertyBags
         /// genuine zeros read back identically, but they are not the same thing on disk.
         /// </para>
         /// <para>
-        /// Recorded, not restored. The holes live in the file's index, which only the write path can
-        /// build, and an <c>ObjectEntry</c> has nowhere to put them. A writer that wants to honour
-        /// them must force a hole at each listed page rather than rely on all-zero detection.
+        /// Restored on write. A plain write stores every page, zero pages too, because FLOMON cannot
+        /// load a file with holes and the ND-made TPE floppy 210523I01-XX-01D stores its zero pages
+        /// (measured on nd100x). A write with properties that carry this list makes a hole at each
+        /// listed page that is all zeros, and at no other page.
         /// </para>
         /// </remarks>
         public const string Holes = Prefix + "holes";
