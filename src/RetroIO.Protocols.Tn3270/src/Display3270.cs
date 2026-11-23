@@ -81,6 +81,32 @@ namespace RetroIO.Protocols.Tn3270
         /// this one here, and a Write with keyboard restore clears all of them in both.
         /// </remarks>
         MinusFunction,
+
+        /// <summary>
+        /// The terminal has sent its query replies (Read Partition Query or Query List) and the host
+        /// has not acknowledged them yet: TWAIT, shown as "X Wait". No keystroking; the operator's
+        /// Reset key does NOT clear it. The host's next outbound transmission that is not a read
+        /// command clears it.
+        /// </summary>
+        /// <remarks>
+        /// GA23-0059-4, Read Partition Query processing for BSC (p. 9-9) and for locally attached
+        /// non-SNA devices (p. 10-8): "The TWAIT indicator is displayed", and after the reply is
+        /// sent "the device [is] placed in retry-read state"; the indicator tables give TWAIT for
+        /// Retry read (p. 9-6, p. 10-5). TWAIT is an input inhibit condition, "no keystroking is
+        /// allowed", and "cannot be cleared by the operator (for example, by the RESET Key)"
+        /// (p. 3-20). The SNA chapter says only that a Read Partition puts the device in retry-read
+        /// state, where an enter action is rejected (p. 3-17, 3-18); it does not name an
+        /// indicator. What ends it (p. 3-23, p. 10-5): "a Query or Query List operation is
+        /// acknowledged by any outbound transmission except one with a read command" - a WSF even
+        /// when its structured fields hold an error, an EAU, and an EW, EWA or Write with or without
+        /// a WCC unless an error is found in its data. Keyboard restore is not needed. x3270 locks
+        /// here too (Common\sf.c, query_reply_end: kybd_inhibit(true), shown "X Wait" by
+        /// Common\vstatus.c) and unlocks on the next Write, Erase/Write or EAU (Common\ctlr.c); its
+        /// Reset key also unlocks it, which the manual's TWAIT rule does not allow, so here it does
+        /// not. Unlike <see cref="WaitingForHost"/>, a Write without keyboard restore does not
+        /// leave System Lock behind: System Lock is raised only by an enter action (p. 3-21).
+        /// </remarks>
+        QueryReplySent,
     }
 
     /// <summary>
@@ -117,6 +143,17 @@ namespace RetroIO.Protocols.Tn3270
         // The character attribute types an SA order may carry (p. 4-16): highlighting, foreground
         // colour, character set, background colour, transparency.
         private static readonly byte[] CharacterAttributeTypes = { 0x41, 0x42, 0x43, 0x45, 0x46 };
+
+        /// <summary>
+        /// The local ID the Character Sets query reply gives the base character set (GA23-0059-4
+        /// p. 6-26: X'F0' to X'F7' for non-loadable 1-byte sets; X'F1' is the Graphic Escape set).
+        /// </summary>
+        public const byte BaseCharacterSetId = 0xF0;
+
+        /// <summary>
+        /// The local ID the Character Sets query reply gives the Graphic Escape set, code page 310.
+        /// </summary>
+        public const byte GraphicEscapeCharacterSetId = 0xF1;
 
         // The query replies this terminal sends, in ascending code order (p. 6-81: Null is never listed).
         private static readonly byte[] QueryCodesWithoutFileTransfer =
@@ -620,17 +657,21 @@ namespace RetroIO.Protocols.Tn3270
             {
                 case Command3270.Write:
                     Write(record.Slice(1), erase: false, alternate: false);
+                    AcknowledgeQueryUnlessFailed();
                     break;
 
                 case Command3270.EraseWrite:
                     Write(record.Slice(1), erase: true, alternate: false);
+                    AcknowledgeQueryUnlessFailed();
                     break;
 
                 case Command3270.EraseWriteAlternate:
                     Write(record.Slice(1), erase: true, alternate: true);
+                    AcknowledgeQueryUnlessFailed();
                     break;
 
                 case Command3270.EraseAllUnprotected:
+                    // EAU acknowledges a query (p. 10-5), and it restores the keyboard anyway.
                     EraseAllUnprotected();
                     break;
 
@@ -647,6 +688,14 @@ namespace RetroIO.Protocols.Tn3270
                     break;
 
                 case Command3270.WriteStructuredField:
+                    // A WSF acknowledges a query "regardless of an error being detected in the
+                    // accompanying structured fields" (p. 3-23, 10-5), so the lock ends before the
+                    // fields run; a Read Partition Query among them locks it again when it replies.
+                    if (Lock == KeyboardLock.QueryReplySent)
+                    {
+                        Lock = KeyboardLock.None;
+                    }
+
                     WriteStructuredField(record.Slice(1));
                     break;
 
@@ -656,6 +705,17 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             return !_failed;
+        }
+
+        private void AcknowledgeQueryUnlessFailed()
+        {
+            // An EW, EWA or Write acknowledges a query "with or without a WCC or data", but not when
+            // "an error is detected in the data" (p. 3-23, 10-5). Keyboard restore is not needed;
+            // with it, Write has already unlocked.
+            if (!_failed && Lock == KeyboardLock.QueryReplySent)
+            {
+                Lock = KeyboardLock.None;
+            }
         }
 
         /// <summary>
@@ -2147,6 +2207,16 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             Send();
+
+            // The reply is out: retry-read state, TWAIT, until the host acknowledges (see
+            // KeyboardLock.QueryReplySent for the pages). Only from an unlocked keyboard: the lock
+            // is one value here, and a keyboard already locked for another reason stays locked
+            // for that reason. With an enter outstanding (WaitingForHost) the manual keeps TWAIT
+            // in effect for the enter (p. 9-9, 10-8, "The TWAIT condition remains in effect").
+            if (Lock == KeyboardLock.None)
+            {
+                Lock = KeyboardLock.QueryReplySent;
+            }
         }
 
         private ReadOnlySpan<byte> SupportedQueryCodes()
@@ -2171,15 +2241,48 @@ namespace RetroIO.Protocols.Tn3270
                     // p. 6-85 to 6-90. Flags: 12/14-bit addressing (X'01'), no special features.
                     // W and H are the largest screen; units inches (X'00') with Xr and Yr X'FFFFFFFF',
                     // "cannot be determined", which is allowed without Load PS (p. 6-89).
-                    int columns = Math.Max(_defaultColumns, _alternateColumns);
-                    int rows = Math.Max(_defaultRows, _alternateRows);
+                    //
+                    // When one size holds the other (every 3278 model: 24 x 80 inside the
+                    // alternate), the larger is "the maximum number of characters that can be
+                    // presented" (p. 6-89) and is the only size reported.
+                    //
+                    // When neither holds the other (43 x 80 with 27 x 132), the larger column count
+                    // with the larger row count is a screen that cannot be shown. p. 6-93 gives that
+                    // very device, a 3180: base 43 rows by 80 columns, and 27 by 132 in an Alternate
+                    // Usable Area self-defining parameter, which "is always required when the
+                    // device supports more than one usable area size on one display surface". So
+                    // the base is the default size, BUFFSZ the larger of the two cell counts, then
+                    // XMIN, YMIN, XMAX and YMAX as zeros - p. 6-87 lets them be left out only when
+                    // no self-defining parameter follows - then the parameter (p. 6-94).
+                    bool defaultHoldsAlternate = _defaultColumns >= _alternateColumns && _defaultRows >= _alternateRows;
+                    bool alternateHoldsDefault = _alternateColumns >= _defaultColumns && _alternateRows >= _defaultRows;
+                    bool nested = defaultHoldsAlternate || alternateHoldsDefault;
+                    int columns = nested ? Math.Max(_defaultColumns, _alternateColumns) : _defaultColumns;
+                    int rows = nested ? Math.Max(_defaultRows, _alternateRows) : _defaultRows;
+                    int bufferSize = Math.Max(_defaultColumns * _defaultRows, _alternateColumns * _alternateRows);
                     AppendBytes(stackalloc byte[] { 0x01, 0x00 });
                     AppendUInt16(columns);
                     AppendUInt16(rows);
                     AppendBytes(stackalloc byte[] { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
                     AppendByte((byte)CellWidth);
                     AppendByte((byte)CellHeight);
-                    AppendUInt16(columns * rows);
+                    AppendUInt16(bufferSize);
+                    if (!nested)
+                    {
+                        // XMIN, YMIN, XMAX, YMAX (bytes 23 to 26, p. 6-87).
+                        AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x00, 0x00 });
+
+                        // Alternate Usable Area (p. 6-94): length X'13', X'02', reserved X'00',
+                        // AUAID X'01', WAUA, HAUA, units inches, Xr and Yr X'FFFFFFFF' ("unable to
+                        // determine", allowed without Load PS), AWAUA, AHAUA.
+                        AppendBytes(stackalloc byte[] { 0x13, 0x02, 0x00, 0x01 });
+                        AppendUInt16(_alternateColumns);
+                        AppendUInt16(_alternateRows);
+                        AppendBytes(stackalloc byte[] { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+                        AppendByte((byte)CellWidth);
+                        AppendByte((byte)CellHeight);
+                    }
+
                     break;
                 }
 
@@ -2191,13 +2294,22 @@ namespace RetroIO.Protocols.Tn3270
                     AppendByte((byte)CellHeight);
                     AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x00, 0x00, 0x07 });
 
-                    // Base set: SET 0, flags 0, local ID 0, then character set and code page.
-                    AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x00 });
+                    // Base set: SET 0, flags 0, local ID X'F0', then character set and code page.
+                    // p. 6-26: "Nonloadable character sets will have default LCID assigned to them
+                    // (X'F0' to X'FE'), where: X'F0' to X'F7' = 1-byte character sets". The base
+                    // set is non-loadable and 1-byte. Which ID in that range is not given by the
+                    // manual; X'F1' is the Graphic Escape set's, X'F0' is the lowest free one
+                    // (decided 24 November 2026). X'00' is not an ID: in SA and SFE it means
+                    // "Default character set" (p. 4-19), a value a host sends. SA and SFE values
+                    // are stored as sent and not interpreted here (GetCharacterCharacterSet,
+                    // GetFieldCharacterSet), so X'00' and X'F0' both reach the caller, which
+                    // must treat both as the base set and X'F1' as code page 310.
+                    AppendBytes(stackalloc byte[] { 0x00, 0x00, BaseCharacterSetId });
                     AppendUInt16(_codePage.CharacterSet);
                     AppendUInt16(_codePage.Number);
 
                     // Graphic Escape set: SET 1, flags 0, local ID X'F1', code page 310.
-                    AppendBytes(stackalloc byte[] { 0x01, 0x00, 0xF1 });
+                    AppendBytes(stackalloc byte[] { 0x01, 0x00, GraphicEscapeCharacterSetId });
                     AppendUInt16(CodePage.Cp310.CharacterSet);
                     AppendUInt16(CodePage.Cp310.Number);
                     break;

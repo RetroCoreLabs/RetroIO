@@ -81,9 +81,9 @@ namespace RetroIO.Protocols.Tn3270.Tests
                 new byte[] { 0x00, 0x17, 0x81, 0x81, 0x01, 0x00, 0x00, 0x50, 0x00, 0x20, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x10, 0x0A, 0x00 },
                 f[1]);
 
-            // Character Sets: base 697/037, GE set F1 = 963/310.
+            // Character Sets: base set F0 = 697/037, GE set F1 = 963/310.
             Assert.Equal(
-                new byte[] { 0x00, 0x1B, 0x81, 0x85, 0x82, 0x00, 0x09, 0x10, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x02, 0xB9, 0x00, 0x25, 0x01, 0x00, 0xF1, 0x03, 0xC3, 0x01, 0x36 },
+                new byte[] { 0x00, 0x1B, 0x81, 0x85, 0x82, 0x00, 0x09, 0x10, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0xF0, 0x02, 0xB9, 0x00, 0x25, 0x01, 0x00, 0xF1, 0x03, 0xC3, 0x01, 0x36 },
                 f[2]);
 
             // Implicit Partition: default 80 x 24, alternate 80 x 32.
@@ -352,6 +352,147 @@ namespace RetroIO.Protocols.Tn3270.Tests
 
             Assert.Equal(0, fields);
             Assert.Single(errors);
+        }
+
+        [Fact]
+        public void TheBaseCharacterSetHasLocalIdF0()
+        {
+            // GA23-0059-4 p. 6-26: non-loadable 1-byte sets get X'F0' to X'F7'; X'F1' is the
+            // Graphic Escape set, X'F0' the base one (decided 24 November 2026).
+            var (d, sent, _) = Create();
+            d.ProcessOutbound(Query);
+            byte[] cs = Find(Fields(sent[0]), QueryCode.CharacterSets);
+
+            // First descriptor: SET 0, flags 0, LCID (p. 6-24); second: SET 1, flags 0, LCID.
+            Assert.Equal(new byte[] { 0x00, 0x00, 0xF0 }, cs.AsSpan(13, 3).ToArray());
+            Assert.Equal(new byte[] { 0x01, 0x00, 0xF1 }, cs.AsSpan(20, 3).ToArray());
+        }
+
+        [Fact]
+        public void UsableAreaForTwoSizesThatDoNotNestReportsTheDefaultAndAnAlternateUsableArea()
+        {
+            // The 3180 of GA23-0059-4 p. 6-93: 43 x 80 or 27 x 132, not at the same time. Base is
+            // the default size, BUFFSZ the larger cell count (27 x 132 = 3564 = X'0DEC'), XMIN to
+            // YMAX present as zeros because a self-defining parameter follows (p. 6-87), then the
+            // Alternate Usable Area parameter (p. 6-94).
+            var (d, sent, errors) = Create(43, 80, 27, 132);
+            d.ProcessOutbound(Query);
+
+            Assert.Empty(errors);
+            byte[] ua = Find(Fields(sent[0]), QueryCode.UsableArea);
+            Assert.Equal(
+                new byte[]
+                {
+                    0x00, 0x2E, 0x81, 0x81,
+                    0x01, 0x00,                                     // 12/14-bit, matrix, cells
+                    0x00, 0x50, 0x00, 0x2B,                         // W 80, H 43
+                    0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                    0x09, 0x10,                                     // AW, AH
+                    0x0D, 0xEC,                                     // BUFFSZ 3564
+                    0x00, 0x00, 0x00, 0x00,                         // XMIN, YMIN, XMAX, YMAX
+                    0x13, 0x02, 0x00, 0x01,                         // Alternate Usable Area, AUAID 1
+                    0x00, 0x84, 0x00, 0x1B,                         // WAUA 132, HAUA 27
+                    0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                    0x09, 0x10,                                     // AWAUA, AHAUA
+                },
+                ua);
+        }
+
+        [Fact]
+        public void UsableAreaForNestedSizesIsTheLargerOneWithNoParameter()
+        {
+            // 24 x 80 inside 27 x 132: the larger is reported, no self-defining parameter, the
+            // reply stops after BUFFSZ (p. 6-87). 27 x 132 = 3564.
+            var (d, sent, _) = Create(24, 80, 27, 132);
+            d.ProcessOutbound(Query);
+            byte[] ua = Find(Fields(sent[0]), QueryCode.UsableArea);
+            Assert.Equal(
+                new byte[] { 0x00, 0x17, 0x81, 0x81, 0x01, 0x00, 0x00, 0x84, 0x00, 0x1B, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x10, 0x0D, 0xEC },
+                ua);
+        }
+
+        // Erase/Write, WCC X'C3' (keyboard restore, reset MDT), then one character.
+        private static readonly byte[] EraseWriteWithRestore = { Command3270.EraseWrite, 0xC3, 0xC1 };
+
+        // Write, WCC X'C0' (no keyboard restore), then one character.
+        private static readonly byte[] WriteWithoutRestore = { Command3270.Write, 0xC0, 0xC1 };
+
+        [Fact]
+        public void AQueryReplyLocksTheKeyboardAndTheResetKeyDoesNotUnlockIt()
+        {
+            // GA23-0059-4 p. 9-9 and 10-8: TWAIT is displayed; p. 3-20: no keystroking, and
+            // Reset does not clear TWAIT.
+            var (d, sent, _) = Create();
+            d.ProcessOutbound(EraseWriteWithRestore);
+            Assert.Equal(KeyboardLock.None, d.Lock);
+
+            d.ProcessOutbound(Query);
+
+            Assert.Single(sent);
+            Assert.Equal(KeyboardLock.QueryReplySent, d.Lock);
+            Assert.False(d.Type('A'));
+            Assert.False(d.Attention(Aid.Enter));
+            Assert.Single(sent);
+            d.Reset();
+            Assert.Equal(KeyboardLock.QueryReplySent, d.Lock);
+            Assert.Equal("X Wait", StatusLine3270.Message(d, StatusLineConnection.Connected));
+        }
+
+        [Fact]
+        public void AWriteWithoutKeyboardRestoreAcknowledgesTheQueryAndLeavesNoSystemLock()
+        {
+            // p. 3-23, 10-5: an EW, EWA or Write "with or without a WCC or data" acknowledges a
+            // query. System Lock comes only from an enter action (p. 3-21).
+            var (d, _, _) = Create();
+            d.ProcessOutbound(EraseWriteWithRestore);
+            d.ProcessOutbound(Query);
+            Assert.Equal(KeyboardLock.QueryReplySent, d.Lock);
+
+            d.ProcessOutbound(WriteWithoutRestore);
+
+            Assert.Equal(KeyboardLock.None, d.Lock);
+        }
+
+        [Fact]
+        public void AWriteStructuredFieldAcknowledgesTheQuery()
+        {
+            // p. 3-23, 10-5: a WSF acknowledges "regardless of an error being detected in the
+            // accompanying structured fields". Set Reply Mode to partition 0, Field mode.
+            var (d, _, _) = Create();
+            d.ProcessOutbound(EraseWriteWithRestore);
+            d.ProcessOutbound(Query);
+            Assert.Equal(KeyboardLock.QueryReplySent, d.Lock);
+
+            d.ProcessOutbound(new byte[] { Command3270.WriteStructuredField, 0x00, 0x05, 0x09, 0x00, 0x00 });
+
+            Assert.Equal(KeyboardLock.None, d.Lock);
+        }
+
+        [Fact]
+        public void AReadCommandDoesNotAcknowledgeTheQuery()
+        {
+            // p. 3-23, 10-5: "any outbound transmission except one with a read command".
+            var (d, _, _) = Create();
+            d.ProcessOutbound(EraseWriteWithRestore);
+            d.ProcessOutbound(Query);
+            Assert.Equal(KeyboardLock.QueryReplySent, d.Lock);
+
+            d.ProcessOutbound(new byte[] { Command3270.ReadBuffer });
+
+            Assert.Equal(KeyboardLock.QueryReplySent, d.Lock);
+        }
+
+        [Fact]
+        public void AnEraseAllUnprotectedAcknowledgesTheQuery()
+        {
+            var (d, _, _) = Create();
+            d.ProcessOutbound(EraseWriteWithRestore);
+            d.ProcessOutbound(Query);
+            Assert.Equal(KeyboardLock.QueryReplySent, d.Lock);
+
+            d.ProcessOutbound(new byte[] { Command3270.EraseAllUnprotected });
+
+            Assert.Equal(KeyboardLock.None, d.Lock);
         }
     }
 }

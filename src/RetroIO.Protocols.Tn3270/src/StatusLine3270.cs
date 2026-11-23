@@ -204,6 +204,10 @@ namespace RetroIO.Protocols.Tn3270
             {
                 case KeyboardLock.WaitingForHost:
                     return "X Wait";
+                case KeyboardLock.QueryReplySent:
+                    // x3270 Common\vstatus.c shows its enter-inhibit lock after a query reply as
+                    // "X Wait"; the manual's indicator for it is TWAIT (p. 10-5), the same one.
+                    return "X Wait";
                 case KeyboardLock.SystemLock:
                     return "X SYSTEM";
                 case KeyboardLock.OperatorError:
