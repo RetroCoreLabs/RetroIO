@@ -356,6 +356,37 @@ namespace RetroIO.Protocols.Tn3270
             ack[6] = 0x06;
             WriteRecordNumber(ack.Slice(7));
             _display.SendStructuredFieldReply(ack);
+
+            // The message ends the transfer once its data is acknowledged: in IBM's figures the
+            // last step of every transfer is "host message, PC Data ack", with no Close of the
+            // message file (IND p.24-26 Figures 27-30; IND-FILE-TRANSFER.md 3.12 step 7). TK5
+            // does the same: measured 23 November 2026 (RetroTerm guide 08 test), its TRANS03
+            // message and our Data ack were followed by the READY screen and no Close. Waiting
+            // for a Close here meant the transfer never ended.
+            if (State == FileTransferState.ReceivingMessage)
+            {
+                FinishWithMessage();
+            }
+        }
+
+        private void FinishWithMessage()
+        {
+            // TRANS03 and TRANS04 are success (3.13). The text ends at a '$': TK5 sends
+            // "TRANS03   File transfer complete$" and blanks to fill 85 bytes, in ASCII (measured
+            // 23 November 2026), and x3270 cuts the message at the first '$' too
+            // (Common/ft_dft.c lines 259-265).
+            string text = _message.ToString();
+            int end = text.IndexOf('$');
+            if (end >= 0)
+            {
+                text = text.Substring(0, end);
+            }
+
+            text = text.TrimEnd('\0', ' ', '\r', '\n');
+            bool success = text.StartsWith("TRANS03", StringComparison.Ordinal) || text.StartsWith("TRANS04", StringComparison.Ordinal);
+            _stream = null;
+            State = FileTransferState.Idle;
+            Finished?.Invoke(success, text);
         }
 
         private void Get()
@@ -441,15 +472,13 @@ namespace RetroIO.Protocols.Tn3270
         private void Close()
         {
             // Close acknowledgement: L L D0 41 09 (3.10).
+            // A Close after the message's data finds the transfer already ended (Insert) and is
+            // only acknowledged. A message file closed with no data in it still ends the
+            // transfer, as a failure with an empty message.
             Acknowledge(TypeClose);
             if (State == FileTransferState.ReceivingMessage)
             {
-                // The message ends the transfer; TRANS03 and TRANS04 are success (3.13).
-                string text = _message.ToString().TrimEnd('\0', ' ', '\r', '\n');
-                bool success = text.StartsWith("TRANS03", StringComparison.Ordinal) || text.StartsWith("TRANS04", StringComparison.Ordinal);
-                _stream = null;
-                State = FileTransferState.Idle;
-                Finished?.Invoke(success, text);
+                FinishWithMessage();
                 return;
             }
 

@@ -70,11 +70,111 @@ namespace RetroIO.Protocols.Tn3270.Tests
             return (d, new IndFileTransfer(d), sent, errors);
         }
 
+        // The host's closing message as IBM draws it and TK5 sends it: Open for messages, one Data
+        // to Insert, and nothing after the PC's Data ack (IND p.24-26 Figures 27-30; measured on
+        // TK5 23 November 2026). No Close of the message file.
         private static void HostMessage(Display3270 d, string text)
         {
             Wsf(d, OpenRequest(upload: false, "FT:MSG "));
             Wsf(d, Insert(System.Text.Encoding.ASCII.GetBytes(text)));
+        }
+
+        // A whole upload as TK5 sent it, 23 November 2026 (RetroTerm guide 08 test, user HERC03,
+        // "IND$FILE PUT RTTFT.TEXT ASCII CRLF"): each record is a WSF with an Outbound 3270DS
+        // write (WCC C2) before the D0 field. The message's data is 85 bytes: the text, '$', and
+        // blanks.
+        private static readonly byte[][] Tk5Upload =
+        {
+            Hex("F3 00 06 40 00 F1 C2 00 29 D0 00 12 01 06 01 01 04 03 0A 0A 00 01 00 00 00 00 01 00 50 05 52 03 F0 08 06 27 04 3F EF 03 09 46 54 3A 44 41 54 41"),
+            Hex("F3 00 06 40 00 F1 C2 00 0F D0 45 11 01 05 00 06 00 09 05 01 03 00 00 09 D0 46 11 01 04 00 80"),
+            Hex("F3 00 06 40 00 F1 C2 00 0F D0 45 11 01 05 00 06 00 09 05 01 03 00 00 09 D0 46 11 01 04 00 80"),
+            Hex("F3 00 06 40 00 F1 C2 00 05 D0 41 12"),
+            Hex("F3 00 06 40 00 F1 C2 00 23 D0 00 12 01 06 01 01 04 03 0A 0A 00 00 00 00 11 01 01 00 50 05 52 03 F0 03 09 46 54 3A 4D 53 47 20"),
+            Tk5Message(),
+        };
+
+        private static byte[] Hex(string text)
+        {
+            string[] parts = text.Split(' ');
+            byte[] bytes = new byte[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                bytes[i] = Convert.ToByte(parts[i], 16);
+            }
+
+            return bytes;
+        }
+
+        private static byte[] Tk5Message()
+        {
+            byte[] head = Hex("F3 00 06 40 00 F1 C2 00 0A D0 47 11 01 05 00 80 00 00 5F D0 47 04 C0 80 61 00 5A");
+            byte[] record = new byte[head.Length + 85];
+            head.CopyTo(record, 0);
+            byte[] text = System.Text.Encoding.ASCII.GetBytes("TRANS03   File transfer complete$");
+            text.CopyTo(record, head.Length);
+            for (int i = head.Length + text.Length; i < record.Length; i++)
+            {
+                record[i] = 0x20;
+            }
+
+            return record;
+        }
+
+        [Fact]
+        public void TheRecordedTk5UploadEndsWithItsMessage()
+        {
+            var (d, t, sent, errors) = Create(16384);
+            bool? ok = null;
+            string message = string.Empty;
+            t.Finished += (success, text) =>
+            {
+                ok = success;
+                message = text;
+            };
+
+            t.ExpectUpload(new MemoryStream(System.Text.Encoding.ASCII.GetBytes("HELLO\r\n")));
+            for (int i = 0; i < Tk5Upload.Length; i++)
+            {
+                d.ProcessOutbound(Tk5Upload[i]);
+            }
+
+            Assert.Empty(errors);
+            Assert.True(ok);
+            Assert.Equal("TRANS03   File transfer complete", message);
+            Assert.Equal(FileTransferState.Idle, t.State);
+
+            // What we sent back, as TK5 accepted it: open ack, the record, end of file, close
+            // ack, message open ack, message Data ack (record number 1).
+            Assert.Equal(new byte[] { 0x88, 0x00, 0x05, 0xD0, 0x00, 0x09 }, sent[0]);
+            Assert.Equal(new byte[] { 0x88, 0x00, 0x09, 0xD0, 0x46, 0x08, 0x69, 0x04, 0x22, 0x00 }, sent[2]);
+            Assert.Equal(new byte[] { 0x88, 0x00, 0x05, 0xD0, 0x41, 0x09 }, sent[3]);
+            Assert.Equal(new byte[] { 0x88, 0x00, 0x0B, 0xD0, 0x47, 0x05, 0x63, 0x06, 0x00, 0x00, 0x00, 0x01 }, sent[5]);
+            Assert.Equal(6, sent.Count);
+        }
+
+        [Fact]
+        public void TheTransferEndsOnTheMessagesDataAckWithNoClose()
+        {
+            var (d, t, sent, errors) = Create();
+            bool? ok = null;
+            t.Finished += (success, _) => ok = success;
+            t.ExpectUpload(new MemoryStream(new byte[] { 0x41 }));
+            Wsf(d, OpenRequest(upload: true, "FT:DATA"));
             Wsf(d, CloseRequest);
+            int before = sent.Count;
+
+            HostMessage(d, "TRANS03 File transfer complete");
+
+            // Open ack and Data ack, and the transfer is over: TK5 sends READY next, never a Close.
+            Assert.Empty(errors);
+            Assert.Equal(before + 2, sent.Count);
+            Assert.True(ok);
+            Assert.Equal(FileTransferState.Idle, t.State);
+
+            // A Close that some host might still send is only acknowledged.
+            Wsf(d, CloseRequest);
+            Assert.Equal(new byte[] { 0x88, 0x00, 0x05, 0xD0, 0x41, 0x09 }, sent[sent.Count - 1]);
+            Assert.Equal(FileTransferState.Idle, t.State);
         }
 
         [Fact]
