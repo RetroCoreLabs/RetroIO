@@ -79,6 +79,61 @@ public sealed class DriveWireLoadTests
     }
 
     /// <summary>
+    /// Measurement for the memory item of plan Phase 14: the same load 150 times on one server, printing
+    /// the memory in use after a full garbage collection, and the sessions, after each batch.
+    /// </summary>
+    [Test]
+    [Explicit("Measurement; prints memory per batch")]
+    public async Task Measure_MemoryOverManyBatches()
+    {
+        DriveWireServerOptions options = new DriveWireServerOptions { BindAddress = "127.0.0.1", Port = 0 };
+        using DriveWireDriveTable drives = new DriveWireDriveTable();
+        drives.Mount(0, new MemoryDrive(Clients * SectorsPerClient));
+        using DriveWireServerService server = new DriveWireServerService(options, drives, new DriveWireServerStatistics(), null, null);
+        await server.StartAsync(CancellationToken.None);
+        try
+        {
+            IPEndPoint endPoint = await server.WaitUntilListeningAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+            for (int batch = 0; batch < 150; batch++)
+            {
+                Task<string>[] clients = new Task<string>[Clients];
+                for (int i = 0; i < Clients; i++)
+                {
+                    int client = i;
+                    clients[i] = Task.Run(() => RunClient(endPoint, client));
+                }
+
+                await Task.WhenAll(clients);
+                while (server.GetSessions().Length != 0)
+                {
+                    await Task.Delay(20);
+                }
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                TestContext.Out.WriteLine($"batch {batch}: {GC.GetTotalMemory(false)} bytes in use, {Process.GetCurrentProcess().HandleCount} handles");
+
+                // With DW_MEASURE_DIR set, pause after batches 20 and the last, so a memory dump can be
+                // taken from outside (dotnet-gcdump); the test goes on when the file "go<batch>" appears.
+                string? pauseDir = Environment.GetEnvironmentVariable("DW_MEASURE_DIR");
+                if (pauseDir != null && (batch == 20 || batch == 149))
+                {
+                    File.WriteAllText(Path.Combine(pauseDir, "ready" + batch), Environment.ProcessId.ToString());
+                    while (!File.Exists(Path.Combine(pauseDir, "go" + batch)))
+                    {
+                        await Task.Delay(200);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            await server.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
     /// One client: write a sector of its own, read it back, <see cref="Rounds"/> times. Returns an
     /// empty string when every step worked, else what went wrong.
     /// </summary>
