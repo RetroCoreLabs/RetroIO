@@ -48,6 +48,20 @@ namespace RetroIO.Protocols.Tn3270.Tests
             Order3270.SetBufferAddress, 0x40, 0xE8, Order3270.StartField, 0xE4, 0xD8,
         };
 
+        // Two labelled input fields, one per row:
+        //  - row 1: "NAME" at 0, input attribute at 5 (data from 6), autoskip stop at 40.
+        //  - row 2: "PASS" at 80, input attribute at 85 (data from 86), autoskip stop at 120.
+        private static readonly byte[] TwoFieldScreen =
+        {
+            Command3270.EraseWrite, 0x03,
+            Order3270.SetBufferAddress, 0x40, 0x40, Order3270.StartField, 0x60, 0xD5, 0xC1, 0xD4, 0xC5,
+            Order3270.StartField, 0x40, Order3270.InsertCursor,
+            Order3270.SetBufferAddress, 0x40, 0xE8, Order3270.StartField, 0xF0,
+            Order3270.SetBufferAddress, 0xC1, 0x50, Order3270.StartField, 0x60, 0xD7, 0xC1, 0xE2, 0xE2,
+            Order3270.StartField, 0x40,
+            Order3270.SetBufferAddress, 0xC1, 0xF8, Order3270.StartField, 0xF0,
+        };
+
         private static (Display3270 Display, List<byte[]> Sent) Create(byte[] screen)
         {
             var display = new Display3270();
@@ -109,6 +123,41 @@ namespace RetroIO.Protocols.Tn3270.Tests
 
             Assert.Equal(2, d.CursorAddress);
             Assert.Equal(KeyboardLock.None, d.Lock);
+        }
+
+        [Theory]
+        [InlineData("ab\ncd")]
+        [InlineData("ab\r\ncd")]
+        public void APastedLineBreakGoesToTheInputFieldOnTheNextRow(string text)
+        {
+            // x3270 emulate_uinput: a pasted LF presses New Line; CR is ignored, so CR LF counts once.
+            var (d, sent) = Create(TwoFieldScreen);
+            Assert.Equal(6, d.CursorAddress);
+
+            d.Paste(text);
+
+            Assert.Equal(0x81, d.GetByte(6));   // a
+            Assert.Equal(0x82, d.GetByte(7));   // b
+            Assert.Equal(0x83, d.GetByte(86));  // c
+            Assert.Equal(0x84, d.GetByte(87));  // d
+            Assert.Equal(88, d.CursorAddress);
+            Assert.Equal(KeyboardLock.None, d.Lock);
+            Assert.Empty(sent);
+        }
+
+        [Fact]
+        public void APasteStopsWhereTheKeyboardLocks()
+        {
+            // The first character lands on the protected label: Go Elsewhere, and the rest of the
+            // paste is dropped.
+            var (d, _) = Create(TwoFieldScreen);
+            d.MoveCursor(1);
+
+            d.Paste("x\nab");
+
+            Assert.Equal(KeyboardLock.OperatorError, d.Lock);
+            Assert.Equal(0xD5, d.GetByte(1));  // "N" untouched
+            Assert.Equal(0x00, d.GetByte(86));
         }
 
         [Fact]

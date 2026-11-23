@@ -1098,6 +1098,76 @@ namespace RetroIO.Protocols.Tn3270
         public void Attn() => SendReadModified(Aid.PA1, all: false);
 
         /// <summary>
+        /// Pastes text the way x3270's normal paste does: typed character by character, with a
+        /// line break pressing New Line (the first input field on a following row).
+        /// </summary>
+        /// <remarks>
+        /// From x3270 (Common\kybd.c, emulate_uinput with pasting set, overlay and margined paste
+        /// off, which are its defaults):
+        ///  - a line feed presses New Line, unless the text just wrapped onto a new row by itself.
+        ///  - a carriage return does nothing, so CR LF counts once.
+        ///  - tab presses Tab, backspace moves left, form feed types a space.
+        ///  - everything else is typed, with the auto-skip Type already does.
+        /// The paste stops when the keyboard locks (a character on a protected field is an
+        /// operator error, as when typing it) and when the cursor wraps past the end of the screen
+        /// back above where it started. The rest of the text is dropped, as x3270 drops it.
+        /// </remarks>
+        /// <param name="text">
+        /// The pasted text.
+        /// </param>
+        public void Paste(ReadOnlySpan<char> text)
+        {
+            int columns = Columns;
+            int start = CursorAddress;
+            int lastAddress = start;
+            int lastRow = start / columns;
+            bool justWrapped = false;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (Lock != KeyboardLock.None || CursorAddress < start)
+                {
+                    return;
+                }
+
+                if (lastAddress != CursorAddress)
+                {
+                    lastAddress = CursorAddress;
+                    int row = CursorAddress / columns;
+                    justWrapped = row != lastRow;
+                    lastRow = row;
+                }
+
+                char c = text[i];
+                switch (c)
+                {
+                    case '\n':
+                        if (!justWrapped)
+                        {
+                            NewLine();
+                        }
+
+                        lastRow = CursorAddress / columns;
+                        justWrapped = false;
+                        break;
+                    case '\r':
+                        break;
+                    case '\t':
+                        Tab();
+                        break;
+                    case '\b':
+                        MoveCursorBy(-1, 0);
+                        break;
+                    case '\f':
+                        Type(' ');
+                        break;
+                    default:
+                        Type(c);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
         /// Moves the cursor to an address (mouse click, arrow keys). Refused while locked.
         /// </summary>
         /// <param name="address">
