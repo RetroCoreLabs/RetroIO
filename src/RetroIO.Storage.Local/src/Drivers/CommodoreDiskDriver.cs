@@ -19,7 +19,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// Thin wrapper that composes GenericBlockDevice + CbmDosFileSystem.
     /// Replaces separate D64Driver, D71Driver, and D81Driver classes.
     /// </summary>
-    public sealed class CommodoreDiskDriver : IFileSystemDriver, IExtendedAttributeSupport
+    public sealed class CommodoreDiskDriver : IFileSystemDriver, IExtendedAttributeSupport, IRawDirectoryNames
     {
         private GenericBlockDevice? _blockDevice;
         private CbmDosFileSystem? _filesystem;
@@ -494,6 +494,61 @@ namespace RetroIO.Storage.Local.Drivers
             EnsureMounted();
             _filesystem!.WriteRawDiskHeader(name, id);
         }
+
+        // ===================================================================
+        // IRawDirectoryNames - the same raw access, as the general interface
+        // ===================================================================
+
+        // The type names of the low three bits of a directory type byte. 5 is a 1581 partition;
+        // 6 and 7 are not defined by CBM DOS and are listed by their number.
+        private static readonly string[] s_rawTypeNames = { "DEL", "SEQ", "PRG", "USR", "REL", "CBM", "TYPE6", "TYPE7" };
+
+        private static readonly RawDirectoryLayout s_rawLayout = new RawDirectoryLayout
+        {
+            NameLength = CbmDosFileSystem.RawNameLength,
+            VolumeNameLength = CbmDosFileSystem.RawNameLength,
+            VolumeIdLength = 2,
+            PadByte = 0xA0,
+            CharacterSet = "PETSCII",
+            SeparatorTypeName = "DEL",
+            Description = "Names are 16 PETSCII bytes padded with A0h (shifted space). A separator is a closed DEL entry with no data; the listing shows it as a line with its name and 0 blocks.",
+        };
+
+        /// <inheritdoc/>
+        public RawDirectoryLayout RawLayout => s_rawLayout;
+
+        /// <inheritdoc/>
+        RawDirectoryEntry[] IRawDirectoryNames.ReadRawDirectory()
+        {
+            CbmRawDirectoryEntry[] raw = ReadRawDirectory();
+            RawDirectoryEntry[] entries = new RawDirectoryEntry[raw.Length];
+            for (int i = 0; i < raw.Length; i++)
+            {
+                int type = raw[i].TypeByte & 0x07;
+                entries[i] = new RawDirectoryEntry
+                {
+                    Index = raw[i].Index,
+                    TypeName = s_rawTypeNames[type],
+                    Name = raw[i].Name,
+                    Blocks = raw[i].Blocks,
+                    IsSeparator = type == 0 && raw[i].StartTrack == 0 && raw[i].Blocks == 0,
+                };
+            }
+
+            return entries;
+        }
+
+        /// <inheritdoc/>
+        public void InsertSeparator(int position, ReadOnlySpan<byte> name) => InsertDelEntry(position, name);
+
+        /// <inheritdoc/>
+        public byte[] ReadRawVolumeName() => ReadRawDiskName();
+
+        /// <inheritdoc/>
+        public byte[] ReadRawVolumeId() => ReadRawDiskId();
+
+        /// <inheritdoc/>
+        public void WriteRawVolumeHeader(ReadOnlySpan<byte> name, ReadOnlySpan<byte> id) => WriteRawDiskHeader(name, id);
 
         // ===================================================================
         // BLOCK OPERATIONS - Delegate to Block Device
