@@ -57,7 +57,7 @@ public sealed class ProtocolConfigurationLoaderTests
         try
         {
             string configPath = Path.Combine(tempPath, "tnfs-config.json");
-            const string original = "{ \"UdpPort\": 12345 }";
+            const string original = "{ \"Enabled\": true, \"UdpPort\": 12345 }";
             File.WriteAllText(configPath, original);
 
             StringWriter captured = new StringWriter();
@@ -147,7 +147,7 @@ public sealed class ProtocolConfigurationLoaderTests
                 ProtocolConfigurationLoader.LoadDriveWireConfiguration(tempPath, new ConfigurationBuilder().Build());
             Console.SetOut(originalOut);
 
-            Assert.That(result.Enabled, Is.True);
+            Assert.That(result.Enabled, Is.False, "every protocol is off until switched on");
             Assert.That(result.Port, Is.EqualTo(65504), "the Becker port default");
             Assert.That(result.BindAddress, Is.EqualTo("127.0.0.1"));
             Assert.That(result.TransactionTimeoutMilliseconds, Is.EqualTo(250), "the specification's time limit");
@@ -409,10 +409,49 @@ public sealed class ProtocolConfigurationLoaderTests
     }
 
     [Test]
+    public void AnOldFile_WithoutTheSwitch_StaysOn_AndGetsItWritten_ButAFileThatSaysOffStaysOff()
+    {
+        // TNFS, Econet and DriveWire were on unless the file said otherwise. An install from before
+        // the default changed to off keeps running them (Ronny, 2026-11-08).
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            File.WriteAllText(Path.Combine(tempPath, "tnfs-config.json"), "{ \"UdpPort\": 12345 }");
+            File.WriteAllText(Path.Combine(tempPath, "econet-config.json"), "{ \"Enabled\": false }");
+            File.WriteAllText(Path.Combine(tempPath, "drivewire-config.json"), "{ \"Port\": 65504 }");
+
+            Console.SetOut(new StringWriter());
+            IConfiguration none = new ConfigurationBuilder().Build();
+            TnfsServerConfiguration tnfs = ProtocolConfigurationLoader.LoadTnfsConfiguration(tempPath, none);
+            EconetServerConfiguration econet = ProtocolConfigurationLoader.LoadEconetConfiguration(tempPath, none);
+            DriveWireServerConfiguration driveWire = ProtocolConfigurationLoader.LoadDriveWireConfiguration(tempPath, none);
+            Console.SetOut(originalOut);
+
+            Assert.That(tnfs.Enabled, Is.True, "an old TNFS file without the switch keeps TNFS on");
+            Assert.That(tnfs.UdpPort, Is.EqualTo(12345), "and keeps its other settings");
+            Assert.That(File.ReadAllText(Path.Combine(tempPath, "tnfs-config.json")), Does.Contain("\"Enabled\": true"),
+                "the old value is written into the file");
+            Assert.That(econet.Enabled, Is.False, "a file that says off stays off");
+            Assert.That(File.ReadAllText(Path.Combine(tempPath, "econet-config.json")), Is.EqualTo("{ \"Enabled\": false }"));
+            Assert.That(driveWire.Enabled, Is.True);
+            Assert.That(driveWire.Port, Is.EqualTo(65504));
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
     public void TnfsAndEconet_EnabledOverride_SwitchesThemForThisRun()
     {
-        // A fresh data folder writes TNFS and Econet switched on; Tnfs:Enabled / Econet:Enabled
-        // (Tnfs__Enabled in a container) switch them off for the run without changing the files.
+        // A fresh data folder writes TNFS and Econet switched off; Tnfs:Enabled / Econet:Enabled
+        // (Tnfs__Enabled in a container) switch them on for the run without changing the files.
         string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempPath);
         TextWriter originalOut = Console.Out;
@@ -421,16 +460,16 @@ public sealed class ProtocolConfigurationLoaderTests
         {
             Console.SetOut(new StringWriter());
             IConfiguration overrides = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?> { ["Tnfs:Enabled"] = "false", ["Econet:Enabled"] = "false" })
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Tnfs:Enabled"] = "true", ["Econet:Enabled"] = "true" })
                 .Build();
             TnfsServerConfiguration tnfs = ProtocolConfigurationLoader.LoadTnfsConfiguration(tempPath, overrides);
             EconetServerConfiguration econet = ProtocolConfigurationLoader.LoadEconetConfiguration(tempPath, overrides);
             TnfsServerConfiguration tnfsFromFile = ProtocolConfigurationLoader.LoadTnfsConfiguration(tempPath, new ConfigurationBuilder().Build());
             Console.SetOut(originalOut);
 
-            Assert.That(tnfs.Enabled, Is.False);
-            Assert.That(econet.Enabled, Is.False);
-            Assert.That(tnfsFromFile.Enabled, Is.True, "the file keeps what it had");
+            Assert.That(tnfs.Enabled, Is.True);
+            Assert.That(econet.Enabled, Is.True);
+            Assert.That(tnfsFromFile.Enabled, Is.False, "the new file keeps the default: off");
         }
         finally
         {

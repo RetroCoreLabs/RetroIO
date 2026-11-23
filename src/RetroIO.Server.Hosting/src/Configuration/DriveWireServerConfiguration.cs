@@ -19,7 +19,7 @@ public sealed class DriveWireServerConfiguration
     /// <summary>
     /// Gets or sets whether the DriveWire server runs. The default is true.
     /// </summary>
-    public bool Enabled { get; set; } = true;
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// Gets or sets the TCP port. The default is 65504.

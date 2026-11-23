@@ -19,7 +19,7 @@ public sealed class TnfsServerConfiguration
     /// DriveWire and the XMSG services have. A file written before then has no such key and reads as true, so an
     /// existing install keeps running as it did. (Phase 6 of the plan turns every protocol off by default.)
     /// </summary>
-    public bool Enabled { get; set; } = true;
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// Gets or sets the root directory of the served files.

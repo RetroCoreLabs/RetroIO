@@ -118,6 +118,7 @@ public static class ProtocolConfigurationLoader
                 string json = File.ReadAllText(configPath);
                 TnfsServerConfiguration? loaded = JsonSerializer.Deserialize<TnfsServerConfiguration>(json);
                 config = loaded ?? TnfsServerConfiguration.GetDefault();
+                KeepOldSwitch(json, configPath, config, c => c.Enabled = true, "TNFS");
             }
             catch (Exception ex)
             {
@@ -170,6 +171,7 @@ public static class ProtocolConfigurationLoader
             {
                 string json = File.ReadAllText(configPath);
                 config = JsonSerializer.Deserialize<EconetServerConfiguration>(json) ?? EconetServerConfiguration.GetDefault();
+                KeepOldSwitch(json, configPath, config, c => c.Enabled = true, "Econet");
             }
             catch (Exception ex)
             {
@@ -227,6 +229,7 @@ public static class ProtocolConfigurationLoader
             {
                 string json = File.ReadAllText(configPath);
                 config = JsonSerializer.Deserialize<DriveWireServerConfiguration>(json) ?? DriveWireServerConfiguration.GetDefault();
+                KeepOldSwitch(json, configPath, config, c => c.Enabled = true, "DriveWire");
             }
             catch (Exception ex) when (ex is IOException || ex is JsonException || ex is UnauthorizedAccessException)
             {
@@ -651,6 +654,45 @@ public static class ProtocolConfigurationLoader
         string? udpPortOverride = configuration["Econet:UdpPort"];
         if (!string.IsNullOrEmpty(udpPortOverride) && int.TryParse(udpPortOverride, out int udpPort))
             config.UdpPort = udpPort;
+    }
+
+    /// <summary>
+    /// Keeps an old install's protocol on when the default changed to off.
+    /// </summary>
+    /// <remarks>
+    /// TNFS, Econet and DriveWire were on unless their file said otherwise; since 2026-11-23 every
+    /// protocol is off until switched on. A file written before it had the <c>Enabled</c> key was
+    /// running that protocol, so it keeps running it: the old value, on, is written into the file
+    /// on the first start after the update (Ronny's decision, 2026-11-08). A file that has the key
+    /// is left as it is.
+    /// </remarks>
+    /// <typeparam name="T">The settings type.</typeparam>
+    /// <param name="json">The file's text.</param>
+    /// <param name="configPath">The file.</param>
+    /// <param name="config">The settings read from it.</param>
+    /// <param name="switchOn">Sets the settings' switch on.</param>
+    /// <param name="label">The protocol, for the console line.</param>
+    private static void KeepOldSwitch<T>(string json, string configPath, T config, Action<T> switchOn, string label)
+    {
+        using (JsonDocument document = JsonDocument.Parse(json))
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || document.RootElement.TryGetProperty("Enabled", out _))
+            {
+                return;
+            }
+        }
+
+        switchOn(config);
+        try
+        {
+            File.WriteAllText(configPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine($"{label}: the settings file had no on/off switch; it was on before, so \"Enabled\": true was written into {configPath}");
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        {
+            Console.WriteLine($"{label}: could not write \"Enabled\": true into {configPath} ({ex.Message}); it stays on for this run");
+        }
     }
 
     private static void SaveConfiguration<T>(string configPath, T config, string label)
