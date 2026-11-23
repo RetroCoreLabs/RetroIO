@@ -146,22 +146,87 @@ namespace RetroIO.Storage.Ndfs.PropertyBags
         }
 
         /// <summary>
-        /// Creates a .xat filename from a data filename.
-        /// Examples:
-        ///   "FILE.DAT" -> "FILE.XAT"
-        ///   "TESTPROG.PROG" -> "TESTPROG.XAT"
+        /// Gets the name of the side file that holds a data file's properties: the whole data file
+        /// name, extension kept, plus the side-file extension.
         /// </summary>
+        /// <remarks>
+        /// Examples:
+        ///  - GAME.PRG gives GAME.PRG.xat, and GAME.SEQ gives GAME.SEQ.xat, so two files that differ
+        ///    only by extension never share a side file.
+        ///  - NOEXT gives NOEXT.xat.
+        /// Side files are only ever written under this name. Exports made before this rule used
+        /// <see cref="GetOldXatFileName"/>; read that one when this one is not there.
+        /// </remarks>
+        /// <param name="dataFileName">
+        /// The data file's name (no folder).
+        /// </param>
+        /// <param name="xatExtension">
+        /// The side-file extension, with its dot.
+        /// </param>
+        /// <returns>
+        /// The side file's name.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="dataFileName"/> is empty.
+        /// </exception>
         public static string GetXatFileName(string dataFileName, string xatExtension = ".xat")
         {
             if (string.IsNullOrEmpty(dataFileName))
                 throw new ArgumentNullException(nameof(dataFileName));
 
-            // Remove extension from data file
+            return dataFileName + xatExtension;
+        }
+
+        /// <summary>
+        /// Gets the side-file name older exports used: the data file name with its last extension
+        /// cut off (GAME.PRG gave GAME.xat). Read only, for exports made before
+        /// <see cref="GetXatFileName"/> kept the extension; never write a side file under it.
+        /// </summary>
+        /// <param name="dataFileName">
+        /// The data file's name (no folder).
+        /// </param>
+        /// <param name="xatExtension">
+        /// The side-file extension, with its dot.
+        /// </param>
+        /// <returns>
+        /// The old side file's name.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="dataFileName"/> is empty.
+        /// </exception>
+        public static string GetOldXatFileName(string dataFileName, string xatExtension = ".xat")
+        {
+            if (string.IsNullOrEmpty(dataFileName))
+                throw new ArgumentNullException(nameof(dataFileName));
+
             int lastDot = dataFileName.LastIndexOf('.');
             string baseName = lastDot > 0 ? dataFileName.Substring(0, lastDot) : dataFileName;
-
-            // Append .xat extension
             return baseName + xatExtension;
+        }
+
+        /// <summary>
+        /// Finds the side file of a data file in a host folder: the new name first, then the old one.
+        /// </summary>
+        /// <param name="folder">
+        /// The host folder that holds the data file.
+        /// </param>
+        /// <param name="dataFileName">
+        /// The data file's name (no folder).
+        /// </param>
+        /// <param name="xatExtension">
+        /// The side-file extension, with its dot.
+        /// </param>
+        /// <returns>
+        /// The side file's full path, or <c>null</c> when there is none.
+        /// </returns>
+        public static string? FindXatFile(string folder, string dataFileName, string xatExtension = ".xat")
+        {
+            string current = System.IO.Path.Combine(folder, GetXatFileName(dataFileName, xatExtension));
+            if (System.IO.File.Exists(current))
+                return current;
+
+            string old = System.IO.Path.Combine(folder, GetOldXatFileName(dataFileName, xatExtension));
+            return System.IO.File.Exists(old) ? old : null;
         }
 
         /// <summary>

@@ -82,9 +82,9 @@ public static class XatSidecar
     /// The path of the .xat file, in the same directory as the object.
     /// </returns>
     /// <remarks>
-    /// The name part goes through <see cref="NdfsXatSerializer.GetXatFileName(string, string)"/> when it holds no dot, which is every Acorn name.
-    /// That method cuts at the last dot, so a name with a dot would share a .xat file with the name before the dot. For such a name the suffix is
-    /// added to the whole name instead, which keeps the two apart.
+    /// The suffix is added to the whole name, the same rule as <see cref="NdfsXatSerializer.GetXatFileName(string, string)"/>, so a name with a dot
+    /// never shares a .xat file with the name before the dot. (That method cut at the last dot until November 2026; this code never relied on it
+    /// for a name with a dot.)
     /// </remarks>
     public static string GetXatPath(string objectPath)
     {

@@ -96,18 +96,40 @@ namespace RetroIO.Tests
         }
 
         [Test]
-        public void NdfsXatSerializer_GetXatFileName_RemovesExtension()
+        public void NdfsXatSerializer_GetXatFileName_KeepsTheExtension()
         {
             // Test simple extension removal
-            Assert.That(NdfsXatSerializer.GetXatFileName("FILE.DAT"), Is.EqualTo("FILE.xat"));
-            Assert.That(NdfsXatSerializer.GetXatFileName("TEST.PROG"), Is.EqualTo("TEST.xat"));
-            Assert.That(NdfsXatSerializer.GetXatFileName("DATA.BIN"), Is.EqualTo("DATA.xat"));
+            Assert.That(NdfsXatSerializer.GetXatFileName("FILE.DAT"), Is.EqualTo("FILE.DAT.xat"));
+            Assert.That(NdfsXatSerializer.GetXatFileName("TEST.PROG"), Is.EqualTo("TEST.PROG.xat"));
+            Assert.That(NdfsXatSerializer.GetXatFileName("DATA.BIN"), Is.EqualTo("DATA.BIN.xat"));
 
             // Test no extension
             Assert.That(NdfsXatSerializer.GetXatFileName("NOEXT"), Is.EqualTo("NOEXT.xat"));
 
             // Test custom extension
-            Assert.That(NdfsXatSerializer.GetXatFileName("FILE.DAT", ".meta"), Is.EqualTo("FILE.meta"));
+            Assert.That(NdfsXatSerializer.GetXatFileName("FILE.DAT", ".meta"), Is.EqualTo("FILE.DAT.meta"));
+        }
+
+        [Test]
+        public void NdfsXatSerializer_OldName_CutsTheExtension_AndFindPrefersTheNewName()
+        {
+            Assert.That(NdfsXatSerializer.GetOldXatFileName("GAME.PRG"), Is.EqualTo("GAME.xat"));
+            Assert.That(NdfsXatSerializer.GetOldXatFileName("NOEXT"), Is.EqualTo("NOEXT.xat"));
+
+            string folder = Path.Combine(TestContext.CurrentContext.WorkDirectory, "xat-find-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            try
+            {
+                Assert.That(NdfsXatSerializer.FindXatFile(folder, "GAME.PRG"), Is.Null, "none");
+                File.WriteAllText(Path.Combine(folder, "GAME.xat"), "{}");
+                Assert.That(NdfsXatSerializer.FindXatFile(folder, "GAME.PRG"), Is.EqualTo(Path.Combine(folder, "GAME.xat")), "old export still read");
+                File.WriteAllText(Path.Combine(folder, "GAME.PRG.xat"), "{}");
+                Assert.That(NdfsXatSerializer.FindXatFile(folder, "GAME.PRG"), Is.EqualTo(Path.Combine(folder, "GAME.PRG.xat")), "new name wins");
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
         }
 
         [Test]
