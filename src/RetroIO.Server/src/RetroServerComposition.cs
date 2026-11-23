@@ -329,7 +329,7 @@ public static class RetroServerComposition
 
         if (opts.EnableManagementApi)
         {
-            app.UseRetroManagementApi();
+            app.UseRetroManagementApi(opts.EnableSwagger);
         }
 
         return app;

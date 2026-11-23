@@ -206,6 +206,36 @@ public static class ManagementApiExtensions
     /// </remarks>
     public static IApplicationBuilder UseRetroManagementApi(this IApplicationBuilder app)
     {
+        return UseRetroManagementApi(app, enableSwagger: false);
+    }
+
+    /// <summary>
+    /// Adds authentication and authorization, and the Swagger page when it was registered.
+    /// </summary>
+    /// <param name="app">
+    /// Application builder from the host.
+    /// </param>
+    /// <param name="enableSwagger">
+    /// True to serve the API description at <c>/swagger/v1/swagger.json</c> and its page at
+    /// <c>/swagger</c>; pass the same value given to <see cref="AddRetroManagementApi"/>.
+    /// </param>
+    /// <returns>
+    /// The same builder, for chaining.
+    /// </returns>
+    /// <remarks>
+    /// The page and the description are served without a login (the page cannot send a token for
+    /// its own description); they hold the API's shape, no data, and every call made from the
+    /// page still needs a login. Until 2026-11-23 the description was built but never served, while
+    /// the start-up banner printed the page's address.
+    /// </remarks>
+    public static IApplicationBuilder UseRetroManagementApi(this IApplicationBuilder app, bool enableSwagger)
+    {
+        if (enableSwagger)
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI();
+        }
+
         app.UseAuthentication();
         app.UseAuthorization();
         return app;
