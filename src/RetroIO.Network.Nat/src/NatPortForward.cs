@@ -223,6 +223,16 @@ namespace RetroIO.Network.Nat
                     guest = NatPacket.ReadAddress(g!.GetAddressBytes());
                     guestPort = parts[3];
                 }
+                else if (parts[2].IndexOf('.') >= 0)
+                {
+                    error = "'" + text + "': the guest address '" + parts[2] + "' is not a dotted four-part IPv4 address (each part 0 to 255).";
+                    return false;
+                }
+                else if (parts[1].IndexOf('.') >= 0)
+                {
+                    error = "'" + text + "': the listen address '" + parts[1] + "' is not a dotted four-part IPv4 address (each part 0 to 255).";
+                    return false;
+                }
                 else
                 {
                     error = "'" + text + "': with four parts, the second (listen) or the third (guest) must be an IPv4 address.";
@@ -231,9 +241,15 @@ namespace RetroIO.Network.Nat
             }
             else
             {
-                if (!TryReadAddress(parts[1], out IPAddress? a) || !TryReadAddress(parts[3], out IPAddress? g))
+                if (!TryReadAddress(parts[1], out IPAddress? a))
                 {
-                    error = "'" + text + "': with five parts, the second (listen) and the fourth (guest) must be IPv4 addresses.";
+                    error = "'" + text + "': the listen address '" + parts[1] + "' is not a dotted four-part IPv4 address (each part 0 to 255).";
+                    return false;
+                }
+
+                if (!TryReadAddress(parts[3], out IPAddress? g))
+                {
+                    error = "'" + text + "': the guest address '" + parts[3] + "' is not a dotted four-part IPv4 address (each part 0 to 255).";
                     return false;
                 }
                 listen = a!;
@@ -333,10 +349,28 @@ namespace RetroIO.Network.Nat
         private static bool TryReadAddress(string text, out IPAddress? address)
         {
             address = null;
-            if (text.IndexOf('.') < 0 || !IPAddress.TryParse(text, out IPAddress? a) || a.AddressFamily != AddressFamily.InterNetwork)
+            // Only the dotted four-part form, each part 0 to 255. IPAddress.TryParse also takes the
+            // old short forms ("10.0.2" is 10.0.0.2), which turns a typo into another machine.
+            string[] parts = text.Split('.');
+            if (parts.Length != 4)
             {
                 return false;
             }
+
+            for (int i = 0; i < 4; i++)
+            {
+                if (parts[i].Length == 0 || parts[i].Length > 3
+                    || !int.TryParse(parts[i], NumberStyles.None, CultureInfo.InvariantCulture, out int value) || value > 255)
+                {
+                    return false;
+                }
+            }
+
+            if (!IPAddress.TryParse(text, out IPAddress? a) || a.AddressFamily != AddressFamily.InterNetwork)
+            {
+                return false;
+            }
+
             address = a;
             return true;
         }

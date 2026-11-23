@@ -474,5 +474,20 @@ namespace RetroIO.Network.Nat.Tests
             int header = TcpHeaderBytes(f);
             return f.AsSpan(34 + header, ipLength - 20 - header).ToArray();
         }
+
+        [Test]
+        public void AnAddressShortOfFourParts_IsRefusedNamingTheField()
+        {
+            // IPAddress.TryParse alone reads "10.0.2" as 10.0.0.2, so a typo forwarded to another machine.
+            Assert.That(NatPortForward.TryParse("tcp:2323:10.0.2:23", out _, out string guest), Is.False);
+            Assert.That(guest, Does.Contain("guest address '10.0.2'"));
+            Assert.That(NatPortForward.TryParse("tcp:127.1:2323:23", out _, out string listen), Is.False);
+            Assert.That(listen, Does.Contain("listen address '127.1'"));
+            Assert.That(NatPortForward.TryParse("tcp:0.0.0.0:2323:10.0.2:23", out _, out string five), Is.False);
+            Assert.That(five, Does.Contain("guest address '10.0.2'"));
+            Assert.That(NatPortForward.TryParse("tcp:0.0.0.0:2323:10.0.2.256:23", out _, out string big), Is.False);
+            Assert.That(big, Does.Contain("guest address '10.0.2.256'"));
+            Assert.That(NatPortForward.TryParse("tcp:0.0.0.0:2323:10.0.2.15:23", out _, out string ok), Is.True, ok);
+        }
     }
 }
