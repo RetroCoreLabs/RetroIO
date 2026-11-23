@@ -2541,6 +2541,16 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            // X.75 3.3.4: "If an STE receives a packet which is not full, and which has the D bit set to 0 but the M bit
+            // set to 1, it will reset the virtual call or the permanent virtual circuit" with network congestion # 103
+            // (Table C.5, "Data with M bit violation"). Full means the data field holds the maximum data field length,
+            // the negotiated one for this direction. Added 2026-11-23; before, an STE passed such a packet on.
+            if (_config.IsSte && info.MBit && !info.DBit && payloadLen < vc.PacketSizeIn)
+            {
+                ResetForProcedureError(vc, X25Diagnostic.MBitViolation);
+                return;
+            }
+
             // 4.3.3: the Q bit must not change inside a complete packet sequence. Annex C lets a
             // network reset on that, and this engine does (diagnostic 83), before the packet is
             // acknowledged or delivered: a sequence whose interpretation changes half-way is not

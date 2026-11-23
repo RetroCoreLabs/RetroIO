@@ -452,6 +452,49 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(ste.ConfirmInterrupt(lci), Is.False, "the reset discarded the unconfirmed interrupt");
         }
 
+        /// <summary>
+        /// X.75 3.3.4 and Table C.5: a data packet that is not full, with M = 1 and D = 0, is ERROR (d3) # 103 at an STE;
+        /// a full one with M = 1, and a short one with M = 1 and D = 1, are fine. The call's packet size here is 16 (41 04
+        /// 04 in the answer's utilities). Added 2026-11-23.
+        /// </summary>
+        /// <param name="length">
+        /// Data field length.
+        /// </param>
+        /// <param name="dBit">
+        /// The D bit.
+        /// </param>
+        /// <param name="reset">
+        /// True when a reset # 103 is expected.
+        /// </param>
+        [TestCase(15, false, true)]
+        [TestCase(16, false, false)]
+        [TestCase(15, true, false)]
+        public void AShortPacketWithMoreToCome_IsAnMBitViolation_AtAnSte(int length, bool dBit, bool reset)
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ushort lci = ste.PlaceCall("2624", "2422", null, new X25CallParameters(2, 2, 16, 16, null, Array.Empty<byte>()));
+            ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: new byte[] { 0x42, 0x04, 0x04 }));
+            Assert.That(ste.TryGetCallParameters(lci, out X25CallParameters p), Is.True);
+            Assert.That(p.PacketSizeIn, Is.EqualTo(16), "the call runs with 16-octet packets");
+
+            // GFI 0001 with the D bit (bit 7, 0x40) as asked; octet 3: P(R) 0, M (0x10), P(S) 0.
+            byte[] data = new byte[3 + length];
+            data[0] = (byte)(dBit ? 0x50 : 0x10);
+            data[1] = (byte)lci;
+            data[2] = 0x10;
+            int before = _sink.Sent.Count;
+            ste.ProcessPacket(data);
+
+            bool wasReset = _sink.Sent.Count > before && _sink.Last[2] == 0x1B;
+            Assert.That(wasReset, Is.EqualTo(reset));
+            if (reset)
+            {
+                X25PacketInfo sent = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+                Assert.That(sent.ResetCause, Is.EqualTo((byte)0x07));
+                Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)103));
+            }
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {

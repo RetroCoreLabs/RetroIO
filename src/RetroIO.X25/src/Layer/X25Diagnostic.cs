@@ -168,6 +168,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte InconsistentQBit = 83;
 
         /// <summary>
+        /// 103 - M bit violation: between networks, a data packet that is not full with M = 1 and D = 0 (X.75 3.3.4 and
+        /// Table C.5).
+        /// </summary>
+        public const byte MBitViolation = 103;
+
+        /// <summary>
         /// 48 - Time expired (the general code; 49-53 say which timer).
         /// </summary>
         public const byte TimeExpired = 48;
