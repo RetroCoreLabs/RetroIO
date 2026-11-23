@@ -260,6 +260,24 @@ public sealed class RetroTelemetryTests
     }
 
     [Test]
+    public void TheLoggerProvider_ForOneClass_KeepsThatClassOnly()
+    {
+        // DriveWire: the session class's lines are kept; the service's own lines are not, because
+        // they already reach the log through the service's telemetry.
+        using RetroTelemetry telemetry = new RetroTelemetry("RetroIO.Test.OneClass");
+        using TelemetryLoggerProvider provider = new TelemetryLoggerProvider(
+            "RetroIO.Protocols.DriveWire.Server.DriveWireSession", telemetry);
+
+        provider.CreateLogger("RetroIO.Protocols.DriveWire.Server.DriveWireSession").LogWarning("session line");
+        provider.CreateLogger("RetroIO.Protocols.DriveWire.Server.DriveWireServerService").LogWarning("service line");
+
+        List<TelemetryLogRecord> records = new List<TelemetryLogRecord>();
+        telemetry.CollectLog(0, records);
+        Assert.That(records, Has.Count.EqualTo(1));
+        Assert.That(records[0].Message, Is.EqualTo("session line"));
+    }
+
+    [Test]
     public void TheLoggerProvider_FollowsTheHostsLevelFilter()
     {
         using RetroTelemetry telemetry = new RetroTelemetry("RetroIO.Test.Filter");
