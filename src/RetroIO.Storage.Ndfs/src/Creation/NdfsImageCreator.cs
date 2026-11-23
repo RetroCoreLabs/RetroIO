@@ -480,10 +480,13 @@ namespace RetroIO.Storage.Ndfs.Creation
                 else if (spec.BootLoaderType != NdfsBootLoaderType.None)
                 {
                     // A 616 page floppy has its own loader; the other floppies use the 154 page one.
-                    byte[] bootSector = (spec.BootLoaderType == NdfsBootLoaderType.Floppy && spec.FileBlocks == 616)
+                    // The 616 page FLOMON also owns page-0 bytes 2000..2015 (floppies have no
+                    // extended-info block there), so it is copied whole.
+                    bool flomon616 = spec.BootLoaderType == NdfsBootLoaderType.Floppy && spec.FileBlocks == 616;
+                    byte[] bootSector = flomon616
                         ? NdfsBootBlobs.Floppy616
                         : NdfsBootSectors.GetBootSector(spec.BootLoaderType);
-                    Array.Copy(bootSector, 0, diskImage, 0, Math.Min(bootSector.Length, BOOT_REGION_SIZE));
+                    Array.Copy(bootSector, 0, diskImage, 0, flomon616 ? bootSector.Length : Math.Min(bootSector.Length, BOOT_REGION_SIZE));
                 }
             }
 
@@ -503,6 +506,16 @@ namespace RetroIO.Storage.Ndfs.Creation
 
                 // Step 4: Bit file (allocation bitmap)
                 Array.Copy(layout.Bitmap, 0, diskImage, spec.BitFileBlock * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE, layout.Bitmap.Length);
+
+                // A bootable 616 page floppy: FLOMON reads the whole bit file page into its memory,
+                // so the bytes after the 39-word map are FLOMON's (see NdfsBootBlobs).
+                if (options.IncludeBootSector && options.CustomBootSector == null
+                    && spec.BootLoaderType == NdfsBootLoaderType.Floppy && spec.FileBlocks == 616)
+                {
+                    byte[] tail = NdfsBootBlobs.Floppy616BitFileTail;
+                    long at = (spec.BitFileBlock * (long)NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE) + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - tail.Length;
+                    Array.Copy(tail, 0, diskImage, at, tail.Length);
+                }
 
                 // Step 5: Object file index block -> data page (empty)
                 CreateObjectFile(diskImage, spec, layout);

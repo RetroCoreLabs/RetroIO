@@ -531,9 +531,13 @@ namespace RetroIO.Tests
         [Test]
         public void Created_FloppyHasNoExtendedInfo_AndHardDiskHasTheCapacity()
         {
+            // On a floppy, bytes 2000..2015 of page 0 are not an extended-info block. A bootable
+            // 1.2 MB floppy has FLOMON's own data there (measured on the TPE floppy
+            // 210523I01-XX-01D), and the reader must not take it for extended info.
             byte[] floppy = CreateBytes(new NdfsImageCreationOptions { Template = NdfsImageTemplate.Floppy12MB });
-            for (int i = 0x7D0; i < 0x7E0; i++)
-                Assert.That(floppy[i], Is.EqualTo(0), $"byte {i:X}");
+            MasterBlock floppyMaster = MasterBlock.FromBytes(floppy.AsSpan(0, 2048).ToArray());
+            Assert.That(floppyMaster.HasFlomon, Is.True, "FLOMON");
+            Assert.That(floppyMaster.ExtValid, Is.False, "no extended info on a floppy");
 
             byte[] smd = CreateBytes(new NdfsImageCreationOptions { Template = NdfsImageTemplate.Smd75MB });
             Assert.That((smd[0x7DC] << 24) | (smd[0x7DD] << 16) | (smd[0x7DE] << 8) | smd[0x7DF], Is.EqualTo(36945));

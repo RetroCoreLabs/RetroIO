@@ -2407,8 +2407,19 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             if (path.EndsWith("/"))
                 path = path.Substring(0, path.Length - 1);
 
-            // NDFS path format: [user/]filename
-            var parts = path.Split('/', 2);
+            // NDFS path format: [user/]filename. Empty parts are dropped, so "/SYSTEM//A:TXT" (a
+            // folder given with its trailing slash, then a slash and the name) is SYSTEM and A:TXT,
+            // not SYSTEM and "/A:TXT".
+            var parts = path.Split('/', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2)
+            {
+                parts[1] = parts[1].TrimStart('/');
+            }
+
+            if (parts.Length == 0)
+            {
+                return (string.Empty, string.Empty);
+            }
 
             if (parts.Length == 2)
             {

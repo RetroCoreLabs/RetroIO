@@ -519,10 +519,15 @@ namespace RetroIO.Storage.Ndfs.Structures
             if (DiskPages > 0 && DiskPages < pagesNeeded)
                 pagesNeeded = (int)DiskPages;
 
-            // Write bitmap data to contiguous blocks
+            // Write bitmap data to contiguous blocks. Each page is read first and only the map
+            // bytes are changed: the rest of the last page is not ours. A FLOMON floppy keeps part
+            // of FLOMON there, and FLOMON loads the whole page into its own memory at boot
+            // (measured on nd100x with the TPE floppy 210523I01-XX-01D).
             for (int i = 0; i < pagesNeeded; i++)
             {
                 var pageBuffer = new byte[PAGE_SIZE];
+                uint pageBlock = pointer.BlockID + (uint)i;
+                device.ReadBlock(RetroIO.Storage.Core.BlockAddress.FromLBA(pageBlock), pageBuffer);
                 int sourceOffset = i * PAGE_SIZE;
                 int bytesToCopy = Math.Min(PAGE_SIZE, _bitmap.Length - sourceOffset);
 
