@@ -208,6 +208,142 @@ namespace RetroIO.Protocols.Xmsg.Hub.Tests
         }
 
         /// <summary>
+        /// Load (plan Phase 14): 16 machines each send 200 broadcast frames at the same time, at a
+        /// steady pace, while reading. Every machine must receive every frame of every other machine, exactly once, and
+        /// none of its own; nothing may be dropped as slow; and once all have hung up the hub has no
+        /// member left.
+        /// </summary>
+        [Fact]
+        [Trait("Category", "Load")]
+        public void Load_ManyMachinesSendAtOnce_EveryFrameReachesEveryOther_AndNoMemberIsLeft()
+        {
+            const int Machines = 16;
+            const int FramesEach = 200;
+            HubServer hub = new HubServer(0);
+            hub.Start();
+
+            try
+            {
+                TestMember[] members = new TestMember[Machines];
+                for (int i = 0; i < Machines; i++)
+                {
+                    members[i] = new TestMember(hub.Port, HubServer.RoleMachine);
+                }
+
+                Thread.Sleep(200);
+
+                // seen[receiver][sender * FramesEach + n]: how often that frame arrived.
+                int[][] seen = new int[Machines][];
+                Thread[] readers = new Thread[Machines];
+                for (int i = 0; i < Machines; i++)
+                {
+                    int me = i;
+                    seen[me] = new int[Machines * FramesEach];
+                    readers[me] = new Thread(() =>
+                    {
+                        int expected = (Machines - 1) * FramesEach;
+                        int got = 0;
+                        while (got < expected)
+                        {
+                            byte[]? frame = members[me].Receive(10000);
+                            if (frame == null)
+                            {
+                                return;
+                            }
+
+                            seen[me][frame[17] * FramesEach + ((frame[18] << 8) | frame[19])]++;
+                            got++;
+                        }
+                    });
+                    readers[me].Start();
+                }
+
+                System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+                Thread[] senders = new Thread[Machines];
+                for (int i = 0; i < Machines; i++)
+                {
+                    int me = i;
+                    senders[me] = new Thread(() =>
+                    {
+                        for (int n = 0; n < FramesEach; n++)
+                        {
+                            byte[] frame = Frame((byte)me);
+                            frame[11] = (byte)me;            // each machine its own source address
+                            frame[18] = (byte)(n >> 8);
+                            frame[19] = (byte)n;
+                            members[me].Send(frame);
+
+                            // A steady pace, not one burst: 10 frames, then a short pause. The whole
+                            // burst at once (3,000 frames to each machine's 256-frame queue) loses
+                            // frames by design - the hub drops for a member that is behind rather
+                            // than stall everybody - and measured 2026-11-23 it lost about a third.
+                            if (n % 10 == 9)
+                            {
+                                Thread.Sleep(1);
+                            }
+                        }
+                    });
+                    senders[me].Start();
+                }
+
+                for (int i = 0; i < Machines; i++)
+                {
+                    senders[i].Join(60000);
+                    readers[i].Join(60000);
+                }
+
+                clock.Stop();
+
+                int missing = 0;
+                for (int r = 0; r < Machines; r++)
+                {
+                    for (int k = 0; k < Machines * FramesEach; k++)
+                    {
+                        if (k / FramesEach != r && seen[r][k] == 0)
+                        {
+                            missing++;
+                        }
+                    }
+                }
+
+                Console.WriteLine($"hub: in {hub.FramesIn}, forwarded {hub.FramesForwarded}, dropped slow {hub.FramesDroppedSlow}, loop {hub.FramesDroppedLoop}, ttl {hub.FramesDroppedTtl}; frames missing at the machines {missing}");
+
+                for (int r = 0; r < Machines; r++)
+                {
+                    for (int sender = 0; sender < Machines; sender++)
+                    {
+                        for (int n = 0; n < FramesEach; n++)
+                        {
+                            int expectedCount = sender == r ? 0 : 1;
+                            Assert.True(seen[r][sender * FramesEach + n] == expectedCount,
+                                $"machine {r} got frame {n} of machine {sender} {seen[r][sender * FramesEach + n]} times, expected {expectedCount}");
+                        }
+                    }
+                }
+
+                Assert.Equal(0, hub.FramesDroppedSlow);
+                Console.WriteLine($"{Machines} machines, {Machines * FramesEach} frames in, {hub.FramesForwarded} forwarded, in {clock.ElapsedMilliseconds} ms");
+
+                for (int i = 0; i < Machines; i++)
+                {
+                    members[i].Dispose();
+                }
+
+                System.Diagnostics.Stopwatch gone = System.Diagnostics.Stopwatch.StartNew();
+                while (hub.MemberCount != 0 && gone.ElapsedMilliseconds < 10000)
+                {
+                    Thread.Sleep(50);
+                }
+
+                Assert.Equal(0, hub.MemberCount);
+            }
+            finally
+            {
+                hub.Stop();
+            }
+        }
+
+        /// <summary>
         /// A frame from one member is delivered to every other member and is not echoed back to
         /// the member that sent it.
         /// </summary>
