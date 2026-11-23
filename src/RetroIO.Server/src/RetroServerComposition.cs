@@ -163,9 +163,12 @@ public static class RetroServerComposition
                 // Its metrics and log, for the management API (api/v1/telemetry).
                 services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(sp => sp.GetRequiredService<DriveWireServerService>().Telemetry);
                 // The per-session lines are kept in its log too. Only the session class: the service's own
-                // lines already go into the log through its telemetry, and would be kept twice.
+                // lines already go into the log through its telemetry, and would be kept twice. The service
+                // is looked up on the first kept line, not here: it takes a logger itself, and asking
+                // for it here looped for ever (2026-11-23).
                 services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(sp => new RetroIO.Telemetry.TelemetryLoggerProvider(
-                    typeof(RetroIO.Protocols.DriveWire.Server.DriveWireSession).FullName!, sp.GetRequiredService<DriveWireServerService>().Telemetry));
+                    typeof(RetroIO.Protocols.DriveWire.Server.DriveWireSession).FullName!,
+                    () => sp.GetRequiredService<DriveWireServerService>().Telemetry));
 
                 if (opts.PrintBanners)
                 {

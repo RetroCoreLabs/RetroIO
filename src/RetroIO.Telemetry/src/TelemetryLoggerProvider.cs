@@ -29,7 +29,7 @@ namespace RetroIO.Telemetry;
 public sealed class TelemetryLoggerProvider : ILoggerProvider
 {
     private readonly string _categoryPrefix;
-    private readonly RetroTelemetry _telemetry;
+    private readonly Func<RetroTelemetry> _telemetry;
 
     /// <summary>
     /// Initialises a provider for one part.
@@ -37,6 +37,26 @@ public sealed class TelemetryLoggerProvider : ILoggerProvider
     /// <param name="categoryPrefix">The namespace of the part's classes.</param>
     /// <param name="telemetry">The part's telemetry, whose log the lines go into.</param>
     public TelemetryLoggerProvider(string categoryPrefix, RetroTelemetry telemetry)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(categoryPrefix);
+        _categoryPrefix = categoryPrefix;
+        ArgumentNullException.ThrowIfNull(telemetry);
+        _telemetry = () => telemetry;
+    }
+
+    /// <summary>
+    /// Initialises a provider for one part whose telemetry is looked up only when the first line is
+    /// kept.
+    /// </summary>
+    /// <param name="categoryPrefix">The namespace of the part's classes, or one class's full name.</param>
+    /// <param name="telemetry">Gives the part's telemetry; called on each kept line, so it must be cheap
+    /// (a singleton lookup).</param>
+    /// <remarks>
+    /// Needed when the part itself takes a logger: building the part needs the logger factory, the
+    /// factory needs this provider, and a provider that wanted the part at once would need the part
+    /// first. That loop hung RetroServer's start for ever with DriveWire on (2026-11-23).
+    /// </remarks>
+    public TelemetryLoggerProvider(string categoryPrefix, Func<RetroTelemetry> telemetry)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(categoryPrefix);
         _categoryPrefix = categoryPrefix;
@@ -64,9 +84,9 @@ public sealed class TelemetryLoggerProvider : ILoggerProvider
     /// </summary>
     private sealed class KeepingLogger : ILogger
     {
-        private readonly RetroTelemetry _telemetry;
+        private readonly Func<RetroTelemetry> _telemetry;
 
-        public KeepingLogger(RetroTelemetry telemetry)
+        public KeepingLogger(Func<RetroTelemetry> telemetry)
         {
             _telemetry = telemetry;
         }
@@ -125,7 +145,7 @@ public sealed class TelemetryLoggerProvider : ILoggerProvider
                 attributes[n] = new KeyValuePair<string, string>("exception.type", exception.GetType().FullName ?? exception.GetType().Name);
             }
 
-            _telemetry.Keep(logLevel, message, attributes);
+            _telemetry().Keep(logLevel, message, attributes);
         }
     }
 
