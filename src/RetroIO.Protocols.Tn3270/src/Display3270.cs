@@ -21,10 +21,23 @@ namespace RetroIO.Protocols.Tn3270
         None,
 
         /// <summary>
-        /// An attention key was sent and the host has not answered with a keyboard restore.
-        /// The operator's Reset key does NOT clear this (GA23-0059-4 p. 3-20).
+        /// An attention key was sent and no Write has come back yet: TWAIT, shown as X and a
+        /// clock. The operator's Reset key does NOT clear this (GA23-0059-4 p. 3-20).
         /// </summary>
         WaitingForHost,
+
+        /// <summary>
+        /// The host has written since the attention key but did not restore the keyboard: System
+        /// Lock, shown as "X SYSTEM". Reset clears it, as does a Write with keyboard restore.
+        /// </summary>
+        /// <remarks>
+        /// GA23-0059-4 p. 3-20: System Lock is raised with TWAIT by every enter action, is not
+        /// shown while TWAIT exists, and unlike TWAIT can be cleared by Reset; GA27-2890-4 p. 2-21
+        /// describes "X SYSTEM" the same way. x3270 makes the change at the end of a Write without
+        /// keyboard restore (Common\ctlr.c, ctlr_write: KL_OIA_TWAIT cleared, status_syswait),
+        /// which is the rule here.
+        /// </remarks>
+        SystemLock,
 
         /// <summary>
         /// The operator did something not allowed, such as typing into a protected field
@@ -968,12 +981,13 @@ namespace RetroIO.Protocols.Tn3270
         }
 
         /// <summary>
-        /// Reset key: clears an operator error and ends insert mode. It does not clear waiting for
-        /// the host (GA23-0059-4 p. 3-20; GA27-2890-4 p. 3-40; GA23-0061-2 p. C-6).
+        /// Reset key: clears an operator error or a System Lock and ends insert mode. It does not
+        /// clear waiting for the host (GA23-0059-4 p. 3-20; GA27-2890-4 p. 2-21 and 3-40;
+        /// GA23-0061-2 p. C-6).
         /// </summary>
         public void Reset()
         {
-            if (Lock == KeyboardLock.OperatorError || Lock == KeyboardLock.TooMuchData || Lock == KeyboardLock.MandatoryFill || Lock == KeyboardLock.MandatoryEntry)
+            if (Lock == KeyboardLock.SystemLock || Lock == KeyboardLock.OperatorError || Lock == KeyboardLock.TooMuchData || Lock == KeyboardLock.MandatoryFill || Lock == KeyboardLock.MandatoryEntry)
             {
                 Lock = KeyboardLock.None;
             }
@@ -1507,6 +1521,12 @@ namespace RetroIO.Protocols.Tn3270
             {
                 Lock = KeyboardLock.None;
                 _lastAid = Aid.None;
+            }
+            else if (Lock == KeyboardLock.WaitingForHost)
+            {
+                // The host answered but left the keyboard locked: TWAIT ends, System Lock shows
+                // (see KeyboardLock.SystemLock).
+                Lock = KeyboardLock.SystemLock;
             }
 
             if ((wcc & Wcc.SoundAlarm) != 0)

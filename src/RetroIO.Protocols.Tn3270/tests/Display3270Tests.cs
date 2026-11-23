@@ -99,6 +99,36 @@ namespace RetroIO.Protocols.Tn3270.Tests
         }
 
         [Fact]
+        public void AWriteThatLeavesTheKeyboardLockedTurnsTheWaitIntoASystemLockThatResetClears()
+        {
+            // GA23-0059-4 p. 3-20: the host answered (TWAIT ends) without restoring the keyboard,
+            // so "X SYSTEM" shows, and unlike TWAIT the operator's Reset clears it. This is what
+            // TK5 does after the TSO password (records F1 C1, seen 23 November 2026).
+            var (d, _, _) = Create();
+            d.ProcessOutbound(LogonScreen);
+            d.Attention(Aid.Enter);
+
+            d.ProcessOutbound(new byte[] { Command3270.Write, Wcc.ResetMdt });
+
+            Assert.Equal(KeyboardLock.SystemLock, d.Lock);
+            Assert.False(d.Type('x'));
+            d.Reset();
+            Assert.Equal(KeyboardLock.None, d.Lock);
+        }
+
+        [Fact]
+        public void AWriteWithoutRestoreLeavesAnUnlockedKeyboardUnlocked()
+        {
+            // System Lock comes only from an enter action (p. 3-20), never from a Write alone.
+            var (d, _, _) = Create();
+            d.ProcessOutbound(LogonScreen);
+
+            d.ProcessOutbound(new byte[] { Command3270.Write, Wcc.ResetMdt });
+
+            Assert.Equal(KeyboardLock.None, d.Lock);
+        }
+
+        [Fact]
         public void ThePaKeysAndClearSendTheAidAlone()
         {
             var (d, sent, _) = Create();
