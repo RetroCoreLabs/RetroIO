@@ -1186,20 +1186,29 @@ namespace RetroIO.Storage.Local.FileSystems
         // C64 and LOAD "HELLO" typed there miss them. c1541 finds these names when given in lower
         // case (`-read hello`), the same as for a disk a C64 wrote.
         private static byte AsciiToPetscii(char c)
+            => TryAsciiToPetscii(c, out byte b) ? b : (byte)0x3F; // anything else is stored as '?'
+
+        // The table behind AsciiToPetscii, for callers that must refuse a character the table does
+        // not hold (CommodoreDiskDriver.EncodeText) instead of storing '?'.
+        internal static bool TryAsciiToPetscii(char c, out byte b)
         {
             if (c >= 'A' && c <= 'Z')
             {
-                return (byte)c; // 'A' -> 0x41 .. 'Z' -> 0x5A
+                b = (byte)c; // 'A' -> 0x41 .. 'Z' -> 0x5A
+                return true;
             }
             if (c >= 'a' && c <= 'z')
             {
-                return (byte)(c - 'a' + 0x41); // 'a' -> 0x41 .. 'z' -> 0x5A
+                b = (byte)(c - 'a' + 0x41); // 'a' -> 0x41 .. 'z' -> 0x5A
+                return true;
             }
             if (c >= ' ' && c <= '?')
             {
-                return (byte)c; // space, digits and common symbols share ASCII/PETSCII codes
+                b = (byte)c; // space, digits and common symbols share ASCII/PETSCII codes
+                return true;
             }
-            return 0x3F; // '?'
+            b = 0;
+            return false;
         }
 
         /// <summary>

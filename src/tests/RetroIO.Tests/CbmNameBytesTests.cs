@@ -64,6 +64,26 @@ namespace RetroIO.Tests
             }
         }
 
+        [TestCase("HELLO")]
+        [TestCase("hello 2-1.5")]
+        public void EncodeText_GivesTheBytesAFileNameGets(string text)
+        {
+            CbmRawDirectoryEntry written = WriteAndRead(text);
+            CommodoreDiskDriver disk = (CommodoreDiskDriver)new CommodoreDiskDriverProvider().Mount(
+                new MemoryStream(new CommodoreDiskDriverProvider().CreateBlank("cbm-d64", new Dictionary<string, string>())), true, "cbm-d64");
+            byte[] encoded = ((RetroIO.Storage.Core.IRawDirectoryNames)disk).EncodeText(text);
+            Assert.That(encoded, Is.EqualTo(written.Name[0..text.Length]));
+        }
+
+        [Test]
+        public void EncodeText_RefusesACharacterWithNoByte()
+        {
+            CommodoreDiskDriver disk = (CommodoreDiskDriver)new CommodoreDiskDriverProvider().Mount(
+                new MemoryStream(new CommodoreDiskDriverProvider().CreateBlank("cbm-d64", new Dictionary<string, string>())), true, "cbm-d64");
+            System.ArgumentException e = Assert.Throws<System.ArgumentException>(() => disk.EncodeText("A~B"))!;
+            Assert.That(e.Message, Does.Contain("'~'"));
+        }
+
         [Test]
         public void DigitsAndSymbols_Unchanged()
         {

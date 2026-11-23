@@ -46,6 +46,23 @@ namespace RetroIO.Storage.Core
         RawDirectoryEntry[] ReadRawDirectory();
 
         /// <summary>
+        /// Turns typed text into the bytes this disk stores for it, by the same rule the driver uses
+        /// for host file names, so a program can offer text input for raw names without knowing the
+        /// disk's character set.
+        /// </summary>
+        /// <param name="text">
+        /// The text; it is not padded or cut to a length.
+        /// </param>
+        /// <returns>
+        /// One byte for each character of <paramref name="text"/>.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="text"/> holds a character the disk has no byte for; the message
+        /// names it.
+        /// </exception>
+        byte[] EncodeText(string text);
+
+        /// <summary>
         /// Replaces the name bytes of one entry.
         /// </summary>
         /// <param name="index">

@@ -503,6 +503,27 @@ namespace RetroIO.Storage.Local.Drivers
         // 6 and 7 are not defined by CBM DOS and are listed by their number.
         private static readonly string[] s_rawTypeNames = { "DEL", "SEQ", "PRG", "USR", "REL", "CBM", "TYPE6", "TYPE7" };
 
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Letters a-z and A-Z become 41h to 5Ah, the bytes a C64 stores when they are typed in its
+        /// start-up character set; space, digits and the symbols 20h to 3Fh stay as they are. The same
+        /// table names files written through <see cref="WriteFile"/>.
+        /// </remarks>
+        public byte[] EncodeText(string text)
+        {
+            ArgumentNullException.ThrowIfNull(text);
+            byte[] bytes = new byte[text.Length];
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (!CbmDosFileSystem.TryAsciiToPetscii(text[i], out bytes[i]))
+                {
+                    throw new ArgumentException("No PETSCII byte for '" + text[i] + "' in text input; letters, digits, space and ! \" # $ % & ' ( ) * + , - . / : ; < = > ? are taken. Give other bytes as hex.", nameof(text));
+                }
+            }
+
+            return bytes;
+        }
+
         private static readonly RawDirectoryLayout s_rawLayout = new RawDirectoryLayout
         {
             NameLength = CbmDosFileSystem.RawNameLength,
