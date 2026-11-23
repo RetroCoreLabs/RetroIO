@@ -619,6 +619,11 @@ public static class ProtocolConfigurationLoader
 
     private static void ApplyTnfsOverrides(IConfiguration configuration, TnfsServerConfiguration config)
     {
+        // On or off for this run only (--Tnfs:Enabled=false, or Tnfs__Enabled in a container).
+        string? enabled = configuration["Tnfs:Enabled"];
+        if (!string.IsNullOrEmpty(enabled) && bool.TryParse(enabled, out bool isEnabled))
+            config.Enabled = isEnabled;
+
         string? rootDirOverride = configuration["Tnfs:RootDirectory"];
         if (!string.IsNullOrEmpty(rootDirOverride))
             config.RootDirectory = rootDirOverride;
@@ -634,6 +639,11 @@ public static class ProtocolConfigurationLoader
 
     private static void ApplyEconetOverrides(IConfiguration configuration, EconetServerConfiguration config)
     {
+        // On or off for this run only (--Econet:Enabled=false, or Econet__Enabled in a container).
+        string? enabled = configuration["Econet:Enabled"];
+        if (!string.IsNullOrEmpty(enabled) && bool.TryParse(enabled, out bool isEnabled))
+            config.Enabled = isEnabled;
+
         string? rootDirOverride = configuration["Econet:RootDirectory"];
         if (!string.IsNullOrEmpty(rootDirOverride))
             config.RootDirectory = rootDirOverride;

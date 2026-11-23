@@ -409,6 +409,38 @@ public sealed class ProtocolConfigurationLoaderTests
     }
 
     [Test]
+    public void TnfsAndEconet_EnabledOverride_SwitchesThemForThisRun()
+    {
+        // A fresh data folder writes TNFS and Econet switched on; Tnfs:Enabled / Econet:Enabled
+        // (Tnfs__Enabled in a container) switch them off for the run without changing the files.
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            Console.SetOut(new StringWriter());
+            IConfiguration overrides = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Tnfs:Enabled"] = "false", ["Econet:Enabled"] = "false" })
+                .Build();
+            TnfsServerConfiguration tnfs = ProtocolConfigurationLoader.LoadTnfsConfiguration(tempPath, overrides);
+            EconetServerConfiguration econet = ProtocolConfigurationLoader.LoadEconetConfiguration(tempPath, overrides);
+            TnfsServerConfiguration tnfsFromFile = ProtocolConfigurationLoader.LoadTnfsConfiguration(tempPath, new ConfigurationBuilder().Build());
+            Console.SetOut(originalOut);
+
+            Assert.That(tnfs.Enabled, Is.False);
+            Assert.That(econet.Enabled, Is.False);
+            Assert.That(tnfsFromFile.Enabled, Is.True, "the file keeps what it had");
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
+
+    [Test]
     public void LoadDialUpConfiguration_AnOverride_IsForThisRunOnly_AndNeverWrittenIntoANewFile()
     {
         string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
