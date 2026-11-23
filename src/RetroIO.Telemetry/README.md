@@ -30,6 +30,10 @@ telemetry.Log(LogLevel.Warning, "login refused", new("caller", "127.0.0.1:30715"
 
 Register the part's `ITelemetrySource` with the host so the management API lists it.
 
+A part that already logs through `ILogger` in many classes does not need each call changed: add
+`new TelemetryLoggerProvider("<the part's namespace>", telemetry)` as an `ILoggerProvider`, and every
+line from a class in that namespace is kept in the part's log too (the host's level filter applies).
+
 Naming: `retroio.<part>.<thing>` in lower case, OpenTelemetry units (`By` bytes, `s` seconds,
 `{call}` a count), and variants as labels rather than as separate names.
 

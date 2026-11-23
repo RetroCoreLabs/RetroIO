@@ -223,12 +223,7 @@ public sealed class RetroTelemetry : ITelemetrySource, IDisposable
         }
 
         KeyValuePair<string, string>[] tags = attributes ?? Array.Empty<KeyValuePair<string, string>>();
-        lock (_gate)
-        {
-            _lastSequence++;
-            _ring[(int)((_lastSequence - 1) % _ring.Length)] =
-                new TelemetryLogRecord(_lastSequence, DateTime.UtcNow, level, _meter.Name, message, tags);
-        }
+        Keep(level, message, tags);
 
         if (_logger == null || !_logger.IsEnabled(level))
         {
@@ -251,6 +246,23 @@ public sealed class RetroTelemetry : ITelemetrySource, IDisposable
         using (_logger.BeginScope(scope))
         {
             _logger.Log(level, exception, "{Message}", message);
+        }
+    }
+
+    /// <summary>
+    /// Puts one record into the ring only; the logger is not written. Used for lines that already
+    /// went through a logger (<see cref="TelemetryLoggerProvider"/>).
+    /// </summary>
+    /// <param name="level">How serious it is.</param>
+    /// <param name="message">The text.</param>
+    /// <param name="attributes">Key-value attributes.</param>
+    internal void Keep(LogLevel level, string message, KeyValuePair<string, string>[] attributes)
+    {
+        lock (_gate)
+        {
+            _lastSequence++;
+            _ring[(int)((_lastSequence - 1) % _ring.Length)] =
+                new TelemetryLogRecord(_lastSequence, DateTime.UtcNow, level, _meter.Name, message, attributes);
         }
     }
 

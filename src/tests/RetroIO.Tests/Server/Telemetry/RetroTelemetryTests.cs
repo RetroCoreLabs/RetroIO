@@ -232,6 +232,53 @@ public sealed class RetroTelemetryTests
         node.Dispose();
     }
 
+    [Test]
+    public void TheLoggerProvider_KeepsOnlyThePartsOwnLines_WithTheirFieldsAsAttributes()
+    {
+        using RetroTelemetry telemetry = new RetroTelemetry("RetroIO.Test.Provider");
+        using TelemetryLoggerProvider provider = new TelemetryLoggerProvider("RetroIO.Protocols.Tnfs.Server", telemetry);
+
+        ILogger ours = provider.CreateLogger("RetroIO.Protocols.Tnfs.Server.TnfsServerService");
+        ILogger client = provider.CreateLogger("RetroIO.Protocols.Tnfs.Client.TnfsClient");
+        ILogger lookalike = provider.CreateLogger("RetroIO.Protocols.Tnfs.ServerX.Other");
+
+        ours.LogWarning("Session {Session} timed out", 7);
+        ours.LogError(new InvalidOperationException("x"), "Read failed");
+        client.LogWarning("client line");
+        lookalike.LogWarning("other line");
+
+        List<TelemetryLogRecord> records = new List<TelemetryLogRecord>();
+        telemetry.CollectLog(0, records);
+
+        Assert.That(records, Has.Count.EqualTo(2), "only the server's own lines");
+        Assert.That(records[0].Message, Is.EqualTo("Session 7 timed out"));
+        Assert.That(records[0].Level, Is.EqualTo(LogLevel.Warning));
+        Assert.That(records[0].Attributes, Has.Length.EqualTo(1));
+        Assert.That(records[0].Attributes[0].Key, Is.EqualTo("Session"));
+        Assert.That(records[0].Attributes[0].Value, Is.EqualTo("7"));
+        Assert.That(records[1].Attributes[0].Key, Is.EqualTo("exception.type"));
+    }
+
+    [Test]
+    public void TheLoggerProvider_FollowsTheHostsLevelFilter()
+    {
+        using RetroTelemetry telemetry = new RetroTelemetry("RetroIO.Test.Filter");
+        using ILoggerFactory factory = LoggerFactory.Create(b =>
+        {
+            b.SetMinimumLevel(LogLevel.Information);
+            b.AddProvider(new TelemetryLoggerProvider("RetroIO.Protocols.Econet", telemetry));
+        });
+
+        ILogger logger = factory.CreateLogger("RetroIO.Protocols.Econet.Server.EconetServerService");
+        logger.LogDebug("not kept");
+        logger.LogInformation("kept");
+
+        List<TelemetryLogRecord> records = new List<TelemetryLogRecord>();
+        telemetry.CollectLog(0, records);
+        Assert.That(records, Has.Count.EqualTo(1));
+        Assert.That(records[0].Message, Is.EqualTo("kept"));
+    }
+
     private static long Read(RetroTelemetry telemetry, string name, string? direction)
     {
         List<MetricReading> readings = new List<MetricReading>();

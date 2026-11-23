@@ -91,8 +91,12 @@ public static class RetroServerComposition
                 o.SessionTimeoutSeconds = tnfsConfig.SessionTimeoutSeconds;
             });
 
-            // Its metrics, for the management API (api/v1/telemetry).
+            // Its metrics and log, for the management API (api/v1/telemetry).
             services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(sp => sp.GetRequiredService<TnfsServerStatistics>().Telemetry);
+
+            // Every line its classes log is kept in that log too, next to the metrics.
+            services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(
+                sp => new RetroIO.Telemetry.TelemetryLoggerProvider("RetroIO.Protocols.Tnfs.Server", sp.GetRequiredService<TnfsServerStatistics>().Telemetry));
 
             if (opts.PrintBanners)
             {
@@ -122,8 +126,12 @@ public static class RetroServerComposition
                 o.WireProfileOverrides = econetConfig.ToWireProfileOverrides();
             });
 
-            // Its metrics, for the management API (api/v1/telemetry).
+            // Its metrics and log, for the management API (api/v1/telemetry).
             services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(sp => sp.GetRequiredService<EconetServerStatistics>().Telemetry);
+
+            // Every line its classes log is kept in that log too, next to the metrics.
+            services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(
+                sp => new RetroIO.Telemetry.TelemetryLoggerProvider("RetroIO.Protocols.Econet", sp.GetRequiredService<EconetServerStatistics>().Telemetry));
 
             if (opts.PrintBanners)
             {
