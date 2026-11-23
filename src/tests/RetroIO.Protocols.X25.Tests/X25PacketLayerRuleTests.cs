@@ -190,12 +190,14 @@ namespace RetroIO.Protocols.X25.Tests
             byte seenDiag = 0xFF;
             _layer.Reset += (l, c, cause, diag) => { resets++; seenDiag = diag; };
 
+            // Told at once, when the bad packet arrives, so a switch can reset the other leg then (X.25 Table C-4;
+            // decided by Ronny 2026-11-23). Until then this test asserted no report before the reset completed.
             _layer.ProcessPacket(Data(lci, ps: 3, pr: 0));
-            Assert.That(resets, Is.EqualTo(0), "not told until the reset completes");
+            Assert.That(resets, Is.EqualTo(1), "told when the bad packet arrives");
 
             _layer.ProcessPacket(X25PacketBuilder.CreateResetConfirmation(lci));
 
-            Assert.That(resets, Is.EqualTo(1));
+            Assert.That(resets, Is.EqualTo(1), "and not again when the reset completes");
             Assert.That(seenDiag, Is.EqualTo(X25Diagnostic.InvalidPS));
             Assert.That(_layer.Circuits[lci].State, Is.EqualTo(X25VcState.DataTransfer));
             Assert.That(_layer.Circuits[lci].RecvSeq, Is.EqualTo(0), "the window is zeroed in both directions (4.4.3)");

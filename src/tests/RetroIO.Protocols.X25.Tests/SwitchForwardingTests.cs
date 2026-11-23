@@ -260,6 +260,23 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_ingress.ResetCircuits[0].Diag, Is.EqualTo((byte)39));
         }
 
+        /// <summary>
+        /// Toward another network the other leg gets network congestion instead: X.75 has no remote procedure error among
+        /// its resetting causes (as x25emu 9e40f78 does). Added 2026-11-23.
+        /// </summary>
+        [Test]
+        public void AProcedureErrorReset_ReachesAnX75LegAsNetworkCongestion()
+        {
+            (ushort inLci, VcStitch stitch) = Call();
+            _ingress.Config.BetweenNetworks = true;
+
+            _egress.InjectReset(stitch.OutLci, cause: 0x05, diagnostic: 39);
+
+            Assert.That(_ingress.ResetCircuits.Count, Is.EqualTo(1));
+            Assert.That(_ingress.ResetCircuits[0].Cause, Is.EqualTo((byte)0x07));
+            Assert.That(_ingress.ResetCircuits[0].Diag, Is.EqualTo((byte)39));
+        }
+
         [Test]
         public void AResetOnTheEgressLeg_ReachesTheIngressLeg()
         {

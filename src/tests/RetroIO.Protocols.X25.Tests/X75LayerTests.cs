@@ -515,7 +515,7 @@ namespace RetroIO.Protocols.X25.Tests
 
         /// <summary>
         /// An STE resets a bad packet with network congestion on the wire, and tells its owner local procedure error with
-        /// the diagnostic when the reset completes, so a switch can pass remote procedure error on (X.25 Table C-4). Added
+        /// the diagnostic at once, and only once, so a switch can pass remote procedure error on (X.25 Table C-4). Added
         /// 2026-11-23.
         /// </summary>
         [Test]
@@ -526,15 +526,18 @@ namespace RetroIO.Protocols.X25.Tests
             ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()));
             byte reportedCause = 0xFF;
             byte reportedDiagnostic = 0xFF;
-            ste.Reset += (layer, l, c, d) => { reportedCause = c; reportedDiagnostic = d; };
+            int reports = 0;
+            ste.Reset += (layer, l, c, d) => { reportedCause = c; reportedDiagnostic = d; reports++; };
 
-            // P(S) 3 where 0 was due: diagnostic 1.
+            // P(S) 3 where 0 was due: diagnostic 1. The owner is told at once (Ronny, 2026-11-23), before the confirmation.
             ste.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x06, 0x41 });
             Assert.That(X25PacketParser.ParsePacket(_sink.Last, x75: true).ResetCause, Is.EqualTo((byte)0x07));
-            ste.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x1F });
-
+            Assert.That(reports, Is.EqualTo(1), "told when the bad packet arrived");
             Assert.That(reportedCause, Is.EqualTo((byte)0x05));
             Assert.That(reportedDiagnostic, Is.EqualTo((byte)1));
+
+            ste.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x1F });
+            Assert.That(reports, Is.EqualTo(1), "not told again when the reset completes");
         }
 
         [Test]

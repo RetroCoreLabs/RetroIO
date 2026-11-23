@@ -1711,17 +1711,20 @@ namespace RetroIO.Protocols.X25.Switch
             }
 
             // X.25 Table C-4: a circuit reset for a procedure error at one interface resets the distant DTE "with the cause
-            // 'Remote procedure error' (same diagnostic)". Added 2026-11-23 (asked by the x25emu session); before, the
-            // other leg got the local cause, or 0 / network congestion from a DTE or STE port.
-            byte onward = cause == X25Cause.ResettingLocalProcedureError ? X25Cause.ResettingRemoteProcedureError : cause;
-            if (fromIngress)
+            // 'Remote procedure error' (same diagnostic)". The layer reports such a reset as local procedure error the moment
+            // the bad packet arrives, so the other leg is reset at once (decided by Ronny 2026-11-23, matching x25emu
+            // 9e40f78). Toward another network the cause is network congestion: X.75 has no remote procedure error among
+            // its resetting causes (read by the x25emu session; the table is an image in the PDF, not checked here). Added
+            // 2026-11-23; before, the other leg got the local cause, or 0 / network congestion, after the first reset completed.
+            ISwitchPort other = fromIngress ? stitch.OutPort : stitch.InPort;
+            ushort otherLci = fromIngress ? stitch.OutLci : stitch.InLci;
+            byte onward = cause;
+            if (cause == X25Cause.ResettingLocalProcedureError)
             {
-                stitch.OutPort.ResetCircuit(stitch.OutLci, onward, diagnostic);
+                onward = other.Config.BetweenNetworks ? (byte)0x07 : X25Cause.ResettingRemoteProcedureError;
             }
-            else
-            {
-                stitch.InPort.ResetCircuit(stitch.InLci, onward, diagnostic);
-            }
+
+            other.ResetCircuit(otherLci, onward, diagnostic);
         }
 
         /// <summary>

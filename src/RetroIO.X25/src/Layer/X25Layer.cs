@@ -2648,9 +2648,13 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 vc.State = vc.Kind == X25VcKind.Pvc ? X25VcState.PvcReady : X25VcState.DataTransfer;
                 vc.TimerExpiryMs = 0;
-                byte collidedCause = CompletedResetCause(vc);
+                bool collidedToldAlready = vc.ResetForProcedureError;
                 vc.ResetFlow();
-                RaiseReset(lci, collidedCause, vc.Diagnostic);
+                if (!collidedToldAlready)
+                {
+                    RaiseReset(lci, vc.Cause, vc.Diagnostic);
+                }
+
                 return;
             }
 
@@ -2671,29 +2675,17 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 vc.State = vc.Kind == X25VcKind.Pvc ? X25VcState.PvcReady : X25VcState.DataTransfer;
                 vc.TimerExpiryMs = 0;
                 vc.OutOfOrder = false;
-                byte completedCause = CompletedResetCause(vc);
+                bool toldAlready = vc.ResetForProcedureError;
                 vc.ResetFlow();
 
                 // The application learns that the circuit was reset when the reset is complete - it
-                // needs to know for a reset it asked for as much as for one the engine raised on a
-                // procedure error, because in both cases everything in flight is gone (X.25 4.4.3.1).
-                RaiseReset(lci, completedCause, vc.Diagnostic);
+                // needs to know for a reset it asked for. One the engine raised on a procedure error was
+                // reported when the bad packet arrived (ResetForProcedureError), so not again here.
+                if (!toldAlready)
+                {
+                    RaiseReset(lci, vc.Cause, vc.Diagnostic);
+                }
             }
-        }
-
-        /// <summary>
-        /// The cause the owner is told when a reset this side sent completes: local procedure error for one started on a
-        /// procedure error, else the cause that was sent.
-        /// </summary>
-        /// <remarks>
-        /// The wire cause of a procedure-error reset is 0 at a DTE and network congestion at an STE, which do not say that
-        /// this side found the error. A switch needs to know it: X.25 Table C-4 resets the distant DTE with "remote
-        /// procedure error" and the same diagnostic (SwitchCore.OnCircuitReset). Added 2026-11-23; before, the owner was told
-        /// the wire cause, so a switch passed 0 or 0x07 on.
-        /// </remarks>
-        private static byte CompletedResetCause(X25Vc vc)
-        {
-            return vc.ResetForProcedureError ? X25Cause.ResettingLocalProcedureError : vc.Cause;
         }
 
         private void OnRestartRequest(X25PacketInfo info)
@@ -2857,6 +2849,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.ResetForProcedureError = true;
             ProcedureErrors++;
             Send(X25PacketBuilder.CreateResetRequest(vc.Lci, cause, diagnostic));
+
+            // The owner is told at once, as local procedure error with the diagnostic, so a switch resets the other leg the
+            // moment the bad packet arrives (X.25 Table C-4; decided by Ronny 2026-11-23, as x25emu 9e40f78 error_reset does).
+            // The wire cause (0 at a DTE, network congestion at an STE) does not say this side found the error. It is not
+            // told again when the reset completes. Before 2026-11-23 the owner heard of it only on completion.
+            RaiseReset(vc.Lci, X25Cause.ResettingLocalProcedureError, diagnostic);
         }
 
         /// <summary>

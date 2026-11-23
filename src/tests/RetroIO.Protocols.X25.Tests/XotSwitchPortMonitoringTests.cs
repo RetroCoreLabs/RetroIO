@@ -280,10 +280,15 @@ namespace RetroIO.Protocols.X25.Tests
         [Test]
         public void DialingPortWithNoPeer_CountsEachAttempt_AndNeverConnects()
         {
-            using TcpListener closedPort = new TcpListener(System.Net.IPAddress.Loopback, 0);
-            closedPort.Start();
-            ushort port = (ushort)((System.Net.IPEndPoint)closedPort.LocalEndpoint).Port;
-            closedPort.Stop();
+            // The port is HELD by a socket that is bound and not listening, for the whole test: a connection to it is
+            // refused, and nothing else on the machine can take it. Until 2026-11-23 the test took a free port and released
+            // it, so another program or a test running at the same time could listen there, the dial connected, and the
+            // test failed now and then ("it must keep trying", seen in a full run).
+            using System.Net.Sockets.Socket holder = new System.Net.Sockets.Socket(
+                System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+            holder.ExclusiveAddressUse = true;
+            holder.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+            ushort port = (ushort)((System.Net.IPEndPoint)holder.LocalEndPoint!).Port;
 
             using XotSwitchPort dte = NewDte(port);
             Assert.That(dte.Start(), Is.True, "a dialling port starts even when the peer is down");
