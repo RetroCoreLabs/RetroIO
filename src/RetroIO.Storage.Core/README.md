@@ -133,6 +133,13 @@ left out, never guessed. Where blank disks of different machines are the same by
 formatted CP/M disk is E5h throughout), each layout names the others in `SameBytesAs`, and the
 program opens it with `Mount` and the layout the user picked.
 
+## Who closes the image stream
+
+The driver does. `IFileSystemDriver.Mount` and `IBlankImageProvider.Mount` hand the stream to the
+driver, and its `Dispose` closes it, so a file opened for a mount is free again once the driver is
+disposed. `BlankImageRuleTests` mounts every blank layout from a real file, by name and by
+detection, disposes the driver and opens the file with no sharing.
+
 ## Copy conversions: text rules offered by the driver
 
 A provider may also implement `ITransferConversionProvider`: it lists the ways a file can be changed

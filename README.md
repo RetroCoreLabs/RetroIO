@@ -39,7 +39,9 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 ## What you can use it for
 
 - **Read and write vintage disk images** — NDFS, D64/T64/TAP/CRT/PRG/P00, DragonDOS, FAT12/16/32,
-  V7, FFS, DECB, OS-9 RBF and more — without knowing their on-disk layouts.
+  V7, FFS, DECB, OS-9 RBF, CP/M and more — without knowing their on-disk layouts. Create blank disks
+  of every format that writes, and copy text in and out with the machine's own rules (CP/M Ctrl-Z,
+  ND parity, PETSCII).
 - **Serve files to a real 8-bit machine** over **TNFS**, or to a BBC Micro over **Econet/AUN**.
 - **Build an X.25 network**: packet layer, LAPB, a switching engine, routing, monitoring, and XOT
   (X.25 over TCP, RFC 1613). XOT carries real traffic through `XotSwitchPort`, `XotPeerTransport`
@@ -47,6 +49,8 @@ lets the same code run in a desktop app, a Windows service and a console tool.
   incoming-call answer in `XotServerTransport` (see [Known problems](#known-problems)).
 - **Talk to a SINTRAN machine** with **XMSG** — file access, chat, the XROUT name service, the
   request/response library, and the kernel API a SINTRAN task would have called.
+- **Network an emulated machine**: put its network card on a built-in NAT, a real host adapter, a
+  TCP link or a hub, and answer dial-up calls with a login and SLIP.
 - **Put a management API on any of it** — REST plus SignalR push, with users, groups and a firewall.
 - **Write a tool in an afternoon**: the four in `src/tools/` are each a few hundred lines on top of
   these packages.
@@ -55,13 +59,14 @@ lets the same code run in a desktop app, a Windows service and a console tool.
 
 ## Status
 
-Version `0.1.0`, published to the local folder feed as `0.1.0-local.<timestamp>`. Nothing is
-on nuget.org yet, and `src/CHANGELOG.md` has only an `[Unreleased]` section so far.
+Version `0.1.0`. A `v*` tag publishes the packages to GitHub Packages (the latest is
+`v0.1.0-alpha.2`); for local work they go to the local folder feed as `0.1.0-local.<timestamp>`.
+Nothing is on nuget.org yet, and `src/CHANGELOG.md` has only an `[Unreleased]` section so far.
 
-- **Fifty-one packages.** Nothing in `src/` has a `Main` - the library and application split is
+- **Fifty-nine packages.** Nothing in `src/` has a `Main` - the library and application split is
   enforced by the layout, not by convention. A clean restore and build give no warnings. The
   GitHub test run is not green: see Known problems.
-- **Eighteen test projects.** The X.25 packet layer and the C emulator `x25emu` read the
+- **Twenty-seven test projects.** The X.25 packet layer and the C emulator `x25emu` read the
   **same** conformance vectors, so a disagreement between the two implementations is a
   failing test rather than an argument.
 - **Not yet measured:** throughput of any driver or protocol. No performance number is
@@ -177,6 +182,15 @@ flowchart TB
         Econet["Protocols.Econet"]
         X25["Protocols.X25.*<br/>ten packages"]
         Xmsg["Protocols.Xmsg.*<br/>eighteen packages"]
+        Slip["Protocols.Slip"]
+    end
+
+    subgraph NET["RetroIO.Network.* - emulated networks"]
+        Eth["Network.Ethernet"]
+        Nat["Network.Nat"]
+        Pcap["Network.Pcap"]
+        Router["Network.Router"]
+        DialUp["Network.DialUp"]
     end
 
     subgraph LINK["Link layer - shared by the wire protocols"]
@@ -205,14 +219,21 @@ flowchart TB
     Mgmt --> Ident
     Mgmt --> Sec
     Server --> SCore
+    Nat --> Eth
+    Pcap --> Eth
+    DialUp --> Slip
+    DialUp --> Nat
+    DialUp --> Router
 
     classDef store fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:#fff
     classDef proto fill:#009688,stroke:#00695C,stroke-width:2px,color:#fff
     classDef link  fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
+    classDef net   fill:#1E88E5,stroke:#1565C0,stroke-width:2px,color:#fff
     classDef cross fill:#FFA726,stroke:#F57C00,stroke-width:2px,color:#000
 
     class SCore,SLocal,SNdfs,SProv,SAzure,SUtil store
-    class Tnfs,DriveWire,Econet,X25,Xmsg proto
+    class Tnfs,DriveWire,Econet,X25,Xmsg,Slip proto
+    class Eth,Nat,Pcap,Router,DialUp net
     class Hdlc,Lapb,Link link
     class Ident,Sec,Mgmt,Server cross
 ```
@@ -235,8 +256,21 @@ flowchart TB
 | `RetroIO.Protocols.Tnfs` | TNFS: filesystem-over-UDP, what an 8-bit machine with a network adapter speaks | [README](src/RetroIO.Protocols.Tnfs/README.md) |
 | `RetroIO.Protocols.DriveWire` | DriveWire 4: Dragon and CoCo disk images served as virtual drives over TCP, for an emulator's Becker port | [README](src/RetroIO.Protocols.DriveWire/README.md) |
 | `RetroIO.Protocols.Econet` | Acorn Econet over AUN, including a Level-3 file server and its `*` commands | [README](src/RetroIO.Protocols.Econet/README.md) |
+| `RetroIO.Protocols.Slip` | SLIP (RFC 1055): line bytes to whole IP packets and back, for dial-up lines | [README](src/RetroIO.Protocols.Slip/README.md) |
+| `RetroIO.Protocols.Telnet` | The telnet byte layer: commands, option negotiation (RFC 1143), subnegotiation; no socket of its own | [README](src/RetroIO.Protocols.Telnet/README.md) |
+| `RetroIO.Protocols.Tn3270` | The IBM 3270 display station as a library, with no window and no network of its own | [README](src/RetroIO.Protocols.Tn3270/README.md) |
 | **X.25 — ten packages** | Packet layer, client, switch, routing, monitor, NMC, SINTRAN, runtime | [family index](src/RetroIO.Protocols.X25/README.md) |
 | **XMSG — eighteen packages** | The ND messaging system: codec, kernel API, file access, chat, sync, Ethernet, node | [family index](src/RetroIO.Protocols.Xmsg/README.md) |
+
+### Network — emulated network cards and dial-up
+
+| Package | What it is | README |
+|---|---|---|
+| `RetroIO.Network.Ethernet` | The host side of an emulated network card: the backend interface, the registry that makes a backend from a setting, TCP, UDP-multicast and TAP links | [README](src/RetroIO.Network.Ethernet/README.md) |
+| `RetroIO.Network.Nat` | The built-in NAT: DHCP, a gateway and a name server, internet through ordinary host sockets, port forwards; no administrator rights | [README](src/RetroIO.Network.Nat/README.md) |
+| `RetroIO.Network.Pcap` | Puts an emulated card on a real host adapter through SharpPcap (Npcap, libpcap) | [README](src/RetroIO.Network.Pcap/README.md) |
+| `RetroIO.Network.Router` | A small IPv4 router for an emulated dial-up provider: one point-to-point link per call | [README](src/RetroIO.Network.Router/README.md) |
+| `RetroIO.Network.DialUp` | The answering side of a dial-up call: an optional text login, then SLIP to the NAT or the router | [README](src/RetroIO.Network.DialUp/README.md) |
 
 ### Link layer
 
