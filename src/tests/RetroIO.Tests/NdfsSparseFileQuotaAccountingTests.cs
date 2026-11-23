@@ -57,6 +57,41 @@ namespace RetroIO.Tests
             return data;
         }
 
+        /// <summary>
+        /// Properties that ask for every all-zero page of <paramref name="data"/> to be a hole, as a
+        /// .xat side file of a sparse file does. A plain write stores every page.
+        /// </summary>
+        /// <param name="data">
+        /// The file's bytes.
+        /// </param>
+        /// <returns>
+        /// The property bag with the hole list.
+        /// </returns>
+        private static System.Collections.Generic.Dictionary<string, object> HolesAt(byte[] data)
+        {
+            System.Collections.Generic.List<int> holes = new System.Collections.Generic.List<int>();
+            int pages = (data.Length + PageSize - 1) / PageSize;
+            for (int p = 0; p < pages; p++)
+            {
+                bool zero = true;
+                int end = System.Math.Min(data.Length, (p + 1) * PageSize);
+                for (int i = p * PageSize; i < end && zero; i++)
+                {
+                    zero = data[i] == 0;
+                }
+
+                if (zero)
+                {
+                    holes.Add(p);
+                }
+            }
+
+            return new System.Collections.Generic.Dictionary<string, object>
+            {
+                { RetroIO.Storage.Ndfs.PropertyBags.NdfsPropertyBagKeys.Holes, holes.ToArray() },
+            };
+        }
+
         private static uint PagesUsedFor(NdfsDriver driver, string userName)
         {
             INdfsFileSystem ndfs = driver.GetFileSystem()!;
@@ -85,7 +120,7 @@ namespace RetroIO.Tests
             driver.CreateDirectory("/ALICE");
 
             uint before = PagesUsedFor(driver, "ALICE");
-            driver.WriteFile("/ALICE/ZERO:DAT", data);
+            driver.WriteFileWithProperties("/ALICE/ZERO:DAT", data, HolesAt(data));
             uint after = PagesUsedFor(driver, "ALICE");
 
             // SINTRAN charges a file's index block and the user's first object data page to the user
@@ -109,7 +144,7 @@ namespace RetroIO.Tests
             driver.CreateDirectory("/BOB");
 
             uint before = PagesUsedFor(driver, "BOB");
-            driver.WriteFile("/BOB/MIXED:DAT", data);
+            driver.WriteFileWithProperties("/BOB/MIXED:DAT", data, HolesAt(data));
             uint after = PagesUsedFor(driver, "BOB");
 
             Assert.That(after - before, Is.EqualTo(3u + 1u + 1u),
@@ -203,7 +238,7 @@ namespace RetroIO.Tests
             driver.CreateDirectory("/FRANK");
 
             uint before = PagesUsedFor(driver, "FRANK");
-            driver.WriteFile("/FRANK/BIGSPARSE:DAT", data);
+            driver.WriteFileWithProperties("/FRANK/BIGSPARSE:DAT", data, HolesAt(data));
             uint after = PagesUsedFor(driver, "FRANK");
 
             // 2 real pages, the top block and 2 group index blocks (600 pages = 2 groups of 512), and

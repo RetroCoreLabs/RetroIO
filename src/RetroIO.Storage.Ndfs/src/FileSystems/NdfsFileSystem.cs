@@ -24,6 +24,9 @@ namespace RetroIO.Storage.Ndfs.FileSystems
     /// </summary>
     public partial class NdfsFileSystem : IBlockFileSystem, INdfsFileSystem, IDisposable
     {
+        // The pages the write in progress may store as holes (see IsHolePage); null for none.
+        private bool[]? _requestedHoles;
+
         private IBlockDevice? _device;
         private MasterBlock? _masterBlock;
         private ObjectFile _objectFile = new ObjectFile();
@@ -3425,8 +3428,8 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                     int pageOffset = (int)(i * NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
                     int pageSize = Math.Min(NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE, data.Length - pageOffset);
 
-                    // Check if page is all zeros (sparse hole)
-                    bool isZeroPage = IsPageAllZeros(data, pageOffset, pageSize);
+                    // A hole only where this write asked for one (see IsHolePage)
+                    bool isZeroPage = IsHolePage(data, i, pageOffset, pageSize);
 
                     if (isZeroPage)
                     {
@@ -3482,7 +3485,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
                         uint absolutePage = pageCursor + i;
                         int pageOffset = (int)(absolutePage * PageSize);
                         int pageSize = Math.Max(0, Math.Min(PageSize, data.Length - pageOffset));
-                        bool isZeroPage = pageSize == 0 || IsPageAllZeros(data, pageOffset, pageSize);
+                        bool isZeroPage = pageSize == 0 || IsHolePage(data, absolutePage, pageOffset, pageSize);
 
                         if (isZeroPage)
                         {
@@ -3533,6 +3536,100 @@ namespace RetroIO.Storage.Ndfs.FileSystems
         }
 
         /// <summary>
+        /// Tells whether a page of the file being written is stored as a hole (no disk page).
+        /// </summary>
+        /// <remarks>
+        /// Every page is stored unless the write asked for a hole at that page AND the page is all
+        /// zeros. A plain write asks for none: FLOMON cannot load a file with holes, and the ND-made
+        /// TPE floppy 210523I01-XX-01D stores its zero pages (measured on nd100x). A write with
+        /// properties takes the hole list a .xat side file carries, so a sparse file copied out
+        /// and back in keeps its holes.
+        /// </remarks>
+        /// <param name="data">
+        /// The file's bytes.
+        /// </param>
+        /// <param name="pageIndex">
+        /// The page's number in the file.
+        /// </param>
+        /// <param name="offset">
+        /// The page's first byte in <paramref name="data"/>.
+        /// </param>
+        /// <param name="length">
+        /// The page's length in <paramref name="data"/>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> for a hole.
+        /// </returns>
+        private bool IsHolePage(byte[] data, uint pageIndex, int offset, int length)
+        {
+            if (_requestedHoles == null || pageIndex >= (uint)_requestedHoles.Length || !_requestedHoles[pageIndex])
+            {
+                return false;
+            }
+
+            return IsPageAllZeros(data, offset, length);
+        }
+
+        /// <summary>
+        /// Reads the hole list of a property bag: page numbers, as numbers or as the JSON text a
+        /// .xat file gives back for a list.
+        /// </summary>
+        /// <param name="propertyBag">
+        /// The properties.
+        /// </param>
+        /// <param name="filePages">
+        /// The file's page count; a page number past it is ignored.
+        /// </param>
+        /// <returns>
+        /// One flag per page, or <c>null</c> when the bag names no holes.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the list is not a list of page numbers.
+        /// </exception>
+        private static bool[]? ReadRequestedHoles(IDictionary<string, object>? propertyBag, uint filePages)
+        {
+            if (propertyBag == null || !propertyBag.TryGetValue(PropertyBags.NdfsPropertyBagKeys.Holes, out object? raw) || raw == null)
+            {
+                return null;
+            }
+
+            List<long> pages = new List<long>();
+            switch (raw)
+            {
+                case int[] ints:
+                    for (int i = 0; i < ints.Length; i++)
+                        pages.Add(ints[i]);
+                    break;
+                case long[] longs:
+                    pages.AddRange(longs);
+                    break;
+                case string text:
+                    string inner = text.Trim();
+                    if (!inner.StartsWith("[", StringComparison.Ordinal) || !inner.EndsWith("]", StringComparison.Ordinal))
+                        throw new ArgumentException(PropertyBags.NdfsPropertyBagKeys.Holes + " must be a list of page numbers, not " + text, nameof(propertyBag));
+                    string[] parts = inner.Substring(1, inner.Length - 2).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    for (int i = 0; i < parts.Length; i++)
+                    {
+                        if (!long.TryParse(parts[i], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long page))
+                            throw new ArgumentException(PropertyBags.NdfsPropertyBagKeys.Holes + " must be a list of page numbers, not " + text, nameof(propertyBag));
+                        pages.Add(page);
+                    }
+                    break;
+                default:
+                    throw new ArgumentException(PropertyBags.NdfsPropertyBagKeys.Holes + " must be a list of page numbers, not " + raw, nameof(propertyBag));
+            }
+
+            bool[] holes = new bool[filePages];
+            for (int i = 0; i < pages.Count; i++)
+            {
+                if (pages[i] >= 0 && pages[i] < filePages)
+                    holes[pages[i]] = true;
+            }
+
+            return holes;
+        }
+
+        /// <summary>
         /// Checks if a page in the data buffer is all zeros.
         /// </summary>
         private bool IsPageAllZeros(byte[] data, int offset, int length)
@@ -3563,7 +3660,7 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             {
                 int pageOffset = (int)(i * NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
                 int pageSize = Math.Min(NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE, data.Length - pageOffset);
-                if (!IsPageAllZeros(data, pageOffset, pageSize))
+                if (!IsHolePage(data, i, pageOffset, pageSize))
                 {
                     realPages++;
                 }
@@ -4001,7 +4098,16 @@ namespace RetroIO.Storage.Ndfs.FileSystems
             // a previous export), so it must never be allowed to override what was actually just
             // allocated on disk — see NdfsPropertyBagSerializer.ApplyPortableMetadata for exactly
             // which fields are safe to restore afterward.
-            WriteFile(path, data);
+            uint filePages = (uint)((data.Length + NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE - 1) / NdfsBlockDeviceDescriptor.NDFS_PAGE_SIZE);
+            _requestedHoles = ReadRequestedHoles(propertyBag, filePages);
+            try
+            {
+                WriteFile(path, data);
+            }
+            finally
+            {
+                _requestedHoles = null;
+            }
 
             if (propertyBag == null || !PropertyBags.NdfsPropertyBagSerializer.HasNdfsMetadata(propertyBag))
                 return;

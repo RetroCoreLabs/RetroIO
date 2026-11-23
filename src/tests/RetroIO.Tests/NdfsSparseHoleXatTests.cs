@@ -115,6 +115,41 @@ namespace RetroIO.Tests
         }
 
         /// <summary>
+        /// Properties that ask for every all-zero page of <paramref name="data"/> to be a hole, as a
+        /// .xat side file of a sparse file does. A plain write stores every page.
+        /// </summary>
+        /// <param name="data">
+        /// The file's bytes.
+        /// </param>
+        /// <returns>
+        /// The property bag with the hole list.
+        /// </returns>
+        private static System.Collections.Generic.Dictionary<string, object> HolesAt(byte[] data)
+        {
+            System.Collections.Generic.List<int> holes = new System.Collections.Generic.List<int>();
+            int pages = (data.Length + PageSize - 1) / PageSize;
+            for (int p = 0; p < pages; p++)
+            {
+                bool zero = true;
+                int end = System.Math.Min(data.Length, (p + 1) * PageSize);
+                for (int i = p * PageSize; i < end && zero; i++)
+                {
+                    zero = data[i] == 0;
+                }
+
+                if (zero)
+                {
+                    holes.Add(p);
+                }
+            }
+
+            return new System.Collections.Generic.Dictionary<string, object>
+            {
+                { RetroIO.Storage.Ndfs.PropertyBags.NdfsPropertyBagKeys.Holes, holes.ToArray() },
+            };
+        }
+
+        /// <summary>
         /// Creates a fresh image named <paramref name="imageName"/>, writes
         /// <paramref name="contents"/> to <paramref name="path"/>, and returns the resulting
         /// property bag.
@@ -151,7 +186,7 @@ namespace RetroIO.Tests
                 // A freshly created image has the SYSTEM user, which owns the file.
                 Assert.That(ndfs!.GetUsers().Count, Is.EqualTo(1), "SYSTEM is the only user of a new image");
 
-                ndfs.WriteFile(path, contents);
+                ndfs.WriteFileWithProperties(path, contents, HolesAt(contents));
 
                 IDictionary<string, object>? bag = ndfs.GetFileProperties(path);
                 Assert.That(bag, Is.Not.Null, "the file must have properties");

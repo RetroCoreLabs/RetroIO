@@ -148,6 +148,39 @@ namespace RetroIO.Tests
             Assert.That(nonZero, Is.GreaterThan(1000), "FLOMON's code after the map");
         }
 
+        [Test]
+        public void Ndfs_ZeroPages_AreStored_UnlessTheXatListsThemAsHoles()
+        {
+            // FLOMON cannot load a file with holes, and the ND-made TPE floppy stores its zero
+            // pages. So a plain write stores every page; only a write that carries a hole list
+            // (from a .xat side file) makes those pages holes again.
+            byte[] data = new byte[5 * 2048];
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = (i / 2048) == 1 || (i / 2048) == 3 ? (byte)0 : (byte)(i + 1);
+            }
+
+            NdfsDriverProvider ndfs = new NdfsDriverProvider();
+            byte[] image = ndfs.CreateBlank("ndfs-floppy-1200k", new Dictionary<string, string>());
+            MemoryStream stream = new MemoryStream();
+            stream.Write(image, 0, image.Length);
+            stream.Position = 0;
+            NdfsDriver driver = (NdfsDriver)ndfs.Mount(stream, false, "ndfs-floppy-1200k");
+
+            driver.WriteFile("/SYSTEM/PLAIN:DATA", data);
+            Assert.That((int[])driver.GetFileProperties("/SYSTEM/PLAIN:DATA")![RetroIO.Storage.Ndfs.PropertyBags.NdfsPropertyBagKeys.Holes], Is.Empty, "plain write");
+
+            IDictionary<string, object> fromXat = RetroIO.Storage.Ndfs.PropertyBags.NdfsXatSerializer.DeserializeFromJson(
+                RetroIO.Storage.Ndfs.PropertyBags.NdfsXatSerializer.SerializeToJson(new Dictionary<string, object>
+                {
+                    { RetroIO.Storage.Ndfs.PropertyBags.NdfsPropertyBagKeys.Holes, new[] { 3 } },
+                }));
+            driver.WriteFileWithProperties("/SYSTEM/SPARSE:DATA", data, fromXat);
+            Assert.That((int[])driver.GetFileProperties("/SYSTEM/SPARSE:DATA")![RetroIO.Storage.Ndfs.PropertyBags.NdfsPropertyBagKeys.Holes], Is.EqualTo(new[] { 3 }), "only the listed zero page");
+            Assert.That(driver.ReadFile("/SYSTEM/SPARSE:DATA"), Is.EqualTo(data));
+            Assert.That(driver.ReadFile("/SYSTEM/PLAIN:DATA"), Is.EqualTo(data));
+        }
+
         private static void Check(IFileSystemDriver driver, string folder, ref string wrong)
         {
             DirectoryEntry[] entries = driver.ListDirectory(folder);
