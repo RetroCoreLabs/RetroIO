@@ -92,6 +92,13 @@ namespace RetroIO.Protocols.Tn3270
     /// </remarks>
     public sealed class Display3270
     {
+        // EBCDIC code page 037 characters the selector-pen designator and Field End test for
+        // (GA23-0059-4 p. 4-22: "?" X'6F', ">" X'6E', "&" X'50', space X'40').
+        private const byte EbcdicSpace = 0x40;
+        private const byte EbcdicQuestion = 0x6F;
+        private const byte EbcdicGreater = 0x6E;
+        private const byte EbcdicAmpersand = 0x50;
+
         // The character attribute types an SA order may carry (p. 4-16): highlighting, foreground
         // colour, character set, background colour, transparency.
         private static readonly byte[] CharacterAttributeTypes = { 0x41, 0x42, 0x43, 0x45, 0x46 };
@@ -958,6 +965,137 @@ namespace RetroIO.Protocols.Tn3270
             int last = Size - 1;
             OperatorMove(NextInputPosition(last));
         }
+
+        /// <summary>
+        /// End (Field End): the cursor goes just after the last character in its field that is not
+        /// a blank or a null, or to the field's first position when it holds none.
+        /// </summary>
+        /// <remarks>
+        /// The 3278 keyboard has no such key; the 3270 PC and x3270 do. Taken from x3270
+        /// (Common\kybd.c, FieldEnd_action): nothing happens on an unformatted screen, on a field
+        /// attribute or in a protected field, and when the last character is in the field's last
+        /// position the cursor stays on it rather than landing on the next attribute.
+        /// </remarks>
+        public void FieldEnd()
+        {
+            if (Lock != KeyboardLock.None || !IsFormatted)
+            {
+                return;
+            }
+
+            int fa = GetFieldAttributeFor(CursorAddress);
+            if (fa == CursorAddress || FieldAttribute.IsProtected(_buffer[fa]))
+            {
+                return;
+            }
+
+            int lastNonBlank = -1;
+            for (int a = Next(fa); !_isFieldAttribute[a]; a = Next(a))
+            {
+                byte c = _buffer[a];
+                if (c != FormatControl.Null && c != EbcdicSpace)
+                {
+                    lastNonBlank = a;
+                }
+            }
+
+            int target = lastNonBlank < 0 ? Next(fa) : Next(lastNonBlank);
+            if (lastNonBlank >= 0 && _isFieldAttribute[target])
+            {
+                target = lastNonBlank;
+            }
+
+            OperatorMove(target);
+        }
+
+        /// <summary>
+        /// Cursor Select: selects the selector-pen detectable field the cursor is in, by its
+        /// designator character, the first character of the field.
+        /// </summary>
+        /// <remarks>
+        /// GA23-0059-4 p. 4-22 to 4-24 and x3270 (Common\kybd.c, lightpen_select):
+        ///  - "?" becomes ">" and the field's MDT is set (selected).
+        ///  - ">" becomes "?" and the MDT is cleared (deselected).
+        ///  - a space or a null: MDT set, then a selector-pen attention (AID X'7E'), which sends the
+        ///    modified fields' addresses without their data (p. 3-12).
+        ///  - an ampersand: MDT set, then an Enter.
+        /// A field that is not detectable (display bits other than 01 or 10), or any other
+        /// designator, locks the keyboard with Go Elsewhere, as GA27-2890-4 p. 2-22 says for "a
+        /// cursor select operation when the cursor is not in a valid cursor select field"; x3270
+        /// only rings the bell there. RetroIO follows IBM, as it does for typing on a protected
+        /// field.
+        /// </remarks>
+        /// <returns>
+        /// True when the field was selected, deselected or sent; false when refused.
+        /// </returns>
+        public bool CursorSelect()
+        {
+            if (Lock != KeyboardLock.None)
+            {
+                return false;
+            }
+
+            int fa = GetFieldAttributeFor(CursorAddress);
+            byte display = fa >= 0 ? (byte)(_buffer[fa] & FieldAttribute.DisplayMask) : (byte)0;
+            if (fa < 0 || (display != 0x04 && display != 0x08))
+            {
+                Lock = KeyboardLock.OperatorError;
+                return false;
+            }
+
+            int designator = Next(fa);
+            switch (_buffer[designator])
+            {
+                case EbcdicQuestion:
+                    _buffer[designator] = EbcdicGreater;
+                    _buffer[fa] = (byte)(_buffer[fa] | FieldAttribute.Mdt);
+                    return true;
+                case EbcdicGreater:
+                    _buffer[designator] = EbcdicQuestion;
+                    _buffer[fa] = (byte)(_buffer[fa] & ~FieldAttribute.Mdt);
+                    return true;
+                case EbcdicSpace:
+                case FormatControl.Null:
+                    _buffer[fa] = (byte)(_buffer[fa] | FieldAttribute.Mdt);
+                    return Attention(Aid.SelectorPen);
+                case EbcdicAmpersand:
+                    _buffer[fa] = (byte)(_buffer[fa] | FieldAttribute.Mdt);
+                    return Attention(Aid.Enter);
+                default:
+                    Lock = KeyboardLock.OperatorError;
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Sys Req (Test Req on the 3278): sends a test request read and waits for the host.
+        /// </summary>
+        /// <remarks>
+        /// GA23-0059-4 p. 9-3: the heading is SOH % / STX (X'01' X'6C' X'61' X'02') instead of the
+        /// AID and cursor address; the rest is a Read Modified's data (every modified field, nulls
+        /// left out; all data on an unformatted screen). The manual's non-SNA layout ends with ETX;
+        /// x3270 (Common\ctlr.c, ctlr_read_modified, case AID_SYSREQ) sends no ETX over TN3270,
+        /// and neither does RetroIO. Under TN3270E Sys Req is a telnet-level request instead
+        /// (RFC 2355), not built.
+        /// </remarks>
+        /// <returns>
+        /// True when sent; false when the keyboard is locked.
+        /// </returns>
+        public bool SysReq() => Attention(Aid.SysReq);
+
+        /// <summary>
+        /// The data-stream half of Attn in plain TN3270: the PA1 short read, sent whatever the
+        /// keyboard lock is, and the lock left as it was.
+        /// </summary>
+        /// <remarks>
+        /// Taken from x3270 (Common\kybd.c, Attn_action, the IN_3270 case, commented "This is
+        /// what PCOMM does in plain TN3270 mode: PA1, then TELNET BREAK"): ctlr_read_modified with
+        /// AID_PA1, then net_break. The telnet break is the connection's job, not the display's;
+        /// the caller sends it after this. Attn works while the keyboard is locked, because
+        /// interrupting a host that does not answer is what it is for. No IBM manual held here
+        /// describes Attn on a TN3270 connection, so x3270 is the only source.
+        /// </remarks>
+        public void Attn() => SendReadModified(Aid.PA1, all: false);
 
         /// <summary>
         /// Moves the cursor to an address (mouse click, arrow keys). Refused while locked.
@@ -2234,7 +2372,18 @@ namespace RetroIO.Protocols.Tn3270
             // attributes. Character mode adds SA orders for the listed types (p. 5-61, 5-62).
             _inbound.Clear();
             Array.Clear(_inboundSa);
-            AppendByte(aid);
+            if (aid == Aid.SysReq)
+            {
+                // Test request read: SOH % / STX instead of the AID and cursor (p. 9-3; see SysReq).
+                AppendByte(0x01);
+                AppendByte(0x6C);
+                AppendByte(0x61);
+                AppendByte(0x02);
+            }
+            else
+            {
+                AppendByte(aid);
+            }
 
             if (!all && Aid.IsShortRead(aid))
             {
@@ -2243,7 +2392,13 @@ namespace RetroIO.Protocols.Tn3270
                 return;
             }
 
-            AppendAddress(CursorAddress);
+            if (aid != Aid.SysReq)
+            {
+                AppendAddress(CursorAddress);
+            }
+
+            // Selector-pen attention: each modified field's address, but none of its data (p. 3-12).
+            bool sendData = all || aid != Aid.SelectorPen;
             int size = Size;
 
             if (!IsFormatted)
@@ -2270,7 +2425,7 @@ namespace RetroIO.Protocols.Tn3270
                 AppendByte(Order3270.SetBufferAddress);
                 int a = Next(fa);
                 AppendAddress(a);
-                while (!_isFieldAttribute[a])
+                while (sendData && !_isFieldAttribute[a])
                 {
                     AppendData(a);
                     a = Next(a);

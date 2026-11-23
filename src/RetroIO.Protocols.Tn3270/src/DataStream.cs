@@ -323,9 +323,16 @@ namespace RetroIO.Protocols.Tn3270
         public const byte PA3 = 0x6B;
 
         /// <summary>
-        /// Test Req and Sys Req, X'F0'.
+        /// Test Req and Sys Req, X'F0'. Its Read Modified is the test request read (see
+        /// <see cref="Display3270.SysReq"/>), not a normal read heading.
         /// </summary>
         public const byte SysReq = 0xF0;
+
+        /// <summary>
+        /// Selector-pen attention, X'7E' (p. 3-9): sent by Cursor Select on a field whose designator
+        /// is a space or a null. Its Read Modified carries field addresses but no data (p. 3-12).
+        /// </summary>
+        public const byte SelectorPen = 0x7E;
 
         /// <summary>
         /// The AID for PF1 to PF24 (p. 3-9).
