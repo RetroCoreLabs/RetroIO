@@ -20,7 +20,7 @@ namespace RetroIO.Protocols.X25.Tests
     /// </summary>
     /// <remarks>
     /// Gated on the <c>NMC_DEMO</c> environment variable so it only runs when the demo is up
-    /// (<c>./demo/demo.ps1 start</c>).
+    /// (RetroX25 repository, <c>src/demo/demo.ps1 start</c>).
     /// </remarks>
     [TestFixture]
     public class NmcDiscoveryLiveTests
@@ -30,7 +30,7 @@ namespace RetroIO.Protocols.X25.Tests
         {
             if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("NMC_DEMO")))
             {
-                Assert.Ignore("Start the C# demo (./demo/demo.ps1 start) and set NMC_DEMO=1 to run this test.");
+                Assert.Ignore("Start the C# demo of the RetroX25 repository (src/demo/demo.ps1 start; the copy in this repository does not work, see src/tests/demo/README.md) and set NMC_DEMO=1 to run this test.");
             }
 
             NmcDiscoveryOptions options = new NmcDiscoveryOptions

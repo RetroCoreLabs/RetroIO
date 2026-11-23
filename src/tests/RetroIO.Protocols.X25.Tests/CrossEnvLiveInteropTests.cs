@@ -140,7 +140,7 @@ namespace RetroIO.Protocols.X25.Tests
         {
             if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CSHARP_DEMO")))
             {
-                Assert.Ignore("Start the C# demo (./demo/demo.ps1 start) and set CSHARP_DEMO=1 to run this smoke test.");
+                Assert.Ignore("Start the C# demo of the RetroX25 repository (src/demo/demo.ps1 start; the copy in this repository does not work, see src/tests/demo/README.md) and set CSHARP_DEMO=1 to run this smoke test.");
             }
 
             using X25Client client = new X25Client { ServiceName = "smoke" };

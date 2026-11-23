@@ -28,3 +28,7 @@ CLAUDE.md
 
 # Machine-specific test-data folders (copy of src/eng/test-env.example.bat filled in)
 src/eng/test-env.local.bat
+
+# Run-time output of the old demo script (src/tests/demo): process ids and logs, never source.
+src/tests/demo/.pids
+src/tests/demo/logs/
