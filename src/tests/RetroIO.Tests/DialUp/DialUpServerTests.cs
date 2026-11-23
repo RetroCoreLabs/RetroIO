@@ -244,6 +244,62 @@ public sealed class DialUpServerTests
         return server;
     }
 
+    /// <summary>
+    /// Load (plan Phase 14): 16 callers dial and log in at the same time, ten times over. In each
+    /// wave every caller gets an address of its own; after each wave every line is free again and
+    /// the addresses are given out again; at the end no call is left and nothing was refused.
+    /// </summary>
+    [Test]
+    [Category("Load")]
+    [Explicit("Load test; about 15 s, most of it the password check on every login")]
+    public void Load_SixteenCallersAtOnce_TenWaves_EachGetsItsOwnAddress_AndNoCallIsLeft()
+    {
+        const int Callers = 16;
+        const int Waves = 10;
+        using DialUpServer server = StartServer(maxCalls: Callers);
+        System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+
+        for (int wave = 0; wave < Waves; wave++)
+        {
+            TcpClient[] lines = new TcpClient[Callers];
+            string[] addresses = new string[Callers];
+            System.Threading.Tasks.Parallel.For(0, Callers, i =>
+            {
+                lines[i] = Dial(server);
+                string text = LogIn(lines[i], "caller", Password);
+                int at = text.IndexOf("Your address is ", StringComparison.Ordinal);
+                addresses[i] = at < 0 ? "none: " + text : text.Substring(at + 16).Split('\r', '\n', ' ')[0];
+            });
+
+            HashSet<string> distinct = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < Callers; i++)
+            {
+                Assert.That(addresses[i], Does.StartWith("10.42.0."), "wave " + wave + ", caller " + i);
+                Assert.That(distinct.Add(addresses[i]), Is.True, "wave " + wave + ": " + addresses[i] + " given to two callers at once");
+            }
+
+            Assert.That(server.CallsActive, Is.EqualTo(Callers), "wave " + wave);
+            for (int i = 0; i < Callers; i++)
+            {
+                lines[i].Dispose();
+            }
+
+            DateTime deadline = DateTime.UtcNow + Wait;
+            while (server.CallsActive != 0 && DateTime.UtcNow < deadline)
+            {
+                System.Threading.Thread.Sleep(20);
+            }
+
+            Assert.That(server.CallsActive, Is.EqualTo(0), "wave " + wave + ": every caller hung up");
+        }
+
+        clock.Stop();
+        TestContext.Out.WriteLine($"{Callers * Waves} calls in {Waves} waves of {Callers} in {clock.ElapsedMilliseconds} ms");
+        Assert.That(server.CallsAnswered, Is.EqualTo(Callers * Waves));
+        Assert.That(server.CallsRefusedFull, Is.EqualTo(0));
+        Assert.That(server.LoginsRefused, Is.EqualTo(0));
+    }
+
     [Test]
     public void OneCaller_SendsAnIpPacketToAnother_OverSlip_AndItArrives()
     {
