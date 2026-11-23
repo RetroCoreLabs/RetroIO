@@ -294,6 +294,69 @@ public sealed class DialUpServerTests
         Assert.That(arrived.AsSpan(28).ToArray(), Is.EqualTo(payload));
     }
 
+    [Test]
+    public void ACaller_ReachesAUdpServiceOnThePc_ThroughTheGateway_AndGetsTheAnswer()
+    {
+        // Step 1 of the plan: a caller reaches RetroServer's own services. The gateway 10.42.0.2 is
+        // the PC's own 127.0.0.1 through the NAT. A UDP echo on the PC stands for the service.
+        using System.Net.Sockets.UdpClient service = new System.Net.Sockets.UdpClient(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+        int servicePort = ((System.Net.IPEndPoint)service.Client.LocalEndPoint!).Port;
+        byte[]? heard = null;
+        Thread echo = new Thread(() =>
+        {
+            try
+            {
+                System.Net.IPEndPoint? from = null;
+                service.Client.ReceiveTimeout = (int)Wait.TotalMilliseconds;
+                heard = service.Receive(ref from);
+                service.Send(Encoding.ASCII.GetBytes("answer from the PC"), from);
+            }
+            catch (SocketException)
+            {
+                // Nothing came: the asserts below say so.
+            }
+        }) { IsBackground = true };
+        echo.Start();
+
+        using DialUpServer server = StartServer(maxCalls: 4);
+        using TcpClient caller = Dial(server);
+        Assert.That(LogIn(caller, "caller", Password), Does.Contain("Your address is 10.42.0.15"));
+
+        byte[] question = Encoding.ASCII.GetBytes("question from the caller");
+        RetroIO.Protocols.Slip.SlipLink slip = new RetroIO.Protocols.Slip.SlipLink();
+        slip.OnLineOutput += bytes => caller.GetStream().Write(bytes);
+        byte[]? answer = null;
+        slip.OnPacket += p =>
+        {
+            // UDP from the gateway to the caller.
+            if (p.Length > 28 && p[9] == 17 && p[15] == 2 && p[19] == 15)
+            {
+                answer = p.ToArray();
+            }
+        };
+        slip.SendPacket(UdpPacket(new byte[] { 10, 42, 0, 15 }, new byte[] { 10, 42, 0, 2 }, 40001, servicePort, question));
+
+        byte[] buffer = new byte[2048];
+        DateTime deadline = DateTime.UtcNow + Wait;
+        while (answer == null && DateTime.UtcNow < deadline)
+        {
+            int read = caller.GetStream().Read(buffer, 0, buffer.Length);
+            if (read == 0)
+            {
+                break;
+            }
+
+            slip.ReceiveFromLine(buffer.AsSpan(0, read));
+        }
+
+        echo.Join(Wait);
+        Assert.That(heard, Is.EqualTo(question), "the service on the PC got the caller's packet");
+        Assert.That(answer, Is.Not.Null, "the caller got no answer");
+        Assert.That(answer!.AsSpan(28).ToArray(), Is.EqualTo(Encoding.ASCII.GetBytes("answer from the PC")));
+        Assert.That((answer[20] << 8) | answer[21], Is.EqualTo(servicePort), "from the service's port");
+        Assert.That((answer[22] << 8) | answer[23], Is.EqualTo(40001), "to the caller's port");
+    }
+
     /// <summary>
     /// Builds an IPv4 UDP packet with a correct header checksum and no UDP checksum (0, allowed by RFC 768).
     /// </summary>
