@@ -91,6 +91,9 @@ public static class RetroServerComposition
                 o.SessionTimeoutSeconds = tnfsConfig.SessionTimeoutSeconds;
             });
 
+            // Its metrics, for the management API (api/v1/telemetry).
+            services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(sp => sp.GetRequiredService<TnfsServerStatistics>().Telemetry);
+
             if (opts.PrintBanners)
             {
                 ServerHostingBanners.PrintTnfsConfiguration(tnfsConfig);
@@ -118,6 +121,9 @@ public static class RetroServerComposition
                 o.DefaultWireProfile = econetConfig.WireProfile;
                 o.WireProfileOverrides = econetConfig.ToWireProfileOverrides();
             });
+
+            // Its metrics, for the management API (api/v1/telemetry).
+            services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(sp => sp.GetRequiredService<EconetServerStatistics>().Telemetry);
 
             if (opts.PrintBanners)
             {

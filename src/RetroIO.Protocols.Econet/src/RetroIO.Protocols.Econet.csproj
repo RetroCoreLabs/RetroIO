@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
+    <ProjectReference Include="..\..\RetroIO.Telemetry\src\RetroIO.Telemetry.csproj" />
     <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />
     <ProjectReference Include="..\..\RetroIO.Identity\src\RetroIO.Identity.csproj" />
     <ProjectReference Include="..\..\RetroIO.Security.Firewall\src\RetroIO.Security.Firewall.csproj" />

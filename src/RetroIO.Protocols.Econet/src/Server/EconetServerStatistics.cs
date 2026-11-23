@@ -7,6 +7,8 @@
 
 using System.Threading;
 
+using RetroIO.Telemetry;
+
 namespace RetroIO.Protocols.Econet.Server;
 
 /// <summary>
@@ -27,6 +29,31 @@ public sealed class EconetServerStatistics : IEconetStatisticsTracker
     private long _fileOperations;
     private long _errors;
     private readonly DateTime _startedAt = DateTime.UtcNow;
+
+    /// <summary>
+    /// Initialises the counters and their metrics in the shared RetroServer shape.
+    /// </summary>
+    public EconetServerStatistics()
+    {
+        Telemetry = new RetroTelemetry(TelemetryName);
+        Telemetry.AddCounter("retroio.econet.requests", "{request}", "Requests handled.", () => TotalRequests);
+        Telemetry.AddCounter("retroio.econet.file_operations", "{request}", "Requests that were file operations.", () => FileOperations);
+        Telemetry.AddCounter("retroio.econet.errors", "{error}", "Requests that failed, and replies that could not be sent.", () => Errors);
+        Telemetry.AddCounter("retroio.econet.io", "By", "Payload bytes.", () => BytesReceived, new KeyValuePair<string, string>("direction", "in"));
+        Telemetry.AddCounter("retroio.econet.io", "By", "Payload bytes.", () => BytesSent, new KeyValuePair<string, string>("direction", "out"));
+        Telemetry.AddGauge("retroio.econet.uptime", "s", "Seconds since the server started.", () => (long)Uptime.TotalSeconds);
+    }
+
+    /// <summary>
+    /// The name of the Econet file server in metrics and logs, and its meter name for OpenTelemetry.
+    /// </summary>
+    public const string TelemetryName = "RetroIO.Econet";
+
+    /// <summary>
+    /// Gets the metrics of the server, in the shape every RetroServer part uses. Its log does not go
+    /// through this yet; it still goes only to the server logger (see the plan).
+    /// </summary>
+    public RetroTelemetry Telemetry { get; }
 
     /// <summary>
     /// Records one handled request.

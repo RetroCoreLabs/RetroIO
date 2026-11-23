@@ -187,4 +187,43 @@ public sealed class RetroTelemetryTests
         Assert.That(errorSeries, Is.EqualTo(5), "read, write, checksum, timeout and unknown operation");
         service.Dispose();
     }
+
+    [Test]
+    public void TnfsAndEconet_ShowTheirRecordedRequests_AsSharedMetrics()
+    {
+        RetroIO.Protocols.Tnfs.Server.TnfsServerStatistics tnfs = new RetroIO.Protocols.Tnfs.Server.TnfsServerStatistics();
+        tnfs.RecordRequest(100);
+        tnfs.RecordRequest(20);
+        RetroIO.Protocols.Econet.Server.EconetServerStatistics econet = new RetroIO.Protocols.Econet.Server.EconetServerStatistics();
+        econet.RecordRequest(10, 30, isFileOperation: true);
+
+        Assert.That(tnfs.Telemetry.Name, Is.EqualTo("RetroIO.Tnfs"));
+        Assert.That(Read(tnfs.Telemetry, "retroio.tnfs.requests", null), Is.EqualTo(2));
+        Assert.That(Read(tnfs.Telemetry, "retroio.tnfs.io", null), Is.EqualTo(120));
+
+        Assert.That(econet.Telemetry.Name, Is.EqualTo("RetroIO.Econet"));
+        Assert.That(Read(econet.Telemetry, "retroio.econet.file_operations", null), Is.EqualTo(1));
+        Assert.That(Read(econet.Telemetry, "retroio.econet.io", "in"), Is.EqualTo(10));
+        Assert.That(Read(econet.Telemetry, "retroio.econet.io", "out"), Is.EqualTo(30));
+    }
+
+    private static long Read(RetroTelemetry telemetry, string name, string? direction)
+    {
+        List<MetricReading> readings = new List<MetricReading>();
+        telemetry.CollectMetrics(readings);
+        for (int i = 0; i < readings.Count; i++)
+        {
+            if (readings[i].Name != name)
+            {
+                continue;
+            }
+
+            if (direction == null || (readings[i].Tags.Length == 1 && readings[i].Tags[0].Value == direction))
+            {
+                return readings[i].Value;
+            }
+        }
+
+        throw new AssertionException("no metric " + name + " " + direction);
+    }
 }

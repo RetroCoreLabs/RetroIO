@@ -7,6 +7,8 @@
 
 using System.Threading;
 
+using RetroIO.Telemetry;
+
 namespace RetroIO.Protocols.Tnfs.Server;
 
 /// <summary>
@@ -21,6 +23,29 @@ public sealed class TnfsServerStatistics
     private long _bytesTransferred;
     private long _filesTransferred;
     private readonly DateTime _startedAt = DateTime.UtcNow;
+
+    /// <summary>
+    /// Initialises the counters and their metrics in the shared RetroServer shape.
+    /// </summary>
+    public TnfsServerStatistics()
+    {
+        Telemetry = new RetroTelemetry(TelemetryName);
+        Telemetry.AddCounter("retroio.tnfs.requests", "{request}", "Requests handled.", () => TotalRequests);
+        Telemetry.AddCounter("retroio.tnfs.io", "By", "Bytes in requests and replies together.", () => BytesTransferred);
+        Telemetry.AddCounter("retroio.tnfs.files.opened", "{file}", "Files opened for transfer.", () => FilesTransferred);
+        Telemetry.AddGauge("retroio.tnfs.uptime", "s", "Seconds since the server started.", () => (long)Uptime.TotalSeconds);
+    }
+
+    /// <summary>
+    /// The name of the TNFS server in metrics and logs, and its meter name for OpenTelemetry.
+    /// </summary>
+    public const string TelemetryName = "RetroIO.Tnfs";
+
+    /// <summary>
+    /// Gets the metrics of the server, in the shape every RetroServer part uses. Its log does not go
+    /// through this yet; it still goes only to the server logger (see the plan).
+    /// </summary>
+    public RetroTelemetry Telemetry { get; }
 
     /// <summary>
     /// Records one handled request and the total bytes involved (request + response payload).

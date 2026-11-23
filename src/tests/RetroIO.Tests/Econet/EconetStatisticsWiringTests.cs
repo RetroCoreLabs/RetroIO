@@ -64,6 +64,12 @@ public sealed class EconetStatisticsWiringTests
 
         private int _sendAttempts;
 
+        // Set when the service starts the transport, which it does only after it has subscribed to
+        // OnMessageReceived. A real transport delivers nothing before it runs; this one waits the same
+        // way. Before 2026-11-23 a message could be delivered while the service was still starting up on
+        // another thread, find no handler, and vanish, so the error count read 0 in some full runs.
+        private readonly TaskCompletionSource _running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         /// <inheritdoc />
         public string TransportType => "FailingSend";
 
@@ -83,6 +89,7 @@ public sealed class EconetStatisticsWiringTests
         /// <inheritdoc />
         public async Task RunAsync(CancellationToken cancellationToken)
         {
+            _running.TrySetResult();
             try
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
@@ -109,6 +116,7 @@ public sealed class EconetStatisticsWiringTests
         public async Task DeliverAsync(EconetMessage message)
         {
             message.Transport = this;
+            await _running.Task.WaitAsync(TimeSpan.FromSeconds(10));
             EconetMessageReceivedHandler? handler = OnMessageReceived;
             if (handler != null)
                 await handler(message);
