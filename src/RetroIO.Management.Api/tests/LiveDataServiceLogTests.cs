@@ -26,6 +26,8 @@ public class LiveDataServiceLogTests
     private InMemoryLogProvider _logs = null!;
     private LiveDataService _service = null!;
     private ILogger _writer = null!;
+    private IHubContext<ServerHub, IServerHubClient> _hub = null!;
+    private IServerManager _manager = null!;
 
     [SetUp]
     public void SetUp()
@@ -62,6 +64,8 @@ public class LiveDataServiceLogTests
         Mock<IServerManager> manager = new Mock<IServerManager>();
         manager.Setup(m => m.GetStatus()).Returns(new ServerStatusResponse { IsRunning = true, Uptime = "0:00:01" });
 
+        _hub = hub.Object;
+        _manager = manager.Object;
         _service = new LiveDataService(hub.Object, _logs, manager.Object, NullLogger<LiveDataService>.Instance);
     }
 
@@ -71,6 +75,42 @@ public class LiveDataServiceLogTests
         await _service.StopAsync(CancellationToken.None);
         _service.Dispose();
         _logs.Dispose();
+    }
+
+    /// <summary>
+    /// A normal stop is not an error. Until 2026-11-23 every stop logged "Error pushing live data"
+    /// with a TaskCanceledException, because stopping cancels the one-second wait inside the loop.
+    /// </summary>
+    [Test]
+    public async Task Stopping_LogsNoError()
+    {
+        ErrorCountingLogger logger = new ErrorCountingLogger();
+        using LiveDataService service = new LiveDataService(_hub, _logs, _manager, logger);
+
+        await service.StartAsync(CancellationToken.None);
+        await Task.Delay(200);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.That(logger.Errors, Is.EqualTo(0), logger.LastError);
+    }
+
+    private sealed class ErrorCountingLogger : ILogger<LiveDataService>
+    {
+        public int Errors;
+        public string LastError = string.Empty;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Error)
+            {
+                Interlocked.Increment(ref Errors);
+                LastError = formatter(state, exception) + " " + exception?.GetType().Name;
+            }
+        }
     }
 
     private string[][] Pushed()

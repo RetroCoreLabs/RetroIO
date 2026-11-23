@@ -107,6 +107,11 @@ public class LiveDataService : BackgroundService
 
                 await Task.Delay(1000, stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // The host is stopping: the wait above was cancelled on purpose. Not an error.
+                break;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error pushing live data");
