@@ -2648,8 +2648,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
             {
                 vc.State = vc.Kind == X25VcKind.Pvc ? X25VcState.PvcReady : X25VcState.DataTransfer;
                 vc.TimerExpiryMs = 0;
+                byte collidedCause = CompletedResetCause(vc);
                 vc.ResetFlow();
-                RaiseReset(lci, vc.Cause, vc.Diagnostic);
+                RaiseReset(lci, collidedCause, vc.Diagnostic);
                 return;
             }
 
@@ -2670,13 +2671,29 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 vc.State = vc.Kind == X25VcKind.Pvc ? X25VcState.PvcReady : X25VcState.DataTransfer;
                 vc.TimerExpiryMs = 0;
                 vc.OutOfOrder = false;
+                byte completedCause = CompletedResetCause(vc);
                 vc.ResetFlow();
 
                 // The application learns that the circuit was reset when the reset is complete - it
                 // needs to know for a reset it asked for as much as for one the engine raised on a
                 // procedure error, because in both cases everything in flight is gone (X.25 4.4.3.1).
-                RaiseReset(lci, vc.Cause, vc.Diagnostic);
+                RaiseReset(lci, completedCause, vc.Diagnostic);
             }
+        }
+
+        /// <summary>
+        /// The cause the owner is told when a reset this side sent completes: local procedure error for one started on a
+        /// procedure error, else the cause that was sent.
+        /// </summary>
+        /// <remarks>
+        /// The wire cause of a procedure-error reset is 0 at a DTE and network congestion at an STE, which do not say that
+        /// this side found the error. A switch needs to know it: X.25 Table C-4 resets the distant DTE with "remote
+        /// procedure error" and the same diagnostic (SwitchCore.OnCircuitReset). Added 2026-11-23; before, the owner was told
+        /// the wire cause, so a switch passed 0 or 0x07 on.
+        /// </remarks>
+        private static byte CompletedResetCause(X25Vc vc)
+        {
+            return vc.ResetForProcedureError ? X25Cause.ResettingLocalProcedureError : vc.Cause;
         }
 
         private void OnRestartRequest(X25PacketInfo info)
@@ -2837,6 +2854,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
 
             // X.25 4.4.3.1: a reset discards an unconfirmed interrupt; it must not be confirmed in the middle of it.
             vc.InterruptToConfirm = false;
+            vc.ResetForProcedureError = true;
             ProcedureErrors++;
             Send(X25PacketBuilder.CreateResetRequest(vc.Lci, cause, diagnostic));
         }

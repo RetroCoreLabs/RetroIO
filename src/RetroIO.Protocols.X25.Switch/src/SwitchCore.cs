@@ -1710,13 +1710,17 @@ namespace RetroIO.Protocols.X25.Switch
                 EndPvcPeriod(stitch, cause, diagnostic, true);
             }
 
+            // X.25 Table C-4: a circuit reset for a procedure error at one interface resets the distant DTE "with the cause
+            // 'Remote procedure error' (same diagnostic)". Added 2026-11-23 (asked by the x25emu session); before, the
+            // other leg got the local cause, or 0 / network congestion from a DTE or STE port.
+            byte onward = cause == X25Cause.ResettingLocalProcedureError ? X25Cause.ResettingRemoteProcedureError : cause;
             if (fromIngress)
             {
-                stitch.OutPort.ResetCircuit(stitch.OutLci, cause, diagnostic);
+                stitch.OutPort.ResetCircuit(stitch.OutLci, onward, diagnostic);
             }
             else
             {
-                stitch.InPort.ResetCircuit(stitch.InLci, cause, diagnostic);
+                stitch.InPort.ResetCircuit(stitch.InLci, onward, diagnostic);
             }
         }
 

@@ -140,6 +140,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public bool InterruptToConfirm { get; set; }
 
         /// <summary>
+        /// True while a reset this engine started for a procedure error is in progress; its owner is told local procedure
+        /// error when it completes, whatever cause went on the wire.
+        /// </summary>
+        public bool ResetForProcedureError { get; set; }
+
+        /// <summary>
         /// True from our Interrupt until the peer's Interrupt Confirmation. X.25 4.4.2: "The DTE should
         /// not transmit a second DTE interrupt packet until the first one is confirmed."
         /// </summary>
@@ -267,6 +273,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             LocalBusy = false;
             InterruptOutstanding = false;   // X.25 4.4.3.1: a reset also discards an unconfirmed interrupt
             InterruptToConfirm = false;     // in both directions
+            ResetForProcedureError = false;
             ClearSequences();               // and everything in flight in both directions
         }
     }

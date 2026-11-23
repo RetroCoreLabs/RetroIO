@@ -237,6 +237,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte ResettingLocalProcedureError = 0x05;
 
         /// <summary>
+        /// Resetting cause 0x03, remote procedure error (X.25 Table 5-8): the distant end of a circuit that was reset for a
+        /// procedure error at the other interface (Table C-4).
+        /// </summary>
+        public const byte ResettingRemoteProcedureError = 0x03;
+
+        /// <summary>
         /// 00001001 - Out of order, clearing (Table 5-7).
         /// </summary>
         public const byte OutOfOrder = 0x09;

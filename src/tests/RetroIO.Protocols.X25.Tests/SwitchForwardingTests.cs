@@ -243,6 +243,23 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_ingress.BusySignals, Is.EqualTo(new List<(ushort, bool)> { (inLci, true), (inLci, false) }));
         }
 
+        /// <summary>
+        /// X.25 Table C-4: a reset for a procedure error at one leg (local procedure error) reaches the other leg as remote
+        /// procedure error with the same diagnostic. Added 2026-11-23.
+        /// </summary>
+        [Test]
+        public void AProcedureErrorReset_ReachesTheOtherLegAsRemoteProcedureError()
+        {
+            (ushort inLci, VcStitch stitch) = Call();
+
+            _egress.InjectReset(stitch.OutLci, cause: 0x05, diagnostic: 39);
+
+            Assert.That(_ingress.ResetCircuits.Count, Is.EqualTo(1));
+            Assert.That(_ingress.ResetCircuits[0].Lci, Is.EqualTo(inLci));
+            Assert.That(_ingress.ResetCircuits[0].Cause, Is.EqualTo((byte)0x03));
+            Assert.That(_ingress.ResetCircuits[0].Diag, Is.EqualTo((byte)39));
+        }
+
         [Test]
         public void AResetOnTheEgressLeg_ReachesTheIngressLeg()
         {

@@ -513,6 +513,30 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(_sink.Sent.Count, Is.EqualTo(before), "no Clear Request");
         }
 
+        /// <summary>
+        /// An STE resets a bad packet with network congestion on the wire, and tells its owner local procedure error with
+        /// the diagnostic when the reset completes, so a switch can pass remote procedure error on (X.25 Table C-4). Added
+        /// 2026-11-23.
+        /// </summary>
+        [Test]
+        public void AProcedureErrorReset_IsReportedAsLocalProcedureError_AtAnSte()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ushort lci = ste.PlaceCall("2624");
+            ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()));
+            byte reportedCause = 0xFF;
+            byte reportedDiagnostic = 0xFF;
+            ste.Reset += (layer, l, c, d) => { reportedCause = c; reportedDiagnostic = d; };
+
+            // P(S) 3 where 0 was due: diagnostic 1.
+            ste.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x06, 0x41 });
+            Assert.That(X25PacketParser.ParsePacket(_sink.Last, x75: true).ResetCause, Is.EqualTo((byte)0x07));
+            ste.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x1F });
+
+            Assert.That(reportedCause, Is.EqualTo((byte)0x05));
+            Assert.That(reportedDiagnostic, Is.EqualTo((byte)1));
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {
