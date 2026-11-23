@@ -114,6 +114,80 @@ public sealed class TnfsLoadTests
     }
 
     /// <summary>
+    /// Measurement for the memory item of plan Phase 14: the same load 30 times on one server,
+    /// printing the memory in use after a full garbage collection, and the sessions, after each
+    /// batch. Sessions left by resent MOUNTs go on the one-minute cleanup pass, so the count can
+    /// rise between passes and must fall again.
+    /// </summary>
+    /// <returns>The test.</returns>
+    [Test]
+    [Explicit("Measurement; prints memory per batch")]
+    public async Task Measure_MemoryOverManyBatches()
+    {
+        int port;
+        using (Socket probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+        {
+            probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+            port = ((IPEndPoint)probe.LocalEndPoint!).Port;
+        }
+
+        MockFileSystemBackend files = new MockFileSystemBackend();
+        files.AddDirectory("/tmp/tnfs");
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
+        builder.Services.AddLogging();
+        builder.Services.AddSingleton<IFileSystemBackend>(files);
+        builder.Services.AddTnfsServer(o =>
+        {
+            o.EnableUdp = true;
+            o.EnableTcp = false;
+            o.UdpPort = port;
+            o.RootDirectory = "/tmp/tnfs";
+            o.SessionTimeoutSeconds = 1;
+        });
+        using IHost host = builder.Build();
+        await host.StartAsync();
+        try
+        {
+            SessionManager sessions = host.Services.GetRequiredService<SessionManager>();
+            for (int batch = 0; batch < 30; batch++)
+            {
+                Task<int>[] clients = new Task<int>[Clients];
+                for (int i = 0; i < Clients; i++)
+                {
+                    clients[i] = Task.Run(() => RunClient(port));
+                }
+
+                int[] answered = await Task.WhenAll(clients);
+                for (int i = 0; i < answered.Length; i++)
+                {
+                    Assert.That(answered[i], Is.EqualTo(RoundsPerClient * 2), "batch " + batch + ", client " + i + "; " + LastFailure);
+                }
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                TestContext.Out.WriteLine($"batch {batch}: {GC.GetTotalMemory(false)} bytes in use, sessions {sessions.SessionCount}");
+            }
+
+            Stopwatch cleanup = Stopwatch.StartNew();
+            while (sessions.SessionCount != 0 && cleanup.Elapsed < TimeSpan.FromSeconds(75))
+            {
+                await Task.Delay(500);
+            }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            TestContext.Out.WriteLine($"after cleanup: {GC.GetTotalMemory(false)} bytes in use, sessions {sessions.SessionCount}");
+            Assert.That(sessions.SessionCount, Is.EqualTo(0));
+        }
+        finally
+        {
+            await host.StopAsync();
+        }
+    }
+
+    /// <summary>
     /// One client: MOUNT then UMOUNT, <see cref="RoundsPerClient"/> times. Returns how many
     /// requests were answered with status OK.
     /// </summary>
