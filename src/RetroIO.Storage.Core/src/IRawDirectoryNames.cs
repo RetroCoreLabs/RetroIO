@@ -160,6 +160,61 @@ namespace RetroIO.Storage.Core
         /// Gets a sentence for a reader on what these names are and what a separator is.
         /// </summary>
         public string Description { get; init; } = string.Empty;
+
+        /// <summary>
+        /// Gets, for each of the 256 byte values, the glyph it is drawn with: its index in one
+        /// character set of the machine's character ROM. Empty when the driver gives no drawing.
+        /// </summary>
+        /// <remarks>
+        /// A program draws a name by reading <see cref="GlyphHeight"/> bytes at
+        /// set start + index times <see cref="GlyphHeight"/> from a character ROM file the user
+        /// supplies; RetroIO ships no ROM. Each byte is one row, the top bit the left pixel. An
+        /// inverted glyph is a glyph of its own in the ROM and is read from there, never made by
+        /// flipping bits.
+        /// </remarks>
+        public byte[] GlyphIndex { get; init; } = Array.Empty<byte>();
+
+        /// <summary>
+        /// Gets the width of a glyph in pixels (one row is one byte, so at most 8).
+        /// </summary>
+        public int GlyphWidth { get; init; }
+
+        /// <summary>
+        /// Gets the height of a glyph in pixels, which is also its number of bytes in the ROM.
+        /// </summary>
+        public int GlyphHeight { get; init; }
+
+        /// <summary>
+        /// Gets the size in bytes a character ROM file for this disk has.
+        /// </summary>
+        public int CharacterRomSize { get; init; }
+
+        /// <summary>
+        /// Gets the character sets in the ROM: where each starts and what it is called. The first
+        /// is the one the machine lists a directory in by default.
+        /// </summary>
+        public CharacterSetPlace[] CharacterSets { get; init; } = Array.Empty<CharacterSetPlace>();
+
+        /// <summary>
+        /// Gets a sentence naming the character ROM the drawing expects, for a reader.
+        /// </summary>
+        public string CharacterRomDescription { get; init; } = string.Empty;
+    }
+
+    /// <summary>
+    /// One character set in a character ROM.
+    /// </summary>
+    public sealed class CharacterSetPlace
+    {
+        /// <summary>
+        /// Gets the byte offset in the ROM where the set starts.
+        /// </summary>
+        public int Offset { get; init; }
+
+        /// <summary>
+        /// Gets the set's name for a reader (for example "upper case and graphics").
+        /// </summary>
+        public string Name { get; init; } = string.Empty;
     }
 
     /// <summary>

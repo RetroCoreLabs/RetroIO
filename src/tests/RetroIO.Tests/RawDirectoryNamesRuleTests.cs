@@ -81,6 +81,22 @@ namespace RetroIO.Tests
                 Assert.That(layout.CharacterSet, Is.Not.Empty);
                 Assert.That(layout.SeparatorTypeName, Is.Not.Empty);
                 Assert.That(layout.Description, Is.Not.Empty);
+                // A drawing, when given, fits the ROM it describes: 256 entries, glyphs of at most 8
+                // pixels a row, and every set holds 256 glyphs inside the ROM's size.
+                if (layout.GlyphIndex.Length > 0)
+                {
+                    Assert.That(layout.GlyphIndex.Length, Is.EqualTo(256));
+                    Assert.That(layout.GlyphWidth, Is.InRange(1, 8));
+                    Assert.That(layout.GlyphHeight, Is.GreaterThan(0));
+                    Assert.That(layout.CharacterSets.Length, Is.GreaterThan(0));
+                    Assert.That(layout.CharacterRomDescription, Is.Not.Empty);
+                    for (int s = 0; s < layout.CharacterSets.Length; s++)
+                    {
+                        Assert.That(layout.CharacterSets[s].Name, Is.Not.Empty);
+                        Assert.That(layout.CharacterSets[s].Offset + (256 * layout.GlyphHeight), Is.LessThanOrEqualTo(layout.CharacterRomSize));
+                    }
+                }
+
                 Assert.That(raw.ReadRawVolumeName().Length, Is.EqualTo(layout.VolumeNameLength));
                 Assert.That(raw.ReadRawVolumeId().Length, Is.EqualTo(layout.VolumeIdLength));
 

@@ -512,7 +512,49 @@ namespace RetroIO.Storage.Local.Drivers
             CharacterSet = "PETSCII",
             SeparatorTypeName = "DEL",
             Description = "Names are 16 PETSCII bytes padded with A0h (shifted space). A separator is a closed DEL entry with no data; the listing shows it as a line with its name and 0 blocks.",
+            GlyphIndex = PetsciiToScreenCode(),
+            GlyphWidth = 8,
+            GlyphHeight = 8,
+            CharacterRomSize = 4096,
+            CharacterSets = new[]
+            {
+                new CharacterSetPlace { Offset = 0, Name = "upper case and graphics" },
+                new CharacterSetPlace { Offset = 2048, Name = "lower and upper case" },
+            },
+            CharacterRomDescription = "The C64 character ROM, 4096 bytes (part 901225-01): two sets of 256 glyphs of 8 by 8 pixels; glyphs 80h to FFh of each set are the reversed characters.",
         };
+
+        // The screen code the C64 draws each PETSCII byte with, by the table at
+        // https://sta.c64.org/cbm64pettoscr.html (read 2026-11-23):
+        //   00-1F +80h -> 80-9F    20-3F as is      40-5F -40h -> 00-1F    60-7F -20h -> 40-5F
+        //   80-9F +40h -> C0-DF    A0-BF -40h -> 60-7F    C0-DF -80h -> 40-5F
+        //   E0-FE -80h -> 60-7E    FF -> 5E
+        // A screen code is the glyph's place in a character set of the ROM. Codes 80h and up are the
+        // reversed glyphs, as the ROM holds them: they are not always an exact bit-flip of the plain
+        // ones (in ROM 901225-01 the reversed @ differs from a flipped @ in row 5), so they are read
+        // from the ROM, never computed.
+        private static byte[] PetsciiToScreenCode()
+        {
+            byte[] map = new byte[256];
+            for (int p = 0; p < 256; p++)
+            {
+                int s = p switch
+                {
+                    <= 0x1F => p + 0x80,
+                    <= 0x3F => p,
+                    <= 0x5F => p - 0x40,
+                    <= 0x7F => p - 0x20,
+                    <= 0x9F => p + 0x40,
+                    <= 0xBF => p - 0x40,
+                    <= 0xDF => p - 0x80,
+                    <= 0xFE => p - 0x80,
+                    _ => 0x5E,
+                };
+                map[p] = (byte)s;
+            }
+
+            return map;
+        }
 
         /// <inheritdoc/>
         public RawDirectoryLayout RawLayout => s_rawLayout;
