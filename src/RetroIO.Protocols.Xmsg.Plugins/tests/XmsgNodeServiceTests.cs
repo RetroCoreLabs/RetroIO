@@ -95,6 +95,150 @@ namespace RetroIO.Protocols.Xmsg.Plugins.Tests
         }
 
         /// <summary>
+        /// Load (plan Phase 14): 16 chat client programs, each on its own connection, join one room on
+        /// the running node and each says 2 lines at the same time. Every client must hear every
+        /// line of every other client; once all have left, the room is empty.
+        /// </summary>
+        /// <returns>
+        /// The test.
+        /// </returns>
+        [Fact]
+        [Trait("Category", "Load")]
+        public async Task Load_SixteenChatClients_AllTalkAtOnce_EveryoneHearsEveryone_AndTheRoomEmpties()
+        {
+            const int Clients = 16;
+            // 2 lines each, not more: the node moves about 28 chat messages a second (BUGS.md,
+            // 2026-11-23), so 20 lines each took about 170 s.
+            const int Lines = 2;
+            HubServer hub = new HubServer(IPAddress.Loopback, 0);
+            hub.Start();
+            string state = Path.Combine(Path.GetTempPath(), "xmsg-node-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(state);
+            int port = FreePort();
+            XmsgNodeService service = new XmsgNodeService(
+                new XmsgNodeServiceOptions
+                {
+                    SystemNumber = 19998,
+                    PeerSystemNumber = 102,
+                    Ethernet = "tcp:127.0.0.1:" + hub.Port,
+                    PluginPort = port,
+                    StateDirectory = state,
+                },
+                null);
+
+            List<GrpcChannel> channels = new List<GrpcChannel>();
+            List<PluginConnection> connections = new List<PluginConnection>();
+            try
+            {
+                await service.StartAsync(CancellationToken.None);
+                string address = "http://127.0.0.1:" + port;
+                GrpcChannel serverChannel = GrpcChannel.ForAddress(address);
+                channels.Add(serverChannel);
+                PluginConnection serverSide = await ConnectWhenOpenAsync(serverChannel, "chat-server");
+                connections.Add(serverSide);
+                ChatServer chat = new ChatServer(serverSide.Kernel, serverSide.Names);
+                Assert.Equal(XroutError.XRSOK, chat.Open("*CHAT", Clients, "WELCOME"));
+
+                ChatClient[] clients = new ChatClient[Clients];
+                for (int i = 0; i < Clients; i++)
+                {
+                    GrpcChannel channel = GrpcChannel.ForAddress(address);
+                    channels.Add(channel);
+                    PluginConnection side = await PluginConnection.ConnectAsync(channel, "client" + i, "1");
+                    connections.Add(side);
+                    clients[i] = new ChatClient(side.Kernel, side.Names, "USER" + i);
+                    await JoinAsync(chat, clients[i]);
+                }
+
+                Assert.Equal(Clients, chat.MemberCount);
+
+                // heard[i]: the lines client i heard from the others, as "USERn:line".
+                HashSet<string>[] heard = new HashSet<string>[Clients];
+                for (int i = 0; i < Clients; i++)
+                {
+                    heard[i] = new HashSet<string>(StringComparer.Ordinal);
+                }
+
+                Stopwatch clock = Stopwatch.StartNew();
+                for (int line = 0; line < Lines; line++)
+                {
+                    for (int i = 0; i < Clients; i++)
+                    {
+                        Assert.True(clients[i].Say("line " + line), "USER" + i + " could not say line " + line);
+                    }
+                }
+
+                int expected = (Clients - 1) * Lines;
+                bool everyoneHeard = false;
+                Stopwatch waited = Stopwatch.StartNew();
+                while (!everyoneHeard && waited.Elapsed < TimeSpan.FromSeconds(60))
+                {
+                    chat.Poll();
+                    everyoneHeard = true;
+                    for (int i = 0; i < Clients; i++)
+                    {
+                        IReadOnlyList<ChatMessage> got = clients[i].Poll();
+                        for (int m = 0; m < got.Count; m++)
+                        {
+                            if (got[m].Kind == ChatMessageKind.Said && got[m].Nickname != "USER" + i)
+                            {
+                                heard[i].Add(got[m].Nickname + ":" + got[m].Text);
+                            }
+                        }
+
+                        everyoneHeard &= heard[i].Count == expected;
+                    }
+
+                    await Task.Delay(2);
+                }
+
+                clock.Stop();
+                for (int i = 0; i < Clients; i++)
+                {
+                    Assert.True(heard[i].Count == expected, $"USER{i} heard {heard[i].Count} of {expected} lines");
+                }
+
+                Console.WriteLine($"{Clients} clients, {Clients * Lines} lines said, {Clients * expected} heard, in {clock.ElapsedMilliseconds} ms");
+
+                for (int i = 0; i < Clients; i++)
+                {
+                    clients[i].Leave();
+                }
+
+                Stopwatch emptied = Stopwatch.StartNew();
+                while (chat.MemberCount != 0 && emptied.Elapsed < Patience)
+                {
+                    chat.Poll();
+                    for (int i = 0; i < Clients; i++)
+                    {
+                        clients[i].Poll();
+                    }
+
+                    await Task.Delay(5);
+                }
+
+                Assert.Equal(0, chat.MemberCount);
+            }
+            finally
+            {
+                for (int i = connections.Count - 1; i >= 0; i--)
+                {
+                    await connections[i].DisposeAsync();
+                }
+
+                for (int i = 0; i < channels.Count; i++)
+                {
+                    channels[i].Dispose();
+                }
+
+                await service.StopAsync(CancellationToken.None);
+                service.Dispose();
+                hub.Stop();
+                Directory.Delete(state, true);
+            }
+        }
+
+        /// <summary>
         /// A client program that goes away without leaving is removed from the room the next time
         /// the server writes to it, on the running node over real sockets.
         /// </summary>
