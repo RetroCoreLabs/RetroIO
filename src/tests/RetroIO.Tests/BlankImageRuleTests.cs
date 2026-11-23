@@ -234,6 +234,81 @@ namespace RetroIO.Tests
             }
         }
 
+        [TestCaseSource(nameof(Layouts))]
+        public void DisposingTheDriver_ClosesTheImageFile(string fileSystemType, string layoutId)
+        {
+            IFileSystemDriverProvider[] providers = AllProviders();
+            IBlankImageProvider? blank = null;
+            DriverFactory factory = new DriverFactory();
+            for (int p = 0; p < providers.Length; p++)
+            {
+                factory.Register(providers[p]);
+                if (providers[p].FileSystemType == fileSystemType)
+                {
+                    blank = (IBlankImageProvider)providers[p];
+                }
+            }
+
+            string extension = ".img";
+            for (int i = 0; i < blank!.BlankLayouts.Count; i++)
+            {
+                if (blank.BlankLayouts[i].Id == layoutId)
+                {
+                    extension = blank.BlankLayouts[i].Extension;
+                }
+            }
+
+            string folder = Path.Combine(Path.GetTempPath(), "retroio-release-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            try
+            {
+                string path = Path.Combine(folder, "blank" + extension);
+                File.WriteAllBytes(path, blank.CreateBlank(layoutId, new Dictionary<string, string>()));
+
+                // Mounted as the named layout, written to, disposed: the file must be free.
+                IFileSystemDriver named = blank.Mount(new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read), false, layoutId);
+                named.WriteFile(FindFolder(named) + TestFile(named), new byte[] { 1, 2, 3 });
+                named.Dispose();
+                AssertFileIsFree(path, "named mount");
+
+                // Mounted by detection, disposed: the file must be free.
+                IFileSystemDriver? detected = factory.Detect(path);
+                Assert.That(detected, Is.Not.Null, "detected");
+                if (detected is IPartitionProvider partitioned && HasPartitionTable(path))
+                {
+                    partitioned.SelectPartition("0");
+                }
+
+                detected!.Mount(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read), true);
+                detected.ListDirectory("/");
+                detected.Dispose();
+                AssertFileIsFree(path, "detected mount");
+            }
+            finally
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+
+        private static void AssertFileIsFree(string path, string what)
+        {
+            try
+            {
+                using FileStream alone = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException e)
+            {
+                Assert.Fail(what + ": the image file is still open after Dispose: " + e.Message);
+            }
+        }
+
+        private static string FindFolder(IFileSystemDriver driver)
+        {
+            string folder = "/";
+            CountFiles(driver, "/", ref folder);
+            return folder;
+        }
+
         private static bool HasPartitionTable(string path)
         {
             List<RetroIO.Storage.Local.Partitions.PartitionInfo>? partitions = RetroIO.Storage.Local.Partitions.PartitionDetectionService.DetectPartitions(path);

@@ -262,6 +262,7 @@ namespace RetroIO.Storage.Local.Drivers
             _sectors?.Dispose();
             _sectors = null;
             _image = null;
+            _fileStream?.Dispose();
             _fileStream = null;
         }
 

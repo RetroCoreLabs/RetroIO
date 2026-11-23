@@ -62,7 +62,8 @@ namespace RetroIO.Storage.Core
         /// picked, not as whichever detection would choose.
         /// </remarks>
         /// <param name="stream">
-        /// The image.
+        /// The image. The returned driver owns it and closes it when it is disposed, the same rule as
+        /// <see cref="IFileSystemDriver.Mount"/>.
         /// </param>
         /// <param name="readOnly">
         /// Whether the mount is read-only.

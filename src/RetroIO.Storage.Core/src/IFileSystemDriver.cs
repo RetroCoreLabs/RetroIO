@@ -77,8 +77,13 @@ namespace RetroIO.Storage.Core
         /// <summary>
         /// Mounts a filesystem from the provided stream.
         /// </summary>
+        /// <remarks>
+        /// The driver owns the stream from here on: it closes it when the driver is disposed, so a
+        /// file opened for the mount is free again once the driver is. A test over every provider
+        /// (BlankImageRuleTests) holds every driver to this.
+        /// </remarks>
         /// <param name="imageStream">
-        /// Stream containing the filesystem image
+        /// Stream containing the filesystem image; the driver closes it on Dispose.
         /// </param>
         /// <param name="readOnly">
         /// If true, mount as read-only

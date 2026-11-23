@@ -605,6 +605,10 @@ namespace RetroIO.Storage.Local.Drivers
             _filesystem = null;
             _blockDevice?.Dispose();
             _blockDevice = null;
+
+            // The driver owns the stream it was mounted from, also when a partition was opened in it.
+            _rawStream?.Dispose();
+            _rawStream = null;
         }
 
         private void EnsureMounted()

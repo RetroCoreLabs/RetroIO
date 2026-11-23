@@ -52,6 +52,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </remarks>
     public sealed class DragonVdkDriver : IFileSystemDriver
     {
+        // The stream the image was mounted from; closed on Dispose.
+        private Stream? _imageStream;
+
         private GenericBlockDevice? _blockDevice;
         private IBlockFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
@@ -143,6 +146,7 @@ namespace RetroIO.Storage.Local.Drivers
 
             // 1. Verify VDK header
             byte[] header = new byte[12];
+            _imageStream = imageStream;
             imageStream.Position = 0;
             int bytesRead = imageStream.Read(header, 0, 12);
             if (bytesRead < 12)
@@ -482,6 +486,11 @@ namespace RetroIO.Storage.Local.Drivers
             _filesystem = null;
             _blockDevice?.Dispose();
             _blockDevice = null;
+
+            // The data part is a window on the image stream and leaves it open; the driver owns the
+            // image stream and closes it here.
+            _imageStream?.Dispose();
+            _imageStream = null;
         }
 
         private void EnsureWritable()

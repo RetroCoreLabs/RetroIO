@@ -61,6 +61,9 @@ namespace RetroIO.Storage.Local.Drivers
     /// </remarks>
     public sealed class DragonDskDriver : IFileSystemDriver
     {
+        // The stream the image was mounted from; closed on Dispose.
+        private Stream? _imageStream;
+
         private GenericBlockDevice? _blockDevice;
         private IBlockFileSystem? _filesystem;
         private BlockDeviceDescriptor? _descriptor;
@@ -153,6 +156,7 @@ namespace RetroIO.Storage.Local.Drivers
                 throw new ArgumentNullException(nameof(imageStream));
             }
 
+            _imageStream = imageStream;
             long fileSize = imageStream.Length;
 
             // Calculate header size: fileSize % 128. The JVC description says % 256, XRoar uses % 128 so that 128-byte sectors
@@ -832,10 +836,13 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
-        /// Drops the block device and the file system. The block device is not disposed.
+        /// Drops the block device and the file system, and closes the stream the image was mounted
+        /// from; the driver owns that stream.
         /// </summary>
         public void Dispose()
         {
+            _imageStream?.Dispose();
+            _imageStream = null;
             _blockDevice = null;
             _filesystem = null;
             _descriptor = null;

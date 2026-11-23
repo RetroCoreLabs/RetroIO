@@ -886,11 +886,13 @@ namespace RetroIO.Storage.Local.Drivers
         public BlockDeviceInfo? GetBlockDeviceInfo() => null;
 
         /// <summary>
-        /// Lets go of the image.
+        /// Lets go of the image and closes the stream it was mounted from; the driver owns that stream.
         /// </summary>
         public void Dispose()
         {
             _fileSystem = null;
+            _stream?.Dispose();
+            _stream = null;
         }
 
         private CpmFileSystem EnsureMounted()
