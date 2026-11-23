@@ -69,6 +69,57 @@ public sealed class EconetLoadTests
     }
 
     /// <summary>
+    /// Measurement for the memory item of plan Phase 14: the same load 30 times on one server,
+    /// printing the memory in use after a full garbage collection, and the sessions, after each batch.
+    /// </summary>
+    [Test]
+    [Explicit("Measurement; prints memory per batch")]
+    public async Task Measure_MemoryOverManyBatches()
+    {
+        int port;
+        using (Socket probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+        {
+            probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+            port = ((IPEndPoint)probe.LocalEndPoint!).Port;
+        }
+
+        await using EconetUdpTestServer server = await EconetUdpTestServer.StartAsync(port);
+        for (int batch = 0; batch < 30; batch++)
+        {
+            Task<string>[] stations = new Task<string>[Stations];
+            for (int i = 0; i < Stations; i++)
+            {
+                byte station = (byte)(i + 2);
+                stations[i] = Task.Run(() => RunStation(port, station));
+            }
+
+            string[] results = await Task.WhenAll(stations);
+            for (int i = 0; i < results.Length; i++)
+            {
+                Assert.That(results[i], Is.Empty, "batch " + batch + ", station " + (i + 2));
+            }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            GCMemoryInfo info = GC.GetGCMemoryInfo(GCKind.FullBlocking);
+            TestContext.Out.WriteLine($"batch {batch}: {GC.GetTotalMemory(false)} bytes in use, heap {info.HeapSizeBytes}, unusable gaps {info.FragmentedBytes}, pinned objects {info.PinnedObjectsCount}, areas gen0/gen1/gen2/large/pinned {info.GenerationInfo[0].SizeAfterBytes}/{info.GenerationInfo[1].SizeAfterBytes}/{info.GenerationInfo[2].SizeAfterBytes}/{info.GenerationInfo[3].SizeAfterBytes}/{info.GenerationInfo[4].SizeAfterBytes}, sessions {server.Sessions.GetActiveSessionCount()}");
+
+            // With MEASURE_DIR set, pause after batches 5 and 29 so a memory dump can be taken from
+            // outside (dotnet-gcdump); the test goes on when the file "go<batch>" appears.
+            string? pauseDir = Environment.GetEnvironmentVariable("MEASURE_DIR");
+            if (pauseDir != null && (batch == 5 || batch == 29))
+            {
+                System.IO.File.WriteAllText(System.IO.Path.Combine(pauseDir, "ready" + batch), Environment.ProcessId.ToString());
+                while (!System.IO.File.Exists(System.IO.Path.Combine(pauseDir, "go" + batch)))
+                {
+                    await Task.Delay(200);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// One station's rounds. Returns an empty string when every step worked, else what went wrong.
     /// </summary>
     private static string RunStation(int port, byte station)
