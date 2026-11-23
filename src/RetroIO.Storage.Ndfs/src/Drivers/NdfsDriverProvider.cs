@@ -19,7 +19,7 @@ namespace RetroIO.Storage.Ndfs.Drivers
     /// <summary>
     /// NDFS driver provider for registration with FileSystemDriverFactory.
     /// </summary>
-    public sealed class NdfsDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
+    public sealed class NdfsDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider, ITransferConversionProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Norsk Data ND-100", "Norsk Data ND-500" };
@@ -351,6 +351,51 @@ namespace RetroIO.Storage.Ndfs.Drivers
                 "ndfs-custom" => NdfsImageTemplate.Custom,
                 _ => throw new ArgumentException("not an NDFS blank-image layout: " + layoutId, nameof(layoutId)),
             };
+        }
+
+        /// <summary>
+        /// Gets the copy conversions of this file system; see <see cref="NdfsTextConversion"/>.
+        /// </summary>
+        public IReadOnlyList<TransferConversion> Conversions => NdfsTextConversion.Conversions;
+
+        /// <summary>
+        /// Converts a file's stored bytes for the host.
+        /// </summary>
+        /// <param name="conversionId">
+        /// The conversion's id.
+        /// </param>
+        /// <param name="stored">
+        /// The bytes as read from the image.
+        /// </param>
+        /// <param name="options">
+        /// Option values, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// The bytes for the host file.
+        /// </returns>
+        public byte[] ToHost(string conversionId, ReadOnlySpan<byte> stored, IReadOnlyDictionary<string, string>? options)
+        {
+            return NdfsTextConversion.ToHost(conversionId, stored, options);
+        }
+
+        /// <summary>
+        /// Converts a host file's bytes for the image.
+        /// </summary>
+        /// <param name="conversionId">
+        /// The conversion's id.
+        /// </param>
+        /// <param name="host">
+        /// The bytes of the host file.
+        /// </param>
+        /// <param name="options">
+        /// Option values, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// The bytes to write to the image.
+        /// </returns>
+        public byte[] FromHost(string conversionId, ReadOnlySpan<byte> host, IReadOnlyDictionary<string, string>? options)
+        {
+            return NdfsTextConversion.FromHost(conversionId, host, options);
         }
     }
 }

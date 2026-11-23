@@ -28,7 +28,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// least one is a file; an empty CP/M directory gives no sign of CP/M, so it is left to the
     /// Commodore provider.
     /// </remarks>
-    public sealed class CpmDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
+    public sealed class CpmDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider, ITransferConversionProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Commodore 128", "Commodore 64", "Kaypro II", "Kaypro 4", "Osborne 1", "Amstrad CPC", "Amstrad PCW", "IBM PC (CP/M-86)", "IBM PC-XT (CP/M-86)", "TIKI-100" };
@@ -258,6 +258,51 @@ namespace RetroIO.Storage.Local.Drivers
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Gets the copy conversions of this file system; see <see cref="CpmTextConversion"/>.
+        /// </summary>
+        public IReadOnlyList<TransferConversion> Conversions => CpmTextConversion.Conversions;
+
+        /// <summary>
+        /// Converts a file's stored bytes for the host.
+        /// </summary>
+        /// <param name="conversionId">
+        /// The conversion's id.
+        /// </param>
+        /// <param name="stored">
+        /// The bytes as read from the image.
+        /// </param>
+        /// <param name="options">
+        /// Option values, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// The bytes for the host file.
+        /// </returns>
+        public byte[] ToHost(string conversionId, ReadOnlySpan<byte> stored, IReadOnlyDictionary<string, string>? options)
+        {
+            return CpmTextConversion.ToHost(conversionId, stored, options);
+        }
+
+        /// <summary>
+        /// Converts a host file's bytes for the image.
+        /// </summary>
+        /// <param name="conversionId">
+        /// The conversion's id.
+        /// </param>
+        /// <param name="host">
+        /// The bytes of the host file.
+        /// </param>
+        /// <param name="options">
+        /// Option values, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// The bytes to write to the image.
+        /// </returns>
+        public byte[] FromHost(string conversionId, ReadOnlySpan<byte> host, IReadOnlyDictionary<string, string>? options)
+        {
+            return CpmTextConversion.FromHost(conversionId, host, options);
         }
     }
 }

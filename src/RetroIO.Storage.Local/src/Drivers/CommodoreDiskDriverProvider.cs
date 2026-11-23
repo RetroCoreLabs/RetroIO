@@ -16,7 +16,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// Unified provider for Commodore disk drivers (D64, D71, D81).
     /// Replaces separate D64DriverProvider, D71DriverProvider, and D81DriverProvider.
     /// </summary>
-    public sealed class CommodoreDiskDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider
+    public sealed class CommodoreDiskDriverProvider : FileSystemDriverProviderBase, IBlankImageProvider, ITransferConversionProvider
     {
         // The machines this format's disks come from, shown to users.
         private static readonly string[] MachineList = new[] { "Commodore 64 (1541)", "Commodore 128 (1571, 1581)" };
@@ -186,6 +186,51 @@ namespace RetroIO.Storage.Local.Drivers
             }
 
             return 0.0f; // No match
+        }
+
+        /// <summary>
+        /// Gets the copy conversions of this file system; see <see cref="PetsciiTextConversion"/>.
+        /// </summary>
+        public IReadOnlyList<TransferConversion> Conversions => PetsciiTextConversion.Conversions;
+
+        /// <summary>
+        /// Converts a file's stored bytes for the host.
+        /// </summary>
+        /// <param name="conversionId">
+        /// The conversion's id.
+        /// </param>
+        /// <param name="stored">
+        /// The bytes as read from the image.
+        /// </param>
+        /// <param name="options">
+        /// Option values, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// The bytes for the host file.
+        /// </returns>
+        public byte[] ToHost(string conversionId, ReadOnlySpan<byte> stored, IReadOnlyDictionary<string, string>? options)
+        {
+            return PetsciiTextConversion.ToHost(conversionId, stored, options);
+        }
+
+        /// <summary>
+        /// Converts a host file's bytes for the image.
+        /// </summary>
+        /// <param name="conversionId">
+        /// The conversion's id.
+        /// </param>
+        /// <param name="host">
+        /// The bytes of the host file.
+        /// </param>
+        /// <param name="options">
+        /// Option values, or <c>null</c>.
+        /// </param>
+        /// <returns>
+        /// The bytes to write to the image.
+        /// </returns>
+        public byte[] FromHost(string conversionId, ReadOnlySpan<byte> host, IReadOnlyDictionary<string, string>? options)
+        {
+            return PetsciiTextConversion.FromHost(conversionId, host, options);
         }
     }
 }

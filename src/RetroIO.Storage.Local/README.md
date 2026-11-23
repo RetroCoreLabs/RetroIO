@@ -30,6 +30,10 @@ Two design decisions shape the whole package, and both were corrections:
   overlay and the base image is preserved byte for byte.
 - Making **blank, valid** images: `CbmImageFactory` produces c1541-valid D64/D71/D81 by formatting
   through the real `Format` path; `PcImageFactory` does the same for FAT.
+- **Directory art on Commodore disks**: `CommodoreDiskDriver.ReadRawDirectory`, `WriteRawName`,
+  `InsertDelEntry`, `ReadRawDiskName`, `ReadRawDiskId` and `WriteRawDiskHeader` read and write names,
+  the disk name and the disk id as the raw PETSCII bytes, and put a DEL entry at any place in the
+  listing.
 - Reading a partition out of a larger image: BSD disk labels, MBR, GPT and **Sun VTOC**.
 - Caching for speed: `LruBlockCache` uses `ArrayPool` for zero-copy, with selectable write strategy.
 - Remembering mounts across restarts (`MountConfigStore`, to `~/.retrofs/mounts.json` or

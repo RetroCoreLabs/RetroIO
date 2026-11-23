@@ -288,6 +288,109 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         // ===================================================================
+        // RAW DIRECTORY - names as stored PETSCII bytes, for directory art
+        // ===================================================================
+
+        /// <summary>
+        /// Reads every closed directory entry with its raw name bytes; see <see cref="CbmDosFileSystem.ReadRawDirectory"/>.
+        /// </summary>
+        /// <returns>
+        /// The entries, in listing order.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
+        public CbmRawDirectoryEntry[] ReadRawDirectory()
+        {
+            EnsureMounted();
+            return _filesystem!.ReadRawDirectory();
+        }
+
+        /// <summary>
+        /// Replaces one entry's 16 name bytes; see <see cref="CbmDosFileSystem.WriteRawName"/>.
+        /// </summary>
+        /// <param name="index">
+        /// The entry's place in the listing.
+        /// </param>
+        /// <param name="name">
+        /// Exactly 16 bytes, stored as given.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
+        public void WriteRawName(int index, ReadOnlySpan<byte> name)
+        {
+            EnsureMounted();
+            _filesystem!.WriteRawName(index, name);
+        }
+
+        /// <summary>
+        /// Puts a closed DEL entry with a raw name at a place in the listing; see <see cref="CbmDosFileSystem.InsertDelEntry"/>.
+        /// </summary>
+        /// <param name="position">
+        /// The place the new entry gets.
+        /// </param>
+        /// <param name="name">
+        /// Exactly 16 bytes, stored as given.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
+        public void InsertDelEntry(int position, ReadOnlySpan<byte> name)
+        {
+            EnsureMounted();
+            _filesystem!.InsertDelEntry(position, name);
+        }
+
+        /// <summary>
+        /// Reads the 16 raw bytes of the disk name.
+        /// </summary>
+        /// <returns>
+        /// The disk name as stored.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
+        public byte[] ReadRawDiskName()
+        {
+            EnsureMounted();
+            return _filesystem!.ReadRawDiskName();
+        }
+
+        /// <summary>
+        /// Reads the 2 raw bytes of the disk id.
+        /// </summary>
+        /// <returns>
+        /// The disk id as stored.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
+        public byte[] ReadRawDiskId()
+        {
+            EnsureMounted();
+            return _filesystem!.ReadRawDiskId();
+        }
+
+        /// <summary>
+        /// Replaces the disk name and id with raw bytes; see <see cref="CbmDosFileSystem.WriteRawDiskHeader"/>.
+        /// </summary>
+        /// <param name="name">
+        /// Exactly 16 bytes, stored as given.
+        /// </param>
+        /// <param name="id">
+        /// Exactly 2 bytes, stored as given.
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no image is mounted.
+        /// </exception>
+        public void WriteRawDiskHeader(ReadOnlySpan<byte> name, ReadOnlySpan<byte> id)
+        {
+            EnsureMounted();
+            _filesystem!.WriteRawDiskHeader(name, id);
+        }
+
+        // ===================================================================
         // BLOCK OPERATIONS - Delegate to Block Device
         // ===================================================================
 

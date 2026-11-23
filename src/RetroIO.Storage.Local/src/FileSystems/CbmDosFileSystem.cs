@@ -19,7 +19,7 @@ namespace RetroIO.Storage.Local.FileSystems
     /// Works with D64 (CBM DOS 2.6), D71 (CBM DOS 3.0), and D81 (CBM DOS 10.0).
     /// Operates on block devices using Track/Sector addressing.
     /// </summary>
-    public class CbmDosFileSystem : IBlockFileSystem
+    public partial class CbmDosFileSystem : IBlockFileSystem
     {
         private IBlockDevice? _disk;
         private string _volumeLabel = string.Empty;

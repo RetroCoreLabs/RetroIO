@@ -133,6 +133,25 @@ left out, never guessed. Where blank disks of different machines are the same by
 formatted CP/M disk is E5h throughout), each layout names the others in `SameBytesAs`, and the
 program opens it with `Mount` and the layout the user picked.
 
+## Copy conversions: text rules offered by the driver
+
+A provider may also implement `ITransferConversionProvider`: it lists the ways a file can be changed
+while it is copied out to the host or in from it (`Conversions`, each with an id, a name, a
+description, the directions, whether it is the first choice for text, and options checked like a
+blank disk's), and does the change (`ToHost`, `FromHost`). Copying the exact bytes is always
+possible and is never listed. Today:
+
+| Provider | Id | What it does |
+|---|---|---|
+| CP/M | `cpm-text` | Copy out stops at the first Ctrl-Z (1Ah); optional CR LF to LF |
+| NDFS | `sintran-text` | Copy out clears bit 7; copy in leaves it clear or sets ND even parity; optional CR LF to LF |
+| Commodore | `petscii-text` | PETSCII letters to ASCII and back in either character set; CR to the host line end |
+
+A conversion follows a real rule of the machine. A byte the rule has no answer for (a PETSCII
+colour code, a byte above 7Fh for SINTRAN text) is refused with a message naming it, never
+replaced. One test (`tests/RetroIO.Tests/TransferConversionRuleTests.cs`) checks that plain text
+comes back unchanged through copy in and copy out under every option choice.
+
 ## Contents
 
 | Area | Types |
@@ -141,6 +160,7 @@ program opens it with `Mount` and the layout the user picked.
 | Block access | `IBlockDevice`, `BlockAddress`, `BlockAddressMode`, `BlockDeviceInfo` |
 | Capabilities | `DriverCapabilities`, `FileSystemCapabilities`, `IExtendedAttributeSupport` |
 | Detection | `DiskImageDetector`, `DiskImageAnalysisResult`, `DetectionHints` |
+| Blank disks and copy conversions | `IBlankImageProvider`, `BlankImageLayout`, `BlankImageOption`, `ITransferConversionProvider`, `TransferConversion`, `TransferText` |
 | Partitions | `PartitionDetector`, `PartitionMetadata`, `PartitionTableType`, `IPartitionProvider` |
 | The VFS | `RetroVFS`, `VfsCore`, `VfsResolver`, `VfsDentryCache`, `VfsMetadataCache`, `VfsPluginRegistry` |
 | Plugins | `IExtFsPlugin`, `ZipFsPlugin` |
