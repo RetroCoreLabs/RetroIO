@@ -110,6 +110,36 @@ namespace RetroIO.Protocols.Tn3270
         /// </exception>
         public static void Build(Display3270 display, StatusLineConnection connection, string? luName, Span<char> line)
         {
+            Build(display, connection, luName, tn3270e: false, line);
+        }
+
+        /// <summary>
+        /// Writes line 25 for a display, saying whether the connection runs TN3270E.
+        /// </summary>
+        /// <remarks>
+        /// The same as the other Build, except that column 1 shows "B" instead of "A" while
+        /// TN3270E is in force (wc3270\screen.c, draw_oia: addch(IN_E? 'B': 'A')).
+        /// </remarks>
+        /// <param name="display">
+        /// The screen whose keyboard lock, insert mode and cursor are shown.
+        /// </param>
+        /// <param name="connection">
+        /// Where the connection to the host is.
+        /// </param>
+        /// <param name="luName">
+        /// The LU name from TN3270E, or null when there is none; at most 8 characters are shown.
+        /// </param>
+        /// <param name="tn3270e">
+        /// True while the connection runs TN3270E.
+        /// </param>
+        /// <param name="line">
+        /// The characters of the line, one per column; every column is written.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="line"/> is narrower than the layout needs (40 columns).
+        /// </exception>
+        public static void Build(Display3270 display, StatusLineConnection connection, string? luName, bool tn3270e, Span<char> line)
+        {
             ArgumentNullException.ThrowIfNull(display);
             int m = line.Length - 1; // wc3270's rmargin: the last column
             if (line.Length < 40)
@@ -121,7 +151,7 @@ namespace RetroIO.Protocols.Tn3270
             bool in3270 = connection == StatusLineConnection.Connected;
 
             line[ReadyColumn] = '4';
-            line[OnlineColumn] = 'A';
+            line[OnlineColumn] = tn3270e ? 'B' : 'A';
             line[BoxColumn] = in3270 ? ' ' : '?';
 
             Write(line, MessageColumn, Message(display, connection), MessageWidth);

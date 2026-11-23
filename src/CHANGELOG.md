@@ -5,6 +5,7 @@ All notable changes to RetroIO. One version per repo, so one entry covers every 
 ## [Unreleased]
 
 ### Added
+- `StatusLine3270.Build` with a `tn3270e` flag: column 1 shows "B" instead of "A" while the connection runs TN3270E (wc3270 draw_oia).
 - `KeyboardLock.MinusFunction` and `Display3270.RefuseFunction`: a key whose function is not available now locks the keyboard with Minus Function, shown as "X -f", until Reset (x3270 KL_OIA_MINUS; GA27-2890-4 p. 3-32). Used for Attn on a TN3270E connection with no SNA session bound.
 - `Display3270.Erase`: erase left, the PC Backspace of wc3270. The cursor moves one place left and that character is deleted the way `Delete` does it; at the first position of a field nothing happens. Follows x3270's `Erase` action step by step.
 - **Five network packages, moved from RetroCore**: `RetroIO.Network.Ethernet` (the backend interface for an emulated network card, the backend registry, TCP, hub, UDP-multicast and TAP links), `RetroIO.Network.Nat` (the built-in NAT, on any subnet), `RetroIO.Network.Pcap` (a real host adapter through SharpPcap), `RetroIO.Network.Router` (the dial-up router; new `IpRouter.TryAddLink`) and the new `RetroIO.Network.DialUp` (`SlipDialUpSession`: an optional text login with a quick or a slow check, then SLIP to `NatDialUpSide` or `RouterDialUpSide`).

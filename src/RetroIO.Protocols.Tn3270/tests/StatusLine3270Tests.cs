@@ -52,6 +52,20 @@ namespace RetroIO.Protocols.Tn3270.Tests
         }
 
         [Fact]
+        public void UnderTn3270eColumnOneIsBAndTheLuNameIsShown()
+        {
+            // wc3270 draw_oia: addch(IN_E? 'B': 'A'), and the LU at rmargin-25.
+            var d = new Display3270();
+            d.ProcessOutbound(OneInputField);
+            Span<char> line = stackalloc char[80];
+
+            StatusLine3270.Build(d, StatusLineConnection.Connected, "TCP00034", tn3270e: true, line);
+
+            char[] expected = Expected(" ", string.Empty, "001/002", lu: "TCP00034").ToCharArray();
+            expected[1] = 'B';
+            Assert.Equal(new string(expected), new string(line));
+        }
+        [Fact]
         public void AnUnlockedConnectedScreenShowsTheReadySymbolsAndTheCursor()
         {
             var d = new Display3270();
