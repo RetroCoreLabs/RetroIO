@@ -290,6 +290,20 @@ namespace RetroIO.Protocols.Tn3270.Tests
         }
 
         [Fact]
+        public void TheClearKeyPutsTheReplyModeBackToField()
+        {
+            // GA23-0059-4 Table C-1, p. C-1: CLEAR Key LULU, Inbound Reply Mode = R.
+            var (d, _, _) = Create();
+            d.ProcessOutbound(new byte[] { Command3270.EraseWrite, 0x02 });
+            d.ProcessOutbound(new byte[] { Command3270.WriteStructuredField, 0x00, 0x05, 0x09, 0x00, 0x01 });
+            Assert.Equal(ReplyMode.ExtendedField, d.ReplyMode);
+
+            Assert.True(d.Attention(Aid.Clear));
+
+            Assert.Equal(ReplyMode.Field, d.ReplyMode);
+        }
+
+        [Fact]
         public void SetReplyModeRejectsAReservedModeAndANonCharacterType()
         {
             var (d, _, errors) = Create();

@@ -1289,6 +1289,14 @@ namespace RetroIO.Protocols.Tn3270
                 // and the cursor to 0 (GA23-0061-2 p. C-8). Then the short read: the AID alone.
                 Resize(_defaultRows, _defaultColumns);
                 CursorAddress = 0;
+
+                // And the inbound reply mode goes back to field mode: GA23-0059-4 Table C-1
+                // (p. C-1), row "CLEAR Key LULU", Inbound Reply Mode = R. x3270 does not do this
+                // (it resets the mode only on connect and on an Erase/Write with WCC reset), but the
+                // manual is the authority. A TN3270 host session is the LU-LU case; the "Unowned"
+                // row says implementation defined.
+                _replyMode = ReplyMode.Field;
+                _replyTypes = Array.Empty<byte>();
             }
 
             if (aid != Aid.Clear && !Aid.IsShortRead(aid))
