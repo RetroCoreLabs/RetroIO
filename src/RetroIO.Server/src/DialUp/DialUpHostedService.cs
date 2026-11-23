@@ -33,7 +33,7 @@ public sealed class DialUpHostedService : IHostedService, IDisposable
     /// </param>
     public DialUpHostedService(DialUpServerConfiguration config, IRetroIDP idp, ILogger<DialUpHostedService> logger)
     {
-        _server = new DialUpServer(config, idp, line => logger.LogInformation("{Line}", line));
+        _server = new DialUpServer(config, idp, logger);
     }
 
     /// <summary>

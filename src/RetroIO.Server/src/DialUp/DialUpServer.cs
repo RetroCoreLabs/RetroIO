@@ -14,6 +14,8 @@ using RetroIO.Network.DialUp;
 using RetroIO.Network.Nat;
 using RetroIO.Network.Router;
 using RetroIO.Server.Hosting.Configuration;
+using Microsoft.Extensions.Logging;
+using RetroIO.Server.Core.Telemetry;
 
 namespace RetroIO.Server.DialUp;
 
@@ -46,14 +48,14 @@ namespace RetroIO.Server.DialUp;
 /// every call while one password was checked.
 /// </para>
 /// </remarks>
-public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpStatistics
+public sealed class DialUpServer : IDisposable
 {
     private const int LineBufferSize = 4096;
     private const int MaxPacket = 65535;
 
     private readonly DialUpServerConfiguration _config;
     private readonly IRetroIDP _idp;
-    private readonly Action<string> _log;
+    private readonly RetroTelemetry _telemetry;
     private readonly ConcurrentQueue<Socket> _incoming = new ConcurrentQueue<Socket>();
     private readonly List<Call> _calls = new List<Call>();
     private readonly byte[] _receive = new byte[LineBufferSize];
@@ -85,15 +87,36 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
     /// <param name="idp">
     /// RetroServer's users.
     /// </param>
-    /// <param name="log">
-    /// Receives one line per event.
+    /// <param name="logger">
+    /// Where the log records also go (and OpenTelemetry can read them); null keeps them only in
+    /// <see cref="Telemetry"/>.
     /// </param>
-    public DialUpServer(DialUpServerConfiguration config, IRetroIDP idp, Action<string> log)
+    public DialUpServer(DialUpServerConfiguration config, IRetroIDP idp, ILogger? logger = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _idp = idp ?? throw new ArgumentNullException(nameof(idp));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _telemetry = new RetroTelemetry(TelemetryName, logger);
+
+        // The metrics, named the OpenTelemetry way (retroio.<part>.<thing>, UCUM units, labels for
+        // the variants). Each reads a counter the server keeps anyway.
+        _telemetry.AddCounter("retroio.dialup.calls.answered", "{call}", "Calls answered since start, including calls later refused at the login.", () => CallsAnswered);
+        _telemetry.AddUpDownCounter("retroio.dialup.calls.active", "{call}", "Calls up now.", () => CallsActive);
+        _telemetry.AddGauge("retroio.dialup.calls.limit", "{call}", "The most calls that can be up at once.", () => _config.MaxCalls);
+        _telemetry.AddCounter("retroio.dialup.calls.refused", "{call}", "Calls turned away before the login.", () => CallsRefusedFull, Tag("reason", "lines_full"));
+        _telemetry.AddCounter("retroio.dialup.logins.refused", "{login}", "Refused logins: wrong name, wrong password, or no dial-up right.", () => LoginsRefused);
+        _telemetry.AddCounter("retroio.dialup.io", "By", "Bytes on the callers' lines.", () => BytesFromCallers, Tag("direction", "in"));
+        _telemetry.AddCounter("retroio.dialup.io", "By", "Bytes on the callers' lines.", () => BytesToCallers, Tag("direction", "out"));
     }
+
+    /// <summary>
+    /// The name of the dial-up part in metrics and logs, and its meter name for OpenTelemetry.
+    /// </summary>
+    public const string TelemetryName = "RetroIO.DialUp";
+
+    /// <summary>
+    /// Gets the metrics and the log of the server.
+    /// </summary>
+    public RetroTelemetry Telemetry => _telemetry;
 
     /// <summary>
     /// Gets the port the server listens on once started; useful when the configured port is 0.
@@ -184,7 +207,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
         _pump = new Thread(PumpLoop) { IsBackground = true, Name = "dial-up" };
         _pump.Start();
 
-        _log($"[dialup] listening on {_config.BindAddress}:{ListeningPort}; callers on {Ipv4.Format(network)}/{prefix}, "
+        _telemetry.Log(LogLevel.Information, $"listening on {_config.BindAddress}:{ListeningPort}; callers on {Ipv4.Format(network)}/{prefix}, "
             + $"router {Ipv4.Format(routerAddress)}, gateway {Ipv4.Format(gateway)}, name server {Ipv4.Format(_nameServer)}, "
             + $"pool {Ipv4.Format(firstCaller)}..{Ipv4.Format(broadcast - 1)}, at most {_config.MaxCalls} calls");
     }
@@ -201,6 +224,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
 
         _disposed = true;
         _stop.Cancel();
+        _telemetry.Dispose();
         try
         {
             _listener?.Stop();
@@ -256,7 +280,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
                     return;
                 }
 
-                _log($"[dialup] accept failed: {ex.SocketErrorCode}");
+                _telemetry.Log(LogLevel.Warning, $"accept failed: {ex.SocketErrorCode}");
                 continue;
             }
 
@@ -318,7 +342,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
             if (_calls.Count >= _config.MaxCalls)
             {
                 Interlocked.Increment(ref _callsRefusedFull);
-                _log($"[dialup] call from {socket.RemoteEndPoint} refused: {_config.MaxCalls} calls are up");
+                _telemetry.Log(LogLevel.Warning, $"call from {socket.RemoteEndPoint} refused: {_config.MaxCalls} calls are up");
                 TrySend(socket, "\r\nNo line free\r\n"u8);
                 socket.Dispose();
                 continue;
@@ -336,7 +360,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
             _calls.Add(call);
             Interlocked.Increment(ref _callsAnswered);
             Volatile.Write(ref _callsActive, _calls.Count);
-            _log($"[dialup] call from {call.RemoteText} answered ({_calls.Count} up)");
+            _telemetry.Log(LogLevel.Information, $"call from {call.RemoteText} answered ({_calls.Count} up)");
             call.Session.Answer();
         }
     }
@@ -448,7 +472,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
                 TrySend(call.Socket, new ReadOnlySpan<byte>(_send, 0, count));
             }
 
-            _log($"[dialup] call from {call.RemoteText} ended: {call.EndReason ?? "ended"}");
+            _telemetry.Log(LogLevel.Information, $"call from {call.RemoteText} ended: {call.EndReason ?? "ended"}");
             call.Socket.Dispose();
             _calls.RemoveAt(i);
             Volatile.Write(ref _callsActive, _calls.Count);
@@ -506,7 +530,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
             if (result != ProtocolAuthResult.Success)
             {
                 Interlocked.Increment(ref _loginsRefused);
-                _log($"[dialup] login '{name}' from {call.RemoteText} refused: {result}");
+                _telemetry.Log(LogLevel.Warning, $"login '{name}' from {call.RemoteText} refused: {result}");
                 answer.Refuse();
                 return;
             }
@@ -521,7 +545,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
             }
 
             call.FixedAddress = fixedAddress;
-            _log($"[dialup] login '{name}' from {call.RemoteText} accepted, "
+            _telemetry.Log(LogLevel.Information, $"login '{name}' from {call.RemoteText} accepted, "
                 + (fixedText.Length == 0 ? "address from the pool" : "fixed address " + fixedText));
             answer.Accept();
         }
@@ -530,7 +554,7 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
             // The user store could not be read, or the stored fixed address is not an address: the
             // caller is refused and the reason is logged; nothing is let in on a failed check.
             Interlocked.Increment(ref _loginsRefused);
-            _log($"[dialup] login '{name}' from {call.RemoteText} refused: the check failed ({ex.GetType().Name}: {ex.Message})");
+            _telemetry.Log(LogLevel.Warning, $"login '{name}' from {call.RemoteText} refused: the check failed ({ex.GetType().Name}: {ex.Message})");
             answer.Refuse();
         }
     }
@@ -576,5 +600,10 @@ public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpSt
         public uint LookUpAddress(string userName) => FixedAddress;
 
         public void Ended(string reason) => EndReason ??= reason;
+    }
+
+    private static KeyValuePair<string, string> Tag(string key, string value)
+    {
+        return new KeyValuePair<string, string>(key, value);
     }
 }

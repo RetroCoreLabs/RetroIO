@@ -30,7 +30,6 @@ public sealed class DialUpServerTests
 
     private string _folder = string.Empty;
     private JsonRetroIDP _idp = null!;
-    private readonly List<string> _log = new List<string>();
 
     [SetUp]
     public void SetUp()
@@ -41,7 +40,6 @@ public sealed class DialUpServerTests
         AddUser("caller", allowDialUp: true, address: null);
         AddUser("fixed", allowDialUp: true, address: "10.42.0.20");
         AddUser("nodial", allowDialUp: false, address: null);
-        _log.Clear();
     }
 
     [TearDown]
@@ -171,31 +169,53 @@ public sealed class DialUpServerTests
     }
 
     [Test]
-    public void TheManagementApi_ShowsTheCounters_OrNotHostedWithoutAServer()
+    public void TheManagementApi_ShowsTheMetricsAndTheLog_NextToEachOther()
     {
-        RetroIO.Management.Api.Controllers.DialUpController none = new RetroIO.Management.Api.Controllers.DialUpController();
-        RetroIO.Management.Contracts.DialUpStatusResponse off = StatusOf(none);
-        Assert.That(off.IsHosted, Is.False);
-        Assert.That(off.CallsAnswered, Is.EqualTo(0));
-
         using DialUpServer server = StartServer(maxCalls: 4);
         using TcpClient client = Dial(server);
         LogIn(client, "caller", "wrong-password");
 
-        RetroIO.Management.Contracts.DialUpStatusResponse on = StatusOf(new RetroIO.Management.Api.Controllers.DialUpController(server));
-        Assert.That(on.IsHosted, Is.True);
-        Assert.That(on.Port, Is.EqualTo(server.ListeningPort));
-        Assert.That(on.CallsAnswered, Is.EqualTo(1));
-        Assert.That(on.CallsActive, Is.EqualTo(1));
-        Assert.That(on.LoginsRefused, Is.EqualTo(1));
-        Assert.That(on.BytesFromCallers, Is.GreaterThan(0));
-        Assert.That(on.BytesToCallers, Is.GreaterThan(0));
+        RetroIO.Management.Api.Controllers.TelemetryController api =
+            new RetroIO.Management.Api.Controllers.TelemetryController(new[] { (RetroIO.Server.Core.Telemetry.ITelemetrySource)server.Telemetry });
+
+        Microsoft.AspNetCore.Mvc.OkObjectResult okMetrics = (Microsoft.AspNetCore.Mvc.OkObjectResult)api.GetMetrics("RetroIO.DialUp").Result!;
+        List<RetroIO.Management.Contracts.MetricDto> metrics =
+            ((RetroIO.Management.Contracts.ApiResponse<RetroIO.Management.Contracts.MetricsResponse>)okMetrics.Value!).Data!.Metrics;
+        Assert.That(ValueOf(metrics, "retroio.dialup.calls.answered", null), Is.EqualTo(1));
+        Assert.That(ValueOf(metrics, "retroio.dialup.calls.active", null), Is.EqualTo(1));
+        Assert.That(ValueOf(metrics, "retroio.dialup.logins.refused", null), Is.EqualTo(1));
+        Assert.That(ValueOf(metrics, "retroio.dialup.calls.limit", null), Is.EqualTo(4));
+        Assert.That(ValueOf(metrics, "retroio.dialup.io", "in"), Is.GreaterThan(0));
+        Assert.That(ValueOf(metrics, "retroio.dialup.io", "out"), Is.GreaterThan(0));
+
+        Microsoft.AspNetCore.Mvc.OkObjectResult okLog = (Microsoft.AspNetCore.Mvc.OkObjectResult)api.GetLog("RetroIO.DialUp").Result!;
+        List<RetroIO.Management.Contracts.TelemetryLogRecordDto> log =
+            ((RetroIO.Management.Contracts.ApiResponse<RetroIO.Management.Contracts.TelemetryLogResponse>)okLog.Value!).Data!.Records;
+        bool refusedLogged = false;
+        for (int i = 0; i < log.Count; i++)
+        {
+            if (log[i].Level == "Warning" && log[i].Message.Contains("refused", StringComparison.Ordinal))
+            {
+                refusedLogged = true;
+            }
+        }
+
+        Assert.That(log[0].Message, Does.StartWith("listening on"));
+        Assert.That(refusedLogged, Is.True, "the refused login is a warning in the log");
     }
 
-    private static RetroIO.Management.Contracts.DialUpStatusResponse StatusOf(RetroIO.Management.Api.Controllers.DialUpController controller)
+    private static long ValueOf(List<RetroIO.Management.Contracts.MetricDto> metrics, string name, string? direction)
     {
-        Microsoft.AspNetCore.Mvc.OkObjectResult ok = (Microsoft.AspNetCore.Mvc.OkObjectResult)controller.GetStatus().Result!;
-        return ((RetroIO.Management.Contracts.ApiResponse<RetroIO.Management.Contracts.DialUpStatusResponse>)ok.Value!).Data!;
+        for (int i = 0; i < metrics.Count; i++)
+        {
+            if (metrics[i].Name == name
+                && (direction == null || (metrics[i].Tags.TryGetValue("direction", out string? d) && d == direction)))
+            {
+                return metrics[i].Value;
+            }
+        }
+
+        throw new AssertionException("no metric " + name + " " + direction);
     }
 
     private void AddUser(string name, bool allowDialUp, string? address)
@@ -219,15 +239,7 @@ public sealed class DialUpServerTests
             Port = 0,
             MaxCalls = maxCalls,
         };
-        DialUpServer server = new DialUpServer(config, _idp, line =>
-        {
-            lock (_log)
-            {
-                _log.Add(line);
-            }
-
-            TestContext.Progress.WriteLine(line);
-        });
+        DialUpServer server = new DialUpServer(config, _idp);
         server.Start();
         return server;
     }
