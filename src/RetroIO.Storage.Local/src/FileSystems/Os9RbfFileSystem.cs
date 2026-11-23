@@ -300,6 +300,64 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
+        /// Gets the attribute byte and the owner of a file's descriptor.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="attributes">
+        /// The attribute byte (descriptor byte 0): read, write, execute, public read, public write,
+        /// public execute, sharable, directory, from bit 0 up.
+        /// </param>
+        /// <param name="owner">
+        /// The owner's user number (descriptor bytes 1 and 2).
+        /// </param>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public void GetDescriptorFields(string path, out byte attributes, out ushort owner)
+        {
+            byte[] fd = ReadSectorChecked(ResolvePath(path, out _));
+            attributes = fd[FdAttributes];
+            owner = (ushort)ReadUInt16(fd, FdOwner);
+        }
+
+        /// <summary>
+        /// Sets the attribute byte and the owner of a file's descriptor. The directory bit stays as it is.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="attributes">
+        /// The attribute byte; bit 7 (directory) is ignored.
+        /// </param>
+        /// <param name="owner">
+        /// The owner's user number.
+        /// </param>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public void SetDescriptorFields(string path, byte attributes, ushort owner)
+        {
+            BeginWrite();
+            try
+            {
+                uint lsn = ResolvePath(path, out _);
+                byte[] fd = ReadSectorChecked(lsn);
+                fd[FdAttributes] = (byte)((fd[FdAttributes] & DirectoryAttribute) | (attributes & ~DirectoryAttribute));
+                fd[FdOwner] = (byte)(owner >> 8);
+                fd[FdOwner + 1] = (byte)owner;
+                PutPending(lsn, fd);
+                CommitWrite();
+            }
+            catch
+            {
+                AbortWrite();
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Writes a file, creating it or replacing its contents.
         /// </summary>
         /// <remarks>

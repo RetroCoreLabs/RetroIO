@@ -148,13 +148,15 @@ namespace RetroIO.Tests
         }
 
         [Test]
-        public void CommodoreDiskDriver_DoesNotImplementIExtendedAttributeSupport()
+        public void CommodoreDiskDriver_DeclaresItsFileTypeAndLockedFlag()
         {
-            // Arrange
+            // The directory entry's type byte holds the file type (bits 0 to 3) and the locked flag
+            // (bit 6); both are carried to and from a .xat file.
             var driver = new CommodoreDiskDriver();
 
-            // Act & Assert
-            Assert.That(driver, Is.Not.InstanceOf<IExtendedAttributeSupport>());
+            FileSystemCapabilities capabilities = ((IExtendedAttributeSupport)driver).GetCapabilities();
+            Assert.That(capabilities.SupportedPropertyKeys, Is.EqualTo(new[] { CommodoreDiskDriver.FileTypeKey, CommodoreDiskDriver.LockedKey }));
+            Assert.That(capabilities.WritablePropertyKeys, Is.EqualTo(new[] { CommodoreDiskDriver.FileTypeKey, CommodoreDiskDriver.LockedKey }));
         }
 
         [Test]

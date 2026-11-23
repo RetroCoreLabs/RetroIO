@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using RetroIO.Storage.Core;
 
@@ -22,7 +23,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// decoded sectors back to <see cref="DmkDiskImage.SetSectorImage"/>, which rebuilds the sector headers, data and both CRCs of the changed
     /// sectors, and writes the DMK file back to the stream from its start. An image whose header marks it write protected is mounted read-only.
     /// </remarks>
-    public sealed class DragonDmkDriver : IFileSystemDriver
+    public sealed class DragonDmkDriver : IFileSystemDriver, IExtendedAttributeSupport
     {
         private readonly DragonDskDriver _inner = new DragonDskDriver();
         private MemoryStream? _sectors;
@@ -116,6 +117,57 @@ namespace RetroIO.Storage.Local.Drivers
         {
             return _inner.ReadFile(path);
         }
+
+        /// <summary>
+        /// Gets the property keys of the mounted file system.
+        /// </summary>
+        /// <returns>
+        /// The capabilities.
+        /// </returns>
+        public FileSystemCapabilities GetCapabilities() => _inner.GetCapabilities();
+
+        /// <summary>
+        /// Gets a file's properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <returns>
+        /// The properties, or <c>null</c> when there is no such file.
+        /// </returns>
+        public IDictionary<string, object>? GetFileProperties(string path) => _inner.GetFileProperties(path);
+
+        /// <summary>
+        /// Writes a file with its properties and saves the DMK file.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="data">
+        /// The file's bytes.
+        /// </param>
+        /// <param name="propertyBag">
+        /// The properties.
+        /// </param>
+        public void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag)
+        {
+            _inner.WriteFileWithProperties(path, data, propertyBag);
+            SaveToFile();
+        }
+
+        /// <summary>
+        /// Reads a file and its properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Receives the properties.
+        /// </param>
+        /// <returns>
+        /// The file's bytes.
+        /// </returns>
+        public byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag) => _inner.ReadFileWithProperties(path, propertyBag);
 
         /// <summary>
         /// Creates or replaces a file on the mounted volume and writes the DMK file back.

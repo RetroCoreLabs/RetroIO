@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.BlockDevices;
@@ -18,7 +19,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// Thin wrapper that composes GenericBlockDevice + CbmDosFileSystem.
     /// Replaces separate D64Driver, D71Driver, and D81Driver classes.
     /// </summary>
-    public sealed class CommodoreDiskDriver : IFileSystemDriver
+    public sealed class CommodoreDiskDriver : IFileSystemDriver, IExtendedAttributeSupport
     {
         private GenericBlockDevice? _blockDevice;
         private CbmDosFileSystem? _filesystem;
@@ -285,6 +286,110 @@ namespace RetroIO.Storage.Local.Drivers
         {
             EnsureMounted();
             return _filesystem!.GetMetadata(path);
+        }
+
+        // ===================================================================
+        // EXTENDED ATTRIBUTES - the file type and the locked flag, for .xat files
+        // ===================================================================
+
+        /// <summary>
+        /// The property key of the file type: <c>DEL</c>, <c>SEQ</c>, <c>PRG</c>, <c>USR</c>, <c>REL</c> or <c>CBM</c>.
+        /// </summary>
+        public const string FileTypeKey = "cbm.file_type";
+
+        /// <summary>
+        /// The property key of the locked flag (bit 6 of the type byte).
+        /// </summary>
+        public const string LockedKey = "cbm.locked";
+
+        /// <summary>
+        /// Gets the property keys: the file type and the locked flag, both written back.
+        /// </summary>
+        /// <returns>
+        /// The capabilities.
+        /// </returns>
+        public FileSystemCapabilities GetCapabilities()
+        {
+            return new FileSystemCapabilities
+            {
+                SupportsExtendedAttributes = true,
+                SupportedPropertyKeys = new[] { FileTypeKey, LockedKey },
+                WritablePropertyKeys = new[] { FileTypeKey, LockedKey },
+            };
+        }
+
+        /// <summary>
+        /// Gets a file's type and locked flag.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <returns>
+        /// The properties, or <c>null</c> when there is no such file.
+        /// </returns>
+        public IDictionary<string, object>? GetFileProperties(string path)
+        {
+            FileMetadata? metadata = GetMetadata(path);
+            if (metadata == null)
+            {
+                return null;
+            }
+
+            return new Dictionary<string, object>
+            {
+                { FileTypeKey, metadata.FileType ?? string.Empty },
+                { LockedKey, (metadata.Attributes ?? string.Empty).Contains('L') },
+            };
+        }
+
+        /// <summary>
+        /// Writes a file, then gives it the file type and locked flag from the properties.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <param name="data">
+        /// The file contents.
+        /// </param>
+        /// <param name="propertyBag">
+        /// The properties; a missing type means PRG, a missing flag means not locked.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the type is REL or CBM, which a plain write cannot make, or is unknown.
+        /// </exception>
+        public void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag)
+        {
+            string type = ExtendedAttributeValues.TryGetString(propertyBag, FileTypeKey, out string t) ? t : "PRG";
+            ExtendedAttributeValues.TryGetBool(propertyBag, LockedKey, out bool locked);
+            if (type != "DEL" && type != "SEQ" && type != "PRG" && type != "USR")
+            {
+                throw new ArgumentException("A written file can be DEL, SEQ, PRG or USR, not " + type, nameof(propertyBag));
+            }
+
+            WriteFile(path, data);
+            if (type != "PRG" || locked)
+            {
+                _filesystem!.SetFileType(path, type, locked);
+            }
+        }
+
+        /// <summary>
+        /// Reads a file and its properties.
+        /// </summary>
+        /// <param name="path">
+        /// Name of the file.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Receives the properties.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        public byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag)
+        {
+            byte[] data = ReadFile(path);
+            ExtendedAttributeValues.CopyInto(GetFileProperties(path), propertyBag);
+            return data;
         }
 
         // ===================================================================

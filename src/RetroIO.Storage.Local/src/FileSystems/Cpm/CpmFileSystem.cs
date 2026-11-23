@@ -470,6 +470,47 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
             StoreDirectory(directory);
         }
 
+        /// <summary>
+        /// Sets the three attribute bits of a file in every one of its directory entries: R/O (bit 7
+        /// of the first type byte), SYS (the second) and archive (the third, CP/M 3).
+        /// </summary>
+        /// <param name="user">
+        /// User number, 0 to 15.
+        /// </param>
+        /// <param name="name">
+        /// NAME.TYP.
+        /// </param>
+        /// <param name="readOnly">
+        /// The R/O attribute.
+        /// </param>
+        /// <param name="system">
+        /// The SYS attribute.
+        /// </param>
+        /// <param name="archive">
+        /// The archive attribute.
+        /// </param>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public void SetAttributes(int user, string name, bool readOnly, bool system, bool archive)
+        {
+            CpmFile file = Find(user, name) ?? throw new FileNotFoundException("File not found: " + name);
+            byte[] fileName = OnDiskName(file.Name);
+            byte[] directory = DirectoryBytes(_image, _parameters, _map);
+            for (int e = 0; e < _parameters.DirectoryEntries; e++)
+            {
+                int at = e * EntrySize;
+                if (IsEntryOf(directory, at, user, fileName))
+                {
+                    directory[at + 9] = (byte)((directory[at + 9] & 0x7F) | (readOnly ? 0x80 : 0));
+                    directory[at + 10] = (byte)((directory[at + 10] & 0x7F) | (system ? 0x80 : 0));
+                    directory[at + 11] = (byte)((directory[at + 11] & 0x7F) | (archive ? 0x80 : 0));
+                }
+            }
+
+            StoreDirectory(directory);
+        }
+
         // Writes the directory back through the record map and reads it again.
         private void StoreDirectory(byte[] directory)
         {
@@ -653,7 +694,7 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
                 string key = status + ":" + name;
                 if (!byKey.TryGetValue(key, out CpmFileBuilder? builder))
                 {
-                    builder = new CpmFileBuilder(status, name, (directory[at + 9] & 0x80) != 0, (directory[at + 10] & 0x80) != 0);
+                    builder = new CpmFileBuilder(status, name, (directory[at + 9] & 0x80) != 0, (directory[at + 10] & 0x80) != 0, (directory[at + 11] & 0x80) != 0);
                     byKey.Add(key, builder);
                     order.Add(builder);
                 }
@@ -694,12 +735,14 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
             private readonly string _name;
             private readonly bool _readOnly;
             private readonly bool _system;
+            private readonly bool _archive;
             private readonly List<KeyValuePair<int, int[]>> _extents = new List<KeyValuePair<int, int[]>>();
             private int _lastExtent = -1;
             private int _lastRecordCount;
 
-            public CpmFileBuilder(int user, string name, bool readOnly, bool system)
+            public CpmFileBuilder(int user, string name, bool readOnly, bool system, bool archive)
             {
+                _archive = archive;
                 _user = user;
                 _name = name;
                 _readOnly = readOnly;
@@ -762,7 +805,7 @@ namespace RetroIO.Storage.Local.FileSystems.Cpm
                         + blocks.Count + " blocks hold.");
                 }
 
-                return new CpmFile(_user, _name, (int)size, _readOnly, _system, blocks);
+                return new CpmFile(_user, _name, (int)size, _readOnly, _system, _archive, blocks);
             }
 
             private static int CompareExtent(KeyValuePair<int, int[]> a, KeyValuePair<int, int[]> b) => a.Key.CompareTo(b.Key);

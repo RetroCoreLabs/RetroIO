@@ -19,6 +19,34 @@ namespace RetroIO.Storage.Ndfs.PropertyBags
     public static class NdfsPropertyBagSerializer
     {
         /// <summary>
+        /// The keys <see cref="SerializeObjectEntry"/> writes for every file, plus
+        /// <see cref="NdfsPropertyBagKeys.Holes"/>, which the file system adds for a file with data.
+        /// </summary>
+        public static readonly string[] FileKeys =
+        {
+            NdfsPropertyBagKeys.Header, NdfsPropertyBagKeys.ObjectIndex, NdfsPropertyBagKeys.ObjectName,
+            NdfsPropertyBagKeys.Type, NdfsPropertyBagKeys.UserName, NdfsPropertyBagKeys.UserIndex,
+            NdfsPropertyBagKeys.ObjectEntryNextVersion, NdfsPropertyBagKeys.ObjectEntryPrevVersion,
+            NdfsPropertyBagKeys.IsVersioned, NdfsPropertyBagKeys.AccessBits, NdfsPropertyBagKeys.AccessPermissionString,
+            NdfsPropertyBagKeys.FileTypeFlags, NdfsPropertyBagKeys.FileTypeString, NdfsPropertyBagKeys.FileType,
+            NdfsPropertyBagKeys.DeviceNumber, NdfsPropertyBagKeys.UserIndexOfReservingUser,
+            NdfsPropertyBagKeys.CurrentOpenCount, NdfsPropertyBagKeys.TotalOpenCount,
+            NdfsPropertyBagKeys.DateCreated, NdfsPropertyBagKeys.LastDateOpenedForRead,
+            NdfsPropertyBagKeys.LastDateOpenedForWrite, NdfsPropertyBagKeys.PagesInFile,
+            NdfsPropertyBagKeys.BytesInFile, NdfsPropertyBagKeys.Holes,
+        };
+
+        /// <summary>
+        /// The keys <see cref="ApplyPortableMetadata"/> puts back after a write. Everything else is
+        /// decided by the write itself (pages, byte count, object slot, owner).
+        /// </summary>
+        public static readonly string[] PortableKeys =
+        {
+            NdfsPropertyBagKeys.AccessBits, NdfsPropertyBagKeys.DateCreated,
+            NdfsPropertyBagKeys.LastDateOpenedForRead, NdfsPropertyBagKeys.LastDateOpenedForWrite,
+        };
+
+        /// <summary>
         /// Populates a property bag with NDFS metadata from an ObjectEntry.
         /// </summary>
         /// <param name="entry">

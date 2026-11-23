@@ -531,6 +531,36 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
+        /// Gets the file type (byte 11 of the entry) and the ASCII flag (byte 12) of a file.
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>.
+        /// </param>
+        /// <param name="fileType">
+        /// 0 BASIC program, 1 BASIC data, 2 machine language, 3 text.
+        /// </param>
+        /// <param name="asciiFlag">
+        /// 00h binary or FFh ASCII.
+        /// </param>
+        /// <exception cref="System.IO.FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public void GetFileType(string path, out byte fileType, out byte asciiFlag)
+        {
+            EnsureInitialized();
+            SplitName(path, out string name, out string extension);
+            ScanDirectory(name, extension, out int found, out _);
+            if (found < 0)
+            {
+                throw new System.IO.FileNotFoundException($"File not found: {path}");
+            }
+
+            byte[] entry = ReadDirEntry(found);
+            fileType = entry[11];
+            asciiFlag = entry[12];
+        }
+
+        /// <summary>
         /// Deletes a file: the first byte of its directory entry is set to 0 and every granule of its chain becomes free (0xFF) in the FAT.
         /// </summary>
         /// <param name="path">

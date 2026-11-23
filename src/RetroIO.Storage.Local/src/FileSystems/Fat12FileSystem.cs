@@ -273,7 +273,7 @@ namespace RetroIO.Storage.Local.FileSystems
         {
             EnsureInitialized();
             DirCursor dir = ResolveDirectory(path);
-            return ListDirectoryEntries(dir);
+            return WithPaths(path, ListDirectoryEntries(dir));
         }
 
         /// <summary>
@@ -301,6 +301,67 @@ namespace RetroIO.Storage.Local.FileSystems
             }
 
             return ReadFileData(raw.Entry.StartCluster, raw.Entry.FileSize);
+        }
+
+        /// <summary>
+        /// The FAT attribute bits a file may carry: read only (01h), hidden (02h), system (04h) and
+        /// archive (20h).
+        /// </summary>
+        public const byte FileAttributeMask = 0x27;
+
+        /// <summary>
+        /// Gets the attribute byte of a file's directory entry.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <returns>
+        /// The attribute byte (offset 11 of the entry).
+        /// </returns>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public byte GetFileAttributes(string path)
+        {
+            EnsureInitialized();
+            var (parent, name) = ResolveParentAndName(path);
+            RawEntry? entry = FindEntryInDirectory(parent, name);
+            if (!entry.HasValue || entry.Value.Entry.IsDirectory)
+            {
+                throw new FileNotFoundException("File not found: " + path);
+            }
+
+            return (byte)entry.Value.Entry.Attributes;
+        }
+
+        /// <summary>
+        /// Sets the read-only, hidden, system and archive bits of a file; the other bits stay.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="attributes">
+        /// The bits; only those in <see cref="FileAttributeMask"/> are used.
+        /// </param>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public void SetFileAttributes(string path, byte attributes)
+        {
+            EnsureInitialized();
+            var (parent, name) = ResolveParentAndName(path);
+            RawEntry? entry = FindEntryInDirectory(parent, name);
+            if (!entry.HasValue || entry.Value.Entry.IsDirectory)
+            {
+                throw new FileNotFoundException("File not found: " + path);
+            }
+
+            byte[] sector = new byte[_device!.BlockSize];
+            _device.ReadBlock(BlockAddress.FromLBA(entry.Value.Lba), sector);
+            int at = entry.Value.Offset + 11;
+            sector[at] = (byte)((sector[at] & ~FileAttributeMask) | (attributes & FileAttributeMask));
+            _device.WriteBlock(BlockAddress.FromLBA(entry.Value.Lba), sector);
+            _device.Flush();
         }
 
         /// <summary>
@@ -431,7 +492,13 @@ namespace RetroIO.Storage.Local.FileSystems
                 return null;
             }
 
-            return ToMetadata(raw.Value.Entry);
+            FileMetadata metadata = ToMetadata(raw.Value.Entry);
+            metadata.Path = ChildPath(path, string.Empty).TrimEnd('/');
+            if (metadata.Path.Length == 0)
+            {
+                metadata.Path = "/";
+            }
+            return metadata;
         }
 
         /// <summary>
@@ -1447,6 +1514,24 @@ namespace RetroIO.Storage.Local.FileSystems
         {
             public uint Lba { get; init; }
             public int Offset { get; init; }
+        }
+
+        // The path of an entry in a folder: the folder's path (any slashes at its ends dropped), a
+        // slash, and the name. The root gives "/NAME".
+        private static string ChildPath(string folder, string name)
+        {
+            string trimmed = (folder ?? string.Empty).Replace((char)0x5C, '/').Trim('/');
+            return trimmed.Length == 0 ? "/" + name : "/" + trimmed + "/" + name;
+        }
+
+        private static DirectoryEntry[] WithPaths(string folder, DirectoryEntry[] entries)
+        {
+            for (int i = 0; i < entries.Length; i++)
+            {
+                entries[i].Metadata.Path = ChildPath(folder, entries[i].Name);
+            }
+
+            return entries;
         }
     }
 }

@@ -589,6 +589,31 @@ namespace RetroIO.Storage.Ndfs.FileSystems
 
             var (userName, fileName) = ParseNdfsPath(path);
 
+            // A path of one name is a user first: the root lists the users as folders, so each
+            // folder it lists must be found by its own path.
+            if (string.IsNullOrEmpty(userName))
+            {
+                var users = _userFile.GetUsers();
+                for (int i = 0; i < users.Count; i++)
+                {
+                    var user = users[i];
+                    if (string.Equals(user.UserName, fileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new FileMetadata
+                        {
+                            Name = user.UserName,
+                            Path = $"/{user.UserName}",
+                            Size = 0,
+                            IsDirectory = true,
+                            FileType = "NDFS User",
+                            CreatedTime = NdDateTime.FromNdDate(user.DateCreated),
+                            ModifiedTime = NdDateTime.FromNdDate(user.LastDateEntered),
+                            Attributes = $"UserIndex:{user.UserIndex},Reserved:{user.PagesReserved},Used:{user.PagesUsed}"
+                        };
+                    }
+                }
+            }
+
             // Normalize filename: convert . separator to : for lookup compatibility
             fileName = NormalizeFileNameForLookup(fileName);
 

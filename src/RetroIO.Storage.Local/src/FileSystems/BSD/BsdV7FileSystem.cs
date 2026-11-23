@@ -331,7 +331,7 @@ namespace RetroIO.Storage.Local.V7.FileSystems
 
             V7Inode inode = _inodeReader!.ReadInode(inodeNum);
 
-            return new FileMetadata
+            FileMetadata metadata = new FileMetadata
             {
                 Name = System.IO.Path.GetFileName(path),
                 IsDirectory = inode.IsDirectory,
@@ -340,6 +340,12 @@ namespace RetroIO.Storage.Local.V7.FileSystems
                 ModifiedTime = inode.ModificationTime,
                 AccessedTime = inode.AccessTime
             };
+
+            // The permission bits (with set-user-id, set-group-id and sticky), the owner and the group.
+            metadata.SetProperty(UnixFileProperties.ModeKey, inode.Mode & 0xFFF);
+            metadata.SetProperty(UnixFileProperties.UidKey, (int)inode.Uid);
+            metadata.SetProperty(UnixFileProperties.GidKey, (int)inode.Gid);
+            return metadata;
         }
 
         /// <summary>

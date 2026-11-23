@@ -25,7 +25,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// disk labels.
     /// Thin wrapper that composes GenericBlockDevice + Fat12FileSystem/Fat16FileSystem/Fat32FileSystem.
     /// </summary>
-    public sealed class PcFloppyDriver : IFileSystemDriver, IPartitionProvider
+    public sealed class PcFloppyDriver : IFileSystemDriver, IPartitionProvider, IExtendedAttributeSupport
     {
         private GenericBlockDevice? _blockDevice;
         private IBlockFileSystem? _filesystem;
@@ -321,6 +321,134 @@ namespace RetroIO.Storage.Local.Drivers
         {
             EnsureMounted();
             _filesystem!.WriteFile(path, data);
+        }
+
+        /// <summary>
+        /// The property key of the read-only attribute (01h).
+        /// </summary>
+        public const string ReadOnlyKey = "fat.read_only";
+
+        /// <summary>
+        /// The property key of the hidden attribute (02h).
+        /// </summary>
+        public const string HiddenKey = "fat.hidden";
+
+        /// <summary>
+        /// The property key of the system attribute (04h).
+        /// </summary>
+        public const string SystemKey = "fat.system";
+
+        /// <summary>
+        /// The property key of the archive attribute (20h).
+        /// </summary>
+        public const string ArchiveKey = "fat.archive";
+
+        /// <summary>
+        /// Gets the property keys: the four FAT file attributes, all written back.
+        /// </summary>
+        /// <returns>
+        /// The capabilities.
+        /// </returns>
+        public FileSystemCapabilities GetCapabilities()
+        {
+            string[] keys = { ReadOnlyKey, HiddenKey, SystemKey, ArchiveKey };
+            return new FileSystemCapabilities
+            {
+                SupportsExtendedAttributes = true,
+                SupportedPropertyKeys = keys,
+                WritablePropertyKeys = (string[])keys.Clone(),
+            };
+        }
+
+        /// <summary>
+        /// Gets a file's attributes.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <returns>
+        /// The properties, or <c>null</c> when there is no such file.
+        /// </returns>
+        public IDictionary<string, object>? GetFileProperties(string path)
+        {
+            EnsureMounted();
+            byte attributes;
+            try
+            {
+                attributes = Attributes(path);
+            }
+            catch (FileNotFoundException)
+            {
+                return null;
+            }
+
+            return new Dictionary<string, object>
+            {
+                { ReadOnlyKey, (attributes & 0x01) != 0 },
+                { HiddenKey, (attributes & 0x02) != 0 },
+                { SystemKey, (attributes & 0x04) != 0 },
+                { ArchiveKey, (attributes & 0x20) != 0 },
+            };
+        }
+
+        /// <summary>
+        /// Writes a file, then sets its attributes from the properties. A missing attribute is clear,
+        /// except archive, which a write sets as DOS does.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <param name="data">
+        /// The file contents.
+        /// </param>
+        /// <param name="propertyBag">
+        /// The properties.
+        /// </param>
+        public void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag)
+        {
+            EnsureMounted();
+            ExtendedAttributeValues.TryGetBool(propertyBag, ReadOnlyKey, out bool readOnly);
+            ExtendedAttributeValues.TryGetBool(propertyBag, HiddenKey, out bool hidden);
+            ExtendedAttributeValues.TryGetBool(propertyBag, SystemKey, out bool system);
+            bool archive = !ExtendedAttributeValues.TryGetBool(propertyBag, ArchiveKey, out bool a) || a;
+            _filesystem!.WriteFile(path, data);
+            byte attributes = (byte)((readOnly ? 0x01 : 0) | (hidden ? 0x02 : 0) | (system ? 0x04 : 0) | (archive ? 0x20 : 0));
+            switch (_filesystem)
+            {
+                case Fat12FileSystem fat12: fat12.SetFileAttributes(path, attributes); break;
+                case Fat16FileSystem fat16: fat16.SetFileAttributes(path, attributes); break;
+                case Fat32FileSystem fat32: fat32.SetFileAttributes(path, attributes); break;
+            }
+        }
+
+        /// <summary>
+        /// Reads a file and its attributes.
+        /// </summary>
+        /// <param name="path">
+        /// Path of the file.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Receives the properties.
+        /// </param>
+        /// <returns>
+        /// The file contents.
+        /// </returns>
+        public byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag)
+        {
+            byte[] data = ReadFile(path);
+            ExtendedAttributeValues.CopyInto(GetFileProperties(path), propertyBag);
+            return data;
+        }
+
+        private byte Attributes(string path)
+        {
+            return _filesystem switch
+            {
+                Fat12FileSystem fat12 => fat12.GetFileAttributes(path),
+                Fat16FileSystem fat16 => fat16.GetFileAttributes(path),
+                Fat32FileSystem fat32 => fat32.GetFileAttributes(path),
+                _ => throw new InvalidOperationException("Not a FAT file system"),
+            };
         }
 
         /// <summary>

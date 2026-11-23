@@ -427,6 +427,60 @@ namespace RetroIO.Storage.Local.FileSystems
         }
 
         /// <summary>
+        /// Gets whether a file is write protected (bit 1 of its directory entry's flag byte).
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when it is protected.
+        /// </returns>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public bool IsWriteProtected(string path)
+        {
+            SplitLookupName(path, out string filename, out string extension);
+            DirectoryTable table = LoadTable();
+            int number = FindHeadNumber(table, filename, extension);
+            if (number < 0)
+            {
+                throw new System.IO.FileNotFoundException($"File not found: {path}");
+            }
+
+            return (table.Dir[EntryOffset(number)] & AttrWriteProtect) != 0;
+        }
+
+        /// <summary>
+        /// Sets or clears the write protection of a file.
+        /// </summary>
+        /// <param name="path">
+        /// File name as <c>NAME.EXT</c>.
+        /// </param>
+        /// <param name="protect">
+        /// Whether the file is write protected.
+        /// </param>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        public void SetWriteProtected(string path, bool protect)
+        {
+            EnsureWritable();
+            SplitLookupName(path, out string filename, out string extension);
+            DirectoryTable table = LoadTable();
+            int number = FindHeadNumber(table, filename, extension);
+            if (number < 0)
+            {
+                throw new System.IO.FileNotFoundException($"File not found: {path}");
+            }
+
+            int at = EntryOffset(number);
+            table.Dir[at] = (byte)(protect ? table.Dir[at] | AttrWriteProtect : table.Dir[at] & ~AttrWriteProtect);
+            table.DirDirty[number / ENTRIES_PER_SECTOR] = true;
+            CommitTable(table);
+        }
+
+        /// <summary>
         /// Deletes a file: every entry of the file is marked 81H and the BAM bits of its extents are set (free).
         /// </summary>
         /// <param name="path">

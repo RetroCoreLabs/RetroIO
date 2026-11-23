@@ -48,7 +48,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// straight away. CP/M 3 time stamps are not written yet.
     /// </para>
     /// </remarks>
-    public sealed class CpmDriver : IFileSystemDriver
+    public sealed class CpmDriver : IFileSystemDriver, IExtendedAttributeSupport
     {
         // Kaypro ROM 81-232, 0165h: Kaypro II SSDD DPB (SPT 40, BSH 3, BLM 7, EXM 0, DSM 194, DRM 63,
         // AL0 F0h, AL1 0, CKS 16, OFF 1).
@@ -816,6 +816,117 @@ namespace RetroIO.Storage.Local.Drivers
         }
 
         /// <summary>
+        /// The property key of the user number, 0 to 15. Read only: the path names the user area
+        /// (<c>/USERn/</c>).
+        /// </summary>
+        public const string UserKey = "cpm.user";
+
+        /// <summary>
+        /// The property key of the R/O attribute.
+        /// </summary>
+        public const string ReadOnlyKey = "cpm.read_only";
+
+        /// <summary>
+        /// The property key of the SYS attribute.
+        /// </summary>
+        public const string SystemKey = "cpm.system";
+
+        /// <summary>
+        /// The property key of the archive attribute (CP/M 3).
+        /// </summary>
+        public const string ArchiveKey = "cpm.archive";
+
+        /// <summary>
+        /// Gets the property keys: the user number, and the R/O, SYS and archive attributes, which
+        /// are written back.
+        /// </summary>
+        /// <returns>
+        /// The capabilities.
+        /// </returns>
+        public FileSystemCapabilities GetCapabilities()
+        {
+            return new FileSystemCapabilities
+            {
+                SupportsExtendedAttributes = true,
+                SupportedPropertyKeys = new[] { UserKey, ReadOnlyKey, SystemKey, ArchiveKey },
+                WritablePropertyKeys = new[] { ReadOnlyKey, SystemKey, ArchiveKey },
+            };
+        }
+
+        /// <summary>
+        /// Gets a file's user number and attributes.
+        /// </summary>
+        /// <param name="path">
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
+        /// </param>
+        /// <returns>
+        /// The properties, or <c>null</c> when there is no such file.
+        /// </returns>
+        public IDictionary<string, object>? GetFileProperties(string path)
+        {
+            CpmFile? file = Find(EnsureMounted(), path);
+            if (file == null)
+            {
+                return null;
+            }
+
+            return new Dictionary<string, object>
+            {
+                { UserKey, file.User },
+                { ReadOnlyKey, file.ReadOnly },
+                { SystemKey, file.System },
+                { ArchiveKey, file.Archive },
+            };
+        }
+
+        /// <summary>
+        /// Writes a file, then sets its attributes from the properties, and saves the image.
+        /// </summary>
+        /// <param name="path">
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
+        /// </param>
+        /// <param name="data">
+        /// The file's bytes.
+        /// </param>
+        /// <param name="propertyBag">
+        /// The properties; a missing attribute is clear.
+        /// </param>
+        public void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag)
+        {
+            ExtendedAttributeValues.TryGetBool(propertyBag, ReadOnlyKey, out bool readOnly);
+            ExtendedAttributeValues.TryGetBool(propertyBag, SystemKey, out bool system);
+            ExtendedAttributeValues.TryGetBool(propertyBag, ArchiveKey, out bool archive);
+            CpmFileSystem fs = EnsureWritable();
+            ParsePath(path, out int user, out string name);
+            fs.Write(user, name, data);
+            if (readOnly || system || archive)
+            {
+                fs.SetAttributes(user, name, readOnly, system, archive);
+            }
+
+            Save(fs);
+        }
+
+        /// <summary>
+        /// Reads a file and its properties.
+        /// </summary>
+        /// <param name="path">
+        /// "/NAME.TYP" or "/USERn/NAME.TYP".
+        /// </param>
+        /// <param name="propertyBag">
+        /// Receives the properties.
+        /// </param>
+        /// <returns>
+        /// The file's bytes.
+        /// </returns>
+        public byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag)
+        {
+            byte[] data = ReadFile(path);
+            ExtendedAttributeValues.CopyInto(GetFileProperties(path), propertyBag);
+            return data;
+        }
+
+        /// <summary>
         /// Renames a file within its user area and saves the image back to the stream.
         /// </summary>
         /// <param name="oldPath">
@@ -1012,7 +1123,7 @@ namespace RetroIO.Storage.Local.Drivers
                 Path = path,
                 IsDirectory = false,
                 Size = file.Size,
-                Attributes = (file.ReadOnly ? "R" : string.Empty) + (file.System ? "S" : string.Empty),
+                Attributes = (file.ReadOnly ? "R" : string.Empty) + (file.System ? "S" : string.Empty) + (file.Archive ? "A" : string.Empty),
                 UrnIdentifier = UrnIdentifier.Encode(file.Name),
             };
             metadata.SetProperty("User", file.User);

@@ -19,7 +19,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// Driver for UNIX V7 filesystem images (1979).
     /// Thin wrapper that composes GenericBlockDevice + V7FileSystem.
     /// </summary>
-    public sealed class V7Driver : IFileSystemDriver, IPartitionProvider
+    public sealed class V7Driver : IFileSystemDriver, IExtendedAttributeSupport, IPartitionProvider
     {
         private GenericBlockDevice? _blockDevice;
         private V7FileSystem? _filesystem;
@@ -167,6 +167,70 @@ namespace RetroIO.Storage.Local.Drivers
         // ===================================================================
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
+
+        /// <summary>
+        /// Gets the property keys: the inode's permission bits, owner and group. Read only; this driver does not write them.
+        /// </summary>
+        /// <returns>
+        /// The capabilities.
+        /// </returns>
+        public FileSystemCapabilities GetCapabilities()
+        {
+            return ExtendedAttributeValues.ReadOnly(UnixFileProperties.Keys);
+        }
+
+        /// <summary>
+        /// Gets a file's properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <returns>
+        /// The properties, or <c>null</c> when there is no such file.
+        /// </returns>
+        public IDictionary<string, object>? GetFileProperties(string path)
+        {
+            return ExtendedAttributeValues.FromMetadata(GetMetadata(path), UnixFileProperties.Keys);
+        }
+
+        /// <summary>
+        /// Always throws: this driver does not write these properties.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Not used.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Always thrown.
+        /// </exception>
+        public void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag)
+        {
+            throw new UnauthorizedAccessException("This driver does not write file properties.");
+        }
+
+        /// <summary>
+        /// Reads a file and its properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Receives the properties.
+        /// </param>
+        /// <returns>
+        /// The file's bytes.
+        /// </returns>
+        public byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag)
+        {
+            byte[] data = ReadFile(path);
+            ExtendedAttributeValues.CopyInto(GetFileProperties(path), propertyBag);
+            return data;
+        }
 
         /// <summary>
         /// Reads a whole file from the mounted V7 file system.

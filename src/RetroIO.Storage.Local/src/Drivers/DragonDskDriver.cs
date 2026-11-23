@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using RetroIO.Storage.Core;
 using RetroIO.Storage.Local.BlockDevices;
@@ -59,7 +60,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// The mounted volume (DragonDOS, DECB or OS-9) can be written (create, overwrite, delete, rename) through its file system; the changes go back to the image stream after each operation. The
     /// header is kept as it is.
     /// </remarks>
-    public sealed class DragonDskDriver : IFileSystemDriver
+    public sealed class DragonDskDriver : IFileSystemDriver, IExtendedAttributeSupport
     {
         // The stream the image was mounted from; closed on Dispose.
         private Stream? _imageStream;
@@ -652,6 +653,74 @@ namespace RetroIO.Storage.Local.Drivers
             }
 
             return _filesystem.ReadFile(path);
+        }
+
+        /// <summary>
+        /// Gets the property keys of the mounted file system; see <see cref="DragonFileProperties"/>.
+        /// </summary>
+        /// <returns>
+        /// The capabilities.
+        /// </returns>
+        public FileSystemCapabilities GetCapabilities()
+        {
+            return DragonFileProperties.Capabilities(_filesystem);
+        }
+
+        /// <summary>
+        /// Gets a file's properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <returns>
+        /// The properties, or <c>null</c> when there is no such file.
+        /// </returns>
+        public IDictionary<string, object>? GetFileProperties(string path)
+        {
+            if (_filesystem == null)
+            {
+                throw new InvalidOperationException("Filesystem not mounted");
+            }
+
+            return DragonFileProperties.Get(_filesystem, path);
+        }
+
+        /// <summary>
+        /// Writes a file and applies its properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="data">
+        /// The file's bytes.
+        /// </param>
+        /// <param name="propertyBag">
+        /// The properties.
+        /// </param>
+        public void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag)
+        {
+            EnsureWritable();
+            DragonFileProperties.Write(_filesystem!, path, data, propertyBag);
+            _blockDevice!.Flush();
+        }
+
+        /// <summary>
+        /// Reads a file and its properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Receives the properties.
+        /// </param>
+        /// <returns>
+        /// The file's bytes.
+        /// </returns>
+        public byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag)
+        {
+            byte[] data = ReadFile(path);
+            ExtendedAttributeValues.CopyInto(GetFileProperties(path), propertyBag);
+            return data;
         }
 
         /// <summary>

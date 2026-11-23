@@ -360,6 +360,57 @@ namespace RetroIO.Storage.Local.FileSystems
             ParseHeader();
         }
 
+        /// <summary>
+        /// Sets the file type and the locked flag of a closed file.
+        /// </summary>
+        /// <remarks>
+        /// Only the types a file written here can be: DEL, SEQ, PRG and USR. A REL file needs side
+        /// sectors and a record length, and a 1581 partition (CBM) a block range, which a plain
+        /// write does not make, so those are refused.
+        /// </remarks>
+        /// <param name="path">
+        /// File name, with or without a leading <c>/</c>.
+        /// </param>
+        /// <param name="fileType">
+        /// <c>DEL</c>, <c>SEQ</c>, <c>PRG</c> or <c>USR</c>.
+        /// </param>
+        /// <param name="locked">
+        /// Whether the file is locked (bit 6 of the type byte; the listing shows it with a less-than sign).
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="fileType"/> is not one of the four.
+        /// </exception>
+        /// <exception cref="FileNotFoundException">
+        /// Thrown when there is no such file.
+        /// </exception>
+        /// <exception cref="IOException">
+        /// Thrown when the disk is mounted read-only.
+        /// </exception>
+        public void SetFileType(string path, string fileType, bool locked)
+        {
+            int type = fileType switch
+            {
+                "DEL" => 0,
+                "SEQ" => 1,
+                "PRG" => 2,
+                "USR" => 3,
+                _ => throw new ArgumentException("A written file can be DEL, SEQ, PRG or USR, not " + fileType, nameof(fileType)),
+            };
+            CheckRawWrite(new byte[RawNameLength], RawNameLength, nameof(path));
+            string name = NormalizeFileName(path);
+            if (!LocateDirSlot(name, out byte dirTrack, out byte dirSector, out int slot, out _, out _))
+            {
+                throw new FileNotFoundException("File not found: " + name);
+            }
+
+            byte[] sec = new byte[_disk!.BlockSize];
+            BlockAddress address = BlockAddress.FromTrackSector(dirTrack, dirSector);
+            _disk.ReadBlock(address, sec);
+            sec[(slot * 32) + 2] = (byte)(0x80 | (locked ? 0x40 : 0) | type);
+            _disk.WriteBlock(address, sec);
+            _disk.Flush();
+        }
+
         // Where the disk name and id are in the header sector: 1541/1571 at 90h and A2h of 18/0,
         // 1581 at 04h and 16h of 40/0.
         private int DiskNameOffset => IsD81 ? 0x04 : 0x90;

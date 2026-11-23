@@ -339,26 +339,17 @@ namespace RetroIO.Storage.Ndfs.Drivers
         /// Does not need a mounted image; the answer is fixed.
         /// </remarks>
         /// <returns>
-        /// A new capabilities object with extended attributes supported and the 23 <c>ndfs:</c>
-        /// property keys.
+        /// A new capabilities object with extended attributes supported, the real property-bag keys
+        /// and the keys a write puts back.
         /// </returns>
         public FileSystemCapabilities GetCapabilities()
         {
-            // NDFS supports full extended attributes (23 metadata fields)
+            // The real keys of the property bag (NdfsPropertyBagKeys), as the serializer writes them.
             return new FileSystemCapabilities
             {
                 SupportsExtendedAttributes = true,
-                SupportedPropertyKeys = new[]
-                {
-                    "ndfs:ObjectName", "ndfs:Type", "ndfs:UserName", "ndfs:UserIndex",
-                    "ndfs:ObjectIndex", "ndfs:BytesInFile", "ndfs:PagesInFile",
-                    "ndfs:FilePointer", "ndfs:FileType", "ndfs:AccessBits",
-                    "ndfs:CreatedDate", "ndfs:ModifiedDate", "ndfs:AccessedDate",
-                    "ndfs:Owner", "ndfs:Group", "ndfs:Permissions",
-                    "ndfs:FriendList", "ndfs:QuotaPagesUsed", "ndfs:QuotaMaxPages",
-                    "ndfs:FileTypeFlags", "ndfs:IndexBlockId", "ndfs:DataBlockIds",
-                    "ndfs:SparseHoleIndices"
-                }
+                SupportedPropertyKeys = (string[])PropertyBags.NdfsPropertyBagSerializer.FileKeys.Clone(),
+                WritablePropertyKeys = (string[])PropertyBags.NdfsPropertyBagSerializer.PortableKeys.Clone(),
             };
         }
 

@@ -22,7 +22,7 @@ namespace RetroIO.Storage.Local.Drivers
     /// Thin wrapper that composes GenericBlockDevice + FfsFileSystem.
     /// Supports SunOS 3.4 / 4.2BSD filesystem format with BSD Disk Label partitions.
     /// </summary>
-    public sealed class FfsDriver : IFileSystemDriver, IPartitionProvider, IVolumeInfoProvider
+    public sealed class FfsDriver : IFileSystemDriver, IExtendedAttributeSupport, IPartitionProvider, IVolumeInfoProvider
     {
         private GenericBlockDevice? _blockDevice;
         private FfsFileSystem? _filesystem;
@@ -212,6 +212,70 @@ namespace RetroIO.Storage.Local.Drivers
         // ===================================================================
         // FILE OPERATIONS - Delegate to Filesystem
         // ===================================================================
+
+        /// <summary>
+        /// Gets the property keys: the inode's permission bits, owner and group. Read only; this driver does not write them.
+        /// </summary>
+        /// <returns>
+        /// The capabilities.
+        /// </returns>
+        public FileSystemCapabilities GetCapabilities()
+        {
+            return ExtendedAttributeValues.ReadOnly(UnixFileProperties.Keys);
+        }
+
+        /// <summary>
+        /// Gets a file's properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <returns>
+        /// The properties, or <c>null</c> when there is no such file.
+        /// </returns>
+        public IDictionary<string, object>? GetFileProperties(string path)
+        {
+            return ExtendedAttributeValues.FromMetadata(GetMetadata(path), UnixFileProperties.Keys);
+        }
+
+        /// <summary>
+        /// Always throws: this driver does not write these properties.
+        /// </summary>
+        /// <param name="path">
+        /// Not used.
+        /// </param>
+        /// <param name="data">
+        /// Not used.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Not used.
+        /// </param>
+        /// <exception cref="UnauthorizedAccessException">
+        /// Always thrown.
+        /// </exception>
+        public void WriteFileWithProperties(string path, byte[] data, IDictionary<string, object> propertyBag)
+        {
+            throw new UnauthorizedAccessException("This driver does not write file properties.");
+        }
+
+        /// <summary>
+        /// Reads a file and its properties.
+        /// </summary>
+        /// <param name="path">
+        /// The file's path.
+        /// </param>
+        /// <param name="propertyBag">
+        /// Receives the properties.
+        /// </param>
+        /// <returns>
+        /// The file's bytes.
+        /// </returns>
+        public byte[] ReadFileWithProperties(string path, IDictionary<string, object> propertyBag)
+        {
+            byte[] data = ReadFile(path);
+            ExtendedAttributeValues.CopyInto(GetFileProperties(path), propertyBag);
+            return data;
+        }
 
         /// <summary>
         /// Reads a whole file from the mounted FFS file system.
