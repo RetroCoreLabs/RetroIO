@@ -1543,7 +1543,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
             BeginClear(vc, ProcedureErrorCause(), diagnostic, Now());
             if (wasLive)
             {
-                ReportCleared(vc, vc.Cause, vc.Diagnostic);
+                // The owner is told local procedure error, whatever cause went on the wire (0 at a DTE, network congestion
+                // at an STE), so a switch can clear the distant end with remote procedure error and the same diagnostic
+                // (SwitchCore.OnCallCleared). Added 2026-11-23, with the matching reset rule; before, the owner got the wire cause.
+                ReportCleared(vc, X25Cause.ClearingLocalProcedureError, vc.Diagnostic);
             }
             else
             {

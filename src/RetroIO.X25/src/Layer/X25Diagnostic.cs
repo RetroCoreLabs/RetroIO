@@ -231,6 +231,12 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public const byte ClearingLocalProcedureError = 0x13;
 
         /// <summary>
+        /// Clearing cause 0x11, remote procedure error (X.25 Table 5-7, X.75 Table 21): the distant end of a call cleared for
+        /// a procedure error at the other interface.
+        /// </summary>
+        public const byte ClearingRemoteProcedureError = 0x11;
+
+        /// <summary>
         /// 00000101 - Local procedure error, resetting (Table 5-8). Not the same octet as the
         /// clearing cause of the same name.
         /// </summary>

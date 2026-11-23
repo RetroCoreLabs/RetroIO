@@ -1713,15 +1713,16 @@ namespace RetroIO.Protocols.X25.Switch
             // X.25 Table C-4: a circuit reset for a procedure error at one interface resets the distant DTE "with the cause
             // 'Remote procedure error' (same diagnostic)". The layer reports such a reset as local procedure error the moment
             // the bad packet arrives, so the other leg is reset at once (decided by Ronny 2026-11-23, matching x25emu
-            // 9e40f78). Toward another network the cause is network congestion: X.75 has no remote procedure error among
-            // its resetting causes (read by the x25emu session; the table is an image in the PDF, not checked here). Added
-            // 2026-11-23; before, the other leg got the local cause, or 0 / network congestion, after the first reset completed.
+            // 9e40f78). The same cause toward another network: X.75 (10/96) Table 23 lists "Remote procedure error" (read
+            // 2026-11-23), and network congestion would also lose the diagnostic (4.4.3.2, Table 24 maps 1-111 to 114). A
+            // network-congestion rule for X.75 legs was written and taken out the same day. Added 2026-11-23; before, the other
+            // leg got the local cause, or 0 / network congestion, after the first reset completed.
             ISwitchPort other = fromIngress ? stitch.OutPort : stitch.InPort;
             ushort otherLci = fromIngress ? stitch.OutLci : stitch.InLci;
             byte onward = cause;
             if (cause == X25Cause.ResettingLocalProcedureError)
             {
-                onward = other.Config.BetweenNetworks ? (byte)0x07 : X25Cause.ResettingRemoteProcedureError;
+                onward = X25Cause.ResettingRemoteProcedureError;
             }
 
             other.ResetCircuit(otherLci, onward, diagnostic);
@@ -1920,11 +1921,17 @@ namespace RetroIO.Protocols.X25.Switch
             // The clear's facility field goes to the other leg as it came (X.25 5.2.4.2; PLAN B1): charging information,
             // called line address modified and anything this switch does not act on.
             byte[] clearFacilities = port.GetClearFacilities(lci);
+
+            // A call cleared for a procedure error at one interface clears the distant end with "remote procedure error"
+            // and the same diagnostic, on X.25 and X.75 alike (X.75 Table 21 has 0x11). Added 2026-11-23, with x25emu; the
+            // call record keeps the cause as it came.
+            byte onwardCause = cause == X25Cause.ClearingLocalProcedureError ? X25Cause.ClearingRemoteProcedureError : cause;
+
             // The end that is told gets this switch's charging answer added when it is owed one (6.22); the end that
             // cleared had its answer in the DCE Clear Confirmation (ChargingForConfirmation).
             if (clearedFromIngress)
             {
-                stitch.OutPort.ClearCall(stitch.OutLci, cause, diagnostic,
+                stitch.OutPort.ClearCall(stitch.OutLci, onwardCause, diagnostic,
                     ClearFacilitiesFor(stitch, toCaller: false, clearFacilities));
             }
             else
@@ -1966,7 +1973,7 @@ namespace RetroIO.Protocols.X25.Switch
                     X25Facilities.DefaultPacketSize, X25Facilities.DefaultPacketSize,
                     ClearFacilitiesFor(stitch, toCaller: true, clearFacilities), null),
                     IsInternalTrunk(stitch.InPort) ? transitList : null);
-                stitch.InPort.ClearCall(stitch.InLci, cause, diagnostic, toCaller.OtherFacilities,
+                stitch.InPort.ClearCall(stitch.InLci, onwardCause, diagnostic, toCaller.OtherFacilities,
                     stitch.InPort.Config.BetweenNetworks ? transitList : null);
             }
 

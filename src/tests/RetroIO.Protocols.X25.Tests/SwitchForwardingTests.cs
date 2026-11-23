@@ -261,11 +261,11 @@ namespace RetroIO.Protocols.X25.Tests
         }
 
         /// <summary>
-        /// Toward another network the other leg gets network congestion instead: X.75 has no remote procedure error among
-        /// its resetting causes (as x25emu 9e40f78 does). Added 2026-11-23.
+        /// Toward another network the other leg also gets remote procedure error with the diagnostic: X.75 (10/96) Table 23
+        /// has it. Added 2026-11-23, after a network-congestion rule was tried and found wrong the same day.
         /// </summary>
         [Test]
-        public void AProcedureErrorReset_ReachesAnX75LegAsNetworkCongestion()
+        public void AProcedureErrorReset_ReachesAnX75LegAsRemoteProcedureError()
         {
             (ushort inLci, VcStitch stitch) = Call();
             _ingress.Config.BetweenNetworks = true;
@@ -273,8 +273,24 @@ namespace RetroIO.Protocols.X25.Tests
             _egress.InjectReset(stitch.OutLci, cause: 0x05, diagnostic: 39);
 
             Assert.That(_ingress.ResetCircuits.Count, Is.EqualTo(1));
-            Assert.That(_ingress.ResetCircuits[0].Cause, Is.EqualTo((byte)0x07));
+            Assert.That(_ingress.ResetCircuits[0].Cause, Is.EqualTo((byte)0x03));
             Assert.That(_ingress.ResetCircuits[0].Diag, Is.EqualTo((byte)39));
+        }
+
+        /// <summary>
+        /// A call cleared for a procedure error at one leg (local procedure error, 0x13) is cleared at the other with remote
+        /// procedure error (0x11) and the same diagnostic (X.75 Table 21; x25emu does the same). Added 2026-11-23.
+        /// </summary>
+        [Test]
+        public void AProcedureErrorClear_ReachesTheOtherLegAsRemoteProcedureError()
+        {
+            (ushort inLci, VcStitch stitch) = Call();
+
+            _egress.InjectClear(stitch.OutLci, 0x13, 38);
+
+            Assert.That(_ingress.ClearedCalls.Count, Is.EqualTo(1));
+            Assert.That(_ingress.ClearedCalls[0].Cause, Is.EqualTo((byte)0x11));
+            Assert.That(_ingress.ClearedCalls[0].Diag, Is.EqualTo((byte)38));
         }
 
         [Test]

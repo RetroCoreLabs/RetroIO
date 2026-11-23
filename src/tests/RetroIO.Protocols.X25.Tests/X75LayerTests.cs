@@ -540,6 +540,28 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(reports, Is.EqualTo(1), "not told again when the reset completes");
         }
 
+        /// <summary>
+        /// An STE clears a call for a procedure error with network congestion on the wire, and tells its owner local
+        /// procedure error with the diagnostic, so a switch can clear the distant end with remote procedure error. Added
+        /// 2026-11-23.
+        /// </summary>
+        [Test]
+        public void AProcedureErrorClear_IsReportedAsLocalProcedureError_AtAnSte()
+        {
+            X25Layer ste = Ste(fromHighest: false);
+            ushort lci = ste.PlaceCall("2624");
+            byte reportedCause = 0xFF;
+            ste.Cleared += (layer, l, c, d) => { reportedCause = c; };
+
+            // Data before the answer: ERROR, a clear (Table C.3).
+            ste.ProcessPacket(new byte[] { 0x10, (byte)lci, 0x00, 0x41 });
+
+            X25PacketInfo sent = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(sent.PacketType, Is.EqualTo(X25PacketType.ClearRequest));
+            Assert.That(sent.ClearingCause, Is.EqualTo((byte)0x05), "network congestion on the wire");
+            Assert.That(reportedCause, Is.EqualTo((byte)0x13), "local procedure error to the owner");
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {
