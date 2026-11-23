@@ -45,6 +45,11 @@ public sealed class UdpAunTransport : ITransport
     private bool _disposed;
 
     /// <summary>
+    /// Done once the socket is bound, so a caller can tell when messages can be received.
+    /// </summary>
+    private readonly TaskCompletionSource _listening = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
     /// Creates the transport. The socket is opened when RunAsync starts.
     /// </summary>
     /// <param name="port">
@@ -99,6 +104,18 @@ public sealed class UdpAunTransport : ITransport
     public string TransportType => "UDP";
 
     /// <summary>
+    /// Gets a task that is done once the UDP port is bound and messages sent to it are received.
+    /// </summary>
+    /// <remarks>
+    /// The port is bound when <see cref="RunAsync"/> starts, which the host runs on its own task: a
+    /// host's start can return before it. A message sent to the port before that is answered by
+    /// the operating system with "port unreachable", which a Windows UDP socket then reports on
+    /// its next receive as "an existing connection was forcibly closed" (seen in the Econet bulk
+    /// save test, 2026-11-23). It fails with the bind's exception if the port could not be opened.
+    /// </remarks>
+    public Task Listening => _listening.Task;
+
+    /// <summary>
     /// Gets what the transport can do: many clients, no connection state, unreliable delivery, and the
     /// server acknowledges inbound data itself. A new object is made on every read.
     /// </summary>
@@ -128,8 +145,20 @@ public sealed class UdpAunTransport : ITransport
     /// </returns>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        Socket socket = CreateAndBind();
+        Socket socket;
+        try
+        {
+            socket = CreateAndBind();
+        }
+        catch (Exception ex)
+        {
+            // Whoever waits for the port hears why it never opened, rather than waiting on.
+            _listening.TrySetException(ex);
+            throw;
+        }
+
         _socket = socket;
+        _listening.TrySetResult();
 
         _logger.LogInformation("Econet AUN UDP transport started");
 

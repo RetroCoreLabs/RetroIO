@@ -82,6 +82,11 @@ internal sealed class EconetUdpTestServer : IAsyncDisposable
 
         AunAddressMapper mapper = new AunAddressMapper(network: 1);
 
+        UdpAunTransport transport = new UdpAunTransport(
+            udpPort,
+            mapper,
+            NullLogger<UdpAunTransport>.Instance);
+
         IHost host = Host.CreateDefaultBuilder()
             .ConfigureServices(services =>
             {
@@ -91,10 +96,7 @@ internal sealed class EconetUdpTestServer : IAsyncDisposable
                 services.AddSingleton(activityLog);
                 services.AddSingleton<FileServerCommandHandler>();
                 services.AddSingleton<BulkTransferHandler>();
-                services.AddSingleton<ITransport>(new UdpAunTransport(
-                    udpPort,
-                    mapper,
-                    NullLogger<UdpAunTransport>.Instance));
+                services.AddSingleton<ITransport>(transport);
                 services.AddHostedService(sp =>
                     new EconetFileServerService(
                         new ITransport[] { sp.GetRequiredService<ITransport>() },
@@ -106,6 +108,10 @@ internal sealed class EconetUdpTestServer : IAsyncDisposable
             .Build();
 
         await host.StartAsync(cancellationToken);
+
+        // The host's start can return before the transport has bound its port; a client that
+        // sends first gets "port unreachable" back. Started means listening.
+        await transport.Listening.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
         return new EconetUdpTestServer(host, activityLog, identityProvider, udpPort);
     }
 
