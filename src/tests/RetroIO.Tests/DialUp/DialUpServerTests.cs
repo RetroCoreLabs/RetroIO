@@ -424,6 +424,95 @@ public sealed class DialUpServerTests
         listener.Stop();
     }
 
+    [Test]
+    public async System.Threading.Tasks.Task ACaller_MountsRetroServersTnfsServer_ThroughTheGateway()
+    {
+        // Step 1 with a real RetroServer service: TNFS over UDP, reached at the gateway 10.42.0.2.
+        int tnfsPort;
+        using (Socket probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+        {
+            probe.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+            tnfsPort = ((System.Net.IPEndPoint)probe.LocalEndPoint!).Port;
+        }
+
+        // The TNFS root the server shares, as the other TNFS tests set it up.
+        RetroIO.Tests.TNFS.MockFileSystemBackend files = new RetroIO.Tests.TNFS.MockFileSystemBackend();
+        files.AddDirectory("/tmp/tnfs");
+
+        Microsoft.Extensions.Hosting.HostApplicationBuilder builder =
+            Microsoft.Extensions.Hosting.Host.CreateEmptyApplicationBuilder(new Microsoft.Extensions.Hosting.HostApplicationBuilderSettings());
+        Microsoft.Extensions.DependencyInjection.LoggingServiceCollectionExtensions.AddLogging(builder.Services);
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<RetroIO.Server.Core.FileSystem.IFileSystemBackend>(
+            builder.Services, files);
+        RetroIO.Protocols.Tnfs.Server.TnfsServerExtensions.AddTnfsServer(builder.Services, o =>
+        {
+            o.EnableUdp = true;
+            o.EnableTcp = false;
+            o.UdpPort = tnfsPort;
+            o.RootDirectory = "/tmp/tnfs";
+        });
+        using Microsoft.Extensions.Hosting.IHost tnfs = builder.Build();
+        await tnfs.StartAsync();
+
+        try
+        {
+            using DialUpServer server = StartServer(maxCalls: 4);
+            using TcpClient caller = Dial(server);
+            Assert.That(LogIn(caller, "caller", Password), Does.Contain("Your address is 10.42.0.15"));
+
+            // MOUNT: session 0, retry n, command 0, version 1.2, mount point "/", no user, no password.
+            List<byte> mount = new List<byte> { 0x00, 0x00, 0x00, RetroIO.Protocols.Tnfs.Protocol.TnfsConstants.TNFS_MOUNT,
+                RetroIO.Protocols.Tnfs.Protocol.TnfsConstants.PROTOVERSION_LSB, RetroIO.Protocols.Tnfs.Protocol.TnfsConstants.PROTOVERSION_MSB,
+                (byte)'/', 0x00, 0x00, 0x00 };
+
+            RetroIO.Protocols.Slip.SlipLink slip = new RetroIO.Protocols.Slip.SlipLink();
+            slip.OnLineOutput += bytes => caller.GetStream().Write(bytes);
+            byte[]? reply = null;
+            slip.OnPacket += p =>
+            {
+                if (p.Length > 32 && p[9] == 17 && p[15] == 2 && p[19] == 15)
+                {
+                    reply = p.ToArray();
+                }
+            };
+
+            // A TNFS client resends a request that got no answer, counting up the retry byte; the
+            // server may not be listening yet when the first one goes.
+            byte[] buffer = new byte[2048];
+            DateTime deadline = DateTime.UtcNow + Wait;
+            byte retry = 0;
+            caller.ReceiveTimeout = 500;
+            while (reply == null && DateTime.UtcNow < deadline)
+            {
+                mount[2] = retry++;
+                slip.SendPacket(UdpPacket(new byte[] { 10, 42, 0, 15 }, new byte[] { 10, 42, 0, 2 }, 40003, tnfsPort, mount.ToArray()));
+                try
+                {
+                    int read = caller.GetStream().Read(buffer, 0, buffer.Length);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    slip.ReceiveFromLine(buffer.AsSpan(0, read));
+                }
+                catch (IOException)
+                {
+                    // No answer within half a second: send again.
+                }
+            }
+
+            Assert.That(reply, Is.Not.Null, "no TNFS answer reached the caller");
+            Assert.That(reply![28 + 3], Is.EqualTo(RetroIO.Protocols.Tnfs.Protocol.TnfsConstants.TNFS_MOUNT), "an answer to MOUNT");
+            Assert.That(reply[28 + 4], Is.EqualTo(0), "status OK; the answer was " + Convert.ToHexString(reply, 28, reply.Length - 28));
+            Assert.That(reply[28] | (reply[29] << 8), Is.Not.EqualTo(0), "a session number was given");
+        }
+        finally
+        {
+            await tnfs.StopAsync();
+        }
+    }
+
     /// <summary>
     /// Reads the caller's line until a packet from the PC matches, or the wait runs out.
     /// </summary>
