@@ -135,6 +135,11 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public byte[] ClearUtilities { get; set; } = System.Array.Empty<byte>();
 
         /// <summary>
+        /// An Interrupt received from the peer and not yet confirmed to it, while the far end has it (X25Config.ConfirmInterruptsFromFarEnd).
+        /// </summary>
+        public bool InterruptToConfirm { get; set; }
+
+        /// <summary>
         /// True from our Interrupt until the peer's Interrupt Confirmation. X.25 4.4.2: "The DTE should
         /// not transmit a second DTE interrupt packet until the first one is confirmed."
         /// </summary>
@@ -261,6 +266,7 @@ namespace RetroIO.Protocols.X25.PacketLayer
             PeerBusy = false;
             LocalBusy = false;
             InterruptOutstanding = false;   // X.25 4.4.3.1: a reset also discards an unconfirmed interrupt
+            InterruptToConfirm = false;     // in both directions
             ClearSequences();               // and everything in flight in both directions
         }
     }

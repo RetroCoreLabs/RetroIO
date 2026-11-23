@@ -273,6 +273,27 @@ namespace RetroIO.Protocols.X25.Tests
             });
         }
 
+        /// <summary>
+        /// X.25 4.3.7 and X.75 3.3.5: an interrupt confirmation means the REMOTE DTE confirmed it. The switch confirms the
+        /// interrupt it received only when the far end confirms the one it passed on, in either direction. Added
+        /// 2026-11-23; before, each port confirmed every interrupt as it arrived.
+        /// </summary>
+        [Test]
+        public void AnInterruptIsConfirmedOnlyWhenTheFarEndConfirmsIt()
+        {
+            (ushort inLci, VcStitch stitch) = Call();
+
+            _ingress.InjectInterrupt(inLci, new byte[] { 0x42 });
+            Assert.That(_ingress.ConfirmedInterrupts, Is.Empty, "not before the far end has confirmed");
+            _egress.InjectInterruptConfirmed(stitch.OutLci);
+            Assert.That(_ingress.ConfirmedInterrupts, Is.EqualTo(new List<ushort> { inLci }));
+
+            _egress.InjectInterrupt(stitch.OutLci, new byte[] { 0x43 });
+            Assert.That(_egress.ConfirmedInterrupts, Is.Empty);
+            _ingress.InjectInterruptConfirmed(inLci);
+            Assert.That(_egress.ConfirmedInterrupts, Is.EqualTo(new List<ushort> { stitch.OutLci }));
+        }
+
         [Test]
         public void AnInterruptOnTheEgressLegReachesTheIngressLeg()
         {

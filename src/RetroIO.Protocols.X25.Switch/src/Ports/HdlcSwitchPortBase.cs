@@ -183,6 +183,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
                 // channel search direction X.75 3.1.4 leaves to agreement: dte searches from the highest, dce from
                 // the lowest, the same split as X.25 Annex A, so two ends set dte/dce never search the same way.
                 IsSte = config.BetweenNetworks,
+
+                // The switch confirms an Interrupt when the far end has (X.25 4.3.7, X.75 3.3.5).
+                ConfirmInterruptsFromFarEnd = true,
                 SearchFromHighest = config.Mode == PortMode.Dte,
                 LciBase = config.LciBase,
                 LciCount = config.LciCount,
@@ -197,6 +200,7 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             _layer.Cleared += OnLayerCleared;
             _layer.Reset += OnLayerReset;
             _layer.InterruptReceived += OnLayerInterrupt;
+            _layer.InterruptConfirmed += OnLayerInterruptConfirmed;
             _layer.WindowOpened += OnLayerWindowOpened;
             _layer.RestartOccurred += OnLayerRestart;
             _layer.RestartTimedOut += OnLayerRestartTimedOut;
@@ -312,6 +316,9 @@ namespace RetroIO.Protocols.X25.Switch.Ports
 
         /// <inheritdoc/>
         public event PortInterrupt? InterruptReceived;
+
+        /// <inheritdoc/>
+        public event PortInterruptConfirmed? InterruptConfirmed;
 
         /// <inheritdoc/>
         public event PortReadyToSend? ReadyToSend;
@@ -664,6 +671,15 @@ namespace RetroIO.Protocols.X25.Switch.Ports
             {
                 _layer.AddPvc(lci, _config.DefaultWindowSize, _config.DefaultPacketSize);
                 return true;
+            }
+        }
+
+        /// <inheritdoc/>
+        public void ConfirmInterrupt(ushort lci)
+        {
+            lock (_sync)
+            {
+                _layer.ConfirmInterrupt(lci);
             }
         }
 
@@ -1211,6 +1227,11 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         private void OnLayerInterrupt(X25Layer layer, ushort lci, byte[] userData)
         {
             InterruptReceived?.Invoke(this, lci, userData);
+        }
+
+        private void OnLayerInterruptConfirmed(X25Layer layer, ushort lci)
+        {
+            InterruptConfirmed?.Invoke(this, lci);
         }
 
         private void OnLayerWindowOpened(X25Layer layer, ushort lci)

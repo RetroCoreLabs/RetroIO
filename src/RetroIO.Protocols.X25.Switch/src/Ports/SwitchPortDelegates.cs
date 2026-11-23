@@ -136,6 +136,17 @@ namespace RetroIO.Protocols.X25.Switch.Ports
     public delegate void PortInterrupt(ISwitchPort port, ushort lci, byte[] userData);
 
     /// <summary>
+    /// Raised when the peer on a port confirms an Interrupt this port sent (X.25 4.3.7, X.75 3.3.5).
+    /// </summary>
+    /// <param name="port">
+    /// The port the confirmation arrived on.
+    /// </param>
+    /// <param name="lci">
+    /// The logical channel it belongs to.
+    /// </param>
+    public delegate void PortInterruptConfirmed(ISwitchPort port, ushort lci);
+
+    /// <summary>
     /// Raised when a circuit that had refused a send can take data again.
     /// </summary>
     /// <remarks>

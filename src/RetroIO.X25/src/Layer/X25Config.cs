@@ -98,6 +98,20 @@ namespace RetroIO.Protocols.X25.PacketLayer
         public int ResetRequestTimeoutMs { get; set; } = 180000;
 
         /// <summary>
+        /// True when a received Interrupt is confirmed only once the far end has confirmed it (call
+        /// <see cref="X25Layer.ConfirmInterrupt"/>); false to confirm it as soon as it has been handed up.
+        /// </summary>
+        /// <remarks>
+        /// X.25 4.3.7: the DCE confirms "after the interrupt procedure is completed at the remote end", and "the receipt
+        /// of a DCE interrupt confirmation packet indicates that the interrupt has been confirmed by the remote DTE";
+        /// X.75 3.3.5 says the same between networks. A layer whose owner IS the far end (an application) confirms at
+        /// once, which is the default; a switch that passes the interrupt on sets this and confirms when the
+        /// confirmation comes back. Added 2026-11-23; before, every layer confirmed at once, so a switch confirmed
+        /// interrupts the far end had not received.
+        /// </remarks>
+        public bool ConfirmInterruptsFromFarEnd { get; set; }
+
+        /// <summary>
         /// Clear-request timer (T23) duration in milliseconds.
         /// </summary>
         public int ClearRequestTimeoutMs { get; set; } = 180000;

@@ -417,6 +417,41 @@ namespace RetroIO.Protocols.X25.Tests
             Assert.That(sent.DiagnosticCode, Is.EqualTo((byte)diagnostic));
         }
 
+        /// <summary>
+        /// With ConfirmInterruptsFromFarEnd (a switch) the layer holds its Interrupt Confirmation until ConfirmInterrupt;
+        /// a second Interrupt before that is ERROR # 44, a reset (X.25 C.5 e); X.75 3.3.5 allows it). Without it the
+        /// confirmation leaves at once, as before. Added 2026-11-23.
+        /// </summary>
+        /// <param name="fromFarEnd">
+        /// The setting.
+        /// </param>
+        [TestCase(true)]
+        [TestCase(false)]
+        public void AnInterrupt_IsConfirmedWhenTheOwnerSays_WithTheSetting(bool fromFarEnd)
+        {
+            _sink = new RecordingSink();
+            X25Layer ste = new X25Layer(_sink, new X25Config { LocalAddress = "2422", IsDte = false, IsSte = true, LciBase = 1, LciCount = 4, ConfirmInterruptsFromFarEnd = fromFarEnd });
+            ushort lci = ste.PlaceCall("2624");
+            ste.ProcessPacket(X25PacketBuilder.CreateCallAccepted(lci, networkUtilities: Array.Empty<byte>()));
+            byte[] interrupt = { 0x10, (byte)lci, 0x23, 0x42 };
+
+            ste.ProcessPacket(interrupt);
+            bool confirmedAtOnce = _sink.Last[2] == 0x27;
+            Assert.That(confirmedAtOnce, Is.EqualTo(!fromFarEnd));
+            if (!fromFarEnd)
+            {
+                Assert.That(ste.ConfirmInterrupt(lci), Is.False, "nothing is waiting");
+                return;
+            }
+
+            // A second one before the confirmation: reset, network congestion, # 44.
+            ste.ProcessPacket(interrupt);
+            X25PacketInfo reset = X25PacketParser.ParsePacket(_sink.Last, x75: true);
+            Assert.That(reset.PacketType, Is.EqualTo(X25PacketType.ResetRequest));
+            Assert.That(reset.DiagnosticCode, Is.EqualTo((byte)44));
+            Assert.That(ste.ConfirmInterrupt(lci), Is.False, "the reset discarded the unconfirmed interrupt");
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {

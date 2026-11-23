@@ -1220,8 +1220,45 @@ namespace RetroIO.Protocols.X25.PacketLayer
                 return;
             }
 
+            if (_config.ConfirmInterruptsFromFarEnd)
+            {
+                // X.25 4.3.7 and C.5 e): "a DTE interrupt packet received before a previous DTE interrupt packet has been
+                // confirmed" is ERROR # 44. X.75 3.3.5 allows discarding it or resetting; the reset is used on both.
+                if (vc.InterruptToConfirm)
+                {
+                    ResetForProcedureError(vc, X25Diagnostic.UnauthorizedInterrupt);
+                    return;
+                }
+
+                vc.InterruptToConfirm = true;
+                RaiseInterruptReceived(lci, info.InterruptData);
+                return;
+            }
+
             RaiseInterruptReceived(lci, info.InterruptData);
             Send(X25PacketBuilder.CreateInterruptConfirmation(lci));
+        }
+
+        /// <summary>
+        /// Confirms the Interrupt received on a channel, once the far end has confirmed it (X.25 4.3.7, X.75 3.3.5).
+        /// Used with <see cref="X25Config.ConfirmInterruptsFromFarEnd"/>.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        /// <returns>
+        /// True when an Interrupt Confirmation was sent; false when none was waiting (a reset in between discarded it).
+        /// </returns>
+        public bool ConfirmInterrupt(ushort lci)
+        {
+            if (!_vcs.TryGetValue(lci, out X25Vc? vc) || !vc.InterruptToConfirm
+                || (vc.State != X25VcState.DataTransfer && vc.State != X25VcState.PvcReady))
+            {
+                return false;
+            }
+
+            vc.InterruptToConfirm = false;
+            return Send(X25PacketBuilder.CreateInterruptConfirmation(lci));
         }
 
         /// <summary>
@@ -2784,6 +2821,9 @@ namespace RetroIO.Protocols.X25.PacketLayer
             vc.Diagnostic = diagnostic;
             vc.Retries = 0;
             vc.TimerExpiryMs = Now() + _config.ResetRequestTimeoutMs;
+
+            // X.25 4.4.3.1: a reset discards an unconfirmed interrupt; it must not be confirmed in the middle of it.
+            vc.InterruptToConfirm = false;
             ProcedureErrors++;
             Send(X25PacketBuilder.CreateResetRequest(vc.Lci, cause, diagnostic));
         }

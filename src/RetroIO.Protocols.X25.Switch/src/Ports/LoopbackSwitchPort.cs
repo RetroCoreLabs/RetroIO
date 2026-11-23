@@ -121,6 +121,36 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         /// </summary>
         public event PortInterrupt? InterruptReceived;
 
+        /// <inheritdoc/>
+        public event PortInterruptConfirmed? InterruptConfirmed;
+
+        /// <summary>
+        /// Every Interrupt this port was told to confirm, in order.
+        /// </summary>
+        public List<ushort> ConfirmedInterrupts { get; } = new List<ushort>();
+
+        /// <summary>
+        /// Records the confirmation in <see cref="ConfirmedInterrupts"/>.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        public void ConfirmInterrupt(ushort lci)
+        {
+            ConfirmedInterrupts.Add(lci);
+        }
+
+        /// <summary>
+        /// Injects an interrupt confirmation, as if the far DTE on this port had confirmed an Interrupt sent to it.
+        /// </summary>
+        /// <param name="lci">
+        /// The logical channel it belongs to.
+        /// </param>
+        public void InjectInterruptConfirmed(ushort lci)
+        {
+            InterruptConfirmed?.Invoke(this, lci);
+        }
+
         /// <summary>
         /// Raised when a circuit that had refused a send can take data again; here only by
         /// <see cref="OpenWindow"/>.

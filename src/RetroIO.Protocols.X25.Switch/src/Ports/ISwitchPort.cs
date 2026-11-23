@@ -79,6 +79,21 @@ namespace RetroIO.Protocols.X25.Switch.Ports
         event PortInterrupt InterruptReceived;
 
         /// <summary>
+        /// Raised when the peer confirms an Interrupt sent on a circuit, so the switch can confirm the one it passed on
+        /// (X.25 4.3.7, X.75 3.3.5). Added 2026-11-23.
+        /// </summary>
+        event PortInterruptConfirmed InterruptConfirmed;
+
+        /// <summary>
+        /// Confirms the Interrupt received on a circuit, now that the far end has confirmed it. Added 2026-11-23; before,
+        /// a port confirmed every Interrupt as it arrived.
+        /// </summary>
+        /// <param name="lci">
+        /// Logical channel.
+        /// </param>
+        void ConfirmInterrupt(ushort lci);
+
+        /// <summary>
         /// Raised when a circuit that had refused a send can take data again.
         /// </summary>
         event PortReadyToSend ReadyToSend;

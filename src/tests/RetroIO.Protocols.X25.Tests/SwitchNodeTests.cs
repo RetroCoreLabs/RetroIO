@@ -45,6 +45,7 @@ namespace RetroIO.Protocols.X25.Tests
             public event PortStateChanged? StateChanged;
             public event PortReset? CircuitReset;
             public event PortInterrupt? InterruptReceived;
+            public event PortInterruptConfirmed? InterruptConfirmed { add { } remove { } }
             public event PortReadyToSend? ReadyToSend;
 #pragma warning restore CS0067
 
@@ -58,6 +59,7 @@ namespace RetroIO.Protocols.X25.Tests
             public byte[] GetClearFacilities(ushort lci) => Array.Empty<byte>();
             public void ClearCall(ushort lci, byte cause, byte diagnostic, byte[] facilities, byte[]? transitList) { }
             public byte[] GetClearUtilities(ushort lci) => Array.Empty<byte>();
+            public void ConfirmInterrupt(ushort lci) { }
             public Func<ushort, byte[]?>? ClearConfirmationFacilities { get; set; }
             public void ResetCircuit(ushort lci, byte cause, byte diagnostic) { }
             public void SendInterrupt(ushort lci, byte[] userData) { }

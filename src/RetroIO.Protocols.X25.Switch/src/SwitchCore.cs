@@ -269,6 +269,7 @@ namespace RetroIO.Protocols.X25.Switch
             port.CallCleared += OnCallCleared;
             port.CircuitReset += OnCircuitReset;
             port.InterruptReceived += OnInterruptReceived;
+            port.InterruptConfirmed += OnInterruptConfirmed;
             port.ReadyToSend += OnReadyToSend;
             port.StateChanged += OnPortStateChanged;
 
@@ -1645,6 +1646,14 @@ namespace RetroIO.Protocols.X25.Switch
                 return;
             }
 
+            // A circuit this switch does not pass on ends here, so the switch is the far end and confirms it (X.25
+            // 4.3.7). A stitched one is confirmed when the other side confirms it (OnInterruptConfirmed).
+            if (stitch == null)
+            {
+                port.ConfirmInterrupt(lci);
+                return;
+            }
+
             stitch = _node.FindIngress(port, lci);
             if (stitch != null)
             {
@@ -1658,6 +1667,33 @@ namespace RetroIO.Protocols.X25.Switch
             if (stitch != null)
             {
                 stitch.InPort.SendInterrupt(stitch.InLci, userData);
+            }
+        }
+
+        /// <summary>
+        /// The far end confirmed an Interrupt this switch passed on: confirm the one it came from, on the other side of
+        /// the stitch. X.25 4.3.7 and X.75 3.3.5: a confirmation means "the interrupt has been confirmed by the remote
+        /// DTE". Added 2026-11-23; until then each port confirmed an Interrupt as it arrived.
+        /// </summary>
+        /// <param name="port">
+        /// The port the confirmation arrived on.
+        /// </param>
+        /// <param name="lci">
+        /// Its logical channel.
+        /// </param>
+        private void OnInterruptConfirmed(ISwitchPort port, ushort lci)
+        {
+            VcStitch? stitch = _node.FindEgress(port, lci);
+            if (stitch != null)
+            {
+                stitch.InPort.ConfirmInterrupt(stitch.InLci);
+                return;
+            }
+
+            stitch = _node.FindIngress(port, lci);
+            if (stitch != null)
+            {
+                stitch.OutPort.ConfirmInterrupt(stitch.OutLci);
             }
         }
 
