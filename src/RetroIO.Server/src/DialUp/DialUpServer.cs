@@ -46,7 +46,7 @@ namespace RetroIO.Server.DialUp;
 /// every call while one password was checked.
 /// </para>
 /// </remarks>
-public sealed class DialUpServer : IDisposable
+public sealed class DialUpServer : IDisposable, RetroIO.Server.Hosting.IDialUpStatistics
 {
     private const int LineBufferSize = 4096;
     private const int MaxPacket = 65535;

@@ -188,6 +188,8 @@ public static class RetroServerComposition
                 services.AddSingleton(dialUpConfig);
                 services.AddSingleton<RetroIO.Server.DialUp.DialUpHostedService>();
                 services.AddHostedService(sp => sp.GetRequiredService<RetroIO.Server.DialUp.DialUpHostedService>());
+                // The management API reads the counters through this (see IDialUpStatistics).
+                services.AddSingleton<IDialUpStatistics>(sp => sp.GetRequiredService<RetroIO.Server.DialUp.DialUpHostedService>().Server);
             }
         }
 

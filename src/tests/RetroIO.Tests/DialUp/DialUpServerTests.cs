@@ -170,6 +170,34 @@ public sealed class DialUpServerTests
         Assert.That(ReadUntil(second, "login:"), Does.Contain("login:"));
     }
 
+    [Test]
+    public void TheManagementApi_ShowsTheCounters_OrNotHostedWithoutAServer()
+    {
+        RetroIO.Management.Api.Controllers.DialUpController none = new RetroIO.Management.Api.Controllers.DialUpController();
+        RetroIO.Management.Contracts.DialUpStatusResponse off = StatusOf(none);
+        Assert.That(off.IsHosted, Is.False);
+        Assert.That(off.CallsAnswered, Is.EqualTo(0));
+
+        using DialUpServer server = StartServer(maxCalls: 4);
+        using TcpClient client = Dial(server);
+        LogIn(client, "caller", "wrong-password");
+
+        RetroIO.Management.Contracts.DialUpStatusResponse on = StatusOf(new RetroIO.Management.Api.Controllers.DialUpController(server));
+        Assert.That(on.IsHosted, Is.True);
+        Assert.That(on.Port, Is.EqualTo(server.ListeningPort));
+        Assert.That(on.CallsAnswered, Is.EqualTo(1));
+        Assert.That(on.CallsActive, Is.EqualTo(1));
+        Assert.That(on.LoginsRefused, Is.EqualTo(1));
+        Assert.That(on.BytesFromCallers, Is.GreaterThan(0));
+        Assert.That(on.BytesToCallers, Is.GreaterThan(0));
+    }
+
+    private static RetroIO.Management.Contracts.DialUpStatusResponse StatusOf(RetroIO.Management.Api.Controllers.DialUpController controller)
+    {
+        Microsoft.AspNetCore.Mvc.OkObjectResult ok = (Microsoft.AspNetCore.Mvc.OkObjectResult)controller.GetStatus().Result!;
+        return ((RetroIO.Management.Contracts.ApiResponse<RetroIO.Management.Contracts.DialUpStatusResponse>)ok.Value!).Data!;
+    }
+
     private void AddUser(string name, bool allowDialUp, string? address)
     {
         RetroUser user = new RetroUser
