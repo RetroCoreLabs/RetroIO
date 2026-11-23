@@ -244,6 +244,95 @@ public sealed class DialUpServerTests
         return server;
     }
 
+    [Test]
+    public void OneCaller_SendsAnIpPacketToAnother_OverSlip_AndItArrives()
+    {
+        // Two callers on the dial-up subnet reach each other through the router (Ronny, 2026-11-22:
+        // every caller has its own reachable address).
+        using DialUpServer server = StartServer(maxCalls: 4);
+        using TcpClient a = Dial(server);
+        using TcpClient b = Dial(server);
+        Assert.That(LogIn(a, "caller", Password), Does.Contain("Your address is 10.42.0.15"));
+        Assert.That(LogIn(b, "fixed", Password), Does.Contain("Your address is 10.42.0.20"));
+
+        byte[] payload = Encoding.ASCII.GetBytes("hello from caller A");
+        byte[] packet = UdpPacket(new byte[] { 10, 42, 0, 15 }, new byte[] { 10, 42, 0, 20 }, 40000, 9, payload);
+
+        RetroIO.Protocols.Slip.SlipLink slipA = new RetroIO.Protocols.Slip.SlipLink();
+        slipA.OnLineOutput += bytes => a.GetStream().Write(bytes);
+        slipA.SendPacket(packet);
+
+        byte[]? arrived = null;
+        RetroIO.Protocols.Slip.SlipLink slipB = new RetroIO.Protocols.Slip.SlipLink();
+        slipB.OnPacket += p =>
+        {
+            // The line can carry other packets too; take the one from A.
+            if (p.Length >= 20 && p[12] == 10 && p[15] == 15)
+            {
+                arrived = p.ToArray();
+            }
+        };
+
+        byte[] buffer = new byte[2048];
+        DateTime deadline = DateTime.UtcNow + Wait;
+        while (arrived == null && DateTime.UtcNow < deadline)
+        {
+            int read = b.GetStream().Read(buffer, 0, buffer.Length);
+            if (read == 0)
+            {
+                break;
+            }
+
+            slipB.ReceiveFromLine(buffer.AsSpan(0, read));
+        }
+
+        Assert.That(arrived, Is.Not.Null, "B got no packet from A");
+        Assert.That(arrived!.Length, Is.EqualTo(packet.Length));
+        Assert.That(arrived[16], Is.EqualTo(10));
+        Assert.That(arrived[19], Is.EqualTo(20), "to B's address");
+        Assert.That(arrived[8], Is.EqualTo(packet[8] - 1), "the router took one off the time-to-live");
+        Assert.That(arrived.AsSpan(28).ToArray(), Is.EqualTo(payload));
+    }
+
+    /// <summary>
+    /// Builds an IPv4 UDP packet with a correct header checksum and no UDP checksum (0, allowed by RFC 768).
+    /// </summary>
+    private static byte[] UdpPacket(byte[] from, byte[] to, int fromPort, int toPort, byte[] payload)
+    {
+        int length = 28 + payload.Length;
+        byte[] p = new byte[length];
+        p[0] = 0x45;
+        p[2] = (byte)(length >> 8);
+        p[3] = (byte)length;
+        p[8] = 64;
+        p[9] = 17;
+        from.CopyTo(p, 12);
+        to.CopyTo(p, 16);
+        int sum = 0;
+        for (int i = 0; i < 20; i += 2)
+        {
+            sum += (p[i] << 8) | p[i + 1];
+        }
+
+        while ((sum >> 16) != 0)
+        {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+
+        sum = ~sum & 0xFFFF;
+        p[10] = (byte)(sum >> 8);
+        p[11] = (byte)sum;
+        p[20] = (byte)(fromPort >> 8);
+        p[21] = (byte)fromPort;
+        p[22] = (byte)(toPort >> 8);
+        p[23] = (byte)toPort;
+        int udpLength = 8 + payload.Length;
+        p[24] = (byte)(udpLength >> 8);
+        p[25] = (byte)udpLength;
+        payload.CopyTo(p, 28);
+        return p;
+    }
+
     private static TcpClient Dial(DialUpServer server)
     {
         TcpClient client = new TcpClient();
