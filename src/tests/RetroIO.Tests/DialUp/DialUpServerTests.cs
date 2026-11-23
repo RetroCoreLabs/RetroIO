@@ -357,6 +357,166 @@ public sealed class DialUpServerTests
         Assert.That((answer[22] << 8) | answer[23], Is.EqualTo(40001), "to the caller's port");
     }
 
+    [Test]
+    public void ACaller_OpensATcpConnectionToThePc_ThroughTheGateway_AndTalks()
+    {
+        // TCP from a caller to a listener on the PC (gateway 10.42.0.2 = the PC's 127.0.0.1). The
+        // caller's side is done by hand: SYN, the PC's SYN-ACK, ACK with data, the PC's data.
+        using TcpListener listener = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        int servicePort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        string? serviceHeard = null;
+        Thread serve = new Thread(() =>
+        {
+            try
+            {
+                using TcpClient accepted = listener.AcceptTcpClient();
+                accepted.ReceiveTimeout = (int)Wait.TotalMilliseconds;
+                byte[] got = new byte[256];
+                int n = accepted.GetStream().Read(got, 0, got.Length);
+                serviceHeard = Encoding.ASCII.GetString(got, 0, n);
+                byte[] reply = Encoding.ASCII.GetBytes("hello caller");
+                accepted.GetStream().Write(reply, 0, reply.Length);
+                Thread.Sleep(500);
+            }
+            catch (Exception ex) when (ex is IOException || ex is SocketException)
+            {
+                // Nothing came: the asserts below say so.
+            }
+        }) { IsBackground = true };
+        serve.Start();
+
+        using DialUpServer server = StartServer(maxCalls: 4);
+        using TcpClient caller = Dial(server);
+        Assert.That(LogIn(caller, "caller", Password), Does.Contain("Your address is 10.42.0.15"));
+
+        byte[] me = { 10, 42, 0, 15 };
+        byte[] pc = { 10, 42, 0, 2 };
+        const int MyPort = 40002;
+        const uint MySeq = 1000;
+
+        RetroIO.Protocols.Slip.SlipLink slip = new RetroIO.Protocols.Slip.SlipLink();
+        slip.OnLineOutput += bytes => caller.GetStream().Write(bytes);
+        List<byte[]> fromPc = new List<byte[]>();
+        slip.OnPacket += p =>
+        {
+            if (p.Length >= 40 && p[9] == 6 && p[15] == 2)
+            {
+                fromPc.Add(p.ToArray());
+            }
+        };
+
+        slip.SendPacket(TcpPacket(me, pc, MyPort, servicePort, MySeq, 0, 0x02, Array.Empty<byte>()));
+        byte[]? synAck = WaitFor(caller, slip, fromPc, p => (p[33] & 0x12) == 0x12);
+        Assert.That(synAck, Is.Not.Null, "no SYN-ACK from the PC");
+        uint theirSeq = ReadUInt(synAck!, 24);
+        Assert.That(ReadUInt(synAck!, 28), Is.EqualTo(MySeq + 1), "the SYN-ACK acknowledges our SYN");
+
+        byte[] data = Encoding.ASCII.GetBytes("hello PC");
+        slip.SendPacket(TcpPacket(me, pc, MyPort, servicePort, MySeq + 1, theirSeq + 1, 0x18, data));
+        byte[]? withData = WaitFor(caller, slip, fromPc, p => p.Length > 40 + ((p[32] >> 4) * 4) - 20);
+
+        serve.Join(Wait);
+        Assert.That(serviceHeard, Is.EqualTo("hello PC"), "the listener on the PC got the caller's data");
+        Assert.That(withData, Is.Not.Null, "no data back from the PC");
+        int headerLength = 20 + ((withData![32] >> 4) * 4);
+        Assert.That(Encoding.ASCII.GetString(withData, headerLength, withData.Length - headerLength), Is.EqualTo("hello caller"));
+        listener.Stop();
+    }
+
+    /// <summary>
+    /// Reads the caller's line until a packet from the PC matches, or the wait runs out.
+    /// </summary>
+    private static byte[]? WaitFor(TcpClient caller, RetroIO.Protocols.Slip.SlipLink slip, List<byte[]> fromPc, Func<byte[], bool> match)
+    {
+        byte[] buffer = new byte[2048];
+        DateTime deadline = DateTime.UtcNow + Wait;
+        while (DateTime.UtcNow < deadline)
+        {
+            for (int i = 0; i < fromPc.Count; i++)
+            {
+                if (match(fromPc[i]))
+                {
+                    byte[] found = fromPc[i];
+                    fromPc.RemoveAt(i);
+                    return found;
+                }
+            }
+
+            int read = caller.GetStream().Read(buffer, 0, buffer.Length);
+            if (read == 0)
+            {
+                return null;
+            }
+
+            slip.ReceiveFromLine(buffer.AsSpan(0, read));
+        }
+
+        return null;
+    }
+
+    private static uint ReadUInt(byte[] p, int at)
+    {
+        return ((uint)p[at] << 24) | ((uint)p[at + 1] << 16) | ((uint)p[at + 2] << 8) | p[at + 3];
+    }
+
+    /// <summary>
+    /// Builds an IPv4 TCP packet with correct IP and TCP checksums (TCP over the RFC 793 pseudo-header).
+    /// </summary>
+    private static byte[] TcpPacket(byte[] from, byte[] to, int fromPort, int toPort, uint seq, uint ack, byte flags, byte[] payload)
+    {
+        int length = 40 + payload.Length;
+        byte[] p = new byte[length];
+        p[0] = 0x45;
+        p[2] = (byte)(length >> 8);
+        p[3] = (byte)length;
+        p[8] = 64;
+        p[9] = 6;
+        from.CopyTo(p, 12);
+        to.CopyTo(p, 16);
+        WriteChecksum(p, 10, Sum(p, 0, 20, 0));
+        p[20] = (byte)(fromPort >> 8);
+        p[21] = (byte)fromPort;
+        p[22] = (byte)(toPort >> 8);
+        p[23] = (byte)toPort;
+        p[24] = (byte)(seq >> 24); p[25] = (byte)(seq >> 16); p[26] = (byte)(seq >> 8); p[27] = (byte)seq;
+        p[28] = (byte)(ack >> 24); p[29] = (byte)(ack >> 16); p[30] = (byte)(ack >> 8); p[31] = (byte)ack;
+        p[32] = 0x50;
+        p[33] = flags;
+        p[34] = 0xFF;
+        p[35] = 0xFF;
+        payload.CopyTo(p, 40);
+
+        // Pseudo-header: source, destination, zero, protocol 6, TCP length.
+        int tcpLength = 20 + payload.Length;
+        int pseudo = Sum(p, 12, 8, 0) + 6 + tcpLength;
+        WriteChecksum(p, 36, Sum(p, 20, tcpLength, pseudo));
+        return p;
+    }
+
+    private static int Sum(byte[] p, int start, int count, int sum)
+    {
+        for (int i = 0; i < count; i += 2)
+        {
+            int low = i + 1 < count ? p[start + i + 1] : 0;
+            sum += (p[start + i] << 8) | low;
+        }
+
+        return sum;
+    }
+
+    private static void WriteChecksum(byte[] p, int at, int sum)
+    {
+        while ((sum >> 16) != 0)
+        {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+
+        sum = ~sum & 0xFFFF;
+        p[at] = (byte)(sum >> 8);
+        p[at + 1] = (byte)sum;
+    }
+
     /// <summary>
     /// Builds an IPv4 UDP packet with a correct header checksum and no UDP checksum (0, allowed by RFC 768).
     /// </summary>
