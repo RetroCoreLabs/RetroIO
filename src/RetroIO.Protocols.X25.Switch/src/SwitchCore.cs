@@ -498,7 +498,7 @@ namespace RetroIO.Protocols.X25.Switch
                 paying = FindAccountByNui(nui);
                 if (paying == null)
                 {
-                    inPort.ClearCall(inLci, CauseInvalidFacilityRequest, DiagnosticNuiProblem);
+                    RefuseCall(inPort, inLci, calledAddress, CauseInvalidFacilityRequest, DiagnosticNuiProblem);
                     return;
                 }
 
@@ -512,7 +512,7 @@ namespace RetroIO.Protocols.X25.Switch
             }
             else if (inPort.Config.NuiRequired)
             {
-                inPort.ClearCall(inLci, CauseLocalProcedureError, DiagnosticNuiProblem);
+                RefuseCall(inPort, inLci, calledAddress, CauseLocalProcedureError, DiagnosticNuiProblem);
                 return;
             }
             else
@@ -532,7 +532,7 @@ namespace RetroIO.Protocols.X25.Switch
             int maxCalls = _node.Config.MaxCalls;
             if (maxCalls > 0 && _node.ActiveStitchCount >= maxCalls)
             {
-                inPort.ClearCall(inLci, CauseNetworkCongestion, 0);
+                RefuseCall(inPort, inLci, calledAddress, CauseNetworkCongestion, 0);
                 return;
             }
 
@@ -552,7 +552,7 @@ namespace RetroIO.Protocols.X25.Switch
                 hops = carriedHops[0] + 1;
                 if (hops > _node.Config.MaxHops)
                 {
-                    inPort.ClearCall(inLci, CauseNetworkCongestion, DiagnosticHopLimit);
+                    RefuseCall(inPort, inLci, calledAddress, CauseNetworkCongestion, DiagnosticHopLimit);
                     return;
                 }
             }
@@ -560,7 +560,7 @@ namespace RetroIO.Protocols.X25.Switch
             X25CallDecision decision = Router.Decide(calledAddress, inPort.Id);
             if (decision.Action != X25CallAction.Forward)
             {
-                inPort.ClearCall(inLci, decision.Cause, decision.Diagnostic);
+                RefuseCall(inPort, inLci, calledAddress, decision.Cause, decision.Diagnostic);
                 return;
             }
 
@@ -578,7 +578,7 @@ namespace RetroIO.Protocols.X25.Switch
             byte[]? onwardUtilities = null;
             if (!TryBuildOnwardUtilities(inPort, inLci, outPort, out onwardUtilities, out byte[]? onwardCarried, out byte refuseDiagnostic))
             {
-                inPort.ClearCall(inLci, CauseNetworkCongestion, refuseDiagnostic);
+                RefuseCall(inPort, inLci, calledAddress, CauseNetworkCongestion, refuseDiagnostic);
                 return;
             }
 
@@ -630,7 +630,7 @@ namespace RetroIO.Protocols.X25.Switch
                 X25CallDecision failed = portRefusal ?? (SwitchCallRouter.IsInService(outPort)
                     ? X25CallDecision.Busy()
                     : X25CallDecision.DestinationOutOfOrder());
-                inPort.ClearCall(inLci, failed.Cause, failed.Diagnostic);
+                RefuseCall(inPort, inLci, calledAddress, failed.Cause, failed.Diagnostic);
                 return;
             }
 
@@ -825,6 +825,112 @@ namespace RetroIO.Protocols.X25.Switch
 
             onward = u.Encode();
             return true;
+        }
+
+        /// <summary>
+        /// Refuses a call this switch received, with the cause and diagnostic given.
+        /// </summary>
+        /// <remarks>
+        /// X.75 5.3.1 puts the transit list in a refusal but does not say whether a transit network that refuses adds
+        /// itself. Decided by Ronny 2026-11-23: it does, so the caller can see which network refused
+        /// (<see cref="RefusalTransitList"/>). Before, the list went back as it had arrived.
+        /// </remarks>
+        /// <param name="inPort">
+        /// The port the call came in on.
+        /// </param>
+        /// <param name="inLci">
+        /// Its channel.
+        /// </param>
+        /// <param name="calledAddress">
+        /// The called address as it arrived.
+        /// </param>
+        /// <param name="cause">
+        /// Clearing cause.
+        /// </param>
+        /// <param name="diagnostic">
+        /// Diagnostic code.
+        /// </param>
+        private void RefuseCall(ISwitchPort inPort, ushort inLci, string calledAddress, byte cause, byte diagnostic)
+        {
+            byte[]? list = null;
+            if (inPort.Config.BetweenNetworks && inPort.TryGetCallParameters(inLci, out X25CallParameters asked))
+            {
+                list = RefusalTransitList(asked.NetworkUtilities, calledAddress);
+            }
+
+            if (list == null)
+            {
+                inPort.ClearCall(inLci, cause, diagnostic);
+                return;
+            }
+
+            inPort.ClearCall(inLci, cause, diagnostic, Array.Empty<byte>(), list);
+        }
+
+        /// <summary>
+        /// The transit list for a refusal sent back to another network: the list given, with this network's code added
+        /// at the end when this network is a transit network for the call and the list does not already name it.
+        /// </summary>
+        /// <remarks>
+        /// A transit network is one the called address is not in: the address from another network is the full
+        /// international number (X.121), so its first digits name the network. At the destination network the list goes
+        /// back as received, as in a Call Connected (5.3.1). Decided by Ronny 2026-11-23.
+        /// </remarks>
+        /// <param name="utilities">
+        /// The X.75 utility field holding the list so far.
+        /// </param>
+        /// <param name="calledAddress">
+        /// The called address.
+        /// </param>
+        /// <returns>
+        /// The utility field to send, or null when the given one does not decode (the clear then carries the received list).
+        /// </returns>
+        private byte[]? RefusalTransitList(byte[]? utilities, string calledAddress)
+        {
+            X75Utilities answer = new X75Utilities();
+            if (utilities != null && utilities.Length > 0)
+            {
+                if (X75Utilities.TryDecode(utilities, out X75Utilities read) != X75UtilityError.None)
+                {
+                    return null;
+                }
+
+                List<string> transit = read.TransitNetworks;
+                for (int i = 0; i < transit.Count; i++)
+                {
+                    answer.TransitNetworks.Add(transit[i]);
+                }
+            }
+
+            string ownDnic = _node.Config.Dnic;
+            if (ownDnic.Length > 0 && !IsForOwnNetwork(calledAddress) && !answer.TransitNetworks.Contains(ownDnic))
+            {
+                answer.TransitNetworks.Add(ownDnic);
+            }
+
+            return answer.Encode();
+        }
+
+        /// <summary>
+        /// True when the called address belongs to one of this network's own DNICs (or no DNIC is set up).
+        /// </summary>
+        private bool IsForOwnNetwork(string calledAddress)
+        {
+            IReadOnlyList<string> own = _node.Config.Routing.OwnDnics;
+            if (own.Count == 0)
+            {
+                return _node.Config.Dnic.Length == 0 || calledAddress.StartsWith(_node.Config.Dnic, StringComparison.Ordinal);
+            }
+
+            for (int i = 0; i < own.Count; i++)
+            {
+                if (calledAddress.StartsWith(own[i], StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -1831,6 +1937,20 @@ namespace RetroIO.Protocols.X25.Switch
                         X25Facilities.DefaultPacketSize, X25Facilities.DefaultPacketSize,
                         clearFacilities, port.GetClearUtilities(lci));
                     transitList = AnswerTransitList(stitch, refused);
+
+                    // Toward another network a refusal from inside a transit network names this network too (Ronny,
+                    // 2026-11-23; RefusalTransitList). A refusal from a network further on already names it: this switch
+                    // added itself when it passed the call on.
+                    if (stitch.InPort.Config.BetweenNetworks)
+                    {
+                        byte[]? received = transitList;
+                        if (received == null && stitch.InPort.TryGetCallParameters(stitch.InLci, out X25CallParameters asked))
+                        {
+                            received = asked.NetworkUtilities;
+                        }
+
+                        transitList = RefusalTransitList(received, stitch.CalledAddress) ?? transitList;
+                    }
                 }
 
                 // The carried element is this network's own signalling (X.25 7.1): it never goes on as it came.

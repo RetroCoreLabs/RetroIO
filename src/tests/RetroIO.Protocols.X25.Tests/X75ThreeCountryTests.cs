@@ -670,6 +670,44 @@ namespace RetroIO.Protocols.X25.Tests
                 "the list 2900 refused with, which names both transit networks");
         }
 
+        /// <summary>
+        /// A transit network that refuses a call itself adds its own code to the transit list it sends back, so the caller
+        /// can see which network refused (X.75 5.3.1 leaves this open; decided by Ronny 2026-11-23). 2422 calls 2999
+        /// through 2901, which has no route to 2999: 2901 refuses with Not obtainable and the list names 2901. Before, the
+        /// list went back as it had arrived, empty.
+        /// </summary>
+        [Test]
+        public void ATransitNetworkThatRefuses_NamesItselfInTheList()
+        {
+            const string called = "2999589004";
+            HdlcTcpSwitchPort bIn = new HdlcTcpSwitchPort(NetworkLink(0, PortMode.Dce, 0), NullLogger.Instance);
+            XotSwitchPort bNowhere = new XotSwitchPort(Subscriber(1));
+            Build("2901", "2777", bIn, bNowhere);
+            Assert.That(bIn.Start() && bNowhere.Start(), Is.True);
+            List<byte[]> bInReceived = new List<byte[]>();
+            List<byte[]> bInSent = new List<byte[]>();
+            Capture(bIn, bInReceived, bInSent);
+
+            XotSwitchPort padLine = new XotSwitchPort(Subscriber(0));
+            HdlcTcpSwitchPort aOut = new HdlcTcpSwitchPort(NetworkLink(1, PortMode.Dte, bIn.BoundPort), NullLogger.Instance);
+            Build("2422", "2999", padLine, aOut);
+            Assert.That(padLine.Start() && aOut.Start(), Is.True);
+            Assert.That(SpinWait.SpinUntil(() => bIn.PeerConnected && aOut.PeerConnected, 15000), Is.True, "the link did not come up");
+
+            TcpClient pad = new TcpClient { NoDelay = true };
+            _disposables.Add(pad);
+            pad.Connect("127.0.0.1", padLine.BoundPort);
+            Assert.That(SpinWait.SpinUntil(() => padLine.PeerConnected, 5000), Is.True);
+            NetworkStream padStream = pad.GetStream();
+            padStream.ReadTimeout = 10000;
+
+            SendXot(padStream, X25PacketBuilder.CreateCallRequest(1, called, "24220001"));
+            ReadUntilClear(padStream);
+
+            X25PacketInfo refusal = Captured(bInSent, X25PacketType.ClearRequest);
+            Assert.That(Utilities(refusal).TransitNetworks, Is.EqualTo(new[] { "2901" }));
+        }
+
         private static bool HasType(List<byte[]> packets, X25PacketType type)
         {
             lock (packets)
