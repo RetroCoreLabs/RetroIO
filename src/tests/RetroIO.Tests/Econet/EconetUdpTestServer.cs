@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RetroIO.Identity;
 using RetroIO.Protocols.Econet.FileServer;
@@ -57,7 +58,8 @@ internal sealed class EconetUdpTestServer : IAsyncDisposable
 
     public static async Task<EconetUdpTestServer> StartAsync(
         int udpPort = EconetTestPorts.UnitTestServerUdp,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        LogLevel minimumLogLevel = LogLevel.Information)
     {
         EconetActivityLog activityLog = new EconetActivityLog();
         MockFileSystemBackend fileSystem = new MockFileSystemBackend();
@@ -91,7 +93,11 @@ internal sealed class EconetUdpTestServer : IAsyncDisposable
             mapper,
             NullLogger<UdpAunTransport>.Instance);
 
+        // The default host logs to the console, and NUnit keeps every console line of a test in
+        // memory. A long measurement passes a higher level so that copy is not counted as the
+        // server's memory (it was 250 KB a round, 2026-11-23).
         IHost host = Host.CreateDefaultBuilder()
+            .ConfigureLogging(logging => logging.SetMinimumLevel(minimumLogLevel))
             .ConfigureServices(services =>
             {
                 services.AddSingleton<IFileSystemBackend>(fileSystem);

@@ -83,7 +83,9 @@ public sealed class EconetLoadTests
             port = ((IPEndPoint)probe.LocalEndPoint!).Port;
         }
 
-        await using EconetUdpTestServer server = await EconetUdpTestServer.StartAsync(port);
+        // Warnings and worse only: NUnit keeps every console line in memory, which would be
+        // measured as growth (one log line per request, about 250 KB a round).
+        await using EconetUdpTestServer server = await EconetUdpTestServer.StartAsync(port, default, Microsoft.Extensions.Logging.LogLevel.Warning);
         for (int batch = 0; batch < 30; batch++)
         {
             Task<string>[] stations = new Task<string>[Stations];
