@@ -743,6 +743,41 @@ namespace RetroIO.Protocols.Tn3270
         }
 
         /// <summary>
+        /// Erase left, the PC Backspace of wc3270: the cursor moves one place left and the
+        /// character there is deleted as <see cref="Delete"/> deletes it, so the rest of the field
+        /// moves one place left. At the first position of a field nothing happens.
+        /// </summary>
+        /// <remarks>
+        /// IBM's 3278 had no such key: its Backspace only moved the cursor (GA27-2890-4 p. 3-31).
+        /// This follows x3270's Erase action, step for step (Common\kybd.c, do_erase, read 23
+        /// November 2026): refused in a protected field or on a field attribute; nothing when the
+        /// position to the left is the field's attribute; otherwise left one, then delete. wc3270
+        /// gives the PC Backspace key this action in its built-in key map (Common\fb-c3270, the
+        /// _WIN32 part: "Key BACK: Erase()"). The DBCS steps of do_erase are left out: this
+        /// display has no DBCS.
+        /// </remarks>
+        /// <returns>
+        /// False when refused: keyboard locked, or the cursor in a protected field or on a field
+        /// attribute (which locks the keyboard). True otherwise, also when nothing was erased.
+        /// </returns>
+        public bool Erase()
+        {
+            if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
+            {
+                return false;
+            }
+
+            int left = CursorAddress == 0 ? Size - 1 : CursorAddress - 1;
+            if (fa >= 0 && left == fa)
+            {
+                return true;
+            }
+
+            MoveCursor(left);
+            return Delete();
+        }
+
+        /// <summary>
         /// The ERASE EOF key: nulls from the cursor to the end of the field, or on an unformatted
         /// screen to the end of the screen. The cursor stays and the MDT is set (GA23-0061-2 p. C-4).
         /// </summary>

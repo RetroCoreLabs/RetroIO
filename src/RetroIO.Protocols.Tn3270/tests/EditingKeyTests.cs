@@ -253,5 +253,44 @@ namespace RetroIO.Protocols.Tn3270.Tests
             d.MoveCursorBy(1, 0);
             Assert.Equal(80, d.CursorAddress);
         }
+
+        [Fact]
+        public void EraseMovesLeftAndDeletesThatCharacter()
+        {
+            // "XYZ" at 4-6, cursor after the Y: erase takes the Y and pulls the Z left.
+            Display3270 d = Screen();
+            d.MoveCursor(6);
+
+            Assert.True(d.Erase());
+
+            Assert.Equal("XZ....", Field(d));
+            Assert.Equal(5, d.CursorAddress);
+            Assert.Equal(FieldAttribute.Mdt, d.GetByte(3) & FieldAttribute.Mdt);
+        }
+
+        [Fact]
+        public void EraseAtTheFirstPositionOfAFieldDoesNothing()
+        {
+            // x3270 do_erase: when the position to the left is the field attribute, nothing.
+            Display3270 d = Screen();
+
+            Assert.True(d.Erase());
+
+            Assert.Equal("XYZ...", Field(d));
+            Assert.Equal(4, d.CursorAddress);
+            Assert.Equal(KeyboardLock.None, d.Lock);
+            Assert.Equal(0, d.GetByte(3) & FieldAttribute.Mdt);
+        }
+
+        [Fact]
+        public void EraseInAProtectedFieldIsAnOperatorError()
+        {
+            Display3270 d = Screen();
+            d.MoveCursor(2);
+
+            Assert.False(d.Erase());
+
+            Assert.Equal(KeyboardLock.OperatorError, d.Lock);
+        }
     }
 }
