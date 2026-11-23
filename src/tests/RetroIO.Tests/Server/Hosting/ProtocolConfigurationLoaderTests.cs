@@ -407,4 +407,37 @@ public sealed class ProtocolConfigurationLoaderTests
                 Directory.Delete(tempPath, true);
         }
     }
+
+    [Test]
+    public void LoadDialUpConfiguration_AnOverride_IsForThisRunOnly_AndNeverWrittenIntoANewFile()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "retrofs-hosting-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+        TextWriter originalOut = Console.Out;
+
+        try
+        {
+            Console.SetOut(new StringWriter());
+            IConfiguration overrides = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["DialUp:Enabled"] = "true", ["DialUp:Port"] = "7100" })
+                .Build();
+            DialUpServerConfiguration result = ProtocolConfigurationLoader.LoadDialUpConfiguration(tempPath, overrides);
+            Console.SetOut(originalOut);
+
+            Assert.That(result.Enabled, Is.True, "the override applies to this run");
+            Assert.That(result.Port, Is.EqualTo(7100));
+
+            string json = File.ReadAllText(Path.Combine(tempPath, ProtocolConfigurationLoader.DialUpConfigurationFileName));
+            DialUpServerConfiguration? saved = System.Text.Json.JsonSerializer.Deserialize<DialUpServerConfiguration>(json);
+            Assert.That(saved, Is.Not.Null);
+            Assert.That(saved!.Enabled, Is.False, "the new file keeps the default: off");
+            Assert.That(saved.Port, Is.EqualTo(6400));
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempPath))
+                Directory.Delete(tempPath, true);
+        }
+    }
 }

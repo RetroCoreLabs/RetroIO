@@ -131,11 +131,14 @@ public static class ProtocolConfigurationLoader
             config = TnfsServerConfiguration.GetDefault();
         }
 
-        ApplyTnfsOverrides(configuration, config);
+        // The new file gets the file's own values, before the overrides: an override is for this run only
+        // (see LoadDialUpConfiguration, where this was found 2026-11-23).
         if (!existed)
         {
             SaveConfiguration(configPath, config, "TNFS");
         }
+
+        ApplyTnfsOverrides(configuration, config);
 
         return config;
     }
@@ -180,11 +183,14 @@ public static class ProtocolConfigurationLoader
             config = EconetServerConfiguration.GetDefault();
         }
 
-        ApplyEconetOverrides(configuration, config);
+        // The new file gets the file's own values, before the overrides: an override is for this run only
+        // (see LoadDialUpConfiguration, where this was found 2026-11-23).
         if (!existed)
         {
             SaveConfiguration(configPath, config, "Econet");
         }
+
+        ApplyEconetOverrides(configuration, config);
 
         return config;
     }
@@ -234,11 +240,14 @@ public static class ProtocolConfigurationLoader
             config = DriveWireServerConfiguration.GetDefault();
         }
 
-        ApplyDriveWireOverrides(configuration, config);
+        // The new file gets the file's own values, before the overrides: an override is for this run only
+        // (see LoadDialUpConfiguration, where this was found 2026-11-23).
         if (!existed)
         {
             SaveConfiguration(configPath, config, "DriveWire");
         }
+
+        ApplyDriveWireOverrides(configuration, config);
 
         return config;
     }
@@ -288,11 +297,14 @@ public static class ProtocolConfigurationLoader
             config = XmsgHubServerConfiguration.GetDefault();
         }
 
-        ApplyXmsgHubOverrides(configuration, config);
+        // The new file gets the file's own values, before the overrides: an override is for this run only
+        // (see LoadDialUpConfiguration, where this was found 2026-11-23).
         if (!existed)
         {
             SaveConfiguration(configPath, config, "XMSG hub");
         }
+
+        ApplyXmsgHubOverrides(configuration, config);
 
         return config;
     }
@@ -338,11 +350,15 @@ public static class ProtocolConfigurationLoader
             config = DialUpServerConfiguration.GetDefault();
         }
 
-        ApplyDialUpOverrides(configuration, config);
+        // The new file gets the file's own values, BEFORE the command-line overrides: an override is
+        // for this run only. Found 2026-11-23: with the overrides applied first, one test run with
+        // --DialUp:Enabled=true wrote Enabled true into a new file, and the ISP then started on every run.
         if (!existed)
         {
             SaveConfiguration(configPath, config, "dial-up");
         }
+
+        ApplyDialUpOverrides(configuration, config);
 
         return config;
     }
@@ -465,11 +481,14 @@ public static class ProtocolConfigurationLoader
             config = XmsgNodeServerConfiguration.GetDefault();
         }
 
-        ApplyXmsgNodeOverrides(configuration, config);
+        // The new file gets the file's own values, before the overrides: an override is for this run only
+        // (see LoadDialUpConfiguration, where this was found 2026-11-23).
         if (!existed)
         {
             SaveConfiguration(configPath, config, "XMSG node");
         }
+
+        ApplyXmsgNodeOverrides(configuration, config);
 
         return config;
     }
