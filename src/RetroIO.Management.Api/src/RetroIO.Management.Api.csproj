@@ -50,6 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Telemetry\src\RetroIO.Telemetry.csproj" />
     <ProjectReference Include="..\..\RetroIO.Storage.Utilities\src\RetroIO.Storage.Utilities.csproj" />
     <ProjectReference Include="..\..\RetroIO.Management.Contracts\src\RetroIO.Management.Contracts.csproj" />
     <ProjectReference Include="..\..\RetroIO.Server.Core\src\RetroIO.Server.Core.csproj" />

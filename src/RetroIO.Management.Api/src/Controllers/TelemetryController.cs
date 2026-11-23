@@ -7,7 +7,7 @@
 
 using Microsoft.AspNetCore.Mvc;
 using RetroIO.Management.Contracts;
-using RetroIO.Server.Core.Telemetry;
+using RetroIO.Telemetry;
 
 namespace RetroIO.Management.Api.Controllers;
 

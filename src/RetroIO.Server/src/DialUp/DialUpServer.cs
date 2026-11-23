@@ -15,7 +15,7 @@ using RetroIO.Network.Nat;
 using RetroIO.Network.Router;
 using RetroIO.Server.Hosting.Configuration;
 using Microsoft.Extensions.Logging;
-using RetroIO.Server.Core.Telemetry;
+using RetroIO.Telemetry;
 
 namespace RetroIO.Server.DialUp;
 

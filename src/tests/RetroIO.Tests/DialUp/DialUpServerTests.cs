@@ -176,7 +176,7 @@ public sealed class DialUpServerTests
         LogIn(client, "caller", "wrong-password");
 
         RetroIO.Management.Api.Controllers.TelemetryController api =
-            new RetroIO.Management.Api.Controllers.TelemetryController(new[] { (RetroIO.Server.Core.Telemetry.ITelemetrySource)server.Telemetry });
+            new RetroIO.Management.Api.Controllers.TelemetryController(new[] { (RetroIO.Telemetry.ITelemetrySource)server.Telemetry });
 
         Microsoft.AspNetCore.Mvc.OkObjectResult okMetrics = (Microsoft.AspNetCore.Mvc.OkObjectResult)api.GetMetrics("RetroIO.DialUp").Result!;
         List<RetroIO.Management.Contracts.MetricDto> metrics =

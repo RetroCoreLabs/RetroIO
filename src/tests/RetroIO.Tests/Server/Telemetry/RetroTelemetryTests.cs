@@ -10,7 +10,7 @@ using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
-using RetroIO.Server.Core.Telemetry;
+using RetroIO.Telemetry;
 
 namespace RetroIO.Tests.Server.Telemetry;
 
@@ -114,5 +114,44 @@ public sealed class RetroTelemetryTests
         telemetry.CollectLog(4, newer);
         Assert.That(newer, Has.Count.EqualTo(1));
         Assert.That(newer[0].Message, Is.EqualTo("line 5"));
+    }
+
+    [Test]
+    public void ARecordWithAnException_CarriesItsTypeAsTheOpenTelemetryAttribute()
+    {
+        using RetroTelemetry telemetry = new RetroTelemetry("RetroIO.Test.Error");
+        telemetry.Log(LogLevel.Error, new InvalidOperationException("x"), "failed", new KeyValuePair<string, string>("port", "5010"));
+
+        List<TelemetryLogRecord> records = new List<TelemetryLogRecord>();
+        telemetry.CollectLog(0, records);
+
+        Assert.That(records[0].Attributes, Has.Length.EqualTo(2));
+        Assert.That(records[0].Attributes[0].Key, Is.EqualTo("port"));
+        Assert.That(records[0].Attributes[1].Key, Is.EqualTo("exception.type"));
+        Assert.That(records[0].Attributes[1].Value, Is.EqualTo("System.InvalidOperationException"));
+    }
+
+    [Test]
+    public void TheXmsgHub_HasItsMetricsInTheSharedShape_ReadingZeroWhileStopped()
+    {
+        RetroIO.Protocols.Xmsg.Hub.Server.XmsgHubService hub =
+            new RetroIO.Protocols.Xmsg.Hub.Server.XmsgHubService(new RetroIO.Protocols.Xmsg.Hub.Server.XmsgHubOptions());
+
+        List<MetricReading> readings = new List<MetricReading>();
+        hub.Telemetry.CollectMetrics(readings);
+
+        Assert.That(hub.Telemetry.Name, Is.EqualTo("RetroIO.XmsgHub"));
+        int dropped = 0;
+        for (int i = 0; i < readings.Count; i++)
+        {
+            Assert.That(readings[i].Value, Is.EqualTo(0), readings[i].Name);
+            if (readings[i].Name == "retroio.xmsghub.frames.dropped")
+            {
+                dropped++;
+            }
+        }
+
+        Assert.That(dropped, Is.EqualTo(3), "slow member, loop and hop limit are three labelled series of one metric");
+        hub.Dispose();
     }
 }

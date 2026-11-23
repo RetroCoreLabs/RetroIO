@@ -10,7 +10,7 @@ using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging;
 
-namespace RetroIO.Server.Core.Telemetry;
+namespace RetroIO.Telemetry;
 
 /// <summary>
 /// What kind of number a metric is, using the OpenTelemetry names.
@@ -99,7 +99,7 @@ public interface ITelemetrySource
 /// <c>direction=out</c>; OpenTelemetry wants that rather than two names.
 /// </para>
 /// <para>
-/// Logs: <see cref="Log"/> writes each record to the <see cref="ILogger"/> of the part, which is
+/// Logs: <see cref="Log(LogLevel, Exception?, string, KeyValuePair{string, string}[])"/> writes each record to the <see cref="ILogger"/> of the part, which is
 /// where OpenTelemetry takes logs from, with the attributes as structured fields (a logger scope). It
 /// also keeps the newest records in a fixed ring, so the management API can show the log beside the
 /// metrics.
@@ -198,7 +198,30 @@ public sealed class RetroTelemetry : ITelemetrySource, IDisposable
     /// <param name="attributes">Key-value attributes.</param>
     public void Log(LogLevel level, string message, params KeyValuePair<string, string>[] attributes)
     {
+        Log(level, null, message, attributes);
+    }
+
+    /// <summary>
+    /// Writes one log record with the exception behind it: to the logger (with the exception, so its
+    /// stack goes with it), and into the ring with the exception type as the <c>exception.type</c>
+    /// attribute (the OpenTelemetry attribute name).
+    /// </summary>
+    /// <param name="level">How serious it is.</param>
+    /// <param name="exception">The exception, or null.</param>
+    /// <param name="message">The text, in plain words.</param>
+    /// <param name="attributes">Key-value attributes.</param>
+    public void Log(LogLevel level, Exception? exception, string message, params KeyValuePair<string, string>[] attributes)
+    {
         ArgumentNullException.ThrowIfNull(message);
+        if (exception != null)
+        {
+            KeyValuePair<string, string>[] given = attributes ?? Array.Empty<KeyValuePair<string, string>>();
+            KeyValuePair<string, string>[] with = new KeyValuePair<string, string>[given.Length + 1];
+            Array.Copy(given, with, given.Length);
+            with[given.Length] = new KeyValuePair<string, string>("exception.type", exception.GetType().FullName ?? exception.GetType().Name);
+            attributes = with;
+        }
+
         KeyValuePair<string, string>[] tags = attributes ?? Array.Empty<KeyValuePair<string, string>>();
         lock (_gate)
         {
@@ -214,7 +237,7 @@ public sealed class RetroTelemetry : ITelemetrySource, IDisposable
 
         if (tags.Length == 0)
         {
-            _logger.Log(level, "{Message}", message);
+            _logger.Log(level, exception, "{Message}", message);
             return;
         }
 
@@ -227,7 +250,7 @@ public sealed class RetroTelemetry : ITelemetrySource, IDisposable
 
         using (_logger.BeginScope(scope))
         {
-            _logger.Log(level, "{Message}", message);
+            _logger.Log(level, exception, "{Message}", message);
         }
     }
 

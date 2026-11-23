@@ -32,6 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\RetroIO.Telemetry\src\RetroIO.Telemetry.csproj" />
     <ProjectReference Include="..\..\RetroIO.Protocols.Xmsg.Ethernet\src\RetroIO.Protocols.Xmsg.Ethernet.csproj" />
   </ItemGroup>
 

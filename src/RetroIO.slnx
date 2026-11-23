@@ -216,6 +216,10 @@
   <Folder Name="/src/RetroIO.Server.Core/src/">
     <Project Path="RetroIO.Server.Core/src/RetroIO.Server.Core.csproj" />
   </Folder>
+  <Folder Name="/src/RetroIO.Telemetry/" />
+  <Folder Name="/src/RetroIO.Telemetry/src/">
+    <Project Path="RetroIO.Telemetry/src/RetroIO.Telemetry.csproj" />
+  </Folder>
   <Folder Name="/src/RetroIO.Server.Hosting/" />
   <Folder Name="/src/RetroIO.Server.Hosting/src/">
     <Project Path="RetroIO.Server.Hosting/src/RetroIO.Server.Hosting.csproj" />

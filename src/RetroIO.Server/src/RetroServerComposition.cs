@@ -171,6 +171,10 @@ public static class RetroServerComposition
                     o.StatusIntervalSeconds = hubConfig.StatusIntervalSeconds;
                 });
 
+                // Its metrics and log, for the management API (api/v1/telemetry).
+                services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(
+                    sp => sp.GetRequiredService<RetroIO.Protocols.Xmsg.Hub.Server.XmsgHubService>().Telemetry);
+
                 if (opts.PrintBanners)
                 {
                     ServerHostingBanners.PrintXmsgHubConfiguration(hubConfig);
@@ -189,7 +193,7 @@ public static class RetroServerComposition
                 services.AddSingleton<RetroIO.Server.DialUp.DialUpHostedService>();
                 services.AddHostedService(sp => sp.GetRequiredService<RetroIO.Server.DialUp.DialUpHostedService>());
                 // Its metrics and log, for the management API (api/v1/telemetry).
-                services.AddSingleton<RetroIO.Server.Core.Telemetry.ITelemetrySource>(
+                services.AddSingleton<RetroIO.Telemetry.ITelemetrySource>(
                     sp => sp.GetRequiredService<RetroIO.Server.DialUp.DialUpHostedService>().Server.Telemetry);
             }
         }

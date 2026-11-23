@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>RetroIO.Telemetry</PackageId>
+    <AssemblyName>RetroIO.Telemetry</AssemblyName>
+    <RootNamespace>RetroIO.Telemetry</RootNamespace>
+    <Description>One shape for the metrics and the log of every RetroServer part: named counters with labels on a .NET Meter, ready for OpenTelemetry, and the log beside them.</Description>
+    <PackageTags>retroio;telemetry;metrics;opentelemetry</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

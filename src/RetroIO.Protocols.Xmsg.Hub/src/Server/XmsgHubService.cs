@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -15,6 +16,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+
+using RetroIO.Telemetry;
 
 namespace RetroIO.Protocols.Xmsg.Hub.Server
 {
@@ -88,7 +91,29 @@ namespace RetroIO.Protocols.Xmsg.Hub.Server
             _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<XmsgHubService>();
             Frames = new HubFrameRing(Math.Max(1, options.FrameBufferSize));
             LogLines = new HubLogRing(Math.Max(1, options.LogBufferSize));
+
+            // The shared RetroServer metrics and log (RetroIO.Telemetry). Each metric reads a counter the
+            // running hub keeps; with the hub stopped they read 0.
+            Telemetry = new RetroTelemetry(TelemetryName, _logger, Math.Max(1, options.LogBufferSize));
+            Telemetry.AddUpDownCounter("retroio.xmsghub.members", "{member}", "Members joined now: machines and other hubs.", () => _hub?.MemberCount ?? 0);
+            Telemetry.AddUpDownCounter("retroio.xmsghub.machines", "{machine}", "Machines joined now.", () => _hub?.MachineMemberCount ?? 0);
+            Telemetry.AddCounter("retroio.xmsghub.frames.received", "{frame}", "Frames received from members.", () => _hub?.FramesIn ?? 0);
+            Telemetry.AddCounter("retroio.xmsghub.frames.forwarded", "{frame}", "Frames passed on to members.", () => _hub?.FramesForwarded ?? 0);
+            Telemetry.AddCounter("retroio.xmsghub.frames.dropped", "{frame}", "Frames not passed on.", () => _hub?.FramesDroppedSlow ?? 0, Tag("reason", "slow_member"));
+            Telemetry.AddCounter("retroio.xmsghub.frames.dropped", "{frame}", "Frames not passed on.", () => _hub?.FramesDroppedLoop ?? 0, Tag("reason", "loop"));
+            Telemetry.AddCounter("retroio.xmsghub.frames.dropped", "{frame}", "Frames not passed on.", () => _hub?.FramesDroppedTtl ?? 0, Tag("reason", "hop_limit"));
+            Telemetry.AddCounter("retroio.xmsghub.frames.captured", "{frame}", "Frames written to the capture file.", () => _hub?.FramesCaptured ?? 0);
         }
+
+        /// <summary>
+        /// The name of the hub in metrics and logs, and its meter name for OpenTelemetry.
+        /// </summary>
+        public const string TelemetryName = "RetroIO.XmsgHub";
+
+        /// <summary>
+        /// Gets the metrics and the log of the hub, in the shape every RetroServer part uses.
+        /// </summary>
+        public RetroTelemetry Telemetry { get; }
 
         /// <summary>
         /// Gets the settings the service runs with.
@@ -353,8 +378,10 @@ namespace RetroIO.Protocols.Xmsg.Hub.Server
         /// </param>
         private void Record(string message)
         {
+            // LogLines stays for the hub page and its API (api/v1/xmsghub/log); Telemetry is the shared
+            // log, which also writes to the logger.
             LogLines.Add(DateTime.UtcNow, message);
-            _logger.LogInformation("[hub] {Message}", message);
+            Telemetry.Log(LogLevel.Information, message);
         }
 
         /// <summary>
@@ -371,8 +398,13 @@ namespace RetroIO.Protocols.Xmsg.Hub.Server
             State = XmsgHubState.Failed;
             FailureReason = reason;
             LogLines.Add(DateTime.UtcNow, "FAILED: " + reason);
-            _logger.LogError(ex, "[hub] {Reason}", reason);
+            Telemetry.Log(LogLevel.Error, ex, "failed: " + reason);
             _listeningNow.TrySetException(ex);
+        }
+
+        private static KeyValuePair<string, string> Tag(string key, string value)
+        {
+            return new KeyValuePair<string, string>(key, value);
         }
     }
 }
