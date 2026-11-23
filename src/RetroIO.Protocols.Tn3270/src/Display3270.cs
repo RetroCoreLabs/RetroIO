@@ -66,6 +66,21 @@ namespace RetroIO.Protocols.Tn3270
         /// moved to it (GA23-0059-4 p. 4-22). Reset clears it.
         /// </summary>
         MandatoryEntry,
+
+        /// <summary>
+        /// A key whose function is not available now: "Minus Function", shown as "X -f". Reset
+        /// clears it, as does a Write with keyboard restore.
+        /// </summary>
+        /// <remarks>
+        /// GA27-2890-4 p. 3-32: Attn works only when the OIA shows the "my job" symbol, otherwise
+        /// Minus Function. x3270 sets it for Attn on a TN3270E connection with no SNA session
+        /// bound (Common\kybd.c, Attn_action: kybdlock_set(KL_OIA_MINUS)) and shows "X -f"
+        /// (Common\vstatus.c). x3270 keeps its locks as bits and can hold Minus Function and TWAIT
+        /// together; here the lock is one value, so Minus Function replaces whatever was there.
+        /// The states a person can then reach are the same: Reset clears both in x3270 and clears
+        /// this one here, and a Write with keyboard restore clears all of them in both.
+        /// </remarks>
+        MinusFunction,
     }
 
     /// <summary>
@@ -1133,6 +1148,15 @@ namespace RetroIO.Protocols.Tn3270
         public void Attn() => SendReadModified(Aid.PA1, all: false);
 
         /// <summary>
+        /// Refuses a key whose function is not available now: the keyboard locks with Minus
+        /// Function ("X -f") until Reset. Nothing is sent.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="KeyboardLock.MinusFunction"/> for where this comes from.
+        /// </remarks>
+        public void RefuseFunction() => Lock = KeyboardLock.MinusFunction;
+
+        /// <summary>
         /// Pastes text the way x3270's normal paste does: typed character by character, with a
         /// line break pressing New Line (the first input field on a following row).
         /// </summary>
@@ -1230,7 +1254,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public void Reset()
         {
-            if (Lock == KeyboardLock.SystemLock || Lock == KeyboardLock.OperatorError || Lock == KeyboardLock.TooMuchData || Lock == KeyboardLock.MandatoryFill || Lock == KeyboardLock.MandatoryEntry)
+            if (Lock == KeyboardLock.SystemLock || Lock == KeyboardLock.OperatorError || Lock == KeyboardLock.TooMuchData || Lock == KeyboardLock.MandatoryFill || Lock == KeyboardLock.MandatoryEntry || Lock == KeyboardLock.MinusFunction)
             {
                 Lock = KeyboardLock.None;
             }

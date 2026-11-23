@@ -292,5 +292,23 @@ namespace RetroIO.Protocols.Tn3270.Tests
 
             Assert.Equal(KeyboardLock.OperatorError, d.Lock);
         }
+
+        [Fact]
+        public void ARefusedFunctionLocksWithMinusFunctionUntilReset()
+        {
+            Display3270 d = Screen();
+
+            d.RefuseFunction();
+
+            Assert.Equal(KeyboardLock.MinusFunction, d.Lock);
+            Assert.Equal("X -f", StatusLine3270.Message(d, StatusLineConnection.Connected));
+            Assert.False(d.Type('Q'));
+            Assert.Equal("XYZ...", Field(d));
+
+            d.Reset();
+
+            Assert.Equal(KeyboardLock.None, d.Lock);
+            Assert.True(d.Type('Q'));
+        }
     }
 }

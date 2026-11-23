@@ -183,6 +183,9 @@ namespace RetroIO.Protocols.Tn3270
                 case KeyboardLock.MandatoryFill:
                 case KeyboardLock.MandatoryEntry:
                     return "X";
+                case KeyboardLock.MinusFunction:
+                    // x3270 Common\vstatus.c, vstatus_minus.
+                    return "X -f";
                 default:
                     return string.Empty;
             }
