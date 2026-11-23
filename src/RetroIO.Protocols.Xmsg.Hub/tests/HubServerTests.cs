@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
@@ -205,6 +206,91 @@ namespace RetroIO.Protocols.Xmsg.Hub.Tests
             frame[16] = 0x03;
             frame[17] = marker;
             return frame;
+        }
+
+        /// <summary>
+        /// Memory over many rounds (plan Phase 14): 30 rounds, each of 16 machines that join, each
+        /// send 50 frames that every other machine must receive, and leave. After every round no
+        /// member may be left; the memory in use after a full collection is printed per round.
+        /// </summary>
+        [Fact]
+        [Trait("Category", "Load")]
+        public void Memory_ThirtyRoundsOfJoinSendLeave_EveryFrameArrives_NoMemberIsLeft()
+        {
+            const int Machines = 16;
+            const int FramesEach = 50;
+            HubServer hub = new HubServer(0);
+            hub.Start();
+            try
+            {
+                for (int round = 0; round < 30; round++)
+                {
+                    TestMember[] members = new TestMember[Machines];
+                    for (int i = 0; i < Machines; i++)
+                    {
+                        members[i] = new TestMember(hub.Port, HubServer.RoleMachine);
+                    }
+
+                    Stopwatch joined = Stopwatch.StartNew();
+                    while (hub.MemberCount != Machines && joined.ElapsedMilliseconds < 10000)
+                    {
+                        Thread.Sleep(10);
+                    }
+
+                    Assert.Equal(Machines, hub.MemberCount);
+
+                    int[] got = new int[Machines];
+                    Thread[] readers = new Thread[Machines];
+                    for (int i = 0; i < Machines; i++)
+                    {
+                        int me = i;
+                        readers[me] = new Thread(() =>
+                        {
+                            int expected = (Machines - 1) * FramesEach;
+                            while (got[me] < expected && members[me].Receive(10000) != null)
+                            {
+                                got[me]++;
+                            }
+                        });
+                        readers[me].Start();
+                    }
+
+                    for (int n = 0; n < FramesEach; n++)
+                    {
+                        for (int i = 0; i < Machines; i++)
+                        {
+                            byte[] frame = Frame((byte)i);
+                            frame[11] = (byte)i;
+                            members[i].Send(frame);
+                        }
+
+                        Thread.Sleep(1);
+                    }
+
+                    for (int i = 0; i < Machines; i++)
+                    {
+                        readers[i].Join(30000);
+                        Assert.True(got[i] == (Machines - 1) * FramesEach, $"round {round}: machine {i} got {got[i]} of {(Machines - 1) * FramesEach} frames");
+                        members[i].Dispose();
+                    }
+
+                    Stopwatch gone = Stopwatch.StartNew();
+                    while (hub.MemberCount != 0 && gone.ElapsedMilliseconds < 10000)
+                    {
+                        Thread.Sleep(20);
+                    }
+
+                    Assert.Equal(0, hub.MemberCount);
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                    Console.WriteLine($"round {round}: {GC.GetTotalMemory(false)} bytes in use, members {hub.MemberCount}");
+                }
+            }
+            finally
+            {
+                hub.Stop();
+            }
         }
 
         /// <summary>
