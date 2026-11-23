@@ -495,6 +495,24 @@ namespace RetroIO.Protocols.X25.Tests
             }
         }
 
+        /// <summary>
+        /// X.75 Annex D: an STE runs no timer on a call it received and has not answered; the calling STE's T31 clears
+        /// it. Decided by Ronny 2026-11-23. Before, an STE cleared it after T11 (180 s) with # 49.
+        /// </summary>
+        [Test]
+        public void AnUnansweredReceivedCall_IsNotTimedOut_AtAnSte()
+        {
+            _sink = new RecordingSink();
+            X25Config config = new X25Config { LocalAddress = "2422", IsDte = false, IsSte = true, LciBase = 1, LciCount = 4 };
+            X25Layer ste = new X25Layer(_sink, config);
+            ste.ProcessPacket(X25PacketBuilder.CreateCallRequest(1, "2422", "2624", networkUtilities: Array.Empty<byte>()));
+            int before = _sink.Sent.Count;
+
+            ste.Tick(Environment.TickCount64 + config.IncomingCallTimeoutMs + 1000);
+
+            Assert.That(_sink.Sent.Count, Is.EqualTo(before), "no Clear Request");
+        }
+
         [Test]
         public void TheChannelSearchDirection_IsThePortSetting()
         {

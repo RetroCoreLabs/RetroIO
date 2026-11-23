@@ -2161,7 +2161,10 @@ namespace RetroIO.Protocols.X25.PacketLayer
             // armed BEFORE the offer: an owner that answers inside the event (AcceptCall or ClearCall)
             // stops it there, and one that answers later stops it then. Until 2026-11-17 there was
             // no T11 at all, so a call nobody answered sat in p3 for ever.
-            vc.TimerExpiryMs = Now() + _config.IncomingCallTimeoutMs;
+            // X.75 Annex D has no timer for a call received and not yet answered: only the CALLING STE times it (T31,
+            // 200 s, 3.1.2) and clears it. Decided by Ronny 2026-11-23: follow X.75, so an STE arms nothing here. Before,
+            // an STE ran T11 and cleared after 180 s with # 49, 20 s before the caller's own T31.
+            vc.TimerExpiryMs = _config.IsSte ? 0 : Now() + _config.IncomingCallTimeoutMs;
             RaiseIncomingCall(lci, info.CalledAddress, info.CallingAddress, info.CallUserData);
         }
 
