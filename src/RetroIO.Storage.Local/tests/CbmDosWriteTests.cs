@@ -202,7 +202,9 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.That(listing, Does.Contain("661 blocks free"), "c1541 must agree on free count (664 - 3)");
 
                 // c1541 must extract byte-identical content.
-                (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read HELLO \"{extracted}\"");
+                // c1541 turns its own capitals into shifted PETSCII (C1h-DAh); a name stored as a C64 types it
+                // (41h-5Ah) is found by giving c1541 the name in lower case.
+                (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read hello \"{extracted}\"");
                 Assert.That(readCode, Is.EqualTo(0), "c1541 -read should succeed");
                 byte[] c1541Bytes = File.ReadAllBytes(extracted);
                 Assert.That(c1541Bytes, Is.EqualTo(content), "c1541 must read back exactly what we wrote");
@@ -317,7 +319,11 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.That(listing.ToLowerInvariant(), Does.Contain("hello"));
                 Assert.That(listing, Does.Contain("3157 blocks free"), "3160 - 3");
 
-                (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read HELLO \"{extracted}\"");
+                // c1541 turns its own capitals into shifted PETSCII (C1h-DAh); a name stored as a C64 types it
+
+                // (41h-5Ah) is found by giving c1541 the name in lower case.
+
+                (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read hello \"{extracted}\"");
                 Assert.That(readCode, Is.EqualTo(0));
                 Assert.That(File.ReadAllBytes(extracted), Is.EqualTo(content));
             }
@@ -448,7 +454,11 @@ namespace RetroIO.Storage.Local.Tests
                     Assert.That(listing.ToLowerInvariant(), Does.Contain("hello"));
                     Assert.That(listing, Does.Contain("662 blocks free"), "664 - 2 (300 bytes = 2 blocks)");
 
-                    (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read HELLO \"{extracted}\"");
+                    // c1541 turns its own capitals into shifted PETSCII (C1h-DAh); a name stored as a C64 types it
+
+                    // (41h-5Ah) is found by giving c1541 the name in lower case.
+
+                    (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read hello \"{extracted}\"");
                     Assert.That(readCode, Is.EqualTo(0));
                     Assert.That(File.ReadAllBytes(extracted), Is.EqualTo(content));
                 }
@@ -499,7 +509,11 @@ namespace RetroIO.Storage.Local.Tests
                     Assert.That(listing.ToLowerInvariant(), Does.Contain("hello"));
                     Assert.That(listing, Does.Contain($"{freshFree - 2} blocks free"));
 
-                    (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read HELLO \"{extracted}\"");
+                    // c1541 turns its own capitals into shifted PETSCII (C1h-DAh); a name stored as a C64 types it
+
+                    // (41h-5Ah) is found by giving c1541 the name in lower case.
+
+                    (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read hello \"{extracted}\"");
                     Assert.That(readCode, Is.EqualTo(0));
                     Assert.That(File.ReadAllBytes(extracted), Is.EqualTo(content));
                 }
@@ -579,7 +593,11 @@ namespace RetroIO.Storage.Local.Tests
                     Assert.That(listing.ToLowerInvariant(), Does.Contain("hello"));
                     Assert.That(listing, Does.Contain("663 blocks free"), "final state = 1 block used");
 
-                    (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read HELLO \"{extracted}\"");
+                    // c1541 turns its own capitals into shifted PETSCII (C1h-DAh); a name stored as a C64 types it
+
+                    // (41h-5Ah) is found by giving c1541 the name in lower case.
+
+                    (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read hello \"{extracted}\"");
                     Assert.That(readCode, Is.EqualTo(0));
                     Assert.That(File.ReadAllBytes(extracted), Is.EqualTo(shrunk),
                         "c1541 reads the final overwritten content");

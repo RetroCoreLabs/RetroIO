@@ -1173,17 +1173,23 @@ namespace RetroIO.Storage.Local.FileSystems
             return false;
         }
 
-        // Converts an ASCII filename character to its PETSCII byte for on-disk storage, matching
-        // the convention used by VICE c1541 (verified by hexdump): uppercase ASCII 'A'-'Z' maps to
-        // SHIFTED PETSCII 0xC1-0xDA, and lowercase 'a'-'z' maps to 0x41-0x5A. Using the unshifted
-        // 0x41-0x5A range for uppercase would make c1541's name lookup (e.g. `-read HELLO`) miss the
-        // file, even though it still appears in the directory listing. PetsciiToAscii already decodes
-        // 0xC1-0xDA back to 'A'-'Z', so the round-trip is symmetric.
+        // Converts a host filename character to its PETSCII byte for on-disk storage: the byte a C64
+        // stores when the name is typed in its start-up character set. Letter keys typed without
+        // Shift give 0x41-0x5A, shown there as capitals; 0xC1-0xDA are the shifted keys, shown there
+        // as graphics (sta.c64.org/cbm64pettoscr.html). So host 'A'-'Z' and 'a'-'z' both go to
+        // 0x41-0x5A, and PetsciiToAscii reads them back as 'A'-'Z'.
+        //
+        // Measured 2026-11-23: on the four real C64 .d64 disks in the test images, all 103 letter
+        // bytes in 29 directory names are 0x41-0x5A, none 0xC1-0xDA. Until then this followed VICE
+        // c1541, which stores its own command-line text 'A'-'Z' as 0xC1-0xDA (also measured: c1541
+        // -write ... HELLO gives C8 C5 CC CC CF). That made names written here show as graphics on a
+        // C64 and LOAD "HELLO" typed there miss them. c1541 finds these names when given in lower
+        // case (`-read hello`), the same as for a disk a C64 wrote.
         private static byte AsciiToPetscii(char c)
         {
             if (c >= 'A' && c <= 'Z')
             {
-                return (byte)(c + 0x80); // 'A'(0x41) -> 0xC1 .. 'Z'(0x5A) -> 0xDA
+                return (byte)c; // 'A' -> 0x41 .. 'Z' -> 0x5A
             }
             if (c >= 'a' && c <= 'z')
             {

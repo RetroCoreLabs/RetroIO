@@ -284,7 +284,11 @@ namespace RetroIO.Storage.Local.Tests
                 Assert.That(listing, Does.Contain($"{expectedFree} blocks free"),
                     "c1541 must agree on the free count after a side-2 spill");
 
-                (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read BIG \"{extracted}\"");
+                // c1541 turns its own capitals into shifted PETSCII (C1h-DAh); a name stored as a C64 types it
+
+                // (41h-5Ah) is found by giving c1541 the name in lower case.
+
+                (int readCode, _) = RunC1541(c1541, $"-attach \"{temp}\" -read big \"{extracted}\"");
                 Assert.That(readCode, Is.EqualTo(0));
                 Assert.That(File.ReadAllBytes(extracted), Is.EqualTo(content),
                     "c1541 must read the side-2-spilled file byte-identical");
