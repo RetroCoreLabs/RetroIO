@@ -65,6 +65,26 @@ namespace RetroIO.Protocols.Tn3270.Tests
             expected[1] = 'B';
             Assert.Equal(new string(expected), new string(line));
         }
+
+        [Fact]
+        public void WhileTheSscpOwnsTheScreenColumnTwoShowsTheSystemOperatorSymbol()
+        {
+            // GA23-0061-2 p. 5-35: when ownership passes to the SSCP-SLU session "the System
+            // Operator symbol appears in column 3"; Appendix B p. B-2 draws it.
+            var d = new Display3270();
+            Assert.True(d.ProcessSscpLuData(new byte[] { 0xC9, 0xD2, 0xD1 }));
+            Span<char> line = stackalloc char[80];
+
+            StatusLine3270.Build(d, StatusLineConnection.Connected, null, tn3270e: true, line);
+
+            Assert.Equal(StatusLine3270.SystemOperatorSymbol, line[StatusLine3270.BoxColumn]);
+
+            // 3270 data gives the screen back to the application: My Job, the solid box.
+            d.LeaveSscpLuMode();
+            StatusLine3270.Build(d, StatusLineConnection.Connected, null, tn3270e: true, line);
+            Assert.Equal(' ', line[StatusLine3270.BoxColumn]);
+        }
+
         [Fact]
         public void AnUnlockedConnectedScreenShowsTheReadySymbolsAndTheCursor()
         {

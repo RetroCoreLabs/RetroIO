@@ -45,7 +45,8 @@ namespace RetroIO.Protocols.Tn3270
     ///  - column 0: "4", shown in reverse video (the control unit is ready).
     ///  - column 1: "A", underlined (online, the A set of rules); "B" under TN3270E.
     ///  - column 2: a blank in reverse video (a solid box: connected to the application) when in
-    ///    3270 mode, otherwise "?".
+    ///    3270 mode, otherwise "?"; while the SSCP-LU session owns the screen, the System
+    ///    Operator symbol (<see cref="SystemOperatorSymbol"/>).
     ///  - column 7, 35 wide: the message, "X Wait", "X SYSTEM" and so on (status_connect,
     ///    status_twait, status_syswait, status_oerr).
     ///  - column M-36 + 5: "I" in insert mode.
@@ -79,6 +80,20 @@ namespace RetroIO.Protocols.Tn3270
         /// The column of the reverse-video box ("?" when not in 3270 mode).
         /// </summary>
         public const int BoxColumn = 2;
+
+        /// <summary>
+        /// What column 2 holds while the SSCP-LU session owns the screen: the System Operator
+        /// symbol, a stick figure in a box (GA23-0061-2 Appendix B p. B-2, and p. 5-35: "At this
+        /// time the System Operator symbol appears in column 3", column 3 counted from 1).
+        /// </summary>
+        /// <remarks>
+        /// No character set held names a code for this symbol: GA23-0061-2 and GA27-2890-4 only
+        /// draw it, and Unicode has no stick figure in a box. U+25A1 (a white square) stands in the
+        /// text so a copy of line 25 shows a box there; a renderer that can draw shapes draws the
+        /// figure the manual shows instead. The manual draws it as an outline, not in reverse
+        /// video as the My Job box is.
+        /// </remarks>
+        public const char SystemOperatorSymbol = '\u25A1';
 
         /// <summary>
         /// The first column of the message.
@@ -152,7 +167,10 @@ namespace RetroIO.Protocols.Tn3270
 
             line[ReadyColumn] = '4';
             line[OnlineColumn] = tn3270e ? 'B' : 'A';
-            line[BoxColumn] = in3270 ? ' ' : '?';
+            // My Job (a solid box) while the application owns the screen; the System Operator
+            // symbol while the SSCP-LU session owns it (TN3270E SSCP-LU-DATA, RFC 2355 10.5.2;
+            // GA23-0061-2 p. 5-35).
+            line[BoxColumn] = !in3270 ? '?' : display.SscpLuMode ? SystemOperatorSymbol : ' ';
 
             Write(line, MessageColumn, Message(display, connection), MessageWidth);
 
