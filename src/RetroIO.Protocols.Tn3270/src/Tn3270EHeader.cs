@@ -94,6 +94,20 @@ namespace RetroIO.Protocols.Tn3270
     }
 
     /// <summary>
+    /// The REQUEST-FLAG byte of a TN3270E header (RFC 2355 section 8.1.2); it means something only
+    /// when the DATA-TYPE is <see cref="Tn3270EDataType.Request"/>.
+    /// </summary>
+    public static class Tn3270ERequestFlag
+    {
+        /// <summary>
+        /// X'00', ERR-COND-CLEARED: "The client sends this to the server when some previously
+        /// encountered printer error condition has been cleared" (section 8.1.2), after it has
+        /// answered with Intervention Required or Component Disconnected (section 10.4.1).
+        /// </summary>
+        public const byte ErrorConditionCleared = 0x00;
+    }
+
+    /// <summary>
     /// The one data byte of a RESPONSE message (RFC 2355 section 10.4.1).
     /// </summary>
     public static class Tn3270EResponseStatus
@@ -233,6 +247,29 @@ namespace RetroIO.Protocols.Tn3270
             new Tn3270EHeader(Tn3270EDataType.Response, 0x00, positive ? Tn3270EResponseFlag.Positive : Tn3270EResponseFlag.Negative, sequenceNumber).Write(destination);
             destination[Length] = status;
             return Length + 1;
+        }
+
+        /// <summary>
+        /// Builds the REQUEST message that says a printer error condition has been cleared (RFC
+        /// 2355 section 10.4.1): DATA-TYPE REQUEST, REQUEST-FLAG ERR-COND-CLEARED, and "Note that
+        /// this message has no data portion."
+        /// </summary>
+        /// <remarks>
+        /// The RESPONSE-FLAG is X'00' because section 8.1.3 gives it a meaning only on 3270-DATA,
+        /// SCS-DATA and RESPONSE, and section 8.1.2 says a flag without meaning "should be set to
+        /// 0x00 by the sender". The SEQ-NUMBER is X'0000' because section 10.4 counts only
+        /// 3270-DATA and SCS-DATA messages; the RFC does not say what a REQUEST carries there.
+        /// </remarks>
+        /// <param name="destination">
+        /// At least 5 bytes.
+        /// </param>
+        /// <returns>
+        /// The number of bytes written, 5.
+        /// </returns>
+        public static int WriteErrorConditionCleared(Span<byte> destination)
+        {
+            new Tn3270EHeader(Tn3270EDataType.Request, Tn3270ERequestFlag.ErrorConditionCleared, 0x00, 0).Write(destination);
+            return Length;
         }
 
         /// <summary>

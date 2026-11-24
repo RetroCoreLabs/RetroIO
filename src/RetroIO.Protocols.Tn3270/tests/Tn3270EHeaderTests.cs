@@ -48,6 +48,19 @@ namespace RetroIO.Protocols.Tn3270.Tests
         }
 
         [Fact]
+        public void TheErrorConditionClearedRequestIsAHeaderWithNoData()
+        {
+            // RFC 2355 8.1.1 REQUEST = 0x06, 8.1.2 ERR-COND-CLEARED = 0x00, 10.4.1 "this message
+            // has no data portion". The sixth byte is left as it was.
+            byte[] r = new byte[] { 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE };
+
+            int n = Tn3270EHeader.WriteErrorConditionCleared(r);
+
+            Assert.Equal(5, n);
+            Assert.Equal(new byte[] { 0x06, 0x00, 0x00, 0x00, 0x00, 0xEE }, r);
+        }
+
+        [Fact]
         public void ProcessOutboundSaysWhetherTheRecordFailed()
         {
             var d = new Display3270();
