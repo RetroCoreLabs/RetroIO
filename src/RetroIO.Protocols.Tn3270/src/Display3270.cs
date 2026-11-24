@@ -176,8 +176,12 @@ namespace RetroIO.Protocols.Tn3270
     /// keystrokes made while the host validates one.
     /// </para>
     /// <para>
+    /// Modify Partition (p. 5-34, 5-35) moves and resizes a viewport vertically, moves the window
+    /// and changes RS; a window may have zero extent (<see cref="CursorOnIndicatorRow"/>).
+    /// </para>
+    /// <para>
     /// Not built yet, and loud about it through <see cref="ProtocolError"/>: horizontal
-    /// scrolling, Modify Partition, text partitions, all-points units, protected partitions,
+    /// scrolling, text partitions, all-points units, protected partitions,
     /// every other structured field, and the BSC Copy command inside Outbound 3270DS. Load
     /// Programmed Symbols is built, see <see cref="ProgrammedSymbols"/>.
     /// </para>
@@ -247,6 +251,9 @@ namespace RetroIO.Protocols.Tn3270
         private const byte CreatePartitionId = 0x0C;
         private const byte DestroyPartitionId = 0x0D;
         private const byte ActivatePartitionId = 0x0E;
+
+        // Modify Partition is the two-byte ID X'0F0A' (p. 5-35); this is its first byte.
+        private const byte ModifyPartitionIdHigh = 0x0F;
 
         // INOP for a Read Partition Query or Query List (p. 3-19); the other INOP values are the
         // read commands' own codes.
@@ -1281,6 +1288,25 @@ namespace RetroIO.Protocols.Tn3270
         public bool EnterInhibit => _readState != ReadState.Normal;
 
         /// <summary>
+        /// Gets a value indicating whether the active partition's window has zero extent. That
+        /// happens only when every partition has a zero-extent window: then "this partition remains
+        /// active but the operator cannot type data into it, and the screen cursor is placed at the
+        /// right-hand end of the indicator row" (GA23-0059-4 p. 5-34; Destroy Partition says the
+        /// same, p. 5-14). A renderer shows the cursor there instead of in the partition.
+        /// </summary>
+        /// <remarks>
+        /// The keys that type, erase or move the cursor are refused meanwhile. The attention keys
+        /// (Enter, PF, PA, Clear) are not: the manual names only typing data, and that reading is
+        /// this display's.
+        /// </remarks>
+        public bool CursorOnIndicatorRow => _explicitState && ActivePartition.ZeroWindow;
+
+        // The operator's typing, erasing and cursor keys: refused while the keyboard is locked, and
+        // while the active partition has a zero-extent window (p. 5-34: "the operator cannot type
+        // data into it").
+        private bool KeysRefused => Lock != KeyboardLock.None || CursorOnIndicatorRow;
+
+        /// <summary>
         /// Gets a value indicating whether a trigger field has been sent to the host and the
         /// display waits for its affirmative or negative reply (GA23-0059-4 p. 4-23). Keystrokes
         /// meanwhile are queued, not shown.
@@ -1362,6 +1388,105 @@ namespace RetroIO.Protocols.Tn3270
         /// on (Table C-1 p. C-1, PS Content and PS LCID), so only a new display starts them empty.
         /// </remarks>
         public ProgrammedSymbolStore ProgrammedSymbols { get; } = new ProgrammedSymbolStore(6);
+
+        /// <summary>
+        /// The character set a position of a partition is shown in, as a local ID.
+        /// </summary>
+        /// <remarks>
+        /// GA23-0059-4 p. 4-19: "when a character (or characters) is assigned an LCID, the
+        /// character's ID overrides (for that character) the field's LCID"; a Graphic Escape
+        /// character "always takes precedence over any other character set" (p. 4-9 note 1); X'00'
+        /// is the default set, which is the base set. So the result is
+        /// <see cref="GraphicEscapeCharacterSetId"/> for a GE character, else the character's own
+        /// LCID, else the field's, else <see cref="BaseCharacterSetId"/>. A loadable LCID (X'40'
+        /// to X'EF') is looked up with <see cref="ProgrammedSymbolStore.Find"/>.
+        /// </remarks>
+        /// <param name="partition">
+        /// The partition.
+        /// </param>
+        /// <param name="address">
+        /// The buffer address in it.
+        /// </param>
+        /// <returns>
+        /// The local character set ID.
+        /// </returns>
+        public static byte GetCharacterSetAt(Partition3270 partition, int address)
+        {
+            if (partition.GraphicEscapeAt[address])
+            {
+                return GraphicEscapeCharacterSetId;
+            }
+
+            byte own = partition.CharCharset[address];
+            if (own != 0)
+            {
+                return own;
+            }
+
+            int fa = partition.GetFieldAttributeFor(address);
+            byte field = fa >= 0 ? partition.FieldCharset[fa] : (byte)0;
+            return field != 0 ? field : BaseCharacterSetId;
+        }
+
+        /// <summary>
+        /// Whether the skip after a row of the usable area is suppressed, so the next row is drawn
+        /// directly under it (Load Programmed Symbols SKIP, GA23-0059-4 p. 5-21).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// p. 5-21: "If skip suppression is on, any row in the usable area containing characters
+        /// from this character set will have the skip suppressed that would normally follow that
+        /// row. The characters on the following row will then be vertically adjacent to characters
+        /// on the current row." Note 2: "The 'lost' space ... is made up following the last
+        /// display/print line; that is, the last display/print line moves up from the bottom".
+        /// So a renderer leaves out the gap below every row this returns true for, and the rows
+        /// under it move up; the space gained is left empty at the bottom.
+        /// </para>
+        /// <para>
+        /// A row counts when a viewport shows, in that screen row, a position holding a code X'40'
+        /// to X'FE' (the codes a loaded set has slots for, p. 5-18) whose character set
+        /// (<see cref="GetCharacterSetAt"/>) is a loaded set with SKIP set. Nulls, stored controls
+        /// and field attribute positions are not "characters from this character set" - that
+        /// reading is this display's; the manual does not say.
+        /// </para>
+        /// </remarks>
+        /// <param name="row">
+        /// The screen row, 0 at the top of the usable area.
+        /// </param>
+        /// <returns>
+        /// True when the skip after the row is suppressed.
+        /// </returns>
+        public bool RowSuppressesSkip(int row)
+        {
+            int columns = ScreenColumns;
+            for (int column = 0; column < columns; column++)
+            {
+                if (!TryGetScreenPosition(row, column, out Partition3270? p, out int address) || p == null)
+                {
+                    continue;
+                }
+
+                byte code = p.Buffer[address];
+                if (p.IsFieldAttributeAt[address] || code < ProgrammedSymbolSet.FirstCode || code > ProgrammedSymbolSet.LastCode)
+                {
+                    continue;
+                }
+
+                byte lcid = GetCharacterSetAt(p, address);
+                if (lcid < 0x40 || lcid > 0xEF)
+                {
+                    continue;
+                }
+
+                ProgrammedSymbolSet? set = ProgrammedSymbols.Find(lcid);
+                if (set != null && set.SkipSuppress)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Gets or sets the largest file transfer structured field transmission, in bytes, both
@@ -1910,7 +2035,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool Type(char c)
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 // A real 3278 has no type-ahead; keys pressed while locked are refused
                 // (KEYBOARD.md section 5; decided 22 November 2026).
@@ -1943,12 +2068,12 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool Dup()
         {
-            if (Lock == KeyboardLock.None && _triggerPending)
+            if (!KeysRefused && _triggerPending)
             {
                 return Enqueue(KeystrokeKind.Dup, '\0', 0, 0);
             }
 
-            return Lock == KeyboardLock.None && TypeByte(FormatControl.Dup, tabAfter: true);
+            return !KeysRefused && TypeByte(FormatControl.Dup, tabAfter: true);
         }
 
         /// <summary>
@@ -1960,12 +2085,12 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool FieldMark()
         {
-            if (Lock == KeyboardLock.None && _triggerPending)
+            if (!KeysRefused && _triggerPending)
             {
                 return Enqueue(KeystrokeKind.FieldMark, '\0', 0, 0);
             }
 
-            return Lock == KeyboardLock.None && TypeByte(FormatControl.FieldMark, tabAfter: false);
+            return !KeysRefused && TypeByte(FormatControl.FieldMark, tabAfter: false);
         }
 
         /// <summary>
@@ -1974,7 +2099,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public void ToggleInsert()
         {
-            if (Lock == KeyboardLock.None)
+            if (!KeysRefused)
             {
                 if (_triggerPending)
                 {
@@ -1996,12 +2121,12 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool Delete()
         {
-            if (Lock == KeyboardLock.None && _triggerPending)
+            if (!KeysRefused && _triggerPending)
             {
                 return Enqueue(KeystrokeKind.Delete, '\0', 0, 0);
             }
 
-            if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
+            if (KeysRefused || !CheckInputPosition(out int fa))
             {
                 return false;
             }
@@ -2045,12 +2170,12 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool Erase()
         {
-            if (Lock == KeyboardLock.None && _triggerPending)
+            if (!KeysRefused && _triggerPending)
             {
                 return Enqueue(KeystrokeKind.Erase, '\0', 0, 0);
             }
 
-            if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
+            if (KeysRefused || !CheckInputPosition(out int fa))
             {
                 return false;
             }
@@ -2075,12 +2200,12 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool EraseEndOfField()
         {
-            if (Lock == KeyboardLock.None && _triggerPending)
+            if (!KeysRefused && _triggerPending)
             {
                 return Enqueue(KeystrokeKind.EraseEndOfField, '\0', 0, 0);
             }
 
-            if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
+            if (KeysRefused || !CheckInputPosition(out int fa))
             {
                 return false;
             }
@@ -2122,7 +2247,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool EraseInput()
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return false;
             }
@@ -2180,7 +2305,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public void BackTab()
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return;
             }
@@ -2220,7 +2345,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public void NewLine()
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return;
             }
@@ -2273,7 +2398,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </param>
         public void MoveCursorBy(int columns, int rows)
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return;
             }
@@ -2369,7 +2494,7 @@ namespace RetroIO.Protocols.Tn3270
 
         private bool Scroll(int direction)
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return false;
             }
@@ -2420,7 +2545,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public void Tab()
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return;
             }
@@ -2439,7 +2564,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public void Home()
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return;
             }
@@ -2466,7 +2591,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </remarks>
         public void FieldEnd()
         {
-            if (Lock != KeyboardLock.None || !IsFormatted)
+            if (KeysRefused || !IsFormatted)
             {
                 return;
             }
@@ -2524,7 +2649,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool CursorSelect()
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return false;
             }
@@ -2643,7 +2768,7 @@ namespace RetroIO.Protocols.Tn3270
             bool justWrapped = false;
             for (int i = 0; i < text.Length; i++)
             {
-                if (Lock != KeyboardLock.None || CursorAddress < start)
+                if (KeysRefused || CursorAddress < start)
                 {
                     return;
                 }
@@ -2694,7 +2819,7 @@ namespace RetroIO.Protocols.Tn3270
         /// </param>
         public void MoveCursor(int address)
         {
-            if (Lock != KeyboardLock.None)
+            if (KeysRefused)
             {
                 return;
             }
@@ -3822,6 +3947,10 @@ namespace RetroIO.Protocols.Tn3270
                     case ResetPartitionId:
                         ok = ResetPartition(field);
                         break;
+                    case ModifyPartitionIdHigh:
+                        // NextStructuredField lets only X'0F0A' through among the X'0F' IDs.
+                        ok = ModifyPartition(field);
+                        break;
                     default:
                         Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Load Programmed Symbols, Set Reply Mode, Outbound 3270DS, Create, Destroy, Activate Reset and Set Window Origin, and X'D0' file transfer are).");
                         ok = false;
@@ -3834,6 +3963,51 @@ namespace RetroIO.Protocols.Tn3270
                     return;
                 }
             }
+
+            if (_explicitState && !AnyNonzeroWindow())
+            {
+                // "If at the end of a transmission, the display is in SEND or CONTENTION state and
+                // all partitions have zero extent windows, the structured field is rejected"
+                // (p. 5-13 note 3; p. 5-14 and 5-34 say "an error situation exists"; Table B-1
+                // p. B-2, "RCV state and all windows have zero extent", sense X'0883'). A TN3270
+                // terminal may send once the host's record has ended, so the end of every WSF
+                // counts (this display's reading). The structured fields have already been run by
+                // then; the error is reported and the partitions are left as they are, because the
+                // manual says nothing about undoing them.
+                Error("At the end of the transmission every partition has a zero-extent window (p. 5-13 note 3, 5-34; Table B-1 p. B-2, sense X'0883').");
+            }
+        }
+
+        // True when at least one explicit partition has a window of nonzero extent.
+        private bool AnyNonzeroWindow()
+        {
+            for (int i = 0; i < _partitions.Length; i++)
+            {
+                Partition3270? p = _partitions[i];
+                if (p != null && !p.ZeroWindow)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // The next partition after pid with a window of nonzero extent, by the jump rule (p. 2-5),
+        // or -1 when no other partition has one.
+        private int NextNonzeroPartitionAfter(byte pid)
+        {
+            for (int n = 1; n < _partitions.Length; n++)
+            {
+                int i = (pid + n) % _partitions.Length;
+                Partition3270? p = _partitions[i];
+                if (p != null && !p.ZeroWindow)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
 
         private bool NextStructuredField(ReadOnlySpan<byte> data, int pos, out int length)
@@ -3858,12 +4032,11 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             byte id = data[pos + 2];
-            if (id == 0x0F && pos + 3 < data.Length && data[pos + 3] == 0x0A)
+            if (id == 0x0F && length >= 4 && data[pos + 3] == 0x0A)
             {
-                // Modify Partition, X'0F0A' (p. 5-34, 5-35): optional, and this display's
-                // Alphanumeric Partitions reply has MODIFY 0 (p. 6-19), so a host must not send it.
-                Error("Modify Partition (X'0F0A') is not supported: the Alphanumeric Partitions query reply has MODIFY 0 (p. 5-34, 6-19).");
-                return false;
+                // Modify Partition, X'0F0A' (p. 5-34, 5-35): built, and the Alphanumeric
+                // Partitions reply says so with MODIFY (p. 6-19).
+                return true;
             }
 
             if (id == 0x0F || id == 0x10)
@@ -4245,11 +4418,10 @@ namespace RetroIO.Protocols.Tn3270
             int pw = Field16(field, 26, CellWidth);
             int ph = Field16(field, 28, CellHeight);
 
-            if (hv == 0 || wv == 0)
-            {
-                Error("Create Partition with a viewport " + hv + " high and " + wv + " wide: a zero viewport needs Modify Partition, which this display does not support (p. 5-10 conditions 1 and 2, 6-19).");
-                return false;
-            }
+            // HV = 0 or WV = 0 is rejected only when "modify partition is not supported" (p. 5-10
+            // conditions 1 and 2). It is supported, so a viewport of zero rows or zero columns is
+            // a window of zero extent (p. 5-34).
+            bool zeroWindow = hv == 0 || wv == 0;
 
             if (rv + hv > screenRows || cv + wv > screenColumns)
             {
@@ -4266,9 +4438,7 @@ namespace RetroIO.Protocols.Tn3270
                     continue;
                 }
 
-                bool apart = rv >= other.ViewportRow + other.ViewportRows || rv + hv <= other.ViewportRow
-                    || cv >= other.ViewportColumn + other.ViewportColumns || cv + wv <= other.ViewportColumn;
-                if (!apart)
+                if (ViewportsOverlap(rv, cv, hv, wv, other))
                 {
                     Error("Create Partition viewport at row " + rv + ", column " + cv + ", " + hv + " x " + wv + ", overlaps the viewport of partition " + i + " (p. 5-10 condition 5; Table B-1 p. B-2, Specification error in Viewport/Window).");
                     return false;
@@ -4286,11 +4456,12 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            if (w != wv)
+            if (w != wv && wv != 0)
             {
                 // Only vertical scrolling is built: the Alphanumeric Partitions reply sends the
                 // SCROLL flag alone, and a wider presentation space than viewport would need
-                // horizontal windowing (p. 2-3, 6-19; Table B-1 p. B-2).
+                // horizontal windowing (p. 2-3, 6-19; Table B-1 p. B-2). WV = 0 is a window of
+                // zero extent, which shows no column at all.
                 Error("Create Partition presentation space " + w + " columns wide in a viewport " + wv + " wide: horizontal windowing is not supported, so W must equal WV (p. 2-3, 6-19; Table B-1 p. B-2).");
                 return false;
             }
@@ -4352,7 +4523,7 @@ namespace RetroIO.Protocols.Tn3270
             // created. The display state is changed ... to explicit partitioned state and the
             // created partition is made active" (p. 5-10). The destroyed implicit partition was
             // the inbound one, so INPID becomes 0 (p. 3-20).
-            var created = new Partition3270(pid, h, w, rv, cv, hv, rw, rs, addressMode == 1);
+            var created = new Partition3270(pid, h, w, rv, cv, hv, wv, rw, rs, addressMode == 1);
             bool wasExplicit = _explicitState;
             Partition3270? replaced = wasExplicit ? _partitions[pid] : null;
             if (!wasExplicit)
@@ -4379,10 +4550,23 @@ namespace RetroIO.Protocols.Tn3270
 
             // The cursor at the window origin and the buffer address 0 (p. 5-10 items 7 and 8):
             // the Partition3270 constructor puts the cursor at RW x W.
-            if (!wasExplicit || CountPartitions() == 1)
+            if (!wasExplicit || (!zeroWindow && NextNonzeroPartitionAfter(pid) < 0))
             {
-                // The first, or "the only partition with a window of nonzero extent" (p. 5-10).
+                // The first ("the created partition is made active", whatever its window), or
+                // "the only partition with a window of nonzero extent" (p. 5-10).
                 _activePid = pid;
+            }
+            else if (pid == _activePid && zeroWindow)
+            {
+                // A Create that replaces the active partition with a zero-extent window: p. 5-10
+                // does not say what then. Modify Partition's rule for the same outcome is used
+                // (p. 5-34): the next partition with a nonzero window is activated, if any (this
+                // display's reading).
+                int next = NextNonzeroPartitionAfter(pid);
+                if (next >= 0)
+                {
+                    _activePid = (byte)next;
+                }
             }
 
             // A replaced partition that was active stays the active one: the manual says only
@@ -4426,6 +4610,12 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             p.WindowRow = rw;
+            if (p.ZeroWindow)
+            {
+                // A window of zero extent holds no row to move the cursor into.
+                return true;
+            }
+
             int row = p.Cursor / p.Columns;
             int nearest = Math.Clamp(row, rw, rw + p.ViewportRows - 1);
             if (nearest != row)
@@ -4435,6 +4625,225 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             return true;
+        }
+
+        // Modify Partition, X'0F0A' (GA23-0059-4 p. 5-34, 5-35). Bytes: 0-1 L, 2-3 X'0F0A',
+        // 4 reserved, 5 PID, 6 reserved, 7 flags (bit 1 PROT, the others reserved), 8-11
+        // reserved and "not X'00000000'" is a reject, 12-13 RV, 14-15 CV, 16-17 HV, 18-19 WV,
+        // 20-21 RW, 22-23 CW, 24-25 RS, 26-27 reserved, 28-29 PW, 30-31 PH. "Working backward
+        // from byte 31 through byte 6, parameters may be omitted progressively ... If a parameter
+        // is omitted in this way, its value is not altered" (p. 5-34).
+        //
+        // What is built: the vertical case - the viewport moved or resized (its width W or 0),
+        // the window row RW, the scroll step RS, a window of zero extent. Refused out loud because
+        // this display's replies say it lacks them: PROT (Alphanumeric Partitions PROT 0, p. 6-19),
+        // a cell size other than AW x AH (Usable Area VCP 0, p. 6-88), and every horizontal value
+        // (CW other than 0, WV other than W or 0; no horizontal windowing, Table B-1 p. B-2).
+        private bool ModifyPartition(ReadOnlySpan<byte> field)
+        {
+            int length = field.Length;
+            if (length < 6 || length > 32 || (length > 8 && (length & 1) != 0))
+            {
+                // Bytes 6 and 7 are one byte each; from byte 8 on the parameters are two bytes,
+                // and nothing goes past byte 31 (p. 5-35).
+                Error("Modify Partition of " + length + " bytes: it has bytes 0 to 5 at least, ends at byte 31, and from byte 8 on is left off two bytes at a time (p. 5-34, 5-35; Table B-1 p. B-2, Incorrect length).");
+                return false;
+            }
+
+            if (field[4] != 0 || (length > 6 && field[6] != 0))
+            {
+                Error("Modify Partition reserved byte 4 or 6 is not zero (p. 5-35; Table B-1 p. B-2, Reserved field is not zero).");
+                return false;
+            }
+
+            byte pid = field[5];
+            if (pid >= MaxPartitions)
+            {
+                Error("Modify Partition PID X'" + Hex(pid) + "' is above the highest this display takes, X'" + Hex(MaxPartitions - 1) + "' (Table B-1 p. B-2, Modify Partition, PID > maximum allowed).");
+                return false;
+            }
+
+            if (!_explicitState)
+            {
+                // The implicit partition 0 is the whole screen and was never given a viewport by
+                // a Create Partition; p. 5-34 says nothing about modifying it. Refused rather than
+                // guessed (this display's choice).
+                Error("Modify Partition in implicit partition state is not built: p. 5-34 does not say what modifying the implicit partition 0 means.");
+                return false;
+            }
+
+            Partition3270? p = PartitionFor(pid);
+            if (p == null)
+            {
+                Error("Modify Partition of partition X'" + Hex(pid) + "', which does not exist, is rejected (p. 5-34 condition 1; Table B-1 p. B-2, PID is unknown partition).");
+                return false;
+            }
+
+            byte flags = length > 7 ? field[7] : (byte)0;
+            if ((flags & 0xBF) != 0)
+            {
+                Error("Modify Partition flags X'" + Hex(flags) + "' set a reserved bit (p. 5-34 condition 2, 5-35; Table B-1 p. B-2, Invalid reserved bits).");
+                return false;
+            }
+
+            if ((flags & 0x40) != 0)
+            {
+                Error("Modify Partition asks for a protected partition (PROT), which this display does not support: its Alphanumeric Partitions reply has PROT 0 (p. 5-35, 6-19).");
+                return false;
+            }
+
+            if (Field16(field, 8, 0) != 0 || Field16(field, 10, 0) != 0)
+            {
+                Error("Modify Partition bytes 8-11 are not X'00000000' (p. 5-34 condition 6; Table B-1 p. B-2, Invalid reserved bits).");
+                return false;
+            }
+
+            if (Field16(field, 26, 0) != 0)
+            {
+                Error("Modify Partition reserved bytes 26-27 are not zero (p. 5-35; Table B-1 p. B-2, Reserved field is not zero).");
+                return false;
+            }
+
+            // An omitted parameter keeps its value (p. 5-34).
+            int rv = Field16(field, 12, p.ViewportRow);
+            int cv = Field16(field, 14, p.ViewportColumn);
+            int hv = Field16(field, 16, p.ViewportRows);
+            int wv = Field16(field, 18, p.ViewportColumns);
+            int rw = Field16(field, 20, p.WindowRow);
+            int cw = Field16(field, 22, p.WindowColumn);
+            int rs = Field16(field, 24, p.ScrollRows);
+            int pw = Field16(field, 28, CellWidth);
+            int ph = Field16(field, 30, CellHeight);
+
+            if (pw != CellWidth || ph != CellHeight)
+            {
+                // VCP = 0 in the Usable Area reply: one cell size for every partition (p. 6-88).
+                Error("Modify Partition cell " + pw + " x " + ph + " points: this display has one cell size, " + CellWidth + " x " + CellHeight + " (Usable Area VCP 0, p. 5-35, 6-88).");
+                return false;
+            }
+
+            if (cw != 0)
+            {
+                Error("Modify Partition window origin column " + cw + ": horizontal windowing is not supported (Table B-1 p. B-2, Modify Partition, Invalid windowing parameters).");
+                return false;
+            }
+
+            if (wv != p.Columns && wv != 0)
+            {
+                // The presentation space width W cannot be modified (A-MODE and the other Create
+                // Partition parameters "cannot be modified", p. 5-34), so a viewport of another
+                // width would need horizontal windowing.
+                Error("Modify Partition viewport " + wv + " columns wide for a presentation space " + p.Columns + " wide: horizontal windowing is not supported, so WV must be W or 0 (p. 2-3, 6-19; Table B-1 p. B-2, Invalid windowing parameters).");
+                return false;
+            }
+
+            if (rv + hv > _usableRows || cv + wv > _usableColumns)
+            {
+                Error("Modify Partition viewport at row " + rv + ", column " + cv + ", " + hv + " x " + wv + ", does not fit the " + _usableRows + " x " + _usableColumns + " usable area (p. 5-34 condition 4; Table B-1 p. B-2, Specification error in Window/Viewport).");
+                return false;
+            }
+
+            for (int i = 0; i < _partitions.Length; i++)
+            {
+                Partition3270? other = _partitions[i];
+                if (other != null && i != pid && ViewportsOverlap(rv, cv, hv, wv, other))
+                {
+                    Error("Modify Partition viewport at row " + rv + ", column " + cv + ", " + hv + " x " + wv + ", overlaps the viewport of partition " + i + " (p. 5-34 condition 3; Table B-1 p. B-2, Specification error in Window/Viewport).");
+                    return false;
+                }
+            }
+
+            if (rw + hv > p.Rows)
+            {
+                // The window has the viewport's size (p. 2-3) and starts at RW. Checked with the
+                // values as they will be - an RW left off is the current one - before anything
+                // moves, because the checks come first (p. 5-34).
+                Error("Modify Partition window origin row " + rw + " with a window " + hv + " rows high runs past the " + p.Rows + "-row presentation space (p. 5-34 condition 5; Table B-1 p. B-2, Specification error in Window/Viewport).");
+                return false;
+            }
+
+            // Every check passed: "The specified values replace those currently in effect"
+            // (p. 5-34). RS is taken as Create Partition takes it (any value).
+            bool sizeChanged = hv != p.ViewportRows || wv != p.ViewportColumns;
+            bool originChanged = rw != p.WindowRow;
+            p.ViewportRow = rv;
+            p.ViewportColumn = cv;
+            p.ViewportRows = hv;
+            p.ViewportColumns = wv;
+            p.WindowRow = rw;
+            p.ScrollRows = rs;
+
+            if (!p.ZeroWindow)
+            {
+                int row = p.Cursor / p.Columns;
+                if (originChanged)
+                {
+                    // "If the window origin is changed and the cursor is outside the new window,
+                    // the cursor is moved by the minimum number of rows and/or columns so that it
+                    // is within the new window" (p. 5-34). The column is always inside: WV = W.
+                    // When the size changed too, the host's RW is kept and the cursor moves - p.
+                    // 5-34 gives both rules without saying which comes first (this display's
+                    // reading: an origin the host names is not moved again).
+                    int nearest = Math.Clamp(row, rw, rw + hv - 1);
+                    if (nearest != row)
+                    {
+                        p.Cursor = (nearest * p.Columns) + (p.Cursor % p.Columns);
+                    }
+                }
+                else if (sizeChanged)
+                {
+                    // "If the viewport size is changed, the window size is changed accordingly. If
+                    // as a result, the cursor is outside the window, the window is moved to contain
+                    // it. Vertically, the window is moved by the minimum number of rows" (p. 5-34).
+                    // The cursor row is inside the presentation space, so the moved window is too.
+                    if (row < p.WindowRow)
+                    {
+                        p.WindowRow = row;
+                    }
+                    else if (row >= p.WindowRow + hv)
+                    {
+                        p.WindowRow = row - hv + 1;
+                    }
+                }
+            }
+
+            if (p.ZeroWindow && pid == _activePid)
+            {
+                // "If the size of the window is varied to zero and this partition is Active, the
+                // next partition (if any) with a nonzero window is activated. If every partition
+                // has a zero extent window, this partition remains active" (p. 5-34); the operator
+                // then cannot type, see CursorOnIndicatorRow.
+                int next = NextNonzeroPartitionAfter(pid);
+                if (next >= 0)
+                {
+                    _activePid = (byte)next;
+                }
+            }
+            else if (!p.ZeroWindow && NextNonzeroPartitionAfter(pid) < 0)
+            {
+                // "If this is the only partition with a window of nonzero extent, then it is
+                // Activated" (p. 5-34).
+                _activePid = pid;
+            }
+
+            SelectActive();
+            return true;
+        }
+
+        // Whether a viewport at (rv, cv), hv x wv, overlaps another partition's viewport (p. 5-10
+        // condition 5, p. 5-34 condition 3). A viewport of zero rows or zero columns covers no
+        // screen position, so it overlaps nothing (this display's reading: the manual does not
+        // say where a zero-extent viewport is).
+        private static bool ViewportsOverlap(int rv, int cv, int hv, int wv, Partition3270 other)
+        {
+            if (hv == 0 || wv == 0 || other.ZeroWindow)
+            {
+                return false;
+            }
+
+            bool apart = rv >= other.ViewportRow + other.ViewportRows || rv + hv <= other.ViewportRow
+                || cv >= other.ViewportColumn + other.ViewportColumns || cv + wv <= other.ViewportColumn;
+            return !apart;
         }
 
         // Destroy Partition, X'0D' (p. 5-14).
@@ -4473,10 +4882,12 @@ namespace RetroIO.Protocols.Tn3270
 
             if (pid == _activePid)
             {
-                // "activates the next partition with a window of nonzero extent" - every
-                // partition here has one - the next being the one with the smallest PID greater
-                // than this one, or else the lowest (p. 2-5, the jump-partition rule).
-                _activePid = NextPartitionAfter(pid);
+                // "activates the next partition with a window of nonzero extent. If all other
+                // partitions have zero-extent windows, Destroy Partition activates the next
+                // partition" (p. 5-14), the next being the one with the smallest PID greater than
+                // this one, or else the lowest (p. 2-5, the jump-partition rule).
+                int next = NextNonzeroPartitionAfter(pid);
+                _activePid = next >= 0 ? (byte)next : NextPartitionAfter(pid);
             }
 
             if (pid == _inboundPid)
@@ -4502,9 +4913,19 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             byte pid = field[3];
-            if (PartitionFor(pid) == null)
+            Partition3270? target = PartitionFor(pid);
+            if (target == null)
             {
                 Error("Activate Partition of partition X'" + Hex(pid) + "', which does not exist, is rejected (p. 5-8 step 1).");
+                return false;
+            }
+
+            if (target.ZeroWindow)
+            {
+                // "If the named partition does not exist or has a window of zero extent, the
+                // structured field is rejected" (p. 5-8 step 1; Table B-1 p. B-2, Activate
+                // Partition, Zero extent window).
+                Error("Activate Partition of partition X'" + Hex(pid) + "', whose window has zero extent, is rejected (p. 5-8 step 1; Table B-1 p. B-2).");
                 return false;
             }
 
@@ -4727,15 +5148,17 @@ namespace RetroIO.Protocols.Tn3270
 
                 case QueryCode.AlphanumericPartitions:
                     // p. 6-18, 6-19. NA: partitions 0 to MaxPartitions - 1 may be created. M: the
-                    // bytes of partition storage. Flags X'80': SCROLL, vertical scrolling (bit 0,
+                    // bytes of partition storage. Flags X'82': SCROLL, vertical scrolling (bit 0,
                     // which means Create Partition with H > HV, Set Window Origin, and the
-                    // operator's scroll keys, p. 6-19); no all-points addressing, no partition
-                    // protection, no presentation space local copy, no Modify Partition. The Buffer Allocation parameter is left off: "unless bytes
-                    // 3-6 (RO, CO, FO) are all zeros and byte 2 (CM) = 1" - here they are, so a
-                    // partition of H x W takes H x W bytes (p. 6-19).
+                    // operator's scroll keys, p. 6-19), and MODIFY (bit 6, X'02', since 24 November
+                    // 2026: "If the vertical scroll flag is also set, Modify Partition may be used
+                    // to change the window row", p. 6-19); no all-points addressing, no partition
+                    // protection, no presentation space local copy. The Buffer Allocation parameter
+                    // is left off: "unless bytes 3-6 (RO, CO, FO) are all zeros and byte 2 (CM) = 1"
+                    // - here they are, so a partition of H x W takes H x W bytes (p. 6-19).
                     AppendByte(MaxPartitions);
                     AppendUInt16(PartitionStorage);
-                    AppendByte(0x80);
+                    AppendByte(0x82);
                     break;
 
                 case QueryCode.FieldOutlining:
@@ -4769,10 +5192,12 @@ namespace RetroIO.Protocols.Tn3270
                     // set is non-loadable and 1-byte. Which ID in that range is not given by the
                     // manual; X'F1' is the Graphic Escape set's, X'F0' is the lowest free one
                     // (decided 24 November 2026). X'00' is not an ID: in SA and SFE it means
-                    // "Default character set" (p. 4-19), a value a host sends. SA and SFE values
-                    // are stored as sent and not interpreted here (GetCharacterCharacterSet,
-                    // GetFieldCharacterSet), so X'00' and X'F0' both reach the caller, which
-                    // must treat both as the base set and X'F1' as code page 310.
+                    // "Default character set" (p. 4-19), a value a host sends. SA, SFE and MF
+                    // values are checked against this reply's sets and the loaded LCIDs
+                    // (CheckCharacterSetValue, since 24 November 2026) and stored as sent
+                    // (GetCharacterCharacterSet, GetFieldCharacterSet), so X'00' and X'F0' both
+                    // reach the caller, which must treat both as the base set and X'F1' as code
+                    // page 310 (or use GetCharacterSetAt).
                     AppendBytes(stackalloc byte[] { 0x00, 0x00, BaseCharacterSetId });
                     AppendUInt16(_codePage.CharacterSet);
                     AppendUInt16(_codePage.Number);
@@ -5021,6 +5446,11 @@ namespace RetroIO.Protocols.Tn3270
                         _p.FieldColor[address] = value;
                         break;
                     case 0x43:
+                        if (!CheckCharacterSetValue(value, "SFE or MF"))
+                        {
+                            return false;
+                        }
+
                         _p.FieldCharset[address] = value;
                         break;
                     case 0x45:
@@ -5038,6 +5468,58 @@ namespace RetroIO.Protocols.Tn3270
             return true;
         }
 
+        // The value of a character set attribute (type X'43') in SA, SFE or MF (GA23-0059-4
+        // p. 4-19). Valid settings: X'00' the default set; X'40' to X'EF' "Local ID for loadable
+        // character sets"; X'F0' to X'F7' non-loadable sets; X'F8' to X'FE' two-byte sets; "All
+        // others reserved", and X'FF' "is invalid if sent as a value byte (sense code X'1003')".
+        // "Attribute values that are unknown or cannot be maintained and returned inbound by an
+        // implementation must be rejected" (p. 4-6, 4-16). So an LCID is taken only while the
+        // Character Sets reply names it: X'F0' (base) and X'F1' (Graphic Escape), and an LCID a
+        // Load PS has put on a store. A released LCID: "Any subsequent reference to this released
+        // LCID will be an error condition" (p. 5-22). An LCID never loaded is "unknown" (p. 4-6) -
+        // that it is rejected the same way is this display's reading of p. 4-6, which does not
+        // name LCIDs. Positions already holding an LCID that is later released are left as they
+        // are: p. 5-22 speaks of a reference that comes after the release.
+        private bool CheckCharacterSetValue(byte value, string order)
+        {
+            if (value == 0x00 || value == BaseCharacterSetId || value == GraphicEscapeCharacterSetId)
+            {
+                return true;
+            }
+
+            if (value >= 0x40 && value <= 0xEF)
+            {
+                if (ProgrammedSymbols.Find(value) != null)
+                {
+                    return true;
+                }
+
+                Error(order + " character set X'" + Hex(value) + "' names a loadable set no Load Programmed Symbols has loaded, or one since released: an unknown value is rejected (p. 4-6, 4-16, 4-19, 5-22).");
+                return false;
+            }
+
+            if (value >= 0xF2 && value <= 0xF7)
+            {
+                Error(order + " character set X'" + Hex(value) + "' names a non-loadable set this display does not have: the Character Sets reply lists only X'F0' and X'F1' (p. 4-16, 4-19, 6-26).");
+                return false;
+            }
+
+            if (value >= 0xF8 && value <= 0xFE)
+            {
+                Error(order + " character set X'" + Hex(value) + "' names a two-byte character set, which this display does not have (p. 4-19, chapter 12).");
+                return false;
+            }
+
+            if (value == 0xFF)
+            {
+                Error(order + " character set X'FF' is invalid as a value byte (p. 4-19, sense code X'1003').");
+                return false;
+            }
+
+            Error(order + " character set X'" + Hex(value) + "' is reserved (p. 4-19: all others reserved).");
+            return false;
+        }
+
         private bool ApplySetAttribute(byte type, byte value)
         {
             switch (type)
@@ -5053,6 +5535,11 @@ namespace RetroIO.Protocols.Tn3270
                     _saColor = value;
                     return true;
                 case 0x43:
+                    if (!CheckCharacterSetValue(value, "SA"))
+                    {
+                        return false;
+                    }
+
                     _saCharset = value;
                     return true;
                 case 0x45:

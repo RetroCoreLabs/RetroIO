@@ -94,11 +94,11 @@ namespace RetroIO.Protocols.Tn3270
         internal int Cursor;
 
         internal Partition3270(byte pid, int rows, int columns, int viewportRow, int viewportColumn, bool sixteenBitAddressing)
-            : this(pid, rows, columns, viewportRow, viewportColumn, rows, 0, 0, sixteenBitAddressing)
+            : this(pid, rows, columns, viewportRow, viewportColumn, rows, columns, 0, 0, sixteenBitAddressing)
         {
         }
 
-        internal Partition3270(byte pid, int rows, int columns, int viewportRow, int viewportColumn, int viewportRows, int windowRow, int scrollRows, bool sixteenBitAddressing)
+        internal Partition3270(byte pid, int rows, int columns, int viewportRow, int viewportColumn, int viewportRows, int viewportColumns, int windowRow, int scrollRows, bool sixteenBitAddressing)
         {
             Pid = pid;
             ViewportRow = viewportRow;
@@ -106,6 +106,7 @@ namespace RetroIO.Protocols.Tn3270
             SixteenBitAddressing = sixteenBitAddressing;
             Resize(rows, columns);
             ViewportRows = viewportRows;
+            ViewportColumns = viewportColumns;
             WindowRow = windowRow;
             ScrollRows = scrollRows;
 
@@ -138,9 +139,18 @@ namespace RetroIO.Protocols.Tn3270
         public int ViewportRows { get; internal set; }
 
         /// <summary>
-        /// Gets the columns of the viewport (WV), always <see cref="Columns"/> here.
+        /// Gets the columns of the viewport (WV): <see cref="Columns"/>, or 0 for a window of zero
+        /// extent. Only vertical scrolling is built, so no other width is taken.
         /// </summary>
-        public int ViewportColumns => Columns;
+        public int ViewportColumns { get; internal set; }
+
+        /// <summary>
+        /// Gets a value indicating whether the window has zero extent: the host gave the viewport
+        /// zero rows or zero columns, which Create Partition and Modify Partition allow when the
+        /// display supports Modify Partition (GA23-0059-4 p. 5-10 conditions 1 and 2, p. 5-34).
+        /// Nothing of the partition is shown, and the operator cannot type into it (p. 5-34).
+        /// </summary>
+        public bool ZeroWindow => ViewportRows == 0 || ViewportColumns == 0;
 
         /// <summary>
         /// Gets the presentation space row shown in the top row of the viewport: the window origin
@@ -158,13 +168,14 @@ namespace RetroIO.Protocols.Tn3270
         /// Gets RS, the rows one press of a scroll key moves the window (p. 5-11, 7-16); X'FFFF'
         /// means the device decides (p. 5-12). 0 when the partition does not scroll.
         /// </summary>
-        public int ScrollRows { get; }
+        public int ScrollRows { get; internal set; }
 
         /// <summary>
         /// Gets a value indicating whether the presentation space has more rows than the viewport,
-        /// so the window can move (p. 2-3, 7-16).
+        /// so the window can move (p. 2-3, 7-16). False for a window of zero extent, which shows
+        /// nothing and has nothing to scroll.
         /// </summary>
-        public bool Scrolls => Rows > ViewportRows;
+        public bool Scrolls => !ZeroWindow && Rows > ViewportRows;
 
         /// <summary>
         /// Gets a value indicating whether this partition holds the partition wait condition
@@ -187,15 +198,15 @@ namespace RetroIO.Protocols.Tn3270
 
         /// <summary>
         /// Gets the screen row of the viewport's top edge, relative to the top of the usable area
-        /// (RV, p. 5-11). 0 for the implicit partition.
+        /// (RV, p. 5-11). 0 for the implicit partition. Modify Partition may move it (p. 5-34).
         /// </summary>
-        public int ViewportRow { get; }
+        public int ViewportRow { get; internal set; }
 
         /// <summary>
         /// Gets the screen column of the viewport's left edge, relative to the left of the usable
-        /// area (CV, p. 5-11). 0 for the implicit partition.
+        /// area (CV, p. 5-11). 0 for the implicit partition. Modify Partition may move it (p. 5-34).
         /// </summary>
-        public int ViewportColumn { get; }
+        public int ViewportColumn { get; internal set; }
 
         /// <summary>
         /// Gets a value indicating whether buffer addresses to and from this partition are 16-bit
@@ -417,6 +428,7 @@ namespace RetroIO.Protocols.Tn3270
                 // A new size is only ever given to the implicit partition (Erase/Write, p. 3-6),
                 // whose viewport is the whole presentation space (p. 2-6).
                 ViewportRows = rows;
+                ViewportColumns = columns;
                 WindowRow = 0;
             }
 

@@ -206,18 +206,5 @@ namespace RetroIO.Protocols.Tn3270.Tests
             Assert.Single(errors);
             Assert.False(d.ExplicitPartitioned);
         }
-
-        [Fact]
-        public void ModifyPartitionIsRefusedByName()
-        {
-            // p. 5-34: optional; this display reports MODIFY 0 (p. 6-19).
-            var (d, _, errors) = Create();
-            d.ProcessOutbound(CreateScrolling(40, 12, 0, 0, 1));
-
-            Assert.False(d.ProcessOutbound(new byte[] { Command3270.WriteStructuredField, 0x00, 0x06, 0x0F, 0x0A, 0x01, 0x00 }));
-
-            Assert.Single(errors);
-            Assert.Contains("Modify Partition", errors[0], StringComparison.Ordinal);
-        }
     }
 }

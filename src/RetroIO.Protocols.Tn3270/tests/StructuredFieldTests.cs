@@ -83,9 +83,10 @@ namespace RetroIO.Protocols.Tn3270.Tests
                 f[1]);
 
             // Alphanumeric Partitions (p. 6-18): NA 16, M 32767 (X'7FFF', this display's own
-            // choice now that a presentation space can be larger than the screen), flags X'80'
-            // (SCROLL, bit 0, p. 6-19), no Buffer Allocation parameter (CM 1, RO, CO, FO 0).
-            Assert.Equal(new byte[] { 0x00, 0x08, 0x81, 0x84, 0x10, 0x7F, 0xFF, 0x80 }, f[2]);
+            // choice now that a presentation space can be larger than the screen), flags X'82'
+            // (SCROLL, bit 0, and MODIFY, bit 6, p. 6-19), no Buffer Allocation parameter (CM 1,
+            // RO, CO, FO 0).
+            Assert.Equal(new byte[] { 0x00, 0x08, 0x81, 0x84, 0x10, 0x7F, 0xFF, 0x82 }, f[2]);
 
             // Character Sets: flags X'B2' (ALT, LOADABLE, EXT, GF), PSCS, FORM types 1 to 6, base
             // set F0 = 697/037, GE set F1 = 963/310, then the six loadable sets
