@@ -71,26 +71,35 @@ namespace RetroIO.Protocols.Tn3270.Tests
                 codes[i] = f[i][3];
             }
 
-            Assert.Equal(new byte[] { 0x80, 0x81, 0x85, 0x86, 0x87, 0x88, 0x8A, 0xA6 }, codes);
+            Assert.Equal(new byte[] { 0x80, 0x81, 0x84, 0x85, 0x86, 0x87, 0x88, 0x8A, 0x8C, 0xA6 }, codes);
 
             // Summary lists the same codes (p. 6-81).
-            Assert.Equal(new byte[] { 0x00, 0x0C, 0x81, 0x80, 0x80, 0x81, 0x85, 0x86, 0x87, 0x88, 0x8A, 0xA6 }, f[0]);
+            Assert.Equal(new byte[] { 0x00, 0x0E, 0x81, 0x80, 0x80, 0x81, 0x84, 0x85, 0x86, 0x87, 0x88, 0x8A, 0x8C, 0xA6 }, f[0]);
 
-            // Usable Area: 12/14-bit, 80 x 32 (the larger screen), cells 9 x 16, buffer 2560.
+            // Usable Area: 12/14/16-bit (ADDR X'3', p. 6-88), 80 x 32 (the larger screen), cells
+            // 9 x 16, BUFFSZ 0 because the device supports partitions (p. 6-90).
             Assert.Equal(
-                new byte[] { 0x00, 0x17, 0x81, 0x81, 0x01, 0x00, 0x00, 0x50, 0x00, 0x20, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x10, 0x0A, 0x00 },
+                new byte[] { 0x00, 0x17, 0x81, 0x81, 0x03, 0x00, 0x00, 0x50, 0x00, 0x20, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x10, 0x00, 0x00 },
                 f[1]);
+
+            // Alphanumeric Partitions (p. 6-18): NA 16, M 2560 (80 x 32), flags 0, no Buffer
+            // Allocation parameter (CM 1, RO, CO, FO 0, p. 6-19).
+            Assert.Equal(new byte[] { 0x00, 0x08, 0x81, 0x84, 0x10, 0x0A, 0x00, 0x00 }, f[2]);
 
             // Character Sets: base set F0 = 697/037, GE set F1 = 963/310.
             Assert.Equal(
                 new byte[] { 0x00, 0x1B, 0x81, 0x85, 0x82, 0x00, 0x09, 0x10, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0xF0, 0x02, 0xB9, 0x00, 0x25, 0x01, 0x00, 0xF1, 0x03, 0xC3, 0x01, 0x36 },
-                f[2]);
+                f[3]);
 
             // Implicit Partition: default 80 x 24, alternate 80 x 32.
-            Assert.Equal(new byte[] { 0x00, 0x11, 0x81, 0xA6, 0x00, 0x00, 0x0B, 0x01, 0x00, 0x00, 0x50, 0x00, 0x18, 0x00, 0x50, 0x00, 0x20 }, f[7]);
+            Assert.Equal(new byte[] { 0x00, 0x11, 0x81, 0xA6, 0x00, 0x00, 0x0B, 0x01, 0x00, 0x00, 0x50, 0x00, 0x18, 0x00, 0x50, 0x00, 0x20 }, f[9]);
 
             // Field Validation: mandatory fill and mandatory entry, no trigger.
-            Assert.Equal(new byte[] { 0x00, 0x05, 0x81, 0x8A, 0x06 }, f[6]);
+            Assert.Equal(new byte[] { 0x00, 0x05, 0x81, 0x8A, 0x06 }, f[7]);
+
+            // Field Outlining (p. 6-49, 6-50): length 10, flags 0, SEP 0, VPOS 0 and HPOS 15 (the
+            // defaults of OutlineVerticalPosition and OutlineHorizontalPosition), HPOS0 and HPOS1 0.
+            Assert.Equal(new byte[] { 0x00, 0x0A, 0x81, 0x8C, 0x00, 0x00, 0x00, 0x0F, 0x00, 0x00 }, f[8]);
         }
 
         [Fact]
@@ -128,7 +137,7 @@ namespace RetroIO.Protocols.Tn3270.Tests
             d.ProcessOutbound(Query);
             List<byte[]> f = Fields(sent[0]);
             Assert.Equal(new byte[] { 0x00, 0x0C, 0x81, 0x95, 0x00, 0x00, 0x40, 0x00, 0x40, 0x00, 0x01, 0x01 }, Find(f, QueryCode.Ddm));
-            Assert.Equal(9, f.Count);
+            Assert.Equal(11, f.Count);
         }
 
         [Fact]
@@ -163,7 +172,7 @@ namespace RetroIO.Protocols.Tn3270.Tests
 
             d.ProcessOutbound(new byte[] { Command3270.WriteStructuredField, 0x00, 0x07, 0x01, 0xFF, 0x03, 0x80, 0x86 });
 
-            Assert.Equal(8, Fields(sent[0]).Count);
+            Assert.Equal(10, Fields(sent[0]).Count);
         }
 
         [Fact]
@@ -372,7 +381,7 @@ namespace RetroIO.Protocols.Tn3270.Tests
         public void UsableAreaForTwoSizesThatDoNotNestReportsTheDefaultAndAnAlternateUsableArea()
         {
             // The 3180 of GA23-0059-4 p. 6-93: 43 x 80 or 27 x 132, not at the same time. Base is
-            // the default size, BUFFSZ the larger cell count (27 x 132 = 3564 = X'0DEC'), XMIN to
+            // the default size, BUFFSZ 0 because the device supports partitions (p. 6-90), XMIN to
             // YMAX present as zeros because a self-defining parameter follows (p. 6-87), then the
             // Alternate Usable Area parameter (p. 6-94).
             var (d, sent, errors) = Create(43, 80, 27, 132);
@@ -384,11 +393,11 @@ namespace RetroIO.Protocols.Tn3270.Tests
                 new byte[]
                 {
                     0x00, 0x2E, 0x81, 0x81,
-                    0x01, 0x00,                                     // 12/14-bit, matrix, cells
+                    0x03, 0x00,                                     // 12/14/16-bit, matrix, cells
                     0x00, 0x50, 0x00, 0x2B,                         // W 80, H 43
                     0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                     0x09, 0x10,                                     // AW, AH
-                    0x0D, 0xEC,                                     // BUFFSZ 3564
+                    0x00, 0x00,                                     // BUFFSZ 0: partitions (p. 6-90)
                     0x00, 0x00, 0x00, 0x00,                         // XMIN, YMIN, XMAX, YMAX
                     0x13, 0x02, 0x00, 0x01,                         // Alternate Usable Area, AUAID 1
                     0x00, 0x84, 0x00, 0x1B,                         // WAUA 132, HAUA 27
@@ -402,12 +411,12 @@ namespace RetroIO.Protocols.Tn3270.Tests
         public void UsableAreaForNestedSizesIsTheLargerOneWithNoParameter()
         {
             // 24 x 80 inside 27 x 132: the larger is reported, no self-defining parameter, the
-            // reply stops after BUFFSZ (p. 6-87). 27 x 132 = 3564.
+            // reply stops after BUFFSZ (p. 6-87), which is 0 with partitions (p. 6-90).
             var (d, sent, _) = Create(24, 80, 27, 132);
             d.ProcessOutbound(Query);
             byte[] ua = Find(Fields(sent[0]), QueryCode.UsableArea);
             Assert.Equal(
-                new byte[] { 0x00, 0x17, 0x81, 0x81, 0x01, 0x00, 0x00, 0x84, 0x00, 0x1B, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x10, 0x0D, 0xEC },
+                new byte[] { 0x00, 0x17, 0x81, 0x81, 0x03, 0x00, 0x00, 0x84, 0x00, 0x1B, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x10, 0x00, 0x00 },
                 ua);
         }
 

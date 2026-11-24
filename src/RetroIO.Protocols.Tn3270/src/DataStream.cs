@@ -402,7 +402,7 @@ namespace RetroIO.Protocols.Tn3270
     public static class StructuredFieldId
     {
         /// <summary>
-        /// Read Partition, X'01': a read of partition 0, or a query (p. 5-47).
+        /// Read Partition, X'01': a read of a partition, or a query (p. 5-47).
         /// </summary>
         public const byte ReadPartition = 0x01;
 
@@ -429,6 +429,12 @@ namespace RetroIO.Protocols.Tn3270
         public const byte QueryReply = 0x81;
 
         /// <summary>
+        /// Inbound 3270DS, X'80': the AID, cursor and data of a read from a partition with a nonzero
+        /// PID (p. 6-7).
+        /// </summary>
+        public const byte Inbound3270DS = 0x80;
+
+        /// <summary>
         /// Data transfer, X'D0': the DDM structured fields IND$FILE uses in DFT mode (IBM
         /// SS-HCS12-1372-00 p. 23, 26).
         /// </summary>
@@ -449,6 +455,12 @@ namespace RetroIO.Protocols.Tn3270
         /// Usable Area, X'81': the size of the display surface (p. 6-85).
         /// </summary>
         public const byte UsableArea = 0x81;
+
+        /// <summary>
+        /// Alphanumeric Partitions, X'84': how many partitions Create Partition may make, their
+        /// storage, and the partition functions supported (p. 6-18).
+        /// </summary>
+        public const byte AlphanumericPartitions = 0x84;
 
         /// <summary>
         /// Character Sets, X'85': the base set and the Graphic Escape set (p. 6-21).
@@ -474,6 +486,11 @@ namespace RetroIO.Protocols.Tn3270
         /// Field Validation, X'8A': mandatory fill, mandatory entry and trigger (p. 6-49).
         /// </summary>
         public const byte FieldValidation = 0x8A;
+
+        /// <summary>
+        /// Field Outlining, X'8C': where the outline lines are drawn in a character cell (p. 6-49).
+        /// </summary>
+        public const byte FieldOutlining = 0x8C;
 
         /// <summary>
         /// DDM, X'95': the file transfer subset IND$FILE looks for to choose DFT mode (p. 6-37).

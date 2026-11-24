@@ -122,13 +122,25 @@ namespace RetroIO.Protocols.Tn3270
     /// </para>
     /// <para>
     /// Write Structured Field is handled for Read Partition (Query, Query List, and the three reads
-    /// of partition 0), Erase/Reset, Set Reply Mode, Outbound 3270DS and the file transfer field
-    /// X'D0', which goes to <see cref="FileTransferField"/>.
+    /// of any partition), Erase/Reset, Set Reply Mode, Outbound 3270DS, Create Partition, Destroy
+    /// Partition, Activate Partition, Reset Partition and the file transfer field X'D0', which goes
+    /// to <see cref="FileTransferField"/>.
     /// </para>
     /// <para>
-    /// Not built yet, and loud about it through <see cref="ProtocolError"/>: partitions other than
-    /// the implicit partition 0, 16-bit addresses, every other structured field, and the BSC Copy
-    /// command inside Outbound 3270DS.
+    /// Partitions (GA23-0059-4 chapter 2): up to <see cref="MaxPartitions"/> explicit partitions,
+    /// each with its own presentation space, cursor, reply mode and 12/14-bit or 16-bit
+    /// addressing, shown in non-overlapping viewports of the same size as the presentation space.
+    /// The getters such as <see cref="GetByte"/> read the active partition;
+    /// <see cref="GetPartition"/> and <see cref="TryGetScreenPosition"/> reach the others.
+    /// </para>
+    /// <para>
+    /// Not built yet, and loud about it through <see cref="ProtocolError"/>: scrolling (a
+    /// presentation space larger than its viewport, Set Window Origin, Modify Partition), text
+    /// partitions, all-points units, protected partitions, every other structured field, and the
+    /// BSC Copy command inside Outbound 3270DS. Not built and silent, because they are operator
+    /// conditions rather than host data: the jump-partition key, and per-partition input inhibit
+    /// (PWAIT and System Lock per partition, the Enter Inhibit condition, p. 2-9, 3-20); the
+    /// keyboard lock is one for the whole display.
     /// </para>
     /// </remarks>
     public sealed class Display3270
@@ -162,17 +174,34 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public const byte GraphicEscapeCharacterSetId = 0xF1;
 
+        /// <summary>
+        /// How many explicit partitions this display takes, named 0 to MaxPartitions - 1: the NA
+        /// of the Alphanumeric Partitions query reply (GA23-0059-4 p. 6-18, 6-19).
+        /// </summary>
+        /// <remarks>
+        /// The manual lets a device name any count up to the 127 PIDs X'00' to X'7E' (p. 5-10); it
+        /// does not give a count for an emulated one. 16 is this display's own choice, not a value
+        /// from the manual or from another emulator (x3270 and tnz build no partitions).
+        /// </remarks>
+        public const int MaxPartitions = 16;
+
+        // Structured field IDs of the partition structured fields (GA23-0059-4 p. 5-2).
+        private const byte ResetPartitionId = 0x00;
+        private const byte CreatePartitionId = 0x0C;
+        private const byte DestroyPartitionId = 0x0D;
+        private const byte ActivatePartitionId = 0x0E;
+
         // The query replies this terminal sends, in ascending code order (p. 6-81: Null is never listed).
         private static readonly byte[] QueryCodesWithoutFileTransfer =
         {
-            QueryCode.Summary, QueryCode.UsableArea, QueryCode.CharacterSets, QueryCode.Color,
-            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.FieldValidation, QueryCode.ImplicitPartition,
+            QueryCode.Summary, QueryCode.UsableArea, QueryCode.AlphanumericPartitions, QueryCode.CharacterSets, QueryCode.Color,
+            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.FieldValidation, QueryCode.FieldOutlining, QueryCode.ImplicitPartition,
         };
 
         private static readonly byte[] QueryCodesWithFileTransfer =
         {
-            QueryCode.Summary, QueryCode.UsableArea, QueryCode.CharacterSets, QueryCode.Color,
-            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.FieldValidation, QueryCode.Ddm, QueryCode.ImplicitPartition,
+            QueryCode.Summary, QueryCode.UsableArea, QueryCode.AlphanumericPartitions, QueryCode.CharacterSets, QueryCode.Color,
+            QueryCode.Highlighting, QueryCode.ReplyModes, QueryCode.FieldValidation, QueryCode.FieldOutlining, QueryCode.Ddm, QueryCode.ImplicitPartition,
         };
 
         private readonly int _defaultRows;
@@ -201,25 +230,36 @@ namespace RetroIO.Protocols.Tn3270
         private byte[] _retryRecord = Array.Empty<byte>();
         private int _retryLength;
 
-        private byte[] _buffer = Array.Empty<byte>();
-        private bool[] _isFieldAttribute = Array.Empty<bool>();
-        private bool[] _graphicEscape = Array.Empty<bool>();
+        // The partitions (GA23-0059-4 chapter 2). The buffers, the attributes, the cursor, the
+        // reply mode and the primed mandatory-fill field of each are in its Partition3270 (the
+        // comments on what each array holds are there).
+        //
+        // _implicitPartition is implicit partition 0, the only one in implicit partition state.
+        // _partitions holds the explicitly created ones, by PID, in explicit partitioned state
+        // (p. 2-6, 2-7); it is all null in implicit partition state.
+        //
+        // _p is the partition the code below works on: the active partition whenever the
+        // operator's keys run, and, while a host record is applied, the partition the record
+        // names (an Outbound 3270DS's PID, explicit partition 0 for a command sent as the first
+        // byte). After every host record it is the active partition again.
+        private readonly Partition3270 _implicitPartition;
+        private readonly Partition3270?[] _partitions = new Partition3270?[MaxPartitions];
+        private bool _explicitState;
+        private Partition3270 _p;
 
-        // Extended field attributes, kept at the field attribute's position (GA23-0059-4 p. 4-11).
-        private byte[] _fieldHighlight = Array.Empty<byte>();
-        private byte[] _fieldColor = Array.Empty<byte>();
-        private byte[] _fieldCharset = Array.Empty<byte>();
-        private byte[] _fieldBackground = Array.Empty<byte>();
-        private byte[] _fieldTransparency = Array.Empty<byte>();
-        private byte[] _fieldValidation = Array.Empty<byte>();
-        private byte[] _fieldOutlining = Array.Empty<byte>();
+        // The active partition, the one the operator works in (p. 2-5), and INPID, the partition
+        // inbound data comes from and a retry repeats (p. 3-20).
+        private byte _activePid;
+        private byte _inboundPid;
 
-        // Character attributes, kept per position (p. 4-15).
-        private byte[] _charHighlight = Array.Empty<byte>();
-        private byte[] _charColor = Array.Empty<byte>();
-        private byte[] _charCharset = Array.Empty<byte>();
-        private byte[] _charBackground = Array.Empty<byte>();
-        private byte[] _charTransparency = Array.Empty<byte>();
+        // The usable area of explicit partitioned state, in rows and columns: the screen the
+        // viewports are placed on (p. 5-10). Set by the first Create Partition.
+        private int _usableRows;
+        private int _usableColumns;
+
+        // When an inbound record is an Inbound 3270DS structured field (a partition with a
+        // nonzero PID, p. 6-7), the position of its length bytes, filled in by Send; -1 otherwise.
+        private int _inboundFieldStart = -1;
 
         // The current SA set, applied to each character written (p. 4-5).
         private byte _saHighlight;
@@ -230,20 +270,11 @@ namespace RetroIO.Protocols.Tn3270
 
         private byte _lastAid = Aid.None;
 
-        // Set Reply Mode (p. 5-61): the form of later inbound data, and for Character mode the
-        // character attribute types that are sent with SA orders.
-        private ReplyMode _replyMode = ReplyMode.Field;
-        private byte[] _replyTypes = Array.Empty<byte>();
-
         // The character attribute values last sent inbound with SA, in the order of
         // CharacterAttributeTypes. Every inbound record starts with all at default (p. 3-12, 3-13).
         private readonly byte[] _inboundSa = new byte[5];
 
         private int _fileTransferLimit;
-
-        // The field attribute address of the primed mandatory-fill field, or -1 (p. 4-21). Only one
-        // can be primed: the cursor is in it, and leaving it validates and unprimes it.
-        private int _primedField = -1;
 
         // Set when the record being applied raised ProtocolError.
         private bool _failed;
@@ -289,7 +320,11 @@ namespace RetroIO.Protocols.Tn3270
             _sessionColumns = columns;
             _sessionAlternateRows = alternateRows;
             _sessionAlternateColumns = alternateColumns;
-            Resize(rows, columns);
+
+            // Power on: implicit partition state, implicit partition 0 at the default size
+            // (p. 2-6).
+            _implicitPartition = new Partition3270(0, rows, columns, 0, 0, sixteenBitAddressing: false);
+            _p = _implicitPartition;
         }
 
         /// <summary>
@@ -368,14 +403,13 @@ namespace RetroIO.Protocols.Tn3270
             //  - INPID/INOP R: INPID 0 and INOP Read Modified, the normal read state, so no
             //    inbound record is kept for a retry any more (p. 3-14: a Read Modified repeats
             //    INOP only in a retry state; p. 3-19: INOP becomes Read Modified when INPID is
-            //    set to 0). Only implicit partition 0 exists, so INPID is 0 already.
-            //  - Partitions R: only implicit partition 0 exists; it is made again at the
-            //    session's default size by the Resize below.
+            //    set to 0).
+            //  - Partitions R: every explicit partition is destroyed ("Any explicitly created
+            //    partitions are destroyed by BIND, UNBIND, ...", p. 5-13 note 2) and implicit
+            //    partition 0 is made again at the session's size.
+            // ResetToImplicit below does all three, in both the taken and the refused branch.
             // Not modelled, so nothing to reset: operator attribute selection and its indicators
             // (Selection, Indicators) - RetroIO has no operator selection. PS Content is NC.
-            _replyMode = ReplyMode.Field;
-            _replyTypes = Array.Empty<byte>();
-            _retryLength = 0;
 
             int rows;
             int columns;
@@ -454,8 +488,7 @@ namespace RetroIO.Protocols.Tn3270
                 _sessionColumns = _defaultColumns;
                 _sessionAlternateRows = _alternateRows;
                 _sessionAlternateColumns = _alternateColumns;
-                Resize(_sessionRows, _sessionColumns);
-                CursorAddress = 0;
+                ResetToImplicit(_sessionRows, _sessionColumns);
                 Error("The BIND's screen sizes were not taken, the model's are kept: " + why + ".");
                 return false;
             }
@@ -464,8 +497,7 @@ namespace RetroIO.Protocols.Tn3270
             _sessionColumns = columns;
             _sessionAlternateRows = alternateRows;
             _sessionAlternateColumns = alternateColumns;
-            Resize(rows, columns);
-            CursorAddress = 0;
+            ResetToImplicit(rows, columns);
             return true;
         }
 
@@ -491,9 +523,11 @@ namespace RetroIO.Protocols.Tn3270
             // attribute selections, which RetroIO does not have. Which reply mode that means is
             // not known, so the mode is left as it was rather than guessed (BUGS.md, Q group,
             // "Tn3270 Unbind reply mode"). The next BIND resets it to field mode (ApplyBind).
-            // Note 17 is printed for Partitions but p. C-2 has no note 17; RetroIO has only
-            // implicit partition 0, made again at the model's size below. INPID/INOP NR: a later
-            // action sets them. Note 8 (the last write stays on the screen while unowned) is not
+            // Note 17 is printed for Partitions but p. C-2 has no note 17; p. 5-13 note 2 says
+            // "Any explicitly created partitions are destroyed by BIND, UNBIND, ...", so they are,
+            // and implicit partition 0 is made again at the model's size below, keeping the reply
+            // mode it had (note 13 above). INPID/INOP NR: a later action sets them; only when an
+            // explicit partition is destroyed does INPID go to 0 with it (p. 3-20). Note 8 (the last write stays on the screen while unowned) is not
             // what this method does: it clears the screen as x3270 does (see remarks); that
             // difference is in the same BUGS.md entry.
             SscpLuMode = false;
@@ -502,6 +536,12 @@ namespace RetroIO.Protocols.Tn3270
             _sessionColumns = _defaultColumns;
             _sessionAlternateRows = _alternateRows;
             _sessionAlternateColumns = _alternateColumns;
+            if (_explicitState)
+            {
+                ResetToImplicit(_sessionRows, _sessionColumns, resetReplyMode: false);
+                return;
+            }
+
             Resize(_sessionRows, _sessionColumns);
             CursorAddress = 0;
         }
@@ -554,8 +594,23 @@ namespace RetroIO.Protocols.Tn3270
                 SscpLuMode = true;
                 NvtMode = false;
                 bool alternateIsLarger = _alternateRows * _alternateColumns > _defaultRows * _defaultColumns;
-                Resize(alternateIsLarger ? _alternateRows : _defaultRows, alternateIsLarger ? _alternateColumns : _defaultColumns);
-                CursorAddress = 0;
+                int sscpRows = alternateIsLarger ? _alternateRows : _defaultRows;
+                int sscpColumns = alternateIsLarger ? _alternateColumns : _defaultColumns;
+                if (_explicitState)
+                {
+                    // The SSCP's text fills the whole screen, which explicit partitions cannot
+                    // share, so they are destroyed. GA23-0059-4 does not list an SSCP message
+                    // among what destroys them (p. 5-13 note 2 names BIND, UNBIND, ACTLU, DACTLU,
+                    // ACTPU and DACTPU); this is a reading, not a quoted rule. The reply mode is
+                    // left as it was, as it always was for this switch.
+                    ResetToImplicit(sscpRows, sscpColumns, resetReplyMode: false);
+                }
+                else
+                {
+                    Resize(sscpRows, sscpColumns);
+                    CursorAddress = 0;
+                }
+
                 InsertMode = false;
             }
 
@@ -736,8 +791,18 @@ namespace RetroIO.Protocols.Tn3270
         {
             NvtMode = true;
             SscpLuMode = false;
-            Resize(_sessionRows, _sessionColumns);
-            CursorAddress = 0;
+            if (_explicitState)
+            {
+                // Erase/Reset destroys every partition (GA23-0059-4 p. 5-15). The reply mode is
+                // left as this switch always left it.
+                ResetToImplicit(_sessionRows, _sessionColumns, resetReplyMode: false);
+            }
+            else
+            {
+                Resize(_sessionRows, _sessionColumns);
+                CursorAddress = 0;
+            }
+
             _sscpStart = 0;
             InsertMode = false;
         }
@@ -771,8 +836,8 @@ namespace RetroIO.Protocols.Tn3270
             int size = Size;
             for (int a = _sscpStart; a < size; a++)
             {
-                byte b = _buffer[a];
-                if (b == FormatControl.Null || _isFieldAttribute[a] || _graphicEscape[a])
+                byte b = _p.Buffer[a];
+                if (b == FormatControl.Null || _p.IsFieldAttributeAt[a] || _p.GraphicEscapeAt[a])
                 {
                     continue;
                 }
@@ -827,13 +892,13 @@ namespace RetroIO.Protocols.Tn3270
             int end = Math.Min(Size, _sscpStart + MaxSscpInbound);
             for (int a = _sscpStart; a < end; a++)
             {
-                byte b = _buffer[a];
-                if (b == FormatControl.Null || _isFieldAttribute[a])
+                byte b = _p.Buffer[a];
+                if (b == FormatControl.Null || _p.IsFieldAttributeAt[a])
                 {
                     continue;
                 }
 
-                if (_graphicEscape[a])
+                if (_p.GraphicEscapeAt[a])
                 {
                     // Not in the manual's inbound paragraph; GE before an APL character is how
                     // the outbound side marks one (p. 5-37), and x3270 sends it the same way.
@@ -907,24 +972,159 @@ namespace RetroIO.Protocols.Tn3270
         public event StructuredFieldHandler? FileTransferField;
 
         /// <summary>
-        /// Gets the number of rows on the screen now.
+        /// Gets the number of rows of the active partition's presentation space. In implicit
+        /// partition state that is the screen.
         /// </summary>
-        public int Rows { get; private set; }
+        public int Rows => _p.Rows;
 
         /// <summary>
-        /// Gets the number of columns on the screen now.
+        /// Gets the number of columns of the active partition's presentation space. In implicit
+        /// partition state that is the screen.
         /// </summary>
-        public int Columns { get; private set; }
+        public int Columns => _p.Columns;
 
         /// <summary>
-        /// Gets rows times columns.
+        /// Gets rows times columns of the active partition.
         /// </summary>
         public int Size => Rows * Columns;
 
         /// <summary>
-        /// Gets the cursor's buffer address.
+        /// Gets the cursor's buffer address in the active partition (GA23-0059-4 p. 2-5: the screen
+        /// cursor is displayed at the current cursor position of the active partition).
         /// </summary>
-        public int CursorAddress { get; private set; }
+        public int CursorAddress
+        {
+            get => _p.Cursor;
+            private set => _p.Cursor = value;
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the display is in explicit partitioned state: the host
+        /// has created partitions with Create Partition (GA23-0059-4 p. 2-7). False means implicit
+        /// partition state, one implicit partition 0 that is the whole screen.
+        /// </summary>
+        public bool ExplicitPartitioned => _explicitState;
+
+        /// <summary>
+        /// Gets the PID of the active partition, the one the operator's keys and the cursor are in
+        /// (p. 2-5). 0 in implicit partition state.
+        /// </summary>
+        public byte ActivePartitionId => _activePid;
+
+        /// <summary>
+        /// Gets INPID, the partition inbound data comes from and that a retry repeats (p. 3-20).
+        /// </summary>
+        public byte InboundPartitionId => _inboundPid;
+
+        /// <summary>
+        /// Gets the rows of the screen the partitions' viewports are placed on: in implicit
+        /// partition state the implicit partition's rows, in explicit partitioned state the usable
+        /// area's (p. 2-7, 5-10).
+        /// </summary>
+        public int ScreenRows => _explicitState ? _usableRows : _implicitPartition.Rows;
+
+        /// <summary>
+        /// Gets the columns of the screen the partitions' viewports are placed on.
+        /// </summary>
+        public int ScreenColumns => _explicitState ? _usableColumns : _implicitPartition.Columns;
+
+        /// <summary>
+        /// Gets the active partition: its presentation space, cursor and viewport.
+        /// </summary>
+        public Partition3270 ActivePartition => PartitionFor(_activePid) ?? _implicitPartition;
+
+        /// <summary>
+        /// The partition with a PID, or null when there is none. In implicit partition state only
+        /// PID 0 exists, the implicit partition.
+        /// </summary>
+        /// <param name="pid">
+        /// The partition identifier.
+        /// </param>
+        /// <returns>
+        /// The partition, or null.
+        /// </returns>
+        public Partition3270? GetPartition(byte pid) => PartitionFor(pid);
+
+        /// <summary>
+        /// The partition whose viewport covers a screen position, and the buffer address of that
+        /// position in it.
+        /// </summary>
+        /// <remarks>
+        /// Without scrolling the window is the whole presentation space at (0, 0), so the address is
+        /// (row - RV) x W + (column - CV) (GA23-0059-4 p. 2-3). A position outside every viewport
+        /// shows nothing (p. 5-14: a destroyed partition's viewport is cleared).
+        /// </remarks>
+        /// <param name="row">
+        /// The screen row, 0 at the top of the usable area.
+        /// </param>
+        /// <param name="column">
+        /// The screen column.
+        /// </param>
+        /// <param name="partition">
+        /// The partition, or null.
+        /// </param>
+        /// <param name="address">
+        /// The buffer address in that partition, or -1.
+        /// </param>
+        /// <returns>
+        /// True when a viewport covers the position.
+        /// </returns>
+        public bool TryGetScreenPosition(int row, int column, out Partition3270? partition, out int address)
+        {
+            if (!_explicitState)
+            {
+                Partition3270 ip = _implicitPartition;
+                if (row >= 0 && row < ip.Rows && column >= 0 && column < ip.Columns)
+                {
+                    partition = ip;
+                    address = (row * ip.Columns) + column;
+                    return true;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _partitions.Length; i++)
+                {
+                    Partition3270? p = _partitions[i];
+                    if (p != null
+                        && row >= p.ViewportRow && row < p.ViewportRow + p.Rows
+                        && column >= p.ViewportColumn && column < p.ViewportColumn + p.Columns)
+                    {
+                        partition = p;
+                        address = ((row - p.ViewportRow) * p.Columns) + (column - p.ViewportColumn);
+                        return true;
+                    }
+                }
+            }
+
+            partition = null;
+            address = -1;
+            return false;
+        }
+
+        /// <summary>
+        /// Gets or sets where the vertical outline is drawn across a character cell, in the cell
+        /// units of the Usable Area reply (VPOS of the Field Outlining query reply, GA23-0059-4
+        /// p. 6-49, 6-50), counted from the cell's left edge.
+        /// </summary>
+        /// <remarks>
+        /// The renderer draws the outlines and should set this to where it draws them. The
+        /// default 0, the cell's left edge, is an ASSUMPTION, not a measured value.
+        /// </remarks>
+        public int OutlineVerticalPosition { get; set; }
+
+        /// <summary>
+        /// Gets or sets where the overline and underline are drawn down a character cell, in the
+        /// cell units of the Usable Area reply (HPOS of the Field Outlining query reply, p. 6-49,
+        /// 6-50), counted from the cell's top edge.
+        /// </summary>
+        /// <remarks>
+        /// p. 6-49: "When the overline is drawn above the cell, the location of the underline,
+        /// which is the same as the location of the overline in the next row, is used." The
+        /// default 15, the bottom pel row of the default 16-high cell, is an ASSUMPTION, not a
+        /// measured value; the renderer should set it.
+        /// </remarks>
+        public int OutlineHorizontalPosition { get; set; } = 15;
 
         /// <summary>
         /// Gets why the keyboard is locked, or <see cref="KeyboardLock.None"/>.
@@ -1000,7 +1200,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <summary>
         /// Gets the inbound reply mode the host last set with Set Reply Mode.
         /// </summary>
-        public ReplyMode ReplyMode => _replyMode;
+        public ReplyMode ReplyMode => _p.InboundReplyMode;
 
         /// <summary>
         /// Gets or sets the base code page that turns typed characters into bytes, and that the
@@ -1036,9 +1236,9 @@ namespace RetroIO.Protocols.Tn3270
         {
             get
             {
-                for (int i = 0; i < _isFieldAttribute.Length; i++)
+                for (int i = 0; i < _p.IsFieldAttributeAt.Length; i++)
                 {
-                    if (_isFieldAttribute[i])
+                    if (_p.IsFieldAttributeAt[i])
                     {
                         return true;
                     }
@@ -1058,7 +1258,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The byte.
         /// </returns>
-        public byte GetByte(int address) => _buffer[address];
+        public byte GetByte(int address) => _p.Buffer[address];
 
         /// <summary>
         /// True when the position holds a field attribute (shown as a blank, p. 4-13).
@@ -1069,7 +1269,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// True for a field attribute position.
         /// </returns>
-        public bool IsFieldAttribute(int address) => _isFieldAttribute[address];
+        public bool IsFieldAttribute(int address) => _p.IsFieldAttributeAt[address];
 
         /// <summary>
         /// True when the character came in with Graphic Escape, so it is from the alternate set
@@ -1081,7 +1281,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// True for a GE character.
         /// </returns>
-        public bool IsGraphicEscape(int address) => _graphicEscape[address];
+        public bool IsGraphicEscape(int address) => _p.GraphicEscapeAt[address];
 
         /// <summary>
         /// The address of the field attribute that governs a position, or -1 on an unformatted
@@ -1099,7 +1299,7 @@ namespace RetroIO.Protocols.Tn3270
             int a = address;
             for (int n = 0; n < size; n++)
             {
-                if (_isFieldAttribute[a])
+                if (_p.IsFieldAttributeAt[a])
                 {
                     return a;
                 }
@@ -1119,7 +1319,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The colour value (GA23-0061-2 p. 2-10 lists X'F1'-X'F7').
         /// </returns>
-        public byte GetFieldColor(int fieldAttributeAddress) => _fieldColor[fieldAttributeAddress];
+        public byte GetFieldColor(int fieldAttributeAddress) => _p.FieldColor[fieldAttributeAddress];
 
         /// <summary>
         /// The foreground colour character attribute of one position (X'00' = take the field's).
@@ -1130,7 +1330,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The colour value.
         /// </returns>
-        public byte GetCharacterColor(int address) => _charColor[address];
+        public byte GetCharacterColor(int address) => _p.CharColor[address];
 
         /// <summary>
         /// The extended highlighting of the field at a field attribute address.
@@ -1141,7 +1341,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The highlight value (p. 4-18).
         /// </returns>
-        public byte GetFieldHighlight(int fieldAttributeAddress) => _fieldHighlight[fieldAttributeAddress];
+        public byte GetFieldHighlight(int fieldAttributeAddress) => _p.FieldHighlight[fieldAttributeAddress];
 
         /// <summary>
         /// The highlighting character attribute of one position.
@@ -1152,7 +1352,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The highlight value.
         /// </returns>
-        public byte GetCharacterHighlight(int address) => _charHighlight[address];
+        public byte GetCharacterHighlight(int address) => _p.CharHighlight[address];
 
         /// <summary>
         /// The character set of the field at a field attribute address (X'00' = default).
@@ -1167,7 +1367,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The character set's local ID (p. 4-19).
         /// </returns>
-        public byte GetFieldCharacterSet(int fieldAttributeAddress) => _fieldCharset[fieldAttributeAddress];
+        public byte GetFieldCharacterSet(int fieldAttributeAddress) => _p.FieldCharset[fieldAttributeAddress];
 
         /// <summary>
         /// The character set character attribute of one position (X'00' = take the field's).
@@ -1178,7 +1378,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The character set's local ID.
         /// </returns>
-        public byte GetCharacterCharacterSet(int address) => _charCharset[address];
+        public byte GetCharacterCharacterSet(int address) => _p.CharCharset[address];
 
         /// <summary>
         /// The background colour of the field at a field attribute address (X'00' = default).
@@ -1189,7 +1389,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The colour value (p. 4-18).
         /// </returns>
-        public byte GetFieldBackground(int fieldAttributeAddress) => _fieldBackground[fieldAttributeAddress];
+        public byte GetFieldBackground(int fieldAttributeAddress) => _p.FieldBackground[fieldAttributeAddress];
 
         /// <summary>
         /// The background colour character attribute of one position (X'00' = take the field's).
@@ -1200,7 +1400,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The colour value.
         /// </returns>
-        public byte GetCharacterBackground(int address) => _charBackground[address];
+        public byte GetCharacterBackground(int address) => _p.CharBackground[address];
 
         /// <summary>
         /// The transparency of the field at a field attribute address (X'00' = default).
@@ -1211,7 +1411,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The transparency value (p. 4-20).
         /// </returns>
-        public byte GetFieldTransparency(int fieldAttributeAddress) => _fieldTransparency[fieldAttributeAddress];
+        public byte GetFieldTransparency(int fieldAttributeAddress) => _p.FieldTransparency[fieldAttributeAddress];
 
         /// <summary>
         /// The transparency character attribute of one position (X'00' = take the field's).
@@ -1222,7 +1422,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The transparency value.
         /// </returns>
-        public byte GetCharacterTransparency(int address) => _charTransparency[address];
+        public byte GetCharacterTransparency(int address) => _p.CharTransparency[address];
 
         /// <summary>
         /// The field validation attribute of the field at a field attribute address (p. 4-21).
@@ -1233,7 +1433,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The validation bits: see <see cref="FieldValidation"/>.
         /// </returns>
-        public byte GetFieldValidation(int fieldAttributeAddress) => _fieldValidation[fieldAttributeAddress];
+        public byte GetFieldValidation(int fieldAttributeAddress) => _p.FieldValidationAt[fieldAttributeAddress];
 
         /// <summary>
         /// The field outlining attribute of the field at a field attribute address (p. 4-20).
@@ -1244,7 +1444,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <returns>
         /// The outlining bits: see <see cref="FieldOutlining"/>.
         /// </returns>
-        public byte GetFieldOutlining(int fieldAttributeAddress) => _fieldOutlining[fieldAttributeAddress];
+        public byte GetFieldOutlining(int fieldAttributeAddress) => _p.FieldOutliningAt[fieldAttributeAddress];
 
         /// <summary>
         /// Applies one complete outbound record (telnet framing already removed).
@@ -1272,6 +1472,40 @@ namespace RetroIO.Protocols.Tn3270
             if (command != Command3270.ReadModified && command != Command3270.ReadModifiedAll && command != Command3270.ReadBuffer)
             {
                 _retryLength = 0;
+            }
+
+            if (_explicitState && command != Command3270.WriteStructuredField)
+            {
+                // A command sent as the first byte, in explicit partitioned state (GA23-0059-4
+                // Table 3-3, p. 3-4):
+                //  - EW or EWA with WCC reset: "Reset the display to the implicit partition state;
+                //    execute the command" - every partition destroyed (p. 3-6 step 6b), then the
+                //    command runs as in implicit partition state, which sets the size.
+                //  - EW or EWA without reset, and Write: "Execute the command against explicit
+                //    partition 0; if no explicit partition 0, reject the command."
+                //  - EAU: "implicit or explicit partition 0 must exist" (p. 3-20).
+                //  - RB, RM, RMA: "Partition 0, whether implicit or explicit, must exist or the
+                //    read command sent as the first byte of the data stream is rejected" (p. 3-18
+                //    note 1). A Read Modified in a retry state is a retry instead (p. 3-17) and
+                //    sends the kept record, wherever it came from.
+                bool eraseWithReset = (command == Command3270.EraseWrite || command == Command3270.EraseWriteAlternate)
+                    && record.Length > 1 && (record[1] & Wcc.Reset) != 0;
+                bool retry = command == Command3270.ReadModified && _retryLength > 0;
+                if (eraseWithReset)
+                {
+                    ResetToImplicit(_sessionRows, _sessionColumns);
+                }
+                else if (!retry)
+                {
+                    Partition3270? zero = _partitions[0];
+                    if (zero == null)
+                    {
+                        Error("Command X'" + Hex(command) + "' sent as the first byte goes to explicit partition 0, and there is none; it is rejected (GA23-0059-4 Table 3-3 p. 3-4, p. 3-18, 3-20).");
+                        return false;
+                    }
+
+                    _p = zero;
+                }
             }
 
             switch (command)
@@ -1334,6 +1568,8 @@ namespace RetroIO.Protocols.Tn3270
                     break;
             }
 
+            // The operator's keys work on the active partition (p. 2-5).
+            SelectActive();
             return !_failed;
         }
 
@@ -1431,7 +1667,7 @@ namespace RetroIO.Protocols.Tn3270
             // The end is the last position before the next field attribute, never past the row.
             int rowEnd = ((CursorAddress / Columns) * Columns) + Columns - 1;
             int end = CursorAddress;
-            while (end < rowEnd && !_isFieldAttribute[end + 1])
+            while (end < rowEnd && !_p.IsFieldAttributeAt[end + 1])
             {
                 end++;
             }
@@ -1510,7 +1746,7 @@ namespace RetroIO.Protocols.Tn3270
 
             // It may wrap from the end of the screen to the end of the field.
             int p = CursorAddress;
-            while (!_isFieldAttribute[p])
+            while (!_p.IsFieldAttributeAt[p])
             {
                 StoreCharacter(p, FormatControl.Null, graphicEscape: false, useSa: false);
                 p = Next(p);
@@ -1540,7 +1776,7 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             // An erase-input keystroke unprimes a mandatory-fill field (p. 4-21).
-            _primedField = -1;
+            _p.PrimedField = -1;
             int size = Size;
             int first = GetFieldAttributeFor(size - 1);
             if (first < 0)
@@ -1554,17 +1790,17 @@ namespace RetroIO.Protocols.Tn3270
                 return true;
             }
 
-            bool isProtected = FieldAttribute.IsProtected(_buffer[first]);
+            bool isProtected = FieldAttribute.IsProtected(_p.Buffer[first]);
             bool any = false;
             for (int a = 0; a < size; a++)
             {
-                if (_isFieldAttribute[a])
+                if (_p.IsFieldAttributeAt[a])
                 {
-                    isProtected = FieldAttribute.IsProtected(_buffer[a]);
+                    isProtected = FieldAttribute.IsProtected(_p.Buffer[a]);
                     if (!isProtected)
                     {
                         any = true;
-                        _buffer[a] = (byte)(_buffer[a] & ~FieldAttribute.Mdt);
+                        _p.Buffer[a] = (byte)(_p.Buffer[a] & ~FieldAttribute.Mdt);
                     }
                 }
                 else if (!isProtected)
@@ -1591,7 +1827,7 @@ namespace RetroIO.Protocols.Tn3270
 
             int size = Size;
             int fa = GetFieldAttributeFor(CursorAddress);
-            if (fa >= 0 && !_isFieldAttribute[CursorAddress] && !FieldAttribute.IsProtected(_buffer[fa]) && Next(fa) != CursorAddress)
+            if (fa >= 0 && !_p.IsFieldAttributeAt[CursorAddress] && !FieldAttribute.IsProtected(_p.Buffer[fa]) && Next(fa) != CursorAddress)
             {
                 OperatorMove(Next(fa));
                 return;
@@ -1602,7 +1838,7 @@ namespace RetroIO.Protocols.Tn3270
             for (int n = 0; n < size; n++)
             {
                 a = a == 0 ? size - 1 : a - 1;
-                if (_isFieldAttribute[a] && !FieldAttribute.IsProtected(_buffer[a]) && Next(a) != CursorAddress && !_isFieldAttribute[Next(a)])
+                if (_p.IsFieldAttributeAt[a] && !FieldAttribute.IsProtected(_p.Buffer[a]) && Next(a) != CursorAddress && !_p.IsFieldAttributeAt[Next(a)])
                 {
                     OperatorMove(Next(a));
                     return;
@@ -1640,7 +1876,7 @@ namespace RetroIO.Protocols.Tn3270
             for (int n = 0; n < size; n++)
             {
                 int fa = GetFieldAttributeFor(a);
-                if (!_isFieldAttribute[a] && fa >= 0 && !FieldAttribute.IsProtected(_buffer[fa]))
+                if (!_p.IsFieldAttributeAt[a] && fa >= 0 && !FieldAttribute.IsProtected(_p.Buffer[fa]))
                 {
                     OperatorMove(a);
                     return;
@@ -1724,15 +1960,15 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             int fa = GetFieldAttributeFor(CursorAddress);
-            if (fa == CursorAddress || FieldAttribute.IsProtected(_buffer[fa]))
+            if (fa == CursorAddress || FieldAttribute.IsProtected(_p.Buffer[fa]))
             {
                 return;
             }
 
             int lastNonBlank = -1;
-            for (int a = Next(fa); !_isFieldAttribute[a]; a = Next(a))
+            for (int a = Next(fa); !_p.IsFieldAttributeAt[a]; a = Next(a))
             {
-                byte c = _buffer[a];
+                byte c = _p.Buffer[a];
                 if (c != FormatControl.Null && c != EbcdicSpace)
                 {
                     lastNonBlank = a;
@@ -1740,7 +1976,7 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             int target = lastNonBlank < 0 ? Next(fa) : Next(lastNonBlank);
-            if (lastNonBlank >= 0 && _isFieldAttribute[target])
+            if (lastNonBlank >= 0 && _p.IsFieldAttributeAt[target])
             {
                 target = lastNonBlank;
             }
@@ -1776,7 +2012,7 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             int fa = GetFieldAttributeFor(CursorAddress);
-            byte display = fa >= 0 ? (byte)(_buffer[fa] & FieldAttribute.DisplayMask) : (byte)0;
+            byte display = fa >= 0 ? (byte)(_p.Buffer[fa] & FieldAttribute.DisplayMask) : (byte)0;
             if (fa < 0 || (display != 0x04 && display != 0x08))
             {
                 Lock = KeyboardLock.OperatorError;
@@ -1784,22 +2020,22 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             int designator = Next(fa);
-            switch (_buffer[designator])
+            switch (_p.Buffer[designator])
             {
                 case EbcdicQuestion:
-                    _buffer[designator] = EbcdicGreater;
-                    _buffer[fa] = (byte)(_buffer[fa] | FieldAttribute.Mdt);
+                    _p.Buffer[designator] = EbcdicGreater;
+                    _p.Buffer[fa] = (byte)(_p.Buffer[fa] | FieldAttribute.Mdt);
                     return true;
                 case EbcdicGreater:
-                    _buffer[designator] = EbcdicQuestion;
-                    _buffer[fa] = (byte)(_buffer[fa] & ~FieldAttribute.Mdt);
+                    _p.Buffer[designator] = EbcdicQuestion;
+                    _p.Buffer[fa] = (byte)(_p.Buffer[fa] & ~FieldAttribute.Mdt);
                     return true;
                 case EbcdicSpace:
                 case FormatControl.Null:
-                    _buffer[fa] = (byte)(_buffer[fa] | FieldAttribute.Mdt);
+                    _p.Buffer[fa] = (byte)(_p.Buffer[fa] | FieldAttribute.Mdt);
                     return Attention(Aid.SelectorPen);
                 case EbcdicAmpersand:
-                    _buffer[fa] = (byte)(_buffer[fa] | FieldAttribute.Mdt);
+                    _p.Buffer[fa] = (byte)(_p.Buffer[fa] | FieldAttribute.Mdt);
                     return Attention(Aid.Enter);
                 default:
                     Lock = KeyboardLock.OperatorError;
@@ -1988,16 +2224,18 @@ namespace RetroIO.Protocols.Tn3270
                 // Clear: every field attribute becomes a null - no fields left (p. 4-13), the buffer
                 // and all extended attributes are cleared, the screen goes back to the default size
                 // and the cursor to 0 (GA23-0061-2 p. C-8). Then the short read: the AID alone.
-                Resize(_sessionRows, _sessionColumns);
-                CursorAddress = 0;
+                // In explicit partitioned state Clear also destroys every partition and goes back
+                // to implicit partition 0 (GA23-0059-4 p. 3-16: implicit partition 0 occurs
+                // "After the CLEAR key is pressed"; Figure 2-4, p. 2-8), so the short read comes
+                // from partition 0 in plain 3270 format.
+                ResetToImplicit(_sessionRows, _sessionColumns);
 
                 // And the inbound reply mode goes back to field mode: GA23-0059-4 Table C-1
                 // (p. C-1), row "CLEAR Key LULU", Inbound Reply Mode = R. x3270 does not do this
                 // (it resets the mode only on connect and on an Erase/Write with WCC reset), but the
                 // manual is the authority. A TN3270 host session is the LU-LU case; the "Unowned"
                 // row says implementation defined.
-                _replyMode = ReplyMode.Field;
-                _replyTypes = Array.Empty<byte>();
+                // ResetToImplicit has done it.
             }
 
             if (aid != Aid.Clear && !Aid.IsShortRead(aid))
@@ -2022,6 +2260,11 @@ namespace RetroIO.Protocols.Tn3270
             // Every key that talks to the host ends insert mode (GA23-0061-2 p. C-6).
             InsertMode = false;
             _lastAid = aid;
+
+            // "INPID is set to the PID of the active partition" (GA23-0059-4 p. 3-21 step 6);
+            // the data then comes from that partition, in an Inbound 3270DS when its PID is not 0
+            // (p. 6-7, case 3).
+            _inboundPid = _activePid;
             Lock = KeyboardLock.WaitingForHost;
             SendReadModified(aid, all: false);
             return true;
@@ -2097,7 +2340,7 @@ namespace RetroIO.Protocols.Tn3270
         {
             // Moving the cursor out of a primed mandatory-fill field validates it first; on failure
             // the cursor stays in the field (p. 4-21).
-            if (_primedField >= 0 && GetFieldAttributeFor(address) != _primedField && !ValidateFill())
+            if (_p.PrimedField >= 0 && GetFieldAttributeFor(address) != _p.PrimedField && !ValidateFill())
             {
                 return;
             }
@@ -2109,32 +2352,32 @@ namespace RetroIO.Protocols.Tn3270
         {
             // An unprotected mandatory-fill field is primed by a data key, Delete or Erase EOF in
             // it (p. 4-21). Protected fields cannot get here.
-            if (fieldAttribute >= 0 && (_fieldValidation[fieldAttribute] & FieldValidation.MandatoryFill) != 0)
+            if (fieldAttribute >= 0 && (_p.FieldValidationAt[fieldAttribute] & FieldValidation.MandatoryFill) != 0)
             {
-                _primedField = fieldAttribute;
+                _p.PrimedField = fieldAttribute;
             }
         }
 
         private bool ValidateFill()
         {
             // A DUP anywhere in the field passes; otherwise any null fails (p. 4-21).
-            if (_primedField < 0)
+            if (_p.PrimedField < 0)
             {
                 return true;
             }
 
             bool hasNull = false;
-            int a = Next(_primedField);
+            int a = Next(_p.PrimedField);
             int guard = Size;
-            while (!_isFieldAttribute[a] && guard-- > 0)
+            while (!_p.IsFieldAttributeAt[a] && guard-- > 0)
             {
-                if (_buffer[a] == FormatControl.Dup)
+                if (_p.Buffer[a] == FormatControl.Dup)
                 {
-                    _primedField = -1;
+                    _p.PrimedField = -1;
                     return true;
                 }
 
-                hasNull |= _buffer[a] == FormatControl.Null;
+                hasNull |= _p.Buffer[a] == FormatControl.Null;
                 a = Next(a);
             }
 
@@ -2144,7 +2387,7 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            _primedField = -1;
+            _p.PrimedField = -1;
             return true;
         }
 
@@ -2154,10 +2397,10 @@ namespace RetroIO.Protocols.Tn3270
             int size = Size;
             for (int a = 0; a < size; a++)
             {
-                if (_isFieldAttribute[a]
-                    && (_fieldValidation[a] & FieldValidation.MandatoryEntry) != 0
-                    && !FieldAttribute.IsProtected(_buffer[a])
-                    && (_buffer[a] & FieldAttribute.Mdt) == 0)
+                if (_p.IsFieldAttributeAt[a]
+                    && (_p.FieldValidationAt[a] & FieldValidation.MandatoryEntry) != 0
+                    && !FieldAttribute.IsProtected(_p.Buffer[a])
+                    && (_p.Buffer[a] & FieldAttribute.Mdt) == 0)
                 {
                     return a;
                 }
@@ -2173,7 +2416,7 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            if (InsertMode && _buffer[CursorAddress] != FormatControl.Null)
+            if (InsertMode && _p.Buffer[CursorAddress] != FormatControl.Null)
             {
                 // Insert (GA23-0061-2 p. C-5): the first null at or after the cursor in the field
                 // takes the shift; characters after that null stay. No null: Too Much Data. The
@@ -2182,9 +2425,9 @@ namespace RetroIO.Protocols.Tn3270
                 int size = Size;
                 int hole = -1;
                 int p = CursorAddress;
-                for (int n = 0; n < size && !_isFieldAttribute[p]; n++)
+                for (int n = 0; n < size && !_p.IsFieldAttributeAt[p]; n++)
                 {
-                    if (_buffer[p] == FormatControl.Null)
+                    if (_p.Buffer[p] == FormatControl.Null)
                     {
                         hole = p;
                         break;
@@ -2231,9 +2474,9 @@ namespace RetroIO.Protocols.Tn3270
             // the autoskip case; the step past a plain attribute follows x3270 kybd.c
             // ("Implement auto-skip"), read, not copied.
             int guard = Size;
-            while (_isFieldAttribute[next] && guard-- > 0)
+            while (_p.IsFieldAttributeAt[next] && guard-- > 0)
             {
-                next = FieldAttribute.IsAutoSkip(_buffer[next]) ? NextInputPosition(next) : Next(next);
+                next = FieldAttribute.IsAutoSkip(_p.Buffer[next]) ? NextInputPosition(next) : Next(next);
             }
 
             OperatorMove(next);
@@ -2246,7 +2489,7 @@ namespace RetroIO.Protocols.Tn3270
             // field attribute or in a protected field they lock the keyboard ("Go Elsewhere",
             // GA27-2890-4 p. 2-21; GA23-0061-2 p. C-3 to C-7). An unformatted screen is all input.
             fieldAttribute = GetFieldAttributeFor(CursorAddress);
-            if (fieldAttribute >= 0 && (_isFieldAttribute[CursorAddress] || FieldAttribute.IsProtected(_buffer[fieldAttribute])))
+            if (fieldAttribute >= 0 && (_p.IsFieldAttributeAt[CursorAddress] || FieldAttribute.IsProtected(_p.Buffer[fieldAttribute])))
             {
                 Lock = KeyboardLock.OperatorError;
                 return false;
@@ -2259,26 +2502,26 @@ namespace RetroIO.Protocols.Tn3270
         {
             if (fieldAttribute >= 0)
             {
-                _buffer[fieldAttribute] = (byte)(_buffer[fieldAttribute] | FieldAttribute.Mdt);
+                _p.Buffer[fieldAttribute] = (byte)(_p.Buffer[fieldAttribute] | FieldAttribute.Mdt);
             }
         }
 
         private void MoveCell(int from, int to)
         {
             // A character and its character attributes, never a field attribute.
-            _buffer[to] = _buffer[from];
-            _graphicEscape[to] = _graphicEscape[from];
-            _charHighlight[to] = _charHighlight[from];
-            _charColor[to] = _charColor[from];
-            _charCharset[to] = _charCharset[from];
-            _charBackground[to] = _charBackground[from];
-            _charTransparency[to] = _charTransparency[from];
+            _p.Buffer[to] = _p.Buffer[from];
+            _p.GraphicEscapeAt[to] = _p.GraphicEscapeAt[from];
+            _p.CharHighlight[to] = _p.CharHighlight[from];
+            _p.CharColor[to] = _p.CharColor[from];
+            _p.CharCharset[to] = _p.CharCharset[from];
+            _p.CharBackground[to] = _p.CharBackground[from];
+            _p.CharTransparency[to] = _p.CharTransparency[from];
         }
 
         private void Write(ReadOnlySpan<byte> data, bool erase, bool alternate, bool fromStructuredField = false)
         {
             // "A write operation to that partition" unprimes a mandatory-fill field (p. 4-21).
-            _primedField = -1;
+            _p.PrimedField = -1;
 
             // "A write command with no WCC and no data is a no-op" (p. 3-2); an EW with no WCC is a
             // no-op too, nothing is erased (p. 3-6).
@@ -2297,8 +2540,10 @@ namespace RetroIO.Protocols.Tn3270
             if (erase)
             {
                 // Erase/Write steps (p. 3-6): screen size, nulls, attributes to X'00', cursor to 0.
-                // Inside Outbound 3270DS the size does not change (p. 5-47).
-                if (fromStructuredField)
+                // Inside Outbound 3270DS the size does not change (p. 5-47). Nor does it in explicit
+                // partitioned state: step 1 sets the size only "If in implicit partition state"
+                // (p. 3-6), so an EW to explicit partition 0 erases it at its own size.
+                if (fromStructuredField || _explicitState)
                 {
                     Resize(Rows, Columns);
                 }
@@ -2316,18 +2561,18 @@ namespace RetroIO.Protocols.Tn3270
                 if ((wcc & Wcc.Reset) != 0)
                 {
                     // EW or EWA with the WCC reset bit puts the reply mode back to Field (p. 5-62).
-                    _replyMode = ReplyMode.Field;
-                    _replyTypes = Array.Empty<byte>();
+                    _p.InboundReplyMode = ReplyMode.Field;
+                    _p.ReplyTypes = Array.Empty<byte>();
                 }
             }
             if ((wcc & Wcc.ResetMdt) != 0)
             {
                 // Reset MDT happens before any data or order (p. 3-3).
-                for (int i = 0; i < _buffer.Length; i++)
+                for (int i = 0; i < _p.Buffer.Length; i++)
                 {
-                    if (_isFieldAttribute[i])
+                    if (_p.IsFieldAttributeAt[i])
                     {
-                        _buffer[i] = (byte)(_buffer[i] & ~FieldAttribute.Mdt);
+                        _p.Buffer[i] = (byte)(_p.Buffer[i] & ~FieldAttribute.Mdt);
                     }
                 }
             }
@@ -2385,7 +2630,7 @@ namespace RetroIO.Protocols.Tn3270
                             goto Done;
                         }
 
-                        if (!_isFieldAttribute[address])
+                        if (!_p.IsFieldAttributeAt[address])
                         {
                             Error("MF where the buffer address holds no field attribute is rejected (p. 4-6).");
                             goto Done;
@@ -2475,14 +2720,14 @@ namespace RetroIO.Protocols.Tn3270
                         }
 
                         int fa = GetFieldAttributeFor(address);
-                        bool isProtected = fa >= 0 && FieldAttribute.IsProtected(_buffer[fa]);
+                        bool isProtected = fa >= 0 && FieldAttribute.IsProtected(_p.Buffer[fa]);
                         int a = address;
                         do
                         {
-                            if (_isFieldAttribute[a])
+                            if (_p.IsFieldAttributeAt[a])
                             {
                                 // Field attributes are left alone; they decide what follows (p. 4-9).
-                                isProtected = FieldAttribute.IsProtected(_buffer[a]);
+                                isProtected = FieldAttribute.IsProtected(_p.Buffer[a]);
                             }
                             else if (!isProtected)
                             {
@@ -2628,8 +2873,20 @@ namespace RetroIO.Protocols.Tn3270
                         FileTransferField?.Invoke(field);
                         ok = true;
                         break;
+                    case CreatePartitionId:
+                        ok = CreatePartition(field);
+                        break;
+                    case DestroyPartitionId:
+                        ok = DestroyPartition(field);
+                        break;
+                    case ActivatePartitionId:
+                        ok = ActivatePartition(field);
+                        break;
+                    case ResetPartitionId:
+                        ok = ResetPartition(field);
+                        break;
                     default:
-                        Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Set Reply Mode, Outbound 3270DS and X'D0' file transfer are).");
+                        Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Set Reply Mode, Outbound 3270DS, Create, Destroy, Activate and Reset Partition, and X'D0' file transfer are).");
                         ok = false;
                         break;
                 }
@@ -2738,27 +2995,42 @@ namespace RetroIO.Protocols.Tn3270
                 case Command3270.ReadBuffer:
                 case Command3270.ReadModified:
                 case Command3270.ReadModifiedAll:
-                    if (pid != 0x00)
+                {
+                    // "The operation type is Read Modified, Read Modified All, or Read Buffer, and
+                    // PID does not exist" is rejected (p. 5-48).
+                    Partition3270? target = PartitionFor(pid);
+                    if (target == null)
                     {
-                        Error("Read Partition of partition X'" + Hex(pid) + "': only the implicit partition 0 exists, partitions are not built (p. 5-48).");
+                        Error("Read Partition of partition X'" + Hex(pid) + "', which does not exist, is rejected (p. 5-48; Table B-1 p. B-2, PID is unknown partition).");
                         return false;
                     }
 
-                    // Partition 0 answers in plain 3270 format, not in Inbound 3270DS (p. 6-7). The
-                    // manual contradicts itself on the AID: p. 5-49 step 8 says X'61', but p. 3-9
-                    // note 2 says X'61' can never be the first byte of an inbound stream, and in
-                    // plain 3270 format the AID is the first byte. The current AID is sent, which
-                    // obeys p. 3-9.
+                    // p. 5-49 steps 2 to 8: INPID is set to the PID, INOP to the operation, the
+                    // data goes inbound and the device is in retry-read state, where a Read
+                    // Modified command sends the same data again (p. 3-17, 3-18).
+                    _inboundPid = pid;
+                    _p = target;
+
+                    // A partition with a nonzero PID answers in an Inbound 3270DS with AID X'61'
+                    // (p. 3-16, 6-7 case 2, 5-49 step 8). Partition 0 answers in plain 3270 format
+                    // (p. 6-7, 3-16), and there the manual contradicts itself on the AID: p. 5-49
+                    // step 8 says X'61', but p. 3-9 note 2 says X'61' can never be the first byte
+                    // of an inbound stream, and in plain 3270 format the AID is the first byte. The
+                    // current AID is sent for partition 0, which obeys p. 3-9.
+                    byte aid = pid == 0 ? _lastAid : Aid.ReadPartition;
                     if (type == Command3270.ReadBuffer)
                     {
-                        SendReadBuffer(_lastAid);
+                        SendReadBuffer(aid);
                     }
                     else
                     {
-                        SendReadModified(_lastAid, all: type == Command3270.ReadModifiedAll);
+                        SendReadModified(aid, all: type == Command3270.ReadModifiedAll);
                     }
 
+                    KeepLastInboundForRetry();
+                    SelectActive();
                     return true;
+                }
 
                 default:
                     Error("Read Partition type X'" + Hex(type) + "' is reserved and rejected (p. 5-48).");
@@ -2777,18 +3049,18 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
+            // "Resets the device to implicit partition state destroying all existing (implicit or
+            // explicit) partitions" and makes implicit partition 0 "with default partition
+            // characteristics" (p. 5-15): Field reply mode, INPID 0.
             if ((field[3] & 0x80) != 0)
             {
-                Resize(_sessionAlternateRows, _sessionAlternateColumns);
+                ResetToImplicit(_sessionAlternateRows, _sessionAlternateColumns);
             }
             else
             {
-                Resize(_sessionRows, _sessionColumns);
+                ResetToImplicit(_sessionRows, _sessionColumns);
             }
 
-            CursorAddress = 0;
-            _replyMode = ReplyMode.Field;
-            _replyTypes = Array.Empty<byte>();
             return true;
         }
 
@@ -2801,9 +3073,12 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            if (field[3] != 0x00)
+            // The mode belongs to the partition named (p. 5-61); "PID is unknown partition" is an
+            // error (Table B-1, p. B-2).
+            Partition3270? target = PartitionFor(field[3]);
+            if (target == null)
             {
-                Error("Set Reply Mode for partition X'" + Hex(field[3]) + "': only the implicit partition 0 exists, partitions are not built.");
+                Error("Set Reply Mode for partition X'" + Hex(field[3]) + "', which does not exist, is rejected (Table B-1 p. B-2, PID is unknown partition).");
                 return false;
             }
 
@@ -2824,8 +3099,8 @@ namespace RetroIO.Protocols.Tn3270
                 }
             }
 
-            _replyMode = (ReplyMode)mode;
-            _replyTypes = types.ToArray();
+            target.InboundReplyMode = (ReplyMode)mode;
+            target.ReplyTypes = types.ToArray();
             return true;
         }
 
@@ -2838,12 +3113,26 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            if (field[3] != 0x00)
+            // "The specified partition must be defined or a data stream error occurs" (p. 5-40);
+            // in implicit partition state only PID 0 is (Table 3-3, p. 3-4: "If the PID does not
+            // equal 0, reject with -RSP"). The orders and data are then the partition's: buffer
+            // addresses relative to its origin, in its address mode (p. 4-3, 4-4), and a WCC reset
+            // resets only that partition (p. 5-41).
+            Partition3270? target = PartitionFor(field[3]);
+            if (target == null)
             {
-                Error("Outbound 3270DS for partition X'" + Hex(field[3]) + "': only partition 0 exists, partitions are not built (p. 5-40).");
+                Error("Outbound 3270DS for partition X'" + Hex(field[3]) + "', which does not exist, is rejected (p. 5-40; Table 3-3 p. 3-4).");
                 return false;
             }
 
+            _p = target;
+            bool ok = Outbound3270DSCommand(field);
+            SelectActive();
+            return ok;
+        }
+
+        private bool Outbound3270DSCommand(ReadOnlySpan<byte> field)
+        {
             ReadOnlySpan<byte> rest = field.Slice(5);
             switch (field[4])
             {
@@ -2866,6 +3155,431 @@ namespace RetroIO.Protocols.Tn3270
                     Error("Outbound 3270DS command X'" + Hex(field[4]) + "' is reserved and rejected (p. 5-40).");
                     return false;
             }
+        }
+
+        // Create Partition, X'0C' (GA23-0059-4 p. 5-10 to 5-13). Bytes: 0-1 L, 2 X'0C', 3 PID,
+        // 4 UOM (bits 0-3) and A-MODE (bits 4-7), 5 flags (bit 0 reserved, 1 PROT, 2 COPY, 3-4
+        // reserved, 5-7 BASE), 6-7 H, 8-9 W, 10-11 RV, 12-13 CV, 14-15 HV, 16-17 WV, 18-19 RW,
+        // 20-21 CW, 22-23 RS, 24-25 reserved, 26-27 PW, 28-29 PH. "Working backwards from byte 29,
+        // the above parameters may be progressively omitted by specifying the appropriate length"
+        // (p. 5-12), with the defaults of the table on p. 5-12.
+        //
+        // What is built: character-cell units only, 12/14-bit or 16-bit addressing, and a
+        // presentation space the same size as its viewport with the window at (0, 0) - no
+        // scrolling, which the Alphanumeric Partitions reply says (SCROLL = 0, p. 6-19). Anything
+        // else this display reports as not supported is refused out loud, never approximated.
+        private bool CreatePartition(ReadOnlySpan<byte> field)
+        {
+            int length = field.Length;
+            if (length > 30 || (length > 6 && (length & 1) != 0))
+            {
+                // A two-byte parameter cut in half, or more than byte 29.
+                Error("Create Partition of " + length + " bytes: its parameters end at byte 29 and are left off two bytes at a time from the end (p. 5-11, 5-12; Table B-1 p. B-2, Incorrect length).");
+                return false;
+            }
+
+            byte pid = length > 3 ? field[3] : (byte)0;
+            if (pid >= MaxPartitions)
+            {
+                Error("Create Partition PID X'" + Hex(pid) + "' is above the highest this display takes, X'" + Hex(MaxPartitions - 1) + "' (Alphanumeric Partitions NA, p. 6-18; Table B-1 p. B-2, PID > maximum allowed).");
+                return false;
+            }
+
+            byte modes = length > 4 ? field[4] : (byte)0;
+            int uom = modes >> 4;
+            int addressMode = modes & 0x0F;
+            if (uom != 0)
+            {
+                // "If the CELL parameter of the Usable Area Query Reply is B'0', only UOM =
+                // B'0000' is supported" (p. 5-12); this display's CELLUNITS is 0.
+                Error("Create Partition UOM B'" + Convert.ToString(uom, 2).PadLeft(4, '0') + "': only character cells (B'0000') are supported, the Usable Area reply has CELLUNITS 0 (p. 5-12; Table B-1 p. B-2, Invalid UOM value).");
+                return false;
+            }
+
+            if (addressMode == 2)
+            {
+                Error("Create Partition A-MODE B'0010' asks for a text partition, which is not built: no Text Partitions query reply is sent (p. 5-11, 5-13).");
+                return false;
+            }
+
+            if (addressMode > 2)
+            {
+                Error("Create Partition A-MODE B'" + Convert.ToString(addressMode, 2).PadLeft(4, '0') + "' is reserved (p. 5-11; Table B-1 p. B-2, Invalid A-MODE).");
+                return false;
+            }
+
+            byte flags = length > 5 ? field[5] : (byte)0;
+            if ((flags & 0x98) != 0)
+            {
+                Error("Create Partition flags X'" + Hex(flags) + "' set reserved bit 0, 3 or 4 (p. 5-11; Table B-1 p. B-2, Reserved field is not zero).");
+                return false;
+            }
+
+            if ((flags & 0x40) != 0)
+            {
+                Error("Create Partition asks for a protected partition (PROT), which this display does not support: its Alphanumeric Partitions reply has PROT 0 (p. 5-11, 6-19).");
+                return false;
+            }
+
+            if ((flags & 0x20) != 0)
+            {
+                Error("Create Partition asks for a presentation space local copy (COPY), which this display does not support: its Alphanumeric Partitions reply has COPY 0 (p. 5-11, 6-19).");
+                return false;
+            }
+
+            if ((flags & 0x07) != 0)
+            {
+                // BASE counts down the base set descriptors of the Character Sets reply (p. 6-25);
+                // this display sends one, so only index 0 exists.
+                Error("Create Partition BASE " + (flags & 0x07) + ": the Character Sets reply has one base character set, index 0 (p. 5-10, 6-25; Table B-1 p. B-2, Base > supported number).");
+                return false;
+            }
+
+            // The usable area the viewport goes on. In implicit partition state, or when this
+            // Create replaces the only partition, it is chosen now: "the device first tries to fit
+            // the viewport in the base usable area, then in the alternate one, and rejects the
+            // structured field if it fits in neither" (p. 6-93); the alternate one is "limited to a
+            // single-partition implementation" (p. 6-93). Otherwise it is the one in use.
+            UsableArea(out int baseRows, out int baseColumns, out bool nested);
+            int screenRows = _usableRows;
+            int screenColumns = _usableColumns;
+            bool onlyPartition = !_explicitState || (CountPartitions() == 1 && _partitions[pid] != null);
+            if (onlyPartition)
+            {
+                screenRows = baseRows;
+                screenColumns = baseColumns;
+            }
+
+            int h = Field16(field, 6, _sessionRows);
+            int w = Field16(field, 8, _sessionColumns);
+            int rv = Field16(field, 10, 0);
+            int cv = Field16(field, 12, 0);
+            int hv = Field16(field, 14, Math.Min(h, screenRows));
+            int wv = Field16(field, 16, Math.Min(w, screenColumns));
+            if (onlyPartition && !nested && (rv + hv > screenRows || cv + wv > screenColumns)
+                && rv + hv <= _alternateRows && cv + wv <= _alternateColumns)
+            {
+                screenRows = _alternateRows;
+                screenColumns = _alternateColumns;
+                if (length < 16)
+                {
+                    // The viewport defaults follow the usable area it now goes on.
+                    hv = Field16(field, 14, Math.Min(h, screenRows));
+                    wv = Field16(field, 16, Math.Min(w, screenColumns));
+                }
+            }
+
+            int rw = Field16(field, 18, 0);
+            int cw = Field16(field, 20, 0);
+            int rs = Field16(field, 22, h != hv ? 1 : 0);
+            int cs = Field16(field, 24, w != wv ? 1 : 0);
+            int pw = Field16(field, 26, CellWidth);
+            int ph = Field16(field, 28, CellHeight);
+
+            if (hv == 0 || wv == 0)
+            {
+                Error("Create Partition with a viewport " + hv + " high and " + wv + " wide: a zero viewport needs Modify Partition, which this display does not support (p. 5-10 conditions 1 and 2, 6-19).");
+                return false;
+            }
+
+            if (rv + hv > screenRows || cv + wv > screenColumns)
+            {
+                Error("Create Partition viewport at row " + rv + ", column " + cv + ", " + hv + " x " + wv + ", does not fit the " + screenRows + " x " + screenColumns + " usable area (p. 5-10 conditions 3, 4 and 6; Table B-1 p. B-2, Specification error in Viewport/Window).");
+                return false;
+            }
+
+            for (int i = 0; i < _partitions.Length; i++)
+            {
+                Partition3270? other = _partitions[i];
+                if (!_explicitState || other == null || i == pid)
+                {
+                    // The partition with this PID is destroyed and replaced (p. 5-10).
+                    continue;
+                }
+
+                bool apart = rv >= other.ViewportRow + other.Rows || rv + hv <= other.ViewportRow
+                    || cv >= other.ViewportColumn + other.Columns || cv + wv <= other.ViewportColumn;
+                if (!apart)
+                {
+                    Error("Create Partition viewport at row " + rv + ", column " + cv + ", " + hv + " x " + wv + ", overlaps the viewport of partition " + i + " (p. 5-10 condition 5; Table B-1 p. B-2, Specification error in Viewport/Window).");
+                    return false;
+                }
+            }
+
+            if (rs >= 0x0002 && rs <= 0xFFFE)
+            {
+                Error("Create Partition RS " + rs + ": vertical windowing is not supported (Table B-1 p. B-2, RS = X'0002'-X'FFFE' and vertical windowing not supported).");
+                return false;
+            }
+
+            if (cs >= 0x0002 && cs <= 0xFFFE)
+            {
+                // Bytes 24-25 are printed as reserved in the format table, and as CS in the
+                // defaults table (p. 5-11, 5-12) and in Table B-1. Either reading rejects these.
+                Error("Create Partition bytes 24-25 (CS) " + cs + ": horizontal windowing is not supported (Table B-1 p. B-2, CS = X'0002'-X'FFFE' and horizontal windowing not supported).");
+                return false;
+            }
+
+            if (h != hv || w != wv)
+            {
+                // A presentation space larger than its viewport is a scrolling partition
+                // (p. 2-3, 6-19); a smaller one cannot hold the window (p. 5-10 item 10).
+                Error("Create Partition presentation space " + h + " x " + w + " is not the size of its viewport " + hv + " x " + wv + ": scrolling is not supported (Alphanumeric Partitions SCROLL 0, p. 6-19) and the window must lie inside the presentation space (p. 5-10 item 10).");
+                return false;
+            }
+
+            if (rw != 0 || cw != 0)
+            {
+                Error("Create Partition window origin row " + rw + ", column " + cw + ": with the window the size of the presentation space only (0, 0) lies inside it (p. 5-10 item 10).");
+                return false;
+            }
+
+            if (pw != CellWidth || ph != CellHeight)
+            {
+                // VCP = 0 in the Usable Area reply: one cell size for every partition (p. 6-88).
+                Error("Create Partition cell " + pw + " x " + ph + " points: this display has one cell size, " + CellWidth + " x " + CellHeight + " (Usable Area VCP 0, p. 6-88).");
+                return false;
+            }
+
+            // Storage: CM(H x W) bytes per partition with CM = 1, the total at most M (p. 6-19).
+            int used = h * w;
+            for (int i = 0; _explicitState && i < _partitions.Length; i++)
+            {
+                Partition3270? other = _partitions[i];
+                if (other != null && i != pid)
+                {
+                    used += other.Size;
+                }
+            }
+
+            if (used > PartitionStorage)
+            {
+                Error("Create Partition needs " + used + " bytes of partition storage, more than the " + PartitionStorage + " this display has (p. 6-19; Table B-1 p. B-2, Insufficient resource).");
+                return false;
+            }
+
+            if (addressMode == 0 && h * w > 0x4000)
+            {
+                // A 14-bit address reaches 16383 (p. 4-4); the manual gives no rule for a larger
+                // 12/14-bit partition, so it is refused rather than half addressable.
+                Error("Create Partition of " + (h * w) + " cells with 12/14-bit addressing: 14 bits reach only 16384 cells (p. 4-4); use A-MODE B'0001'.");
+                return false;
+            }
+
+            // Everything is valid: make it. In implicit partition state "implicit partition 0 is
+            // destroyed by the Create Partition and a partition identifier equal to PID is
+            // created. The display state is changed ... to explicit partitioned state and the
+            // created partition is made active" (p. 5-10). The destroyed implicit partition was
+            // the inbound one, so INPID becomes 0 (p. 3-20).
+            var created = new Partition3270(pid, h, w, rv, cv, addressMode == 1);
+            bool wasExplicit = _explicitState;
+            Partition3270? replaced = wasExplicit ? _partitions[pid] : null;
+            if (!wasExplicit)
+            {
+                Array.Clear(_partitions);
+                _explicitState = true;
+                _inboundPid = 0;
+                _retryLength = 0;
+            }
+            else if (replaced != null && pid == _inboundPid)
+            {
+                // "Destruction of the inbound partition sets INPID to 0" (p. 3-20); a Create
+                // Partition to the inbound partition is a read acknowledgment (p. 3-23).
+                _inboundPid = 0;
+                _retryLength = 0;
+            }
+
+            _usableRows = screenRows;
+            _usableColumns = screenColumns;
+            _partitions[pid] = created;
+
+            // The cursor at the window origin and the buffer address 0 (p. 5-10 items 7 and 8):
+            // a new Partition3270 starts with both at 0.
+            if (!wasExplicit || CountPartitions() == 1)
+            {
+                // The first, or "the only partition with a window of nonzero extent" (p. 5-10).
+                _activePid = pid;
+            }
+
+            // A replaced partition that was active stays the active one: the manual says only
+            // that the old one is destroyed and replaced (p. 5-10), and names no other partition
+            // to activate.
+            SelectActive();
+            return true;
+        }
+
+        // Destroy Partition, X'0D' (p. 5-14).
+        private bool DestroyPartition(ReadOnlySpan<byte> field)
+        {
+            if (field.Length != 4)
+            {
+                Error("Destroy Partition is 4 bytes, X'0004' X'0D' PID (p. 5-14; Table B-1 p. B-2, Incorrect length).");
+                return false;
+            }
+
+            byte pid = field[3];
+            if (pid >= MaxPartitions)
+            {
+                Error("Destroy Partition PID X'" + Hex(pid) + "' is above the highest this display takes, X'" + Hex(MaxPartitions - 1) + "' (Table B-1 p. B-2, PID > maximum allowed).");
+                return false;
+            }
+
+            if (PartitionFor(pid) == null)
+            {
+                // "If the identified partition does not exist, Destroy Partition has no effect."
+                return true;
+            }
+
+            if (!_explicitState || CountPartitions() == 1)
+            {
+                // The only existing partition (implicit partition 0 counts, p. 3-23 names "a
+                // Destroy Partition structured field to the inbound partition including explicit
+                // and implicit partition 0"): destroyed, implicit partition state with the default
+                // implicit partition 0, "any Input Inhibit conditions" reset, INOP Read Modified
+                // and INPID 0.
+                ResetToImplicit(_sessionRows, _sessionColumns);
+                Lock = KeyboardLock.None;
+                return true;
+            }
+
+            if (pid == _activePid)
+            {
+                // "activates the next partition with a window of nonzero extent" - every
+                // partition here has one - the next being the one with the smallest PID greater
+                // than this one, or else the lowest (p. 2-5, the jump-partition rule).
+                _activePid = NextPartitionAfter(pid);
+            }
+
+            if (pid == _inboundPid)
+            {
+                _inboundPid = 0;
+                _retryLength = 0;
+            }
+
+            _partitions[pid] = null;
+            SelectActive();
+            return true;
+        }
+
+        // Activate Partition, X'0E' (p. 5-8).
+        private bool ActivatePartition(ReadOnlySpan<byte> field)
+        {
+            if (field.Length != 4)
+            {
+                Error("Activate Partition is 4 bytes, X'0004' X'0E' PID (p. 5-8; Table B-1 p. B-2, Incorrect length).");
+                return false;
+            }
+
+            byte pid = field[3];
+            if (PartitionFor(pid) == null)
+            {
+                Error("Activate Partition of partition X'" + Hex(pid) + "', which does not exist, is rejected (p. 5-8 step 1).");
+                return false;
+            }
+
+            // The partition is made active and the screen cursor is shown at its current cursor
+            // position (p. 5-8 steps 2 and 3). The keyboard lock here is one for the whole
+            // display, so there are no per-partition input inhibit conditions to save and raise
+            // (steps 4 and 5); see the class remarks.
+            _activePid = pid;
+            SelectActive();
+            return true;
+        }
+
+        // Reset Partition, X'00' (p. 5-51): the inbound reply mode back to Field. Format groups
+        // and Set Partition Characteristics, the other two characteristics it resets, are not
+        // built, so there is nothing else to reset.
+        private bool ResetPartition(ReadOnlySpan<byte> field)
+        {
+            if (field.Length != 4)
+            {
+                Error("Reset Partition is 4 bytes, X'0004' X'00' PID (p. 5-51; Table B-1 p. B-2, Incorrect length).");
+                return false;
+            }
+
+            Partition3270? target = PartitionFor(field[3]);
+            if (target == null)
+            {
+                Error("Reset Partition of partition X'" + Hex(field[3]) + "', which does not exist, is rejected (Table B-1 p. B-2, PID is unknown partition).");
+                return false;
+            }
+
+            target.InboundReplyMode = ReplyMode.Field;
+            target.ReplyTypes = Array.Empty<byte>();
+            return true;
+        }
+
+        private int CountPartitions()
+        {
+            int n = 0;
+            for (int i = 0; i < _partitions.Length; i++)
+            {
+                if (_partitions[i] != null)
+                {
+                    n++;
+                }
+            }
+
+            return n;
+        }
+
+        // The smallest PID greater than pid, or else the lowest PID (p. 2-5).
+        private byte NextPartitionAfter(byte pid)
+        {
+            for (int i = pid + 1; i < _partitions.Length; i++)
+            {
+                if (_partitions[i] != null)
+                {
+                    return (byte)i;
+                }
+            }
+
+            for (int i = 0; i < pid; i++)
+            {
+                if (_partitions[i] != null)
+                {
+                    return (byte)i;
+                }
+            }
+
+            return pid;
+        }
+
+        // A two-byte parameter, or its default when the structured field ends before it.
+        private static int Field16(ReadOnlySpan<byte> field, int offset, int defaultValue)
+        {
+            return field.Length >= offset + 2 ? (field[offset] << 8) | field[offset + 1] : defaultValue;
+        }
+
+        // The base usable area as the Usable Area reply reports it (see AppendQueryReply): the
+        // larger size when one holds the other, else the default size with the alternate one in
+        // an Alternate Usable Area parameter.
+        private void UsableArea(out int rows, out int columns, out bool nested)
+        {
+            bool defaultHoldsAlternate = _defaultColumns >= _alternateColumns && _defaultRows >= _alternateRows;
+            bool alternateHoldsDefault = _alternateColumns >= _defaultColumns && _alternateRows >= _defaultRows;
+            nested = defaultHoldsAlternate || alternateHoldsDefault;
+            columns = nested ? Math.Max(_defaultColumns, _alternateColumns) : _defaultColumns;
+            rows = nested ? Math.Max(_defaultRows, _alternateRows) : _defaultRows;
+        }
+
+        // M of the Alphanumeric Partitions reply: the bytes of partition storage (p. 6-19). With
+        // no scrolling and no overlap the partitions never hold more cells than the largest usable
+        // area, so that is what this display has.
+        private int PartitionStorage => Math.Max(_defaultRows * _defaultColumns, _alternateRows * _alternateColumns);
+
+        // Keeps the inbound record just sent so that a Read Modified command sends it again: the
+        // retry-read state of p. 3-17, 3-18 after a Read Partition read (p. 5-49 step 7).
+        private void KeepLastInboundForRetry()
+        {
+            ReadOnlySpan<byte> record = _inbound.WrittenSpan;
+            if (_retryRecord.Length < record.Length)
+            {
+                _retryRecord = new byte[record.Length];
+            }
+
+            record.CopyTo(_retryRecord);
+            _retryLength = record.Length;
         }
 
         private void SendQueryReplies(ReadOnlySpan<byte> listed, bool all)
@@ -2926,9 +3640,16 @@ namespace RetroIO.Protocols.Tn3270
 
                 case QueryCode.UsableArea:
                 {
-                    // p. 6-85 to 6-90. Flags: 12/14-bit addressing (X'01'), no special features.
+                    // p. 6-85 to 6-90. Flags: ADDR X'3', "12/14/16-bit addressing allowed. This
+                    // value is used to support partitions that use the 16-bit addressing" (p. 6-88),
+                    // which Create Partition A-MODE B'0001' gives; no special features. Byte 5 is 0:
+                    // VCP 0 (one cell size for every partition), matrix characters, CELLUNITS 0.
                     // W and H are the largest screen; units inches (X'00') with Xr and Yr X'FFFFFFFF',
                     // "cannot be determined", which is allowed without Load PS (p. 6-89).
+                    //
+                    // BUFFSZ is 0: "It applies only to a device that does not support partitions.
+                    // If the device supports partitions, the Alphanumeric Partitions Query Reply will
+                    // define the buffer size, and the BUFFSZ parameter will be set to zero" (p. 6-90).
                     //
                     // When one size holds the other (every 3278 model: 24 x 80 inside the
                     // alternate), the larger is "the maximum number of characters that can be
@@ -2939,22 +3660,18 @@ namespace RetroIO.Protocols.Tn3270
                     // very device, a 3180: base 43 rows by 80 columns, and 27 by 132 in an Alternate
                     // Usable Area self-defining parameter, which "is always required when the
                     // device supports more than one usable area size on one display surface". So
-                    // the base is the default size, BUFFSZ the larger of the two cell counts, then
+                    // the base is the default size, BUFFSZ 0 (partitions, see above), then
                     // XMIN, YMIN, XMAX and YMAX as zeros - p. 6-87 lets them be left out only when
                     // no self-defining parameter follows - then the parameter (p. 6-94).
-                    bool defaultHoldsAlternate = _defaultColumns >= _alternateColumns && _defaultRows >= _alternateRows;
-                    bool alternateHoldsDefault = _alternateColumns >= _defaultColumns && _alternateRows >= _defaultRows;
-                    bool nested = defaultHoldsAlternate || alternateHoldsDefault;
-                    int columns = nested ? Math.Max(_defaultColumns, _alternateColumns) : _defaultColumns;
-                    int rows = nested ? Math.Max(_defaultRows, _alternateRows) : _defaultRows;
-                    int bufferSize = Math.Max(_defaultColumns * _defaultRows, _alternateColumns * _alternateRows);
-                    AppendBytes(stackalloc byte[] { 0x01, 0x00 });
+                    // Create Partition uses the same base and alternate areas (UsableArea).
+                    UsableArea(out int rows, out int columns, out bool nested);
+                    AppendBytes(stackalloc byte[] { 0x03, 0x00 });
                     AppendUInt16(columns);
                     AppendUInt16(rows);
                     AppendBytes(stackalloc byte[] { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
                     AppendByte((byte)CellWidth);
                     AppendByte((byte)CellHeight);
-                    AppendUInt16(bufferSize);
+                    AppendUInt16(0);
                     if (!nested)
                     {
                         // XMIN, YMIN, XMAX, YMAX (bytes 23 to 26, p. 6-87).
@@ -2973,6 +3690,30 @@ namespace RetroIO.Protocols.Tn3270
 
                     break;
                 }
+
+                case QueryCode.AlphanumericPartitions:
+                    // p. 6-18, 6-19. NA: partitions 0 to MaxPartitions - 1 may be created. M: the
+                    // bytes of partition storage. Flags 0: no vertical scrolling, no all-points
+                    // addressing, no partition protection, no presentation space local copy, no
+                    // Modify Partition. The Buffer Allocation parameter is left off: "unless bytes
+                    // 3-6 (RO, CO, FO) are all zeros and byte 2 (CM) = 1" - here they are, so a
+                    // partition of H x W takes H x W bytes (p. 6-19).
+                    AppendByte(MaxPartitions);
+                    AppendUInt16(PartitionStorage);
+                    AppendByte(0x00);
+                    break;
+
+                case QueryCode.FieldOutlining:
+                    // p. 6-49, 6-50. Flags reserved 0; SEP 0, separation of underline and overline
+                    // is for printers; VPOS and HPOS where the renderer draws the lines; HPOS0 and
+                    // HPOS1 zero "where the device does not support the Separation". RetroIO keeps
+                    // and returns the outlining attribute (GetFieldOutlining); drawing it is the
+                    // renderer's.
+                    AppendBytes(stackalloc byte[] { 0x00, 0x00 });
+                    AppendByte((byte)OutlineVerticalPosition);
+                    AppendByte((byte)OutlineHorizontalPosition);
+                    AppendBytes(stackalloc byte[] { 0x00, 0x00 });
+                    break;
 
                 case QueryCode.CharacterSets:
                     // p. 6-21 to 6-28. Flags X'82': ALT (Graphic Escape is supported) and GF (the
@@ -3093,7 +3834,7 @@ namespace RetroIO.Protocols.Tn3270
             int size = Size;
 
             // On the attribute of an unprotected field: move on by one only (p. 4-7).
-            if (_isFieldAttribute[address] && !FieldAttribute.IsProtected(_buffer[address]))
+            if (_p.IsFieldAttributeAt[address] && !FieldAttribute.IsProtected(_p.Buffer[address]))
             {
                 return Next(address);
             }
@@ -3103,7 +3844,7 @@ namespace RetroIO.Protocols.Tn3270
             {
                 // Nulls from here to the end of the field, whatever the protection (p. 4-7). The
                 // search ends at the last location of the buffer.
-                while (!_isFieldAttribute[a])
+                while (!_p.IsFieldAttributeAt[a])
                 {
                     StoreCharacter(a, FormatControl.Null, graphicEscape: false, useSa: false);
                     if (a == size - 1)
@@ -3119,7 +3860,7 @@ namespace RetroIO.Protocols.Tn3270
             // Next unprotected field attribute, stopping at the last location (p. 4-7).
             for (int i = a; i < size; i++)
             {
-                if (_isFieldAttribute[i] && !FieldAttribute.IsProtected(_buffer[i]))
+                if (_p.IsFieldAttributeAt[i] && !FieldAttribute.IsProtected(_p.Buffer[i]))
                 {
                     // One found in the last location also gives address 0.
                     return i == size - 1 ? 0 : i + 1;
@@ -3138,7 +3879,13 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            if (!BufferAddress.TryDecode(data[i], data[i + 1], out address))
+            if (_p.SixteenBitAddressing)
+            {
+                // A 16-bit partition: "all 8 bits of each byte are used for the address" (p. 4-4,
+                // D-1), so every pair of bytes is in the proper form and only the range is checked.
+                address = (data[i] << 8) | data[i + 1];
+            }
+            else if (!BufferAddress.TryDecode(data[i], data[i + 1], out address))
             {
                 Error("Buffer address with the reserved flag bits B'10' is rejected (p. 4-4).");
                 return false;
@@ -3193,7 +3940,7 @@ namespace RetroIO.Protocols.Tn3270
                 {
                     case 0xC0:
                         // Keep the MDT the field already has? No: the pair carries the whole attribute.
-                        _buffer[address] = (byte)(value & FieldAttribute.Meaningful);
+                        _p.Buffer[address] = (byte)(value & FieldAttribute.Meaningful);
                         break;
                     case 0xC1:
                         if ((value & FieldValidation.Reserved) != 0)
@@ -3208,25 +3955,25 @@ namespace RetroIO.Protocols.Tn3270
                             return false;
                         }
 
-                        _fieldValidation[address] = value;
+                        _p.FieldValidationAt[address] = value;
                         break;
                     case 0xC2:
-                        _fieldOutlining[address] = value;
+                        _p.FieldOutliningAt[address] = value;
                         break;
                     case 0x41:
-                        _fieldHighlight[address] = value;
+                        _p.FieldHighlight[address] = value;
                         break;
                     case 0x42:
-                        _fieldColor[address] = value;
+                        _p.FieldColor[address] = value;
                         break;
                     case 0x43:
-                        _fieldCharset[address] = value;
+                        _p.FieldCharset[address] = value;
                         break;
                     case 0x45:
-                        _fieldBackground[address] = value;
+                        _p.FieldBackground[address] = value;
                         break;
                     case 0x46:
-                        _fieldTransparency[address] = value;
+                        _p.FieldTransparency[address] = value;
                         break;
                     default:
                         Error("Attribute type X'" + type.ToString("X2", System.Globalization.CultureInfo.InvariantCulture) + "' is not valid in SFE or MF (p. 4-16).");
@@ -3268,7 +4015,7 @@ namespace RetroIO.Protocols.Tn3270
 
         private void EraseAllUnprotected()
         {
-            _primedField = -1;
+            _p.PrimedField = -1;
 
             // GA23-0059-4 p. 3-7.
             bool any = false;
@@ -3277,18 +4024,18 @@ namespace RetroIO.Protocols.Tn3270
             int first = GetFieldAttributeFor(size - 1);
             if (first >= 0)
             {
-                isProtected = FieldAttribute.IsProtected(_buffer[first]);
+                isProtected = FieldAttribute.IsProtected(_p.Buffer[first]);
             }
 
             for (int a = 0; a < size; a++)
             {
-                if (_isFieldAttribute[a])
+                if (_p.IsFieldAttributeAt[a])
                 {
-                    isProtected = FieldAttribute.IsProtected(_buffer[a]);
+                    isProtected = FieldAttribute.IsProtected(_p.Buffer[a]);
                     if (!isProtected)
                     {
                         any = true;
-                        _buffer[a] = (byte)(_buffer[a] & ~FieldAttribute.Mdt);
+                        _p.Buffer[a] = (byte)(_p.Buffer[a] & ~FieldAttribute.Mdt);
                     }
                 }
                 else if (!isProtected || first < 0)
@@ -3319,7 +4066,7 @@ namespace RetroIO.Protocols.Tn3270
             }
             else
             {
-                AppendByte(aid);
+                BeginInbound(aid);
             }
 
             if (!all && Aid.IsShortRead(aid))
@@ -3354,7 +4101,7 @@ namespace RetroIO.Protocols.Tn3270
             // (p. 3-13). A field that runs past the end of the buffer continues at address 0.
             for (int fa = 0; fa < size; fa++)
             {
-                if (!_isFieldAttribute[fa] || (_buffer[fa] & FieldAttribute.Mdt) == 0)
+                if (!_p.IsFieldAttributeAt[fa] || (_p.Buffer[fa] & FieldAttribute.Mdt) == 0)
                 {
                     continue;
                 }
@@ -3362,7 +4109,7 @@ namespace RetroIO.Protocols.Tn3270
                 AppendByte(Order3270.SetBufferAddress);
                 int a = Next(fa);
                 AppendAddress(a);
-                while (sendData && !_isFieldAttribute[a])
+                while (sendData && !_p.IsFieldAttributeAt[a])
                 {
                     AppendData(a);
                     a = Next(a);
@@ -3383,24 +4130,24 @@ namespace RetroIO.Protocols.Tn3270
             //    differ from the ones last sent in this record, which start at default.
             _inbound.Clear();
             Array.Clear(_inboundSa);
-            AppendByte(aid);
+            BeginInbound(aid);
             AppendAddress(CursorAddress);
             int size = Size;
             for (int a = 0; a < size; a++)
             {
-                if (_isFieldAttribute[a])
+                if (_p.IsFieldAttributeAt[a])
                 {
                     AppendFieldAttribute(a);
                     continue;
                 }
 
                 AppendCharacterAttributes(a);
-                if (_graphicEscape[a])
+                if (_p.GraphicEscapeAt[a])
                 {
                     AppendByte(Order3270.GraphicEscape);
                 }
 
-                AppendByte(_buffer[a]);
+                AppendByte(_p.Buffer[a]);
             }
 
             Send();
@@ -3409,8 +4156,8 @@ namespace RetroIO.Protocols.Tn3270
         private void AppendFieldAttribute(int address)
         {
             // Bits 0-1 made printable per Figure D-1 (p. 4-13).
-            byte attribute = BufferAddress.EncodeSixBits(_buffer[address]);
-            if (_replyMode == ReplyMode.Field)
+            byte attribute = BufferAddress.EncodeSixBits(_p.Buffer[address]);
+            if (_p.InboundReplyMode == ReplyMode.Field)
             {
                 AppendByte(Order3270.StartField);
                 AppendByte(attribute);
@@ -3421,13 +4168,13 @@ namespace RetroIO.Protocols.Tn3270
             int n = 0;
             pairs[n++] = 0xC0;
             pairs[n++] = attribute;
-            AddPair(pairs, ref n, 0x41, _fieldHighlight[address]);
-            AddPair(pairs, ref n, 0x42, _fieldColor[address]);
-            AddPair(pairs, ref n, 0x43, _fieldCharset[address]);
-            AddPair(pairs, ref n, 0x45, _fieldBackground[address]);
-            AddPair(pairs, ref n, 0x46, _fieldTransparency[address]);
-            AddPair(pairs, ref n, 0xC1, _fieldValidation[address]);
-            AddPair(pairs, ref n, 0xC2, _fieldOutlining[address]);
+            AddPair(pairs, ref n, 0x41, _p.FieldHighlight[address]);
+            AddPair(pairs, ref n, 0x42, _p.FieldColor[address]);
+            AddPair(pairs, ref n, 0x43, _p.FieldCharset[address]);
+            AddPair(pairs, ref n, 0x45, _p.FieldBackground[address]);
+            AddPair(pairs, ref n, 0x46, _p.FieldTransparency[address]);
+            AddPair(pairs, ref n, 0xC1, _p.FieldValidationAt[address]);
+            AddPair(pairs, ref n, 0xC2, _p.FieldOutliningAt[address]);
             AppendByte(Order3270.StartFieldExtended);
             AppendByte((byte)(n / 2));
             AppendBytes(pairs.Slice(0, n));
@@ -3446,14 +4193,14 @@ namespace RetroIO.Protocols.Tn3270
         private void AppendCharacterAttributes(int address)
         {
             // Character mode only, and only the types Set Reply Mode listed (p. 5-62).
-            if (_replyMode != ReplyMode.Character)
+            if (_p.InboundReplyMode != ReplyMode.Character)
             {
                 return;
             }
 
-            for (int i = 0; i < _replyTypes.Length; i++)
+            for (int i = 0; i < _p.ReplyTypes.Length; i++)
             {
-                byte type = _replyTypes[i];
+                byte type = _p.ReplyTypes[i];
                 int slot = Array.IndexOf(CharacterAttributeTypes, type);
                 byte value = CharacterAttribute(slot, address);
                 if (value != _inboundSa[slot])
@@ -3472,15 +4219,15 @@ namespace RetroIO.Protocols.Tn3270
             switch (slot)
             {
                 case 0:
-                    return _charHighlight[address];
+                    return _p.CharHighlight[address];
                 case 1:
-                    return _charColor[address];
+                    return _p.CharColor[address];
                 case 2:
-                    return _charCharset[address];
+                    return _p.CharCharset[address];
                 case 3:
-                    return _charBackground[address];
+                    return _p.CharBackground[address];
                 default:
-                    return _charTransparency[address];
+                    return _p.CharTransparency[address];
             }
         }
 
@@ -3488,14 +4235,14 @@ namespace RetroIO.Protocols.Tn3270
         {
             // Nulls are left out; in Character mode SA orders go before a non-null character only
             // (p. 3-13, 5-62).
-            byte b = _buffer[address];
+            byte b = _p.Buffer[address];
             if (b == FormatControl.Null)
             {
                 return;
             }
 
             AppendCharacterAttributes(address);
-            if (_graphicEscape[address])
+            if (_p.GraphicEscapeAt[address])
             {
                 AppendByte(Order3270.GraphicEscape);
             }
@@ -3503,10 +4250,39 @@ namespace RetroIO.Protocols.Tn3270
             AppendByte(b);
         }
 
+        // The start of a read reply. From a partition with a nonzero PID it is an Inbound 3270DS:
+        // AID X'88', then L, X'80', PID, AID, and the cursor and data follow (p. 6-7, 3-9 note 1);
+        // Send fills in L. From partition 0, implicit or explicit, it is the plain 3270 reply that
+        // starts with the AID (p. 6-7: "Orders and data from partition zero ... are transmitted in
+        // 3270 format").
+        private void BeginInbound(byte aid)
+        {
+            if (_explicitState && _p.Pid != 0)
+            {
+                AppendByte(Aid.StructuredField);
+                _inboundFieldStart = _inbound.WrittenCount;
+                AppendBytes(stackalloc byte[] { 0x00, 0x00, StructuredFieldId.Inbound3270DS, _p.Pid });
+            }
+
+            AppendByte(aid);
+        }
+
         private void AppendAddress(int address)
         {
             Span<byte> s = _inbound.GetSpan(2);
-            BufferAddress.Encode(address, Size, s);
+            if (_p.SixteenBitAddressing)
+            {
+                // "When 16-bit addressing is specified, the partition will always generate 16-bit
+                // addresses in the inbound data stream" (p. 4-4): all 16 bits, high byte first
+                // (p. D-1: 3100 is X'0C1C').
+                s[0] = (byte)(address >> 8);
+                s[1] = (byte)address;
+            }
+            else
+            {
+                BufferAddress.Encode(address, Size, s);
+            }
+
             _inbound.Advance(2);
         }
 
@@ -3516,6 +4292,16 @@ namespace RetroIO.Protocols.Tn3270
             // is the one a Read Modified repeats (p. 3-14). SendStructuredFieldReply keeps this
             // one again when asked to, after this.
             _retryLength = 0;
+            if (_inboundFieldStart >= 0)
+            {
+                // The Inbound 3270DS length counts itself and runs to the end of the record.
+                int fieldLength = _inbound.WrittenCount - _inboundFieldStart;
+                Span<byte> written = MemoryMarshalWritten(_inboundFieldStart);
+                written[0] = (byte)(fieldLength >> 8);
+                written[1] = (byte)fieldLength;
+                _inboundFieldStart = -1;
+            }
+
             InboundRecord?.Invoke(_inbound.WrittenSpan);
         }
 
@@ -3527,10 +4313,10 @@ namespace RetroIO.Protocols.Tn3270
             for (int n = 0; n < size; n++)
             {
                 a = Next(a);
-                if (_isFieldAttribute[a] && !FieldAttribute.IsProtected(_buffer[a]))
+                if (_p.IsFieldAttributeAt[a] && !FieldAttribute.IsProtected(_p.Buffer[a]))
                 {
                     int first = Next(a);
-                    if (!_isFieldAttribute[first])
+                    if (!_p.IsFieldAttributeAt[first])
                     {
                         return first;
                     }
@@ -3542,9 +4328,9 @@ namespace RetroIO.Protocols.Tn3270
 
         private void SetFieldAttribute(int address, byte attribute)
         {
-            _isFieldAttribute[address] = true;
-            _graphicEscape[address] = false;
-            _buffer[address] = attribute;
+            _p.IsFieldAttributeAt[address] = true;
+            _p.GraphicEscapeAt[address] = false;
+            _p.Buffer[address] = attribute;
 
             // SF sets the extended field attribute of the position to its default (p. 4-2).
             ClearFieldAttributes(address);
@@ -3554,17 +4340,17 @@ namespace RetroIO.Protocols.Tn3270
         private void StoreCharacter(int address, byte value, bool graphicEscape, bool useSa)
         {
             // The host may overwrite a field attribute with data (p. 4-13).
-            _isFieldAttribute[address] = false;
+            _p.IsFieldAttributeAt[address] = false;
             ClearFieldAttributes(address);
-            _buffer[address] = value;
-            _graphicEscape[address] = graphicEscape;
+            _p.Buffer[address] = value;
+            _p.GraphicEscapeAt[address] = graphicEscape;
             if (useSa)
             {
-                _charHighlight[address] = _saHighlight;
-                _charColor[address] = _saColor;
-                _charCharset[address] = _saCharset;
-                _charBackground[address] = _saBackground;
-                _charTransparency[address] = _saTransparency;
+                _p.CharHighlight[address] = _saHighlight;
+                _p.CharColor[address] = _saColor;
+                _p.CharCharset[address] = _saCharset;
+                _p.CharBackground[address] = _saBackground;
+                _p.CharTransparency[address] = _saTransparency;
             }
             else
             {
@@ -3575,76 +4361,64 @@ namespace RetroIO.Protocols.Tn3270
 
         private void ClearFieldAttributes(int address)
         {
-            _fieldHighlight[address] = 0;
-            _fieldColor[address] = 0;
-            _fieldCharset[address] = 0;
-            _fieldBackground[address] = 0;
-            _fieldTransparency[address] = 0;
-            _fieldValidation[address] = 0;
-            _fieldOutlining[address] = 0;
+            _p.FieldHighlight[address] = 0;
+            _p.FieldColor[address] = 0;
+            _p.FieldCharset[address] = 0;
+            _p.FieldBackground[address] = 0;
+            _p.FieldTransparency[address] = 0;
+            _p.FieldValidationAt[address] = 0;
+            _p.FieldOutliningAt[address] = 0;
         }
 
         private void ClearCharacterAttributes(int address)
         {
-            _charHighlight[address] = 0;
-            _charColor[address] = 0;
-            _charCharset[address] = 0;
-            _charBackground[address] = 0;
-            _charTransparency[address] = 0;
+            _p.CharHighlight[address] = 0;
+            _p.CharColor[address] = 0;
+            _p.CharCharset[address] = 0;
+            _p.CharBackground[address] = 0;
+            _p.CharTransparency[address] = 0;
         }
 
-        private void ClearAllAttributes()
+        // Resizes and erases the partition being worked on (see Partition3270.Resize).
+        private void Resize(int rows, int columns) => _p.Resize(rows, columns);
+
+        private Partition3270? PartitionFor(byte pid)
         {
-            Array.Clear(_fieldHighlight);
-            Array.Clear(_fieldColor);
-            Array.Clear(_fieldCharset);
-            Array.Clear(_fieldBackground);
-            Array.Clear(_fieldTransparency);
-            Array.Clear(_fieldValidation);
-            Array.Clear(_fieldOutlining);
-            Array.Clear(_charHighlight);
-            Array.Clear(_charColor);
-            Array.Clear(_charCharset);
-            Array.Clear(_charBackground);
-            Array.Clear(_charTransparency);
+            if (!_explicitState)
+            {
+                return pid == 0 ? _implicitPartition : null;
+            }
+
+            return pid < _partitions.Length ? _partitions[pid] : null;
         }
 
-        private void Resize(int rows, int columns)
+        // Back to implicit partition state (p. 2-6, 2-7, 3-6 step 6b, 5-14, 5-15): every explicit
+        // partition destroyed, implicit partition 0 made at the given size with its default
+        // characteristics, INPID 0 and INOP Read Modified, so no inbound record is kept for a retry
+        // (p. 3-19, 3-20). resetReplyMode false only for the UNBIND, see Unbind.
+        private void ResetToImplicit(int rows, int columns, bool resetReplyMode = true)
         {
-            Rows = rows;
-            Columns = columns;
-            int size = rows * columns;
-            if (_buffer.Length != size)
+            Array.Clear(_partitions);
+            _explicitState = false;
+            _usableRows = 0;
+            _usableColumns = 0;
+            _p = _implicitPartition;
+            _p.Resize(rows, columns);
+            _p.Cursor = 0;
+            _p.PrimedField = -1;
+            if (resetReplyMode)
             {
-                _buffer = new byte[size];
-                _isFieldAttribute = new bool[size];
-                _graphicEscape = new bool[size];
-                _fieldHighlight = new byte[size];
-                _fieldColor = new byte[size];
-                _fieldCharset = new byte[size];
-                _fieldBackground = new byte[size];
-                _fieldTransparency = new byte[size];
-                _fieldValidation = new byte[size];
-                _fieldOutlining = new byte[size];
-                _charHighlight = new byte[size];
-                _charColor = new byte[size];
-                _charCharset = new byte[size];
-                _charBackground = new byte[size];
-                _charTransparency = new byte[size];
-            }
-            else
-            {
-                Array.Clear(_buffer);
-                Array.Clear(_isFieldAttribute);
-                Array.Clear(_graphicEscape);
-                ClearAllAttributes();
+                _p.InboundReplyMode = ReplyMode.Field;
+                _p.ReplyTypes = Array.Empty<byte>();
             }
 
-            if (CursorAddress >= size)
-            {
-                CursorAddress = 0;
-            }
+            _activePid = 0;
+            _inboundPid = 0;
+            _retryLength = 0;
         }
+
+        // After a host record: the code works on the active partition again (see _p).
+        private void SelectActive() => _p = ActivePartition;
 
         private int Next(int address)
         {
