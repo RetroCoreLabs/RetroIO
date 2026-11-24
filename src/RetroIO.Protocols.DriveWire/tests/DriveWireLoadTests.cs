@@ -45,6 +45,7 @@ public sealed class DriveWireLoadTests
         {
             IPEndPoint endPoint = await server.WaitUntilListeningAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
 
+            long allocatedBefore = GC.GetTotalAllocatedBytes(true);
             Stopwatch clock = Stopwatch.StartNew();
             Task<string>[] clients = new Task<string>[Clients];
             for (int i = 0; i < Clients; i++)
@@ -61,7 +62,7 @@ public sealed class DriveWireLoadTests
                 Assert.That(results[i], Is.Empty, "client " + i);
             }
 
-            TestContext.Out.WriteLine($"{Clients} clients, {Clients * Rounds * 2} sector transfers in {clock.ElapsedMilliseconds} ms");
+            TestContext.Out.WriteLine($"{Clients} clients, {Clients * Rounds * 2} sector transfers in {clock.ElapsedMilliseconds} ms"); TestContext.Out.WriteLine($"allocated per transfer, server and test clients together: {(GC.GetTotalAllocatedBytes(true) - allocatedBefore) / (Clients * Rounds * 2)} bytes");
 
             // A session is removed when its connection's read loop sees the hang-up, a moment later.
             Stopwatch gone = Stopwatch.StartNew();
