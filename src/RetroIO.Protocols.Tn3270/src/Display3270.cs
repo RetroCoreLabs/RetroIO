@@ -356,6 +356,27 @@ namespace RetroIO.Protocols.Tn3270
         {
             SscpLuMode = false;
             NvtMode = false;
+
+            // GA23-0059-4 Appendix C, Table C-1 (p. C-1, read from the page image 24 November
+            // 2026), row "Bind Unowned": Partitions R, Inbound Reply Mode R, Selection R,
+            // Indicators R, INPID/INOP R, PS Content/PS LCID NC. Row "Bind SSCP" is 9 in every
+            // column but INPID/INOP ("the state will already be set", note 9), and R there, so
+            // doing the resets is right for both. What RetroIO models of that, done here whether
+            // or not the sizes below are taken (the reset is the BIND's, not the sizes'):
+            //  - Inbound Reply Mode R: back to field mode. "Reset" is field mode by Table 3-3
+            //    (p. 3-4): "reset the inbound reply mode to field".
+            //  - INPID/INOP R: INPID 0 and INOP Read Modified, the normal read state, so no
+            //    inbound record is kept for a retry any more (p. 3-14: a Read Modified repeats
+            //    INOP only in a retry state; p. 3-19: INOP becomes Read Modified when INPID is
+            //    set to 0). Only implicit partition 0 exists, so INPID is 0 already.
+            //  - Partitions R: only implicit partition 0 exists; it is made again at the
+            //    session's default size by the Resize below.
+            // Not modelled, so nothing to reset: operator attribute selection and its indicators
+            // (Selection, Indicators) - RetroIO has no operator selection. PS Content is NC.
+            _replyMode = ReplyMode.Field;
+            _replyTypes = Array.Empty<byte>();
+            _retryLength = 0;
+
             int rows;
             int columns;
             int alternateRows;
@@ -461,6 +482,20 @@ namespace RetroIO.Protocols.Tn3270
         /// </remarks>
         public void Unbind()
         {
+            // GA23-0059-4 Appendix C, Table C-1 (p. C-1, read from the page image 24 November
+            // 2026), row "Unbind LULU (8)": Partitions 17, Inbound Reply Mode 13, Selection NC,
+            // Indicators 7, INPID/INOP NR, PS Content/PS LCID NC. Note 13 (p. C-2): "Change the
+            // inbound reply mode to allow all selections." That is NOT done here, on purpose:
+            // the manual defines field, extended field and character mode (p. 5-61, 5-62) and
+            // nothing called "allow all selections"; the selections it speaks of are operator
+            // attribute selections, which RetroIO does not have. Which reply mode that means is
+            // not known, so the mode is left as it was rather than guessed (BUGS.md, Q group,
+            // "Tn3270 Unbind reply mode"). The next BIND resets it to field mode (ApplyBind).
+            // Note 17 is printed for Partitions but p. C-2 has no note 17; RetroIO has only
+            // implicit partition 0, made again at the model's size below. INPID/INOP NR: a later
+            // action sets them. Note 8 (the last write stays on the screen while unowned) is not
+            // what this method does: it clears the screen as x3270 does (see remarks); that
+            // difference is in the same BUGS.md entry.
             SscpLuMode = false;
             NvtMode = false;
             _sessionRows = _defaultRows;

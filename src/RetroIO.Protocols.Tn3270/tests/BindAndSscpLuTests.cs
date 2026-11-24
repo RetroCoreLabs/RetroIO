@@ -192,6 +192,56 @@ namespace RetroIO.Protocols.Tn3270.Tests
             Assert.Equal(43, d.AlternateRows);
         }
 
+        [Theory]
+        [InlineData(new byte[] { Command3270.WriteStructuredField, 0x00, 0x05, 0x09, 0x00, 0x01 })]       // extended field
+        [InlineData(new byte[] { Command3270.WriteStructuredField, 0x00, 0x06, 0x09, 0x00, 0x02, 0x42 })] // character, colour
+        public void ABindResetsTheInboundReplyModeToField(byte[] setReplyMode)
+        {
+            // GA23-0059-4 Table C-1 (p. C-1), row "Bind Unowned": Inbound Reply Mode R; reset
+            // means field mode (Table 3-3, p. 3-4).
+            var (d, _, errors) = Create();
+            Assert.True(d.ProcessOutbound(setReplyMode));
+            Assert.NotEqual(ReplyMode.Field, d.ReplyMode);
+
+            Assert.True(d.ApplyBind(Read(IbmModel2Bind)));
+
+            Assert.Empty(errors);
+            Assert.Equal(ReplyMode.Field, d.ReplyMode);
+        }
+
+        [Fact]
+        public void ABindWhoseSizesAreRefusedStillResetsTheInboundReplyMode()
+        {
+            // The reset belongs to the BIND (Table C-1), not to the sizes it carries.
+            var (d, _, _) = Create();
+            Assert.True(d.ProcessOutbound(new byte[] { Command3270.WriteStructuredField, 0x00, 0x05, 0x09, 0x00, 0x01 }));
+
+            Assert.False(d.ApplyBind(Read(Bind(0x18, 0x50, 0x2B, 0x50, 0x7F))));
+
+            Assert.Equal(ReplyMode.Field, d.ReplyMode);
+        }
+
+        [Fact]
+        public void ABindEndsTheRetryStateSoReadModifiedReadsTheScreenAgain()
+        {
+            // Table C-1 (p. C-1), row "Bind Unowned": INPID/INOP R - INOP back to Read Modified
+            // in the normal read state, where a Read Modified command is an ordinary read and
+            // repeats nothing (p. 3-14, 3-19).
+            var (d, sent, errors) = Create();
+            byte[] field = { 0x00, 0x05, 0xD0, 0x46, 0x05 };
+            d.SendStructuredFieldReply(field, retry: true);
+            Assert.Single(sent);
+
+            Assert.True(d.ApplyBind(Read(IbmModel2Bind)));
+            Assert.True(d.ProcessOutbound(new byte[] { Command3270.ReadModified }));
+
+            Assert.Empty(errors);
+            Assert.Equal(2, sent.Count);
+
+            // Not the kept structured field again (AID X'88'), but a read of the screen.
+            Assert.NotEqual(Aid.StructuredField, sent[1][0]);
+        }
+
         // "IKJ" in EBCDIC.
         private static readonly byte[] Ikj = { 0xC9, 0xD2, 0xD1 };
 
