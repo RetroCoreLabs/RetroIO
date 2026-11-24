@@ -178,7 +178,8 @@ namespace RetroIO.Protocols.Tn3270
     /// <para>
     /// Not built yet, and loud about it through <see cref="ProtocolError"/>: horizontal
     /// scrolling, Modify Partition, text partitions, all-points units, protected partitions,
-    /// every other structured field, and the BSC Copy command inside Outbound 3270DS.
+    /// every other structured field, and the BSC Copy command inside Outbound 3270DS. Load
+    /// Programmed Symbols is built, see <see cref="ProgrammedSymbols"/>.
     /// </para>
     /// </remarks>
     public sealed class Display3270
@@ -1327,6 +1328,40 @@ namespace RetroIO.Protocols.Tn3270
         /// The renderer should set this. The default of 16 is an ASSUMPTION, not a measured value.
         /// </remarks>
         public int CellHeight { get; set; } = 16;
+
+        /// <summary>
+        /// Gets or sets the distance between two dots across, in millimetres: the 2-byte numerator
+        /// in the high half, the 2-byte denominator in the low half (Xr of the Usable Area query
+        /// reply, UNITS X'01', p. 6-87, 6-89).
+        /// </summary>
+        /// <remarks>
+        /// A display with Load PS may not send X'FFFFFFFF', "cannot be determined" (p. 6-89), so a
+        /// real value is needed. The default X'000A02E5' (10/741 mm) is x3270's canned 3279 model 2
+        /// value (`Xr_3279_2` in its sf.c), an ASSUMPTION about the renderer, not a measurement.
+        /// </remarks>
+        public uint DotDistanceX { get; set; } = 0x000A02E5;
+
+        /// <summary>
+        /// Gets or sets the distance between two dots down, in millimetres, as for
+        /// <see cref="DotDistanceX"/> (Yr, p. 6-87, 6-89).
+        /// </summary>
+        /// <remarks>
+        /// The default X'0002006F' (2/111 mm) is x3270's `Yr_3279_2`, an ASSUMPTION.
+        /// </remarks>
+        public uint DotDistanceY { get; set; } = 0x0002006F;
+
+        /// <summary>
+        /// Gets the loadable character sets the host fills with Load Programmed Symbols
+        /// (GA23-0059-4 p. 5-18 to 5-33). A renderer looks up the set by the LCID a field or
+        /// character carries (<see cref="GetFieldCharacterSet"/>,
+        /// <see cref="GetCharacterCharacterSet"/>) and draws the dots of the code in that slot.
+        /// </summary>
+        /// <remarks>
+        /// Six sets, RWS X'02' to X'07', one per PS key A to F (p. 6-25 names the "PS [A-F]
+        /// selection keys"); how many is this display's choice. They survive every reset but power
+        /// on (Table C-1 p. C-1, PS Content and PS LCID), so only a new display starts them empty.
+        /// </remarks>
+        public ProgrammedSymbolStore ProgrammedSymbols { get; } = new ProgrammedSymbolStore(6);
 
         /// <summary>
         /// Gets or sets the largest file transfer structured field transmission, in bytes, both
@@ -3741,6 +3776,20 @@ namespace RetroIO.Protocols.Tn3270
                     case StructuredFieldId.SetReplyMode:
                         ok = SetReplyMode(field);
                         break;
+                    case StructuredFieldId.LoadProgrammedSymbols:
+                    {
+                        // p. 5-18 to 5-33. The slot size is SDW x SDH of the Character Sets reply
+                        // (MS is 0), and the sets are triple-plane on a colour screen.
+                        string? reject = ProgrammedSymbols.Load(field, CellWidth, CellHeight, Color);
+                        ok = reject == null;
+                        if (reject != null)
+                        {
+                            Error(reject);
+                        }
+
+                        break;
+                    }
+
                     case StructuredFieldId.Outbound3270DS:
                         ok = Outbound3270DS(field);
                         if (ok && _triggerReply == TriggerReply.Affirmative)
@@ -3774,7 +3823,7 @@ namespace RetroIO.Protocols.Tn3270
                         ok = ResetPartition(field);
                         break;
                     default:
-                        Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Set Reply Mode, Outbound 3270DS, Create, Destroy, Activate Reset and Set Window Origin, and X'D0' file transfer are).");
+                        Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Load Programmed Symbols, Set Reply Mode, Outbound 3270DS, Create, Destroy, Activate Reset and Set Window Origin, and X'D0' file transfer are).");
                         ok = false;
                         break;
                 }
@@ -4621,8 +4670,9 @@ namespace RetroIO.Protocols.Tn3270
                     // value is used to support partitions that use the 16-bit addressing" (p. 6-88),
                     // which Create Partition A-MODE B'0001' gives; no special features. Byte 5 is 0:
                     // VCP 0 (one cell size for every partition), matrix characters, CELLUNITS 0.
-                    // W and H are the largest screen; units inches (X'00') with Xr and Yr X'FFFFFFFF',
-                    // "cannot be determined", which is allowed without Load PS (p. 6-89).
+                    // W and H are the largest screen; units millimetres (X'01') with Xr and Yr from
+                    // DotDistanceX and DotDistanceY. Until Load PS was built this sent inches with
+                    // X'FFFFFFFF', "cannot be determined", which p. 6-89 allows only without Load PS.
                     //
                     // BUFFSZ is 0: "It applies only to a device that does not support partitions.
                     // If the device supports partitions, the Alphanumeric Partitions Query Reply will
@@ -4645,7 +4695,12 @@ namespace RetroIO.Protocols.Tn3270
                     AppendBytes(stackalloc byte[] { 0x03, 0x00 });
                     AppendUInt16(columns);
                     AppendUInt16(rows);
-                    AppendBytes(stackalloc byte[] { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+
+                    // UNITS millimetres, then Xr and Yr. A device with Load PS may not send
+                    // X'FFFFFFFF' (p. 6-89), so DotDistanceX and DotDistanceY are sent.
+                    AppendByte(0x01);
+                    AppendUInt32(DotDistanceX);
+                    AppendUInt32(DotDistanceY);
                     AppendByte((byte)CellWidth);
                     AppendByte((byte)CellHeight);
                     AppendUInt16(0);
@@ -4655,12 +4710,14 @@ namespace RetroIO.Protocols.Tn3270
                         AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x00, 0x00 });
 
                         // Alternate Usable Area (p. 6-94): length X'13', X'02', reserved X'00',
-                        // AUAID X'01', WAUA, HAUA, units inches, Xr and Yr X'FFFFFFFF' ("unable to
-                        // determine", allowed without Load PS), AWAUA, AHAUA.
+                        // AUAID X'01', WAUA, HAUA, units millimetres with the same Xr and Yr ("with
+                        // Load PS, bytes 8 to 18 must be supplied", p. 6-93), AWAUA, AHAUA.
                         AppendBytes(stackalloc byte[] { 0x13, 0x02, 0x00, 0x01 });
                         AppendUInt16(_alternateColumns);
                         AppendUInt16(_alternateRows);
-                        AppendBytes(stackalloc byte[] { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+                        AppendByte(0x01);
+                        AppendUInt32(DotDistanceX);
+                        AppendUInt32(DotDistanceY);
                         AppendByte((byte)CellWidth);
                         AppendByte((byte)CellHeight);
                     }
@@ -4694,12 +4751,17 @@ namespace RetroIO.Protocols.Tn3270
                     break;
 
                 case QueryCode.CharacterSets:
-                    // p. 6-21 to 6-28. Flags X'82': ALT (Graphic Escape is supported) and GF (the
-                    // CGCSGID fields are present). SDW, SDH, FORM 0, descriptor length 7.
-                    AppendBytes(stackalloc byte[] { 0x82, 0x00 });
+                    // p. 6-21 to 6-28. Flags X'B2': ALT (Graphic Escape is supported), LOADABLE and
+                    // EXT (Load PS, basic and extended form), GF (the CGCSGID fields are present).
+                    // MULTID 0: every set has the one slot size (MS 0), so no two sets need one
+                    // LCID. Byte 5 X'40': PSCS, a Load PS may load symbols smaller than the slot
+                    // (p. 6-23). SDW, SDH, FORM types 1 to 6 (X'7E000000'; type 8, vector, is not
+                    // built), descriptor length 7.
+                    AppendBytes(stackalloc byte[] { 0xB2, 0x40 });
                     AppendByte((byte)CellWidth);
                     AppendByte((byte)CellHeight);
-                    AppendBytes(stackalloc byte[] { 0x00, 0x00, 0x00, 0x00, 0x07 });
+                    AppendUInt32(ProgrammedSymbolStore.FormTypes);
+                    AppendByte(0x07);
 
                     // Base set: SET 0, flags 0, local ID X'F0', then character set and code page.
                     // p. 6-26: "Nonloadable character sets will have default LCID assigned to them
@@ -4719,6 +4781,20 @@ namespace RetroIO.Protocols.Tn3270
                     AppendBytes(stackalloc byte[] { 0x01, 0x00, GraphicEscapeCharacterSetId });
                     AppendUInt16(CodePage.Cp310.CharacterSet);
                     AppendUInt16(CodePage.Cp310.Number);
+
+                    // The loadable sets: SET = the RWS number (p. 6-25), flags LOAD, TRIPLE on a
+                    // colour screen, CB as the last Load PS set it; the LCID now tied to the store
+                    // (X'FF' when free, p. 6-25); CGCSGID all zeros, "a user-defined programmed
+                    // symbol set" has none (p. 6-28).
+                    for (int i = 0; i < ProgrammedSymbols.Count; i++)
+                    {
+                        ProgrammedSymbolSet set = ProgrammedSymbols[i];
+                        AppendByte(set.Rws);
+                        AppendByte((byte)(0x80 | (Color ? 0x40 : 0x00) | (set.NoLcidCompare ? 0x10 : 0x00)));
+                        AppendByte(set.Lcid);
+                        AppendUInt32(0);
+                    }
+
                     break;
 
                 case QueryCode.Color:
@@ -4794,6 +4870,12 @@ namespace RetroIO.Protocols.Tn3270
         {
             values.CopyTo(_inbound.GetSpan(values.Length));
             _inbound.Advance(values.Length);
+        }
+
+        private void AppendUInt32(uint value)
+        {
+            AppendUInt16((int)(value >> 16));
+            AppendUInt16((int)(value & 0xFFFF));
         }
 
         private void AppendUInt16(int value)

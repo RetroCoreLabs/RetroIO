@@ -420,6 +420,11 @@ namespace RetroIO.Protocols.Tn3270
         public const byte EraseReset = 0x03;
 
         /// <summary>
+        /// Load Programmed Symbols, X'06': symbol shapes into a loadable character set (p. 5-18).
+        /// </summary>
+        public const byte LoadProgrammedSymbols = 0x06;
+
+        /// <summary>
         /// Set Reply Mode, X'09': the form of later inbound data (p. 5-61).
         /// </summary>
         public const byte SetReplyMode = 0x09;
