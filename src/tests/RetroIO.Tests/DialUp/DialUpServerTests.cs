@@ -300,6 +300,47 @@ public sealed class DialUpServerTests
         Assert.That(server.LoginsRefused, Is.EqualTo(0));
     }
 
+    /// <summary>
+    /// Measurement for the memory item of plan Phase 14: 20 waves of 16 callers on one server, each
+    /// dialling, logging in and hanging up; prints the memory in use after a full garbage
+    /// collection after each wave. No call may be left after a wave.
+    /// </summary>
+    [Test]
+    [Explicit("Measurement; about 30 s, prints memory per wave")]
+    public void Measure_MemoryOverManyWaves()
+    {
+        const int Callers = 16;
+        using DialUpServer server = StartServer(maxCalls: Callers);
+        for (int wave = 0; wave < 20; wave++)
+        {
+            TcpClient[] lines = new TcpClient[Callers];
+            string[] answers = new string[Callers];
+            System.Threading.Tasks.Parallel.For(0, Callers, i =>
+            {
+                lines[i] = Dial(server);
+                answers[i] = LogIn(lines[i], "caller", Password);
+            });
+
+            for (int i = 0; i < Callers; i++)
+            {
+                Assert.That(answers[i], Does.Contain("Your address is 10.42.0."), "wave " + wave + ", caller " + i);
+                lines[i].Dispose();
+            }
+
+            DateTime deadline = DateTime.UtcNow + Wait;
+            while (server.CallsActive != 0 && DateTime.UtcNow < deadline)
+            {
+                System.Threading.Thread.Sleep(20);
+            }
+
+            Assert.That(server.CallsActive, Is.EqualTo(0), "wave " + wave + ": every caller hung up");
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            TestContext.Out.WriteLine($"wave {wave}: {GC.GetTotalMemory(false)} bytes in use, calls {server.CallsActive}");
+        }
+    }
+
     [Test]
     public void OneCaller_SendsAnIpPacketToAnother_OverSlip_AndItArrives()
     {
