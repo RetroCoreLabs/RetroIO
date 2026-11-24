@@ -107,6 +107,39 @@ namespace RetroIO.Protocols.Tn3270
         /// leave System Lock behind: System Lock is raised only by an enter action (p. 3-21).
         /// </remarks>
         QueryReplySent,
+
+        /// <summary>
+        /// PWAIT: the active partition sent an enter action the host has not acknowledged, and
+        /// there is more than one partition. Shown as "X", arrows and a clock; the arrows say the
+        /// operator may jump to another partition and type there. Reset does NOT clear it.
+        /// </summary>
+        /// <remarks>
+        /// GA23-0059-4 p. 2-9, 3-20: "TWAIT will be used when in the implicit partition state or
+        /// when there is only one explicit partition. PWAIT is used when there is more than one
+        /// partition". The indicator for TWAIT is "X Clock"; for PWAIT it is X, then the clock
+        /// between two arrows pointing outwards. With one partition the same condition is <see cref="WaitingForHost"/>. The condition
+        /// belongs to the partition (<see cref="Partition3270.PartitionWait"/>): after a jump to
+        /// another partition the indicator goes, and it comes back with the partition.
+        /// </remarks>
+        PartitionWait,
+
+        /// <summary>
+        /// The host gave a negative reply to a trigger field (GA23-0059-4 p. 4-24: "the
+        /// invalid-field input-inhibit condition is raised"). Reset clears it.
+        /// </summary>
+        InvalidField,
+
+        /// <summary>
+        /// Keystrokes queued while the host validates a trigger field filled the queue
+        /// (GA23-0059-4 p. 4-25 note 4: "If the keystroke queue becomes full before a write is
+        /// received from the host, an input-inhibit condition is raised"). Reset clears it.
+        /// </summary>
+        /// <remarks>
+        /// The manual names neither the queue's size nor which condition, nor what clears it.
+        /// The size (<see cref="Display3270.KeystrokeQueueCapacity"/>) and Reset clearing it are
+        /// this display's own choices.
+        /// </remarks>
+        KeystrokeQueueFull,
     }
 
     /// <summary>
@@ -129,18 +162,23 @@ namespace RetroIO.Protocols.Tn3270
     /// <para>
     /// Partitions (GA23-0059-4 chapter 2): up to <see cref="MaxPartitions"/> explicit partitions,
     /// each with its own presentation space, cursor, reply mode and 12/14-bit or 16-bit
-    /// addressing, shown in non-overlapping viewports of the same size as the presentation space.
+    /// addressing, shown in non-overlapping viewports. A presentation space may have more rows
+    /// than its viewport (vertical scrolling, p. 2-3, 7-16): Set Window Origin, the scroll keys
+    /// (<see cref="ScrollUp"/>, <see cref="ScrollDown"/>) and automatic scrolling move the window.
     /// The getters such as <see cref="GetByte"/> read the active partition;
     /// <see cref="GetPartition"/> and <see cref="TryGetScreenPosition"/> reach the others.
     /// </para>
     /// <para>
-    /// Not built yet, and loud about it through <see cref="ProtocolError"/>: scrolling (a
-    /// presentation space larger than its viewport, Set Window Origin, Modify Partition), text
-    /// partitions, all-points units, protected partitions, every other structured field, and the
-    /// BSC Copy command inside Outbound 3270DS. Not built and silent, because they are operator
-    /// conditions rather than host data: the jump-partition key, and per-partition input inhibit
-    /// (PWAIT and System Lock per partition, the Enter Inhibit condition, p. 2-9, 3-20); the
-    /// keyboard lock is one for the whole display.
+    /// Input inhibit (p. 2-9, 3-14 to 3-21): PWAIT and System Lock belong to a partition and are
+    /// remembered when another partition is made active; Enter Inhibit, the read state (normal,
+    /// retry enter, retry read), INPID and INOP belong to the display. The jump-partition key is
+    /// <see cref="JumpPartition"/>. Trigger fields (p. 4-23 to 4-26) are built, with the queue of
+    /// keystrokes made while the host validates one.
+    /// </para>
+    /// <para>
+    /// Not built yet, and loud about it through <see cref="ProtocolError"/>: horizontal
+    /// scrolling, Modify Partition, text partitions, all-points units, protected partitions,
+    /// every other structured field, and the BSC Copy command inside Outbound 3270DS.
     /// </para>
     /// </remarks>
     public sealed class Display3270
@@ -185,11 +223,33 @@ namespace RetroIO.Protocols.Tn3270
         /// </remarks>
         public const int MaxPartitions = 16;
 
+        /// <summary>
+        /// How many keystrokes are queued while the host validates a trigger field before the
+        /// <see cref="KeyboardLock.KeystrokeQueueFull"/> condition is raised (GA23-0059-4 p. 4-25
+        /// note 4).
+        /// </summary>
+        /// <remarks>
+        /// The manual gives no size. 64 is this display's own choice.
+        /// </remarks>
+        public const int KeystrokeQueueCapacity = 64;
+
+        // M of the Alphanumeric Partitions reply, the bytes of partition storage (p. 6-18, 6-19):
+        // with scrolling a presentation space may be larger than the screen, so the storage is
+        // not tied to the screen size. 32767 is this display's own choice, not a value from the
+        // manual (X'FFFF' is reserved there); a 12/14-bit partition is still held to 16384 cells
+        // by its addresses (p. 4-4).
+        private const int PartitionStorage = 0x7FFF;
+
         // Structured field IDs of the partition structured fields (GA23-0059-4 p. 5-2).
         private const byte ResetPartitionId = 0x00;
+        private const byte SetWindowOriginId = 0x0B;
         private const byte CreatePartitionId = 0x0C;
         private const byte DestroyPartitionId = 0x0D;
         private const byte ActivatePartitionId = 0x0E;
+
+        // INOP for a Read Partition Query or Query List (p. 3-19); the other INOP values are the
+        // read commands' own codes.
+        private const byte InopQuery = 0x02;
 
         // The query replies this terminal sends, in ascending code order (p. 6-81: Null is never listed).
         private static readonly byte[] QueryCodesWithoutFileTransfer =
@@ -224,11 +284,45 @@ namespace RetroIO.Protocols.Tn3270
 
         private readonly ArrayBufferWriter<byte> _inbound = new ArrayBufferWriter<byte>(4096);
 
-        // The last inbound record sent with SendStructuredFieldReply(field, retry: true), kept until
-        // the host acknowledges it, so a Read Modified command sends it again (see
-        // SendStructuredFieldReply). _retryLength 0: nothing to retry.
+        // The inbound record of the inbound operation in progress (an enter action, a trigger
+        // action, a Read Partition, or SendStructuredFieldReply(field, retry: true)), kept until
+        // the host acknowledges it, so a Read Modified command in a retry state sends it again
+        // (p. 3-17, 3-18). _retryLength 0: nothing kept. Kept only while _readState is not
+        // Normal.
         private byte[] _retryRecord = Array.Empty<byte>();
         private int _retryLength;
+
+        // The read state (p. 3-17 to 3-19, Figure 3-1) and INOP (p. 3-19). In either retry state
+        // the display has the Enter Inhibit condition: no enter action is accepted from any
+        // partition (p. 3-20, 3-21), and a Read Partition is rejected with X'0871' (p. 3-18).
+        private ReadState _readState;
+        private byte _inop = Command3270.ReadModified;
+
+        // The input inhibit conditions that belong to the display rather than to a partition:
+        // operator errors, Minus Function, the query TWAIT and the trigger conditions. Activate
+        // Partition leaves them shown (p. 5-8 step 5b: "All other input-inhibit indicators remain
+        // displayed"). PWAIT and System Lock are in each Partition3270.
+        private KeyboardLock _deviceLock;
+
+        // A trigger action waiting for the host's reply (p. 4-23, 4-24): the partition, where the
+        // keystroke that caused it would have put the cursor (and the window, for a scroll key),
+        // whether that target wins over an Insert Cursor in the reply and raises Mandatory Entry
+        // (the case of p. 4-25 note 2), and the queued keystrokes.
+        private bool _triggerPending;
+        private byte _triggerPid;
+        private int _triggerTarget;
+        private int _triggerWindowRow = -1;
+        private bool _triggerForMandatoryEntry;
+        private readonly Keystroke[] _queue = new Keystroke[KeystrokeQueueCapacity];
+        private int _queueCount;
+
+        // Set by an Insert Cursor order in the Write being applied, so an affirmative trigger
+        // reply knows whether the host placed the cursor (p. 4-23).
+        private bool _insertCursorSeen;
+
+        // What the record being applied is to a pending trigger action (p. 4-24), decided before
+        // it is applied.
+        private TriggerReply _triggerReply;
 
         // The partitions (GA23-0059-4 chapter 2). The buffers, the attributes, the cursor, the
         // reply mode and the primed mandatory-fill field of each are in its Partition3270 (the
@@ -652,7 +746,7 @@ namespace RetroIO.Protocols.Tn3270
 
             CursorAddress = a;
             _sscpStart = a;
-            Lock = KeyboardLock.None;
+            ClearAllInputInhibit();
             return true;
         }
 
@@ -760,7 +854,7 @@ namespace RetroIO.Protocols.Tn3270
 
             CursorAddress = a;
             _sscpStart = a;
-            Lock = KeyboardLock.None;
+            ClearAllInputInhibit();
             if (firstRefused >= 0)
             {
                 Error("NVT text byte X'" + firstRefused.ToString("X2", System.Globalization.CultureInfo.InvariantCulture) + "' was not shown: only printable ASCII, CR, LF, BS, HT and BEL are built for NVT mode (RFC 854); an ANSI terminal is not built into the 3270 screen.");
@@ -827,7 +921,7 @@ namespace RetroIO.Protocols.Tn3270
 
             if (aid != Aid.Enter)
             {
-                Lock = KeyboardLock.MinusFunction;
+                _deviceLock = KeyboardLock.MinusFunction;
                 return false;
             }
 
@@ -882,7 +976,7 @@ namespace RetroIO.Protocols.Tn3270
 
             if (aid != Aid.Enter)
             {
-                Lock = KeyboardLock.MinusFunction;
+                _deviceLock = KeyboardLock.MinusFunction;
                 return false;
             }
 
@@ -909,7 +1003,16 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             _lastAid = aid;
-            Lock = KeyboardLock.WaitingForHost;
+
+            // An enter action on the implicit partition: TWAIT and System Lock, retry-enter state
+            // (GA23-0059-4 p. 3-21 steps 5 to 9). Nothing is kept for a retry: the SSCP-LU
+            // session has no read commands.
+            _inboundPid = 0;
+            _inop = Command3270.ReadModified;
+            _p.Pwait = true;
+            _p.SysLock = true;
+            _readState = ReadState.RetryEnter;
+            _retryLength = 0;
             Send();
             return true;
         }
@@ -995,7 +1098,15 @@ namespace RetroIO.Protocols.Tn3270
         public int CursorAddress
         {
             get => _p.Cursor;
-            private set => _p.Cursor = value;
+            private set
+            {
+                _p.Cursor = value;
+
+                // The cursor never leaves the window (p. 2-5, 7-16): a new cursor position outside
+                // it is an automatic scroll (p. 7-17), which also puts the window at (0, 0) when
+                // Erase/Write puts the cursor at 0 (p. 3-6 step 5).
+                ScrollToCursor(_p);
+            }
         }
 
         /// <summary>
@@ -1050,9 +1161,12 @@ namespace RetroIO.Protocols.Tn3270
         /// position in it.
         /// </summary>
         /// <remarks>
-        /// Without scrolling the window is the whole presentation space at (0, 0), so the address is
-        /// (row - RV) x W + (column - CV) (GA23-0059-4 p. 2-3). A position outside every viewport
-        /// shows nothing (p. 5-14: a destroyed partition's viewport is cleared).
+        /// The viewport shows the window, the part of the presentation space from row
+        /// <see cref="Partition3270.WindowRow"/> on, "in the corresponding row and column of the
+        /// viewport" (GA23-0059-4 p. 2-3), so the address is (RW + row - RV) x W + (column - CV).
+        /// Without scrolling RW is 0 and the window is the whole presentation space. A position
+        /// outside every viewport shows nothing (p. 5-14: a destroyed partition's viewport is
+        /// cleared). This is what a renderer draws at that screen position.
         /// </remarks>
         /// <param name="row">
         /// The screen row, 0 at the top of the usable area.
@@ -1087,11 +1201,11 @@ namespace RetroIO.Protocols.Tn3270
                 {
                     Partition3270? p = _partitions[i];
                     if (p != null
-                        && row >= p.ViewportRow && row < p.ViewportRow + p.Rows
-                        && column >= p.ViewportColumn && column < p.ViewportColumn + p.Columns)
+                        && row >= p.ViewportRow && row < p.ViewportRow + p.ViewportRows
+                        && column >= p.ViewportColumn && column < p.ViewportColumn + p.ViewportColumns)
                     {
                         partition = p;
-                        address = ((row - p.ViewportRow) * p.Columns) + (column - p.ViewportColumn);
+                        address = ((p.WindowRow + row - p.ViewportRow) * p.Columns) + (column - p.ViewportColumn);
                         return true;
                     }
                 }
@@ -1127,9 +1241,55 @@ namespace RetroIO.Protocols.Tn3270
         public int OutlineHorizontalPosition { get; set; } = 15;
 
         /// <summary>
-        /// Gets why the keyboard is locked, or <see cref="KeyboardLock.None"/>.
+        /// Gets why the keyboard is locked for the active partition, or
+        /// <see cref="KeyboardLock.None"/>.
         /// </summary>
-        public KeyboardLock Lock { get; private set; }
+        /// <remarks>
+        /// The conditions of the display come first (operator errors, Minus Function, the query
+        /// TWAIT, the trigger conditions), because Activate Partition leaves their indicators up
+        /// (GA23-0059-4 p. 5-8 step 5b). Then the active partition's own: PWAIT, shown as TWAIT
+        /// (<see cref="KeyboardLock.WaitingForHost"/>) when there is only one partition (p. 3-20),
+        /// then System Lock, which "will not be displayed while TWAIT or PWAIT exists" (p. 3-21).
+        /// The Enter Inhibit condition has no indicator (p. 3-21); see <see cref="EnterInhibit"/>.
+        /// </remarks>
+        public KeyboardLock Lock
+        {
+            get
+            {
+                if (_deviceLock != KeyboardLock.None)
+                {
+                    return _deviceLock;
+                }
+
+                Partition3270 active = ActivePartition;
+                if (active.Pwait)
+                {
+                    return _explicitState && CountPartitions() > 1 ? KeyboardLock.PartitionWait : KeyboardLock.WaitingForHost;
+                }
+
+                return active.SysLock ? KeyboardLock.SystemLock : KeyboardLock.None;
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the display has the Enter Inhibit condition: an inbound
+        /// operation (an enter action, a trigger action, a Read Partition) has not been
+        /// acknowledged, so no AID can be sent from any partition, while typing into a partition
+        /// with no other condition is still allowed (GA23-0059-4 p. 3-15, 3-21).
+        /// </summary>
+        public bool EnterInhibit => _readState != ReadState.Normal;
+
+        /// <summary>
+        /// Gets a value indicating whether a trigger field has been sent to the host and the
+        /// display waits for its affirmative or negative reply (GA23-0059-4 p. 4-23). Keystrokes
+        /// meanwhile are queued, not shown.
+        /// </summary>
+        public bool TriggerPending => _triggerPending;
+
+        /// <summary>
+        /// Gets how many keystrokes are queued while a trigger field is validated (p. 4-23).
+        /// </summary>
+        public int QueuedKeystrokes => _queueCount;
 
         /// <summary>
         /// Gets a value indicating whether the keyboard is in insert mode.
@@ -1465,16 +1625,28 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             byte command = record[0];
+            bool isRead = command == Command3270.ReadModified || command == Command3270.ReadModifiedAll || command == Command3270.ReadBuffer;
 
-            // Any outbound transmission other than a read command acknowledges the inbound record
-            // kept for a retry (p. 3-23: the acknowledgment is "any outbound transmission except
-            // one with a read command"), so a later Read Modified is an ordinary one again.
-            if (command != Command3270.ReadModified && command != Command3270.ReadModifiedAll && command != Command3270.ReadBuffer)
+            // What this record is to a trigger field the host is validating (p. 4-24), decided
+            // from the record as it came, before anything in it is applied.
+            _triggerReply = _triggerPending ? ClassifyTriggerReply(record) : TriggerReply.None;
+
+            // A read command in a retry state works on the inbound partition (p. 3-22 step 3):
+            // Read Modified always ("a retry of the inbound operation on INPID", p. 3-17), Read
+            // Buffer and Read Modified All when INOP is a read (3d). With INOP Query they read
+            // partition 0 like any read command (3c).
+            bool retryRead = false;
+            if (isRead && _readState != ReadState.Normal && (command == Command3270.ReadModified || _inop != InopQuery))
             {
-                _retryLength = 0;
+                Partition3270? inbound = PartitionFor(_inboundPid);
+                if (inbound != null)
+                {
+                    _p = inbound;
+                    retryRead = true;
+                }
             }
 
-            if (_explicitState && command != Command3270.WriteStructuredField)
+            if (_explicitState && command != Command3270.WriteStructuredField && !retryRead)
             {
                 // A command sent as the first byte, in explicit partitioned state (GA23-0059-4
                 // Table 3-3, p. 3-4):
@@ -1486,16 +1658,15 @@ namespace RetroIO.Protocols.Tn3270
                 //  - EAU: "implicit or explicit partition 0 must exist" (p. 3-20).
                 //  - RB, RM, RMA: "Partition 0, whether implicit or explicit, must exist or the
                 //    read command sent as the first byte of the data stream is rejected" (p. 3-18
-                //    note 1). A Read Modified in a retry state is a retry instead (p. 3-17) and
-                //    sends the kept record, wherever it came from.
+                //    note 1). A read command in a retry state is a retry instead (p. 3-17, 3-22),
+                //    handled above.
                 bool eraseWithReset = (command == Command3270.EraseWrite || command == Command3270.EraseWriteAlternate)
                     && record.Length > 1 && (record[1] & Wcc.Reset) != 0;
-                bool retry = command == Command3270.ReadModified && _retryLength > 0;
                 if (eraseWithReset)
                 {
                     ResetToImplicit(_sessionRows, _sessionColumns);
                 }
-                else if (!retry)
+                else
                 {
                     Partition3270? zero = _partitions[0];
                     if (zero == null)
@@ -1512,21 +1683,22 @@ namespace RetroIO.Protocols.Tn3270
             {
                 case Command3270.Write:
                     Write(record.Slice(1), erase: false, alternate: false);
-                    AcknowledgeQueryUnlessFailed();
+                    AcknowledgeAfterWrite(record.Length > 1);
                     break;
 
                 case Command3270.EraseWrite:
                     Write(record.Slice(1), erase: true, alternate: false);
-                    AcknowledgeQueryUnlessFailed();
+                    AcknowledgeAfterWrite(record.Length > 1);
                     break;
 
                 case Command3270.EraseWriteAlternate:
                     Write(record.Slice(1), erase: true, alternate: true);
-                    AcknowledgeQueryUnlessFailed();
+                    AcknowledgeAfterWrite(record.Length > 1);
                     break;
 
                 case Command3270.EraseAllUnprotected:
-                    // EAU acknowledges a query (p. 10-5), and it restores the keyboard anyway.
+                    // EAU acknowledges a query (p. 10-5) and an enter or read on partition 0
+                    // (p. 3-23), and it restores the keyboard anyway.
                     EraseAllUnprotected();
                     break;
 
@@ -1537,14 +1709,23 @@ namespace RetroIO.Protocols.Tn3270
                 case Command3270.ReadModified:
                     // In a retry state "the read modified command performs a retry of the inbound
                     // operation" (p. 3-14, 3-17); only the Read Modified command does, not Read
-                    // Modified All, Read Buffer or a Read Partition (p. 3-14).
-                    if (_retryLength > 0)
+                    // Modified All, Read Buffer or a Read Partition (p. 3-14). The kept record is
+                    // the inbound operation's own data; with none kept (Attn has sent since), the
+                    // data is read again from INPID as INOP Read Modified defines it (p. 3-22 3b).
+                    // A trigger field's retry is that field again (p. 4-23: "The RM command
+                    // transmits the trigger field").
+                    if (retryRead && _retryLength > 0)
                     {
                         InboundRecord?.Invoke(_retryRecord.AsSpan(0, _retryLength));
                         break;
                     }
 
                     SendReadModified(_lastAid, all: false);
+                    if (retryRead)
+                    {
+                        KeepLastInboundForRetry();
+                    }
+
                     break;
 
                 case Command3270.ReadModifiedAll:
@@ -1555,9 +1736,9 @@ namespace RetroIO.Protocols.Tn3270
                     // A WSF acknowledges a query "regardless of an error being detected in the
                     // accompanying structured fields" (p. 3-23, 10-5), so the lock ends before the
                     // fields run; a Read Partition Query among them locks it again when it replies.
-                    if (Lock == KeyboardLock.QueryReplySent)
+                    if (_deviceLock == KeyboardLock.QueryReplySent)
                     {
-                        Lock = KeyboardLock.None;
+                        _deviceLock = KeyboardLock.None;
                     }
 
                     WriteStructuredField(record.Slice(1));
@@ -1568,20 +1749,117 @@ namespace RetroIO.Protocols.Tn3270
                     break;
             }
 
+            if (_triggerReply == TriggerReply.Negative && !_failed)
+            {
+                // "Any other operation is a negative reply. The negative reply causes the
+                // keystroke queue to be emptied (purged) and an input-inhibit condition to be
+                // raised" - the invalid-field condition, with the cursor where the host put it
+                // (p. 4-24). "These replies apply only if the command is processed successfully"
+                // (p. 4-25), so a record with an error leaves the trigger action waiting. The
+                // condition is raised after the record, so a keyboard restore in a negative reply
+                // (an Erase/Write is negative whatever its WCC) does not take it down again; that
+                // order is this display's reading, the manual does not say.
+                _triggerPending = false;
+                _queueCount = 0;
+                _deviceLock = KeyboardLock.InvalidField;
+            }
+
+            _triggerReply = TriggerReply.None;
+
             // The operator's keys work on the active partition (p. 2-5).
             SelectActive();
             return !_failed;
         }
 
-        private void AcknowledgeQueryUnlessFailed()
+        // After a W, EW or EWA command sent as the first byte.
+        private void AcknowledgeAfterWrite(bool hasWcc)
         {
-            // An EW, EWA or Write acknowledges a query "with or without a WCC or data", but not when
-            // "an error is detected in the data" (p. 3-23, 10-5). Keyboard restore is not needed;
-            // with it, Write has already unlocked.
-            if (!_failed && Lock == KeyboardLock.QueryReplySent)
+            if (_failed)
             {
-                Lock = KeyboardLock.None;
+                // "If data is present and an error is detected in the data, the transmission is
+                // not an acknowledgment" (p. 3-23, notes 1 and 2).
+                return;
             }
+
+            // An EW, EWA or Write acknowledges a query "with or without a WCC or data" (p. 3-23,
+            // 10-5). Keyboard restore is not needed; with it, Write has already unlocked.
+            if (_deviceLock == KeyboardLock.QueryReplySent)
+            {
+                _deviceLock = KeyboardLock.None;
+            }
+
+            // An enter or a read: "If no WCC is defined following an Erase/Write ... any
+            // outstanding read or enter operation is not acknowledged" (p. 3-6); the same is read
+            // here for a Write with no WCC, which "is a no-op" (p. 3-2).
+            if (hasWcc || _inop == InopQuery)
+            {
+                AcknowledgeInbound();
+            }
+
+            if (_triggerReply == TriggerReply.Affirmative)
+            {
+                // "The queued keystrokes are processed after the operation is completed, that is,
+                // after the orders and data have been processed" (p. 4-23).
+                TriggerAffirmative();
+            }
+        }
+
+        // The host has acknowledged the inbound operation (p. 3-23): back to normal-read state,
+        // INOP Read Modified (p. 3-19), nothing kept for a retry, and the inbound partition's
+        // PWAIT (TWAIT) ended. System Lock stays: only a write with keyboard restore to its
+        // partition or the RESET key removes it (p. 2-9, 3-21).
+        //
+        // Which transmissions acknowledge. p. 3-23 starts from the SNA rule, "any transmission
+        // that after execution leaves the display in a Send or Contention state" and not one that
+        // makes the display send input, then lists what else acknowledges. TN3270 carries no SNA
+        // request header, so there is no Change Direction or End Bracket to read; every host
+        // record is taken here as ending the host's turn, the way this display already took a
+        // Write without keyboard restore as ending TWAIT and leaving System Lock (the SNA Change
+        // Direction case of p. 3-21; x3270 Common\ctlr.c, ctlr_write, does the same). So every
+        // outbound record that is not a read command, and does not itself carry a Read Partition
+        // for an enter or a read, acknowledges. That is this display's reading for TN3270, not a
+        // sentence of the manual.
+        private void AcknowledgeInbound()
+        {
+            if (_readState == ReadState.Normal)
+            {
+                return;
+            }
+
+            Partition3270? inbound = PartitionFor(_inboundPid);
+            if (inbound != null)
+            {
+                inbound.Pwait = false;
+            }
+
+            _readState = ReadState.Normal;
+            _inop = Command3270.ReadModified;
+            _retryLength = 0;
+        }
+
+        // Every input inhibit condition and the read state reset: an SSCP-LU message or NVT text
+        // ("It is unlocked when in contention or send-not-xmit", GA23-0061-2 p. 5-36), and the
+        // last partition destroyed ("Resets any Input Inhibit conditions", GA23-0059-4 p. 5-14).
+        private void ClearAllInputInhibit()
+        {
+            _deviceLock = KeyboardLock.None;
+            _implicitPartition.Pwait = false;
+            _implicitPartition.SysLock = false;
+            for (int i = 0; i < _partitions.Length; i++)
+            {
+                Partition3270? p = _partitions[i];
+                if (p != null)
+                {
+                    p.Pwait = false;
+                    p.SysLock = false;
+                }
+            }
+
+            _readState = ReadState.Normal;
+            _inop = Command3270.ReadModified;
+            _retryLength = 0;
+            _triggerPending = false;
+            _queueCount = 0;
         }
 
         /// <summary>
@@ -1609,6 +1887,14 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
+            if (_triggerPending)
+            {
+                // While a trigger field is validated "All keystrokes are accepted and queued ...
+                // The cursor is not moved, however, and keystrokes are not displayed, until an
+                // affirmative reply is received" (p. 4-23).
+                return Enqueue(KeystrokeKind.Type, c, 0, 0);
+            }
+
             return TypeByte(ebcdic, tabAfter: false);
         }
 
@@ -1622,6 +1908,11 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool Dup()
         {
+            if (Lock == KeyboardLock.None && _triggerPending)
+            {
+                return Enqueue(KeystrokeKind.Dup, '\0', 0, 0);
+            }
+
             return Lock == KeyboardLock.None && TypeByte(FormatControl.Dup, tabAfter: true);
         }
 
@@ -1634,6 +1925,11 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool FieldMark()
         {
+            if (Lock == KeyboardLock.None && _triggerPending)
+            {
+                return Enqueue(KeystrokeKind.FieldMark, '\0', 0, 0);
+            }
+
             return Lock == KeyboardLock.None && TypeByte(FormatControl.FieldMark, tabAfter: false);
         }
 
@@ -1645,6 +1941,12 @@ namespace RetroIO.Protocols.Tn3270
         {
             if (Lock == KeyboardLock.None)
             {
+                if (_triggerPending)
+                {
+                    Enqueue(KeystrokeKind.ToggleInsert, '\0', 0, 0);
+                    return;
+                }
+
                 InsertMode = !InsertMode;
             }
         }
@@ -1659,6 +1961,11 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool Delete()
         {
+            if (Lock == KeyboardLock.None && _triggerPending)
+            {
+                return Enqueue(KeystrokeKind.Delete, '\0', 0, 0);
+            }
+
             if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
             {
                 return false;
@@ -1703,6 +2010,11 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool Erase()
         {
+            if (Lock == KeyboardLock.None && _triggerPending)
+            {
+                return Enqueue(KeystrokeKind.Erase, '\0', 0, 0);
+            }
+
             if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
             {
                 return false;
@@ -1728,6 +2040,11 @@ namespace RetroIO.Protocols.Tn3270
         /// </returns>
         public bool EraseEndOfField()
         {
+            if (Lock == KeyboardLock.None && _triggerPending)
+            {
+                return Enqueue(KeystrokeKind.EraseEndOfField, '\0', 0, 0);
+            }
+
             if (Lock != KeyboardLock.None || !CheckInputPosition(out int fa))
             {
                 return false;
@@ -1775,8 +2092,16 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            // An erase-input keystroke unprimes a mandatory-fill field (p. 4-21).
+            if (_triggerPending)
+            {
+                return Enqueue(KeystrokeKind.EraseInput, '\0', 0, 0);
+            }
+
+            // An erase-input keystroke unprimes a mandatory-fill field (p. 4-21) and a trigger
+            // field (p. 4-23). The cursor then goes to the first input field without a trigger
+            // action: the field it leaves is no longer primed.
             _p.PrimedField = -1;
+            _p.PrimedTrigger = -1;
             int size = Size;
             int first = GetFieldAttributeFor(size - 1);
             if (first < 0)
@@ -1825,6 +2150,12 @@ namespace RetroIO.Protocols.Tn3270
                 return;
             }
 
+            if (_triggerPending)
+            {
+                Enqueue(KeystrokeKind.BackTab, ' ', 0, 0);
+                return;
+            }
+
             int size = Size;
             int fa = GetFieldAttributeFor(CursorAddress);
             if (fa >= 0 && !_p.IsFieldAttributeAt[CursorAddress] && !FieldAttribute.IsProtected(_p.Buffer[fa]) && Next(fa) != CursorAddress)
@@ -1856,6 +2187,12 @@ namespace RetroIO.Protocols.Tn3270
         {
             if (Lock != KeyboardLock.None)
             {
+                return;
+            }
+
+            if (_triggerPending)
+            {
+                Enqueue(KeystrokeKind.NewLine, ' ', 0, 0);
                 return;
             }
 
@@ -1906,12 +2243,140 @@ namespace RetroIO.Protocols.Tn3270
                 return;
             }
 
-            int size = Size;
-            int a = CursorAddress + columns;
-            a = ((a % size) + size) % size;
+            if (_triggerPending)
+            {
+                Enqueue(KeystrokeKind.MoveBy, ' ', columns, rows);
+                return;
+            }
+
+            // "The cursor movement keys (Up, Down, Left, Right, Backspace) wrap at the boundary of
+            // the viewport" (p. 7-16, 7-17), so the arithmetic is on the window, which is the
+            // whole presentation space when the partition does not scroll.
+            int top = _p.WindowRow * Columns;
+            int windowRows = _p.ViewportRows;
+            int windowSize = windowRows * Columns;
+            int a = CursorAddress - top + columns;
+            a = ((a % windowSize) + windowSize) % windowSize;
             int row = (a / Columns) + rows;
-            row = ((row % Rows) + Rows) % Rows;
-            OperatorMove((row * Columns) + (a % Columns));
+            row = ((row % windowRows) + windowRows) % windowRows;
+            OperatorMove(top + (row * Columns) + (a % Columns));
+        }
+
+        /// <summary>
+        /// The scroll-up key: the window moves down the presentation space by the partition's
+        /// RS rows, so the data moves up the viewport (GA23-0059-4 p. 7-16, 7-17).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// "If the current cursor position is in the top row of the window, the cursor is moved
+        /// down the presentation space so that it remains in the top row of the window"; at the
+        /// bottom of the presentation space "scrolling up has no effect. Note that there is no
+        /// input-inhibit condition and no indicator" (p. 7-17). A scroll that drags the cursor out
+        /// of a primed trigger field is a trigger action (p. 4-25 note 1).
+        /// </para>
+        /// <para>
+        /// Choices of this display, not settled by the manual: a scroll that would pass the end
+        /// moves only to the end; RS X'FFFF' ("the device determines the amount", p. 5-12) moves
+        /// one viewport height; RS 0 moves nothing; and the scroll keys are refused while the
+        /// keyboard is locked, as the cursor keys are.
+        /// </para>
+        /// </remarks>
+        /// <returns>
+        /// True when the window moved.
+        /// </returns>
+        public bool ScrollUp() => Scroll(1);
+
+        /// <summary>
+        /// The scroll-down key: the window moves up the presentation space by RS rows, so the
+        /// data moves down the viewport (GA23-0059-4 p. 7-17). See <see cref="ScrollUp"/>.
+        /// </summary>
+        /// <returns>
+        /// True when the window moved.
+        /// </returns>
+        public bool ScrollDown() => Scroll(-1);
+
+        /// <summary>
+        /// The jump-partition key: the next partition becomes the active one and the cursor shows
+        /// at its current cursor position (GA23-0059-4 p. 2-5).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// p. 2-5: "If the partition ID has the value N, the next active partition is that partition
+        /// with the smallest PID greater than N. If no such partition exists, the next active
+        /// partition is that partition with the lowest PID." The partition left keeps its PWAIT and
+        /// System Lock and shows them again when it is active again (p. 2-9). "When the TWAIT
+        /// condition exists, the Jump key does nothing; it is a No-op" (p. 3-20): TWAIT is the
+        /// condition of implicit partition state and of a single partition, and the TWAIT after a
+        /// query reply.
+        /// </para>
+        /// <para>
+        /// A jump while a trigger field is validated is not queued and starts no trigger action;
+        /// the partition left keeps its cursor in the trigger field (p. 4-25 notes 3 and 7). The
+        /// display's other conditions (operator errors and the like) do not stop the jump: the
+        /// manual does not say they do, and Activate Partition leaves them shown (p. 5-8 step 5b).
+        /// That is this display's reading.
+        /// </para>
+        /// </remarks>
+        /// <returns>
+        /// True when another partition became active.
+        /// </returns>
+        public bool JumpPartition()
+        {
+            if (!_explicitState || CountPartitions() < 2 || _deviceLock == KeyboardLock.QueryReplySent)
+            {
+                return false;
+            }
+
+            _activePid = NextPartitionAfter(_activePid);
+            SelectActive();
+            return true;
+        }
+
+        private bool Scroll(int direction)
+        {
+            if (Lock != KeyboardLock.None)
+            {
+                return false;
+            }
+
+            if (_triggerPending)
+            {
+                return Enqueue(KeystrokeKind.Scroll, ' ', direction, 0);
+            }
+
+            Partition3270 p = _p;
+            int lastWindowRow = p.Rows - p.ViewportRows;
+            int step = p.ScrollRows == 0xFFFF ? p.ViewportRows : p.ScrollRows;
+            int windowRow = Math.Clamp(p.WindowRow + (direction * step), 0, lastWindowRow);
+            if (windowRow == p.WindowRow)
+            {
+                return false;
+            }
+
+            // The cursor is dragged along at the edge of the window (p. 7-16).
+            int row = p.Cursor / p.Columns;
+            int draggedRow = Math.Clamp(row, windowRow, windowRow + p.ViewportRows - 1);
+            int target = (draggedRow * p.Columns) + (p.Cursor % p.Columns);
+            if (target != p.Cursor)
+            {
+                int fa = GetFieldAttributeFor(target);
+                if (p.PrimedField >= 0 && fa != p.PrimedField && !ValidateFill())
+                {
+                    // A scroll that would drag the cursor out of a primed mandatory-fill field
+                    // that fails validation does not happen: the cursor must stay in the field
+                    // (p. 4-21). This display's reading.
+                    return false;
+                }
+
+                if (p.PrimedTrigger >= 0 && fa != p.PrimedTrigger)
+                {
+                    return TriggerAction(target, windowRow, forMandatoryEntry: false);
+                }
+            }
+
+            p.WindowRow = windowRow;
+            p.Cursor = target;
+            return true;
         }
 
         /// <summary>
@@ -1925,6 +2390,12 @@ namespace RetroIO.Protocols.Tn3270
                 return;
             }
 
+            if (_triggerPending)
+            {
+                Enqueue(KeystrokeKind.Tab, ' ', 0, 0);
+                return;
+            }
+
             OperatorMove(NextInputPosition(CursorAddress));
         }
 
@@ -1935,6 +2406,12 @@ namespace RetroIO.Protocols.Tn3270
         {
             if (Lock != KeyboardLock.None)
             {
+                return;
+            }
+
+            if (_triggerPending)
+            {
+                Enqueue(KeystrokeKind.Home, ' ', 0, 0);
                 return;
             }
 
@@ -1956,6 +2433,12 @@ namespace RetroIO.Protocols.Tn3270
         {
             if (Lock != KeyboardLock.None || !IsFormatted)
             {
+                return;
+            }
+
+            if (_triggerPending)
+            {
+                Enqueue(KeystrokeKind.FieldEnd, ' ', 0, 0);
                 return;
             }
 
@@ -2011,11 +2494,19 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
+            if (_triggerPending)
+            {
+                // Queued whole, as the other keystrokes are (p. 4-23); what it does is decided
+                // when it is played back. This display's reading: the manual does not name the
+                // selector pen among the keys that are not queued.
+                return Enqueue(KeystrokeKind.CursorSelect, ' ', 0, 0);
+            }
+
             int fa = GetFieldAttributeFor(CursorAddress);
             byte display = fa >= 0 ? (byte)(_p.Buffer[fa] & FieldAttribute.DisplayMask) : (byte)0;
             if (fa < 0 || (display != 0x04 && display != 0x08))
             {
-                Lock = KeyboardLock.OperatorError;
+                _deviceLock = KeyboardLock.OperatorError;
                 return false;
             }
 
@@ -2038,7 +2529,7 @@ namespace RetroIO.Protocols.Tn3270
                     _p.Buffer[fa] = (byte)(_p.Buffer[fa] | FieldAttribute.Mdt);
                     return Attention(Aid.Enter);
                 default:
-                    Lock = KeyboardLock.OperatorError;
+                    _deviceLock = KeyboardLock.OperatorError;
                     return false;
             }
         }
@@ -2054,11 +2545,18 @@ namespace RetroIO.Protocols.Tn3270
         /// and neither does RetroIO. Under TN3270E with the SYSREQ function Sys Req is not this
         /// read but a telnet Abort Output that the connection sends (RFC 2355 section 10.5.2);
         /// the SSCP's answer then comes through <see cref="ProcessSscpLuData"/>.
+        /// While a trigger field is validated, "system request purges the queue" of keystrokes
+        /// (GA23-0059-4 p. 4-23); the read itself is then an enter action like any other, refused
+        /// under Enter Inhibit (p. 3-21 step 1).
         /// </remarks>
         /// <returns>
         /// True when sent; false when the keyboard is locked.
         /// </returns>
-        public bool SysReq() => Attention(Aid.SysReq);
+        public bool SysReq()
+        {
+            _queueCount = 0;
+            return Attention(Aid.SysReq);
+        }
 
         /// <summary>
         /// The data-stream half of Attn in plain TN3270: the PA1 short read, sent whatever the
@@ -2081,7 +2579,7 @@ namespace RetroIO.Protocols.Tn3270
         /// <remarks>
         /// See <see cref="KeyboardLock.MinusFunction"/> for where this comes from.
         /// </remarks>
-        public void RefuseFunction() => Lock = KeyboardLock.MinusFunction;
+        public void RefuseFunction() => _deviceLock = KeyboardLock.MinusFunction;
 
         /// <summary>
         /// Pastes text the way x3270's normal paste does: typed character by character, with a
@@ -2171,6 +2669,12 @@ namespace RetroIO.Protocols.Tn3270
                 throw new ArgumentOutOfRangeException(nameof(address));
             }
 
+            if (_triggerPending)
+            {
+                Enqueue(KeystrokeKind.MoveTo, ' ', address, 0);
+                return;
+            }
+
             OperatorMove(address);
         }
 
@@ -2181,9 +2685,25 @@ namespace RetroIO.Protocols.Tn3270
         /// </summary>
         public void Reset()
         {
-            if (Lock == KeyboardLock.SystemLock || Lock == KeyboardLock.OperatorError || Lock == KeyboardLock.TooMuchData || Lock == KeyboardLock.MandatoryFill || Lock == KeyboardLock.MandatoryEntry || Lock == KeyboardLock.MinusFunction)
+            // The operator-clearable conditions of the display. InvalidField and
+            // KeystrokeQueueFull are cleared here by this display's own choice (p. 4-24 and 4-25
+            // do not say what ends them). Reset is not queued while a trigger field is validated:
+            // the manual names it among the keys that act at once (this display's reading of
+            // p. 4-23, which queues "all keystrokes" but lists the input-inhibit keys apart).
+            KeyboardLock device = _deviceLock;
+            if (device == KeyboardLock.OperatorError || device == KeyboardLock.TooMuchData || device == KeyboardLock.MandatoryFill
+                || device == KeyboardLock.MandatoryEntry || device == KeyboardLock.MinusFunction
+                || device == KeyboardLock.InvalidField || device == KeyboardLock.KeystrokeQueueFull)
             {
-                Lock = KeyboardLock.None;
+                _deviceLock = KeyboardLock.None;
+            }
+
+            // "The RESET key removes System Lock when the partition in which it exists is the
+            // active partition" (p. 2-9), but not while PWAIT hides it: Reset does not end a
+            // wait (p. 3-20).
+            if (_deviceLock == KeyboardLock.None && !_p.Pwait)
+            {
+                _p.SysLock = false;
             }
 
             if (Lock == KeyboardLock.None)
@@ -2219,6 +2739,23 @@ namespace RetroIO.Protocols.Tn3270
                 return NvtAttention(aid);
             }
 
+            if (_triggerPending && aid != Aid.SysReq)
+            {
+                // An AID key while a trigger field is validated is a keystroke like the others:
+                // queued, and run after the affirmative reply, which has acknowledged the trigger
+                // action by then (p. 4-23). Sys Req is not queued; it purges the queue.
+                return Enqueue(KeystrokeKind.Attention, ' ', aid, 0);
+            }
+
+            if (_readState != ReadState.Normal)
+            {
+                // "If the Enter Inhibit condition exists, the enter action is rejected" (p. 3-21
+                // step 1): an inbound operation of some partition is not yet acknowledged. Which
+                // indicator a real display then shows is not stated; this display shows none and
+                // only refuses the key.
+                return false;
+            }
+
             if (aid == Aid.Clear)
             {
                 // Clear: every field attribute becomes a null - no fields left (p. 4-13), the buffer
@@ -2252,7 +2789,7 @@ namespace RetroIO.Protocols.Tn3270
                 if (empty >= 0)
                 {
                     CursorAddress = Next(empty);
-                    Lock = KeyboardLock.MandatoryEntry;
+                    _deviceLock = KeyboardLock.MandatoryEntry;
                     return false;
                 }
             }
@@ -2264,10 +2801,290 @@ namespace RetroIO.Protocols.Tn3270
             // "INPID is set to the PID of the active partition" (GA23-0059-4 p. 3-21 step 6);
             // the data then comes from that partition, in an Inbound 3270DS when its PID is not 0
             // (p. 6-7, case 3).
+            // Steps 5 to 11: Enter Inhibit (the retry-enter state), INOP Read Modified, PWAIT and
+            // System Lock on INPID, then the data, kept for a retry by Read Modified (p. 3-17).
             _inboundPid = _activePid;
-            Lock = KeyboardLock.WaitingForHost;
+            _inop = Command3270.ReadModified;
+            _p.Pwait = true;
+            _p.SysLock = true;
+            _readState = ReadState.RetryEnter;
             SendReadModified(aid, all: false);
+            KeepLastInboundForRetry();
             return true;
+        }
+
+        // The trigger action (p. 4-23): the operator tried to move the cursor out of the primed
+        // trigger field, to target (and, for a scroll key, the window to windowRow; -1 keeps it).
+        // The cursor stays; the field goes to the host; keystrokes are queued until the reply.
+        private bool TriggerAction(int target, int windowRow, bool forMandatoryEntry)
+        {
+            if (_readState != ReadState.Normal)
+            {
+                // A trigger action is an enter action (p. 3-21: steps 8 and 9 name it), so Enter
+                // Inhibit rejects it like any other. This display's reading: the key is refused
+                // and the cursor stays in the field.
+                return false;
+            }
+
+            Partition3270 p = _p;
+            int fa = p.PrimedTrigger;
+
+            // "The trigger action unprimes the field" (p. 4-23).
+            p.PrimedTrigger = -1;
+            InsertMode = false;
+
+            // Steps 5 to 7, not 8 and 9: no PWAIT and no System Lock for a trigger action
+            // (p. 3-21).
+            _inboundPid = _activePid;
+            _inop = Command3270.ReadModified;
+            _readState = ReadState.RetryEnter;
+            _triggerPending = true;
+            _triggerPid = _activePid;
+            _triggerTarget = target;
+            _triggerWindowRow = windowRow;
+            _triggerForMandatoryEntry = forMandatoryEntry;
+            _queueCount = 0;
+
+            // The record: AID X'7F', the cursor address, then the field - "the trigger field's
+            // address and data" (p. 4-23), sent as a Read Modified sends one field: SBA to the
+            // position after the attribute, then the data with nulls left out (p. 3-10). The
+            // MDT is not looked at and not changed (p. 4-26 note 9). The SBA form is this
+            // display's reading of "field address".
+            _inbound.Clear();
+            Array.Clear(_inboundSa);
+            BeginInbound(Aid.Trigger);
+            AppendAddress(p.Cursor);
+            AppendByte(Order3270.SetBufferAddress);
+            AppendAddress(Next(fa));
+            for (int a = Next(fa); !p.IsFieldAttributeAt[a] && a != fa; a = Next(a))
+            {
+                byte c = p.Buffer[a];
+                if (c != FormatControl.Null)
+                {
+                    AppendByte(c);
+                }
+            }
+
+            Send();
+            KeepLastInboundForRetry();
+            return true;
+        }
+
+        // What a host record is to the pending trigger action (p. 4-24). Decided from the
+        // record's first bytes before it is applied.
+        private TriggerReply ClassifyTriggerReply(ReadOnlySpan<byte> record)
+        {
+            byte command = record[0];
+            switch (command)
+            {
+                case Command3270.ReadBuffer:
+                case Command3270.ReadModified:
+                case Command3270.ReadModifiedAll:
+                    // "The read commands ... are not replies" (p. 4-24).
+                    return TriggerReply.None;
+
+                case Command3270.Write:
+                    // "a write command with keyboard restore, directed to INPID": W as the first
+                    // byte goes to partition 0 (Table 3-3), so only when INPID is 0.
+                    return _triggerPid == 0 && record.Length > 1 && (record[1] & Wcc.KeyboardRestore) != 0
+                        ? TriggerReply.Affirmative
+                        : TriggerReply.Negative;
+
+                case Command3270.WriteStructuredField:
+                    return ClassifyTriggerWsf(record.Slice(1));
+
+                default:
+                    // Erase/Write, EWA and EAU are "any other operation" (p. 4-24).
+                    return TriggerReply.Negative;
+            }
+        }
+
+        private TriggerReply ClassifyTriggerWsf(ReadOnlySpan<byte> fields)
+        {
+            // The first structured field decides: an Outbound 3270DS (X'40') to INPID holding a
+            // Write with keyboard restore is affirmative (p. 4-24). A Read Partition is not a
+            // reply (p. 4-24) - and is rejected anyway under Enter Inhibit. Anything else is
+            // negative.
+            if (fields.Length < 3)
+            {
+                return TriggerReply.Negative;
+            }
+
+            byte id = fields[2];
+            if (id == StructuredFieldId.ReadPartition)
+            {
+                return TriggerReply.None;
+            }
+
+            if (id == StructuredFieldId.Outbound3270DS && fields.Length >= 6 && fields[3] == _triggerPid
+                && fields[4] == Command3270.Write && (fields[5] & Wcc.KeyboardRestore) != 0)
+            {
+                return TriggerReply.Affirmative;
+            }
+
+            return TriggerReply.Negative;
+        }
+
+        // The affirmative reply has been applied (p. 4-23, 4-24): the cursor goes where the
+        // keystroke that caused the trigger action would have put it, unless the reply moved it
+        // with an Insert Cursor order; then the queued keystrokes run.
+        private void TriggerAffirmative()
+        {
+            _triggerPending = false;
+            Partition3270? p = PartitionFor(_triggerPid);
+            if (p != null)
+            {
+                Partition3270 saved = _p;
+                _p = p;
+                if (_triggerForMandatoryEntry)
+                {
+                    // p. 4-25 note 2: the cursor moved by the mandatory-entry check goes to the
+                    // empty mandatory-entry field and the condition is raised after the reply.
+                    // This display reads that move as winning over an Insert Cursor order.
+                    CursorAddress = _triggerTarget;
+                    _deviceLock = KeyboardLock.MandatoryEntry;
+                }
+                else if (!_insertCursorSeen)
+                {
+                    if (_triggerWindowRow >= 0)
+                    {
+                        p.WindowRow = _triggerWindowRow;
+                        p.Cursor = _triggerTarget;
+                    }
+                    else
+                    {
+                        CursorAddress = _triggerTarget;
+                    }
+                }
+
+                _p = saved;
+            }
+
+            SelectActive();
+            ReplayQueue();
+        }
+
+        private bool Enqueue(KeystrokeKind kind, char c, int a, int b)
+        {
+            if (_queueCount >= _queue.Length)
+            {
+                _deviceLock = KeyboardLock.KeystrokeQueueFull;
+                return false;
+            }
+
+            _queue[_queueCount++] = new Keystroke(kind, c, a, b);
+            return true;
+        }
+
+        private void ReplayQueue()
+        {
+            int count = _queueCount;
+            _queueCount = 0;
+            Keystroke[] copy = System.Buffers.ArrayPool<Keystroke>.Shared.Rent(Math.Max(count, 1));
+            Array.Copy(_queue, copy, count);
+            try
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    // A keystroke that starts another trigger action queues the rest behind it.
+                    if (_triggerPending)
+                    {
+                        for (int j = i; j < count; j++)
+                        {
+                            Keystroke k = copy[j];
+                            Enqueue(k.Kind, k.Character, k.A, k.B);
+                        }
+
+                        return;
+                    }
+
+                    RunKeystroke(copy[i]);
+                }
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<Keystroke>.Shared.Return(copy);
+            }
+        }
+
+        private void RunKeystroke(Keystroke k)
+        {
+            switch (k.Kind)
+            {
+                case KeystrokeKind.Type: Type(k.Character); break;
+                case KeystrokeKind.Dup: Dup(); break;
+                case KeystrokeKind.FieldMark: FieldMark(); break;
+                case KeystrokeKind.ToggleInsert: ToggleInsert(); break;
+                case KeystrokeKind.Delete: Delete(); break;
+                case KeystrokeKind.Erase: Erase(); break;
+                case KeystrokeKind.EraseEndOfField: EraseEndOfField(); break;
+                case KeystrokeKind.EraseInput: EraseInput(); break;
+                case KeystrokeKind.BackTab: BackTab(); break;
+                case KeystrokeKind.NewLine: NewLine(); break;
+                case KeystrokeKind.Tab: Tab(); break;
+                case KeystrokeKind.Home: Home(); break;
+                case KeystrokeKind.FieldEnd: FieldEnd(); break;
+                case KeystrokeKind.MoveBy: MoveCursorBy(k.A, k.B); break;
+                case KeystrokeKind.MoveTo: MoveCursor(k.A); break;
+                case KeystrokeKind.Scroll: Scroll(k.A); break;
+                case KeystrokeKind.CursorSelect: CursorSelect(); break;
+                case KeystrokeKind.Attention: Attention((byte)k.A); break;
+            }
+        }
+
+        private enum KeystrokeKind : byte
+        {
+            Type,
+            Dup,
+            FieldMark,
+            ToggleInsert,
+            Delete,
+            Erase,
+            EraseEndOfField,
+            EraseInput,
+            BackTab,
+            NewLine,
+            Tab,
+            Home,
+            FieldEnd,
+            MoveBy,
+            MoveTo,
+            Scroll,
+            CursorSelect,
+            Attention,
+        }
+
+        private readonly struct Keystroke
+        {
+            public Keystroke(KeystrokeKind kind, char character, int a, int b)
+            {
+                Kind = kind;
+                Character = character;
+                A = a;
+                B = b;
+            }
+
+            public KeystrokeKind Kind { get; }
+
+            public char Character { get; }
+
+            public int A { get; }
+
+            public int B { get; }
+        }
+
+        private enum ReadState : byte
+        {
+            Normal,
+            RetryEnter,
+            RetryRead,
+        }
+
+        private enum TriggerReply : byte
+        {
+            None,
+            Affirmative,
+            Negative,
         }
 
         /// <summary>
@@ -2319,33 +3136,66 @@ namespace RetroIO.Protocols.Tn3270
             _inbound.Clear();
             AppendByte(Aid.StructuredField);
             AppendBytes(field);
+            Send();
             if (retry)
             {
-                ReadOnlySpan<byte> record = _inbound.WrittenSpan;
-                if (_retryRecord.Length < record.Length)
-                {
-                    _retryRecord = new byte[record.Length];
-                }
-
-                record.CopyTo(_retryRecord);
+                // Kept as a read reply is (p. 3-17, 3-18): retry-read state, INOP Read Modified,
+                // so a Read Modified command sends it again until the host's next other
+                // transmission. Treating this inbound record as a read's reply is this display's
+                // reading; the manual starts a retry state only from an enter action or a Read
+                // Partition (see above).
+                EnterRetryRead(Command3270.ReadModified);
             }
-
-            // Send ends any retry kept from before; this record's is set after it.
-            int length = _inbound.WrittenCount;
-            Send();
-            _retryLength = retry ? length : 0;
+            else if (_readState == ReadState.RetryRead)
+            {
+                // A new inbound record that is not kept ends the retry of the one before.
+                _readState = ReadState.Normal;
+                _inop = Command3270.ReadModified;
+                _retryLength = 0;
+            }
         }
 
         private void OperatorMove(int address)
         {
             // Moving the cursor out of a primed mandatory-fill field validates it first; on failure
             // the cursor stays in the field (p. 4-21).
-            if (_p.PrimedField >= 0 && GetFieldAttributeFor(address) != _p.PrimedField && !ValidateFill())
+            int target = GetFieldAttributeFor(address);
+            if (_p.PrimedField >= 0 && target != _p.PrimedField && !ValidateFill())
             {
                 return;
             }
 
+            // Fill checking comes first, then the trigger (p. 4-25 note 1): an attempt to move
+            // the cursor out of a primed trigger field is the trigger action, and the cursor
+            // stays in the field until the host replies (p. 4-23).
+            if (_p.PrimedTrigger >= 0 && target != _p.PrimedTrigger)
+            {
+                TriggerAction(address, -1, forMandatoryEntry: false);
+                return;
+            }
+
             CursorAddress = address;
+        }
+
+        // Automatic scrolling (p. 7-17): when the cursor is put outside the window - by a field
+        // key, a data key, Home, or an Insert Cursor order - the window moves by the fewest rows
+        // that bring the cursor in. The window column is always 0.
+        private static void ScrollToCursor(Partition3270 p)
+        {
+            if (!p.Scrolls)
+            {
+                return;
+            }
+
+            int row = p.Cursor / p.Columns;
+            if (row < p.WindowRow)
+            {
+                p.WindowRow = row;
+            }
+            else if (row >= p.WindowRow + p.ViewportRows)
+            {
+                p.WindowRow = row - p.ViewportRows + 1;
+            }
         }
 
         private void Prime(int fieldAttribute)
@@ -2355,6 +3205,12 @@ namespace RetroIO.Protocols.Tn3270
             if (fieldAttribute >= 0 && (_p.FieldValidationAt[fieldAttribute] & FieldValidation.MandatoryFill) != 0)
             {
                 _p.PrimedField = fieldAttribute;
+            }
+
+            // A trigger field is primed the same way (p. 4-23).
+            if (fieldAttribute >= 0 && (_p.FieldValidationAt[fieldAttribute] & FieldValidation.Trigger) != 0)
+            {
+                _p.PrimedTrigger = fieldAttribute;
             }
         }
 
@@ -2383,7 +3239,7 @@ namespace RetroIO.Protocols.Tn3270
 
             if (hasNull)
             {
-                Lock = KeyboardLock.MandatoryFill;
+                _deviceLock = KeyboardLock.MandatoryFill;
                 return false;
             }
 
@@ -2438,7 +3294,7 @@ namespace RetroIO.Protocols.Tn3270
 
                 if (hole < 0)
                 {
-                    Lock = KeyboardLock.TooMuchData;
+                    _deviceLock = KeyboardLock.TooMuchData;
                     return false;
                 }
 
@@ -2491,7 +3347,7 @@ namespace RetroIO.Protocols.Tn3270
             fieldAttribute = GetFieldAttributeFor(CursorAddress);
             if (fieldAttribute >= 0 && (_p.IsFieldAttributeAt[CursorAddress] || FieldAttribute.IsProtected(_p.Buffer[fieldAttribute])))
             {
-                Lock = KeyboardLock.OperatorError;
+                _deviceLock = KeyboardLock.OperatorError;
                 return false;
             }
 
@@ -2520,8 +3376,11 @@ namespace RetroIO.Protocols.Tn3270
 
         private void Write(ReadOnlySpan<byte> data, bool erase, bool alternate, bool fromStructuredField = false)
         {
-            // "A write operation to that partition" unprimes a mandatory-fill field (p. 4-21).
+            // "A write operation to that partition" unprimes a mandatory-fill field (p. 4-21) and
+            // a trigger field (p. 4-23).
             _p.PrimedField = -1;
+            _p.PrimedTrigger = -1;
+            _insertCursorSeen = false;
 
             // "A write command with no WCC and no data is a no-op" (p. 3-2); an EW with no WCC is a
             // no-op too, nothing is erased (p. 3-6).
@@ -2671,6 +3530,7 @@ namespace RetroIO.Protocols.Tn3270
 
                     case Order3270.InsertCursor:
                         CursorAddress = address;
+                        _insertCursorSeen = true;
                         break;
 
                     case Order3270.ProgramTab:
@@ -2785,16 +3645,16 @@ namespace RetroIO.Protocols.Tn3270
 
         Done:
             // Every WCC function except Reset MDT waits until the data and orders are done (p. 3-2).
+            // Keyboard restore ends the display's conditions and this partition's System Lock
+            // (p. 2-9: "a write operation with keyboard restore to that partition"). PWAIT ends
+            // with the acknowledgment the caller makes (AcknowledgeAfterWrite, or the WSF case),
+            // which a write without keyboard restore makes as well, leaving System Lock shown
+            // (see KeyboardLock.SystemLock).
             if ((wcc & Wcc.KeyboardRestore) != 0)
             {
-                Lock = KeyboardLock.None;
+                _deviceLock = KeyboardLock.None;
+                _p.SysLock = false;
                 _lastAid = Aid.None;
-            }
-            else if (Lock == KeyboardLock.WaitingForHost)
-            {
-                // The host answered but left the keyboard locked: TWAIT ends, System Lock shows
-                // (see KeyboardLock.SystemLock).
-                Lock = KeyboardLock.SystemLock;
             }
 
             if ((wcc & Wcc.SoundAlarm) != 0)
@@ -2809,6 +3669,7 @@ namespace RetroIO.Protocols.Tn3270
             // file transfer total, before anything is applied. Each field is a 2-byte length that
             // counts itself, then the ID; length 0 means the field runs to the end (p. 5-1).
             int fileTransferBytes = 0;
+            bool holdsReadPartition = false;
             int pos = 0;
             while (pos < data.Length)
             {
@@ -2829,7 +3690,21 @@ namespace RetroIO.Protocols.Tn3270
                     fileTransferBytes += length;
                 }
 
+                if (id == StructuredFieldId.ReadPartition)
+                {
+                    holdsReadPartition = true;
+                }
+
                 pos += length;
+            }
+
+            // The WSF acknowledges the outstanding inbound operation (p. 3-23), unless it carries
+            // a Read Partition, which is a read - and is rejected in a retry state anyway
+            // (p. 3-18) - while INOP is a read. A query is acknowledged by any WSF (p. 3-23,
+            // 10-5). An affirmative trigger reply is acknowledged below, after its Outbound 3270DS.
+            if (_triggerReply != TriggerReply.Affirmative && (!holdsReadPartition || _inop == InopQuery))
+            {
+                AcknowledgeInbound();
             }
 
             if (fileTransferBytes > 0)
@@ -2868,6 +3743,16 @@ namespace RetroIO.Protocols.Tn3270
                         break;
                     case StructuredFieldId.Outbound3270DS:
                         ok = Outbound3270DS(field);
+                        if (ok && _triggerReply == TriggerReply.Affirmative)
+                        {
+                            // The first structured field was the Write with keyboard restore to
+                            // INPID: the affirmative reply (p. 4-24). It acknowledges the trigger
+                            // action, then the queued keystrokes run on its result.
+                            _triggerReply = TriggerReply.None;
+                            AcknowledgeInbound();
+                            TriggerAffirmative();
+                        }
+
                         break;
                     case StructuredFieldId.DataTransfer:
                         FileTransferField?.Invoke(field);
@@ -2875,6 +3760,9 @@ namespace RetroIO.Protocols.Tn3270
                         break;
                     case CreatePartitionId:
                         ok = CreatePartition(field);
+                        break;
+                    case SetWindowOriginId:
+                        ok = SetWindowOrigin(field);
                         break;
                     case DestroyPartitionId:
                         ok = DestroyPartition(field);
@@ -2886,7 +3774,7 @@ namespace RetroIO.Protocols.Tn3270
                         ok = ResetPartition(field);
                         break;
                     default:
-                        Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Set Reply Mode, Outbound 3270DS, Create, Destroy, Activate and Reset Partition, and X'D0' file transfer are).");
+                        Error("Structured field X'" + Hex(field[2]) + "' is not built (only Read Partition, Erase/Reset, Set Reply Mode, Outbound 3270DS, Create, Destroy, Activate Reset and Set Window Origin, and X'D0' file transfer are).");
                         ok = false;
                         break;
                 }
@@ -2921,6 +3809,14 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             byte id = data[pos + 2];
+            if (id == 0x0F && pos + 3 < data.Length && data[pos + 3] == 0x0A)
+            {
+                // Modify Partition, X'0F0A' (p. 5-34, 5-35): optional, and this display's
+                // Alphanumeric Partitions reply has MODIFY 0 (p. 6-19), so a host must not send it.
+                Error("Modify Partition (X'0F0A') is not supported: the Alphanumeric Partitions query reply has MODIFY 0 (p. 5-34, 6-19).");
+                return false;
+            }
+
             if (id == 0x0F || id == 0x10)
             {
                 // Two-byte IDs begin with X'0F' or X'10' (p. 5-2); none of them is built.
@@ -2942,6 +3838,15 @@ namespace RetroIO.Protocols.Tn3270
 
             byte pid = field[3];
             byte type = field[4];
+            if (_readState != ReadState.Normal)
+            {
+                // "If the device is in retry state, the Read Partition structured field is rejected
+                // with sense code X'0871'" (p. 3-18; Table B-1 p. B-3: read partition, state
+                // error).
+                Error("Read Partition while an inbound operation is not yet acknowledged (retry state) is rejected, sense X'0871' (p. 3-18).");
+                return false;
+            }
+
             switch (type)
             {
                 case 0x02:
@@ -2952,6 +3857,7 @@ namespace RetroIO.Protocols.Tn3270
                     }
 
                     SendQueryReplies(Array.Empty<byte>(), all: true);
+                    EnterRetryRead(InopQuery);
                     return true;
 
                 case 0x03:
@@ -2975,16 +3881,19 @@ namespace RetroIO.Protocols.Tn3270
                     {
                         case 0:
                             SendQueryReplies(codes, all: false);
+                            EnterRetryRead(InopQuery);
                             return true;
                         case 1:
                             // "Equivalent": everything a Query sends, plus the listed codes, no
                             // duplicates. A Query sends every reply this terminal has, so the list
                             // adds nothing.
                             SendQueryReplies(codes, all: true);
+                            EnterRetryRead(InopQuery);
                             return true;
                         case 2:
                             // "All" overrides the list.
                             SendQueryReplies(Array.Empty<byte>(), all: true);
+                            EnterRetryRead(InopQuery);
                             return true;
                         default:
                             Error("Read Partition Query List with the reserved request type B'11' (p. 5-47).");
@@ -3027,7 +3936,7 @@ namespace RetroIO.Protocols.Tn3270
                         SendReadModified(aid, all: type == Command3270.ReadModifiedAll);
                     }
 
-                    KeepLastInboundForRetry();
+                    EnterRetryRead(type);
                     SelectActive();
                     return true;
                 }
@@ -3036,6 +3945,17 @@ namespace RetroIO.Protocols.Tn3270
                     Error("Read Partition type X'" + Hex(type) + "' is reserved and rejected (p. 5-48).");
                     return false;
             }
+        }
+
+        // After a Read Partition's reply (p. 5-48, 5-49): INOP is the operation, the reply is kept,
+        // and the device is in retry-read state until the host acknowledges (p. 3-17, 3-18). A
+        // query's INPID is not set by the Read Partition (p. 3-19: "For Query operations, INPID is
+        // not used"); it stays as it was, and no partition has PWAIT for it.
+        private void EnterRetryRead(byte inop)
+        {
+            _inop = inop;
+            _readState = ReadState.RetryRead;
+            KeepLastInboundForRetry();
         }
 
         private bool EraseReset(ReadOnlySpan<byte> field)
@@ -3297,8 +4217,8 @@ namespace RetroIO.Protocols.Tn3270
                     continue;
                 }
 
-                bool apart = rv >= other.ViewportRow + other.Rows || rv + hv <= other.ViewportRow
-                    || cv >= other.ViewportColumn + other.Columns || cv + wv <= other.ViewportColumn;
+                bool apart = rv >= other.ViewportRow + other.ViewportRows || rv + hv <= other.ViewportRow
+                    || cv >= other.ViewportColumn + other.ViewportColumns || cv + wv <= other.ViewportColumn;
                 if (!apart)
                 {
                     Error("Create Partition viewport at row " + rv + ", column " + cv + ", " + hv + " x " + wv + ", overlaps the viewport of partition " + i + " (p. 5-10 condition 5; Table B-1 p. B-2, Specification error in Viewport/Window).");
@@ -3306,12 +4226,9 @@ namespace RetroIO.Protocols.Tn3270
                 }
             }
 
-            if (rs >= 0x0002 && rs <= 0xFFFE)
-            {
-                Error("Create Partition RS " + rs + ": vertical windowing is not supported (Table B-1 p. B-2, RS = X'0002'-X'FFFE' and vertical windowing not supported).");
-                return false;
-            }
-
+            // RS, the rows a scroll key moves (p. 5-11, 7-16): any value is taken. 0 means the
+            // scroll keys move nothing, X'FFFF' "the device determines the amount" (p. 5-12),
+            // here one viewport height - both this display's choices.
             if (cs >= 0x0002 && cs <= 0xFFFE)
             {
                 // Bytes 24-25 are printed as reserved in the format table, and as CS in the
@@ -3320,17 +4237,32 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
-            if (h != hv || w != wv)
+            if (w != wv)
             {
-                // A presentation space larger than its viewport is a scrolling partition
-                // (p. 2-3, 6-19); a smaller one cannot hold the window (p. 5-10 item 10).
-                Error("Create Partition presentation space " + h + " x " + w + " is not the size of its viewport " + hv + " x " + wv + ": scrolling is not supported (Alphanumeric Partitions SCROLL 0, p. 6-19) and the window must lie inside the presentation space (p. 5-10 item 10).");
+                // Only vertical scrolling is built: the Alphanumeric Partitions reply sends the
+                // SCROLL flag alone, and a wider presentation space than viewport would need
+                // horizontal windowing (p. 2-3, 6-19; Table B-1 p. B-2).
+                Error("Create Partition presentation space " + w + " columns wide in a viewport " + wv + " wide: horizontal windowing is not supported, so W must equal WV (p. 2-3, 6-19; Table B-1 p. B-2).");
                 return false;
             }
 
-            if (rw != 0 || cw != 0)
+            if (h < hv)
             {
-                Error("Create Partition window origin row " + rw + ", column " + cw + ": with the window the size of the presentation space only (0, 0) lies inside it (p. 5-10 item 10).");
+                // "The window must be wholly contained within the presentation space" (p. 5-10
+                // item 10), and the window is the viewport's size (p. 2-3).
+                Error("Create Partition presentation space " + h + " rows high in a viewport " + hv + " high: the window cannot lie inside it (p. 2-3, 5-10 item 10; Table B-1 p. B-2, Specification error in Viewport/Window).");
+                return false;
+            }
+
+            if (cw != 0)
+            {
+                Error("Create Partition window origin column " + cw + ": CW > 0, but horizontal windowing not supported (Table B-1 p. B-2).");
+                return false;
+            }
+
+            if (rw + hv > h)
+            {
+                Error("Create Partition window origin row " + rw + " with a window " + hv + " rows high runs past the " + h + "-row presentation space (p. 5-10 item 10; Table B-1 p. B-2, Window spec outside presentation space).");
                 return false;
             }
 
@@ -3371,11 +4303,14 @@ namespace RetroIO.Protocols.Tn3270
             // created. The display state is changed ... to explicit partitioned state and the
             // created partition is made active" (p. 5-10). The destroyed implicit partition was
             // the inbound one, so INPID becomes 0 (p. 3-20).
-            var created = new Partition3270(pid, h, w, rv, cv, addressMode == 1);
+            var created = new Partition3270(pid, h, w, rv, cv, hv, rw, rs, addressMode == 1);
             bool wasExplicit = _explicitState;
             Partition3270? replaced = wasExplicit ? _partitions[pid] : null;
             if (!wasExplicit)
             {
+                // Implicit partition 0 was the inbound partition, and its destruction
+                // acknowledges (p. 3-23).
+                AcknowledgeInbound();
                 Array.Clear(_partitions);
                 _explicitState = true;
                 _inboundPid = 0;
@@ -3385,8 +4320,8 @@ namespace RetroIO.Protocols.Tn3270
             {
                 // "Destruction of the inbound partition sets INPID to 0" (p. 3-20); a Create
                 // Partition to the inbound partition is a read acknowledgment (p. 3-23).
+                AcknowledgeInbound();
                 _inboundPid = 0;
-                _retryLength = 0;
             }
 
             _usableRows = screenRows;
@@ -3394,7 +4329,7 @@ namespace RetroIO.Protocols.Tn3270
             _partitions[pid] = created;
 
             // The cursor at the window origin and the buffer address 0 (p. 5-10 items 7 and 8):
-            // a new Partition3270 starts with both at 0.
+            // the Partition3270 constructor puts the cursor at RW x W.
             if (!wasExplicit || CountPartitions() == 1)
             {
                 // The first, or "the only partition with a window of nonzero extent" (p. 5-10).
@@ -3405,6 +4340,51 @@ namespace RetroIO.Protocols.Tn3270
             // that the old one is destroyed and replaced (p. 5-10), and names no other partition
             // to activate.
             SelectActive();
+            return true;
+        }
+
+        // Set Window Origin, X'0B' (p. 5-63): X'0008' X'0B' PID RW(2) CW(2). The window of the
+        // partition moves to row RW; a cursor outside the new window goes to the nearest row of
+        // it (p. 5-63). CW must be 0, horizontal windowing is not built (Table B-1 p. B-5).
+        private bool SetWindowOrigin(ReadOnlySpan<byte> field)
+        {
+            if (field.Length != 8)
+            {
+                Error("Set Window Origin is 8 bytes, X'0008' X'0B' PID RW CW (p. 5-63; Table B-1, Incorrect length).");
+                return false;
+            }
+
+            byte pid = field[3];
+            Partition3270? p = PartitionFor(pid);
+            if (p == null)
+            {
+                Error("Set Window Origin of partition X'" + Hex(pid) + "', which does not exist, is rejected (p. 5-63; Table B-1, PID is unknown partition).");
+                return false;
+            }
+
+            int rw = (field[4] << 8) | field[5];
+            int cw = (field[6] << 8) | field[7];
+            if (cw != 0)
+            {
+                Error("Set Window Origin CW " + cw + ": CW > 0, but horizontal windowing not supported (Table B-1 p. B-5).");
+                return false;
+            }
+
+            if (rw + p.ViewportRows > p.Rows)
+            {
+                Error("Set Window Origin row " + rw + " with a window " + p.ViewportRows + " rows high runs past the " + p.Rows + "-row presentation space (p. 5-63; Table B-1, Window spec outside presentation space).");
+                return false;
+            }
+
+            p.WindowRow = rw;
+            int row = p.Cursor / p.Columns;
+            int nearest = Math.Clamp(row, rw, rw + p.ViewportRows - 1);
+            if (nearest != row)
+            {
+                // "the cursor is moved to the nearest row ... of the window"; the column stays.
+                p.Cursor = (nearest * p.Columns) + (p.Cursor % p.Columns);
+            }
+
             return true;
         }
 
@@ -3438,7 +4418,7 @@ namespace RetroIO.Protocols.Tn3270
                 // implicit partition 0, "any Input Inhibit conditions" reset, INOP Read Modified
                 // and INPID 0.
                 ResetToImplicit(_sessionRows, _sessionColumns);
-                Lock = KeyboardLock.None;
+                ClearAllInputInhibit();
                 return true;
             }
 
@@ -3452,8 +4432,10 @@ namespace RetroIO.Protocols.Tn3270
 
             if (pid == _inboundPid)
             {
+                // A Destroy Partition to the inbound partition acknowledges (p. 3-23), and "sets
+                // INPID to 0" (p. 3-20).
+                AcknowledgeInbound();
                 _inboundPid = 0;
-                _retryLength = 0;
             }
 
             _partitions[pid] = null;
@@ -3478,9 +4460,10 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             // The partition is made active and the screen cursor is shown at its current cursor
-            // position (p. 5-8 steps 2 and 3). The keyboard lock here is one for the whole
-            // display, so there are no per-partition input inhibit conditions to save and raise
-            // (steps 4 and 5); see the class remarks.
+            // position (p. 5-8 steps 2 and 3). Its PWAIT and System Lock are its own
+            // (Partition3270.Pwait, SysLock), so the old partition's are saved and the new one's
+            // raised by making it active (steps 4 and 5a); the display's other conditions stay
+            // shown (step 5b). Lock reads them in that order.
             _activePid = pid;
             SelectActive();
             return true;
@@ -3563,11 +4546,6 @@ namespace RetroIO.Protocols.Tn3270
             rows = nested ? Math.Max(_defaultRows, _alternateRows) : _defaultRows;
         }
 
-        // M of the Alphanumeric Partitions reply: the bytes of partition storage (p. 6-19). With
-        // no scrolling and no overlap the partitions never hold more cells than the largest usable
-        // area, so that is what this display has.
-        private int PartitionStorage => Math.Max(_defaultRows * _defaultColumns, _alternateRows * _alternateColumns);
-
         // Keeps the inbound record just sent so that a Read Modified command sends it again: the
         // retry-read state of p. 3-17, 3-18 after a Read Partition read (p. 5-49 step 7).
         private void KeepLastInboundForRetry()
@@ -3611,13 +4589,12 @@ namespace RetroIO.Protocols.Tn3270
             Send();
 
             // The reply is out: retry-read state, TWAIT, until the host acknowledges (see
-            // KeyboardLock.QueryReplySent for the pages). Only from an unlocked keyboard: the lock
-            // is one value here, and a keyboard already locked for another reason stays locked
-            // for that reason. With an enter outstanding (WaitingForHost) the manual keeps TWAIT
-            // in effect for the enter (p. 9-9, 10-8, "The TWAIT condition remains in effect").
-            if (Lock == KeyboardLock.None)
+            // KeyboardLock.QueryReplySent for the pages). A display condition already up (an
+            // operator error and the like) stays shown for its own reason. An enter cannot be
+            // outstanding here: a Read Partition in a retry state is rejected (p. 3-18).
+            if (_deviceLock == KeyboardLock.None)
             {
-                Lock = KeyboardLock.QueryReplySent;
+                _deviceLock = KeyboardLock.QueryReplySent;
             }
         }
 
@@ -3693,14 +4670,15 @@ namespace RetroIO.Protocols.Tn3270
 
                 case QueryCode.AlphanumericPartitions:
                     // p. 6-18, 6-19. NA: partitions 0 to MaxPartitions - 1 may be created. M: the
-                    // bytes of partition storage. Flags 0: no vertical scrolling, no all-points
-                    // addressing, no partition protection, no presentation space local copy, no
-                    // Modify Partition. The Buffer Allocation parameter is left off: "unless bytes
+                    // bytes of partition storage. Flags X'80': SCROLL, vertical scrolling (bit 0,
+                    // which means Create Partition with H > HV, Set Window Origin, and the
+                    // operator's scroll keys, p. 6-19); no all-points addressing, no partition
+                    // protection, no presentation space local copy, no Modify Partition. The Buffer Allocation parameter is left off: "unless bytes
                     // 3-6 (RO, CO, FO) are all zeros and byte 2 (CM) = 1" - here they are, so a
                     // partition of H x W takes H x W bytes (p. 6-19).
                     AppendByte(MaxPartitions);
                     AppendUInt16(PartitionStorage);
-                    AppendByte(0x00);
+                    AppendByte(0x80);
                     break;
 
                 case QueryCode.FieldOutlining:
@@ -3764,8 +4742,8 @@ namespace RetroIO.Protocols.Tn3270
                     break;
 
                 case QueryCode.FieldValidation:
-                    // p. 6-52: mandatory fill and mandatory entry; trigger is not built.
-                    AppendByte((byte)(FieldValidation.MandatoryFill | FieldValidation.MandatoryEntry));
+                    // p. 6-52: mandatory fill, mandatory entry and trigger.
+                    AppendByte((byte)(FieldValidation.MandatoryFill | FieldValidation.MandatoryEntry | FieldValidation.Trigger));
                     break;
 
                 case QueryCode.ReplyModes:
@@ -3949,12 +4927,6 @@ namespace RetroIO.Protocols.Tn3270
                             return false;
                         }
 
-                        if ((value & FieldValidation.Trigger) != 0)
-                        {
-                            Error("Field validation with the trigger bit: trigger fields are not built, and the Field Validation query reply says so (p. 4-23, 6-52).");
-                            return false;
-                        }
-
                         _p.FieldValidationAt[address] = value;
                         break;
                     case 0xC2:
@@ -4045,8 +5017,13 @@ namespace RetroIO.Protocols.Tn3270
                 }
             }
 
-            Lock = KeyboardLock.None;
+            // EAU restores the keyboard (p. 3-7) and acknowledges (p. 3-23); it is a write to
+            // the partition, so a primed trigger field is unprimed (p. 4-23).
+            _deviceLock = KeyboardLock.None;
+            _p.SysLock = false;
+            _p.PrimedTrigger = -1;
             _lastAid = Aid.None;
+            AcknowledgeInbound();
             CursorAddress = any ? NextInputPosition(size - 1) : 0;
         }
 
@@ -4288,10 +5265,9 @@ namespace RetroIO.Protocols.Tn3270
 
         private void Send()
         {
-            // A new inbound record replaces the one kept for a retry: the last inbound operation
-            // is the one a Read Modified repeats (p. 3-14). SendStructuredFieldReply keeps this
-            // one again when asked to, after this.
-            _retryLength = 0;
+            // The record kept for a retry is the inbound operation's (an enter, a trigger, a Read
+            // Partition), kept by KeepLastInboundForRetry; a plain read command's reply in a
+            // retry state does not replace it (p. 3-17: the retry is of the inbound operation).
             if (_inboundFieldStart >= 0)
             {
                 // The Inbound 3270DS length counts itself and runs to the end of the record.
@@ -4398,6 +5374,10 @@ namespace RetroIO.Protocols.Tn3270
         // (p. 3-19, 3-20). resetReplyMode false only for the UNBIND, see Unbind.
         private void ResetToImplicit(int rows, int columns, bool resetReplyMode = true)
         {
+            // System Lock survives the reset (this display's reading: p. 2-9 ends it only by a
+            // keyboard restore or RESET); PWAIT and the read state do not - every partition and
+            // with it INPID's operation is gone (p. 3-19, 3-20).
+            bool systemLock = ActivePartition.SysLock;
             Array.Clear(_partitions);
             _explicitState = false;
             _usableRows = 0;
@@ -4412,9 +5392,16 @@ namespace RetroIO.Protocols.Tn3270
                 _p.ReplyTypes = Array.Empty<byte>();
             }
 
+            _p.Pwait = false;
+            _p.SysLock = systemLock;
+            _p.PrimedTrigger = -1;
             _activePid = 0;
             _inboundPid = 0;
             _retryLength = 0;
+            _readState = ReadState.Normal;
+            _inop = Command3270.ReadModified;
+            _triggerPending = false;
+            _queueCount = 0;
         }
 
         // After a host record: the code works on the active partition again (see _p).

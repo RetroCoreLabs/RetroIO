@@ -232,8 +232,17 @@ namespace RetroIO.Protocols.Tn3270
                     return "X Protected";
                 case KeyboardLock.TooMuchData:
                     return "X Overflow";
+                case KeyboardLock.PartitionWait:
+                    // PWAIT: X, then the clock between two arrows pointing outwards (GA23-0059-4
+                    // p. 3-20). The text form is this display's choice, made after x3270's "X Wait"
+                    // for TWAIT.
+                    return "X <-Wait->";
                 case KeyboardLock.MandatoryFill:
                 case KeyboardLock.MandatoryEntry:
+                case KeyboardLock.InvalidField:
+                case KeyboardLock.KeystrokeQueueFull:
+                    // The manual names no indicator text for these two; "X" alone is this
+                    // display's choice, as for the field validation conditions.
                     return "X";
                 case KeyboardLock.MinusFunction:
                     // x3270 Common\vstatus.c, vstatus_minus.

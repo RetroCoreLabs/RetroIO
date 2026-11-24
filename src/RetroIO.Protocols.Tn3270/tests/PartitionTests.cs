@@ -265,6 +265,10 @@ namespace RetroIO.Protocols.Tn3270.Tests
             d.ProcessOutbound(Outbound(1, Command3270.Write, 0x02, Order3270.SetBufferAddress, 0x00, 0x64, Order3270.InsertCursor));
             d.ProcessOutbound(Outbound(2, Command3270.Write, 0x02, Order3270.SetBufferAddress, 0x00, 0x64, Order3270.InsertCursor));
             d.ProcessOutbound(ReadPartition(1, Command3270.ReadModified));
+
+            // The first read must be acknowledged before the second Read Partition, or it is
+            // rejected in retry-read state (p. 3-18): a Write with no restore to partition 1.
+            d.ProcessOutbound(Outbound(1, Command3270.Write, 0x00));
             d.ProcessOutbound(ReadPartition(2, Command3270.ReadModified));
 
             Assert.Empty(errors);
@@ -369,13 +373,33 @@ namespace RetroIO.Protocols.Tn3270.Tests
         }
 
         [Fact]
-        public void APresentationSpaceLargerThanItsViewportIsRefusedBecauseScrollingIsNotBuilt()
+        public void APresentationSpaceLargerThanItsViewportIsAScrollingPartition()
         {
-            // H > HV is a scrolling partition (p. 2-3); the Alphanumeric Partitions reply says
-            // SCROLL 0 (p. 6-19), so it is refused, not shown cut off.
+            // H > HV is a scrolling partition (p. 2-3), taken now that the Alphanumeric
+            // Partitions reply says SCROLL (p. 6-19). RS defaults to 1 when H differs from HV
+            // (p. 5-12), the window to (0, 0).
             var (d, _, errors) = Create();
 
-            Assert.False(d.ProcessOutbound(CreatePartition(1, 40, 80, 0, 0, hv: 12, wv: 80)));
+            Assert.True(d.ProcessOutbound(CreatePartition(1, 40, 80, 0, 0, hv: 12, wv: 80)));
+
+            Assert.Empty(errors);
+            Partition3270? p = d.GetPartition(1);
+            Assert.NotNull(p);
+            Assert.Equal(40, p.Rows);
+            Assert.Equal(12, p.ViewportRows);
+            Assert.Equal(0, p.WindowRow);
+            Assert.Equal(1, p.ScrollRows);
+            Assert.True(p.Scrolls);
+        }
+
+        [Fact]
+        public void AWiderPresentationSpaceThanViewportIsRefusedBecauseHorizontalScrollingIsNotBuilt()
+        {
+            // Only SCROLL (vertical) is reported (p. 6-19); W > WV would need horizontal
+            // windowing (Table B-1 p. B-2).
+            var (d, _, errors) = Create();
+
+            Assert.False(d.ProcessOutbound(CreatePartition(1, 12, 120, 0, 0, hv: 12, wv: 80)));
 
             Assert.Single(errors);
             Assert.False(d.ExplicitPartitioned);

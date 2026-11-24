@@ -19,9 +19,16 @@ namespace RetroIO.Protocols.Tn3270
     /// GA23-0059-4 chapter 2 (p. 2-1 to 2-6): every partition has its own presentation space of
     /// H rows by W columns, addressed 0 to W x H - 1 from its own origin; its own current cursor
     /// position; and a viewport, the rectangle of the usable area it is shown in. Without scrolling
-    /// "a partition's presentation space and viewport have the same dimensions" (p. 2-3), which is
-    /// the only case built here, so the window is always the whole presentation space at offset
-    /// (0, 0).
+    /// "a partition's presentation space and viewport have the same dimensions" (p. 2-3).
+    /// </para>
+    /// <para>
+    /// Vertical scrolling is built (24 November 2026): the presentation space may have more rows
+    /// than the viewport, and the window - the part of the presentation space the viewport shows,
+    /// "the same dimensions (rows and columns)" as the viewport (p. 2-3) - starts at row
+    /// <see cref="WindowRow"/>. Horizontal scrolling is not built: the display reports only the
+    /// SCROLL (vertical) flag in its Alphanumeric Partitions reply (p. 6-19, which has no
+    /// horizontal flag), so W always equals the viewport width and the window column is always 0
+    /// (Table B-1 p. B-2 and B-5: "CW > 0, but horizontal windowing not supported").
     /// </para>
     /// <para>
     /// The implicit partition 0 (p. 2-6) is one of these too: its viewport is the whole screen at
@@ -67,17 +74,44 @@ namespace RetroIO.Protocols.Tn3270
         // can be primed: the cursor is in it, and leaving it validates and unprimes it.
         internal int PrimedField = -1;
 
+        // The field attribute address of the primed trigger field, or -1 (p. 4-23): primed by a
+        // data key, Delete or Erase EOF in it; unprimed by a write to the partition, Erase Input,
+        // or the trigger action for that field.
+        internal int PrimedTrigger = -1;
+
+        // The partition-related input inhibit conditions (p. 2-9, 3-20, 3-21). PWAIT: set on
+        // INPID by an enter action that is not a trigger action, ended only by the host's
+        // acknowledgment. System Lock: set with it, ended by a write with keyboard restore to
+        // this partition or by the RESET key while this partition is active. Both stay with the
+        // partition when another one is made active ("the condition will be remembered", p. 2-9),
+        // which is what Activate Partition steps 4 and 5 (p. 5-8) and Destroy Partition (p. 5-14)
+        // save and raise.
+        internal bool Pwait;
+        internal bool SysLock;
+
         // The current cursor position of this partition (p. 2-5: "Associated with each partition
         // is a current cursor position on the presentation space").
         internal int Cursor;
 
         internal Partition3270(byte pid, int rows, int columns, int viewportRow, int viewportColumn, bool sixteenBitAddressing)
+            : this(pid, rows, columns, viewportRow, viewportColumn, rows, 0, 0, sixteenBitAddressing)
+        {
+        }
+
+        internal Partition3270(byte pid, int rows, int columns, int viewportRow, int viewportColumn, int viewportRows, int windowRow, int scrollRows, bool sixteenBitAddressing)
         {
             Pid = pid;
             ViewportRow = viewportRow;
             ViewportColumn = viewportColumn;
             SixteenBitAddressing = sixteenBitAddressing;
             Resize(rows, columns);
+            ViewportRows = viewportRows;
+            WindowRow = windowRow;
+            ScrollRows = scrollRows;
+
+            // "The current cursor position for the new partition is set to the window origin"
+            // (p. 5-10 item 8). The window column is always 0 here.
+            Cursor = windowRow * columns;
         }
 
         /// <summary>
@@ -86,15 +120,65 @@ namespace RetroIO.Protocols.Tn3270
         public byte Pid { get; }
 
         /// <summary>
-        /// Gets the rows of the presentation space (H), which are also the viewport's rows: no
-        /// scrolling is built.
+        /// Gets the rows of the presentation space (H). In a scrolling partition this is more
+        /// than <see cref="ViewportRows"/>.
         /// </summary>
         public int Rows { get; private set; }
 
         /// <summary>
-        /// Gets the columns of the presentation space (W), which are also the viewport's columns.
+        /// Gets the columns of the presentation space (W), which are also the viewport's columns:
+        /// only vertical scrolling is built.
         /// </summary>
         public int Columns { get; private set; }
+
+        /// <summary>
+        /// Gets the rows of the viewport (HV, p. 5-11), which are also the window's rows (p. 2-3).
+        /// The same as <see cref="Rows"/> unless the partition scrolls.
+        /// </summary>
+        public int ViewportRows { get; internal set; }
+
+        /// <summary>
+        /// Gets the columns of the viewport (WV), always <see cref="Columns"/> here.
+        /// </summary>
+        public int ViewportColumns => Columns;
+
+        /// <summary>
+        /// Gets the presentation space row shown in the top row of the viewport: the window origin
+        /// row RW (p. 5-11), moved by Set Window Origin (p. 5-63), the operator's scroll keys and
+        /// automatic scrolling (p. 7-16, 7-17).
+        /// </summary>
+        public int WindowRow { get; internal set; }
+
+        /// <summary>
+        /// Gets the window origin column CW, always 0: horizontal windowing is not built.
+        /// </summary>
+        public int WindowColumn => 0;
+
+        /// <summary>
+        /// Gets RS, the rows one press of a scroll key moves the window (p. 5-11, 7-16); X'FFFF'
+        /// means the device decides (p. 5-12). 0 when the partition does not scroll.
+        /// </summary>
+        public int ScrollRows { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the presentation space has more rows than the viewport,
+        /// so the window can move (p. 2-3, 7-16).
+        /// </summary>
+        public bool Scrolls => Rows > ViewportRows;
+
+        /// <summary>
+        /// Gets a value indicating whether this partition holds the partition wait condition
+        /// (PWAIT, or TWAIT when it is the only partition): its enter action has not been
+        /// acknowledged by the host yet (GA23-0059-4 p. 2-9, 3-20).
+        /// </summary>
+        public bool PartitionWait => Pwait;
+
+        /// <summary>
+        /// Gets a value indicating whether this partition holds the System Lock condition
+        /// (p. 2-9, 3-21). It is kept while another partition is active and shown again when this
+        /// one is.
+        /// </summary>
+        public bool SystemLock => SysLock;
 
         /// <summary>
         /// Gets rows times columns: the number of buffer addresses, 0 to Size - 1 (p. 2-2).
@@ -328,6 +412,14 @@ namespace RetroIO.Protocols.Tn3270
         // (Erase/Write steps 2 to 4, p. 3-6). The cursor stays unless it would fall outside.
         internal void Resize(int rows, int columns)
         {
+            if (rows != Rows || columns != Columns)
+            {
+                // A new size is only ever given to the implicit partition (Erase/Write, p. 3-6),
+                // whose viewport is the whole presentation space (p. 2-6).
+                ViewportRows = rows;
+                WindowRow = 0;
+            }
+
             Rows = rows;
             Columns = columns;
             int size = rows * columns;

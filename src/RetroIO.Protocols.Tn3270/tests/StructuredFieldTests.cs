@@ -82,9 +82,10 @@ namespace RetroIO.Protocols.Tn3270.Tests
                 new byte[] { 0x00, 0x17, 0x81, 0x81, 0x03, 0x00, 0x00, 0x50, 0x00, 0x20, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x10, 0x00, 0x00 },
                 f[1]);
 
-            // Alphanumeric Partitions (p. 6-18): NA 16, M 2560 (80 x 32), flags 0, no Buffer
-            // Allocation parameter (CM 1, RO, CO, FO 0, p. 6-19).
-            Assert.Equal(new byte[] { 0x00, 0x08, 0x81, 0x84, 0x10, 0x0A, 0x00, 0x00 }, f[2]);
+            // Alphanumeric Partitions (p. 6-18): NA 16, M 32767 (X'7FFF', this display's own
+            // choice now that a presentation space can be larger than the screen), flags X'80'
+            // (SCROLL, bit 0, p. 6-19), no Buffer Allocation parameter (CM 1, RO, CO, FO 0).
+            Assert.Equal(new byte[] { 0x00, 0x08, 0x81, 0x84, 0x10, 0x7F, 0xFF, 0x80 }, f[2]);
 
             // Character Sets: base set F0 = 697/037, GE set F1 = 963/310.
             Assert.Equal(
@@ -94,8 +95,8 @@ namespace RetroIO.Protocols.Tn3270.Tests
             // Implicit Partition: default 80 x 24, alternate 80 x 32.
             Assert.Equal(new byte[] { 0x00, 0x11, 0x81, 0xA6, 0x00, 0x00, 0x0B, 0x01, 0x00, 0x00, 0x50, 0x00, 0x18, 0x00, 0x50, 0x00, 0x20 }, f[9]);
 
-            // Field Validation: mandatory fill and mandatory entry, no trigger.
-            Assert.Equal(new byte[] { 0x00, 0x05, 0x81, 0x8A, 0x06 }, f[7]);
+            // Field Validation: mandatory fill, mandatory entry and trigger (p. 6-52).
+            Assert.Equal(new byte[] { 0x00, 0x05, 0x81, 0x8A, 0x07 }, f[7]);
 
             // Field Outlining (p. 6-49, 6-50): length 10, flags 0, SEP 0, VPOS 0 and HPOS 15 (the
             // defaults of OutlineVerticalPosition and OutlineHorizontalPosition), HPOS0 and HPOS1 0.

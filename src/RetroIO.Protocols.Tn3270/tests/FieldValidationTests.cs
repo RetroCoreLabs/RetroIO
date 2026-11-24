@@ -135,10 +135,12 @@ namespace RetroIO.Protocols.Tn3270.Tests
         }
 
         [Fact]
-        public void TriggerAndReservedBitsAreReported()
+        public void TriggerIsTakenAndReservedBitsAreReported()
         {
-            var (_, _, trigger) = Screen(FieldValidation.Trigger);
-            Assert.Single(trigger);
+            // The Field Validation reply now lists trigger (p. 6-52), so the bit is taken.
+            var (d, _, trigger) = Screen(FieldValidation.Trigger);
+            Assert.Empty(trigger);
+            Assert.Equal(FieldValidation.Trigger, d.GetFieldValidation(0));
 
             var (_, _, reserved) = Screen(0x80);
             Assert.Single(reserved);

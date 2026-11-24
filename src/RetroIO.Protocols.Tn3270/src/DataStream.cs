@@ -335,6 +335,13 @@ namespace RetroIO.Protocols.Tn3270
         public const byte SelectorPen = 0x7E;
 
         /// <summary>
+        /// Trigger action, X'7F' (GA23-0059-4 p. 3-9 Table 3-4, p. 4-23): sent when the operator
+        /// moves the cursor out of a primed trigger field, with the cursor address and that one
+        /// field's address and data.
+        /// </summary>
+        public const byte Trigger = 0x7F;
+
+        /// <summary>
         /// The AID for PF1 to PF24 (p. 3-9).
         /// </summary>
         /// <remarks>
