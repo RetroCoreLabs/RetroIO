@@ -140,6 +140,13 @@ namespace RetroIO.Protocols.Tn3270
         private const byte EbcdicGreater = 0x6E;
         private const byte EbcdicAmpersand = 0x50;
 
+        // SCS New Line, the one control code of SSCP-LU text (GA23-0061-2 p. 5-37).
+        private const byte ScsNewLine = 0x15;
+
+        // The SSCP-LU limits of a 3274: 1,536 bytes outbound, an inbound RU of 256 (p. 5-37).
+        private const int MaxSscpOutbound = 1536;
+        private const int MaxSscpInbound = 256;
+
         // The character attribute types an SA order may carry (p. 4-16): highlighting, foreground
         // colour, character set, background colour, transparency.
         private static readonly byte[] CharacterAttributeTypes = { 0x41, 0x42, 0x43, 0x45, 0x46 };
@@ -172,6 +179,19 @@ namespace RetroIO.Protocols.Tn3270
         private readonly int _defaultColumns;
         private readonly int _alternateRows;
         private readonly int _alternateColumns;
+
+        // The sizes Erase/Write, Erase/Write Alternate, Erase/Reset and Clear use now. They are
+        // the model's own (the four fields above, which the Query Reply always reports, as x3270
+        // reports its model in Common\sf.c) until a BIND sets others for the session
+        // (ApplyBind, GA23-0061-2 Figure 1-11), and the model's again after an UNBIND (Unbind).
+        private int _sessionRows;
+        private int _sessionColumns;
+        private int _sessionAlternateRows;
+        private int _sessionAlternateColumns;
+
+        // SSCP-LU mode: the initial cursor address, where the operator's message to the SSCP
+        // starts (GA23-0061-2 p. 5-37, "Outbound Message Handling").
+        private int _sscpStart;
 
         private readonly ArrayBufferWriter<byte> _inbound = new ArrayBufferWriter<byte>(4096);
 
@@ -265,7 +285,558 @@ namespace RetroIO.Protocols.Tn3270
             _defaultColumns = columns;
             _alternateRows = alternateRows;
             _alternateColumns = alternateColumns;
+            _sessionRows = rows;
+            _sessionColumns = columns;
+            _sessionAlternateRows = alternateRows;
+            _sessionAlternateColumns = alternateColumns;
             Resize(rows, columns);
+        }
+
+        /// <summary>
+        /// Gets the default size rows Erase/Write uses now: the model's, or a BIND's.
+        /// </summary>
+        public int DefaultRows => _sessionRows;
+
+        /// <summary>
+        /// Gets the default size columns Erase/Write uses now: the model's, or a BIND's.
+        /// </summary>
+        public int DefaultColumns => _sessionColumns;
+
+        /// <summary>
+        /// Gets the alternate size rows Erase/Write Alternate uses now: the model's, or a BIND's.
+        /// </summary>
+        public int AlternateRows => _sessionAlternateRows;
+
+        /// <summary>
+        /// Gets the alternate size columns Erase/Write Alternate uses now: the model's, or a
+        /// BIND's.
+        /// </summary>
+        public int AlternateColumns => _sessionAlternateColumns;
+
+        /// <summary>
+        /// Gets a value indicating whether the screen belongs to the SSCP-LU session: the host's
+        /// control program talks to the operator in plain text, not the 3270 data stream
+        /// (GA23-0061-2 p. 5-36, 5-37; RFC 2355 section 10.5.1).
+        /// </summary>
+        public bool SscpLuMode { get; private set; }
+
+        /// <summary>
+        /// Takes the screen sizes of a BIND for the LU-LU session that has just started, and
+        /// clears the screen to the new default size.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// GA23-0061-2 Figure 1-11 (p. 1-20, 1-21) gives byte 24's codes; see
+        /// <see cref="BindScreenSize"/>. With the base codes and with X'7E' there is one size for
+        /// the session and Erase/Write Alternate runs as Erase/Write, so the alternate size is
+        /// made the same as the default. Rows and columns are checked against this model the way
+        /// the manual's tables do: columns 40, 80 or 132 (or one of the model's own column
+        /// counts, for a screen the 1985 manual does not know, such as IBM-DYNAMIC), and no more
+        /// rows or columns than the model has. One difference from those tables: a model 1 with
+        /// 12 rows of 80 columns is in them, and is refused here because a 12 x 40 model has no
+        /// 80th column.
+        /// </para>
+        /// <para>
+        /// A 3274 refuses a bad BIND with sense X'0821' (p. 1-21). Under TN3270E the server has
+        /// already accepted it (RFC 2355 section 10.3), so the terminal cannot refuse it; the
+        /// sizes are not taken, the model's stay, and <see cref="ProtocolError"/> says why. x3270
+        /// does the same (Common\telnet.c, process_bind: "Ignoring invalid BIND image screen size
+        /// parameters"). Clearing the screen is what a new size needs (sizes change only at an
+        /// erase, GA23-0059-4 p. 3-6); x3270 also erases on every BIND (process_bind,
+        /// ctlr_erase).
+        /// </para>
+        /// </remarks>
+        /// <param name="bind">
+        /// The BIND image, read by <see cref="BindImage.TryRead"/>.
+        /// </param>
+        /// <returns>
+        /// False when the sizes were refused and <see cref="ProtocolError"/> was raised.
+        /// </returns>
+        public bool ApplyBind(in BindImage bind)
+        {
+            SscpLuMode = false;
+            NvtMode = false;
+            int rows;
+            int columns;
+            int alternateRows;
+            int alternateColumns;
+            bool model1 = _defaultRows == 12 && _defaultColumns == 40;
+            string? why = null;
+            switch (bind.ScreenSizeCode)
+            {
+                case BindScreenSize.BaseDefault:
+                    // "the device assumes the 3277 default size defined for that model": 12 x 40
+                    // on a model 1, 24 x 80 on the others (p. 1-21 table).
+                    rows = model1 ? 12 : 24;
+                    columns = model1 ? 40 : 80;
+                    alternateRows = rows;
+                    alternateColumns = columns;
+                    break;
+                case BindScreenSize.BaseModel1:
+                    rows = 12;
+                    columns = 40;
+                    alternateRows = rows;
+                    alternateColumns = columns;
+                    if (!model1)
+                    {
+                        why = "byte 24 X'01' is a model 1 screen of 12 x 40, which a model 2 to 5 rejects with X'0821' (GA23-0061-2 p. 1-21)";
+                    }
+
+                    break;
+                case BindScreenSize.BaseModel2:
+                    rows = 24;
+                    columns = 80;
+                    alternateRows = rows;
+                    alternateColumns = columns;
+                    if (model1)
+                    {
+                        why = "byte 24 X'02' is a 24 x 80 screen, which a model 1 rejects with X'0821' (GA23-0061-2 p. 1-21)";
+                    }
+
+                    break;
+                case BindScreenSize.DefaultAndQueryAlternate:
+                    rows = 24;
+                    columns = 80;
+                    alternateRows = _alternateRows;
+                    alternateColumns = _alternateColumns;
+                    break;
+                case BindScreenSize.ExtendedDefault:
+                    rows = bind.DefaultRows;
+                    columns = bind.DefaultColumns;
+                    alternateRows = rows;
+                    alternateColumns = columns;
+                    break;
+                case BindScreenSize.ExtendedAlternate:
+                    rows = bind.DefaultRows;
+                    columns = bind.DefaultColumns;
+                    alternateRows = bind.AlternateRows;
+                    alternateColumns = bind.AlternateColumns;
+                    break;
+                default:
+                    rows = 0;
+                    columns = 0;
+                    alternateRows = 0;
+                    alternateColumns = 0;
+                    why = "byte 24 X'" + bind.ScreenSizeCode.ToString("X2", System.Globalization.CultureInfo.InvariantCulture) + "' is not a screen-size code of GA23-0061-2 Figure 1-11";
+                    break;
+            }
+
+            if (why == null)
+            {
+                why = CheckBindSize("default", rows, columns) ?? CheckBindSize("alternate", alternateRows, alternateColumns);
+            }
+
+            if (why != null)
+            {
+                // The model's sizes stay; the screen is still cleared, as for any BIND.
+                _sessionRows = _defaultRows;
+                _sessionColumns = _defaultColumns;
+                _sessionAlternateRows = _alternateRows;
+                _sessionAlternateColumns = _alternateColumns;
+                Resize(_sessionRows, _sessionColumns);
+                CursorAddress = 0;
+                Error("The BIND's screen sizes were not taken, the model's are kept: " + why + ".");
+                return false;
+            }
+
+            _sessionRows = rows;
+            _sessionColumns = columns;
+            _sessionAlternateRows = alternateRows;
+            _sessionAlternateColumns = alternateColumns;
+            Resize(rows, columns);
+            CursorAddress = 0;
+            return true;
+        }
+
+        /// <summary>
+        /// The LU-LU session has ended (an UNBIND): the screen goes back to the model's default
+        /// size and is cleared.
+        /// </summary>
+        /// <remarks>
+        /// GA23-0061-2 p. 1-20: operation stays in alternate mode until, among others, "the SNA
+        /// session is unbound"; "Only these conditions return the display ... to the
+        /// default-value screen-size". With the session gone, its BIND sizes go too. x3270 does
+        /// the same (Common\telnet.c, process_eor, TN3270E_DT_UNBIND: the model sizes back, then
+        /// ctlr_erase).
+        /// </remarks>
+        public void Unbind()
+        {
+            SscpLuMode = false;
+            NvtMode = false;
+            _sessionRows = _defaultRows;
+            _sessionColumns = _defaultColumns;
+            _sessionAlternateRows = _alternateRows;
+            _sessionAlternateColumns = _alternateColumns;
+            Resize(_sessionRows, _sessionColumns);
+            CursorAddress = 0;
+        }
+
+        /// <summary>
+        /// Shows one message from the SSCP on the SSCP-LU session, and enters SSCP-LU mode if the
+        /// screen was not in it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// GA23-0061-2 p. 5-37, "Outbound Message Handling": the message is SCS text. The only
+        /// control codes are NL (X'15') and, with the APL feature, Graphic Escape (X'08'); every
+        /// other byte is a graphic. It is shown at the cursor; NL fills the rest of the line with
+        /// nulls and moves to the start of the next line; past the last line the message wraps
+        /// to the top. The cursor is left after the last character (at the start of the next
+        /// line after an ending NL), and that address is "the initial cursor address", where the
+        /// operator's message starts. There is "an outbound limit of 1,536 bytes of data".
+        /// </para>
+        /// <para>
+        /// Entering SSCP-LU mode clears the screen and sets "the maximum physical size"
+        /// (p. 5-36, "Setting the Screen Size": from the unowned state to SSCP ownership; "The
+        /// screen also is cleared by the transfer of ownership from unowned to SSCP-owned when
+        /// this state transfer is caused by an outbound RU from the SSCP"; "Pressing the SYS REQ
+        /// key causes the screen to be cleared"). x3270 does not clear (Common\ctlr.c,
+        /// ctlr_write_sscp_lu writes over what is there); the manual is followed.
+        /// </para>
+        /// <para>
+        /// The keyboard is unlocked afterwards: "It is unlocked when in contention or
+        /// send-not-xmit", and receiving a request and answering it puts the LU in contention
+        /// (p. 5-36).
+        /// </para>
+        /// </remarks>
+        /// <param name="data">
+        /// The data part of a TN3270E SSCP-LU-DATA message.
+        /// </param>
+        /// <returns>
+        /// False when the message was refused and <see cref="ProtocolError"/> was raised.
+        /// </returns>
+        public bool ProcessSscpLuData(ReadOnlySpan<byte> data)
+        {
+            _failed = false;
+            if (data.Length > MaxSscpOutbound)
+            {
+                Error("An SSCP-LU message of " + data.Length + " bytes is over the 3274's outbound limit of 1,536 bytes (GA23-0061-2 p. 5-37); it was not shown.");
+                return false;
+            }
+
+            if (!SscpLuMode)
+            {
+                SscpLuMode = true;
+                NvtMode = false;
+                bool alternateIsLarger = _alternateRows * _alternateColumns > _defaultRows * _defaultColumns;
+                Resize(alternateIsLarger ? _alternateRows : _defaultRows, alternateIsLarger ? _alternateColumns : _defaultColumns);
+                CursorAddress = 0;
+                InsertMode = false;
+            }
+
+            int size = Size;
+            int columns = Columns;
+            int a = CursorAddress;
+            for (int i = 0; i < data.Length; i++)
+            {
+                byte b = data[i];
+                if (b == ScsNewLine)
+                {
+                    // Nulls to the end of this line, then the first position of the next one.
+                    int nextRow = ((a / columns) + 1) * columns;
+                    for (int n = a; n < nextRow; n++)
+                    {
+                        StoreCharacter(n, FormatControl.Null, graphicEscape: false, useSa: false);
+                        ClearCharacterAttributes(n);
+                    }
+
+                    a = nextRow == size ? 0 : nextRow;
+                    continue;
+                }
+
+                bool graphicEscape = false;
+                if (b == Order3270.GraphicEscape && i + 1 < data.Length)
+                {
+                    // "when the APL/Text feature is installed, the Graphic Escape character":
+                    // the next byte is from the APL set (code page 310), as GE is in the 3270
+                    // data stream (GA23-0059-4 p. 4-21).
+                    i++;
+                    b = data[i];
+                    graphicEscape = true;
+                }
+
+                StoreCharacter(a, b, graphicEscape, useSa: false);
+                ClearCharacterAttributes(a);
+                a = a + 1 == size ? 0 : a + 1;
+            }
+
+            CursorAddress = a;
+            _sscpStart = a;
+            Lock = KeyboardLock.None;
+            return true;
+        }
+
+        /// <summary>
+        /// The screen goes back to the LU-LU session (3270 data from the host application again);
+        /// what is on it stays until the host writes.
+        /// </summary>
+        public void LeaveSscpLuMode() => SscpLuMode = false;
+
+        /// <summary>
+        /// Gets a value indicating whether the screen is in TN3270E NVT mode: the host sends plain
+        /// ASCII text, not the 3270 data stream (RFC 2355 section 9.1).
+        /// </summary>
+        public bool NvtMode { get; private set; }
+
+        /// <summary>
+        /// Shows one TN3270E NVT-DATA message, and enters NVT mode if the screen was not in it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// RFC 2355 section 9.1: "Switching modes results in the client performing the equivalent
+        /// of a 3270 Erase/Reset operation ... using the default partition (screen) size", so
+        /// entering NVT mode clears the screen to the default size. The data is NVT text (RFC
+        /// 854, "The Network Virtual Terminal"): printable ASCII is shown through the code page,
+        /// CR goes to the start of the line, LF to the next line (the top after the last), BS one
+        /// position left, HT to the next multiple of 8, BEL sounds the alarm. NUL is "No
+        /// Operation". Any other control byte (ESC and the sequences it starts, among others) is
+        /// not shown, and <see cref="ProtocolError"/> says which: an ANSI terminal is not built
+        /// into this 3270 screen. A character the code page has no EBCDIC byte for is not shown
+        /// either, and said the same way.
+        /// </para>
+        /// <para>
+        /// The keyboard is left unlocked: NVT mode has no keyboard lock of its own in RFC 2355 or
+        /// RFC 854. The operator's text starts where the host's output ended, as on the SSCP-LU
+        /// screen (<see cref="Attention"/>).
+        /// </para>
+        /// </remarks>
+        /// <param name="data">
+        /// The data part of the NVT-DATA message, telnet framing already removed.
+        /// </param>
+        /// <returns>
+        /// False when part of the text was not shown and <see cref="ProtocolError"/> was raised.
+        /// </returns>
+        public bool ProcessNvtData(ReadOnlySpan<byte> data)
+        {
+            _failed = false;
+            if (!NvtMode)
+            {
+                EnterNvtMode();
+            }
+
+            int size = Size;
+            int columns = Columns;
+            int a = CursorAddress;
+            int firstRefused = -1;
+            for (int i = 0; i < data.Length; i++)
+            {
+                byte b = data[i];
+                switch (b)
+                {
+                    case 0x00: // NUL, "No Operation" (RFC 854)
+                        break;
+                    case 0x07: // BEL
+                        Alarm?.Invoke();
+                        break;
+                    case 0x08: // BS
+                        a = a == 0 ? 0 : a - 1;
+                        break;
+                    case 0x09: // HT: the next multiple of 8 on this line, at most its last column
+                    {
+                        int column = a % columns;
+                        int next = Math.Min(columns - 1, ((column / 8) + 1) * 8);
+                        a = a - column + next;
+                        break;
+                    }
+
+                    case 0x0A: // LF: the same column, one line down
+                        a += columns;
+                        if (a >= size)
+                        {
+                            a -= size;
+                        }
+
+                        break;
+                    case 0x0D: // CR: the start of this line
+                        a -= a % columns;
+                        break;
+                    default:
+                        if (b < 0x20 || b > 0x7E || !_codePage.TryFromUnicode((char)b, out byte ebcdic))
+                        {
+                            if (firstRefused < 0)
+                            {
+                                firstRefused = b;
+                            }
+
+                            break;
+                        }
+
+                        StoreCharacter(a, ebcdic, graphicEscape: false, useSa: false);
+                        ClearCharacterAttributes(a);
+                        a = a + 1 == size ? 0 : a + 1;
+                        break;
+                }
+            }
+
+            CursorAddress = a;
+            _sscpStart = a;
+            Lock = KeyboardLock.None;
+            if (firstRefused >= 0)
+            {
+                Error("NVT text byte X'" + firstRefused.ToString("X2", System.Globalization.CultureInfo.InvariantCulture) + "' was not shown: only printable ASCII, CR, LF, BS, HT and BEL are built for NVT mode (RFC 854); an ANSI terminal is not built into the 3270 screen.");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Leaves NVT mode for 3270 mode: the screen is cleared to the default size, as RFC 2355
+        /// section 9.1 says for every mode switch. Does nothing when not in NVT mode.
+        /// </summary>
+        public void LeaveNvtMode()
+        {
+            if (!NvtMode)
+            {
+                return;
+            }
+
+            NvtMode = false;
+            Resize(_sessionRows, _sessionColumns);
+            CursorAddress = 0;
+        }
+
+        // RFC 2355 9.1: Erase/Reset at the default size, then plain text.
+        private void EnterNvtMode()
+        {
+            NvtMode = true;
+            SscpLuMode = false;
+            Resize(_sessionRows, _sessionColumns);
+            CursorAddress = 0;
+            _sscpStart = 0;
+            InsertMode = false;
+        }
+
+        // Enter in NVT mode: the operator's text from where the host's output ended, nulls left
+        // out, as ASCII, then CR LF, the NVT end of line (RFC 854). RFC 2355 9.1: the client
+        // "should buffer data until an entire message is built (for the client, this would
+        // normally mean until the user presses Enter)". The cursor goes to the start of the next
+        // line, where the next message starts. Clear clears the screen locally. Every other
+        // attention key is Minus Function: RFC 2355 gives PA and PF keys no NVT meaning (x3270
+        // sends them as escape sequences, Common\kybd.c nvt_send_pf, which no RFC names).
+        private bool NvtAttention(byte aid)
+        {
+            if (aid == Aid.Clear)
+            {
+                Resize(Rows, Columns);
+                CursorAddress = 0;
+                _sscpStart = 0;
+                InsertMode = false;
+                return true;
+            }
+
+            if (aid != Aid.Enter)
+            {
+                Lock = KeyboardLock.MinusFunction;
+                return false;
+            }
+
+            InsertMode = false;
+            _inbound.Clear();
+            int size = Size;
+            for (int a = _sscpStart; a < size; a++)
+            {
+                byte b = _buffer[a];
+                if (b == FormatControl.Null || _isFieldAttribute[a] || _graphicEscape[a])
+                {
+                    continue;
+                }
+
+                char c = _codePage.ToUnicode(b);
+                if (c >= 0x20 && c <= 0x7E)
+                {
+                    AppendByte((byte)c);
+                }
+            }
+
+            AppendByte(0x0D);
+            AppendByte(0x0A);
+            int row = CursorAddress / Columns;
+            int next = (row + 1) * Columns;
+            CursorAddress = next >= size ? 0 : next;
+            _sscpStart = CursorAddress;
+            Send();
+            return true;
+        }
+
+        // An attention key in SSCP-LU mode (GA23-0061-2 p. 5-37, "Inbound Message Handling"):
+        //  - ENTER sends "the data (excluding nulls) contained in the first 256 screen character
+        //    positions including and following the cursor address, or to the end of screen,
+        //    whichever occurs first", from the initial cursor address. The manual names no AID
+        //    and no cursor address in front of it, and x3270 sends neither (Common\ctlr.c,
+        //    ctlr_read_modified: "if (!IN_SSCP)" around the AID and cursor). The keyboard locks
+        //    until the SSCP answers ("locked when in receive or send-xmit", p. 5-36).
+        //  - CLEAR clears the screen and resets the initial cursor address; nothing is sent.
+        //  - any other PA or PF key: "Input Inhibited and Minus Function symbols are turned on",
+        //    nothing is sent.
+        private bool SscpAttention(byte aid)
+        {
+            if (aid == Aid.Clear)
+            {
+                Resize(Rows, Columns);
+                CursorAddress = 0;
+                _sscpStart = 0;
+                InsertMode = false;
+                return true;
+            }
+
+            if (aid != Aid.Enter)
+            {
+                Lock = KeyboardLock.MinusFunction;
+                return false;
+            }
+
+            InsertMode = false;
+            _inbound.Clear();
+            Array.Clear(_inboundSa);
+            int end = Math.Min(Size, _sscpStart + MaxSscpInbound);
+            for (int a = _sscpStart; a < end; a++)
+            {
+                byte b = _buffer[a];
+                if (b == FormatControl.Null || _isFieldAttribute[a])
+                {
+                    continue;
+                }
+
+                if (_graphicEscape[a])
+                {
+                    // Not in the manual's inbound paragraph; GE before an APL character is how
+                    // the outbound side marks one (p. 5-37), and x3270 sends it the same way.
+                    AppendByte(Order3270.GraphicEscape);
+                }
+
+                AppendByte(b);
+            }
+
+            _lastAid = aid;
+            Lock = KeyboardLock.WaitingForHost;
+            Send();
+            return true;
+        }
+
+        // Checks one BIND screen size against this model (GA23-0061-2 p. 1-21 tables); null when
+        // it is good, otherwise why not.
+        private string? CheckBindSize(string which, int rows, int columns)
+        {
+            int maxRows = Math.Max(_defaultRows, _alternateRows);
+            int maxColumns = Math.Max(_defaultColumns, _alternateColumns);
+            bool knownColumns = columns == 40 || columns == 80 || columns == 132 || columns == _defaultColumns || columns == _alternateColumns;
+            if (rows < 1 || rows > maxRows)
+            {
+                return "the " + which + " size has " + rows + " rows; this model has 1 to " + maxRows + " (GA23-0061-2 p. 1-21)";
+            }
+
+            if (!knownColumns || columns > maxColumns)
+            {
+                return "the " + which + " size has " + columns + " columns; this model takes 40, 80 or 132 up to " + maxColumns + " (GA23-0061-2 p. 1-21)";
+            }
+
+            if (rows * columns > Math.Max(_defaultRows * _defaultColumns, _alternateRows * _alternateColumns))
+            {
+                return "the " + which + " size " + rows + " x " + columns + " holds more cells than this model's largest screen";
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -1209,8 +1780,9 @@ namespace RetroIO.Protocols.Tn3270
         /// AID and cursor address; the rest is a Read Modified's data (every modified field, nulls
         /// left out; all data on an unformatted screen). The manual's non-SNA layout ends with ETX;
         /// x3270 (Common\ctlr.c, ctlr_read_modified, case AID_SYSREQ) sends no ETX over TN3270,
-        /// and neither does RetroIO. Under TN3270E Sys Req is a telnet-level request instead
-        /// (RFC 2355), not built.
+        /// and neither does RetroIO. Under TN3270E with the SYSREQ function Sys Req is not this
+        /// read but a telnet Abort Output that the connection sends (RFC 2355 section 10.5.2);
+        /// the SSCP's answer then comes through <see cref="ProcessSscpLuData"/>.
         /// </remarks>
         /// <returns>
         /// True when sent; false when the keyboard is locked.
@@ -1366,12 +1938,22 @@ namespace RetroIO.Protocols.Tn3270
                 return false;
             }
 
+            if (SscpLuMode)
+            {
+                return SscpAttention(aid);
+            }
+
+            if (NvtMode)
+            {
+                return NvtAttention(aid);
+            }
+
             if (aid == Aid.Clear)
             {
                 // Clear: every field attribute becomes a null - no fields left (p. 4-13), the buffer
                 // and all extended attributes are cleared, the screen goes back to the default size
                 // and the cursor to 0 (GA23-0061-2 p. C-8). Then the short read: the AID alone.
-                Resize(_defaultRows, _defaultColumns);
+                Resize(_sessionRows, _sessionColumns);
                 CursorAddress = 0;
 
                 // And the inbound reply mode goes back to field mode: GA23-0059-4 Table C-1
@@ -1687,11 +2269,11 @@ namespace RetroIO.Protocols.Tn3270
                 }
                 else if (alternate)
                 {
-                    Resize(_alternateRows, _alternateColumns);
+                    Resize(_sessionAlternateRows, _sessionAlternateColumns);
                 }
                 else
                 {
-                    Resize(_defaultRows, _defaultColumns);
+                    Resize(_sessionRows, _sessionColumns);
                 }
 
                 CursorAddress = 0;
@@ -2162,11 +2744,11 @@ namespace RetroIO.Protocols.Tn3270
 
             if ((field[3] & 0x80) != 0)
             {
-                Resize(_alternateRows, _alternateColumns);
+                Resize(_sessionAlternateRows, _sessionAlternateColumns);
             }
             else
             {
-                Resize(_defaultRows, _defaultColumns);
+                Resize(_sessionRows, _sessionColumns);
             }
 
             CursorAddress = 0;
