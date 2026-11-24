@@ -117,6 +117,8 @@
     href: ../../RetroIO.Storage.Providers/README.md
   - name: RetroIO.Storage.Utilities
     href: ../../RetroIO.Storage.Utilities/README.md
+  - name: RetroIO.Telemetry
+    href: ../../RetroIO.Telemetry/README.md
   - name: RetroIO.X25
     href: ../../RetroIO.X25/README.md
 - name: Guides
