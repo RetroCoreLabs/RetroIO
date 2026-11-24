@@ -447,7 +447,11 @@ namespace RetroIO.Protocols.Tn3270
             s[14] = (byte)((read + 5) >> 8);
             s[15] = (byte)(read + 5);
             BytesTransferred += read;
-            _display.SendStructuredFieldReply(s);
+
+            // Kept for a retry: TK5 answers a full block with a Read Modified command and wants
+            // the same block again (Display3270.SendStructuredFieldReply, measured 24 November
+            // 2026). The host's next Get or Close acknowledges it.
+            _display.SendStructuredFieldReply(s, retry: true);
             Progress?.Invoke(BytesTransferred);
         }
 

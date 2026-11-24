@@ -175,6 +175,12 @@ namespace RetroIO.Protocols.Tn3270
 
         private readonly ArrayBufferWriter<byte> _inbound = new ArrayBufferWriter<byte>(4096);
 
+        // The last inbound record sent with SendStructuredFieldReply(field, retry: true), kept until
+        // the host acknowledges it, so a Read Modified command sends it again (see
+        // SendStructuredFieldReply). _retryLength 0: nothing to retry.
+        private byte[] _retryRecord = Array.Empty<byte>();
+        private int _retryLength;
+
         private byte[] _buffer = Array.Empty<byte>();
         private bool[] _isFieldAttribute = Array.Empty<bool>();
         private bool[] _graphicEscape = Array.Empty<bool>();
@@ -653,6 +659,15 @@ namespace RetroIO.Protocols.Tn3270
             }
 
             byte command = record[0];
+
+            // Any outbound transmission other than a read command acknowledges the inbound record
+            // kept for a retry (p. 3-23: the acknowledgment is "any outbound transmission except
+            // one with a read command"), so a later Read Modified is an ordinary one again.
+            if (command != Command3270.ReadModified && command != Command3270.ReadModifiedAll && command != Command3270.ReadBuffer)
+            {
+                _retryLength = 0;
+            }
+
             switch (command)
             {
                 case Command3270.Write:
@@ -680,6 +695,15 @@ namespace RetroIO.Protocols.Tn3270
                     break;
 
                 case Command3270.ReadModified:
+                    // In a retry state "the read modified command performs a retry of the inbound
+                    // operation" (p. 3-14, 3-17); only the Read Modified command does, not Read
+                    // Modified All, Read Buffer or a Read Partition (p. 3-14).
+                    if (_retryLength > 0)
+                    {
+                        InboundRecord?.Invoke(_retryRecord.AsSpan(0, _retryLength));
+                        break;
+                    }
+
                     SendReadModified(_lastAid, all: false);
                     break;
 
@@ -1397,12 +1421,59 @@ namespace RetroIO.Protocols.Tn3270
         /// <param name="field">
         /// The whole structured field, its two length bytes first.
         /// </param>
-        public void SendStructuredFieldReply(ReadOnlySpan<byte> field)
+        public void SendStructuredFieldReply(ReadOnlySpan<byte> field) => SendStructuredFieldReply(field, retry: false);
+
+        /// <summary>
+        /// Sends one structured field to the host as its own inbound record, as
+        /// <see cref="SendStructuredFieldReply(ReadOnlySpan{byte})"/>, and when asked keeps it so
+        /// that a Read Modified command before the host's next other transmission sends the very
+        /// same record again.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// For the file data <see cref="IndFileTransfer"/> sends on the host's Get. TK5's IND$FILE
+        /// answers every full upload block with a Read Modified command (X'F6') and then expects
+        /// the block a second time; a terminal that answers with an ordinary Read Modified loses
+        /// that block without any error (measured 24 November 2026 on TK5: RetroTerm sent a
+        /// 16384-byte block, answered the X'F6' with AID X'88' alone, and the data set held only
+        /// the second block; s3270 sent each block again and the file came back whole).
+        /// </para>
+        /// <para>
+        /// This is the retry of GA23-0059-4 p. 3-14 to 3-18: a Read Modified command in a retry
+        /// state repeats the last inbound operation, and any outbound transmission other than a
+        /// read command acknowledges it (p. 3-23). The manual names only an enter action and a
+        /// Read Partition as starting a retry state; IBM's IND$FILE description does not mention
+        /// this exchange. x3270 does the same for upload data only (Common/ft_dft.c, the
+        /// saved upload buffer sent again on a Read Modified).
+        /// </para>
+        /// </remarks>
+        /// <param name="field">
+        /// The whole structured field, its two length bytes first.
+        /// </param>
+        /// <param name="retry">
+        /// True to keep the record for a retry; false sends it without, and ends any retry kept
+        /// from before.
+        /// </param>
+        public void SendStructuredFieldReply(ReadOnlySpan<byte> field, bool retry)
         {
             _inbound.Clear();
             AppendByte(Aid.StructuredField);
             AppendBytes(field);
+            if (retry)
+            {
+                ReadOnlySpan<byte> record = _inbound.WrittenSpan;
+                if (_retryRecord.Length < record.Length)
+                {
+                    _retryRecord = new byte[record.Length];
+                }
+
+                record.CopyTo(_retryRecord);
+            }
+
+            // Send ends any retry kept from before; this record's is set after it.
+            int length = _inbound.WrittenCount;
             Send();
+            _retryLength = retry ? length : 0;
         }
 
         private void OperatorMove(int address)
@@ -2824,6 +2895,10 @@ namespace RetroIO.Protocols.Tn3270
 
         private void Send()
         {
+            // A new inbound record replaces the one kept for a retry: the last inbound operation
+            // is the one a Read Modified repeats (p. 3-14). SendStructuredFieldReply keeps this
+            // one again when asked to, after this.
+            _retryLength = 0;
             InboundRecord?.Invoke(_inbound.WrittenSpan);
         }
 

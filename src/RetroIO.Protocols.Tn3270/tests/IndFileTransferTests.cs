@@ -242,6 +242,59 @@ namespace RetroIO.Protocols.Tn3270.Tests
             Assert.Equal(30, t.BytesTransferred);
         }
 
+        // TK5 answers each full upload block with a Read Modified command (X'F6') and then wants
+        // the same block again before its next Get; answering with an ordinary Read Modified lost
+        // the block without any error (measured 24 November 2026, Display3270.SendStructuredFieldReply).
+        [Fact]
+        public void AReadModifiedAfterUploadDataSendsTheSameBlockAgain()
+        {
+            var (d, t, sent, errors) = Create(limit: 40);
+            byte[] content = new byte[30];
+            for (int i = 0; i < content.Length; i++)
+            {
+                content[i] = (byte)('a' + i);
+            }
+
+            t.ExpectUpload(new MemoryStream(content));
+            Wsf(d, OpenRequest(upload: true, "FT:DATA"));
+            Wsf(d, SetCursorAndGet);
+            d.ProcessOutbound(new byte[] { Command3270.ReadModified });
+            d.ProcessOutbound(new byte[] { Command3270.ReadModified });
+            Wsf(d, SetCursorAndGet);
+            Wsf(d, SetCursorAndGet);
+
+            Assert.Empty(errors);
+            Assert.Equal(6, sent.Count);
+            Assert.Equal(sent[1], sent[2]);
+            Assert.Equal(sent[1], sent[3]);
+            Assert.Equal(0x02, sent[4][11]);
+            Assert.Equal(content.AsSpan(23).ToArray(), sent[4].AsSpan(17).ToArray());
+            Assert.Equal(new byte[] { 0x88, 0x00, 0x09, 0xD0, 0x46, 0x08, 0x69, 0x04, 0x22, 0x00 }, sent[5]);
+            Assert.Equal(30, t.BytesTransferred);
+        }
+
+        // The host's next transmission that is not a read command acknowledges the block (p. 3-23):
+        // a Read Modified after it is an ordinary one, and so is one after an Open ack, which is
+        // not kept for a retry.
+        [Fact]
+        public void AReadModifiedAfterTheAcknowledgmentIsAnOrdinaryOne()
+        {
+            var (d, t, sent, errors) = Create(limit: 40);
+            t.ExpectUpload(new MemoryStream(new byte[] { 0x41 }));
+            Wsf(d, OpenRequest(upload: true, "FT:DATA"));
+            d.ProcessOutbound(new byte[] { Command3270.ReadModified });
+            Wsf(d, SetCursorAndGet);
+            d.ProcessOutbound(new byte[] { Command3270.Write, 0x00 });
+            d.ProcessOutbound(new byte[] { Command3270.ReadModified });
+
+            Assert.Empty(errors);
+            Assert.Equal(4, sent.Count);
+            Assert.Equal(new byte[] { 0x88, 0x00, 0x05, 0xD0, 0x00, 0x09 }, sent[0]);
+            Assert.NotEqual(sent[0], sent[1]);
+            Assert.Equal(0x46, sent[2][4]);
+            Assert.NotEqual(sent[2], sent[3]);
+        }
+
         [Fact]
         public void AnOpenNobodyAskedForIsRefused()
         {
